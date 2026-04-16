@@ -1,0 +1,753 @@
+@using System.Security.Claims
+@using System.Text.Json
+@using CalibraHub.Application.Ui
+@using Microsoft.AspNetCore.Antiforgery
+@inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@inject IAntiforgery Antiforgery
+@{
+    // Workspace (iframe) mode: ya ?workspace=1 query flag'i var, YA DA
+    // request bir iframe'den geliyor (Sec-Fetch-Dest: iframe). Ikincisi
+    // kritik — iframe icinde kullanici bir linke tiklarsa workspace=1 flag'i
+    // kaybolur ama Sec-Fetch-Dest hala "iframe" oldugu icin server Shell host
+    // yerine minimal layout doner → "Matruska kabuk" sorunu engellenir.
+    var isWorkspaceFrame = string.Equals(Context.Request.Query["workspace"], "1", StringComparison.Ordinal)
+                           || string.Equals(Context.Request.Headers["Sec-Fetch-Dest"], "iframe", StringComparison.OrdinalIgnoreCase);
+    var uiRuntime = await UiText.GetRuntimeAsync();
+    var layoutUi = await UiText.GetFormAsync("shared.layout");
+    var appearanceUi = await UiText.GetFormAsync("admin.appearance");
+    var controllerName = (ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty).ToLowerInvariant();
+    var useDashboardShell = ViewData["UseDashboardShell"] is bool dashboardShell && dashboardShell;
+    var customBodyClass = ViewData["BodyClass"] as string;
+    var isAuthenticated = User.Identity?.IsAuthenticated == true;
+    var showMainSidebar = !isWorkspaceFrame && !useDashboardShell && isAuthenticated && controllerName != "account";
+    var hasSideRail = showMainSidebar;
+    var profileName = User.Identity?.Name ?? "Misafir";
+    var profileEmail = User.FindFirstValue(ClaimTypes.Email) ?? "-";
+    var profileCompany = User.FindFirstValue("company_name") ?? "-";
+    var profileUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+    var profileInitials = string.IsNullOrWhiteSpace(profileName) ? "?" :
+        string.Concat(profileName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Take(2).Select(w => char.ToUpper(w[0])));
+    var profileUserKey = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? User.FindFirstValue(ClaimTypes.Email)
+                         ?? User.Identity?.Name
+                         ?? "anonymous";
+
+    // React Shell (yeni nesil kabuk) — authenticated + non-workspace + non-account
+    // durumlarinda devreye girer. Workspace iframe, login sayfasi ve anonim ziyaretciler
+    // eski minimal layout ile calismaya devam eder.
+    var isSystemAdmin = string.Equals(
+        User.FindFirstValue(ClaimTypes.Email), "admin@calibra.local",
+        StringComparison.OrdinalIgnoreCase);
+    var shouldUseReactShell = isAuthenticated && !isWorkspaceFrame && controllerName != "account";
+    var shellAntiforgeryToken = shouldUseReactShell
+        ? (Antiforgery.GetAndStoreTokens(Context).RequestToken ?? string.Empty)
+        : string.Empty;
+    var toastMessages = new List<(string Type, string Message)>();
+    var toastMessageKeys = new HashSet<string>(StringComparer.Ordinal);
+
+    bool ShouldSuppressTopRightToast(string type, string? message)
+    {
+        if (!string.Equals(type, "success", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        var normalizedMessage = message.Trim().ToLowerInvariant();
+
+        return normalizedMessage.Contains("kaydedildi")
+               || normalizedMessage.Contains("olusturuldu")
+               || normalizedMessage.Contains("guncellendi")
+               || normalizedMessage.Contains("degistirildi");
+    }
+
+    void AddToast(string type, string message)
+    {
+        var normalizedType = string.IsNullOrWhiteSpace(type) ? "info" : type.Trim().ToLowerInvariant();
+        var normalizedMessage = message?.Trim();
+
+        if (string.IsNullOrWhiteSpace(normalizedMessage))
+        {
+            return;
+        }
+
+        if (ShouldSuppressTopRightToast(normalizedType, normalizedMessage))
+        {
+            return;
+        }
+
+        var dedupeKey = $"{normalizedType}|{normalizedMessage}";
+        if (!toastMessageKeys.Add(dedupeKey))
+        {
+            return;
+        }
+
+        toastMessages.Add((normalizedType, normalizedMessage));
+    }
+
+    void AddToastMessage(string key, string type)
+    {
+        if (TempData[key] is string message && !string.IsNullOrWhiteSpace(message))
+        {
+            AddToast(type, message);
+        }
+    }
+
+    AddToastMessage("AdminSuccess", "success");
+    AddToastMessage("PasswordSuccess", "success");
+    AddToastMessage("AdminError", "error");
+    AddToastMessage("AdminWarning", "warning");
+    AddToastMessage("AdminInfo", "info");
+
+    var modelStateErrors = ViewData?.ModelState?
+        .Values
+        .SelectMany(x => x.Errors)
+        .Select(x => string.IsNullOrWhiteSpace(x.ErrorMessage) ? x.Exception?.Message : x.ErrorMessage)
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Take(3)
+        .ToList();
+
+    if (modelStateErrors is { Count: > 0 })
+    {
+        foreach (var errorMessage in modelStateErrors)
+        {
+            AddToast("error", errorMessage!);
+        }
+    }
+
+    var bodyClasses = new List<string> { useDashboardShell ? "dashboard-body" : "layout-body" };
+
+    if (!useDashboardShell && hasSideRail)
+    {
+        bodyClasses.Add("has-side-rail");
+    }
+
+    if (isWorkspaceFrame)
+    {
+        bodyClasses.Add("workspace-frame-body");
+    }
+
+    if (!string.IsNullOrWhiteSpace(customBodyClass))
+    {
+        bodyClasses.Add(customBodyClass);
+    }
+
+    bodyClasses.Add($"app-theme-{uiRuntime.ThemeCode}");
+
+    var bodyClass = string.Join(" ", bodyClasses);
+    var currentUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
+    var supportedLanguages = UiCatalog.GetLanguages();
+    var supportedThemes = UiCatalog.GetThemes();
+    var tabsEnabled = !isWorkspaceFrame && isAuthenticated && controllerName != "account";
+    var showWorkspaceActionBar = !isWorkspaceFrame && isAuthenticated && controllerName != "account";
+    var collaborationEnabled = !isWorkspaceFrame && isAuthenticated && controllerName != "account";
+    var homeUrl = Url.Action("Index", "Home") ?? "/";
+    object? titleValue = null;
+    var pageTitle = ViewData?.TryGetValue("Title", out titleValue) == true
+        ? titleValue as string ?? "CalibraHub"
+        : "CalibraHub";
+    var collaborationConfig = new
+    {
+        enabled = collaborationEnabled,
+        hubUrl = Url.Content("~/hubs/collaboration"),
+        releaseUrl = Url.Content("~/api/collaboration/release"),
+        currentUserId = profileUserId,
+        currentUserName = profileName,
+        ui = new
+        {
+            launcherLabel = layoutUi.Text("collaboration_button", "Mesajlar"),
+            onlineUsersTitle = layoutUi.Text("collaboration_online_users", "Aktif Kullanicilar"),
+            conversationTitle = layoutUi.Text("collaboration_conversation", "Mesajlasma"),
+            noUsers = layoutUi.Text("collaboration_no_users", "Aktif kullanici bulunmuyor."),
+            noConversation = layoutUi.Text("collaboration_no_conversation", "Mesajlasmak icin bir kullanici secin."),
+            messagePlaceholder = layoutUi.Text("collaboration_message_placeholder", "Mesajinizi yazin..."),
+            sendLabel = layoutUi.Text("collaboration_send", "Gonder"),
+            statusConnected = layoutUi.Text("collaboration_status_connected", "Canli baglanti hazir"),
+            statusConnecting = layoutUi.Text("collaboration_status_connecting", "Baglanti kuruluyor"),
+            statusDisconnected = layoutUi.Text("collaboration_status_disconnected", "Baglanti kesildi"),
+            lockOwned = layoutUi.Text("collaboration_lock_owned", "Bu kaydi su anda siz duzenliyorsunuz."),
+            lockReadonly = layoutUi.Text("collaboration_lock_readonly", "Bu kayit su anda {user} tarafindan duzenlenmektedir."),
+            requestUnlock = layoutUi.Text("collaboration_request_unlock", "Lutfen {record} kaydini kapatir misin?"),
+            messageUser = layoutUi.Text("collaboration_message_user", "Mesaj Gonder"),
+            selectUser = layoutUi.Text("collaboration_select_user", "Kullanici Secin"),
+            incomingToast = layoutUi.Text("collaboration_incoming_toast", "{user} size yeni bir mesaj gonderdi."),
+            connectionLostToast = layoutUi.Text("collaboration_connection_lost_toast", "Canli isbirligi baglantisi kesildi."),
+            connectionRestoredToast = layoutUi.Text("collaboration_connection_restored_toast", "Canli isbirligi baglantisi tekrar kuruldu.")
+        }
+    };
+
+    if (ViewData is not null)
+    {
+        ViewData["WorkspaceActionBarShowProfile"] = isAuthenticated && controllerName != "account";
+        ViewData["WorkspaceActionBarShowCollaborationButton"] = isAuthenticated && controllerName != "account";
+        ViewData["WorkspaceActionBarProfileName"] = profileName;
+        ViewData["WorkspaceActionBarProfileEmail"] = profileEmail;
+        ViewData["WorkspaceActionBarCurrentUrl"] = currentUrl;
+        ViewData["WorkspaceActionBarLanguageCode"] = uiRuntime.LanguageCode;
+        ViewData["WorkspaceActionBarThemeCode"] = uiRuntime.ThemeCode;
+        ViewData["WorkspaceActionBarSupportedLanguages"] = supportedLanguages;
+        ViewData["WorkspaceActionBarSupportedThemes"] = supportedThemes;
+        ViewData["WorkspaceActionBarLanguageLabel"] = appearanceUi.Text("language_label");
+        ViewData["WorkspaceActionBarThemeLabel"] = appearanceUi.Text("theme_label");
+        ViewData["WorkspaceActionBarSavePreferencesText"] = appearanceUi.Text("save_preferences");
+        ViewData["WorkspaceActionBarProfilePasswordText"] = layoutUi.Text("profile_password");
+        ViewData["WorkspaceActionBarLogoutText"] = layoutUi.Text("logout_button");
+        ViewData["WorkspaceActionBarMessagesText"] = layoutUi.Text("collaboration_button", "Mesajlar");
+    }
+}
+<!DOCTYPE html>
+<html lang="@uiRuntime.LanguageCode"@(showWorkspaceActionBar ? " data-workspace-proxy" : "")@(string.Equals(uiRuntime.ThemeCode, "light", StringComparison.OrdinalIgnoreCase) ? "" : " class=\"dark\"")>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@pageTitle - CalibraHub</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/CalibraHub.Web.styles.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
+    @if (isWorkspaceFrame)
+    {
+        @* ── Workspace Frame Navigation Guard ───────────────────────────────
+           iframe tab'larinda ?workspace=1 flag'ini her navigasyona otomatik ekler.
+           SmartCard, SmartBoard, vanilla JS, <a> linkleri hepsini kapser. *@
+        <script src="~/js/workspace-frame-nav-guard.js" asp-append-version="true"></script>
+    }
+</head>
+<body class="@bodyClass"
+      data-user-key="@profileUserKey"
+      data-user-id="@profileUserId"
+      data-page-url="@currentUrl"
+      data-page-title="@pageTitle"
+      data-home-url="@homeUrl"
+      data-page-tabs-enabled="@(tabsEnabled ? "1" : "0")">
+@if (shouldUseReactShell)
+{
+    @* ══════════════════════════════════════════════════════════════
+       React Shell — yeni nesil kabuk (Navbar + Sidebar + Tabs + Status Bar)
+       Eski navbar/sidebar/footer render edilmez. Sayfa icerigi React
+       Shell'in icindeki iframe tab'larina yuklenir (?workspace=1 ile). *@
+    <link rel="stylesheet" href="~/react/calibrahub-widgets.css" asp-append-version="true" />
+    <div id="shell-root" style="position:fixed;inset:0;z-index:10;"></div>
+
+    <script>
+        window.__CALIBRA_SHELL_CONFIG__ = @Html.Raw(JsonSerializer.Serialize(new
+        {
+            user = new
+            {
+                name = profileName,
+                email = profileEmail,
+                initials = profileInitials,
+                userKey = profileUserKey,
+            },
+            system = new
+            {
+                company = profileCompany,
+                year = DateTime.Now.Year.ToString(),
+                status = layoutUi.Text("system_status"),
+            },
+            menu = CalibraHub.Web.Models.Navigation.MenuDefinition.GetMainMenu(isSystemAdmin),
+            theme = uiRuntime.ThemeCode,
+            lang = uiRuntime.LanguageCode,
+            initialUrl = currentUrl,
+            savePreferencesUrl = Url.Action("SaveInterfacePreferences", "Account"),
+            antiforgeryToken = shellAntiforgeryToken,
+        }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+    </script>
+    <script src="~/react/calibrahub-widgets.js" asp-append-version="true"></script>
+    <script>
+        (function () {
+            var el = document.getElementById('shell-root');
+            function tryMount() {
+                if (window.CalibraHub && window.CalibraHub.mountShell) {
+                    window.CalibraHub.mountShell(el, window.__CALIBRA_SHELL_CONFIG__);
+                    return true;
+                }
+                return false;
+            }
+            if (!tryMount()) {
+                var tries = 0;
+                var timer = setInterval(function () {
+                    if (tryMount() || ++tries >= 40) clearInterval(timer);
+                }, 100);
+            }
+        })();
+    </script>
+}
+else if (!isWorkspaceFrame)
+{
+<header>
+    <nav class="navbar navbar-expand-lg navbar-light main-nav app-topbar fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand brand-logo" asp-controller="Home" asp-action="Index">
+                <img src="~/Document/CalibraBuyukLogo.png" alt="Calibra Logo" />
+                <span>CalibraHub</span>
+            </a>
+
+            <div class="topbar-actions ms-auto">
+                @if (isAuthenticated)
+                {
+                    @if (collaborationEnabled)
+                    {
+                        <div class="collaboration-widget collaboration-widget--navbar" data-collaboration-widget hidden>
+                            <aside id="collaborationPanel" class="collaboration-panel" data-collaboration-panel hidden>
+                                <header class="collaboration-panel__header">
+                                    <div>
+                                        <h2>@layoutUi.Text("collaboration_button", "Mesajlar")</h2>
+                                        <p data-collaboration-status>@layoutUi.Text("collaboration_status_connecting", "Baglanti kuruluyor")</p>
+                                    </div>
+                                    <button type="button" class="collaboration-panel__close" data-collaboration-close aria-label="Paneli kapat">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M6 6 18 18M18 6 6 18"></path>
+                                        </svg>
+                                    </button>
+                                </header>
+
+                                <div class="collaboration-panel__body">
+                                    <section class="collaboration-presence">
+                                        <div class="collaboration-section-title">@layoutUi.Text("collaboration_online_users", "Aktif Kullanicilar")</div>
+                                        <div class="collaboration-user-list" data-collaboration-users></div>
+                                        <div class="collaboration-empty-state" data-collaboration-users-empty>
+                                            @layoutUi.Text("collaboration_no_users", "Aktif kullanici bulunmuyor.")
+                                        </div>
+                                    </section>
+
+                                    <section class="collaboration-thread">
+                                        <div class="collaboration-section-title" data-collaboration-thread-title>
+                                            @layoutUi.Text("collaboration_select_user", "Kullanici Secin")
+                                        </div>
+                                        <div class="collaboration-message-list" data-collaboration-messages></div>
+                                        <div class="collaboration-empty-state" data-collaboration-messages-empty>
+                                            @layoutUi.Text("collaboration_no_conversation", "Mesajlasmak icin bir kullanici secin.")
+                                        </div>
+                                        <form class="collaboration-compose" data-collaboration-form>
+                                            <textarea class="form-control"
+                                                      rows="3"
+                                                      data-collaboration-input
+                                                      placeholder="@layoutUi.Text("collaboration_message_placeholder", "Mesajinizi yazin...")"></textarea>
+                                            <button type="submit" class="btn btn-primary">@layoutUi.Text("collaboration_send", "Gonder")</button>
+                                        </form>
+                                    </section>
+                                </div>
+                            </aside>
+                        </div>
+                    }
+
+                    <div class="dropdown profile-dropdown">
+                        <button class="topbar-profile-btn dropdown-toggle"
+                                type="button"
+                                data-bs-toggle="dropdown"
+                                data-bs-auto-close="outside"
+                                aria-expanded="false"
+                                title="@profileName">
+                            @profileInitials
+                        </button>
+
+                        <div class="dropdown-menu dropdown-menu-end profile-menu">
+                            <div class="profile-menu-header">
+                                <div class="topbar-profile-btn" style="width:36px;height:36px;font-size:0.78rem;pointer-events:none">@profileInitials</div>
+                                <div>
+                                    <div class="profile-menu-name">@profileName</div>
+                                    <div class="profile-menu-email">@profileEmail</div>
+                                </div>
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            @if (!isWorkspaceFrame)
+                            {
+                                <div data-open-windows-panel hidden>
+                                    <button type="button" id="btnOpenWindowsModal" class="dropdown-item profile-menu-action-item">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+                                        <span>Açık Sayfalar</span>
+                                        <span id="openWindowsBadge" class="profile-menu-badge" style="display:none">0</span>
+                                    </button>
+                                </div>
+                            }
+                            @if (collaborationEnabled)
+                            {
+                                <button type="button" class="dropdown-item profile-menu-action-item"
+                                        data-collaboration-toggle
+                                        aria-expanded="false"
+                                        aria-controls="collaborationPanel">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" aria-hidden="true"><path d="M7 10h10"/><path d="M7 14h6"/><path d="M12 3c4.97 0 9 3.58 9 8s-4.03 8-9 8a9.9 9.9 0 0 1-3.26-.54L3 21l1.87-4.12A7.35 7.35 0 0 1 3 11c0-4.42 4.03-8 9-8Z"/></svg>
+                                    <span>Mesajlar</span>
+                                    <span class="profile-menu-badge" data-collaboration-unread hidden>0</span>
+                                </button>
+                            }
+                            <div class="dropdown-divider"></div>
+                            @{
+                                var isDarkTheme = !string.Equals(uiRuntime.ThemeCode, "light", StringComparison.OrdinalIgnoreCase);
+                                var isEnglish = string.Equals(uiRuntime.LanguageCode, "en-US", StringComparison.OrdinalIgnoreCase);
+                            }
+                            <form asp-controller="Account"
+                                  asp-action="SaveInterfacePreferences"
+                                  method="post"
+                                  class="profile-preferences-form"
+                                  id="profilePreferencesForm">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="returnUrl" value="@currentUrl" />
+                                <input type="hidden" name="languageCode" id="profile-language-value" value="@uiRuntime.LanguageCode" />
+                                <input type="hidden" name="themeCode" id="profile-theme-value" value="@uiRuntime.ThemeCode" />
+
+                                <div class="profile-switch-row">
+                                    <div class="profile-switch-label">
+                                        <svg class="profile-switch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10" />
+                                            <path d="M2 12h20" />
+                                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                        </svg>
+                                        <span>@appearanceUi.Text("language_label")</span>
+                                    </div>
+                                    <button type="button" class="profile-switch @(isEnglish ? "is-on" : "")" data-profile-switch="language" aria-label="Language toggle">
+                                        <span class="profile-switch-track">
+                                            <span class="profile-switch-opt profile-switch-opt--left">TR</span>
+                                            <span class="profile-switch-opt profile-switch-opt--right">EN</span>
+                                            <span class="profile-switch-thumb"></span>
+                                        </span>
+                                    </button>
+                                </div>
+
+                                <div class="profile-switch-row">
+                                    <div class="profile-switch-label">
+                                        <svg class="profile-switch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="4" />
+                                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                                        </svg>
+                                        <span>@appearanceUi.Text("theme_label")</span>
+                                    </div>
+                                    <button type="button" class="profile-switch @(isDarkTheme ? "is-on" : "")" data-profile-switch="theme" aria-label="Theme toggle">
+                                        <span class="profile-switch-track">
+                                            <span class="profile-switch-opt profile-switch-opt--left">
+                                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+                                            </span>
+                                            <span class="profile-switch-opt profile-switch-opt--right">
+                                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                                            </span>
+                                            <span class="profile-switch-thumb"></span>
+                                        </span>
+                                    </button>
+                                </div>
+                            </form>
+                            <script>
+                                (function() {
+                                    var form = document.getElementById('profilePreferencesForm');
+                                    if (!form) return;
+                                    var langInput = form.querySelector('#profile-language-value');
+                                    var themeInput = form.querySelector('#profile-theme-value');
+
+                                    // AJAX ile backend'e kaydet — dropdown kapanmaz
+                                    function saveAsync() {
+                                        var formData = new FormData(form);
+                                        fetch(form.action, {
+                                            method: 'POST',
+                                            body: formData,
+                                            credentials: 'same-origin',
+                                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                                        }).catch(function(err) {
+                                            console.warn('[ProfilePrefs] Save failed:', err);
+                                        });
+                                    }
+
+                                    form.querySelectorAll('[data-profile-switch]').forEach(function(btn) {
+                                        btn.addEventListener('click', function(e) {
+                                            e.preventDefault();
+                                            e.stopPropagation(); // Dropdown kapanmasin
+                                            var kind = btn.getAttribute('data-profile-switch');
+                                            var isOn = btn.classList.toggle('is-on');
+                                            if (kind === 'language') {
+                                                langInput.value = isOn ? 'en-US' : 'tr-TR';
+                                                saveAsync();
+                                                // Dil degisikligi text'leri etkiler — kisa bir gecikme sonrasi yenile
+                                                setTimeout(function() { window.location.reload(); }, 400);
+                                            } else if (kind === 'theme') {
+                                                themeInput.value = isOn ? 'dark' : 'light';
+                                                // Anlik UI guncelle
+                                                document.body.classList.remove('app-theme-light', 'app-theme-dark');
+                                                document.body.classList.add('app-theme-' + themeInput.value);
+                                                if (isOn) document.documentElement.classList.add('dark');
+                                                else document.documentElement.classList.remove('dark');
+                                                // iframe'lerde de uygula (workspace frame'leri)
+                                                document.querySelectorAll('iframe').forEach(function(f) {
+                                                    try {
+                                                        if (f.contentDocument && f.contentDocument.body) {
+                                                            f.contentDocument.body.classList.remove('app-theme-light', 'app-theme-dark');
+                                                            f.contentDocument.body.classList.add('app-theme-' + themeInput.value);
+                                                            if (isOn) f.contentDocument.documentElement.classList.add('dark');
+                                                            else f.contentDocument.documentElement.classList.remove('dark');
+                                                        }
+                                                    } catch(ex) {}
+                                                });
+                                                saveAsync();
+                                                // Dropdown acik kalir, sayfa yenilenmez
+                                            }
+                                        });
+                                    });
+
+                                    // Dropdown icinde tiklamalarin dropdown'u kapatmasini engelle
+                                    form.addEventListener('click', function(e) {
+                                        e.stopPropagation();
+                                    });
+                                })();
+                            </script>
+                            <div class="dropdown-divider"></div>
+                            <a class="dropdown-item" asp-controller="Account" asp-action="ChangePassword">
+                                @layoutUi.Text("profile_password")
+                            </a>
+                            <div class="px-2 pb-2">
+                                <form asp-controller="Account" asp-action="Logout" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-danger btn-sm w-100">@layoutUi.Text("logout_button")</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <a class="btn btn-sm btn-light" asp-controller="Account" asp-action="Login">@layoutUi.Text("login_button")</a>
+                }
+            </div>
+        </div>
+    </nav>
+</header>
+}
+
+@if (shouldUseReactShell)
+{
+    @* React Shell aktif — body icerigi iframe tab'lara yuklenir.
+       IgnoreBody() zorunlu: Razor her layout'ta RenderBody/IgnoreBody bekler. *@
+    IgnoreBody();
+}
+else if (isWorkspaceFrame)
+{
+    <main class="app-content-area app-content-area--workspace-frame">
+        @RenderBody()
+    </main>
+}
+else if (!useDashboardShell)
+{
+
+    @if (showMainSidebar)
+    {
+        <div class="app-shell">
+            <aside class="app-sidebar">
+                @await Html.PartialAsync("_MainMenu")
+            </aside>
+            <div class="app-main">
+                @if (tabsEnabled)
+                {
+                    @await Html.PartialAsync("_WorkspaceTabs")
+                }
+                @if (showWorkspaceActionBar)
+                {
+                    @await Html.PartialAsync("_WorkspaceActionBar")
+                }
+                <main class="app-content-area" data-workspace-shell>
+                    <div class="workspace-panel-stack" data-workspace-panel-stack>
+                        <section class="workspace-panel workspace-panel--native is-active"
+                                 data-workspace-panel
+                                 data-workspace-native-page
+                                 data-workspace-url="@currentUrl"
+                                 data-workspace-title="@pageTitle"
+                                 aria-hidden="false">
+                            @RenderBody()
+                        </section>
+                    </div>
+                </main>
+            </div>
+        </div>
+    }
+    else
+    {
+        <main class="app-content-area app-content-area--standalone">
+            @RenderBody()
+        </main>
+    }
+
+    <footer class="pagefooter">
+        <div class="container-fluid px-3 px-lg-4 pagefooter-inner">
+            <div class="status-item">
+                <span class="status-dot"></span>
+                <span>@layoutUi.Text("system_status")</span>
+            </div>
+            @if (isAuthenticated)
+            {
+                <div class="status-item">
+                    <span class="status-dot"></span>
+                    <span>@layoutUi.Text("active_company"): @profileCompany</span>
+                </div>
+            }
+            <div class="status-item">@layoutUi.Text("user_label"): @profileName</div>
+            <div class="status-item">&copy; 2026 CalibraHub</div>
+        </div>
+    </footer>
+}
+else
+{
+    <div class="dashboard-shell">
+        <aside class="dashboard-shell__sidebar">
+            @await Html.PartialAsync("_DashboardSidebar")
+        </aside>
+        <main class="dashboard-shell__content">
+            @if (tabsEnabled)
+            {
+                @await Html.PartialAsync("_WorkspaceTabs")
+            }
+            @if (showWorkspaceActionBar)
+            {
+                @await Html.PartialAsync("_WorkspaceActionBar")
+            }
+            <div class="workspace-panel-stack" data-workspace-panel-stack>
+                <section class="workspace-panel workspace-panel--native is-active"
+                         data-workspace-panel
+                         data-workspace-native-page
+                         data-workspace-url="@currentUrl"
+                         data-workspace-title="@pageTitle"
+                         aria-hidden="false">
+                    @RenderBody()
+                </section>
+            </div>
+        </main>
+    </div>
+}
+
+@if (isAuthenticated && !isWorkspaceFrame && !shouldUseReactShell)
+{
+<!-- AÇIK SAYFALAR YÖNETİCİ MODALI -->
+<div class="modal fade" id="openWindowsModal" tabindex="-1" aria-hidden="true" data-bs-theme="dark">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; background: var(--bs-body-bg);">
+      <div class="modal-header border-bottom-0 pb-0">
+        <h5 class="modal-title d-flex align-items-center" style="color: var(--bs-body-color); font-weight: 600; font-size: 1.05rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-2 text-warning" width="20" height="20"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+            Açık Sayfalar Yöneticisi
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+      </div>
+      <div class="modal-body py-3" style="min-height: 150px;">
+        <div id="openWindowsModalList" style="display:flex; flex-direction:column; gap:6px;"></div>
+      </div>
+      <div class="modal-footer bg-light border-top-0 d-flex justify-content-between" style="border-radius: 0 0 12px 12px;">
+        <button type="button" class="btn btn-outline-danger btn-sm" id="btnActiveCloseAll">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" class="me-1"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+           Tümünü Kapat
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Kapat</button>
+      </div>
+    </div>
+  </div>
+</div>
+}
+
+<div id="calibra-toast-root"
+     class="toast-root toast-root--top-right"
+     role="status"
+     aria-live="polite"
+     aria-relevant="additions text"></div>
+
+<div class="modal fade material-delete-modal"
+     id="globalDeleteConfirmModal"
+     tabindex="-1"
+     aria-labelledby="globalDeleteConfirmModalLabel"
+     aria-hidden="true"
+     data-delete-confirm-modal>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="material-delete-modal__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M4 7h16"></path>
+                        <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"></path>
+                        <path d="M7.5 7 8 19a1 1 0 0 0 1 .96h6a1 1 0 0 0 1-.96L16.5 7"></path>
+                        <path d="M10 11v5"></path>
+                        <path d="M14 11v5"></path>
+                    </svg>
+                </div>
+                <h5 class="material-delete-modal__title"
+                    id="globalDeleteConfirmModalLabel"
+                    data-delete-confirm-title>
+                    @layoutUi.Text("delete_confirm_title", "Kayit silinsin mi?")
+                </h5>
+                <p class="material-delete-modal__text" data-delete-confirm-text>
+                    @layoutUi.Text("delete_confirm_text", "Bu islem geri alinamaz. Silmek uzere oldugunuz kayit:")
+                </p>
+                <div class="material-delete-modal__record" data-delete-confirm-record>-</div>
+                <div class="material-delete-modal__actions">
+                    <button type="button"
+                            class="btn btn-secondary integrator-btn-secondary"
+                            data-bs-dismiss="modal">
+                        @layoutUi.Text("delete_confirm_cancel", "Vazgec")
+                    </button>
+                    <button type="button"
+                            class="btn btn-danger"
+                            data-delete-confirm-submit>
+                        @layoutUi.Text("delete_confirm_submit", "Sil")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.calibraCollaborationConfig = @Html.Raw(JsonSerializer.Serialize(collaborationConfig));
+
+    async function clearBrowserCache() {
+        try {
+            if ('caches' in window) {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(function(k) { return caches.delete(k); }));
+            }
+            if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(function(r) { return r.unregister(); }));
+            }
+        } catch (e) { /* sessiz kal */ }
+
+        var sep = location.search ? '&' : '?';
+        location.href = location.pathname + location.search + sep + '_t=' + Date.now();
+    }
+</script>
+
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+@if (collaborationEnabled)
+{
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+}
+<script src="~/js/site.js" asp-append-version="true" defer></script>
+@if (collaborationEnabled)
+{
+    <script src="~/js/collaboration.js" asp-append-version="true" defer></script>
+}
+@if (toastMessages.Count > 0)
+{
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            if (typeof window.showToast !== "function") {
+                return;
+            }
+@foreach (var toast in toastMessages)
+{
+            <text>
+            (function () {
+                const type = "@toast.Type";
+                const message = @Html.Raw(JsonSerializer.Serialize(toast.Message));
+                if (window.toast && typeof window.toast[type] === "function") {
+                    window.toast[type](message, { position: "top-right", duration: 5000 });
+                    return;
+                }
+                if (typeof window.showToast === "function") {
+                    window.showToast({ type: type, message: message, position: "top-right", duration: 5000 });
+                }
+            })();
+            </text>
+}
+        });
+    </script>
+}
+@await RenderSectionAsync("Scripts", required: false)
+@if (ViewData["DbInfo"] is string dbInfoHtml && !string.IsNullOrWhiteSpace(dbInfoHtml))
+{
+    <div id="calibra-db-info" style="display:none;" data-page-title="@(ViewData["Title"] ?? "")">@Html.Raw(dbInfoHtml)</div>
+}
+</body>
+</html>

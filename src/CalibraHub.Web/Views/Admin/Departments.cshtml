@@ -1,0 +1,150 @@
+@{
+    ViewData["Title"] = "Departman Tanimlama";
+    ViewData["FormCode"] = "ADMIN_DEPARTMENTS";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>departments</td><td style='padding:6px 8px;'>Departman tanimlari (kod, ad, sirket, durum)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .dep-layout { display: flex; gap: 0; height: 100%; overflow: hidden; }
+    .dep-form-panel { width: 300px; flex-shrink: 0; border-right: 1px solid var(--app-border,#dde3ee); background: var(--app-surface,#fff); display: flex; flex-direction: column; overflow-y: auto; padding: 10px 14px; }
+    .dep-grid-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .dep-grid-panel .dep-table-wrap { flex: 1 1 auto; overflow: auto; }
+    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child { width: 70px; flex-shrink: 0; font-size: 0.76rem; font-weight: 600; color: var(--app-text-muted,#64748b); text-align: right; }
+    .dep-toolbar { padding: 5px 10px; border-bottom: 1px solid var(--app-border,#dde3ee); }
+    .dep-grid { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .dep-grid thead th { text-align: left; padding: 3px 8px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+    .dep-grid tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; }
+    .dep-grid tbody tr:hover { background: #f8fafc; }
+    .dep-grid td { padding: 2px 8px; vertical-align: middle; }
+    .dep-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
+    .dep-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
+    .dep-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .dep-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+</style>
+}
+
+<div class="entity-form-toolbar" data-no-proxy="1">
+    <button type="button" class="btn btn-primary btn-sm" onclick="depSave()">Kaydet</button>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="depNew()">Yeni</button>
+</div>
+
+<div class="dep-layout">
+    <div class="dep-form-panel">
+        <div class="cs-line">
+            <label>Sirket *</label>
+            <select id="depCompanyId" class="form-select form-select-sm"></select>
+        </div>
+        <div class="cs-line"><label>Kod *</label><input id="depCode" class="form-control form-control-sm" maxlength="20" /></div>
+        <div class="cs-line"><label>Ad *</label><input id="depName" class="form-control form-control-sm" maxlength="100" /></div>
+        <div id="depMsg"></div>
+    </div>
+    <div class="dep-grid-panel">
+        <div class="dep-toolbar" style="display:flex;gap:6px;align-items:center;">
+            <select id="depFilterCompany" class="form-select form-select-sm" style="max-width:160px;" onchange="depLoad()">
+                <option value="">Tum sirketler</option>
+            </select>
+            <input type="text" id="depSearch" class="form-control form-control-sm" placeholder="Kod veya ada gore ara..." oninput="depLoad()" style="max-width:200px;" />
+        </div>
+        <div class="dep-table-wrap">
+            <table class="dep-grid"><thead><tr>
+                <th>Sirket</th><th>Kod</th><th>Ad</th><th>Durum</th>
+            </tr></thead><tbody id="depBody"></tbody></table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var API = function(a) { return '/Admin/' + a; };
+
+    function loadCompanies(cb) {
+        fetch(API('GetCompaniesJson'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sel = document.getElementById('depCompanyId');
+                var flt = document.getElementById('depFilterCompany');
+                sel.innerHTML = '<option value="">Sirket seciniz</option>' +
+                    data.map(function(c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
+                data.forEach(function(c) {
+                    var opt = document.createElement('option');
+                    opt.value = c.id; opt.textContent = c.name;
+                    flt.appendChild(opt);
+                });
+                if (cb) cb();
+            });
+    }
+
+    window.depLoad = function() {
+        var s = document.getElementById('depSearch').value;
+        var cid = document.getElementById('depFilterCompany').value;
+        var url = API('GetDepartmentsJson') + '?search=' + encodeURIComponent(s);
+        if (cid) url += '&companyId=' + encodeURIComponent(cid);
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var body = document.getElementById('depBody');
+                if (data.length === 0) {
+                    body.innerHTML = '<tr><td colspan="4" class="dep-empty">Kayit bulunamadi.</td></tr>';
+                    return;
+                }
+                body.innerHTML = data.map(function(d) {
+                    return '<tr>' +
+                        '<td>' + esc(d.companyName) + '</td>' +
+                        '<td style="font-weight:600;">' + esc(d.code) + '</td>' +
+                        '<td>' + esc(d.name) + '</td>' +
+                        '<td style="font-size:0.72rem;color:' + (d.isActive ? '#15803d' : '#dc2626') + ';">' + (d.isActive ? 'Aktif' : 'Pasif') + '</td>' +
+                        '</tr>';
+                }).join('');
+            });
+    };
+
+    window.depNew = function() {
+        document.getElementById('depCode').value = '';
+        document.getElementById('depName').value = '';
+        depMsg('');
+    };
+
+    window.depSave = function() {
+        var companyId = document.getElementById('depCompanyId').value;
+        var code = document.getElementById('depCode').value.trim();
+        var name = document.getElementById('depName').value.trim();
+        if (!companyId) { depMsg('Sirket secimi zorunludur.', false); return; }
+        if (!code) { depMsg('Kod zorunludur.', false); return; }
+        if (!name) { depMsg('Ad zorunludur.', false); return; }
+
+        fetch(API('SaveDepartmentJson'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyId: companyId, code: code, name: name })
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) {
+                    depMsg(d.message || 'Kaydedildi.', true);
+                    depNew();
+                    depLoad();
+                } else {
+                    depMsg(d.message || 'Hata', false);
+                }
+            });
+    };
+
+    function depMsg(msg, ok) {
+        var el = document.getElementById('depMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="dep-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    loadCompanies(depLoad);
+})();
+</script>
+}

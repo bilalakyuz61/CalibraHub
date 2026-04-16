@@ -1,0 +1,226 @@
+@inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@{
+    var runtime = await UiText.GetRuntimeAsync();
+    var activePage = ViewData["SetupPage"]?.ToString() ?? "companies";
+}
+<!DOCTYPE html>
+<html lang="@runtime.LanguageCode">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — CalibraHub Kurulum</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <style>
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+
+        .setup-shell {
+            display: flex;
+            height: 100vh;
+            background: var(--app-content-bg, #f8fafc);
+            color: var(--app-text, #333);
+            font-size: 0.88rem;
+        }
+
+        /* ── Sidebar ── */
+        .setup-sidebar {
+            width: 210px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            background: var(--app-surface, #fff);
+            border-right: 1px solid var(--app-border, #e0e0e0);
+        }
+
+        .setup-sidebar-brand {
+            display: flex;
+            flex-direction: column;
+            padding: 18px 16px 14px;
+            border-bottom: 1px solid var(--app-border, #e0e0e0);
+            gap: 2px;
+        }
+
+        .setup-sidebar-brand strong {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--theme-accent, #2563eb);
+            letter-spacing: -0.01em;
+        }
+
+        .setup-sidebar-brand small {
+            font-size: 0.72rem;
+            color: var(--app-text-muted, #64748b);
+            font-weight: 500;
+        }
+
+        .setup-sidebar-nav {
+            flex: 1 1 auto;
+            padding: 8px 0;
+            list-style: none;
+            margin: 0;
+        }
+
+        .setup-sidebar-nav li { margin: 0; }
+
+        .setup-sidebar-item {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 9px 16px;
+            color: var(--app-text-muted, #4f4f4f);
+            text-decoration: none;
+            font-size: 0.84rem;
+            font-weight: 500;
+            transition: background .12s, color .12s;
+            border-left: 3px solid transparent;
+        }
+
+        .setup-sidebar-item svg { flex-shrink: 0; opacity: .7; }
+
+        .setup-sidebar-item:hover {
+            background: var(--app-muted-surface, #f3f5f7);
+            color: var(--app-text, #333);
+        }
+
+        .setup-sidebar-item.is-active {
+            color: var(--theme-accent, #2563eb);
+            background: var(--theme-accent-soft, rgba(37,99,235,.08));
+            border-left-color: var(--theme-accent, #2563eb);
+            font-weight: 600;
+        }
+
+        .setup-sidebar-item.is-active svg { opacity: 1; }
+
+        .setup-sidebar-footer {
+            padding: 12px 16px;
+            border-top: 1px solid var(--app-border, #e0e0e0);
+        }
+
+        .setup-sidebar-back {
+            font-size: 0.81rem;
+            font-weight: 500;
+            color: var(--app-text-muted, #64748b);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 10px;
+            border-radius: 7px;
+            border: 1px solid var(--app-border, #e0e0e0);
+            background: var(--app-muted-surface, #f3f5f7);
+            transition: background .12s, color .12s, border-color .12s;
+        }
+
+        .setup-sidebar-back:hover {
+            color: var(--theme-accent, #2563eb);
+            background: var(--theme-accent-soft, rgba(37,99,235,.08));
+            border-color: color-mix(in srgb, var(--theme-accent, #2563eb) 25%, var(--app-border, #e0e0e0) 75%);
+        }
+
+        /* ── Main area ── */
+        .setup-main {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .setup-header {
+            flex: 0 0 auto;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: var(--app-surface, #fff);
+            border-bottom: 1px solid var(--app-border, #e0e0e0);
+        }
+
+        .setup-header h1 {
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin: 0;
+            color: var(--app-text, #1e293b);
+        }
+
+        .setup-success-banner {
+            margin: 12px 24px 0;
+            padding: 10px 16px;
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+            border-radius: 8px;
+            font-size: 0.84rem;
+        }
+
+        .setup-content {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 16px 24px 24px;
+        }
+    </style>
+</head>
+<body class="setup-page app-theme-@runtime.ThemeCode">
+<div class="setup-shell">
+
+    <nav class="setup-sidebar">
+        <div class="setup-sidebar-brand">
+            <strong>CalibraHub</strong>
+            <small>Sistem Kurulumu</small>
+        </div>
+
+        <ul class="setup-sidebar-nav">
+            <li>
+                <a asp-controller="Setup" asp-action="Companies"
+                   class="setup-sidebar-item @(activePage == "companies" ? "is-active" : "")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15" aria-hidden="true">
+                        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                    </svg>
+                    Sirket Tanimlari
+                </a>
+            </li>
+            <li>
+                <a asp-controller="Setup" asp-action="Users"
+                   class="setup-sidebar-item @(activePage == "users" ? "is-active" : "")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="15" height="15" aria-hidden="true">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Kullanici Tanimlari
+                </a>
+            </li>
+        </ul>
+
+        <div class="setup-sidebar-footer">
+            <a asp-controller="Account" asp-action="Login" class="setup-sidebar-back">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+                Giris Ekranina Don
+            </a>
+        </div>
+    </nav>
+
+    <div class="setup-main">
+        <header class="setup-header">
+            <h1>@ViewData["Title"]</h1>
+        </header>
+
+        @if (TempData["SetupSuccess"] is string successMsg)
+        {
+            <div class="setup-success-banner">@successMsg</div>
+        }
+
+        <main class="setup-content">
+            @RenderBody()
+        </main>
+    </div>
+</div>
+
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+<script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+@RenderSection("Scripts", required: false)
+</body>
+</html>

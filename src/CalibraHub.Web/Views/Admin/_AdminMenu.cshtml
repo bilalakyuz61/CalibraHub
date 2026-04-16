@@ -1,0 +1,352 @@
+@inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@{
+    var activeMenu = (ViewData["AdminMenu"] as string ?? string.Empty).ToLowerInvariant();
+    var managementOpen = activeMenu is "dashboard" or "guide-management" or "form-management";
+    var panelModuleOpen = activeMenu is "dashboard";
+    var guideModuleOpen = activeMenu is "guide-management" or "form-management";
+    var systemSettingsOpen = activeMenu is "company-settings" or "integrator-settings" or "mail-settings" or "erp-settings" or "appearance" or "project-instructions";
+    var logsOpen = activeMenu is "system-logs";
+    var viewSettingsOpen = activeMenu is "view-settings-screens" or "view-settings-material-cards";
+    var settingsOpen = systemSettingsOpen || logsOpen || viewSettingsOpen;
+    var organizationModuleOpen = activeMenu is "users" or "departments" or "roles";
+    var definitionsOpen = organizationModuleOpen;
+    var ui = await UiText.GetFormAsync("shared.admin_menu");
+    var collapseMenuText = ui.Text("collapse_menu");
+    var searchPlaceholderText = ui.Text("search_placeholder");
+    var favoritesTitleText = ui.Text("favorites_title");
+    var managementText = ui.Text("management");
+    var panelText = ui.Text("panel");
+    var generalSettingsText = ui.Text("general_settings");
+    var settingsText = ui.Text("settings");
+    var systemSettingsText = ui.Text("system_settings");
+    var companyDefinitionText = ui.Text("company_definition");
+    var integratorSettingsText = ui.Text("integrator_settings");
+    var mailSettingsText = ui.Text("mail_settings");
+    var erpSettingsText = ui.Text("erp_settings");
+    var appearanceText = ui.Text("appearance");
+    var projectInstructionsText = "Proje Talimatlari";
+    var viewsText = ui.Text("views");
+    var screenDesignSettingsText = ui.Text("screen_design_settings");
+    var logText = ui.Text("log");
+    var systemLogReportText = ui.Text("system_log_report");
+    var definitionsText = ui.Text("definitions");
+    var organizationText = ui.Text("organization");
+    var departmentsText = ui.Text("departments");
+    var usersText = ui.Text("users");
+    var rolesText = ui.Text("roles");
+}
+
+<nav class="admin-nav" data-menu-root data-menu-scope="admin">
+    <button type="button"
+            class="side-toggle"
+            data-sidebar-toggle
+            aria-expanded="true"
+            aria-label="@collapseMenuText"
+            title="@collapseMenuText">
+        <span class="menu-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="m14.5 6-5 6 5 6"></path></svg>
+        </span>
+        <span class="menu-text">@collapseMenuText</span>
+    </button>
+
+    <div class="menu-search-wrap">
+        <input type="search"
+               class="menu-search-input"
+               data-menu-search
+               placeholder="@searchPlaceholderText"
+               autocomplete="off" />
+    </div>
+
+    <section class="favorites-panel" data-favorites-panel hidden>
+        <h3 class="favorites-title">@favoritesTitleText</h3>
+        <div class="favorites-list" data-favorites-list></div>
+    </section>
+
+    <details class="admin-group" @(managementOpen ? "open" : null)>
+        <summary>
+            <span class="menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7"></rect><rect x="13" y="4" width="7" height="5"></rect><rect x="13" y="11" width="7" height="9"></rect><rect x="4" y="13" width="7" height="7"></rect></svg>
+            </span>
+            <span class="menu-text">@managementText</span>
+        </summary>
+
+        <div class="menu-group-content">
+            <div class="menu-group-content-inner">
+                <details class="admin-group admin-group-nested" @(panelModuleOpen ? "open" : null)>
+                    <summary>
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M4 18h16"></path><path d="M7 15V9"></path><path d="M12 15V6"></path><path d="M17 15v-4"></path></svg>
+                        </span>
+                        <span class="menu-text">@panelText</span>
+                    </summary>
+
+                    <div class="menu-group-content">
+                        <div class="menu-group-content-inner">
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-dashboard">
+                                <a class="admin-nav-item @(activeMenu == "dashboard" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="Index" title="@generalSettingsText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M4 19V5h16v14z"></path><path d="M8 14l2-2 2 1 4-4"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@generalSettingsText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{generalSettingsText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+
+                        </div>
+                    </div>
+                </details>
+
+                <details class="admin-group admin-group-nested" @(guideModuleOpen ? "open" : null)>
+                    <summary>
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M4 6h16"></path><path d="M4 12h10"></path><path d="M4 18h7"></path><circle cx="18" cy="16" r="3"></circle><path d="m21 19-1.5-1.5"></path></svg>
+                        </span>
+                        <span class="menu-text">Rehber Merkezi</span>
+                    </summary>
+
+                    <div class="menu-group-content">
+                        <div class="menu-group-content-inner">
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-guide-management">
+                                <a class="admin-nav-item @(activeMenu == "guide-management" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="GuideManagement" title="Rehber Yönetimi">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                                    </span>
+                                    <span class="menu-text">Rehber Yönetimi</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Rehber Yönetimi favorilere ekle">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-form-management">
+                                <a class="admin-nav-item @(activeMenu == "form-management" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="FormManagement" title="Form Tasarım Ayarları">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
+                                    </span>
+                                    <span class="menu-text">Form Tasarım Ayarları</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Form Tasarım Ayarları favorilere ekle">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </div>
+    </details>
+
+    <details class="admin-group" @(settingsOpen ? "open" : null)>
+        <summary>
+            <span class="menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 .001 7.001A3.5 3.5 0 0 0 12 8.5z"></path><path d="M21 13v-2l-2.03-.52a8.03 8.03 0 0 0-.72-1.73l1.08-1.8-2.12-2.12-1.8 1.08a8.03 8.03 0 0 0-1.73-.72L13 3h-2l-.52 2.03a8.03 8.03 0 0 0-1.73.72l-1.8-1.08-2.12 2.12 1.08 1.8a8.03 8.03 0 0 0-.72 1.73L3 11v2l2.03.52c.15.6.39 1.17.72 1.73l-1.08 1.8 2.12 2.12 1.8-1.08c.56.33 1.13.57 1.73.72L11 21h2l.52-2.03a8.03 8.03 0 0 0 1.73-.72l1.8 1.08 2.12-2.12-1.08-1.8c.33-.56.57-1.13.72-1.73z"></path></svg>
+            </span>
+            <span class="menu-text">@settingsText</span>
+        </summary>
+
+        <div class="menu-group-content">
+            <div class="menu-group-content-inner">
+                <details class="admin-group admin-group-nested" @(systemSettingsOpen ? "open" : null)>
+                    <summary>
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path><circle cx="8" cy="6" r="2"></circle><circle cx="14" cy="12" r="2"></circle><circle cx="10" cy="18" r="2"></circle></svg>
+                        </span>
+                        <span class="menu-text">@systemSettingsText</span>
+                    </summary>
+
+                        <div class="menu-group-content">
+                        <div class="menu-group-content-inner">
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-company-settings">
+                                <a class="admin-nav-item @(activeMenu == "company-settings" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="CompanySettings" title="@companyDefinitionText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"></rect><path d="M8 10h8"></path><path d="M8 14h8"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@companyDefinitionText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{companyDefinitionText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+
+
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-mail-settings">
+                                <a class="admin-nav-item @(activeMenu == "mail-settings" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="MailSettings" title="@mailSettingsText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m4 7 8 6 8-6"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@mailSettingsText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{mailSettingsText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-erp-settings">
+                                <a class="admin-nav-item @(activeMenu == "erp-settings" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="ErpSettings" title="@erpSettingsText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M3 7h13v10H3z"></path><path d="M16 10h3l2 2v5h-5z"></path><circle cx="7" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>
+                                    </span>
+                                    <span class="menu-text">@erpSettingsText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{erpSettingsText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-appearance">
+                                <a class="admin-nav-item @(activeMenu == "appearance" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="Appearance" title="@appearanceText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M12 3v3"></path><path d="M12 18v3"></path><path d="m4.9 4.9 2.1 2.1"></path><path d="m17 17 2.1 2.1"></path><path d="M3 12h3"></path><path d="M18 12h3"></path><path d="m4.9 19.1 2.1-2.1"></path><path d="M17 7l2.1-2.1"></path><circle cx="12" cy="12" r="4"></circle></svg>
+                                    </span>
+                                    <span class="menu-text">@appearanceText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{appearanceText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-project-instructions">
+                                <a class="admin-nav-item @(activeMenu == "project-instructions" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="ProjectInstructions" title="@projectInstructionsText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M7 4h7l5 5v11H7z"></path><path d="M14 4v5h5"></path><path d="M10 12h6"></path><path d="M10 16h6"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@projectInstructionsText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{projectInstructionsText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="admin-group admin-group-nested" @(viewSettingsOpen ? "open" : null)>
+                    <summary>
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M3 12s3.6-6 9-6 9 6 9 6-3.6 6-9 6-9-6-9-6z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+                        </span>
+                        <span class="menu-text">@viewsText</span>
+                    </summary>
+
+                    <div class="menu-group-content">
+                        <div class="menu-group-content-inner">
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-view-settings-screens">
+                                <a class="admin-nav-item @(viewSettingsOpen ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="ViewSettings" title="@screenDesignSettingsText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"></rect><path d="M3.5 10h17"></path><path d="M8 15h4"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@screenDesignSettingsText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{screenDesignSettingsText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="admin-group admin-group-nested" @(logsOpen ? "open" : null)>
+                    <summary>
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M6 4h12v16H6z"></path><path d="M9 9h6"></path><path d="M9 13h6"></path></svg>
+                        </span>
+                        <span class="menu-text">@logText</span>
+                    </summary>
+
+                    <div class="menu-group-content">
+                        <div class="menu-group-content-inner">
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-system-logs">
+                                <a class="admin-nav-item @(activeMenu == "system-logs" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="Logs" title="@systemLogReportText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"></path><path d="M8 9h8"></path><path d="M8 13h8"></path><path d="M8 17h4"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@systemLogReportText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{systemLogReportText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </div>
+    </details>
+
+    <details class="admin-group" @(definitionsOpen ? "open" : null)>
+        <summary>
+            <span class="menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg>
+            </span>
+            <span class="menu-text">@definitionsText</span>
+        </summary>
+
+        <div class="menu-group-content">
+            <div class="menu-group-content-inner">
+                <details class="admin-group admin-group-nested" @(organizationModuleOpen ? "open" : null)>
+                    <summary>
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M12 4v6"></path><path d="M6 20v-4a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v4"></path><circle cx="12" cy="4" r="2"></circle><circle cx="6" cy="20" r="2"></circle><circle cx="18" cy="20" r="2"></circle></svg>
+                        </span>
+                        <span class="menu-text">@organizationText</span>
+                    </summary>
+
+                    <div class="menu-group-content">
+                        <div class="menu-group-content-inner">
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-departments">
+                                <a class="admin-nav-item @(activeMenu == "departments" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="Departments" title="@departmentsText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M4 20V8l8-4 8 4v12"></path><path d="M9 20v-4h6v4"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@departmentsText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{departmentsText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-users">
+                                <a class="admin-nav-item @(activeMenu == "users" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="Users" title="@usersText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"></circle><path d="M5 21a7 7 0 0 1 14 0"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@usersText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{usersText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-roles">
+                                <a class="admin-nav-item @(activeMenu == "roles" ? "active" : string.Empty)"
+                                   asp-controller="Admin" asp-action="Roles" title="@rolesText">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><path d="M12 3 4 7v5c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V7z"></path><path d="m9 12 2 2 4-4"></path></svg>
+                                    </span>
+                                    <span class="menu-text">@rolesText</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{rolesText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </div>
+    </details>
+</nav>

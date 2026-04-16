@@ -1,0 +1,302 @@
+@model CalibraHub.Web.Models.Logistics.MaterialGroupsViewModel
+@{
+    ViewData["Title"] = "Malzeme Grupları";
+    ViewData["FormCode"] = "MATERIAL_GROUPS";
+    ViewData["BodyClass"] = "page-material-groups";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>material_groups</td><td style='padding:6px 8px;'>Malzeme grup tanimlari (kategori 1-5, kod, aciklama)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>material_group_mappings</td><td style='padding:6px 8px;'>Malzeme-grup eslestirmeleri (hangi malzeme hangi gruba ait)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .page-material-groups .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-material-groups .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .mg-body {
+        display: flex; flex: 1 1 auto; min-height: 0; gap: 8px; padding: 8px; overflow: hidden;
+    }
+    .mg-tabs {
+        flex: 0 0 120px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .mg-tab-btn {
+        display: block; width: 100%; padding: 10px 14px;
+        text-align: left; border: 1px solid #dee2e6; border-radius: 6px;
+        background: #f8f9fa; cursor: pointer; font-size: .875rem;
+        transition: background .15s, color .15s, border-color .15s;
+    }
+    .mg-tab-btn:hover { background: #e9ecef; }
+    .mg-tab-btn.active {
+        background: var(--calibra-primary, #0d6efd);
+        color: #fff;
+        border-color: var(--calibra-primary, #0d6efd);
+        font-weight: 600;
+    }
+    .mg-content {
+        flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px;
+        min-height: 0; min-width: 0; overflow: hidden;
+    }
+    /* Form kartı — medya sorgusunun flex:1 1 auto'sunu ezmek için !important */
+    .mg-form-card,
+    .integrator-dashboard--compact.integrator-dashboard--wide .mg-form-card {
+        flex: 0 0 auto !important;
+        display: block !important;
+        overflow-y: auto !important;
+        overflow-x: hidden;
+        min-height: 0;
+    }
+    .mg-form-card .integrator-collapsible-card__content {
+        display: block !important;
+        overflow: visible !important;
+        min-height: auto !important;
+    }
+    /* Grid kartı */
+    .mg-grid-card {
+        flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .mg-grid-card .integrator-collapsible-card__content {
+        flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .mg-grid-card .integrator-data-stack { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .mg-grid-card .integrator-data-block {
+        height: 100%; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .mg-grid-card .integrator-table-wrap { flex: 1 1 auto; overflow-y: auto; }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--compact integrator-dashboard--wide">
+    <div class="integrator-dashboard__content">
+        <div class="mg-body">
+
+            <!-- Sol: dikey sekmeler -->
+            <div class="mg-tabs">
+                @for (int cat = 1; cat <= 5; cat++)
+                {
+                    <button type="button"
+                            class="mg-tab-btn @(cat == 1 ? "active" : "")"
+                            data-cat="@cat"
+                            onclick="mgSelectTab(@cat)">Grup @cat</button>
+                }
+            </div>
+
+            <!-- Sağ: form + grid -->
+            <div class="mg-content">
+
+                <!-- Form kartı -->
+                <article class="integrator-card integrator-card--form mg-form-card">
+                    <div class="integrator-collapsible-card__content">
+                        <div class="entity-form-toolbar">
+                            <button type="button" class="btn btn-primary integrator-btn-primary" onclick="mgSave()">Kaydet</button>
+                            <button type="button" class="btn btn-secondary integrator-btn-secondary" onclick="mgNew()">Yeni</button>
+                            <button type="button" class="btn btn-outline-danger integrator-btn-tertiary" id="mgBtnDelete" disabled onclick="mgDelete()">Sil</button>
+                        </div>
+                        <div class="integrator-form integrator-form--compact-width" autocomplete="off">
+                            <div id="mgError" class="text-danger mb-2" style="display:none"></div>
+                            <input type="hidden" id="mgId" value="" />
+                            <input type="hidden" id="mgCategory" value="1" />
+                            <div class="entity-layout-grid">
+                                <div class="integrator-field layout-span-1">
+                                    <label class="form-label">Grup Kodu *</label>
+                                    <input type="text" id="mgCode" class="form-control" maxlength="10"
+                                           placeholder="Kod giriniz" style="text-transform:uppercase"
+                                           onkeydown="if(event.key==='Enter'){mgSave();event.preventDefault();}" />
+                                </div>
+                                <div class="integrator-field layout-span-2">
+                                    <label class="form-label">Grup Açıklaması</label>
+                                    <input type="text" id="mgDesc" class="form-control" maxlength="100"
+                                           placeholder="Açıklama giriniz"
+                                           onkeydown="if(event.key==='Enter'){mgSave();event.preventDefault();}" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+
+                <!-- Grid kartı -->
+                <article class="integrator-card integrator-card--table mg-grid-card">
+                    <div class="integrator-collapsible-card__content">
+                        <div class="integrator-data-stack">
+                            <section class="integrator-data-block">
+                                <div class="integrator-table-wrap">
+                                    <table class="table integrator-table">
+                                        <thead>
+                                            <tr>
+                                                <th class="calibra-grid-actions-first">İşlem</th>
+                                                <th>Grup Kodu</th>
+                                                <th>Grup Açıklaması</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="mgGridBody">
+                                            <tr>
+                                                <td colspan="3" class="integrator-table__empty">Yükleniyor...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </article>
+
+            </div>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+    let mgCurrentCat = 1;
+
+    async function mgSelectTab(cat) {
+        mgCurrentCat = cat;
+        document.querySelectorAll('.mg-tab-btn')
+            .forEach(b => b.classList.toggle('active', +b.dataset.cat === cat));
+        document.getElementById('mgCategory').value = cat;
+        mgNew();
+        await mgLoadGrid(cat);
+    }
+
+    async function mgLoadGrid(cat) {
+        const tbody = document.getElementById('mgGridBody');
+        tbody.innerHTML = '<tr><td colspan="3" class="integrator-table__empty">Yükleniyor...</td></tr>';
+        try {
+            const resp = await fetch(`/Logistics/GetAllMaterialGroups?category=${cat}`);
+            if (!resp.ok) throw new Error();
+            const groups = await resp.json();
+            mgRenderGrid(groups);
+        } catch {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-danger">Veriler yüklenemedi.</td></tr>';
+        }
+    }
+
+    function mgRenderGrid(groups) {
+        const tbody = document.getElementById('mgGridBody');
+        if (!groups || groups.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="integrator-table__empty">Bu kategoride kayıt bulunmuyor.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = groups.map(g => `
+            <tr>
+                <td class="calibra-grid-actions-first">
+                    <div class="material-row-actions">
+                        <button type="button" class="btn btn-secondary integrator-btn-secondary"
+                                onclick="mgEdit(${g.id},${JSON.stringify(g.code)},${JSON.stringify(g.description)})">Düzenle</button>
+                        <button type="button" class="btn btn-outline-danger integrator-btn-tertiary"
+                                onclick="mgConfirmDelete(${g.id},${JSON.stringify(g.code)})">Sil</button>
+                    </div>
+                </td>
+                <td>${escHtml(g.code)}</td>
+                <td>${escHtml(g.description)}</td>
+            </tr>`).join('');
+    }
+
+    function mgNew() {
+        document.getElementById('mgId').value = '';
+        document.getElementById('mgCode').value = '';
+        document.getElementById('mgDesc').value = '';
+        document.getElementById('mgBtnDelete').disabled = true;
+        const errEl = document.getElementById('mgError');
+        errEl.style.display = 'none';
+        errEl.textContent = '';
+    }
+
+    function mgEdit(id, code, desc) {
+        document.getElementById('mgId').value = id;
+        document.getElementById('mgCode').value = code;
+        document.getElementById('mgDesc').value = desc ?? '';
+        document.getElementById('mgBtnDelete').disabled = false;
+        const errEl = document.getElementById('mgError');
+        errEl.style.display = 'none';
+        errEl.textContent = '';
+        document.getElementById('mgCode').focus();
+    }
+
+    async function mgSave() {
+        const id      = parseInt(document.getElementById('mgId').value) || 0;
+        const cat     = parseInt(document.getElementById('mgCategory').value);
+        const code    = document.getElementById('mgCode').value.trim().toUpperCase();
+        const desc    = document.getElementById('mgDesc').value.trim();
+        const errEl   = document.getElementById('mgError');
+        errEl.style.display = 'none';
+        if (!code) {
+            errEl.textContent = 'Grup kodu zorunludur.';
+            errEl.style.display = '';
+            document.getElementById('mgCode').focus();
+            return;
+        }
+        try {
+            const resp = await fetch('/Logistics/UpsertMaterialGroup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: id > 0 ? id : null,
+                    groupCategory: cat,
+                    groupCode: code,
+                    groupDescription: desc || null
+                })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                mgNew();
+                mgRenderGrid(data.groups);
+            } else {
+                errEl.textContent = data.message;
+                errEl.style.display = '';
+            }
+        } catch {
+            errEl.textContent = 'Sunucu hatası oluştu.';
+            errEl.style.display = '';
+        }
+    }
+
+    async function mgConfirmDelete(id, code) {
+        if (!confirm(`"${code}" grup kodunu silmek istediğinizden emin misiniz?`)) return;
+        await mgDoDelete(id);
+    }
+
+    async function mgDelete() {
+        const id   = parseInt(document.getElementById('mgId').value);
+        const code = document.getElementById('mgCode').value.trim();
+        if (!id) return;
+        if (!confirm(`"${code}" grup kodunu silmek istediğinizden emin misiniz?`)) return;
+        await mgDoDelete(id);
+    }
+
+    async function mgDoDelete(id) {
+        const cat   = parseInt(document.getElementById('mgCategory').value);
+        const errEl = document.getElementById('mgError');
+        errEl.style.display = 'none';
+        try {
+            const resp = await fetch('/Logistics/DeleteMaterialGroupInline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, category: cat })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                mgNew();
+                mgRenderGrid(data.groups);
+            } else {
+                errEl.textContent = data.message;
+                errEl.style.display = '';
+            }
+        } catch {
+            errEl.textContent = 'Sunucu hatası oluştu.';
+            errEl.style.display = '';
+        }
+    }
+
+    function escHtml(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => mgSelectTab(1));
+</script>
+}

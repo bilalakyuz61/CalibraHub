@@ -1,0 +1,211 @@
+@{
+    ViewData["Title"] = "Lokasyon Tanimlamalari";
+    ViewData["FormCode"] = "LOCATIONS";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>warehouse_locations</td><td style='padding:6px 8px;'>Lokasyon tanimlari (tip, kod, ad, ust kirilim, sira, agirlik kapasitesi, hacim, durum). Hiyerarsik yapi ParentId ile saglanir.</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .wl-layout { display: flex; flex-direction: column; gap: 0; height: 100%; overflow: hidden; }
+    .wl-form-panel { flex: 1 1 50%; max-height: 50%; background: var(--app-surface,#fff); display: flex; flex-direction: column; overflow-y: auto; padding: 10px 14px; border-bottom: 1px solid var(--app-border,#dde3ee); }
+    .wl-grid-panel { flex: 1 1 50%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .wl-grid-panel .wl-table-wrap { flex: 1 1 auto; overflow: auto; }
+    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child { width: 58px; flex-shrink: 0; font-size: 0.76rem; font-weight: 600; color: var(--app-text-muted,#64748b); text-align: right; }
+    .wl-toolbar { padding: 5px 10px; border-bottom: 1px solid var(--app-border,#dde3ee); }
+    .wl-grid { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .wl-grid thead th { text-align: left; padding: 3px 8px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+    .wl-grid tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; cursor: pointer; }
+    .wl-grid tbody tr:hover { background: #f8fafc; }
+    .wl-grid tbody tr.is-sel { background: #eff6ff; }
+    .wl-grid td { padding: 2px 8px; vertical-align: middle; }
+    .wl-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
+    .act-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border-radius: 4px; border: 1px solid #fecaca; background: #fff; color: #dc2626; cursor: pointer; }
+    .act-btn:hover { background: #fef2f2; }
+    .wl-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
+    .wl-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .wl-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+</style>
+}
+
+<div class="entity-form-toolbar" data-no-proxy="1">
+    <button type="button" class="btn btn-primary integrator-btn-primary" onclick="wlSave()">Kaydet</button>
+    <button type="button" class="btn btn-secondary integrator-btn-secondary" onclick="wlNew()">Yeni</button>
+    <button type="button" class="btn btn-outline-danger integrator-btn-tertiary" id="wlBtnDelete" disabled onclick="wlDelete()">Sil</button>
+</div>
+
+<div class="wl-layout">
+    <div class="wl-form-panel">
+        <input type="hidden" id="wlId" value="" />
+        <div class="cs-line"><label>Tip *</label>
+            <select id="wlTypeCode" class="form-select form-select-sm">
+                <option value="FACTORY">Fabrika</option>
+                <option value="SECTION" selected>Bolum</option>
+                <option value="SHELF">Raf</option>
+                <option value="BIN">Hucre</option>
+            </select>
+        </div>
+        <div class="cs-line"><label>Ust</label>
+            <select id="wlParentId" class="form-select form-select-sm">
+                <option value="">Ust kirilim yok</option>
+            </select>
+        </div>
+        <div class="cs-line"><label>Kod *</label><input id="wlCode" class="form-control form-control-sm" maxlength="50" style="max-width:120px;" /></div>
+        <div class="cs-line"><label>Ad</label><input id="wlName" class="form-control form-control-sm" maxlength="100" /></div>
+        <div class="cs-line"><label>Sira</label><input id="wlSortOrder" class="form-control form-control-sm" type="number" min="0" style="max-width:80px;" value="0" /></div>
+        <div class="cs-line"><label>Agirlik</label><input id="wlWeight" class="form-control form-control-sm" type="number" min="0" step="0.01" style="max-width:100px;" /></div>
+        <div class="cs-line"><label>Hacim</label><input id="wlVolume" class="form-control form-control-sm" type="number" min="0" step="0.01" style="max-width:100px;" /></div>
+        <div class="cs-line"><label>Durum</label><div class="form-check form-switch" style="margin:0;"><input id="wlIsActive" class="form-check-input" type="checkbox" role="switch" checked /></div></div>
+        <div id="wlMsg"></div>
+    </div>
+    <div class="wl-grid-panel">
+        <div class="wl-toolbar">
+            <input type="text" id="wlSearch" class="form-control form-control-sm" placeholder="Tip, kod, ad veya ust kirilima gore ara..." oninput="wlLoad()" style="max-width:280px;" />
+        </div>
+        <div class="wl-table-wrap">
+            <table class="wl-grid"><thead><tr>
+                <th style="width:36px;"></th><th>Tip</th><th>Kod</th><th>Ad</th><th>Ust Kirilim</th><th>Sira</th><th>Agirlik</th><th>Hacim</th><th>Durum</th>
+            </tr></thead><tbody id="wlBody"></tbody></table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var API = function(a) { return '/Logistics/' + a; };
+    var selId = 0;
+    var allLocations = [];
+
+    wlLoad();
+
+    window.wlLoad = function() {
+        var s = document.getElementById('wlSearch').value;
+        fetch(API('GetAllWarehouseLocations') + '?search=' + encodeURIComponent(s))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                allLocations = data;
+                wlBuildParentOptions();
+                var body = document.getElementById('wlBody');
+                if (data.length === 0) { body.innerHTML = '<tr><td colspan="9" class="wl-empty">Kayit bulunamadi.</td></tr>'; return; }
+                body.innerHTML = data.map(function(d) {
+                    var w = d.maxWeightCapacity != null ? d.maxWeightCapacity.toFixed(2).replace(/\.?0+$/, '') : '-';
+                    var v = d.volumeCapacity != null ? d.volumeCapacity.toFixed(2).replace(/\.?0+$/, '') : '-';
+                    return '<tr class="' + (d.id === selId ? 'is-sel' : '') + '" onclick="wlSelect(' + d.id + ')">' +
+                        '<td onclick="event.stopPropagation()"><button type="button" class="act-btn" title="Sil" onclick="wlDeleteRow(' + d.id + ')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></td>' +
+                        '<td>' + d.locationTypeDisplayName + '</td>' +
+                        '<td style="font-weight:600;">' + d.locationCode + '</td>' +
+                        '<td>' + (d.locationName || '-') + '</td>' +
+                        '<td>' + d.parentDisplayName + '</td>' +
+                        '<td>' + d.sortOrder + '</td>' +
+                        '<td>' + w + '</td>' +
+                        '<td>' + v + '</td>' +
+                        '<td style="font-size:0.72rem;color:' + (d.isActive ? '#15803d' : '#dc2626') + ';">' + (d.isActive ? 'Aktif' : 'Pasif') + '</td></tr>';
+                }).join('');
+            });
+    };
+
+    function wlBuildParentOptions() {
+        var sel = document.getElementById('wlParentId');
+        var curVal = sel.value;
+        sel.innerHTML = '<option value="">Ust kirilim yok</option>';
+        allLocations.forEach(function(d) {
+            if (d.id === selId) return;
+            var label = d.locationName ? d.locationCode + ' - ' + d.locationName : d.locationCode;
+            var opt = document.createElement('option');
+            opt.value = d.id;
+            opt.textContent = label;
+            if (String(d.id) === curVal) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    window.wlSelect = function(id) {
+        selId = id;
+        fetch(API('GetWarehouseLocation') + '?id=' + id)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                document.getElementById('wlId').value = d.id;
+                document.getElementById('wlTypeCode').value = d.locationTypeCode;
+                document.getElementById('wlCode').value = d.locationCode;
+                document.getElementById('wlName').value = d.locationName;
+                document.getElementById('wlSortOrder').value = d.sortOrder;
+                document.getElementById('wlWeight').value = d.maxWeightCapacity != null ? d.maxWeightCapacity : '';
+                document.getElementById('wlVolume').value = d.volumeCapacity != null ? d.volumeCapacity : '';
+                document.getElementById('wlIsActive').checked = d.isActive;
+                document.getElementById('wlBtnDelete').style.display = '';
+                wlBuildParentOptions();
+                document.getElementById('wlParentId').value = d.parentId != null ? d.parentId : '';
+                wlLoad();
+            });
+    };
+
+    window.wlNew = function() {
+        selId = 0;
+        document.getElementById('wlId').value = '';
+        document.getElementById('wlTypeCode').value = 'SECTION';
+        document.getElementById('wlParentId').value = '';
+        document.getElementById('wlCode').value = '';
+        document.getElementById('wlName').value = '';
+        document.getElementById('wlSortOrder').value = '0';
+        document.getElementById('wlWeight').value = '';
+        document.getElementById('wlVolume').value = '';
+        document.getElementById('wlIsActive').checked = true;
+        document.getElementById('wlBtnDelete').style.display = 'none';
+        wlMsg('');
+        wlLoad();
+    };
+
+    window.wlSave = function() {
+        var wVal = document.getElementById('wlWeight').value;
+        var vVal = document.getElementById('wlVolume').value;
+        var pVal = document.getElementById('wlParentId').value;
+        var payload = {
+            id: parseInt(document.getElementById('wlId').value) || null,
+            locationTypeCode: document.getElementById('wlTypeCode').value,
+            parentId: pVal ? parseInt(pVal) : null,
+            locationCode: document.getElementById('wlCode').value,
+            locationName: document.getElementById('wlName').value || null,
+            sortOrder: parseInt(document.getElementById('wlSortOrder').value) || 0,
+            maxWeightCapacity: wVal !== '' ? parseFloat(wVal) : null,
+            volumeCapacity: vVal !== '' ? parseFloat(vVal) : null,
+            isActive: document.getElementById('wlIsActive').checked
+        };
+        fetch(API('SaveWarehouseLocationJson'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { wlMsg('Kaydedildi.', true); wlNew(); }
+                else wlMsg(d.message || 'Hata', false);
+            });
+    };
+
+    window.wlDelete = function() {
+        var id = parseInt(document.getElementById('wlId').value);
+        if (!id || !confirm('Bu lokasyonu silmek istediginize emin misiniz?')) return;
+        fetch(API('DeleteWarehouseLocationJson') + '?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { wlMsg('Silindi.', true); wlNew(); }
+                else wlMsg(d.message || 'Silinemedi', false);
+            });
+    };
+
+    window.wlDeleteRow = function(id) {
+        if (!confirm('Bu lokasyonu silmek istediginize emin misiniz?')) return;
+        fetch(API('DeleteWarehouseLocationJson') + '?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { if (d.success) wlLoad(); });
+    };
+
+    function wlMsg(msg, ok) {
+        var el = document.getElementById('wlMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="wl-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+})();
+</script>
+}

@@ -1,0 +1,144 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Kullanici Tanimlari";
+    ViewData["FormCode"] = "SETUP_USERS";
+}
+
+@section Styles {
+<style>
+    .usr-layout { display: flex; gap: 0; height: 100%; overflow: hidden; }
+    .usr-form-panel { width: 300px; flex-shrink: 0; border-right: 1px solid var(--app-border,#dde3ee); background: var(--app-surface,#fff); display: flex; flex-direction: column; overflow-y: auto; padding: 10px 14px; }
+    .usr-grid-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .usr-grid-panel .usr-table-wrap { flex: 1 1 auto; overflow: auto; }
+    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child { width: 70px; flex-shrink: 0; font-size: 0.76rem; font-weight: 600; color: var(--app-text-muted,#64748b); text-align: right; }
+    .usr-toolbar { padding: 5px 10px; border-bottom: 1px solid var(--app-border,#dde3ee); }
+    .usr-grid { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .usr-grid thead th { text-align: left; padding: 3px 8px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+    .usr-grid tbody tr { border-bottom: 1px solid #f1f5f9; }
+    .usr-grid tbody tr:hover { background: #f8fafc; }
+    .usr-grid td { padding: 2px 8px; vertical-align: middle; }
+    .usr-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
+    .usr-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
+    .usr-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .usr-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .usr-note { font-size: 0.72rem; color: #64748b; margin-top: 8px; padding: 6px 8px; background: #f8fafc; border-radius: 4px; border-left: 3px solid #2563eb; }
+</style>
+}
+
+<div class="entity-form-toolbar" data-no-proxy="1">
+    <button type="button" class="btn btn-primary btn-sm" onclick="usrSave()">Kaydet</button>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="usrNew()">Yeni</button>
+</div>
+
+<div class="usr-layout">
+    <div class="usr-form-panel">
+        <div class="cs-line">
+            <label>Sirket *</label>
+            <select id="usrCompanyId" class="form-select form-select-sm"></select>
+        </div>
+        <div class="cs-line"><label>Ad Soyad *</label><input id="usrFullName" class="form-control form-control-sm" /></div>
+        <div class="cs-line"><label>E-posta *</label><input id="usrEmail" type="email" class="form-control form-control-sm" /></div>
+        <div class="cs-line"><label>Sifre *</label><input id="usrPassword" type="password" class="form-control form-control-sm" autocomplete="new-password" /></div>
+        <div class="usr-note">Kullanici sisteme <strong>Sistem Yoneticisi</strong> rolüyle eklenir.</div>
+        <div id="usrMsg"></div>
+    </div>
+    <div class="usr-grid-panel">
+        <div class="usr-toolbar">
+            <input type="text" id="usrSearch" class="form-control form-control-sm" placeholder="Ad, e-posta veya sirket ara..." oninput="usrLoad()" style="max-width:260px;" />
+        </div>
+        <div class="usr-table-wrap">
+            <table class="usr-grid"><thead><tr>
+                <th>Ad Soyad</th><th>E-posta</th><th>Sirket</th><th>Rol</th><th>Durum</th>
+            </tr></thead><tbody id="usrBody"></tbody></table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var API = function(a) { return '/Setup/' + a; };
+    var ADMIN_API = function(a) { return '/Admin/' + a; };
+
+    function loadCompanies(cb) {
+        fetch(ADMIN_API('GetCompaniesJson'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sel = document.getElementById('usrCompanyId');
+                sel.innerHTML = '<option value="">Sirket seciniz</option>' +
+                    data.map(function(c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
+                if (cb) cb();
+            });
+    }
+
+    window.usrLoad = function() {
+        var s = document.getElementById('usrSearch').value;
+        fetch(API('GetUsersJson') + '?search=' + encodeURIComponent(s))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var body = document.getElementById('usrBody');
+                if (data.length === 0) {
+                    body.innerHTML = '<tr><td colspan="5" class="usr-empty">Kayit bulunamadi.</td></tr>';
+                    return;
+                }
+                body.innerHTML = data.map(function(d) {
+                    return '<tr>' +
+                        '<td style="font-weight:600;">' + esc(d.fullName) + '</td>' +
+                        '<td>' + esc(d.email) + '</td>' +
+                        '<td>' + esc(d.companyName) + '</td>' +
+                        '<td style="font-size:0.72rem;color:#2563eb;">' + esc(d.role) + '</td>' +
+                        '<td style="font-size:0.72rem;color:' + (d.isActive ? '#15803d' : '#dc2626') + ';">' + (d.isActive ? 'Aktif' : 'Pasif') + '</td>' +
+                        '</tr>';
+                }).join('');
+            });
+    };
+
+    window.usrNew = function() {
+        document.getElementById('usrFullName').value = '';
+        document.getElementById('usrEmail').value = '';
+        document.getElementById('usrPassword').value = '';
+        usrMsg('');
+    };
+
+    window.usrSave = function() {
+        var companyId = document.getElementById('usrCompanyId').value;
+        var fullName = document.getElementById('usrFullName').value.trim();
+        var email = document.getElementById('usrEmail').value.trim();
+        var password = document.getElementById('usrPassword').value;
+        if (!companyId) { usrMsg('Sirket secimi zorunludur.', false); return; }
+        if (!fullName) { usrMsg('Ad Soyad zorunludur.', false); return; }
+        if (!email) { usrMsg('E-posta zorunludur.', false); return; }
+        if (!password) { usrMsg('Sifre zorunludur.', false); return; }
+
+        fetch(API('SaveUserJson'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ companyId: companyId, fullName: fullName, email: email, password: password })
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) {
+                    usrMsg(d.message || 'Kaydedildi.', true);
+                    usrNew();
+                    usrLoad();
+                } else {
+                    usrMsg(d.message || 'Hata', false);
+                }
+            });
+    };
+
+    function usrMsg(msg, ok) {
+        var el = document.getElementById('usrMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="usr-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    loadCompanies(usrLoad);
+})();
+</script>
+}

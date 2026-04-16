@@ -1,0 +1,134 @@
+@model CalibraHub.Web.Models.Sales.SalesQuotesViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Satis Teklifleri";
+    ViewData["FormCode"] = "SALES_QUOTES";
+    ViewData["BodyClass"] = "page-sales-quotes";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quotes</td><td style='padding:6px 8px;'>Satis teklifi master bilgileri (belge no, tarih, cari, durum, toplam)</td></tr>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quote_lines</td><td style='padding:6px 8px;'>Teklif satirlari (malzeme, miktar, birim, fiyat)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quote_line_details</td><td style='padding:6px 8px;'>Satir detaylari (kombinasyon aciklamalari)</td></tr>"
+        + "</table>";
+
+    // Inline JSON: SmartBoard config (server-side hazirlandi — BuildSalesQuotesBoardConfigAsync)
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = Model.BoardConfig != null
+        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
+        : "null";
+}
+
+@section Styles {
+<style>
+    .page-sales-quotes .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-sales-quotes .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-sales-quotes .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-sales-quotes .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@section Scripts {
+<script>
+(function() {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[SQ] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayi Yenile</button>'
+            + '</div>';
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadi'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadi');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            console.log('[SQ] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'teklif');
+        } catch (ex) {
+            console.error('[SQ] Mount exception:', ex);
+            showError('Mount hatasi: ' + (ex.message || ex));
+        }
+    }
+
+    // ── Dinamik CSS yukle ─────────────────────────
+    function loadCss() {
+        var prev = document.querySelector('link[data-sq-smartboard]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = CSS_URL;
+        link.setAttribute('data-sq-smartboard', '1');
+        document.head.appendChild(link);
+    }
+
+    // ── Dinamik JS bundle yukle ────────────────────
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-sq-smartboard]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-sq-smartboard', '1');
+        script.onload = function() {
+            console.log('[SQ] Bundle loaded, typeof window.CalibraHub =', typeof window.CalibraHub);
+            setTimeout(cb, 0);
+        };
+        script.onerror = function() {
+            console.error('[SQ] Bundle script failed to load!');
+            showError('Bundle yuklenemedi (network hatasi)');
+        };
+        document.head.appendChild(script);
+    }
+
+    loadCss();
+
+    // Bundle zaten yuklu ise hemen mount et
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        console.log('[SQ] Bundle already loaded, direct mount');
+        doMount();
+    } else {
+        console.log('[SQ] Bundle not ready, loading dynamically');
+        loadScript(doMount);
+    }
+
+    // bfcache — geri dugmesi ile gelince reload
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted) {
+            console.log('[SQ] bfcache detected, reloading');
+            location.reload();
+        }
+    });
+})();
+</script>
+}

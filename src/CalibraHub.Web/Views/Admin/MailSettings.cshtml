@@ -1,0 +1,276 @@
+@model CalibraHub.Web.Models.Admin.IntegratorSettingsManagementViewModel
+@{
+    ViewData["Title"] = "Mail Ayarlari";
+    ViewData["FormCode"] = "MAIL_SETTINGS";
+    ViewData["BodyClass"] = "page-admin-mail";
+    var listState = Model.SmtpListState;
+    var editing = Model.SmtpInput.Id.HasValue;
+}
+
+@section Styles {
+<style>
+    .page-admin-mail .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-admin-mail .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .ms-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .ms-form-area {
+        flex: 0 0 auto; padding: 10px 14px; overflow: visible;
+        border-bottom: 1px solid var(--app-border,#e0e0e0); background: var(--app-surface,#fff);
+    }
+    .ms-form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 6px; }
+    .ms-form-field { display: flex; flex-direction: column; min-width: 0; }
+    .ms-form-field--grow { flex: 1 1 auto; }
+    .ms-form-field label { font-size: 0.76rem; font-weight: 600; color: var(--app-text-muted,#64748b); margin-bottom: 1px; }
+    .ms-section-title {
+        font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+        color: var(--app-text-muted,#94a3b8); margin: 6px 0 4px;
+    }
+    .ms-grid-area { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .ms-grid-area .integrator-table-wrap { flex: 1 1 auto; overflow-y: auto; }
+    .ms-oauth-panel { display: none; margin-top: 6px; padding: 8px 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; }
+    .ms-oauth-panel.visible { display: block; }
+    .ms-oauth-hint { font-size: 0.74rem; color: #92400e; margin-bottom: 6px; }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="ms-body">
+
+        <div class="ms-form-area">
+            <div class="entity-form-toolbar">
+                <button type="submit" form="smtp-form" class="btn btn-primary integrator-btn-primary">Kaydet</button>
+                <a asp-action="MailSettings" class="btn btn-secondary integrator-btn-secondary">Yeni</a>
+                @if (editing)
+                {
+                    <button type="button" class="btn btn-outline-secondary integrator-btn-tertiary" id="btnTestSmtp">Baglanti Test Et</button>
+                }
+            </div>
+
+            <form id="smtp-form" method="post" asp-action="SaveSmtpProfile" autocomplete="off">
+                @Html.AntiForgeryToken()
+                <input asp-for="SmtpInput.Id" type="hidden" />
+                <input type="hidden" name="page" value="@listState.Page" />
+                <input type="hidden" name="pageSize" value="@listState.PageSize" />
+
+                <div class="ms-section-title">Profil</div>
+                <div class="ms-form-row">
+                    <div class="ms-form-field">
+                        <label asp-for="SmtpInput.CompanyId">Sirket</label>
+                        <select asp-for="SmtpInput.CompanyId" asp-items="Model.CompanyOptions" class="form-select form-select-sm">
+                            <option value="">Seciniz</option>
+                        </select>
+                    </div>
+                    <div class="ms-form-field ms-form-field--grow">
+                        <label asp-for="SmtpInput.Name">Profil Adi</label>
+                        <input asp-for="SmtpInput.Name" class="form-control form-control-sm" />
+                    </div>
+                    <div class="ms-form-field ms-form-field--grow">
+                        <label asp-for="SmtpInput.FromEmail">Gonderen E-posta</label>
+                        <input asp-for="SmtpInput.FromEmail" class="form-control form-control-sm" />
+                    </div>
+                    <div class="ms-form-field">
+                        <label asp-for="SmtpInput.FromDisplayName">Gorunen Ad</label>
+                        <input asp-for="SmtpInput.FromDisplayName" class="form-control form-control-sm" />
+                    </div>
+                </div>
+
+                <div class="ms-section-title">Sunucu</div>
+                <div class="ms-form-row">
+                    <div class="ms-form-field ms-form-field--grow">
+                        <label asp-for="SmtpInput.Host">SMTP Host</label>
+                        <input asp-for="SmtpInput.Host" class="form-control form-control-sm" placeholder="smtp.gmail.com" />
+                    </div>
+                    <div class="ms-form-field" style="width:70px;">
+                        <label asp-for="SmtpInput.Port">Port</label>
+                        <input asp-for="SmtpInput.Port" class="form-control form-control-sm" type="number" />
+                    </div>
+                    <div class="ms-form-field" style="padding-bottom:2px;">
+                        <div class="form-check form-switch">
+                            <input asp-for="SmtpInput.UseSsl" class="form-check-input" type="checkbox" role="switch" />
+                            <label asp-for="SmtpInput.UseSsl" class="form-check-label" style="font-size:.78rem;">SSL/TLS</label>
+                        </div>
+                    </div>
+                    <div class="ms-form-field" style="padding-bottom:2px;">
+                        <div class="form-check form-switch">
+                            <input asp-for="SmtpInput.IsActive" class="form-check-input" type="checkbox" role="switch" />
+                            <label asp-for="SmtpInput.IsActive" class="form-check-label" style="font-size:.78rem;">Aktif</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ms-section-title">Kimlik Dogrulama</div>
+                <div class="ms-form-row">
+                    <div class="ms-form-field">
+                        <label asp-for="SmtpInput.AuthMethod">Yontem</label>
+                        <select asp-for="SmtpInput.AuthMethod" class="form-select form-select-sm" id="authMethodSelect">
+                            <option value="Normal">Normal Sifre</option>
+                            <option value="AppPassword">Uygulama Sifresi (2FA)</option>
+                            <option value="OAuth2">OAuth2 (Gmail/Outlook)</option>
+                        </select>
+                    </div>
+                    <div class="ms-form-field ms-form-field--grow">
+                        <label asp-for="SmtpInput.Username">Kullanici Adi</label>
+                        <input asp-for="SmtpInput.Username" class="form-control form-control-sm" />
+                    </div>
+                    <div class="ms-form-field ms-form-field--grow" id="passwordField">
+                        <label asp-for="SmtpInput.Password" id="passwordLabel">Sifre</label>
+                        <input asp-for="SmtpInput.Password" class="form-control form-control-sm" type="password" autocomplete="new-password"
+                               value="@Model.SmtpInput.Password" />
+                    </div>
+                </div>
+
+                <div class="ms-oauth-panel" id="oauthPanel">
+                    <div class="ms-oauth-hint">
+                        OAuth2 ile Gmail veya Outlook kullanmak icin Google Cloud Console / Azure AD'den Client ID ve Secret alin.
+                    </div>
+                    <div class="ms-form-row">
+                        <div class="ms-form-field ms-form-field--grow">
+                            <label asp-for="SmtpInput.OAuth2ClientId">Client ID</label>
+                            <input asp-for="SmtpInput.OAuth2ClientId" class="form-control form-control-sm" />
+                        </div>
+                        <div class="ms-form-field ms-form-field--grow">
+                            <label asp-for="SmtpInput.OAuth2ClientSecret">Client Secret</label>
+                            <input asp-for="SmtpInput.OAuth2ClientSecret" class="form-control form-control-sm" type="password"
+                                   value="@Model.SmtpInput.OAuth2ClientSecret" />
+                        </div>
+                        <div class="ms-form-field ms-form-field--grow">
+                            <label asp-for="SmtpInput.OAuth2RefreshToken">Refresh Token</label>
+                            <input asp-for="SmtpInput.OAuth2RefreshToken" class="form-control form-control-sm" type="password"
+                                   value="@Model.SmtpInput.OAuth2RefreshToken" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ms-form-row" style="margin-top:6px;">
+                    <div class="ms-form-field ms-form-field--grow">
+                        <label asp-for="SmtpInput.TestRecipientEmail">Test Alici E-posta <small style="font-weight:400;color:var(--app-text-muted,#94a3b8);">(bos = gonderen)</small></label>
+                        <input asp-for="SmtpInput.TestRecipientEmail" class="form-control form-control-sm" placeholder="test@ornek.com" />
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="ms-grid-area">
+            <div class="integrator-table-wrap">
+                <table class="table integrator-table integrator-table--compact" data-grid-no-delete>
+                    <thead>
+                    <tr>
+                        <th class="calibra-grid-actions-first">Islem</th>
+                        <th>Profil Adi</th>
+                        <th>Gonderen</th>
+                        <th>Host</th>
+                        <th>Port</th>
+                        <th>Yontem</th>
+                        <th>Durum</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @if (!Model.SmtpProfiles.Any())
+                    {
+                        <tr><td colspan="7" class="integrator-table__empty">Kayitli SMTP profili bulunmuyor.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var p in Model.SmtpProfiles)
+                        {
+                            <tr class="@(editing && Model.SmtpInput.Id == p.Id ? "is-selected" : "")">
+                                <td class="calibra-grid-actions-first">
+                                    <div class="material-row-actions">
+                                        <a class="btn btn-secondary integrator-btn-secondary"
+                                           asp-action="MailSettings" asp-route-smtpId="@p.Id"
+                                           asp-route-page="@listState.Page" asp-route-pageSize="@listState.PageSize">Duzenle</a>
+                                    </div>
+                                </td>
+                                <td style="font-weight:600;">@p.Name</td>
+                                <td>@p.FromEmail</td>
+                                <td>@p.Host</td>
+                                <td>@p.Port</td>
+                                <td>
+                                    @(p.AuthMethod switch {
+                                        "AppPassword" => "Uygulama Sifresi",
+                                        "OAuth2" => "OAuth2",
+                                        _ => "Normal"
+                                    })
+                                </td>
+                                <td>
+                                    <span class="integrator-status-pill @(p.IsActive ? "is-active" : "is-inactive")">
+                                        <span class="integrator-status-pill__dot"></span>
+                                        @(p.IsActive ? "Aktif" : "Pasif")
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    </tbody>
+                </table>
+            </div>
+            @await Html.PartialAsync("_GridPager", new CalibraHub.Web.Models.Shared.GridPagerViewModel
+            {
+                State = listState, ActionName = "MailSettings"
+            })
+        </div>
+
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+    (function () {
+        var authSelect = document.getElementById('authMethodSelect');
+        var oauthPanel = document.getElementById('oauthPanel');
+        var passwordLabel = document.getElementById('passwordLabel');
+
+        function updateAuthUI() {
+            if (!authSelect) return;
+            var method = authSelect.value;
+            // OAuth2 paneli
+            if (oauthPanel) oauthPanel.classList.toggle('visible', method === 'OAuth2');
+            // Sifre label
+            if (passwordLabel) {
+                passwordLabel.textContent = method === 'AppPassword' ? 'Uygulama Sifresi' : method === 'OAuth2' ? 'Sifre (opsiyonel)' : 'Sifre';
+            }
+        }
+
+        if (authSelect) {
+            authSelect.addEventListener('change', updateAuthUI);
+            updateAuthUI();
+        }
+
+        // SMTP Test
+        var testBtn = document.getElementById('btnTestSmtp');
+        if (testBtn) {
+            testBtn.addEventListener('click', async function () {
+                testBtn.disabled = true; testBtn.textContent = 'Test ediliyor...';
+                try {
+                    var form = document.getElementById('smtp-form');
+                    var formData = new FormData(form);
+                    var token = formData.get('__RequestVerificationToken');
+                    var resp = await fetch('@Url.Action("TestSmtpConnection", "Admin")', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                        body: JSON.stringify({
+                            companyId: formData.get('SmtpInput.CompanyId'),
+                            name: formData.get('SmtpInput.Name'),
+                            fromEmail: formData.get('SmtpInput.FromEmail'),
+                            fromDisplayName: formData.get('SmtpInput.FromDisplayName'),
+                            host: formData.get('SmtpInput.Host'),
+                            port: parseInt(formData.get('SmtpInput.Port')) || 587,
+                            username: formData.get('SmtpInput.Username'),
+                            password: formData.get('SmtpInput.Password'),
+                            useSsl: formData.get('SmtpInput.UseSsl') === 'true',
+                            testRecipientEmail: formData.get('SmtpInput.TestRecipientEmail')
+                        })
+                    });
+                    var data = await resp.json();
+                    alert(data.isSuccess ? 'Basarili: ' + data.message : 'Hata: ' + data.message);
+                } catch (e) { alert('Test hatasi: ' + e.message); }
+                finally { testBtn.disabled = false; testBtn.textContent = 'Baglanti Test Et'; }
+            });
+        }
+    })();
+    </script>
+}

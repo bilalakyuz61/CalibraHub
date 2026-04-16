@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "CalibraHub Web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/CalibraHub.Web"],
+      "port": 61001
+    },
+    {
+      "name": "CalibraHub Worker",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/CalibraHub.Worker"],
+      "port": null
+    },
+    {
+      "name": "ClientApp (Vite)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "src/CalibraHub.Web/ClientApp"],
+      "port": 5173
+    }
+  ]
+}

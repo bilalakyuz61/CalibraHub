@@ -1,0 +1,4 @@
+C:\Users\Bilal\RiderProjects\CalibraHub\src\CalibraHub.Domain\obj_temp\Debug\net8.0\CalibraHub.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Bilal\RiderProjects\CalibraHub\src\CalibraHub.Domain\obj_temp\Debug\net8.0\CalibraHub.Domain.AssemblyInfoInputs.cache
+C:\Users\Bilal\RiderProjects\CalibraHub\src\CalibraHub.Domain\obj_temp\Debug\net8.0\CalibraHub.Domain.AssemblyInfo.cs
+C:\Users\Bilal\RiderProjects\CalibraHub\src\CalibraHub.Domain\obj_temp\Debug\net8.0\CalibraHub.Domain.csproj.CoreCompileInputs.cache

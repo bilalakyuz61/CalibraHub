@@ -1,0 +1,71 @@
+d:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Properties\launchSettings.json i??indeki ba??latma ayarlar?? kullan??l??yor...
+Derleniyor...
+dotnet : [DB INIT ERROR] SqlException 207: Invalid colu
+mn name 'material_code'.
+At line:1 char:1
++ dotnet run --project d:\JetBrainsRider\Projeler\Calib
+raHub\src\Calibr ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([DB INIT  
+   ERROR]...material_code'.:String) [], RemoteExcepti  
+  on
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[DB INIT ERROR] Procedure: 
+Unhandled exception. Microsoft.Data.SqlClient.SqlExcept
+ion (0x80131904): Invalid column name 'material_code'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(Sq
+lException exception, Boolean breakConnection, Action`1
+ wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.On
+Error(SqlException exception, Boolean breakConnection, 
+Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowException
+AndWarning(TdsParserStateObject stateObj, SqlCommand co
+mmand, Boolean callerHasConnectionLock, Boolean asyncCl
+ose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBeha
+vior runBehavior, SqlCommand cmdHandler, SqlDataReader 
+dataStream, BulkCopySimpleResultSet bulkCopyHandler, Td
+sParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlCommand.InternalEndEx
+ecuteNonQuery(IAsyncResult asyncResult, Boolean isInter
+nal, String endMethod)
+   at Microsoft.Data.SqlClient.SqlCommand.EndExecuteNon
+QueryInternal(IAsyncResult asyncResult)
+   at Microsoft.Data.SqlClient.SqlCommand.EndExecuteNon
+QueryAsync(IAsyncResult asyncResult)
+   at Microsoft.Data.SqlClient.SqlCommand.<>c.<Internal
+ExecuteNonQueryAsync>b__193_1(IAsyncResult asyncResult)
+   at System.Threading.Tasks.TaskFactory`1.FromAsyncCor
+eLogic(IAsyncResult iar, Func`2 endFunction, Action`1 e
+ndAction, Task`1 promise, Boolean requiresSynchronizati
+on)
+--- End of stack trace from previous location ---
+   at CalibraHub.Persistence.Database.CalibraDatabaseIn
+itializer.EnsureSchemaAndTablesAsync(SqlConnection conn
+ection, CancellationToken cancellationToken) in d:\JetB
+rainsRider\Projeler\CalibraHub\src\CalibraHub.Persisten
+ce\Database\CalibraDatabaseInitializer.cs:line 2259
+   at CalibraHub.Persistence.Database.CalibraDatabaseIn
+itializer.EnsureSchemaAndTablesAsync(SqlConnection conn
+ection, CancellationToken cancellationToken) in d:\JetB
+rainsRider\Projeler\CalibraHub\src\CalibraHub.Persisten
+ce\Database\CalibraDatabaseInitializer.cs:line 2259
+   at CalibraHub.Persistence.Database.CalibraDatabaseIn
+itializer.InitializeAsync(CancellationToken cancellatio
+nToken) in d:\JetBrainsRider\Projeler\CalibraHub\src\Ca
+libraHub.Persistence\Database\CalibraDatabaseInitialize
+r.cs:line 52
+   at CalibraHub.Persistence.Database.CalibraDatabaseIn
+itializer.InitializeAsync(CancellationToken cancellatio
+nToken) in d:\JetBrainsRider\Projeler\CalibraHub\src\Ca
+libraHub.Persistence\Database\CalibraDatabaseInitialize
+r.cs:line 68
+   at Program.<Main>$(String[] args) in d:\JetBrainsRid
+er\Projeler\CalibraHub\src\CalibraHub.Web\Program.cs:li
+ne 138
+   at Program.<Main>(String[] args)
+ClientConnectionId:1ad77794-b1fd-4419-8f34-128beb670ea6
+Error Number:207,State:1,Class:16

@@ -1,0 +1,133 @@
+@model CalibraHub.Web.Models.Admin.SystemLogsViewModel
+@using System
+@{
+    ViewData["Title"] = "Sistem Loglari";
+    ViewData["BodyClass"] = "page-admin-logs";
+
+    var listState = Model.ListState;
+    var pagerRouteValues = new Dictionary<string, string?>();
+    if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
+    {
+        pagerRouteValues["searchTerm"] = Model.SearchTerm;
+    }
+
+    if (!string.IsNullOrWhiteSpace(Model.Level))
+    {
+        pagerRouteValues["level"] = Model.Level;
+    }
+
+    if (Model.CompanyId.HasValue)
+    {
+        pagerRouteValues["companyId"] = Model.CompanyId.Value.ToString();
+    }
+}
+
+@section Styles {
+<style>
+    .page-admin-logs .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .page-admin-logs .integrator-dashboard__header { flex: 0 0 auto; }
+    .page-admin-logs .integrator-dashboard__grid { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; gap: 4px; min-height: 0; }
+    .page-admin-logs .integrator-dashboard__group { flex: 1 1 0 !important; min-height: 0; overflow: hidden; }
+</style>
+}
+
+<section class="admin-content integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+        <div class="integrator-dashboard__grid">
+            <section class="integrator-dashboard__group">
+                <article class="integrator-card integrator-card--table">
+                    <div class="integrator-collapsible-card__content">
+                        <form method="get" asp-action="Logs" class="integrator-table-search">
+                            <input type="hidden" name="pageSize" value="@listState.PageSize" />
+                            <div class="integrator-table-search__fields">
+                                <input type="search"
+                                       name="searchTerm"
+                                       value="@Model.SearchTerm"
+                                       class="form-control"
+                                       placeholder="Entegrator, mesaj veya kaynak ara..." />
+                                <select name="level" class="form-select">
+                                    <option value="" selected="@string.IsNullOrWhiteSpace(Model.Level)">Tum Durumlar</option>
+                                    <option value="Success" selected="@string.Equals(Model.Level, "Success", StringComparison.OrdinalIgnoreCase)">Basarili</option>
+                                    <option value="Error" selected="@string.Equals(Model.Level, "Error", StringComparison.OrdinalIgnoreCase)">Hata</option>
+                                    <option value="Warning" selected="@string.Equals(Model.Level, "Warning", StringComparison.OrdinalIgnoreCase)">Uyari</option>
+                                    <option value="Info" selected="@string.Equals(Model.Level, "Info", StringComparison.OrdinalIgnoreCase)">Bilgi</option>
+                                </select>
+                                <select name="companyId" asp-items="Model.CompanyOptions" class="form-select">
+                                    <option value="">Tum Sirketler</option>
+                                </select>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary integrator-btn-primary">Ara</button>
+                                <a class="btn btn-outline-secondary integrator-btn-tertiary" asp-action="Logs">Temizle</a>
+                            </div>
+                        </form>
+
+                        <div class="integrator-table-wrap">
+                            <table class="table integrator-table integrator-table--compact">
+                                <thead>
+                                <tr>
+                                    <th>Zaman</th>
+                                    <th>Sirket</th>
+                                    <th>Kaynak</th>
+                                    <th>Durum</th>
+                                    <th>Mesaj</th>
+                                    <th>Yeni</th>
+                                    <th>Atlanan</th>
+                                    <th>Log Kaynagi</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                @if (Model.Logs.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="8" class="integrator-table__empty">Filtreye uygun log kaydi bulunmuyor.</td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var log in Model.Logs)
+                                    {
+                                        var isSuccess = string.Equals(log.Level, "Success", StringComparison.OrdinalIgnoreCase);
+                                        var statusText = string.Equals(log.Level, "Success", StringComparison.OrdinalIgnoreCase)
+                                            ? "Basarili"
+                                            : string.Equals(log.Level, "Error", StringComparison.OrdinalIgnoreCase)
+                                                ? "Hata"
+                                                : string.Equals(log.Level, "Warning", StringComparison.OrdinalIgnoreCase)
+                                                    ? "Uyari"
+                                                    : "Bilgi";
+
+                                        <tr>
+                                            <td>@log.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                            <td>@log.CompanyName</td>
+                                            <td>@log.IntegratorName</td>
+                                            <td>
+                                                <span class="integrator-status-pill @(isSuccess ? "is-active" : "is-inactive")">
+                                                    <span class="integrator-status-pill__dot" aria-hidden="true"></span>
+                                                    <span>@statusText</span>
+                                                </span>
+                                            </td>
+                                            <td>@log.Message</td>
+                                            <td>@log.ImportedCount</td>
+                                            <td>@log.SkippedCount</td>
+                                            <td>@log.SourceFileName</td>
+                                        </tr>
+                                    }
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                        @await Html.PartialAsync("_GridPager", new CalibraHub.Web.Models.Shared.GridPagerViewModel
+                        {
+                            State = listState,
+                            ActionName = "Logs",
+                            RouteValues = pagerRouteValues
+                        })
+                    </div>
+                </article>
+            </section>
+        </div>
+    </section>

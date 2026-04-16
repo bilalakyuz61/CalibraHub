@@ -1,0 +1,215 @@
+@model CalibraHub.Web.Models.Admin.MaterialCardViewSettingsViewModel
+@using CalibraHub.Application.Ui
+@using System.Linq
+@{
+    var defaultGroupDisplayOrder = Model.Groups.Count == 0 ? 10 : Model.Groups.Max(x => x.DisplayOrder) + 10;
+    var openMaterialGroupModal = ViewData["OpenMaterialGroupModal"] is bool shouldOpen && shouldOpen;
+}
+
+<div class="modal fade screen-design-modal"
+     id="materialGroupModal"
+     tabindex="-1"
+     aria-labelledby="materialGroupModalLabel"
+     aria-hidden="true"
+     data-open-on-load="@(openMaterialGroupModal ? "true" : "false")">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="materialGroupModalLabel" data-material-group-modal-title>
+                        @(Model.GroupInput.GroupId.HasValue ? "Sekmeyi Duzenle" : "Yeni Sekme")
+                    </h5>
+                    <p class="screen-design-modal__subtitle">Alan taniminda kullanilacak sekmeyi buradan kaydedin.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body">
+                <form method="post"
+                      asp-action="SaveMaterialCardFieldGroup"
+                      class="integrator-form integrator-inline-form"
+                      id="materialGroupDesignerForm"
+                      data-new-display-order="@defaultGroupDisplayOrder">
+                    @Html.AntiForgeryToken()
+                    <input asp-for="GroupInput.GroupId" type="hidden" />
+                    <input asp-for="FieldInput.FieldId" type="hidden" />
+                    <input asp-for="FieldInput.GroupId" type="hidden" />
+                    <div class="integrator-form-grid">
+                        <div class="integrator-field">
+                            <label asp-for="GroupInput.GroupKey" class="form-label">Sekme Teknik Adi</label>
+                            <input asp-for="GroupInput.GroupKey" class="form-control" />
+                        </div>
+                        <div class="integrator-field">
+                            <label asp-for="GroupInput.GroupLabel" class="form-label">Sekme Basligi</label>
+                            <input asp-for="GroupInput.GroupLabel" class="form-control" />
+                        </div>
+                        <div class="integrator-field">
+                            <label asp-for="GroupInput.DisplayOrder" class="form-label">Sekme Sirasi</label>
+                            <input asp-for="GroupInput.DisplayOrder" class="form-control" type="number" min="0" />
+                        </div>
+                        <div class="integrator-field">
+                            <label class="material-config-toggle"><input asp-for="GroupInput.IsActive" type="checkbox" /><span>Aktif</span></label>
+                        </div>
+                    </div>
+                    <div class="integrator-form-actions">
+                        <button type="button" class="btn btn-secondary integrator-btn-secondary" data-bs-dismiss="modal">Vazgec</button>
+                        <button type="submit" class="btn btn-primary integrator-btn-primary">Sekmeyi Kaydet</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<section class="integrator-dashboard__group">
+    <article class="integrator-card integrator-card--form">
+        <h3 class="material-form-card__title">Alan Tanimi</h3>
+        <form method="post" asp-action="SaveMaterialCardDynamicField" class="integrator-form" id="materialFieldDesignerForm">
+            @Html.AntiForgeryToken()
+            <input asp-for="FieldInput.FieldId" type="hidden" />
+            <input asp-for="FieldInput.IsSystem" type="hidden" />
+            <div class="integrator-form-grid">
+                <div class="integrator-field screen-design-group-picker">
+                    <label asp-for="FieldInput.GroupId" class="form-label">Sekme</label>
+                    <div class="screen-design-group-picker__controls">
+                        <select asp-for="FieldInput.GroupId" asp-items="Model.GroupOptions" class="form-select"><option value="">Seciniz</option></select>
+                        <button type="button"
+                                class="btn btn-secondary integrator-btn-secondary"
+                                data-open-new-material-group>
+                            Yeni Sekme Ac
+                        </button>
+                    </div>
+                </div>
+                <div class="integrator-field">
+                    <label asp-for="FieldInput.FieldKey" class="form-label">Veritabani Adi</label>
+                    @if (Model.FieldInput.IsSystem)
+                    {
+                        <input asp-for="FieldInput.FieldKey" class="form-control" readonly />
+                    }
+                    else
+                    {
+                        <input asp-for="FieldInput.FieldKey" class="form-control" />
+                    }
+                </div>
+                <div class="integrator-field">
+                    <label asp-for="FieldInput.FieldLabel" class="form-label">Gorunecek Ad</label>
+                    <input asp-for="FieldInput.FieldLabel" class="form-control" />
+                </div>
+                <div class="integrator-field">
+                    <label asp-for="FieldInput.DataType" class="form-label">Veri Tipi</label>
+                    <select asp-for="FieldInput.DataType" asp-items="Model.DataTypeOptions" class="form-select" data-field-datatype></select>
+                </div>
+                <div class="integrator-field">
+                    <label asp-for="FieldInput.DefaultValue" class="form-label">Varsayilan Deger</label>
+                    <input asp-for="FieldInput.DefaultValue" class="form-control" />
+                </div>
+                <div class="integrator-field">
+                    <label asp-for="FieldInput.DisplayOrder" class="form-label">Alan Sirasi</label>
+                    <input asp-for="FieldInput.DisplayOrder" class="form-control" type="number" min="0" />
+                </div>
+                <div class="integrator-field">
+                    <label asp-for="FieldInput.ColumnSpan" class="form-label">Kolon Genisligi</label>
+                    <input asp-for="FieldInput.ColumnSpan" class="form-control" type="number" min="1" max="3" />
+                </div>
+                <div class="integrator-field"><label class="material-config-toggle"><input asp-for="FieldInput.IsVisible" type="checkbox" /><span>Gorunur</span></label></div>
+                <div class="integrator-field"><label class="material-config-toggle"><input asp-for="FieldInput.IsRequired" type="checkbox" /><span>Zorunlu</span></label></div>
+                <div class="integrator-field"><label class="material-config-toggle"><input asp-for="FieldInput.IsActive" type="checkbox" /><span>Aktif</span></label></div>
+            </div>
+
+            <div class="integrator-form-section" data-field-options-panel>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h4 class="material-form-card__title">Secenekler</h4>
+                    <button type="button" class="btn btn-secondary integrator-btn-secondary" data-add-option-row>Secenek Ekle</button>
+                </div>
+                <div class="integrator-table-wrap">
+                    <table class="table integrator-table integrator-table--compact">
+                        <thead>
+                        <tr>
+                            <th>Anahtar</th>
+                            <th>Metin</th>
+                            <th>Sira</th>
+                            <th>Aktif</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody data-option-rows>
+                        @for (var i = 0; i < Model.FieldInput.Options.Count; i++)
+                        {
+                            <tr>
+                                <td><input asp-for="FieldInput.Options[i].OptionId" type="hidden" /><input asp-for="FieldInput.Options[i].OptionKey" class="form-control" /></td>
+                                <td><input asp-for="FieldInput.Options[i].OptionLabel" class="form-control" /></td>
+                                <td><input asp-for="FieldInput.Options[i].SortOrder" class="form-control" type="number" min="0" /></td>
+                                <td><input asp-for="FieldInput.Options[i].IsActive" class="form-check-input" /></td>
+                                <td><button type="button" class="btn btn-outline-danger integrator-btn-tertiary" data-remove-option-row>Sil</button></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </form>
+    </article>
+</section>
+
+<section class="integrator-dashboard__group">
+    <article class="integrator-card integrator-card--table">
+        <h3 class="material-form-card__title">Sekmeler</h3>
+        <div class="integrator-table-wrap">
+            <table class="table integrator-table integrator-table--compact">
+                <thead><tr><th>Teknik Ad</th><th>Baslik</th><th>Sira</th><th>Durum</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var group in Model.Groups)
+                {
+                    <tr>
+                        <td>@group.GroupKey</td>
+                        <td>@group.GroupLabel</td>
+                        <td>@group.DisplayOrder</td>
+                        <td>@(group.IsActive ? "Aktif" : "Pasif")</td>
+                        <td>
+                            <a class="btn btn-secondary integrator-btn-secondary"
+                               asp-action="ViewSettings"
+                               asp-route-screenCode="@ScreenDesignCatalog.MaterialCardsScreenCode"
+                               asp-route-groupId="@group.Id"
+                               asp-route-openGroupModal="true"
+                               asp-route-fieldId="@Model.FieldInput.FieldId">
+                                Duzenle
+                            </a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </article>
+</section>
+
+<section class="integrator-dashboard__group">
+    <article class="integrator-card integrator-card--table">
+        <h3 class="material-form-card__title">Alanlar</h3>
+        <div class="integrator-table-wrap">
+            <table class="table integrator-table integrator-table--compact">
+                <thead><tr><th>Sekme</th><th>Alan</th><th>Tip</th><th>Kolon</th><th>Sira</th><th>Durum</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var field in Model.Fields)
+                {
+                    <tr>
+                        <td>@field.GroupLabel</td>
+                        <td>@field.FieldLabel <div class="integrator-table__subtext">@field.FieldKey</div></td>
+                        <td>@field.DataType</td>
+                        <td>@field.ColumnSpan</td>
+                        <td>@field.DisplayOrder</td>
+                        <td>@(field.IsActive ? "Aktif" : "Pasif")</td>
+                        <td>
+                            <a class="btn btn-secondary integrator-btn-secondary"
+                               asp-action="ViewSettings"
+                               asp-route-screenCode="@ScreenDesignCatalog.MaterialCardsScreenCode"
+                               asp-route-fieldId="@field.Id">
+                                Duzenle
+                            </a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </article>
+</section>

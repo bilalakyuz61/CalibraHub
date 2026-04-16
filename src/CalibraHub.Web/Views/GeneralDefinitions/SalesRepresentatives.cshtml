@@ -1,0 +1,151 @@
+@{
+    ViewData["Title"] = "Satis Temsilcileri";
+    ViewData["FormCode"] = "SALES_REPS";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_representatives</td><td style='padding:6px 8px;'>Satis temsilcisi tanimlari (kod, ad, durum)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .sr-layout { display: flex; flex-direction: column; gap: 0; height: 100%; overflow: hidden; }
+    .sr-form-panel { flex: 1 1 50%; max-height: 50%; background: var(--app-surface,#fff); display: flex; flex-direction: column; overflow-y: auto; padding: 10px 14px; border-bottom: 1px solid var(--app-border,#dde3ee); }
+    .sr-grid-panel { flex: 1 1 50%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .sr-grid-panel .sr-table-wrap { flex: 1 1 auto; overflow: auto; }
+    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child { width: 50px; flex-shrink: 0; font-size: 0.76rem; font-weight: 600; color: var(--app-text-muted,#64748b); text-align: right; }
+    .sr-toolbar { padding: 5px 10px; border-bottom: 1px solid var(--app-border,#dde3ee); }
+    .sr-grid { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .sr-grid thead th { text-align: left; padding: 3px 8px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+    .sr-grid tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; cursor: pointer; }
+    .sr-grid tbody tr:hover { background: #f8fafc; }
+    .sr-grid tbody tr.is-sel { background: #eff6ff; }
+    .sr-grid td { padding: 2px 8px; vertical-align: middle; }
+    .sr-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
+    .act-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border-radius: 4px; border: 1px solid #fecaca; background: #fff; color: #dc2626; cursor: pointer; }
+    .act-btn:hover { background: #fef2f2; }
+    .sr-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
+    .sr-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .sr-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+</style>
+}
+
+<div class="entity-form-toolbar" data-no-proxy="1">
+    <button type="button" class="btn btn-primary integrator-btn-primary" onclick="srSave()">Kaydet</button>
+    <button type="button" class="btn btn-secondary integrator-btn-secondary" onclick="srNew()">Yeni</button>
+    <button type="button" class="btn btn-outline-danger integrator-btn-tertiary" id="srBtnDelete" disabled onclick="srDelete()">Sil</button>
+</div>
+
+<div class="sr-layout">
+    <div class="sr-form-panel">
+        <input type="hidden" id="srId" value="" />
+        <div class="cs-line"><label>Kod *</label><input id="srCode" class="form-control form-control-sm" style="max-width:100px;" /></div>
+        <div class="cs-line"><label>Ad *</label><input id="srName" class="form-control form-control-sm" /></div>
+        <div class="cs-line"><label>Durum</label><div class="form-check form-switch" style="margin:0;"><input id="srIsActive" class="form-check-input" type="checkbox" role="switch" checked /></div></div>
+        <div id="srMsg"></div>
+    </div>
+    <div class="sr-grid-panel">
+        <div class="sr-toolbar">
+            <input type="text" id="srSearch" class="form-control form-control-sm" placeholder="Kod veya ada gore ara..." oninput="srLoad()" style="max-width:220px;" />
+        </div>
+        <div class="sr-table-wrap">
+            <table class="sr-grid"><thead><tr>
+                <th style="width:36px;"></th><th>Kod</th><th>Ad</th><th>Durum</th>
+            </tr></thead><tbody id="srBody"></tbody></table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var API = function(a) { return '/GeneralDefinitions/' + a; };
+    var selId = 0;
+
+    window.srLoad = function() {
+        var s = document.getElementById('srSearch').value;
+        fetch(API('GetSalesReps') + '?search=' + encodeURIComponent(s))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var body = document.getElementById('srBody');
+                if (data.length === 0) { body.innerHTML = '<tr><td colspan="4" class="sr-empty">Kayit bulunamadi.</td></tr>'; return; }
+                body.innerHTML = data.map(function(d) {
+                    return '<tr class="' + (d.id === selId ? 'is-sel' : '') + '" onclick="srSelect(' + d.id + ')">' +
+                        '<td onclick="event.stopPropagation()"><button type="button" class="act-btn primary" title="Duzelt" onclick="srSelect(' + d.id + ')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button></td>' +
+                        '<td style="font-weight:600;">' + d.repCode + '</td>' +
+                        '<td>' + d.repName + '</td>' +
+                        '<td style="font-size:0.72rem;color:' + (d.isActive ? '#15803d' : '#dc2626') + ';">' + (d.isActive ? 'Aktif' : 'Pasif') + '</td></tr>';
+                }).join('');
+            });
+    };
+
+    window.srSelect = function(id) {
+        selId = id;
+        fetch(API('GetSalesRep') + '?id=' + id)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                document.getElementById('srId').value = d.id;
+                document.getElementById('srCode').value = d.repCode;
+                document.getElementById('srName').value = d.repName;
+                document.getElementById('srIsActive').checked = d.isActive;
+                document.getElementById('srBtnDelete').disabled = false;
+                srLoad();
+            });
+    };
+
+    window.srNew = function() {
+        selId = 0;
+        document.getElementById('srId').value = '';
+        document.getElementById('srCode').value = '';
+        document.getElementById('srName').value = '';
+        document.getElementById('srIsActive').checked = true;
+        document.getElementById('srBtnDelete').disabled = true;
+        srMsg('');
+        srLoad();
+    };
+
+    window.srSave = function() {
+        var payload = {
+            id: parseInt(document.getElementById('srId').value) || null,
+            repCode: document.getElementById('srCode').value,
+            repName: document.getElementById('srName').value,
+            isActive: document.getElementById('srIsActive').checked
+        };
+        fetch(API('SaveSalesRepJson'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { srMsg('Kaydedildi.', true); srNew(); }
+                else srMsg(d.message || 'Hata', false);
+            });
+    };
+
+    window.srDelete = function() {
+        var id = parseInt(document.getElementById('srId').value);
+        if (!id || document.getElementById('srBtnDelete').disabled || !confirm('Bu temsilciyi silmek istediginize emin misiniz?')) return;
+        fetch(API('DeleteSalesRepJson') + '?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { srMsg('Silindi.', true); srNew(); }
+                else srMsg(d.message || 'Silinemedi', false);
+            });
+    };
+
+    window.srDeleteRow = function(id) {
+        if (!confirm('Bu temsilciyi silmek istediginize emin misiniz?')) return;
+        fetch(API('DeleteSalesRepJson') + '?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { if (d.success) srLoad(); });
+    };
+
+    function srMsg(msg, ok) {
+        var el = document.getElementById('srMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="sr-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+
+    srLoad();
+})();
+</script>
+}

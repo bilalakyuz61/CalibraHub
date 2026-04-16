@@ -1,0 +1,78 @@
+@{
+    ViewData["Title"] = "Notlar";
+    ViewData["FormCode"] = "NOTES";
+    ViewData["BodyClass"] = "page-notes";
+}
+
+@section Styles {
+<link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+<style>
+    .page-notes .workspace-action-bar { display: none !important; }
+    .workspace-frame-body.page-notes .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .page-notes .integrator-dashboard,
+    .page-notes .integrator-dashboard__content {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0;
+        flex: 1 1 auto;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    .notes-mount {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    /* Dark mode CSS variables for NotesWorkspace */
+    html.dark .notes-mount,
+    body.app-theme-dark .notes-mount {
+        --nw-folders-bg: rgba(15, 23, 42, .4);
+        --nw-folder-active: rgba(99, 102, 241, .15);
+        --nw-card-active: rgba(99, 102, 241, .1);
+        --nw-card-hover: rgba(255, 255, 255, .03);
+        --nw-toolbar-active: rgba(99, 102, 241, .18);
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="notes-mount" id="notesWorkspaceRoot"></div>
+</section>
+
+@section Scripts {
+<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script>
+    (function () {
+        var el = document.getElementById('notesWorkspaceRoot')
+        if (!el) return
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountNotesWorkspace) {
+                console.error('[NotesWorkspace] mount fonksiyonu bulunamadi'); return
+            }
+            try { window.CalibraHub.mountNotesWorkspace(el) }
+            catch (ex) { console.error('[NotesWorkspace] mount hatasi:', ex) }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountNotesWorkspace) { doMount(); return }
+        var tries = 0
+        var timer = setInterval(function () {
+            tries++
+            if (window.CalibraHub && window.CalibraHub.mountNotesWorkspace) { clearInterval(timer); doMount() }
+            else if (tries >= 30) { clearInterval(timer); console.error('[NotesWorkspace] timeout') }
+        }, 100)
+    })()
+</script>
+}

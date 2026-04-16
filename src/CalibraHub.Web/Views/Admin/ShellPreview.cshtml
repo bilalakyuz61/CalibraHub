@@ -1,0 +1,84 @@
+@{
+    Layout = null;
+    ViewData["Title"] = "CalibraHub — Kabuk Onizleme";
+}
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CalibraHub — Kabuk Onizleme</title>
+    <link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0; height: 100%; width: 100%;
+            overflow: hidden;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            background: #0a0d17;
+        }
+        #shell-root {
+            position: fixed;
+            inset: 0;
+        }
+        /* Demo sayfasi icin body class'ini da eskidi: React shell kendi temasini yonetir */
+    </style>
+</head>
+<body class="app-theme-dark">
+    <div id="shell-root"></div>
+
+    <script>
+        // API kontrati — C# backend yerine demo icin inline mock JSON
+        window.__CALIBRA_SHELL_DEMO__ = {
+            user: {
+                name: 'Sistem Admin',
+                email: 'admin@calibra.local',
+                initials: 'SA'
+            },
+            system: {
+                status: 'Hazir',
+                company: 'Adamsor',
+                year: '2026'
+            },
+            activeTab: 'Malzeme Karti Duzenle',
+            tabs: ['Malzeme Kartlari', 'Malzeme Karti Duzenle'],
+            workspace: {
+                title: 'Malzeme Karti Duzenle',
+                id: 'ID: 2 — MT7001'
+            },
+            formData: {
+                w_kod:          { label: 'Malzeme Kodu',       value: 'MT7001',             dataType: 'text' },
+                w_ad:           { label: 'Malzeme Adi',        value: 'Deneme Malzeme Adi', dataType: 'text' },
+                w_kdv:          { label: 'KDV Orani',          value: '20,0000',            dataType: 'numeric' },
+                w_barkod:       { label: 'Barkod',             value: '86925456887',        dataType: 'text' },
+                w_kombinasyon:  { label: 'Kombinasyon Takibi', value: true,                 dataType: 'checkbox' }
+            }
+        };
+    </script>
+
+    <script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+    <script>
+        (function() {
+            var el = document.getElementById('shell-root');
+
+            function tryMount() {
+                if (window.CalibraHub && window.CalibraHub.mountShellRedesignDemo) {
+                    window.CalibraHub.mountShellRedesignDemo(el, window.__CALIBRA_SHELL_DEMO__);
+                    return true;
+                }
+                return false;
+            }
+
+            if (!tryMount()) {
+                var tries = 0;
+                var timer = setInterval(function() {
+                    if (tryMount() || ++tries >= 40) {
+                        clearInterval(timer);
+                    }
+                }, 100);
+            }
+        })();
+    </script>
+</body>
+</html>

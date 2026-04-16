@@ -1,0 +1,68 @@
+{
+  "Items": [
+    {
+      "RequestId": "GRID-001",
+      "Category": "Grid",
+      "Title": "Tum gridler ayni tipte ve sikisik gorunumde olmali.",
+      "Description": "Grid satirlari icerisindeki veriden cok az yuksek olmali.",
+      "IsCompleted": true,
+      "UserComment": "CSS degiskenleri ile kompakt grid standardi uygulanmistir (calibra-grid-cell-padding-y, calibra-grid-cell-font-size vb.)."
+    },
+    {
+      "RequestId": "GRID-002",
+      "Category": "Grid",
+      "Title": "Tum gridlerde zebra striping kullanilmali.",
+      "Description": "Satir okunabilirligi icin alternatif arka plan standardi uygulanmali.",
+      "IsCompleted": true,
+      "UserComment": "nth-child(even/odd) ile zebra striping tum integrator-table ve calibra-grid tablolarina uygulanmistir."
+    },
+    {
+      "RequestId": "GRID-003",
+      "Category": "Grid",
+      "Title": "Tum gridlerin solunda sec, duzelt ve sil aksiyonlari olmali.",
+      "Description": "Bu aksiyonlar sabit ve tum ekranlarda ayni sirada gorunmeli.",
+      "IsCompleted": true,
+      "UserComment": "Tum aksiyon kolonlari sol tarafa (ilk kolon) tasinmistir: WarehouseLocations, MeasureUnitDefinitions, CompanySettings, IntegratorSettings, MailSettings, ErpSettings, ProductConfiguration (3 tablo)."
+    },
+    {
+      "RequestId": "FORM-001",
+      "Category": "Form",
+      "Title": "Tum formlarda split screen yapisi kullanilmali.",
+      "Description": "Ust panel veri giris, alt panel ilgili kayitlarin listelendigi grid alani olmali.",
+      "IsCompleted": true,
+      "UserComment": "Mevcut tum CRUD ekranlari integrator-card--form (ust) ve integrator-card--table (alt) split-screen yapisindadir."
+    },
+    {
+      "RequestId": "GRID-004",
+      "Category": "Grid",
+      "Title": "Tum gridlerde server-side pagination kullanilmali.",
+      "Description": "Sayfa basi kayit sayisi gibi tercihler kullanici bazli kalici olarak saklanmali.",
+      "IsCompleted": true,
+      "UserComment": "Tum gridlerde _GridPager partial ile server-side pagination aktiftir. Sayfa boyutu ResolveGridPageSizeAsync ile user-based olarak saklanmaktadir."
+    },
+    {
+      "RequestId": "LAYOUT-001",
+      "Category": "Layout",
+      "Title": "Sayfada ana scroll yerine grid icinde internal scrolling kullanilmali.",
+      "Description": "Grid alani sabit yukseklikte olmali ve veri yogunlugunda yalnizca grid kaymali.",
+      "IsCompleted": true,
+      "UserComment": "integrator-card--table .integrator-table-wrap max-height ve overflow:auto ile internal scrolling saglanmistir. Sticky thead eklenmistir."
+    },
+    {
+      "RequestId": "FORM-002",
+      "Category": "Form",
+      "Title": "Malzeme kartlarinda zorunlu alan hatalari popup yerine alan bazli gosterilmeli.",
+      "Description": "Malzeme kodu, malzeme adi ve bos gecilemeyen alanlar kaydet sirasinda kirmizi vurgu ile belirtilmeli.",
+      "IsCompleted": true,
+      "UserComment": "jQuery Validate inline errorPlacement uygulanmistir. Tum form alanlarina asp-validation-for span'lari eklenmistir. input-validation-error sinifi ile kirmizi border ve field-validation-error sinifi ile hata mesaji gosterilmektedir."
+    },
+    {
+      "RequestId": "DATA-001",
+      "Category": "Data",
+      "Title": "Form kayitlarindaki tarih alanlari server datetime beklentisine gore standardize edilmeli.",
+      "Description": "UTC zorunlulugu olmayan alanlarda veritabani tarih stratejisi netlestirilmeli ve tek tip uygulanmali.",
+      "IsCompleted": true,
+      "UserComment": "Tum katmanlarda DateTimeOffset yerine DateTime, UtcNow yerine Now kullanilmaktadir. Property isimleri CreatedAt/UpdatedAt olarak standardize edilmistir. SQL kolon tipleri datetime2 olarak guncellenmistir. View'lardaki ToLocalTime() cagrilari kaldirilmistir."
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+@{
+    ViewData["Title"] = "Gorsel Ayarlar";
+    ViewData["FormCode"] = "ADMIN_APPEARANCE";
+}
+
+@section Styles {
+<style>
+    .ap-layout { display: flex; gap: 0; height: 100%; overflow: hidden; flex-direction: column; }
+    .ap-filter { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--app-border,#dde3ee); background: var(--app-surface,#fff); flex-wrap: wrap; }
+    .ap-filter label { font-size: 0.74rem; font-weight: 600; color: #64748b; white-space: nowrap; }
+    .ap-table-wrap { flex: 1 1 auto; overflow: auto; padding: 0 14px 14px; }
+    .ap-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .ap-table thead th { text-align: left; padding: 5px 10px; font-weight: 600; color: #64748b; font-size: 0.72rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; position: sticky; top: 0; }
+    .ap-table tbody tr { border-bottom: 1px solid #f1f5f9; }
+    .ap-table tbody tr:hover { background: #f8fafc; }
+    .ap-table td { padding: 4px 10px; vertical-align: middle; }
+    .ap-key { font-family: monospace; font-size: 0.75rem; color: #475569; }
+    .ap-default { color: #94a3b8; font-size: 0.78rem; }
+    .ap-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; }
+    .ap-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .ap-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .ap-empty { text-align: center; padding: 30px; color: #94a3b8; font-style: italic; }
+</style>
+}
+
+<div class="entity-form-toolbar" data-no-proxy="1">
+    <button type="button" class="btn btn-primary btn-sm" onclick="apSave()">Kaydet</button>
+    <span id="apMsg" style="margin-left:8px;"></span>
+</div>
+
+<div class="ap-layout">
+    <div class="ap-filter">
+        <label>Form:</label>
+        <select id="apFormKey" class="form-select form-select-sm" style="max-width:220px;" onchange="apLoad()"></select>
+        <label>Dil:</label>
+        <select id="apLanguage" class="form-select form-select-sm" style="max-width:140px;" onchange="apLoad()"></select>
+        <span style="color:#94a3b8;font-size:0.72rem;margin-left:4px;">Etiketi bos birakirsaniz sistem varsayilani kullanilir.</span>
+    </div>
+    <div class="ap-table-wrap">
+        <table class="ap-table">
+            <thead><tr><th style="width:200px;">Anahtar</th><th style="width:220px;">Varsayilan Metin</th><th>Gecerli Metin</th><th>Yeni Deger</th></tr></thead>
+            <tbody id="apBody"><tr><td colspan="4" class="ap-empty">Yukleniyor...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var API = function(a) { return '/Admin/' + a; };
+
+    function init() {
+        fetch(API('GetAppearanceFormDataJson'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var formSel = document.getElementById('apFormKey');
+                formSel.innerHTML = data.forms.map(function(f) {
+                    return '<option value="' + esc(f.formKey) + '">' + esc(f.displayName) + '</option>';
+                }).join('');
+                var langSel = document.getElementById('apLanguage');
+                langSel.innerHTML = data.languages.map(function(l) {
+                    return '<option value="' + esc(l.code) + '" ' + (l.code === data.currentLanguage ? 'selected' : '') + '>' + esc(l.displayName) + '</option>';
+                }).join('');
+                apLoad();
+            });
+    }
+
+    window.apLoad = function() {
+        var formKey = document.getElementById('apFormKey').value;
+        var lang = document.getElementById('apLanguage').value;
+        if (!formKey || !lang) return;
+        document.getElementById('apBody').innerHTML = '<tr><td colspan="4" class="ap-empty">Yukleniyor...</td></tr>';
+        fetch(API('GetFormLabelsJson') + '?formKey=' + encodeURIComponent(formKey) + '&languageCode=' + encodeURIComponent(lang))
+            .then(function(r) { return r.json(); })
+            .then(function(labels) {
+                var body = document.getElementById('apBody');
+                if (!labels.length) {
+                    body.innerHTML = '<tr><td colspan="4" class="ap-empty">Bu form icin etiket bulunamadi.</td></tr>';
+                    return;
+                }
+                body.innerHTML = labels.map(function(l) {
+                    return '<tr>' +
+                        '<td><span class="ap-key">' + esc(l.labelKey) + '</span></td>' +
+                        '<td><span class="ap-default">' + esc(l.defaultText) + '</span></td>' +
+                        '<td>' + esc(l.currentText) + '</td>' +
+                        '<td><input type="text" class="form-control form-control-sm ap-override" data-key="' + esc(l.labelKey) + '" value="' + esc(l.overrideText) + '" placeholder="' + esc(l.currentText) + '" /></td>' +
+                        '</tr>';
+                }).join('');
+            });
+    };
+
+    window.apSave = function() {
+        var formKey = document.getElementById('apFormKey').value;
+        var lang = document.getElementById('apLanguage').value;
+        var labels = Array.from(document.querySelectorAll('.ap-override')).map(function(inp) {
+            return { key: inp.getAttribute('data-key'), text: inp.value };
+        });
+        fetch(API('SaveFormLabelsJson'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ formKey: formKey, languageCode: lang, labels: labels })
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              var el = document.getElementById('apMsg');
+              el.innerHTML = '<span class="ap-msg ' + (d.success ? 'ok' : 'err') + '">' + esc(d.message) + '</span>';
+              if (d.success) setTimeout(function() { el.innerHTML = ''; }, 3000);
+          });
+    };
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    init();
+})();
+</script>
+}

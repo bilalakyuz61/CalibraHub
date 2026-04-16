@@ -1,0 +1,62 @@
+@{
+    ViewData["Title"] = "Organizasyon Semasi";
+    ViewData["FormCode"] = "ORG_CHART";
+    ViewData["BodyClass"] = "page-orgchart";
+}
+
+@section Styles {
+<link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+<style>
+    .page-orgchart .workspace-action-bar { display: none !important; }
+    .page-orgchart .integrator-dashboard,
+    .page-orgchart .integrator-dashboard__content {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    .orgchart-mount {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="orgchart-mount" id="orgChartRoot"></div>
+</section>
+
+@section Scripts {
+<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script>
+    (function () {
+        var el = document.getElementById('orgChartRoot')
+        if (!el) return
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountOrgChart) {
+                console.error('[OrgChart] mount fonksiyonu bulunamadi'); return
+            }
+            try { window.CalibraHub.mountOrgChart(el) }
+            catch (ex) { console.error('[OrgChart] mount hatasi:', ex) }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountOrgChart) { doMount(); return }
+        var tries = 0
+        var timer = setInterval(function () {
+            tries++
+            if (window.CalibraHub && window.CalibraHub.mountOrgChart) { clearInterval(timer); doMount() }
+            else if (tries >= 30) { clearInterval(timer); console.error('[OrgChart] timeout') }
+        }, 100)
+    })()
+</script>
+}

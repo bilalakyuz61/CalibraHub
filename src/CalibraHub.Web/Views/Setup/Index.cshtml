@@ -1,0 +1,103 @@
+@model CalibraHub.Web.Models.Setup.SetupViewModel
+@inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@{
+    Layout = null;
+    var runtime = await UiText.GetRuntimeAsync();
+}
+<!DOCTYPE html>
+<html lang="@runtime.LanguageCode">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ilk Kurulum - CalibraHub</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="login-page app-theme-@runtime.ThemeCode">
+<div class="login-shell">
+    <section class="login-hero" aria-hidden="true">
+        <img src="~/Document/2026-02-21_13-51-14.jpg" alt="Calibra Login" />
+    </section>
+
+    <section class="login-panel">
+        <div class="login-card" style="max-width:480px;">
+            <h1>CalibraHub</h1>
+            <p class="text-muted mb-4">Ilk kurulum — sirket ve yonetici bilgilerini girin.</p>
+
+            <form asp-action="Initialize" method="post" autocomplete="off">
+                @Html.AntiForgeryToken()
+
+                <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small mb-3"
+                     style="display:@(ViewData.ModelState.IsValid ? "none" : "block")"></div>
+
+                <h6 class="mb-2 mt-0 text-muted fw-semibold">Sirket Bilgileri</h6>
+
+                <div class="mb-2">
+                    <label asp-for="CompanyName" class="form-label">Sirket Adi</label>
+                    <input asp-for="CompanyName" class="form-control" />
+                    <span asp-validation-for="CompanyName" class="text-danger small"></span>
+                </div>
+
+                <p class="text-muted mb-2" style="font-size:0.8rem;">
+                    SQL Veritabani Baglantisi <span class="fw-normal">(bos birakilirsa sistem veritabani kullanilir)</span>
+                </p>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label asp-for="SqlServer" class="form-label">Sunucu</label>
+                        <input asp-for="SqlServer" class="form-control" placeholder="örn: localhost\SQLEXPRESS" autocomplete="off" />
+                    </div>
+                    <div class="col-6">
+                        <label asp-for="SqlDatabase" class="form-label">Veri Tabani</label>
+                        <input asp-for="SqlDatabase" class="form-control" placeholder="örn: CalibraDB" autocomplete="off" />
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label asp-for="SqlUsername" class="form-label">Kullanici Adi</label>
+                        <input asp-for="SqlUsername" class="form-control" autocomplete="off" />
+                    </div>
+                    <div class="col-6">
+                        <label asp-for="SqlPassword" class="form-label">Sifre</label>
+                        <input asp-for="SqlPassword" class="form-control" type="password" autocomplete="new-password" />
+                    </div>
+                </div>
+
+                <hr class="my-3" />
+
+                <h6 class="mb-2 text-muted fw-semibold">Yonetici Hesabi</h6>
+
+                <div class="mb-2">
+                    <label asp-for="AdminFullName" class="form-label">Ad Soyad</label>
+                    <input asp-for="AdminFullName" class="form-control" />
+                    <span asp-validation-for="AdminFullName" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-2">
+                    <label asp-for="AdminEmail" class="form-label">E-posta</label>
+                    <input asp-for="AdminEmail" class="form-control" type="email" />
+                    <span asp-validation-for="AdminEmail" class="text-danger small"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="AdminPassword" class="form-label">Sifre</label>
+                    <input asp-for="AdminPassword" class="form-control" type="password" autocomplete="new-password" />
+                    <span asp-validation-for="AdminPassword" class="text-danger small"></span>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">Kurulumu Tamamla</button>
+            </form>
+
+            <div class="mt-3 text-center">
+                <a asp-controller="Account" asp-action="Login" class="text-muted small">&larr; Girise don</a>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+<script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+</body>
+</html>

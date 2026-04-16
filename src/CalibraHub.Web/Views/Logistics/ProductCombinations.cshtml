@@ -1,0 +1,53 @@
+@model CalibraHub.Web.Models.Logistics.ProductCombinationsViewModel
+@{
+    ViewData["Title"] = "Konfigurasyon Tanimlama";
+    ViewData["BodyClass"] = "page-product-combinations";
+    var antiforgery = Context.RequestServices.GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>();
+    var tokens = antiforgery.GetAndStoreTokens(Context);
+}
+
+@section Styles {
+<style>
+    /* React kök tam viewport */
+    .page-product-combinations .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-product-combinations .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-product-combinations .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-product-combinations .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+    #pcbReactRoot {
+        height: 100%; display: flex; flex-direction: column;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="pcbReactRoot"></div>
+</section>
+
+@section Scripts {
+<script src="/react/calibrahub-widgets.js"></script>
+<script>
+(function () {
+    var el = document.getElementById('pcbReactRoot');
+    if (el && window.CalibraHub && window.CalibraHub.mountProductCombinations) {
+        window.CalibraHub.mountProductCombinations(el, {
+            csrfToken: '@tokens.RequestToken',
+            initialStockCode: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.SelectedStockCode ?? ""))
+        });
+    }
+})();
+</script>
+}

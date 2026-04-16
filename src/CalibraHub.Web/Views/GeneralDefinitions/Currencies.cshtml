@@ -1,0 +1,327 @@
+@{
+    ViewData["Title"] = "Doviz Tanimlamalari";
+    ViewData["FormCode"] = "CURRENCIES";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>currencies</td><td style='padding:6px 8px;'>Doviz tanimlari (kod, ad, sembol, durum)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>exchange_rates</td><td style='padding:6px 8px;'>Kur bilgileri (doviz kodu, tarih, alis/satis, efektif alis/satis, kaynak)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .cr-layout { display: flex; flex-direction: column; gap: 0; height: 100%; overflow: hidden; }
+    .cr-form-panel { flex: 1 1 50%; max-height: 50%; background: var(--app-surface,#fff); display: flex; flex-direction: column; overflow-y: auto; padding: 10px 14px; border-bottom: 1px solid var(--app-border,#dde3ee); }
+    .cr-grid-panel { flex: 1 1 50%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .cr-grid-panel .cr-table-wrap { flex: 1 1 auto; overflow: auto; }
+    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child { width: 60px; flex-shrink: 0; font-size: 0.74rem; font-weight: 600; color: var(--app-text-muted,#64748b); text-align: right; }
+    .cr-section { font-size: 0.68rem; font-weight: 700; color: var(--app-text-muted,#94a3b8); text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 6px; padding-top: 8px; border-top: 1px solid var(--app-border-light,#f1f5f9); }
+    .cr-toolbar { padding: 5px 10px; border-bottom: 1px solid var(--app-border,#dde3ee); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .cr-grid { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+    .cr-grid thead th { text-align: left; padding: 5px 8px; font-weight: 600; color: var(--app-text-muted,#64748b); font-size: 0.7rem; text-transform: uppercase; letter-spacing: .03em; border-bottom: 2px solid var(--app-border,#e2e8f0); background: var(--app-muted-surface,#f8fafc); white-space: nowrap; }
+    .cr-grid tbody tr { border-bottom: 1px solid var(--app-border-light,#f1f5f9); transition: background .1s; }
+    .cr-grid tbody tr:hover { background: var(--app-muted-surface,#f8fafc); }
+    .cr-grid td { padding: 3px 8px; vertical-align: middle; color: var(--app-text,#1e293b); }
+    .cr-rate { font-size: 0.74rem; color: var(--app-text,#334155); text-align: right; font-variant-numeric: tabular-nums; }
+    .cr-doviz-name { font-size: 0.72rem; color: var(--app-text-muted,#64748b); }
+    .cr-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
+    .act-btn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border-radius: 4px; border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer; }
+    .act-btn:hover { background: #f1f5f9; }
+    .act-btn.danger { color: #dc2626; border-color: #fecaca; }
+    .cr-code-input::placeholder { font-size: 0.68rem; }
+    .act-btn.primary { color: #2563eb; border-color: #bfdbfe; }
+    .btn-tcmb { display: block; width: 100%; font-size: 0.76rem; font-weight: 600; padding: 7px 14px; border-radius: 8px; border: 1px solid rgba(99,102,241,.3); background: rgba(99,102,241,.06); color: #6366f1; cursor: pointer; white-space: nowrap; margin-top: 6px; transition: all .12s; }
+    .btn-tcmb:hover { background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.5); }
+    .cr-loading { display:none; position:absolute; top:0; left:0; right:0; bottom:0; z-index:10; background:rgba(255,255,255,0.7); align-items:center; justify-content:center; }
+    .cr-loading.is-active { display:flex; }
+    .cr-spinner { width:28px; height:28px; border:3px solid #e2e8f0; border-top-color:#2563eb; border-radius:50%; animation:cr-spin .7s linear infinite; }
+    @@keyframes cr-spin { to { transform: rotate(360deg); } }
+    .cr-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
+    .cr-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .cr-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+    /* ── Dark tema ── */
+    body.app-theme-dark .cr-form-panel {
+        background: rgba(255,255,255,.02);
+        border-bottom-color: rgba(255,255,255,.06);
+    }
+    body.app-theme-dark .cs-line {
+        border-bottom-color: rgba(255,255,255,.05);
+    }
+    body.app-theme-dark .cs-line > label:first-child { color: #94a3b8; }
+    body.app-theme-dark .cr-section {
+        color: #94a3b8;
+        border-top-color: rgba(255,255,255,.08);
+    }
+    body.app-theme-dark .cr-toolbar {
+        background: rgba(255,255,255,.02);
+        border-bottom-color: rgba(255,255,255,.06);
+    }
+    body.app-theme-dark .cr-grid thead th {
+        background: rgba(255,255,255,.03);
+        color: #475569;
+        border-bottom-color: rgba(255,255,255,.07);
+    }
+    body.app-theme-dark .cr-grid thead th { color: #94a3b8; }
+    body.app-theme-dark .cr-grid tbody tr { border-bottom-color: rgba(255,255,255,.04); }
+    body.app-theme-dark .cr-grid tbody tr:hover { background: rgba(255,255,255,.04); }
+    body.app-theme-dark .cr-grid td { color: rgba(255,255,255,.85); }
+    body.app-theme-dark .cr-rate { color: rgba(255,255,255,.75); }
+    body.app-theme-dark .cr-doviz-name { color: rgba(255,255,255,.4); }
+    body.app-theme-dark .cr-empty { color: #475569; }
+    body.app-theme-dark .cr-grid td[style*="font-weight"] { color: rgba(255,255,255,.9); }
+    body.app-theme-dark .act-btn {
+        background: rgba(255,255,255,.05);
+        border-color: rgba(255,255,255,.09);
+        color: #94a3b8;
+    }
+    body.app-theme-dark .act-btn:hover { background: rgba(255,255,255,.10); }
+    body.app-theme-dark .act-btn.primary { color: #818cf8; border-color: rgba(129,140,248,.3); }
+    body.app-theme-dark .act-btn.danger  { color: #f87171; border-color: rgba(248,113,113,.3); }
+    body.app-theme-dark .btn-tcmb {
+        background: rgba(99,102,241,.08);
+        border-color: rgba(129,140,248,.3);
+        color: #a5b4fc;
+    }
+    body.app-theme-dark .btn-tcmb:hover { background: rgba(99,102,241,.18); border-color: rgba(129,140,248,.5); }
+    body.app-theme-dark .cr-loading { background: rgba(8,12,23,.7); }
+    body.app-theme-dark .cr-spinner { border-color: rgba(255,255,255,.1); border-top-color: #818cf8; }
+    body.app-theme-dark .cr-msg.ok  { background: rgba(16,185,129,.1);  color: #34d399; border-color: rgba(52,211,153,.25); }
+    body.app-theme-dark .cr-msg.err { background: rgba(239,68,68,.1);   color: #f87171; border-color: rgba(248,113,113,.25); }
+    body.app-theme-dark input[type="date"].form-control { color-scheme: dark; }
+    .cr-rate-date { font-size: 0.7rem; color: #64748b; }
+    body.app-theme-dark .cr-rate-date { color: rgba(255,255,255,.4); }
+</style>
+}
+
+<!-- Aksiyon Seridi -->
+<div class="entity-form-toolbar" data-no-proxy="1">
+    <button type="button" class="btn btn-primary integrator-btn-primary" onclick="crSave()">Kaydet</button>
+    <button type="button" class="btn btn-secondary integrator-btn-secondary" onclick="crNew()">Yeni</button>
+    <button type="button" class="btn btn-outline-danger integrator-btn-tertiary" id="crBtnDelete" disabled onclick="crDeleteCurrency()">Sil</button>
+</div>
+
+<div class="cr-layout">
+    <!-- Sol Panel -->
+    <div class="cr-form-panel">
+        <div class="cs-line">
+            <label>Kod *</label>
+            <input id="crCode" class="form-control form-control-sm cr-code-input" style="text-transform:uppercase;max-width:70px;" placeholder="TCMB kodu" />
+        </div>
+        <div class="cs-line"><label>Ad *</label><input id="crName" class="form-control form-control-sm" /></div>
+        <div class="cs-line"><label>Sembol</label><input id="crSymbol" class="form-control form-control-sm" style="max-width:50px;" /></div>
+        <div class="cs-line"><label>Durum</label><div class="form-check form-switch" style="margin:0;"><input id="crIsActive" class="form-check-input" type="checkbox" role="switch" checked /></div></div>
+        <input type="hidden" id="crId" value="" />
+
+        <div class="cr-section" id="crRateSection" style="display:none;">Kur Bilgisi</div>
+        <div id="crRateFields" style="display:none;">
+            <div class="cs-line"><label>Dvz Alis</label><input id="crBuying" type="number" class="form-control form-control-sm" step="0.0001" min="0" style="max-width:100px;text-align:right;" /></div>
+            <div class="cs-line"><label>Dvz Satis</label><input id="crSelling" type="number" class="form-control form-control-sm" step="0.0001" min="0" style="max-width:100px;text-align:right;" /></div>
+            <div class="cs-line"><label>Eff Alis</label><input id="crEffBuying" type="number" class="form-control form-control-sm" step="0.0001" min="0" style="max-width:100px;text-align:right;" /></div>
+            <div class="cs-line"><label>Eff Satis</label><input id="crEffSelling" type="number" class="form-control form-control-sm" step="0.0001" min="0" style="max-width:100px;text-align:right;" /></div>
+            <button type="button" class="btn btn-outline-primary btn-sm" style="font-size:0.68rem;margin-top:4px;" onclick="crSaveRate()">Kuru Kaydet</button>
+        </div>
+
+        <div class="cr-section">Toplu TCMB Kur</div>
+        <div class="cs-line"><label>Baslangic</label><input type="date" id="crBulkFrom" class="form-control form-control-sm" style="max-width:125px;font-size:0.7rem;" /></div>
+        <div class="cs-line"><label>Bitis</label><input type="date" id="crBulkTo" class="form-control form-control-sm" style="max-width:125px;font-size:0.7rem;" /></div>
+        <button type="button" class="btn-tcmb" style="margin-top:4px;" onclick="crFetchTcmb()">Toplu Kur Cek</button>
+
+        <div id="crMsg"></div>
+    </div>
+
+    <!-- Sag Panel -->
+    <div class="cr-grid-panel" style="position:relative;">
+        <div class="cr-toolbar">
+            <select id="crFilterCode" class="form-select form-select-sm" style="max-width:90px;font-size:0.72rem;" onchange="crLoadRates()"></select>
+            <input type="date" id="crFromDate" class="form-control form-control-sm" style="max-width:125px;font-size:0.7rem;" onchange="crLoadRates()" />
+            <span style="color:#94a3b8;font-size:0.7rem;">—</span>
+            <input type="date" id="crToDate" class="form-control form-control-sm" style="max-width:125px;font-size:0.7rem;" onchange="crLoadRates()" />
+        </div>
+        <div class="cr-table-wrap">
+            <table class="cr-grid"><thead><tr>
+                <th style="width:36px;"></th><th>Kod</th><th>Doviz</th><th>Tarih</th>
+                <th style="text-align:right;">Dvz Alis</th><th style="text-align:right;">Dvz Satis</th>
+                <th style="text-align:right;">Eff Alis</th><th style="text-align:right;">Eff Satis</th>
+            </tr></thead><tbody id="crRateBody"></tbody></table>
+        </div>
+        <div class="cr-loading" id="crLoading"><div class="cr-spinner"></div></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var BASE = '@Url.Action("Currencies", "GeneralDefinitions")';
+    var API = function(action) { return '/GeneralDefinitions/' + action; };
+    var currencies = [];
+    var today = new Date().toISOString().split('T')[0];
+
+    document.getElementById('crFromDate').value = today;
+    document.getElementById('crToDate').value = today;
+    document.getElementById('crBulkFrom').value = today.substring(0,8) + '01';
+    document.getElementById('crBulkTo').value = today;
+
+    // Init
+    loadCurrencies().then(function() { crLoadRates(); });
+
+    function loadCurrencies() {
+        return fetch(API('GetCurrencies')).then(function(r) { return r.json(); }).then(function(data) {
+            currencies = data;
+            var sel = document.getElementById('crFilterCode');
+            sel.innerHTML = '<option value="">Tumu</option>' + data.map(function(c) {
+                return '<option value="' + c.code + '">' + c.code + '</option>';
+            }).join('');
+        });
+    }
+
+    window.crLoadRates = function() {
+        var code = document.getElementById('crFilterCode').value;
+        var from = document.getElementById('crFromDate').value;
+        var to = document.getElementById('crToDate').value;
+        showLoading(true);
+        fetch(API('GetRates') + '?filterCode=' + encodeURIComponent(code) + '&fromDate=' + from + '&toDate=' + to)
+            .then(function(r) { return r.json(); })
+            .then(function(data) { renderRates(data); showLoading(false); })
+            .catch(function() { showLoading(false); });
+    };
+
+    function renderRates(rates) {
+        var body = document.getElementById('crRateBody');
+        if (rates.length === 0) {
+            body.innerHTML = '<tr><td colspan="8" class="cr-empty">Kur bilgisi bulunamadi.</td></tr>';
+            return;
+        }
+        body.innerHTML = rates.map(function(r) {
+            var cid = 0;
+            for (var i = 0; i < currencies.length; i++) { if (currencies[i].code === r.currencyCode) { cid = currencies[i].id; break; } }
+            return '<tr>' +
+                '<td style="white-space:nowrap;display:flex;gap:2px;">' +
+                '<button type="button" class="act-btn primary" title="Duzelt" onclick="crEditRate(' + cid + ',\'' + r.rateDate + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
+                '<button type="button" class="act-btn danger" title="Sil" onclick="crDeleteRate(\'' + r.currencyCode + '\',\'' + r.rateDate + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
+                '</td>' +
+                '<td style="font-weight:600;">' + r.currencyCode + '</td>' +
+                '<td class="cr-doviz-name">' + (function() { for (var i=0;i<currencies.length;i++) { if (currencies[i].code===r.currencyCode) return currencies[i].name||''; } return ''; })() + '</td>' +
+                '<td class="cr-rate-date">' + r.rateDateDisplay + '</td>' +
+                '<td class="cr-rate">' + fmtRate(r.buyingRate) + '</td>' +
+                '<td class="cr-rate">' + fmtRate(r.sellingRate) + '</td>' +
+                '<td class="cr-rate">' + (r.effectiveBuyingRate > 0 ? fmtRate(r.effectiveBuyingRate) : '-') + '</td>' +
+                '<td class="cr-rate">' + (r.effectiveSellingRate > 0 ? fmtRate(r.effectiveSellingRate) : '-') + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    window.crEditRate = function(id, rateDate) {
+        fetch(API('GetCurrencyRate') + '?id=' + id + '&rateDate=' + rateDate)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                document.getElementById('crId').value = d.id;
+                document.getElementById('crCode').value = d.code || '';
+                document.getElementById('crName').value = d.name || '';
+                document.getElementById('crSymbol').value = d.symbol || '';
+                document.getElementById('crIsActive').checked = d.isActive !== false;
+                document.getElementById('crBuying').value = d.buyingRate || '';
+                document.getElementById('crSelling').value = d.sellingRate || '';
+                document.getElementById('crEffBuying').value = d.effectiveBuyingRate || '';
+                document.getElementById('crEffSelling').value = d.effectiveSellingRate || '';
+                document.getElementById('crRateSection').style.display = '';
+                document.getElementById('crRateFields').style.display = '';
+                document.getElementById('crBtnDelete').disabled = false;
+            });
+    };
+
+    window.crNew = function() {
+        document.getElementById('crId').value = '';
+        document.getElementById('crCode').value = '';
+        document.getElementById('crName').value = '';
+        document.getElementById('crSymbol').value = '';
+        document.getElementById('crIsActive').checked = true;
+        document.getElementById('crBuying').value = '';
+        document.getElementById('crSelling').value = '';
+        document.getElementById('crEffBuying').value = '';
+        document.getElementById('crEffSelling').value = '';
+        document.getElementById('crRateSection').style.display = 'none';
+        document.getElementById('crRateFields').style.display = 'none';
+        document.getElementById('crBtnDelete').disabled = true;
+        showMsg('');
+    };
+
+    window.crSave = function() {
+        var payload = {
+            id: parseInt(document.getElementById('crId').value) || null,
+            code: document.getElementById('crCode').value,
+            name: document.getElementById('crName').value,
+            symbol: document.getElementById('crSymbol').value,
+            isActive: document.getElementById('crIsActive').checked
+        };
+        fetch(API('SaveCurrencyJson'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { showMsg('Kaydedildi.', true); crNew(); loadCurrencies().then(function() { crLoadRates(); }); }
+                else showMsg(d.message || 'Hata', false);
+            });
+    };
+
+    window.crDeleteCurrency = function() {
+        var id = parseInt(document.getElementById('crId').value);
+        if (!id || document.getElementById('crBtnDelete').disabled) return;
+        if (!confirm('Bu dovizi silmek istediginize emin misiniz?\nTum kur bilgileri de silinecektir.')) return;
+        fetch(API('DeleteCurrencyJson') + '?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { showMsg('Silindi.', true); crNew(); loadCurrencies().then(function() { crLoadRates(); }); }
+                else showMsg(d.message || 'Silinemedi', false);
+            });
+    };
+
+    window.crSaveRate = function() {
+        var code = document.getElementById('crCode').value;
+        var toDate = document.getElementById('crToDate').value;
+        var payload = {
+            currencyCode: code, rateDate: toDate,
+            buyingRate: parseFloat(document.getElementById('crBuying').value) || 0,
+            sellingRate: parseFloat(document.getElementById('crSelling').value) || 0,
+            effectiveBuyingRate: parseFloat(document.getElementById('crEffBuying').value) || 0,
+            effectiveSellingRate: parseFloat(document.getElementById('crEffSelling').value) || 0
+        };
+        fetch(API('SaveRateJson'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { showMsg('Kur kaydedildi.', true); crLoadRates(); }
+                else showMsg(d.message || 'Hata', false);
+            });
+    };
+
+    window.crDeleteRate = function(code, date) {
+        if (!confirm('Bu kuru silmek istediginize emin misiniz?')) return;
+        fetch(API('DeleteRateJson') + '?currencyCode=' + code + '&rateDate=' + date, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { if (d.success) crLoadRates(); });
+    };
+
+    window.crFetchTcmb = function() {
+        var from = document.getElementById('crBulkFrom').value;
+        var to = document.getElementById('crBulkTo').value;
+        showLoading(true);
+        fetch(API('FetchTcmbRatesJson') + '?fromDate=' + from + '&toDate=' + to, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                showLoading(false);
+                showMsg(d.message || (d.success ? 'Tamamlandi.' : 'Kur bilgisi alinamadi.'), d.success);
+                if (d.success) crLoadRates();
+            })
+            .catch(function() { showLoading(false); showMsg('TCMB ile baglanti kurulamadi. Internet baglantinizi kontrol edin.', false); });
+    };
+
+    function fmtRate(v) { return v ? v.toFixed(4) : '-'; }
+    function showLoading(on) { document.getElementById('crLoading').classList.toggle('is-active', on); }
+    function showMsg(msg, ok) {
+        var el = document.getElementById('crMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="cr-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+})();
+</script>
+}

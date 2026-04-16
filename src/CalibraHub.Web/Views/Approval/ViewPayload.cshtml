@@ -1,0 +1,621 @@
+@model CalibraHub.Web.Models.Approval.ApprovalDocumentViewerViewModel
+@{
+    var kindLabel = Model.Kind switch {
+        "EInvoice"  => "e-Fatura",
+        "EArchive"  => "e-Arsiv",
+        "EDispatch" => "e-Irsaliye",
+        _           => "Belge"
+    };
+    ViewData["Title"] = $"{kindLabel}: {Model.DocumentNumber}";
+    ViewData["BodyClass"] = "page-document-viewer";
+    var rd = Model.RenderData;
+
+    string Fmt(string? val)
+    {
+        if (string.IsNullOrWhiteSpace(val)) return "-";
+        if (decimal.TryParse(val, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var d))
+            return d.ToString("N2", new System.Globalization.CultureInfo("tr-TR"));
+        return val;
+    }
+}
+
+@section Styles {
+<style>
+    /* Workspace container yukseklik zinciri */
+    .page-document-viewer .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-document-viewer .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .page-document-viewer .integrator-dashboard__group { flex: 1 1 0 !important; min-height: 0; overflow: hidden; }
+
+    .doc-viewer { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+    .doc-viewer__header {
+        flex: 0 0 auto;
+        display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        background: var(--bs-body-bg, #fff);
+    }
+    .doc-viewer__meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: .8125rem; }
+    .doc-viewer__meta-item { display: flex; flex-direction: column; }
+    .doc-viewer__meta-label { font-size: .68rem; color: var(--bs-secondary-color, #6c757d); text-transform: uppercase; letter-spacing: .04em; }
+    .doc-viewer__meta-value { font-weight: 500; }
+    .doc-viewer__actions { display: flex; gap: 6px; }
+
+    /* Tabs */
+    .doc-viewer__tabs { flex: 0 0 auto; display: flex; gap: 0; border-bottom: 1px solid var(--bs-border-color, #dee2e6); background: var(--bs-body-bg); padding: 0 16px; }
+    .doc-viewer__tab {
+        padding: 7px 16px; font-size: .8125rem; font-weight: 500; cursor: pointer;
+        border: none; background: none; color: var(--bs-secondary-color, #6c757d);
+        border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .doc-viewer__tab.is-active { color: var(--bs-primary, #0d6efd); border-bottom-color: var(--bs-primary, #0d6efd); }
+    .doc-viewer__tab-pane { display: none !important; flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .doc-viewer__tab-pane.is-active { display: flex !important; flex-direction: column; }
+    #pane-resmi.is-active { display: flex !important; flex-direction: column; }
+
+    /* XML pane */
+    .doc-viewer__xml-wrap { padding: 16px; background: var(--bs-tertiary-bg, #f8f9fa); min-height: 100%; }
+    .doc-viewer__xml {
+        margin: 0; font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+        font-size: .78rem; line-height: 1.6; white-space: pre; tab-size: 2;
+    }
+    .xml-tag { color: #0070c0; } .xml-attr { color: #795e26; } .xml-value { color: #a31515; } .xml-pi { color: #808080; }
+    @@media (prefers-color-scheme: dark) {
+        .xml-tag { color: #569cd6; } .xml-attr { color: #9cdcfe; } .xml-value { color: #ce9178; }
+    }
+
+    /* Invoice visual */
+    .inv { max-width: 860px; margin: 24px auto; padding: 0 16px 40px; font-size: .875rem; color: var(--bs-body-color); }
+    .inv__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 24px; }
+    .inv__title { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; }
+    .inv__badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: color-mix(in srgb, var(--bs-primary,#0d6efd) 12%, transparent); color: var(--bs-primary,#0d6efd); border: 1px solid color-mix(in srgb, var(--bs-primary,#0d6efd) 25%, transparent); }
+    .inv__meta-grid { display: flex; gap: 32px; flex-wrap: wrap; margin-bottom: 20px; }
+    .inv__meta-item label { display: block; font-size: .69rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--bs-secondary-color,#6c757d); margin-bottom: 1px; }
+    .inv__meta-item span { font-weight: 500; }
+    .inv__parties { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .inv__party { border: 1px solid var(--bs-border-color,#dee2e6); border-radius: 8px; padding: 12px 14px; }
+    .inv__party-role { font-size: .69rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--bs-secondary-color,#6c757d); margin-bottom: 6px; }
+    .inv__party-name { font-size: .95rem; font-weight: 700; margin-bottom: 4px; }
+    .inv__party-detail { font-size: .8rem; color: var(--bs-secondary-color,#6c757d); line-height: 1.5; }
+    .inv__lines { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: .82rem; }
+    .inv__lines th { border-bottom: 2px solid var(--bs-border-color,#dee2e6); padding: 6px 8px; text-align: left; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary-color,#6c757d); white-space: nowrap; }
+    .inv__lines th.num, .inv__lines td.num { text-align: right; }
+    .inv__lines td { border-bottom: 1px solid color-mix(in srgb, var(--bs-border-color,#dee2e6) 60%, transparent); padding: 7px 8px; vertical-align: top; }
+    .inv__lines tr:last-child td { border-bottom: none; }
+    .inv__totals { display: flex; justify-content: flex-end; }
+    .inv__totals-table { width: 280px; font-size: .85rem; }
+    .inv__totals-table td { padding: 4px 8px; }
+    .inv__totals-table td:last-child { text-align: right; font-weight: 500; }
+    .inv__totals-table tr.inv__total-grand td { font-size: .95rem; font-weight: 700; border-top: 2px solid var(--bs-border-color,#dee2e6); padding-top: 8px; }
+    .inv__divider { border: none; border-top: 1px solid var(--bs-border-color,#dee2e6); margin: 16px 0; }
+    .inv__note { font-size: .8rem; color: var(--bs-secondary-color,#6c757d); font-style: italic; margin-top: 16px; }
+    .inv__no-render { padding: 48px 24px; text-align: center; color: var(--bs-secondary-color,#6c757d); }
+    @@media (max-width: 600px) {
+        .inv__parties { grid-template-columns: 1fr; }
+        .inv__head { flex-direction: column; }
+    }
+
+    /* ═══ Dark mode ═══ */
+    body.app-theme-dark .doc-viewer__header {
+        background: #0c0f1a;
+        border-bottom-color: rgba(255,255,255,.08);
+    }
+    body.app-theme-dark .doc-viewer__meta-label {
+        color: rgba(255,255,255,.5);
+    }
+    body.app-theme-dark .doc-viewer__meta-value {
+        color: #e2e8f0;
+    }
+    body.app-theme-dark .doc-viewer__tabs {
+        background: #0c0f1a;
+        border-bottom-color: rgba(255,255,255,.08);
+    }
+    body.app-theme-dark .doc-viewer__tab {
+        color: rgba(255,255,255,.5);
+    }
+    body.app-theme-dark .doc-viewer__tab:hover {
+        color: rgba(255,255,255,.75);
+    }
+    body.app-theme-dark .doc-viewer__tab.is-active {
+        color: #818cf8;
+        border-bottom-color: #818cf8;
+    }
+    body.app-theme-dark .doc-viewer__actions .btn-outline-secondary {
+        color: rgba(255,255,255,.65);
+        border-color: rgba(255,255,255,.15);
+    }
+    body.app-theme-dark .doc-viewer__actions .btn-outline-secondary:hover {
+        background: rgba(255,255,255,.08);
+        color: #e2e8f0;
+    }
+    body.app-theme-dark .doc-viewer__actions .btn-outline-primary {
+        color: #818cf8;
+        border-color: rgba(129,140,248,.35);
+    }
+    body.app-theme-dark .doc-viewer__actions .btn-outline-primary:hover {
+        background: rgba(99,102,241,.15);
+        color: #a5b4fc;
+    }
+    body.app-theme-dark .doc-viewer__actions .btn-secondary {
+        background: rgba(255,255,255,.08);
+        border-color: rgba(255,255,255,.12);
+        color: rgba(255,255,255,.7);
+    }
+    body.app-theme-dark .doc-viewer__actions .btn-secondary:hover {
+        background: rgba(255,255,255,.12);
+        color: #e2e8f0;
+    }
+    /* XML pane */
+    body.app-theme-dark .doc-viewer__xml-wrap {
+        background: #0d1323;
+    }
+    body.app-theme-dark .doc-viewer__xml {
+        color: #e2e8f0;
+    }
+    body.app-theme-dark .xml-tag { color: #569cd6; }
+    body.app-theme-dark .xml-attr { color: #9cdcfe; }
+    body.app-theme-dark .xml-value { color: #ce9178; }
+    body.app-theme-dark .xml-pi { color: #94a3b8; }
+    /* Ozet gorunum */
+    body.app-theme-dark .inv { color: #e2e8f0; }
+    body.app-theme-dark .inv__title { color: #f1f5f9; }
+    body.app-theme-dark .inv__badge {
+        background: rgba(129,140,248,.12);
+        color: #818cf8;
+        border-color: rgba(129,140,248,.3);
+    }
+    body.app-theme-dark .inv__meta-item label { color: rgba(255,255,255,.5); }
+    body.app-theme-dark .inv__meta-item span { color: #e2e8f0; }
+    body.app-theme-dark .inv__party {
+        border-color: rgba(255,255,255,.1);
+        background: rgba(255,255,255,.03);
+    }
+    body.app-theme-dark .inv__party-role { color: rgba(255,255,255,.5); }
+    body.app-theme-dark .inv__party-name { color: #f1f5f9; }
+    body.app-theme-dark .inv__party-detail { color: rgba(255,255,255,.6); }
+    body.app-theme-dark .inv__lines th {
+        color: rgba(255,255,255,.5);
+        border-bottom-color: rgba(255,255,255,.12);
+    }
+    body.app-theme-dark .inv__lines td {
+        border-bottom-color: rgba(255,255,255,.06);
+        color: #e2e8f0;
+    }
+    body.app-theme-dark .inv__totals-table td { color: #e2e8f0; }
+    body.app-theme-dark .inv__total-grand td { border-top-color: rgba(255,255,255,.12); }
+    body.app-theme-dark .inv__divider { border-top-color: rgba(255,255,255,.08); }
+    body.app-theme-dark .inv__note { color: rgba(255,255,255,.5); }
+    body.app-theme-dark .inv__no-render { color: rgba(255,255,255,.5); }
+</style>
+}
+
+<div class="doc-viewer">
+    <div class="doc-viewer__header">
+        <div class="doc-viewer__meta">
+            <div class="doc-viewer__meta-item">
+                <span class="doc-viewer__meta-label">Belge No</span>
+                <span class="doc-viewer__meta-value">@Model.DocumentNumber</span>
+            </div>
+            <div class="doc-viewer__meta-item">
+                <span class="doc-viewer__meta-label">Tarih</span>
+                <span class="doc-viewer__meta-value">@Model.IssueDate.ToString("dd.MM.yyyy")</span>
+            </div>
+            <div class="doc-viewer__meta-item">
+                <span class="doc-viewer__meta-label">Gonderen VKN</span>
+                <span class="doc-viewer__meta-value">@Model.SenderTaxNumber</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.SenderName))
+            {
+                <div class="doc-viewer__meta-item">
+                    <span class="doc-viewer__meta-label">Cari</span>
+                    <span class="doc-viewer__meta-value">@Model.SenderName</span>
+                </div>
+            }
+            <div class="doc-viewer__meta-item">
+                <span class="doc-viewer__meta-label">Zarf No</span>
+                <span class="doc-viewer__meta-value" style="font-size:.75rem">@Model.EnvelopeId</span>
+            </div>
+        </div>
+        <div class="doc-viewer__actions" id="docViewerActions">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCopyXml" title="XML'i panoya kopyala">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                Kopyala
+            </button>
+            <a href="@Url.Action("DownloadPayload", "Approval", new { id = Model.Id })"
+               class="btn btn-outline-primary btn-sm" id="btnDownloadXml" title="XML olarak indir" download>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                XML Indir
+            </a>
+            <a href="javascript:history.back()" class="btn btn-secondary btn-sm" id="btnGoBack">Geri</a>
+        </div>
+    </div>
+
+    <div class="doc-viewer__tabs">
+        <button class="doc-viewer__tab is-active" data-tab="resmi">Resmi (GİB) Görüntüsü</button>
+        <button class="doc-viewer__tab" data-tab="gorsel">Özet Görünüm</button>
+        <button class="doc-viewer__tab" data-tab="xml">XML</button>
+    </div>
+
+    @* ---- Resmi Görünüm pane ---- *@
+    <div class="doc-viewer__tab-pane is-active" id="pane-resmi" style="background-color: #525659; overflow: hidden;">
+        <div id="zoomToolbar" style="flex: 0 0 auto; background: #323639; padding: 8px 16px; display: flex; justify-content: center; align-items: center; gap: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); z-index: 10;">
+            <button type="button" class="btn btn-sm btn-dark" id="btnZoomOut" style="border: 1px solid #5f6368;" title="Uzaklaş">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <span id="zoomLabel" style="color: #fff; font-size: 0.85rem; font-weight: 500; display: inline-flex; align-items: center; min-width: 45px; justify-content: center;">100%</span>
+            <button type="button" class="btn btn-sm btn-dark" id="btnZoomIn" style="border: 1px solid #5f6368;" title="Yakınlaş">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <div style="width: 1px; background: #5f6368; height: 20px; margin: 0 4px;"></div>
+            <button type="button" class="btn btn-sm btn-dark" id="btnFitWidth" style="border: 1px solid #5f6368;">Genişliğe Sığdır</button>
+            <button type="button" class="btn btn-sm btn-dark" id="btnFitPage" style="border: 1px solid #5f6368;">Sıkıştır (Ekrana Sığdır)</button>
+        </div>
+
+        <div id="iframeWrapper" style="flex: 1 1 auto; overflow: auto; padding: 24px 16px; text-align: center;">
+            <div id="iframeContainer" style="display: inline-block; background: white; box-shadow: 0 6px 24px rgba(0,0,0,0.35); transition: transform 0.15s ease-out; transform-origin: top center;">
+                <iframe id="xsltIframe" src="@Url.Action("ViewHtml", "Approval", new { id = Model.Id })" style="width: 220mm; min-height: 297mm; border: none; overflow: hidden; display: block;" scrolling="no"></iframe>
+            </div>
+        </div>
+    </div>
+
+    @* ---- Görsel pane ---- *@
+    <div class="doc-viewer__tab-pane" id="pane-gorsel">
+        @if (rd is null)
+        {
+            <div class="inv__no-render">
+                <p>Belge goruntulenemedi — XML parse edilemedi.</p>
+            </div>
+        }
+        else
+        {
+            <div class="inv">
+                <div class="inv__head">
+                    <div>
+                        <div class="inv__title">@Model.DocumentNumber</div>
+                        @if (!string.IsNullOrWhiteSpace(rd.ProfileId))
+                        {
+                            <span class="inv__badge">@rd.ProfileId</span>
+                        }
+                    </div>
+                    <div class="inv__meta-grid">
+                        <div class="inv__meta-item">
+                            <label>Belge Tarihi</label>
+                            <span>@Model.IssueDate.ToString("dd.MM.yyyy")</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(rd.TypeCode))
+                        {
+                            <div class="inv__meta-item">
+                                <label>Belge Turu</label>
+                                <span>@rd.TypeCode</span>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(rd.Currency))
+                        {
+                            <div class="inv__meta-item">
+                                <label>Para Birimi</label>
+                                <span>@rd.Currency</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="inv__parties">
+                    @if (rd.Supplier is not null)
+                    {
+                        <div class="inv__party">
+                            <div class="inv__party-role">Satici / Gonderen</div>
+                            <div class="inv__party-name">@(rd.Supplier.Name ?? "-")</div>
+                            <div class="inv__party-detail">
+                                @if (!string.IsNullOrWhiteSpace(rd.Supplier.TaxNumber))
+                                {
+                                    <span>VKN: @rd.Supplier.TaxNumber</span>
+                                    if (!string.IsNullOrWhiteSpace(rd.Supplier.TaxOfficeName)) { <span> — @rd.Supplier.TaxOfficeName V.D.</span> }
+                                    <br />
+                                }
+                                @if (!string.IsNullOrWhiteSpace(rd.Supplier.AddressLine)) { @rd.Supplier.AddressLine <br /> }
+                                @if (!string.IsNullOrWhiteSpace(rd.Supplier.City)) { @rd.Supplier.City }
+                                @if (!string.IsNullOrWhiteSpace(rd.Supplier.Country) && rd.Supplier.Country != "Türkiye") { <span> / @rd.Supplier.Country</span> }
+                            </div>
+                        </div>
+                    }
+                    @if (rd.Customer is not null)
+                    {
+                        <div class="inv__party">
+                            <div class="inv__party-role">Alici / Alıcı</div>
+                            <div class="inv__party-name">@(rd.Customer.Name ?? "-")</div>
+                            <div class="inv__party-detail">
+                                @if (!string.IsNullOrWhiteSpace(rd.Customer.TaxNumber))
+                                {
+                                    <span>VKN: @rd.Customer.TaxNumber</span>
+                                    if (!string.IsNullOrWhiteSpace(rd.Customer.TaxOfficeName)) { <span> — @rd.Customer.TaxOfficeName V.D.</span> }
+                                    <br />
+                                }
+                                @if (!string.IsNullOrWhiteSpace(rd.Customer.AddressLine)) { @rd.Customer.AddressLine <br /> }
+                                @if (!string.IsNullOrWhiteSpace(rd.Customer.City)) { @rd.Customer.City }
+                                @if (!string.IsNullOrWhiteSpace(rd.Customer.Country) && rd.Customer.Country != "Türkiye") { <span> / @rd.Customer.Country</span> }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                @if (rd.Lines.Count > 0)
+                {
+                    <table class="inv__lines">
+                        <thead>
+                        <tr>
+                            <th style="width:2.5rem;">#</th>
+                            <th>Urun / Hizmet</th>
+                            <th class="num">Miktar</th>
+                            <th class="num">Br. Fiyat</th>
+                            <th class="num">KDV %</th>
+                            <th class="num">KDV</th>
+                            <th class="num">Tutar</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var line in rd.Lines)
+                        {
+                            <tr>
+                                <td>@(line.LineNo ?? "-")</td>
+                                <td>@(line.ItemName ?? "-")</td>
+                                <td class="num">@(line.Quantity ?? "-") @line.UnitCode</td>
+                                <td class="num">@Fmt(line.UnitPrice)</td>
+                                <td class="num">@(line.TaxRate ?? "-")</td>
+                                <td class="num">@Fmt(line.TaxAmount)</td>
+                                <td class="num">@Fmt(line.LineAmount)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+
+                <hr class="inv__divider" />
+
+                <div class="inv__totals">
+                    <table class="inv__totals-table">
+                        @if (!string.IsNullOrWhiteSpace(rd.LineExtensionAmount))
+                        {
+                            <tr><td>Mal/Hizmet Toplam</td><td>@Fmt(rd.LineExtensionAmount)</td></tr>
+                        }
+                        @foreach (var tax in rd.TaxSummaries)
+                        {
+                            <tr>
+                                <td>@(tax.TaxName ?? "KDV") @(string.IsNullOrWhiteSpace(tax.Rate) ? "" : $"(%{tax.Rate})")</td>
+                                <td>@Fmt(tax.TaxAmount)</td>
+                            </tr>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(rd.TaxAmount) && rd.TaxSummaries.Count == 0)
+                        {
+                            <tr><td>Toplam KDV</td><td>@Fmt(rd.TaxAmount)</td></tr>
+                        }
+                        <tr class="inv__total-grand">
+                            <td>Ödenecek Tutar (@(rd.Currency ?? "TRY"))</td>
+                            <td>@Fmt(rd.PayableAmount)</td>
+                        </tr>
+                    </table>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(rd.Note))
+                {
+                    <p class="inv__note">Not: @rd.Note</p>
+                }
+            </div>
+        }
+    </div>
+
+    @* ---- XML pane ---- *@
+    <div class="doc-viewer__tab-pane" id="pane-xml">
+        <div class="doc-viewer__xml-wrap">
+            <pre class="doc-viewer__xml" id="xmlContent">@Model.XmlContent</pre>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    // Tab switching (Güçlü DOM Müdahalesi)
+    document.querySelectorAll('.doc-viewer__tab').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var key = btn.getAttribute('data-tab');
+            document.querySelectorAll('.doc-viewer__tab').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
+            document.querySelectorAll('.doc-viewer__tab-pane').forEach(function (p) { 
+                var isActive = (p.id === 'pane-' + key);
+                p.classList.toggle('is-active', isActive); 
+                
+                // CSS önbelleğine veya Flex sorunlarına takılmamak için kesin DOM gizleme
+                if (isActive) {
+                    p.style.setProperty("display", "flex", "important");
+                    p.style.flexDirection = "column";
+                } else {
+                    p.style.setProperty("display", "none", "important");
+                }
+            });
+        });
+    });
+
+    // XML syntax highlighting (runs lazily when XML tab is first shown)
+    var xmlHighlighted = false;
+    function highlightXml(raw) {
+        return raw.split('\n').map(function (line) {
+            line = line.replace(/(&lt;\?[^?]*\?&gt;)/g, '<span class="xml-pi">$1</span>');
+            line = line.replace(/(&lt;\/?)([\w:.-]+)((?:\s+[\w:.-]+\s*=\s*&quot;[^&]*&quot;)*)(\s*\/?\s*&gt;)/g,
+                function (m, open, name, attrs, close) {
+                    var hAttrs = attrs.replace(/([\w:.-]+)(\s*=\s*)(&quot;[^&]*&quot;)/g,
+                        '<span class="xml-attr">$1</span>$2<span class="xml-value">$3</span>');
+                    return '<span class="xml-tag">' + open + name + '</span>' + hAttrs + '<span class="xml-tag">' + close + '</span>';
+                });
+            return line;
+        }).join('\n');
+    }
+
+    document.querySelector('[data-tab="xml"]').addEventListener('click', function () {
+        if (xmlHighlighted) return;
+        xmlHighlighted = true;
+        var pre = document.getElementById('xmlContent');
+        if (!pre) return;
+        var raw = pre.textContent;
+        var esc = raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        pre.innerHTML = highlightXml(esc);
+    });
+
+    // Copy button always copies raw XML text
+    document.getElementById('btnCopyXml').addEventListener('click', function () {
+        var pre = document.getElementById('xmlContent');
+        var text = pre ? pre.textContent : '';
+        navigator.clipboard.writeText(text).then(function () {
+            var btn = document.getElementById('btnCopyXml');
+            var orig = btn.innerHTML;
+            btn.textContent = 'Kopyalandi!';
+            setTimeout(function () { btn.innerHTML = orig; }, 1800);
+        });
+    });
+
+    // -------- Resmi Fatura Goruntusu (XSLT) Okuyucusu (PDF Viewer Tarzi) --------
+    var wrap = document.getElementById('iframeWrapper');
+    var container = document.getElementById('iframeContainer');
+    var iframe = document.getElementById('xsltIframe');
+    var zoomLabel = document.getElementById('zoomLabel');
+    var currentZoom = 1.0;
+
+    function applyZoom() {
+        if (currentZoom < 0.2) currentZoom = 0.2;
+        if (currentZoom > 3.0) currentZoom = 3.0;
+        container.style.transform = 'scale(' + currentZoom + ')';
+        zoomLabel.textContent = Math.round(currentZoom * 100) + '%';
+        
+        // Transform origin top center applies visual scale, but wrapper scroll height needs adjustment 
+        // to avoid huge empty whitespace below scaled document. We hack container margin!
+        var scaledHeight = container.offsetHeight * currentZoom;
+        var diff = container.offsetHeight - scaledHeight;
+        container.style.marginBottom = '-' + diff + 'px';
+    }
+
+    function syncIframeHeight() {
+        try {
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            var height = doc.documentElement.scrollHeight || doc.body.scrollHeight;
+            if (height > 500) {
+                iframe.style.height = (height + 30) + 'px'; // add small padding below GİB footer
+                applyZoom(); // Re-apply scale margin fixes after height change
+            }
+        } catch(e) { }
+    }
+
+    // Fatura yüklendiğinde iframe yüksekliğini aç, içindeki içerikleri merkeze hizala
+    iframe.addEventListener('load', function() {
+        try {
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            var style = doc.createElement('style');
+            style.innerHTML = 'body { margin: 0; padding: 20px; background: #fff !important; display: block; } table { margin: 0 auto; }';
+            doc.head.appendChild(style);
+        } catch(e) { }
+        
+        // Wait a little bit for inner image/fonts to render
+        setTimeout(syncIframeHeight, 300);
+        setTimeout(syncIframeHeight, 1500); 
+    });
+
+    // Zoom Buttons
+    document.getElementById('btnZoomIn').addEventListener('click', function() {
+        currentZoom += 0.1;
+        applyZoom();
+    });
+    document.getElementById('btnZoomOut').addEventListener('click', function() {
+        currentZoom -= 0.1;
+        applyZoom();
+    });
+    document.getElementById('btnFitWidth').addEventListener('click', function() {
+        var availableW = wrap.clientWidth - 40; 
+        currentZoom = availableW / container.offsetWidth;
+        if (currentZoom > 1.5) currentZoom = 1.5;
+        applyZoom();
+    });
+    document.getElementById('btnFitPage').addEventListener('click', function() {
+        var scaleW = (wrap.clientWidth - 40) / container.offsetWidth;
+        var scaleH = (wrap.clientHeight - 40) / container.offsetHeight;
+        currentZoom = Math.min(scaleW, scaleH);
+        if (currentZoom > 1) currentZoom = 1;
+        applyZoom();
+    });
+
+    // -------- PUSH ACTIONS TO GLOBAL SPA WORKSPACE TOOLBAR --------
+    var isWorkspace = window !== window.top;
+    var activeTab = 'resmi';
+    
+    function triggerToolbarSync() {
+        if (isWorkspace && window.parent && typeof window.parent.calibraGetWorkspaceToolbarContext !== "undefined") {
+            // This forces the Site.js in root parent to re-evaluate our Proxy Object
+            // Actually site.js uses a private function, let's just dispatch the custom event if it exists or 
+            // call a known function if exposed. However, we can simply rely on the parent clicking.
+            // There's no exposed sync right now on parent window, so we'll just let manual tab change sync wait.
+        }
+    }
+
+    if (isWorkspace) {
+        // Hedefi SPA içinde yüklediğimizden "Gösterişsiz" olmak için menüleri görünmez yapıyoruz. 
+        var actDiv = document.getElementById("docViewerActions");
+        if (actDiv) actDiv.style.display = "none";
+        
+        var zoomDiv = document.getElementById("zoomToolbar");
+        if (zoomDiv) zoomDiv.style.display = "none";
+        
+        // Tab değişimini yakala (Hangi eylemlerin gösterileceğine karar ver)
+        document.querySelectorAll('.doc-viewer__tab').forEach(function(b) {
+            b.addEventListener('click', function() {
+                activeTab = b.getAttribute('data-tab');
+                // Tab değiştiğinde babaya Toolbar'ını yenilemesi için sinyal yolla (Sadece Parent içindeyse çalışır)
+                if(window.parent && window.parent.document.querySelector('.workspace-action-bar')) {
+                   // Because parent's requestWorkspaceToolbarSync is private in an IIFE, 
+                   // we just assume the user will see it update when they tab or click.
+                   // Actually creating a resize event on the body forces parent polling in some SPA logic!
+                   document.body.dispatchEvent(new Event("resize"));
+                }
+            });
+        });
+
+        // 1. Köprü Oluşturma Fonksiyonu: Üst ebeveyn bu iframe içinden bu fonksiyonu çağırır
+        window.calibraGetWorkspaceToolbarContext = function() {
+            var actions = [];
+            
+            // Sabit PDF/XML Düğmeleri 
+            actions.push({ 
+                id: "downloadXml", 
+                className: "btn btn-outline-primary btn-sm", 
+                html: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> XML İndir',
+                title: "XML olarak İndir" 
+            });
+            actions.push({ 
+                id: "copyXml", 
+                className: "btn btn-outline-secondary btn-sm", 
+                html: '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> Kopyala', 
+                title: "XML\'i panoya kopyala" 
+            });
+
+            // Resimaktif olduğunda gösterilecek ekstra Zoom kontrolleri!
+            if (activeTab === 'resmi') {
+                actions.push({ id: "zoomOut", className: "btn btn-light btn-sm ms-3", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Uzaklaş" });
+                actions.push({ id: "zoomLabelProxy", className: "btn btn-link btn-sm text-dark text-decoration-none disabled px-1", text: Math.round(currentZoom * 100) + '%' });
+                actions.push({ id: "zoomIn", className: "btn btn-light btn-sm", html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>', title: "Yakınlaş" });
+                actions.push({ id: "fitWidth", className: "btn btn-light btn-sm", text: "Genişliğe Sığdır" });
+            }
+
+            return { actions: actions };
+        };
+
+        // 2. Köprü Tetikleme Fonksiyonu: Ana Çubuktan bir şeye basıldığında Buraya Döner!
+        window.calibraInvokeWorkspaceToolbarAction = function(actionId) {
+            if (actionId === "copyXml") document.getElementById("btnCopyXml").click();
+            else if (actionId === "downloadXml") document.getElementById("btnDownloadXml").click();
+            else if (actionId === "zoomOut") document.getElementById("btnZoomOut").click();
+            else if (actionId === "zoomIn") document.getElementById("btnZoomIn").click();
+            else if (actionId === "fitWidth") document.getElementById("btnFitWidth").click();
+        };
+    }
+})();
+</script>
+}

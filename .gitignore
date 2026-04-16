@@ -1,0 +1,33 @@
+bin/
+obj/
+.idea/
+.vs/
+.dotnet/
+.templateengine/
+
+*.user
+*.suo
+*.nupkg
+
+# Build artifacts & logs
+.tmp_build_out/
+artifacts/
+tmp/
+*.log
+*.err
+*.out
+run_output.txt
+
+# Installer output
+install/
+installer/
+*.exe
+
+# Node
+node_modules/
+
+# Tools
+tools/
+
+# App logs
+app.log

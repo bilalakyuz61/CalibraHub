@@ -1,0 +1,89 @@
+PROJECT INSTRUCTIONS
+====================
+
+Amac
+-----
+
+Bu dosya, CalibraHub genelinde uygulanacak urun, arayuz ve is akis kurallarini tek yerde toplar.
+Kapsam: Admin, Approval, Logistics, workspace/tabsheet yapisi ve sonradan eklenecek tum ekranlar.
+
+Genel Ilkeler
+-------------
+
+- Mevcut katmanli mimari korunacak: Domain <- Application <- (Persistence, Infrastructure) <- (Web, Worker).
+- UI tarafinda mevcut dashboard, card, form ve grid desenleri bozulmadan ilerlenmeli.
+- Yeni ekranlar mevcut adlandirma, navigasyon ve sayfa hiyerarsisi ile uyumlu olmali.
+- Kullaniciya gosterilen metinler kisa, net ve tercihen Turkce olmali.
+
+UI Davranislari
+---------------
+
+- Mevcut tasarim dili korunacak; kart bazli kurumsal ekran yapisi disina cikilmamali.
+- Aksiyon cubuklari ve sayfa basliklari tum ekranlarda tutarli yerlesmeli.
+- Kaydet, guncelle, sil, filtrele ve yenile aksiyonlari ayni hiyerarside sunulmali.
+- Kritik olmayan geri bildirimler inline veya sayfa ici mesaj olarak verilmeli; gereksiz modal ve alert kullanilmamali.
+
+Grid Standartlari
+-----------------
+
+- Tum gridler ayni tipte, kompakt ve okunabilir gorunumde olmali.
+- Zebra striping zorunlu olmali.
+- Satir yuksekligi veriyle tam cakismayacak sekilde biraz genis tutulmali; --calibra-grid-cell-padding-y degiskeni ile belirlenir.
+- Gridlerin sol tarafinda yalnizca duzelt ve sil aksiyonlari (buton olarak) bulunmali; satir secim kutucugu (checkbox) kullanilmamali.
+- Basliklar, siralama ve filtre davranislari ekranlar arasinda tutarli olmali.
+- Gridlerde server-side pagination kullanilmali.
+- Sayfa boyutu gibi kullanici tercihleri user-based persistence ile saklanmali.
+- Grid tablosu kapsayicisinin tam genisligini doldurabilmeli; sola yasli veya icerik kadar dar kalmamalidira.
+- Ana sayfa scroll'u yerine grid kendi alaninda internal scrolling yapmali; integrator-table-wrap overflow-y: auto ile saglanir.
+
+Form Kurallari
+--------------
+
+- Tum veri giris ekranlari split screen yapisinda tasarlanmalidir.
+- Ust panel veri giris/form (flex: 0 0 auto), alt panel ilgili kayit listesi/grid (flex: 1 1 auto) olmalidir.
+- Sayfa genelinde asagi kaydirilmaya gerek olmamali; form ve grid bolumu birlikte viewport icinde sigar.
+- Zorunlu alan hatalari alan bazinda gosterilmeli; kullanici once ilgili alanda yonlendirilmelidir.
+- Ekran tasarim servisinden gelen gorunurluk ve zorunluluk ayarlari korunmalidir.
+- Kayit sonrasi kullanici ayni baglamda kalmali; liste filtre, sayfa ve secim durumu gereksiz yere sifirlanmamalidir.
+
+Workspace ve Tabsheet Davranislari
+----------------------------------
+
+- Workspace modunda acilan sayfalar `workspace=1` baglamini korumalidir.
+- Tab bandi navbar'in hemen altinda baslayarak bosluk birakmamali; ust kismi verimli kullanmalidir.
+- Tab bandi ve action bar yapisi sticky calismali; icerik kaydirma ayrik kalmalidir.
+- Sag ust bildirimleri (toast) navbar yuksekliginin hemen altindan baslamali; navbar arkasinda kalmamalidir.
+- Formdan listeye, duzenlemeden silmeye ve geri donuslerde mevcut query string baglami korunmalidir.
+- Ayni ekran farkli kayit baglamlariyla acildiginda kullanici gecisleri baglam kaybi olmadan surmelidir.
+
+Bildirim ve Onay Kurallari
+--------------------------
+
+- Basari, hata ve bilgi mesajlari kisa, anlasilir ve ayni dil standardinda olmalidir.
+- Silme gibi geri alinmasi zor islemler acik bir onay adimi ile ilerlemelidir.
+- Validasyon sorunlarinda once inline hata, zorunlu durumlarda modal veya onay penceresi tercih edilmelidir.
+- Ajax veya arka planli islemlerde sonuc kullaniciyi ayni ekranda bilgilendirmelidir.
+
+Mobil ve Masaustu Uyumlulugu
+----------------------------
+
+- Masaustu ana hedef olmakla birlikte tablet ve mobil ekranlarda kullanim bozulmamali.
+- Dar ekranlarda form alanlari tek kolona dusmeli, gridler kendi kapsayicisinda yatay ve dikey kayabilmelidir.
+- Sayfa genelinde kontrolsuz yatay tasma olusturulmamalidir.
+- Sticky alanlar mobilde icerigi kapatmayacak sekilde davranmalidir.
+
+Modul Notlari
+-------------
+
+- Admin modulu: sirket, departman, kullanici, rol, entegrator ve sistem ayarlari ayni yonetim diliyle ele alinmalidir.
+- Approval modulu: bekleyen belge listeleri hizli filtrelenebilir ve sayfalanabilir olmali.
+- Logistics modulu: malzeme kartlari, olcu birimleri, lokasyonlar ve konfigurasyon ekranlari ortak grid ve form standartlarini kullanmali.
+- Worker ve entegrator akislarinda hata kayitlari izlenebilir ve operasyon ekiplerine anlamli olmalidir.
+
+Ozel Kullanici Beklentileri ve Acik Notlar
+------------------------------------------
+
+- Malzeme kartlari ekraninda malzeme kodu, malzeme adi veya bos gecilemeyen alanlar eksikse kaydet sirasinda ilgili alan cercevesi kirmizi vurgu ile dikkat cekmeli; gereksiz ek popup uretilmemeli.
+- Formlardan veritabanina yazilan tarih alanlari icin server datetime beklentisi bulunuyor; UTC zorunlulugu olan yerler ayrica karar verilerek standardize edilmelidir.
+- Bu dosya genel referanstir; satir bazli takip gerektiren maddeler `PROJECT_REQUESTS.json` icinde tutulur.
+- Codex icin kalici repo talimatlari gerektiginde dogru yer `AGENTS.md` dosyasidir.

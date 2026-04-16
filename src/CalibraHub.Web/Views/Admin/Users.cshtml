@@ -1,0 +1,217 @@
+@{
+    ViewData["Title"] = "Kullanici Tanimlama";
+    ViewData["FormCode"] = "ADMIN_USERS";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>user_profiles</td><td style='padding:6px 8px;'>Kullanici tanimlari (ad, e-posta, rol, yetkiler, departman)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .admusr-layout { display: flex; gap: 0; height: 100%; overflow: hidden; }
+    .admusr-form-panel { width: 360px; flex-shrink: 0; border-right: 1px solid var(--app-border,#dde3ee); background: var(--app-surface,#fff); display: flex; flex-direction: column; overflow-y: auto; padding: 10px 14px; }
+    .admusr-grid-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .admusr-grid-panel .admusr-table-wrap { flex: 1 1 auto; overflow: auto; }
+    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child { width: 80px; flex-shrink: 0; font-size: 0.76rem; font-weight: 600; color: var(--app-text-muted,#64748b); text-align: right; }
+    .admusr-toolbar { padding: 5px 10px; border-bottom: 1px solid var(--app-border,#dde3ee); display: flex; gap: 6px; align-items: center; }
+    .admusr-grid { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .admusr-grid thead th { text-align: left; padding: 3px 8px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+    .admusr-grid tbody tr { border-bottom: 1px solid #f1f5f9; }
+    .admusr-grid tbody tr:hover { background: #f8fafc; }
+    .admusr-grid td { padding: 2px 8px; vertical-align: middle; }
+    .admusr-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
+    .admusr-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
+    .admusr-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .admusr-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .admusr-perms { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .admusr-perm-item { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #374151; }
+    .admusr-section-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; padding: 8px 0 4px; margin-top: 4px; border-top: 1px solid #f1f5f9; }
+</style>
+}
+
+<div class="entity-form-toolbar" data-no-proxy="1">
+    <button type="button" class="btn btn-primary btn-sm" onclick="admUsrSave()">Kaydet</button>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="admUsrNew()">Yeni</button>
+</div>
+
+<div class="admusr-layout">
+    <div class="admusr-form-panel">
+        <div class="cs-line">
+            <label>Sirket *</label>
+            <select id="admUsrCompanyId" class="form-select form-select-sm" onchange="admUsrCompanyChanged()"></select>
+        </div>
+        <div class="cs-line"><label>Ad Soyad *</label><input id="admUsrFullName" class="form-control form-control-sm" maxlength="100" /></div>
+        <div class="cs-line"><label>E-posta *</label><input id="admUsrEmail" type="email" class="form-control form-control-sm" maxlength="120" /></div>
+        <div class="cs-line"><label>Sicil *</label><input id="admUsrEmployeeCode" class="form-control form-control-sm" maxlength="30" /></div>
+        <div class="cs-line">
+            <label>Departman *</label>
+            <select id="admUsrDepartmentId" class="form-select form-select-sm"></select>
+        </div>
+        <div class="cs-line">
+            <label>Ust Kullanici</label>
+            <select id="admUsrSupervisorId" class="form-select form-select-sm"></select>
+        </div>
+        <div class="cs-line">
+            <label>Rol *</label>
+            <select id="admUsrRole" class="form-select form-select-sm"></select>
+        </div>
+        <div class="admusr-section-title">Yetkiler</div>
+        <div id="admUsrPerms" class="admusr-perms"></div>
+        <div id="admUsrMsg"></div>
+    </div>
+    <div class="admusr-grid-panel">
+        <div class="admusr-toolbar">
+            <select id="admUsrFilterCompany" class="form-select form-select-sm" style="max-width:160px;" onchange="admUsrLoad()">
+                <option value="">Tum sirketler</option>
+            </select>
+            <input type="text" id="admUsrSearch" class="form-control form-control-sm" placeholder="Ad, e-posta veya sicil..." oninput="admUsrLoad()" style="max-width:200px;" />
+        </div>
+        <div class="admusr-table-wrap">
+            <table class="admusr-grid"><thead><tr>
+                <th>Sirket</th><th>Ad Soyad</th><th>E-posta</th><th>Sicil</th>
+                <th>Departman</th><th>Ust Kullanici</th><th>Rol</th><th>Yetkiler</th><th>Durum</th>
+            </tr></thead><tbody id="admUsrBody"></tbody></table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var API = function(a) { return '/Admin/' + a; };
+    var allFormData = { companies: [], departments: [], supervisors: [], roles: [], permissions: [] };
+
+    function loadFormData(cb) {
+        fetch(API('GetUsersFormDataJson'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                allFormData = data;
+                var cSel = document.getElementById('admUsrCompanyId');
+                var cFlt = document.getElementById('admUsrFilterCompany');
+                cSel.innerHTML = '<option value="">Sirket seciniz</option>' +
+                    data.companies.map(function(c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
+                data.companies.forEach(function(c) {
+                    var opt = document.createElement('option');
+                    opt.value = c.id; opt.textContent = c.name;
+                    cFlt.appendChild(opt);
+                });
+                var rSel = document.getElementById('admUsrRole');
+                rSel.innerHTML = '<option value="">Rol seciniz</option>' +
+                    data.roles.map(function(r) { return '<option value="' + r.value + '">' + esc(r.label) + '</option>'; }).join('');
+                renderPermissions(data.permissions, []);
+                if (data.companies.length > 0) {
+                    cSel.selectedIndex = 1;
+                    admUsrCompanyChanged();
+                }
+                if (cb) cb();
+            });
+    }
+
+    function renderPermissions(perms, selected) {
+        var container = document.getElementById('admUsrPerms');
+        container.innerHTML = perms.map(function(p) {
+            var checked = selected.indexOf(p.value) !== -1 ? 'checked' : '';
+            return '<label class="admusr-perm-item">' +
+                '<input type="checkbox" value="' + p.value + '" ' + checked + ' style="margin:0;" />' +
+                '<span>' + esc(p.label) + '</span></label>';
+        }).join('');
+    }
+
+    window.admUsrCompanyChanged = function() {
+        var cid = document.getElementById('admUsrCompanyId').value;
+        fetch(API('GetUsersFormDataJson') + (cid ? '?companyId=' + cid : ''))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var dSel = document.getElementById('admUsrDepartmentId');
+                dSel.innerHTML = '<option value="">Departman seciniz</option>' +
+                    data.departments.map(function(d) { return '<option value="' + d.id + '">' + esc(d.name) + '</option>'; }).join('');
+                var sSel = document.getElementById('admUsrSupervisorId');
+                sSel.innerHTML = '<option value="">Seciniz</option>' +
+                    data.supervisors.map(function(s) { return '<option value="' + s.id + '">' + esc(s.name) + '</option>'; }).join('');
+            });
+    };
+
+    window.admUsrLoad = function() {
+        var s = document.getElementById('admUsrSearch').value;
+        var cid = document.getElementById('admUsrFilterCompany').value;
+        var url = API('GetAdminUsersJson') + '?search=' + encodeURIComponent(s);
+        if (cid) url += '&companyId=' + encodeURIComponent(cid);
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var body = document.getElementById('admUsrBody');
+                if (data.length === 0) {
+                    body.innerHTML = '<tr><td colspan="9" class="admusr-empty">Kayit bulunamadi.</td></tr>';
+                    return;
+                }
+                body.innerHTML = data.map(function(u) {
+                    return '<tr>' +
+                        '<td>' + esc(u.companyName) + '</td>' +
+                        '<td style="font-weight:600;">' + esc(u.fullName) + '</td>' +
+                        '<td>' + esc(u.email) + '</td>' +
+                        '<td>' + esc(u.employeeCode) + '</td>' +
+                        '<td>' + esc(u.departmentName) + '</td>' +
+                        '<td>' + esc(u.supervisorName) + '</td>' +
+                        '<td style="font-size:0.72rem;color:#2563eb;">' + esc(u.role) + '</td>' +
+                        '<td style="font-size:0.72rem;color:#64748b;">' + esc(u.permissions) + '</td>' +
+                        '<td style="font-size:0.72rem;color:' + (u.isActive ? '#15803d' : '#dc2626') + ';">' + (u.isActive ? 'Aktif' : 'Pasif') + '</td>' +
+                        '</tr>';
+                }).join('');
+            });
+    };
+
+    window.admUsrNew = function() {
+        document.getElementById('admUsrFullName').value = '';
+        document.getElementById('admUsrEmail').value = '';
+        document.getElementById('admUsrEmployeeCode').value = '';
+        admUsrMsg('');
+    };
+
+    window.admUsrSave = function() {
+        var companyId = document.getElementById('admUsrCompanyId').value;
+        var departmentId = document.getElementById('admUsrDepartmentId').value;
+        var supervisorId = document.getElementById('admUsrSupervisorId').value;
+        var role = document.getElementById('admUsrRole').value;
+        var selectedPerms = Array.from(document.querySelectorAll('#admUsrPerms input:checked')).map(function(cb) { return cb.value; });
+
+        fetch(API('SaveAdminUserJson'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                companyId: companyId || null,
+                fullName: document.getElementById('admUsrFullName').value,
+                email: document.getElementById('admUsrEmail').value,
+                employeeCode: document.getElementById('admUsrEmployeeCode').value,
+                departmentId: departmentId || null,
+                supervisorUserId: supervisorId || null,
+                role: role,
+                permissions: selectedPerms
+            })
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) {
+                    admUsrMsg(d.message || 'Kaydedildi.', true);
+                    admUsrNew();
+                    admUsrLoad();
+                } else {
+                    admUsrMsg(d.message || 'Hata', false);
+                }
+            });
+    };
+
+    function admUsrMsg(msg, ok) {
+        var el = document.getElementById('admUsrMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="admusr-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    loadFormData(admUsrLoad);
+})();
+</script>
+}

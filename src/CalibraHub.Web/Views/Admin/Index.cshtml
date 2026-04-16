@@ -1,0 +1,63 @@
+@model CalibraHub.Application.Contracts.AdminSnapshotDto
+@inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@{
+    var ui = await UiText.GetFormAsync("admin.index");
+    ViewData["Title"] = ui.Text("title");
+}
+
+<section class="admin-content">
+        <h1>@ui.Text("title")</h1>
+
+        <section class="panel">
+            <h2>@ui.Text("integrator_section")</h2>
+            <div class="integrator-table-wrap">
+                <table class="table integrator-table integrator-table--compact">
+                    <thead>
+                    <tr>
+                        <th>@ui.Text("name")</th>
+                        <th>@ui.Text("provider")</th>
+                        <th>@ui.Text("tax_number")</th>
+                        <th>@ui.Text("base_url")</th>
+                        <th>@ui.Text("polling")</th>
+                        <th>@ui.Text("status")</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var integrator in Model.Integrators)
+                    {
+                        <tr>
+                            <td>@integrator.Name</td>
+                            <td>@integrator.Provider</td>
+                            <td>@integrator.CompanyTaxNumber</td>
+                            <td>@integrator.BaseUrl</td>
+                            <td>@integrator.PollingIntervalSeconds</td>
+                            <td>@(integrator.IsActive ? ui.Text("active") : ui.Text("passive"))</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>@ui.Text("summary_section")</h2>
+            <div class="cards">
+                <div class="card-link">
+                    <h3>@Model.Departments.Count</h3>
+                    <p>@ui.Text("departments")</p>
+                </div>
+                <div class="card-link">
+                    <h3>@Model.Users.Count</h3>
+                    <p>@ui.Text("users")</p>
+                </div>
+                <div class="card-link">
+                    <h3>@Model.Integrators.Count</h3>
+                    <p>@ui.Text("integrators")</p>
+                </div>
+                <div class="card-link">
+                    <h3>@Model.ErpConnections.Count</h3>
+                    <p>@ui.Text("erp_connections")</p>
+                </div>
+            </div>
+        </section>
+    </section>

@@ -1,0 +1,98 @@
+@model CalibraHub.Web.Models.Shared.GridPagerViewModel
+@using System.Globalization
+@{
+    var state = Model.State;
+    if (state.TotalPages <= 0)
+    {
+        return;
+    }
+
+    var baseRouteValues = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+    foreach (var pair in Model.RouteValues)
+    {
+        if (string.IsNullOrWhiteSpace(pair.Key) ||
+            string.Equals(pair.Key, state.PageParameterName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(pair.Key, state.PageSizeParameterName, StringComparison.OrdinalIgnoreCase))
+        {
+            continue;
+        }
+
+        baseRouteValues[pair.Key] = pair.Value;
+    }
+
+    string BuildUrl(int page)
+    {
+        var values = new Dictionary<string, object?>(baseRouteValues, StringComparer.OrdinalIgnoreCase)
+        {
+            [state.PageParameterName] = page,
+            [state.PageSizeParameterName] = state.PageSize
+        };
+        return Url.Action(Model.ActionName, Model.ControllerName, values) ?? "#";
+    }
+
+    var startPage = Math.Max(1, state.Page - 2);
+    var endPage = Math.Min(state.TotalPages, state.Page + 2);
+}
+
+<div class="calibra-grid-pager">
+    <div class="calibra-grid-pager__summary">
+        @if (state.TotalCount == 0)
+        {
+            <span>Kayit yok.</span>
+        }
+        else
+        {
+            <span>@state.StartRow - @state.EndRow / @state.TotalCount @state.ItemLabel</span>
+        }
+    </div>
+
+    <div class="calibra-grid-pager__controls">
+        <form method="get" action="@Url.Action(Model.ActionName, Model.ControllerName)" class="calibra-grid-pager__size-form">
+            @foreach (var pair in baseRouteValues)
+            {
+                <input type="hidden" name="@pair.Key" value="@Convert.ToString(pair.Value, CultureInfo.InvariantCulture)" />
+            }
+            <input type="hidden" name="@state.PageParameterName" value="1" />
+            <label class="calibra-grid-pager__size-label" for="@($"{state.GridKey}-page-size")">Sayfa boyutu</label>
+            <select id="@($"{state.GridKey}-page-size")"
+                    name="@state.PageSizeParameterName"
+                    class="form-select form-select-sm calibra-grid-pager__size-select"
+                    onchange="this.form.requestSubmit()">
+                @foreach (var option in state.PageSizeOptions)
+                {
+                    <option value="@option.Value" selected="@option.Selected">@option.Text</option>
+                }
+            </select>
+        </form>
+
+        @if (state.TotalPages > 1)
+        {
+            <nav class="calibra-grid-pager__nav" aria-label="Grid sayfalama">
+                @{ var prevUrl = state.HasPreviousPage ? BuildUrl(state.Page - 1) : "#"; }
+                <a class="calibra-grid-pager__page @(state.HasPreviousPage ? string.Empty : "is-disabled")"
+                   href="@prevUrl"
+                   aria-disabled="@(!state.HasPreviousPage)">
+                    Onceki
+                </a>
+
+                <div class="calibra-grid-pager__pages">
+                    @for (var pageNumber = startPage; pageNumber <= endPage; pageNumber++)
+                    {
+                        var pageUrl = BuildUrl(pageNumber);
+                        <a class="calibra-grid-pager__page @(pageNumber == state.Page ? "is-active" : string.Empty)"
+                           href="@pageUrl">
+                            @pageNumber
+                        </a>
+                    }
+                </div>
+
+                @{ var nextUrl = state.HasNextPage ? BuildUrl(state.Page + 1) : "#"; }
+                <a class="calibra-grid-pager__page @(state.HasNextPage ? string.Empty : "is-disabled")"
+                   href="@nextUrl"
+                   aria-disabled="@(!state.HasNextPage)">
+                    Sonraki
+                </a>
+            </nav>
+        }
+    </div>
+</div>

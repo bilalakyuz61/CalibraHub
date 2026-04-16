@@ -1,0 +1,881 @@
+@{
+    ViewData["Title"] = "Grup Tanımlamaları";
+    ViewData["BodyClass"] = "page-card-groups";
+}
+
+@section Styles {
+<style>
+    .page-card-groups .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-card-groups .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .cg-shell {
+        display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden;
+    }
+
+    /* ── Tree Panel ── */
+    .cg-tree-panel {
+        flex: 0 0 260px; display: flex; flex-direction: column;
+        min-height: 0; overflow: hidden;
+        border-right: 1px solid var(--app-border); background: var(--card-bg, #fff);
+    }
+    .cg-tree-scroll { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+
+    /* ── Card type section headers (sticky) ── */
+    .cg-type-hdr {
+        display: flex; align-items: center; gap: 4px;
+        height: 34px; padding: 0 8px;
+        font-size: 0.83rem; font-weight: 700;
+        cursor: pointer; user-select: none;
+        background: var(--hover-bg, #f2f2f2);
+        border-bottom: 1px solid var(--app-border);
+        color: var(--text-body);
+        position: sticky; top: 0; z-index: 2;
+    }
+    .cg-type-hdr:hover { background: #e6e6e6; }
+    .cg-type-hdr__toggle { flex: 0 0 14px; font-size: 0.55rem; color: var(--text-muted, #999); }
+    .cg-type-section:not([data-collapsed]) .cg-type-hdr__toggle::before { content: '▼'; }
+    .cg-type-section[data-collapsed] .cg-type-hdr__toggle::before  { content: '▶'; }
+    .cg-type-hdr__lbl { flex: 1 1 auto; }
+    .cg-type-section[data-collapsed] .cg-type-body { display: none; }
+
+    /* ── Level rows (Grup 1 … Grup 5) ── */
+    .cg-level-row {
+        display: flex; align-items: center; gap: 6px;
+        height: 28px; padding: 0 8px 0 22px;
+        font-size: 0.81rem; cursor: pointer; user-select: none;
+        color: var(--text-body);
+    }
+    .cg-level-row:hover { background: var(--hover-bg, #f0f0f0); }
+    .cg-level-row.is-selected { background: var(--active-bg, #e8f0fe); font-weight: 600; }
+    .cg-level-row__icon { font-size: 0.75rem; }
+    .cg-level-row__lbl { flex: 1 1 auto; }
+    .cg-level-row__badge {
+        font-size: 0.68rem; padding: 1px 6px; border-radius: 8px;
+        background: #e0e0e0; color: #555; min-width: 18px; text-align: center;
+    }
+    .cg-level-row.is-selected .cg-level-row__badge { background: #c2d4fa; color: #1a3a8a; }
+
+    /* ── Content Panel ── */
+    .cg-content-panel {
+        flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+    }
+    .cg-content-header {
+        flex: 0 0 auto; padding: 7px 16px; border-bottom: 1px solid var(--app-border);
+        font-size: 0.82rem; background: var(--card-bg, #fff);
+        display: flex; align-items: center; gap: 6px;
+        white-space: nowrap; overflow: hidden;
+    }
+    .cg-content-header__type { color: var(--text-muted, #888); }
+    .cg-content-header__sep  { color: var(--text-muted, #ccc); }
+    .cg-content-header__level{ font-weight: 700; }
+
+    /* ── Form area ── */
+    .cg-form-area {
+        flex: 0 0 auto; padding: 10px 16px; border-bottom: 1px solid var(--app-border);
+        background: var(--hover-bg, #f8f9fa);
+    }
+    #cgError { font-size: .82rem; margin-bottom: 8px; }
+    .cg-form-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+    .cg-form-group { display: flex; flex-direction: column; gap: 3px; }
+    .cg-form-group label { font-size: .78rem; color: var(--text-muted, #777); margin: 0; }
+    .cg-form-group input, .cg-form-group select { font-size: .82rem; padding: 4px 8px; }
+    .cg-inp-parent { min-width: 160px; max-width: 220px; }
+    .cg-inp-code   { width: 120px; }
+    .cg-inp-desc   { width: 280px; }
+
+    /* ── Right panel body (list + preview side by side) ── */
+    .cg-body-row {
+        flex: 1 1 auto; display: flex; min-height: 0; overflow: hidden;
+    }
+
+    /* ── Entry list ── */
+    .cg-list-area { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+    .cg-list-title {
+        padding: 7px 16px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: 0.05em; color: var(--text-muted, #888);
+        border-bottom: 1px solid var(--app-border); background: var(--card-bg, #fff);
+        position: sticky; top: 0; z-index: 1;
+    }
+    .cg-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    .cg-table th {
+        padding: 5px 10px; text-align: left; font-weight: 600; font-size: .75rem;
+        border-bottom: 2px solid var(--app-border); color: var(--text-muted, #888); text-transform: uppercase;
+    }
+    .cg-table td { padding: 5px 8px; border-bottom: 1px solid var(--app-border); vertical-align: middle; }
+    .cg-table tr:last-child td { border-bottom: 0; }
+    .cg-table tr:hover td { background: var(--hover-bg, #f5f5f5); cursor: pointer; }
+    .cg-table tr.is-selected td { background: var(--active-bg, #e8f0fe); }
+    .cg-col-code   { min-width: 160px; font-weight: 600; resize: horizontal; overflow: hidden; }
+    .cg-col-parent { width: 110px; color: var(--text-muted, #888); font-size: .76rem; }
+    /* Row action icons — shown on hover at row bottom-left */
+    .cg-row-acts {
+        display: none; gap: 2px; align-items: center;
+    }
+    .cg-table tr:hover .cg-row-acts,
+    .cg-table tr.is-selected .cg-row-acts { display: inline-flex; }
+    .cg-row-act {
+        background: none; border: 1px solid transparent; border-radius: 3px;
+        cursor: pointer; font-size: 0.7rem; padding: 1px 5px; line-height: 1.5;
+        color: var(--text-muted, #888);
+    }
+    .cg-row-act:hover { background: rgba(0,0,0,.07); border-color: var(--app-border); color: var(--text-body); }
+    .cg-row-act.del:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+    .cg-row-act.preview:hover { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+    .cg-empty {
+        padding: 36px 16px; text-align: center;
+        color: var(--text-muted, #aaa); font-size: .83rem;
+    }
+    .cg-placeholder {
+        padding: 60px 16px; text-align: center;
+        color: var(--text-muted, #ccc); font-size: .88rem;
+    }
+
+    /* ── Tree modal ── */
+    .cg-tree-overlay {
+        position: fixed; inset: 0; z-index: 9000;
+        background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center;
+    }
+    .cg-tree-modal {
+        background: var(--card-bg, #fff); border-radius: 12px;
+        max-width: 620px; width: 92%; max-height: 80vh;
+        display: flex; flex-direction: column;
+        box-shadow: 0 8px 32px rgba(0,0,0,.25);
+    }
+    .cg-tree-modal__hdr {
+        flex-shrink: 0; padding: 14px 18px; border-bottom: 1px solid var(--app-border);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .cg-tree-modal__hdr h3 { margin: 0; font-size: .92rem; font-weight: 700; }
+    .cg-tree-modal__close {
+        background: none; border: none; cursor: pointer; font-size: 1.2rem; color: var(--text-muted, #888);
+        width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px;
+    }
+    .cg-tree-modal__close:hover { background: #f1f5f9; color: #1e293b; }
+    .cg-tree-modal__search {
+        flex-shrink: 0; margin: 10px 18px 0; padding: 7px 10px; font-size: .82rem;
+        border: 1px solid #e2e8f0; border-radius: 6px; outline: none;
+    }
+    .cg-tree-modal__search:focus { border-color: #93c5fd; box-shadow: 0 0 0 2px rgba(59,130,246,.15); }
+    .cg-tree-modal__body { flex: 1; overflow-y: auto; padding: 10px 18px 18px; }
+    .cg-tree ul { list-style: none; padding-left: 20px; margin: 0; }
+    .cg-tree > ul { padding-left: 0; }
+    .cg-tree li { padding: 3px 0; }
+    .cg-tree-node { display: flex; align-items: baseline; gap: 6px; }
+    .cg-tree-code { font-weight: 600; color: #1e3a5f; cursor: pointer; font-size: .82rem; }
+    .cg-tree-code:hover { text-decoration: underline; color: #2563eb; }
+    .cg-tree-desc { color: #64748b; font-size: .78rem; }
+    .cg-tree-lvl { color: #94a3b8; font-size: .68rem; font-weight: 600; min-width: 14px; }
+    .cg-tree-empty { color: var(--text-muted, #ccc); font-size: .82rem; padding: 20px 0; text-align: center; }
+    .cg-tree mark { background: #fef08a; padding: 0 2px; border-radius: 2px; }
+
+    /* ── Confirm modal ── */
+    .calibra-confirm-overlay {
+        position: fixed; inset: 0; z-index: 9000;
+        background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center;
+    }
+    .calibra-confirm-box {
+        background: var(--card-bg, #fff); border-radius: 10px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        padding: 28px 28px 22px; max-width: 380px; width: 92%;
+        animation: cgModalIn 0.14s ease;
+    }
+    @@keyframes cgModalIn {
+        from { opacity: 0; transform: scale(0.93); }
+        to   { opacity: 1; transform: scale(1); }
+    }
+    .calibra-confirm-icon  { font-size: 2rem; text-align: center; margin-bottom: 10px; }
+    .calibra-confirm-title { font-weight: 700; font-size: 1rem; margin-bottom: 6px; }
+    .calibra-confirm-body  { font-size: 0.87rem; color: var(--text-muted, #666); }
+    .calibra-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+</style>
+}
+
+<form id="csrfHolder" style="display:none">@Html.AntiForgeryToken()</form>
+
+<section class="integrator-dashboard integrator-dashboard--compact integrator-dashboard--wide">
+    <div class="integrator-dashboard__content">
+
+        <!-- ── Aksiyon Barı ── -->
+        <div class="entity-form-toolbar" data-no-proxy="1">
+            <button type="button" id="cgSaveBtn"
+                    class="btn btn-primary integrator-btn-primary">Kaydet</button>
+            <button type="button" id="cgNewBtn"
+                    class="btn btn-secondary integrator-btn-secondary">Yeni</button>
+            <button type="button" id="cgDeleteBtn"
+                    class="btn btn-outline-danger integrator-btn-tertiary" disabled>Sil</button>
+        </div>
+
+        <div class="cg-shell">
+
+            <!-- ── Left: Tree Panel ── -->
+            <div class="cg-tree-panel">
+                <div class="cg-tree-scroll">
+
+                    <!-- Malzeme -->
+                    <div class="cg-type-section" data-type="1">
+                        <div class="cg-type-hdr" data-toggle-type="1">
+                            <span class="cg-type-hdr__toggle"></span>
+                            <span class="cg-type-hdr__lbl">📦 Malzeme</span>
+                        </div>
+                        <div class="cg-type-body" id="cgLevels1"></div>
+                    </div>
+
+                    <!-- Cari -->
+                    <div class="cg-type-section" data-type="2">
+                        <div class="cg-type-hdr" data-toggle-type="2">
+                            <span class="cg-type-hdr__toggle"></span>
+                            <span class="cg-type-hdr__lbl">🏢 Cari</span>
+                        </div>
+                        <div class="cg-type-body" id="cgLevels2"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ── Right: Content Panel ── -->
+            <div class="cg-content-panel">
+
+                <div class="cg-content-header" id="cgContentHeader">
+                    <span style="color:var(--text-muted,#aaa)">Sol panelden bir grup seviyesi seçin.</span>
+                </div>
+
+                <div class="cg-form-area" id="cgFormArea" style="display:none">
+                    <div id="cgError" class="alert alert-danger py-2 px-3" style="display:none"></div>
+                    <input type="hidden" id="cgEditId" />
+                    <input type="hidden" id="cgCardType" value="1" />
+                    <input type="hidden" id="cgLevel" value="1" />
+                    <div class="cg-form-row">
+                        <!-- Parent selector — only visible for level > 1 -->
+                        <div class="cg-form-group" id="cgParentGroup" style="display:none">
+                            <label>Üst Grup (Grup <span id="cgParentLevelLabel">1</span>)</label>
+                            <select id="cgParentId" class="form-select cg-inp-parent">
+                                <option value="">— Üst Grup Yok —</option>
+                            </select>
+                        </div>
+                        <div class="cg-form-group">
+                            <label>Grup Kodu *</label>
+                            <input type="text" id="cgCode" class="form-control cg-inp-code"
+                                   placeholder="örn. GRP001" maxlength="20" style="text-transform:uppercase" />
+                        </div>
+                        <div class="cg-form-group">
+                            <label>Açıklama</label>
+                            <input type="text" id="cgDesc" class="form-control cg-inp-desc"
+                                   placeholder="Grup adı veya açıklaması" maxlength="200" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- List + Preview side by side -->
+                <div class="cg-body-row">
+
+                    <!-- Entry list -->
+                    <div class="cg-list-area">
+                        <div class="cg-list-title" id="cgListTitle" style="display:none"></div>
+                        <table class="cg-table" id="cgTable" style="display:none">
+                            <thead id="cgTableHead"></thead>
+                            <tbody id="cgTableBody"></tbody>
+                        </table>
+                        <div class="cg-placeholder" id="cgPlaceholder">
+                            Sol panelden bir grup seviyesi seçerek tanım ekleyebilirsiniz.
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- Confirm Modal -->
+<div id="calibraConfirmOverlay" class="calibra-confirm-overlay" style="display:none">
+    <div class="calibra-confirm-box">
+        <div class="calibra-confirm-icon" id="calibraConfirmIcon"></div>
+        <div class="calibra-confirm-title" id="calibraConfirmTitle"></div>
+        <div class="calibra-confirm-body"  id="calibraConfirmBody"></div>
+        <div class="calibra-confirm-actions">
+            <button type="button" class="btn btn-secondary btn-sm" id="calibraConfirmCancel">İptal</button>
+            <button type="button" class="btn btn-danger btn-sm"    id="calibraConfirmOk">Sil</button>
+        </div>
+    </div>
+</div>
+
+<!-- Tree Modal -->
+<div id="cgTreeOverlay" class="cg-tree-overlay" style="display:none">
+    <div class="cg-tree-modal">
+        <div class="cg-tree-modal__hdr">
+            <h3 id="cgTreeTitle">Alt Gruplar</h3>
+            <button type="button" class="cg-tree-modal__close" id="cgTreeClose" title="Kapat">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <input type="search" class="cg-tree-modal__search" id="cgTreeSearch" placeholder="Ara..." autocomplete="off" />
+        <div class="cg-tree-modal__body cg-tree" id="cgTreeBody"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    /* ── State ─────────────────────────────────────── */
+    var _dataByType = { 1: [], 2: [] };   // raw items per card type
+    var _nodeMap    = {};                  // id → item (flat)
+    var _activeType  = null;              // 1 or 2
+    var _activeLevel = null;              // 1 … 5
+    var _formMode    = 'add';
+    var _typeOpen    = { 1: true, 2: true };
+
+    var TYPE_LABELS  = { 1: '📦 Malzeme', 2: '🏢 Cari' };
+    var LEVEL_ICON   = '📁';
+
+    function getToken() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function esc(s) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(s || ''));
+        return d.innerHTML;
+    }
+
+    /* ── Data Loading ───────────────────────────────── */
+    function loadAll(thenFn) {
+        var p1 = fetch('/Definitions/GetAllCardGroups?cardType=1').then(function (r) { return r.json(); });
+        var p2 = fetch('/Definitions/GetAllCardGroups?cardType=2').then(function (r) { return r.json(); });
+        Promise.all([p1, p2])
+            .then(function (res) {
+                _dataByType[1] = res[0];
+                _dataByType[2] = res[1];
+                buildNodeMap();
+                renderLevelRows();
+                if (thenFn) thenFn();
+            })
+            .catch(function () {
+                document.getElementById('cgLevels1').textContent = 'Yüklenemedi.';
+                document.getElementById('cgLevels2').textContent = 'Yüklenemedi.';
+            });
+    }
+
+    function buildNodeMap() {
+        _nodeMap = {};
+        [1, 2].forEach(function (ct) {
+            _dataByType[ct].forEach(function (item) {
+                _nodeMap[item.id] = Object.assign({}, item, { cardType: ct });
+            });
+        });
+    }
+
+    /* count items for a given type+level */
+    function countForLevel(ct, lv) {
+        return _dataByType[ct].filter(function (x) { return x.level === lv; }).length;
+    }
+
+    /* get items for a given type+level */
+    function itemsForLevel(ct, lv) {
+        return _dataByType[ct].filter(function (x) { return x.level === lv; });
+    }
+
+    /* get items for level-1 (parent candidates) */
+    function parentsForLevel(ct, lv) {
+        if (lv <= 1) return [];
+        return _dataByType[ct].filter(function (x) { return x.level === lv - 1; });
+    }
+
+    /* find an item by id */
+    function byId(id) { return _nodeMap[id] || null; }
+
+    /* ── Tree Left Panel ─────────────────────────────── */
+    function renderLevelRows() {
+        [1, 2].forEach(function (ct) {
+            var container = document.getElementById('cgLevels' + ct);
+            container.innerHTML = '';
+            for (var lv = 1; lv <= 5; lv++) {
+                var cnt   = countForLevel(ct, lv);
+                var isOn  = _activeType === ct && _activeLevel === lv;
+                var div   = document.createElement('div');
+                div.className  = 'cg-level-row' + (isOn ? ' is-selected' : '');
+                div.dataset.type  = ct;
+                div.dataset.level = lv;
+                div.innerHTML =
+                    '<span class="cg-level-row__icon">' + LEVEL_ICON + '</span>' +
+                    '<span class="cg-level-row__lbl">Grup ' + lv + '</span>' +
+                    '<span class="cg-level-row__badge">' + cnt + '</span>';
+                container.appendChild(div);
+            }
+            // Section collapse
+            var sec = document.querySelector('.cg-type-section[data-type="' + ct + '"]');
+            if (sec) {
+                if (_typeOpen[ct]) sec.removeAttribute('data-collapsed');
+                else               sec.setAttribute('data-collapsed', '1');
+            }
+        });
+    }
+
+    /* ── Panel Events ─────────────────────────────────── */
+    document.querySelector('.cg-tree-scroll').addEventListener('click', function (e) {
+        // Section header toggle
+        var hdr = e.target.closest('[data-toggle-type]');
+        if (hdr) {
+            var ct = parseInt(hdr.dataset.toggleType);
+            _typeOpen[ct] = !_typeOpen[ct];
+            var sec = document.querySelector('.cg-type-section[data-type="' + ct + '"]');
+            if (sec) {
+                if (_typeOpen[ct]) sec.removeAttribute('data-collapsed');
+                else               sec.setAttribute('data-collapsed', '1');
+            }
+            return;
+        }
+        // Level row click
+        var row = e.target.closest('.cg-level-row');
+        if (row) {
+            selectLevel(parseInt(row.dataset.type), parseInt(row.dataset.level));
+        }
+    });
+
+    /* ── Level Selection ──────────────────────────────── */
+    function selectLevel(ct, lv) {
+        _activeType  = ct;
+        _activeLevel = lv;
+
+        // Highlight
+        document.querySelectorAll('.cg-level-row').forEach(function (r) {
+            r.classList.toggle('is-selected',
+                parseInt(r.dataset.type) === ct && parseInt(r.dataset.level) === lv);
+        });
+
+        // Header
+        var hdr = document.getElementById('cgContentHeader');
+        hdr.innerHTML =
+            '<span class="cg-content-header__type">' + TYPE_LABELS[ct] + '</span>' +
+            '<span class="cg-content-header__sep">›</span>' +
+            '<span class="cg-content-header__level">Grup ' + lv + '</span>';
+
+        // Form
+        document.getElementById('cgCardType').value = ct;
+        document.getElementById('cgLevel').value    = lv;
+        document.getElementById('cgFormArea').style.display = '';
+        setFormForAdd();
+
+        // List
+        renderList(itemsForLevel(ct, lv), ct, lv);
+    }
+
+    /* ── Form helpers ─────────────────────────────────── */
+    function setFormForAdd() {
+        _formMode = 'add';
+        var lv = parseInt(document.getElementById('cgLevel').value);
+        var ct = parseInt(document.getElementById('cgCardType').value);
+
+        document.getElementById('cgEditId').value  = '';
+        document.getElementById('cgCode').value    = '';
+        document.getElementById('cgDesc').value    = '';
+        document.getElementById('cgDeleteBtn').disabled = true;
+        hideError();
+
+        // Parent selector
+        var parentGroup = document.getElementById('cgParentGroup');
+        if (lv > 1) {
+            parentGroup.style.display = '';
+            document.getElementById('cgParentLevelLabel').textContent = lv - 1;
+            populateParentSelect(ct, lv, null);
+        } else {
+            parentGroup.style.display = 'none';
+        }
+    }
+
+    function populateParentSelect(ct, lv, selectedId) {
+        var sel = document.getElementById('cgParentId');
+        sel.innerHTML = '<option value="">— Üst Grup Yok —</option>';
+        var parents = parentsForLevel(ct, lv);
+        parents.forEach(function (p) {
+            var opt = document.createElement('option');
+            opt.value       = p.id;
+            opt.textContent = p.code + (p.description ? ' — ' + p.description : '');
+            if (selectedId && p.id === selectedId) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    /* ── Entry List (right panel table) ──────────────── */
+    function renderList(items, ct, lv) {
+        var title  = document.getElementById('cgListTitle');
+        var table  = document.getElementById('cgTable');
+        var thead  = document.getElementById('cgTableHead');
+        var tbody  = document.getElementById('cgTableBody');
+        var ph     = document.getElementById('cgPlaceholder');
+
+        title.textContent = 'Grup ' + lv + ' Tanımları';
+        title.style.display = '';
+        table.style.display  = '';
+        ph.style.display     = 'none';
+
+        // Header row — show "Üst Grup" column when lv > 1
+        if (lv > 1) {
+            thead.innerHTML =
+                '<tr>' +
+                    '<th style="width:80px;"></th>' +
+                    '<th class="cg-col-parent">Üst Grup</th>' +
+                    '<th class="cg-col-code">Kod</th>' +
+                    '<th style="width:100%;">Açıklama</th>' +
+                '</tr>';
+        } else {
+            thead.innerHTML =
+                '<tr>' +
+                    '<th style="width:80px;"></th>' +
+                    '<th class="cg-col-code">Kod</th>' +
+                    '<th style="width:100%;">Açıklama</th>' +
+                '</tr>';
+        }
+
+        if (!items || items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="' + (lv > 1 ? 3 : 2) + '" class="cg-empty">' +
+                'Henüz tanım yok. Yukarıdaki formu kullanarak ekleyin.' +
+                '</td></tr>';
+            return;
+        }
+
+        // Sort: by parent code, then by own code
+        var sorted = items.slice().sort(function (a, b) {
+            var pa = a.parentId && byId(a.parentId) ? byId(a.parentId).code : '';
+            var pb = b.parentId && byId(b.parentId) ? byId(b.parentId).code : '';
+            if (pa < pb) return -1; if (pa > pb) return 1;
+            if ((a.code || '') < (b.code || '')) return -1;
+            if ((a.code || '') > (b.code || '')) return 1;
+            return 0;
+        });
+
+        var hasNextLevel = lv < 5;
+        tbody.innerHTML = sorted.map(function (item) {
+            var parentNode = item.parentId ? byId(item.parentId) : null;
+            var parentCell = lv > 1
+                ? '<td class="cg-col-parent">' + (parentNode ? esc(parentNode.code) : '<span style="color:var(--text-muted,#ccc)">—</span>') + '</td>'
+                : '';
+            var previewBtn = hasNextLevel
+                ? '<button type="button" class="cg-row-act preview" data-preview="' + item.id + '" title="Alt grupları göster">🔍</button>'
+                : '';
+            return '<tr data-id="' + item.id + '">' +
+                '<td style="width:80px;padding:2px 4px;white-space:nowrap;">' +
+                    '<button type="button" class="act-btn primary" data-edit="' + item.id + '" title="Düzenle" style="margin-right:2px;">' +
+                        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>' +
+                    '</button>' +
+                    '<button type="button" class="act-btn danger" data-delete="' + item.id + '" title="Sil" style="margin-right:2px;">' +
+                        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7.5 7 8 19a1 1 0 0 0 1 .96h6a1 1 0 0 0 1-.96L16.5 7"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>' +
+                    '</button>' +
+                    (hasNextLevel ? '<button type="button" class="act-btn" data-preview="' + item.id + '" title="Alt grupları göster" style="border-color:#93c5fd;color:#2563eb;">' +
+                        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>' +
+                    '</button>' : '') +
+                '</td>' +
+                parentCell +
+                '<td class="cg-col-code">' + esc(item.code) + '</td>' +
+                '<td>' + esc(item.description || '') + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    /* ── Table button events ──────────────────────────── */
+    document.getElementById('cgTableBody').addEventListener('click', function (e) {
+        var editBtn = e.target.closest('[data-edit]');
+        if (editBtn) { startEdit(parseInt(editBtn.dataset.edit)); return; }
+        var delBtn = e.target.closest('[data-delete]');
+        if (delBtn) { doDelete(parseInt(delBtn.dataset.delete)); return; }
+        var prevBtn = e.target.closest('[data-preview]');
+        if (prevBtn) { showTreeModal(parseInt(prevBtn.dataset.preview)); return; }
+        // Row click → select
+        var tr = e.target.closest('tr[data-id]');
+        if (tr) {
+            document.querySelectorAll('#cgTableBody tr').forEach(function (r) { r.classList.remove('is-selected'); });
+            tr.classList.add('is-selected');
+        }
+    });
+
+    /* ── Edit ─────────────────────────────────────────── */
+    function startEdit(id) {
+        var item = byId(id);
+        if (!item) return;
+
+        _formMode = 'edit';
+        document.getElementById('cgEditId').value   = item.id;
+        document.getElementById('cgCardType').value = item.cardType;
+        document.getElementById('cgLevel').value    = item.level;
+        document.getElementById('cgCode').value     = item.code;
+        document.getElementById('cgDesc').value     = item.description || '';
+        document.getElementById('cgDeleteBtn').disabled = false;
+        hideError();
+
+        // Parent selector
+        var parentGroup = document.getElementById('cgParentGroup');
+        if (item.level > 1) {
+            parentGroup.style.display = '';
+            document.getElementById('cgParentLevelLabel').textContent = item.level - 1;
+            populateParentSelect(item.cardType, item.level, item.parentId || null);
+        } else {
+            parentGroup.style.display = 'none';
+        }
+
+        document.getElementById('cgCode').focus();
+        // Scroll form into view
+        document.getElementById('cgFormArea').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    /* ── Save ─────────────────────────────────────────── */
+    document.getElementById('cgSaveBtn').addEventListener('click', function () {
+        var codeEl = document.getElementById('cgCode');
+        var descEl = document.getElementById('cgDesc');
+        var code = codeEl.value.trim().toUpperCase();
+        codeEl.style.borderColor = '';
+        descEl.style.borderColor = '';
+        var valid = true;
+        if (!descEl.value.trim()) { descEl.style.borderColor = '#dc2626'; if (valid) descEl.focus(); valid = false; }
+        if (!code) { codeEl.style.borderColor = '#dc2626'; codeEl.focus(); valid = false; }
+        if (!valid) return;
+
+        var editId   = document.getElementById('cgEditId').value;
+        var cardType = parseInt(document.getElementById('cgCardType').value);
+        var level    = parseInt(document.getElementById('cgLevel').value);
+        var parentEl = document.getElementById('cgParentId');
+        var parentId = (level > 1 && parentEl.value) ? parseInt(parentEl.value) : null;
+
+        var payload = {
+            id:          editId ? parseInt(editId) : null,
+            cardType:    cardType,
+            level:       level,
+            parentId:    parentId,
+            code:        code,
+            description: document.getElementById('cgDesc').value.trim() || null
+        };
+
+        fetch('/Definitions/SaveCardGroup', {
+            method:  'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': getToken()
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function (r) {
+            if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Hata oluştu.'); });
+            return r.json();
+        })
+        .then(function () {
+            var ct = cardType; var lv = level;
+            loadAll(function () { selectLevel(ct, lv); });
+        })
+        .catch(function (e) { showError(e.message); });
+    });
+
+    document.getElementById('cgNewBtn').addEventListener('click', function () {
+        if (_activeType && _activeLevel) selectLevel(_activeType, _activeLevel);
+        else setFormForAdd();
+    });
+
+    document.getElementById('cgDeleteBtn').addEventListener('click', function () {
+        var editId = parseInt(document.getElementById('cgEditId').value);
+        if (!editId) return;
+        doDelete(editId);
+    });
+
+    /* ── Sub-group Tree Modal ────────────────────────── */
+    var _treeModalType = null;
+    function showTreeModal(itemId) {
+        var item = byId(itemId);
+        if (!item) return;
+        _treeModalType = item.cardType;
+
+        document.getElementById('cgTreeTitle').textContent =
+            item.code + (item.description ? ' — ' + item.description : '') + ' / Alt Gruplar';
+        document.getElementById('cgTreeSearch').value = '';
+
+        var data = _dataByType[item.cardType];
+
+        function buildTree(parentId, level) {
+            var children = data.filter(function (x) {
+                return x.level === level && x.parentId === parentId;
+            }).sort(function (a, b) { return (a.code || '').localeCompare(b.code || ''); });
+
+            if (children.length === 0) return '';
+            var html = '<ul>';
+            children.forEach(function (c) {
+                var text = (c.code + ' ' + (c.description || '')).toLowerCase();
+                html += '<li data-text="' + esc(text) + '" data-id="' + c.id + '">' +
+                    '<div class="cg-tree-node">' +
+                        '<span class="cg-tree-lvl">L' + c.level + '</span>' +
+                        '<span class="cg-tree-code" data-tree-edit="' + c.id + '">' + esc(c.code) + '</span>' +
+                        '<span class="cg-tree-desc">' + esc(c.description || '') + '</span>' +
+                    '</div>' +
+                    buildTree(c.id, level + 1) +
+                '</li>';
+            });
+            html += '</ul>';
+            return html;
+        }
+
+        var treeHtml = buildTree(item.id, item.level + 1);
+        var body = document.getElementById('cgTreeBody');
+        body.innerHTML = treeHtml || '<div class="cg-tree-empty">Alt grup bulunamadı.</div>';
+
+        document.getElementById('cgTreeOverlay').style.display = '';
+        document.getElementById('cgTreeSearch').focus();
+    }
+
+    function closeTreeModal() {
+        document.getElementById('cgTreeOverlay').style.display = 'none';
+    }
+
+    function filterTree() {
+        var term = document.getElementById('cgTreeSearch').value.trim().toLowerCase();
+        var body = document.getElementById('cgTreeBody');
+        var allLi = body.querySelectorAll('li[data-text]');
+
+        if (!term) {
+            allLi.forEach(function (li) { li.style.display = ''; });
+            // Restore original text (remove marks)
+            body.querySelectorAll('.cg-tree-code, .cg-tree-desc').forEach(function (el) {
+                el.innerHTML = esc(el.textContent);
+            });
+            return;
+        }
+
+        // Hide all first
+        allLi.forEach(function (li) { li.style.display = 'none'; });
+
+        // Show matching + parent chain
+        allLi.forEach(function (li) {
+            if (li.dataset.text.indexOf(term) === -1) return;
+            li.style.display = '';
+            // Show all parent LIs
+            var parent = li.parentElement;
+            while (parent) {
+                if (parent.tagName === 'LI') parent.style.display = '';
+                parent = parent.parentElement;
+            }
+        });
+
+        // Highlight matching text
+        body.querySelectorAll('li[data-text]').forEach(function (li) {
+            if (li.style.display === 'none') return;
+            li.querySelectorAll('.cg-tree-code, .cg-tree-desc').forEach(function (el) {
+                var raw = el.textContent;
+                var idx = raw.toLowerCase().indexOf(term);
+                if (idx === -1) { el.innerHTML = esc(raw); return; }
+                el.innerHTML = esc(raw.substring(0, idx)) +
+                    '<mark>' + esc(raw.substring(idx, idx + term.length)) + '</mark>' +
+                    esc(raw.substring(idx + term.length));
+            });
+        });
+    }
+
+    // Modal events
+    document.getElementById('cgTreeClose').addEventListener('click', closeTreeModal);
+    document.getElementById('cgTreeOverlay').addEventListener('click', function (e) {
+        if (e.target === this) closeTreeModal();
+    });
+    document.getElementById('cgTreeSearch').addEventListener('input', filterTree);
+    document.getElementById('cgTreeBody').addEventListener('click', function (e) {
+        var el = e.target.closest('[data-tree-edit]');
+        if (!el) return;
+        closeTreeModal();
+        startEdit(parseInt(el.dataset.treeEdit));
+    });
+
+    /* ── Delete ───────────────────────────────────────── */
+    function doDelete(id) {
+        var item = byId(id);
+        if (!item) return;
+
+        // Check if any items in the next level reference this as parent
+        var hasChildren = _dataByType[item.cardType].some(function (x) {
+            return x.level === item.level + 1 && x.parentId === item.id;
+        });
+
+        showConfirm({
+            icon:    '🗑️',
+            title:   '"' + item.code + '" silinsin mi?',
+            body:    hasChildren
+                ? 'Bu gruba bağlı alt seviye tanımları var. Silmek yine de devam eder.'
+                : 'Bu tanım kalıcı olarak silinecek.',
+            okLabel: 'Sil',
+            onConfirm: function () {
+                fetch('/Definitions/DeleteCardGroup', {
+                    method:  'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': getToken()
+                    },
+                    body: JSON.stringify({ id: id })
+                })
+                .then(function (r) {
+                    if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Silinemedi'); });
+                    return r.json();
+                })
+                .then(function () {
+                    var ct = item.cardType; var lv = item.level;
+                    loadAll(function () { selectLevel(ct, lv); });
+                })
+                .catch(function (e) { showError(e.message); });
+            }
+        });
+    }
+
+    /* ── Confirm Modal ────────────────────────────────── */
+    function showConfirm(opts) {
+        var overlay = document.getElementById('calibraConfirmOverlay');
+        document.getElementById('calibraConfirmIcon').textContent  = opts.icon  || '⚠️';
+        document.getElementById('calibraConfirmTitle').textContent = opts.title || '';
+        document.getElementById('calibraConfirmBody').textContent  = opts.body  || '';
+        var okBtn = document.getElementById('calibraConfirmOk');
+        okBtn.textContent = opts.okLabel || 'Onayla';
+        okBtn.disabled    = false;
+        overlay.style.display = '';
+        function close() { overlay.style.display = 'none'; }
+        okBtn.onclick = function () { close(); opts.onConfirm(); };
+        document.getElementById('calibraConfirmCancel').onclick = close;
+        overlay.onclick = function (e) { if (e.target === overlay) close(); };
+    }
+
+    /* ── Error helpers ────────────────────────────────── */
+    function showError(msg) {
+        var el = document.getElementById('cgError');
+        el.textContent = msg; el.style.display = '';
+    }
+    function hideError() {
+        document.getElementById('cgError').style.display = 'none';
+        document.getElementById('cgCode').style.borderColor = '';
+        document.getElementById('cgDesc').style.borderColor = '';
+    }
+
+    /* ── Kod alanı blur — mevcut kayıt varsa getir ───── */
+    document.getElementById('cgCode').addEventListener('blur', function () {
+        if (_formMode === 'edit') return; // düzenleme modundaysa atla
+        var code = this.value.trim().toUpperCase();
+        if (!code || !_activeType || !_activeLevel) return;
+        var parentId = parseInt(document.getElementById('cgParentId').value) || null;
+        var data = _dataByType[_activeType];
+        var found = data.find(function (g) {
+            return g.level === _activeLevel
+                && g.code.toUpperCase() === code
+                && ((_activeLevel === 1 && !g.parentId) || g.parentId === parentId);
+        });
+        if (found) {
+            // Mevcut kayıt bulundu — düzenleme moduna geç
+            startEdit(found.id);
+        }
+    });
+
+    /* ── Keyboard shortcuts ───────────────────────────── */
+    [document.getElementById('cgCode'), document.getElementById('cgDesc')].forEach(function (inp) {
+        inp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter')  document.getElementById('cgSaveBtn').click();
+            if (e.key === 'Escape') document.getElementById('cgNewBtn').click();
+        });
+    });
+
+    /* ── Init ─────────────────────────────────────────── */
+    loadAll();
+
+})();
+</script>
+}

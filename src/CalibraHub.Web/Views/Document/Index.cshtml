@@ -1,0 +1,440 @@
+@{
+    ViewBag.Title     = "Belge Sablonlari";
+    ViewData["FormCode"] = "DOC_TEMPLATES";
+    ViewBag.PageTitle = "Belge Sablonlari";
+
+    var docTypes     = (IReadOnlyCollection<CalibraHub.Domain.Entities.DocumentType>)(ViewBag.DocumentTypes ?? Array.Empty<CalibraHub.Domain.Entities.DocumentType>());
+    var selectedType = (CalibraHub.Domain.Entities.DocumentType?)ViewBag.SelectedType;
+    var templates    = (IReadOnlyCollection<CalibraHub.Domain.Entities.ReportTemplate>)(ViewBag.Templates ?? Array.Empty<CalibraHub.Domain.Entities.ReportTemplate>());
+}
+
+@section Styles {
+<style>
+/* ── toolbar ────────────────────────────────────────────────────── */
+.doc-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    flex-wrap: wrap;
+}
+.doc-toolbar label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #475569;
+    white-space: nowrap;
+}
+.doc-toolbar select {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    color: #1e293b;
+    min-width: 180px;
+}
+.btn-new {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(124, 58, 237, 0.25), 0 1px 2px rgba(124, 58, 237, 0.12);
+    transition: transform 0.12s, box-shadow 0.12s;
+}
+.btn-new:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(124, 58, 237, 0.3), 0 2px 4px rgba(124, 58, 237, 0.15);
+}
+.btn-new:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(124, 58, 237, 0.2); }
+
+.designer-indicator {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    cursor: default;
+    color: #94a3b8;
+    transition: color 0.3s;
+}
+.designer-indicator.online { color: #7c3aed; }
+.designer-indicator .dot {
+    position: absolute;
+    bottom: -1px; right: -2px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #dc2626;
+    border: 1.5px solid #fff;
+    transition: background 0.3s;
+}
+.designer-indicator .dot.online { background: #22c55e; }
+
+/* ── grid tablo ─────────────────────────────────────────────────── */
+.doc-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+.doc-grid thead th {
+    text-align: left;
+    padding: 3px 10px;
+    font-weight: 600;
+    color: #64748b;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 2px solid #e2e8f0;
+    background: #f8fafc;
+    white-space: nowrap;
+}
+.doc-grid tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+    transition: background 0.1s;
+}
+.doc-grid tbody tr:hover { background: #f8fafc; }
+.doc-grid td {
+    padding: 1px 10px;
+    vertical-align: middle;
+    color: #334155;
+}
+.doc-grid td.col-no    { width: 40px; color: #94a3b8; text-align: center; }
+.doc-grid td.col-name  { font-weight: 600; }
+.editable-name {
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+    transition: border-color 0.15s;
+}
+.editable-name:hover { border-bottom-color: #94a3b8; }
+.doc-grid td.col-path  { font-size: 0.72rem; color: #94a3b8; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-grid td.col-default { text-align: center; width: 80px; }
+.doc-grid td.col-date  { font-size: 0.72rem; color: #64748b; white-space: nowrap; width: 120px; }
+.doc-grid td.col-actions { white-space: nowrap; width: 220px; }
+
+.default-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+}
+
+/* ── butonlar ───────────────────────────────────────────────────── */
+.doc-grid .act-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px; height: 30px;
+    padding: 0;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #475569;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+}
+.doc-grid .act-btn:hover { background: #f1f5f9; }
+.doc-grid .act-btn.designer { color: #7c3aed; border-color: #ddd6fe; }
+.doc-grid .act-btn.designer:hover { background: #f5f3ff; border-color: #7c3aed; }
+.doc-grid .act-btn.primary { color: #1d4ed8; border-color: #bfdbfe; }
+.doc-grid .act-btn.primary:hover { background: #eff6ff; border-color: #1d4ed8; }
+.doc-grid .act-btn.danger { color: #dc2626; border-color: #fecaca; }
+.doc-grid .act-btn.danger:hover { background: #fef2f2; border-color: #dc2626; }
+.col-actions { display: flex; gap: 6px; }
+
+/* ── upload ─────────────────────────────────────────────────────── */
+.doc-upload {
+    border: 2px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    color: #94a3b8;
+    margin-top: 12px;
+    font-size: 0.8rem;
+    transition: border-color 0.15s;
+}
+.doc-upload:hover, .doc-upload.dragover { border-color: #3b82f6; background: #eff6ff; }
+.doc-upload input[type="file"] { display: none; }
+.doc-upload label { cursor: pointer; color: #3b82f6; font-weight: 600; text-decoration: underline; }
+
+/* ── bos ────────────────────────────────────────────────────────── */
+.doc-empty-row td {
+    text-align: center;
+    padding: 32px 10px;
+    color: #94a3b8;
+    font-style: italic;
+}
+</style>
+}
+
+<!-- Action bar (workspace-action-bar'a kopyalanir) -->
+<div class="entity-form-toolbar">
+    @if (selectedType is not null)
+    {
+        <button type="button" class="btn-new" onclick="createBlankTemplate()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Yeni Sablon Olustur
+        </button>
+    }
+</div>
+
+<!-- Toolbar: combobox + designer durumu -->
+<div class="doc-toolbar">
+    <label for="docTypeSelect">Belge Tipi:</label>
+    <select id="docTypeSelect">
+        @foreach (var dt in docTypes)
+        {
+            if (selectedType?.Id == dt.Id)
+            {
+                <option value="@dt.Code" data-id="@dt.Id" selected="selected">@dt.Name</option>
+            }
+            else
+            {
+                <option value="@dt.Code" data-id="@dt.Id">@dt.Name</option>
+            }
+        }
+    </select>
+    <div id="designerIndicator" class="designer-indicator" title="Designer: Bagli degil" style="margin-left:auto;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+        <span class="dot"></span>
+    </div>
+</div>
+
+<!-- Grid -->
+@if (selectedType is not null)
+{
+    <table class="doc-grid">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Sablon Adi</th>
+                <th>Dosya Yolu</th>
+                <th>Varsayilan</th>
+                <th>Olusturulma</th>
+                <th>Islemler</th>
+            </tr>
+        </thead>
+        <tbody id="tplBody">
+            @if (templates.Any())
+            {
+                var idx = 0;
+                @foreach (var tpl in templates)
+                {
+                    idx++;
+                    <tr>
+                        <td class="col-no">@idx</td>
+                        <td class="col-name">
+                            <span class="editable-name" data-id="@tpl.Id" title="Duzenlemek icin tiklayin">@tpl.Name</span>
+                        </td>
+                        <td class="col-path" title="@tpl.FrxFilePath">@tpl.FrxFilePath</td>
+                        <td class="col-default">
+                            @if (tpl.IsDefault) { <span class="default-dot" title="Varsayilan"></span> }
+                        </td>
+                        <td class="col-date">@tpl.CreatedAt.ToString("dd.MM.yyyy HH:mm")</td>
+                        <td class="col-actions">
+                            <button type="button" class="act-btn designer" onclick="openInDesigner('@tpl.Id')" title="Designer'da Ac">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            </button>
+                            @if (!tpl.IsDefault)
+                            {
+                                <button type="button" class="act-btn primary" onclick="setDefault('@tpl.Id')" title="Varsayilan Yap">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                </button>
+                            }
+                            <button type="button" class="act-btn danger" onclick="deleteTemplate('@tpl.Id')" title="Sil">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            }
+            else
+            {
+                <tr class="doc-empty-row">
+                    <td colspan="6">Henuz sablon yok. Yukaridan yeni sablon olusturun veya asagidan .frx yukleyin.</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <!-- Upload -->
+    <div class="doc-upload" id="uploadArea">
+        <input type="file" id="frxFileInput" accept=".frx" />
+        <label for="frxFileInput">.frx dosya sec</label>
+        <span> veya surukle birak</span>
+        <span style="margin-left:8px;font-size:0.72rem;color:#cbd5e1;">(Maks. 1 MB)</span>
+    </div>
+}
+
+@section Scripts {
+<script>
+(function() {
+    let selectedTypeId = '@(selectedType?.Id.ToString() ?? "")';
+
+    // ── Combobox degisince AJAX ile grid yenile ───────────────────
+    const docTypeSelect = document.getElementById('docTypeSelect');
+    if (docTypeSelect) {
+        docTypeSelect.addEventListener('change', function() {
+            const opt = this.options[this.selectedIndex];
+            selectedTypeId = opt.dataset.id;
+            loadTemplates(selectedTypeId);
+        });
+    }
+
+    function loadTemplates(docTypeId) {
+        fetch('@Url.Action("Templates","Document")' + '?documentTypeId=' + docTypeId)
+            .then(r => r.json())
+            .then(data => renderGrid(data))
+            .catch(() => renderGrid([]));
+    }
+
+    function renderGrid(templates) {
+        const tbody = document.getElementById('tplBody');
+        if (!tbody) return;
+        if (templates.length === 0) {
+            tbody.innerHTML = '<tr class="doc-empty-row"><td colspan="6">Henuz sablon yok.</td></tr>';
+            bindEditableNames();
+            return;
+        }
+        tbody.innerHTML = templates.map((t, i) => `
+            <tr>
+                <td class="col-no">${i + 1}</td>
+                <td class="col-name"><span class="editable-name" data-id="${t.id}" title="Duzenlemek icin tiklayin">${esc(t.name)}</span></td>
+                <td class="col-path" title="${esc(t.frxFilePath || '')}">${esc(t.frxFilePath || '')}</td>
+                <td class="col-default">${t.isDefault ? '<span class="default-dot" title="Varsayilan"></span>' : ''}</td>
+                <td class="col-date">${t.createdAt}</td>
+                <td class="col-actions">
+                    <button type="button" class="act-btn designer" onclick="openInDesigner('${t.id}')" title="Designer'da Ac">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    </button>
+                    ${!t.isDefault ? `<button type="button" class="act-btn primary" onclick="setDefault('${t.id}')" title="Varsayilan Yap">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    </button>` : ''}
+                    <button type="button" class="act-btn danger" onclick="deleteTemplate('${t.id}')" title="Sil">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </td>
+            </tr>`).join('');
+        bindEditableNames();
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // ── Upload ────────────────────────────────────────────────────
+    const fileInput = document.getElementById('frxFileInput');
+    const uploadArea = document.getElementById('uploadArea');
+
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) uploadFile(this.files[0]);
+        });
+    }
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', function() { this.classList.remove('dragover'); });
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault(); this.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) uploadFile(e.dataTransfer.files[0]);
+        });
+    }
+
+    function uploadFile(file) {
+        if (!file.name.endsWith('.frx')) { alert('Sadece .frx dosyalari yuklenebilir.'); return; }
+        const name = prompt('Sablon adi:', file.name.replace('.frx', ''));
+        if (!name) return;
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('documentTypeId', selectedTypeId);
+        fd.append('name', name);
+        fetch('@Url.Action("Upload", "Document")', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => { if (data.success) loadTemplates(selectedTypeId); else alert(data.error || 'Yukleme basarisiz.'); })
+            .catch(() => alert('Yukleme sirasinda hata olustu.'));
+    }
+
+    // ── Designer ──────────────────────────────────────────────────
+    const DESIGNER_URL = 'http://localhost:61002';
+    let designerOnline = false;
+
+    function checkDesigner() {
+        fetch(DESIGNER_URL + '/ping', { mode: 'cors' })
+            .then(r => r.json())
+            .then(d => { designerOnline = d.ok === true; updateStatus(); })
+            .catch(() => { designerOnline = false; updateStatus(); });
+    }
+    function updateStatus() {
+        const el = document.getElementById('designerIndicator');
+        if (!el) return;
+        const dot = el.querySelector('.dot');
+        if (dot) dot.classList.toggle('online', designerOnline);
+        el.classList.toggle('online', designerOnline);
+        el.title = designerOnline ? 'Designer: Bagli' : 'Designer: Bagli degil';
+    }
+    checkDesigner();
+    setInterval(checkDesigner, 10000);
+
+    window.openInDesigner = function(id) {
+        if (!designerOnline) { alert('CalibraHub Designer calismiyor.\nLutfen CalibraHub.Designer.exe baslatin.'); return; }
+        fetch(DESIGNER_URL + '/open?id=' + id + '&url=' + encodeURIComponent(location.origin), { mode: 'cors' })
+            .then(r => r.json())
+            .then(d => { if (!d.ok) alert('Designer acamadi.'); })
+            .catch(() => alert('Designer ile iletisim kurulamadi.'));
+    };
+
+    // ── Yeni Sablon ───────────────────────────────────────────────
+    window.createBlankTemplate = function() {
+        const name = prompt('Sablon adi:');
+        if (!name) return;
+        const fd = new FormData();
+        fd.append('documentTypeId', selectedTypeId);
+        fd.append('name', name);
+        fetch('@Url.Action("CreateBlank", "Document")', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    if (designerOnline) openInDesigner(data.id);
+                    loadTemplates(selectedTypeId);
+                } else alert(data.error || 'Olusturma basarisiz.');
+            })
+            .catch(() => alert('Hata olustu.'));
+    };
+
+    // ── Inline Rename ─────────────────────────────────────────────
+    function bindEditableNames() {
+        document.querySelectorAll('.editable-name').forEach(el => {
+            el.addEventListener('click', function() {
+                const id = this.dataset.id;
+                const current = this.textContent.trim();
+                const newName = prompt('Sablon adi:', current);
+                if (!newName || newName === current) return;
+                const fd = new FormData();
+                fd.append('name', newName);
+                fetch('/Document/Rename/' + id, { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(d => { if (d.success) loadTemplates(selectedTypeId); else alert('Yeniden adlandirma basarisiz.'); })
+                    .catch(() => alert('Hata olustu.'));
+            });
+        });
+    }
+    bindEditableNames();
+
+    // ── Actions ───────────────────────────────────────────────────
+    window.setDefault = function(id) {
+        fetch('/Document/SetDefault/' + id, { method: 'POST' })
+            .then(r => r.json()).then(d => { if (d.success) loadTemplates(selectedTypeId); })
+            .catch(() => alert('Islem basarisiz.'));
+    };
+    window.deleteTemplate = function(id) {
+        if (!confirm('Bu sablonu silmek istediginize emin misiniz?')) return;
+        fetch('/Document/Delete/' + id, { method: 'POST' })
+            .then(r => r.json()).then(d => { if (d.success) loadTemplates(selectedTypeId); })
+            .catch(() => alert('Silme basarisiz.'));
+    };
+})();
+</script>
+}

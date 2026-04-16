@@ -1,0 +1,357 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Sirket ve Kullanici Tanimlari";
+    ViewData["BodyClass"] = "page-setup-definitions";
+}
+
+@section Styles {
+<style>
+/* ══ CompanyUserManagement Panel — cum-* ══════════════════════════════════════ */
+.page-setup-definitions .integrator-dashboard { height:100%; min-height:0; }
+.page-setup-definitions .integrator-dashboard__content {
+    display:flex !important; flex-direction:column;
+    width:100% !important; max-width:none !important;
+    min-height:0; padding:0; margin:0 !important; overflow:hidden;
+}
+#cum-mount { height:100%; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+
+/* ── Tema değişkenleri (açık) ── */
+.cum-root {
+    --cum-bg:           #f8fafc;
+    --cum-surface:      #ffffff;
+    --cum-surface2:     #f1f5f9;
+    --cum-border:       #e2e8f0;
+    --cum-border-light: #f1f5f9;
+    --cum-text:         #1e293b;
+    --cum-text-muted:   #64748b;
+    --cum-muted:        #f1f5f9;
+    --cum-input-bg:     #f8fafc;
+    --cum-accent:       var(--theme-accent, #2563eb);
+    --cum-accent-soft:  var(--theme-accent-soft, rgba(37,99,235,.12));
+    --cum-pill-green-bg:rgba(22,163,74,.1);  --cum-pill-green-tx:#15803d;
+    --cum-pill-red-bg:  rgba(220,38,38,.1);  --cum-pill-red-tx:  #b91c1c;
+    --cum-pill-blue-bg: rgba(37,99,235,.1);  --cum-pill-blue-tx: #1d4ed8;
+    --cum-pill-gray-bg: rgba(100,116,139,.1);--cum-pill-gray-tx: #475569;
+}
+
+/* ── Tema değişkenleri (koyu) ── */
+body.app-theme-dark .cum-root {
+    --cum-bg:           #080c17;
+    --cum-surface:      #0d1323;
+    --cum-surface2:     #111827;
+    --cum-border:       rgba(255,255,255,.09);
+    --cum-border-light: rgba(255,255,255,.04);
+    --cum-text:         #e2e8f0;
+    --cum-text-muted:   #94a3b8;
+    --cum-muted:        rgba(255,255,255,.06);
+    --cum-input-bg:     rgba(255,255,255,.07);
+    --cum-accent:       var(--theme-accent, #6366f1);
+    --cum-accent-soft:  var(--theme-accent-soft, rgba(99,102,241,.15));
+    --cum-pill-green-bg:rgba(34,197,94,.15); --cum-pill-green-tx:#4ade80;
+    --cum-pill-red-bg:  rgba(239,68,68,.15); --cum-pill-red-tx:  #f87171;
+    --cum-pill-blue-bg: rgba(99,102,241,.18);--cum-pill-blue-tx: #a5b4fc;
+    --cum-pill-gray-bg: rgba(148,163,184,.12);--cum-pill-gray-tx:#cbd5e1;
+}
+
+.cum-root {
+    display:flex; flex-direction:column; height:100%; min-height:0;
+    overflow:hidden; font-size:.84rem;
+    color: var(--cum-text);
+    background: var(--cum-bg);
+}
+
+/* ── Tab bar ── */
+.cum-tabs {
+    display:flex; gap:2px;
+    border-bottom:2px solid var(--cum-border);
+    flex-shrink:0; padding:0 12px; background: var(--cum-surface);
+}
+.cum-tab {
+    display:flex; align-items:center; gap:6px;
+    padding:8px 16px; font-size:.82rem; font-weight:600;
+    border:none; background:none; cursor:pointer;
+    color: var(--cum-text-muted);
+    border-bottom:2px solid transparent; margin-bottom:-2px;
+    border-radius:6px 6px 0 0; transition:color .12s, background .12s;
+}
+.cum-tab:hover { background: var(--cum-muted); color: var(--cum-text); }
+.cum-tab.is-active { color: var(--cum-accent); border-bottom-color: var(--cum-accent); }
+.cum-tab-badge {
+    font-size:.72rem; font-weight:700;
+    background: var(--cum-accent-soft);
+    color: var(--cum-accent);
+    border-radius:9999px; padding:1px 7px;
+}
+
+/* ── Body: list + form ── */
+.cum-body { display:flex; flex:1 1 auto; min-height:0; overflow:hidden; }
+
+/* ── List panel ── */
+.cum-list-panel {
+    display:flex; flex-direction:column;
+    flex:1 1 auto; min-width:0; overflow:hidden;
+    transition:flex .18s ease;
+}
+.cum-list-panel--narrow { flex:0 0 58%; max-width:58%; }
+
+/* ── Toolbar ── */
+.cum-toolbar {
+    display:flex; align-items:center; gap:8px;
+    padding:10px 14px; flex-shrink:0;
+    border-bottom:1px solid var(--cum-border);
+    background: var(--cum-surface);
+}
+
+/* ── Search ── */
+.cum-search-wrap { position:relative; flex:1; max-width:280px; display:flex; align-items:center; }
+.cum-search-ico { position:absolute; left:9px; color: var(--cum-text-muted); pointer-events:none; }
+.cum-search {
+    width:100%; padding:5px 28px 5px 28px; border-radius:7px; border:none; outline:none;
+    font-size:.8rem; background: var(--cum-muted); color: var(--cum-text);
+    transition:box-shadow .12s;
+}
+.cum-search:focus { box-shadow:0 0 0 2px var(--cum-accent); }
+.cum-search-clear {
+    position:absolute; right:7px; border:none; background:none; cursor:pointer;
+    color: var(--cum-text-muted); font-size:1rem; line-height:1; padding:0;
+}
+.cum-search-clear:hover { color: var(--cum-text); }
+
+/* ── Alert ── */
+.cum-alert {
+    display:flex; align-items:center; gap:7px;
+    padding:8px 14px; font-size:.8rem;
+    background: rgba(220,38,38,.08); color:#f87171;
+    border-bottom:1px solid rgba(220,38,38,.15);
+}
+.cum-alert button { margin-left:auto; border:none; background:none; cursor:pointer; font-size:1.1rem; color:#f87171; }
+
+/* ── Center / empty ── */
+.cum-center {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:10px; flex:1 1 auto; color: var(--cum-text-muted); font-size:.84rem;
+}
+.cum-empty {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px; flex:1 1 auto; color: var(--cum-text-muted); padding:40px; text-align:center;
+}
+.cum-empty svg { opacity:.25; }
+.cum-empty p { margin:0; font-size:.88rem; }
+
+/* ── Table ── */
+.cum-table-wrap { flex:1 1 auto; overflow-y:auto; }
+.cum-table { width:100%; border-collapse:collapse; }
+.cum-table thead th {
+    position:sticky; top:0; z-index:1;
+    background: var(--cum-surface);
+    padding:7px 12px; text-align:left;
+    font-size:.76rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+    color: var(--cum-text-muted);
+    border-bottom:1px solid var(--cum-border);
+}
+.cum-table tbody tr { border-bottom:1px solid var(--cum-border-light); transition:background .1s; }
+.cum-table tbody tr:hover { background: var(--cum-muted); }
+.cum-table tbody tr.is-selected { background: var(--cum-accent-soft) !important; }
+.cum-table td { padding:8px 12px; vertical-align:middle; }
+.cum-td-name { font-weight:600; display:flex; align-items:center; color: var(--cum-text); }
+.cum-td-email { color: var(--cum-text-muted); font-size:.8rem; }
+.cum-td-actions { white-space:nowrap; width:1%; }
+
+/* ── Pills ── */
+.cum-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:9999px; font-size:.73rem; font-weight:600; }
+.cum-pill--green { background: var(--cum-pill-green-bg); color: var(--cum-pill-green-tx); }
+.cum-pill--red   { background: var(--cum-pill-red-bg);   color: var(--cum-pill-red-tx); }
+.cum-pill--blue  { background: var(--cum-pill-blue-bg);  color: var(--cum-pill-blue-tx); }
+.cum-pill--gray  { background: var(--cum-pill-gray-bg);  color: var(--cum-pill-gray-tx); }
+
+/* ── Action buttons in table ── */
+.cum-action-btn {
+    width:28px; height:28px; border-radius:6px; border:none; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center;
+    background: var(--cum-muted); color: var(--cum-text-muted);
+    transition:background .1s, color .1s; margin-left:3px;
+}
+.cum-action-btn:hover { background: var(--cum-border); color: var(--cum-text); }
+.cum-action-btn--danger:hover { background:rgba(239,68,68,.18); color:#f87171; }
+
+/* ── Form panel ── */
+.cum-form-panel {
+    flex:0 0 42%; width:42%; display:flex; flex-direction:column; min-height:0;
+    border-left:1px solid var(--cum-border);
+    background: var(--cum-surface2);
+    overflow:hidden;
+}
+.cum-form-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; flex-shrink:0;
+    border-bottom:1px solid var(--cum-border);
+    background: var(--cum-surface);
+}
+.cum-form-title {
+    display:flex; align-items:center; gap:8px;
+    margin:0; font-size:.9rem; font-weight:700; color: var(--cum-text);
+}
+.cum-close-btn {
+    width:28px; height:28px; border-radius:6px; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    background: var(--cum-muted); color: var(--cum-text-muted);
+}
+.cum-close-btn:hover { background: var(--cum-border); }
+
+/* ── Form body ── */
+.cum-form { flex:1 1 auto; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+.cum-field { display:flex; flex-direction:column; gap:3px; }
+.cum-field-row { display:flex; gap:10px; }
+.cum-field-row > .cum-field { flex:1; }
+.cum-label { font-size:.76rem; font-weight:600; color: var(--cum-text-muted); }
+.cum-field-hint { font-size:.72rem; font-weight:400; opacity:.7; }
+.cum-req { color:#f87171; }
+.cum-input {
+    padding:6px 10px; border-radius:7px; outline:none;
+    border:1px solid var(--cum-border);
+    background: var(--cum-input-bg);
+    color: var(--cum-text);
+    font-size:.83rem; width:100%;
+    transition:border-color .12s, box-shadow .12s;
+}
+.cum-input:focus { border-color: var(--cum-accent); box-shadow:0 0 0 2px var(--cum-accent-soft); }
+.cum-select {
+    padding:6px 10px; border-radius:7px; outline:none;
+    border:1px solid var(--cum-border);
+    background: var(--cum-input-bg); color: var(--cum-text);
+    font-size:.83rem; width:100%; cursor:pointer;
+}
+.cum-select:focus { border-color: var(--cum-accent); }
+body.app-theme-dark .cum-select { color-scheme: dark; }
+.cum-pw-wrap { position:relative; display:flex; align-items:center; }
+.cum-input--pw { padding-right:34px; }
+.cum-eye-btn {
+    position:absolute; right:8px; border:none; background:none; cursor:pointer; padding:0;
+    color: var(--cum-text-muted); display:flex; align-items:center;
+}
+.cum-eye-btn:hover { color: var(--cum-text); }
+
+/* ── Toggle switch ── */
+.cum-switch-wrap { display:inline-flex; align-items:center; gap:9px; cursor:pointer; user-select:none; }
+.cum-switch-input { display:none; }
+.cum-switch-track {
+    width:36px; height:20px; border-radius:10px;
+    background: var(--cum-border); position:relative; transition:background .15s; flex-shrink:0;
+}
+.cum-switch-track.is-on { background: var(--cum-accent); }
+.cum-switch-thumb {
+    position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%;
+    background:#fff; transition:transform .15s; box-shadow:0 1px 3px rgba(0,0,0,.3);
+}
+.cum-switch-track.is-on .cum-switch-thumb { transform:translateX(16px); }
+.cum-switch-label { font-size:.8rem; font-weight:600; color: var(--cum-text-muted); }
+.cum-switch-label.is-active { color: var(--cum-pill-green-tx); }
+
+/* ── Section sep ── */
+.cum-section-sep {
+    display:flex; align-items:center; gap:6px;
+    font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+    color: var(--cum-text-muted);
+    border-top:1px solid var(--cum-border-light); padding-top:10px; margin-top:2px;
+}
+
+/* ── Test row ── */
+.cum-test-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.cum-conn-result { display:flex; align-items:center; gap:5px; font-size:.78rem; font-weight:600; }
+.cum-conn-result.is-ok   { color: var(--cum-pill-green-tx); }
+.cum-conn-result.is-fail  { color: var(--cum-pill-red-tx); }
+
+/* ── Form error ── */
+.cum-form-err {
+    display:flex; align-items:center; gap:6px; padding:7px 10px; border-radius:7px;
+    background:rgba(239,68,68,.1); color: var(--cum-pill-red-tx); font-size:.8rem;
+}
+
+/* ── Form footer ── */
+.cum-form-footer {
+    display:flex; gap:8px; flex-wrap:wrap; padding:10px 0 4px;
+    border-top:1px solid var(--cum-border-light); margin-top:4px;
+}
+
+/* ── Buttons ── */
+.cum-btn {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 14px; border-radius:7px; border:none; cursor:pointer;
+    font-size:.82rem; font-weight:600; transition:opacity .1s, background .1s;
+    white-space:nowrap;
+}
+.cum-btn:disabled { opacity:.5; cursor:not-allowed; }
+.cum-btn--primary  { background: var(--cum-accent); color:#fff; }
+.cum-btn--primary:hover:not(:disabled) { opacity:.86; }
+.cum-btn--secondary {
+    background: var(--cum-muted); color: var(--cum-text);
+    border:1px solid var(--cum-border);
+}
+.cum-btn--secondary:hover:not(:disabled) { background: var(--cum-border); }
+.cum-btn--ghost { background:transparent; color: var(--cum-text-muted); }
+.cum-btn--ghost:hover:not(:disabled) { background: var(--cum-muted); color: var(--cum-text); }
+.cum-btn--danger { background:#dc2626; color:#fff; }
+.cum-btn--danger:hover:not(:disabled) { background:#b91c1c; }
+
+/* ── Spinner ── */
+@@keyframes cum-spin { to { transform:rotate(360deg); } }
+.cum-spin { animation: cum-spin .7s linear infinite; }
+
+/* ── Toast ── */
+.cum-toast {
+    position:fixed; bottom:24px; right:24px; z-index:9999;
+    display:flex; align-items:center; gap:8px;
+    padding:10px 16px; border-radius:10px; font-size:.83rem; font-weight:600;
+    box-shadow:0 8px 32px rgba(0,0,0,.35); max-width:320px;
+    animation: cum-toast-in .2s ease;
+}
+@@keyframes cum-toast-in { from { transform:translateY(10px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+.cum-toast--success { background:#166534; color:#fff; }
+.cum-toast--error   { background:#b91c1c; color:#fff; }
+
+/* ── Confirm overlay ── */
+.cum-overlay {
+    position:fixed; inset:0; z-index:9998;
+    background:rgba(0,0,0,.5); backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center;
+}
+.cum-confirm-box {
+    background: var(--cum-surface);
+    border:1px solid var(--cum-border);
+    border-radius:14px; padding:28px 32px; max-width:360px; width:90%;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    box-shadow:0 24px 64px rgba(0,0,0,.4); text-align:center;
+}
+.cum-confirm-ico { color:#f59e0b; }
+.cum-confirm-box p { margin:0; font-size:.9rem; line-height:1.5; color: var(--cum-text); }
+.cum-confirm-btns { display:flex; gap:10px; }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="cum-mount" style="height:100%;min-height:0;overflow:hidden;"></div>
+</section>
+
+@section Scripts {
+<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script>
+(function () {
+    var el = document.getElementById('cum-mount')
+    if (!el) return
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountCompanyUserManagement) {
+            console.error('[CUM] mount fonksiyonu bulunamadi'); return
+        }
+        try { window.CalibraHub.mountCompanyUserManagement(el) }
+        catch (e) { console.error('[CUM] mount hatasi:', e) }
+    }
+    if (window.CalibraHub && window.CalibraHub.mountCompanyUserManagement) { doMount(); return }
+    var tries = 0
+    var timer = setInterval(function () {
+        tries++
+        if (window.CalibraHub && window.CalibraHub.mountCompanyUserManagement) { clearInterval(timer); doMount() }
+        else if (tries >= 50) { clearInterval(timer); console.error('[CUM] timeout - mount basarisiz') }
+    }, 100)
+})()
+</script>
+}

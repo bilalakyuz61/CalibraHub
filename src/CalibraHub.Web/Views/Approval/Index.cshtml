@@ -1,0 +1,316 @@
+@model CalibraHub.Web.Models.Approval.ApprovalQueueViewModel
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@{
+    ViewData["Title"] = Model.PageTitle;
+    ViewData["BodyClass"] = "page-approval-queue";
+    var listState = Model.ListState;
+    var pagerRouteValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+    if (!string.IsNullOrWhiteSpace(Model.Kind))
+    {
+        pagerRouteValues["kind"] = Model.Kind;
+    }
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    var gridRows = Model.Documents.Select(d => new
+    {
+        id              = d.Id,
+        documentNumber  = d.DocumentNumber,
+        kind            = d.Kind,
+        scenario        = d.Scenario,
+        senderTaxNumber = d.SenderTaxNumber,
+        senderName      = d.SenderName,
+        issueDate       = d.IssueDate.ToString("dd.MM.yyyy"),
+        importedAt      = d.ImportedAt.ToString("dd.MM.yyyy HH:mm"),
+        isProcessed     = d.IsProcessed,
+    });
+    var gridRowsJson = JsonSerializer.Serialize(gridRows, jsonOpts);
+}
+
+@section Styles {
+<link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+<style>
+    .page-approval-queue .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-approval-queue .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .page-approval-queue .integrator-dashboard__header { flex: 0 0 auto; }
+    .page-approval-queue .integrator-dashboard__grid {
+        flex: 1 1 auto !important; display: flex !important;
+        flex-direction: column !important; gap: 4px; min-height: 0;
+    }
+    .page-approval-queue .integrator-dashboard__group {
+        flex: 1 1 0 !important; min-height: 0; overflow: hidden;
+        display: flex; flex-direction: column;
+        border-radius: 8px;
+    }
+
+    /* Portal yükleme overlay */
+    .pull-overlay {
+        display: none;
+        position: fixed; inset: 0; z-index: 1060;
+        background: rgba(0,0,0,.55);
+        backdrop-filter: blur(4px);
+        align-items: center; justify-content: center;
+    }
+    .pull-overlay.is-visible { display: flex; }
+    .pull-overlay__card {
+        background: var(--bs-body-bg, #fff);
+        border-radius: 16px;
+        padding: 28px 36px;
+        display: flex; flex-direction: column; align-items: center; gap: 16px;
+        box-shadow: 0 12px 48px rgba(0,0,0,.24);
+        min-width: 260px; max-width: 360px;
+    }
+    .pull-overlay__video-wrap {
+        width: 220px; height: 220px;
+        border-radius: 50%; overflow: hidden; flex-shrink: 0;
+    }
+    .pull-overlay__video {
+        width: 100%; height: 100%; display: block;
+        object-fit: cover; transform: scale(1.0);
+    }
+    .pull-overlay__title {
+        font-size: .9375rem; font-weight: 600;
+        color: var(--bs-body-color, #212529); margin: 0; text-align: center;
+    }
+    .pull-overlay__sub {
+        font-size: .8rem; color: var(--bs-secondary-color, #6c757d);
+        margin: -8px 0 0; text-align: center;
+    }
+
+    /* Mobil sekme kaydırma */
+    .invoice-tabs-scrollable {
+        flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden;
+        scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch;
+    }
+    .invoice-tabs-scrollable::-webkit-scrollbar { display: none; }
+
+    /* React grid container */
+    #reactInvoiceGrid {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        border-radius: 8px;
+        border: 1px solid;
+        border-color: rgba(226,232,240,1);
+    }
+    body.app-theme-dark #reactInvoiceGrid {
+        border-color: rgba(255,255,255,0.07);
+    }
+
+    /* InvoiceDataGrid CSS değişkenleri — light */
+    .igd-root {
+        --igd-bg:           #ffffff;
+        --igd-toolbar-bg:   #f8fafc;
+        --igd-thead-bg:     #f1f5f9;
+        --igd-border:       #e2e8f0;
+        --igd-row-border:   #f1f5f9;
+        --igd-text:         #1e293b;
+        --igd-text-muted:   #64748b;
+        --igd-text-dim:     #94a3b8;
+        --igd-th-text:      #94a3b8;
+        --igd-accent:       #6366f1;
+        --igd-ok:           #10b981;
+        --igd-badge-ok-bg:  #d1fae5;
+        --igd-modal-bg:     #ffffff;
+        --igd-modal-border: #e2e8f0;
+    }
+    /* InvoiceDataGrid CSS değişkenleri — dark */
+    body.app-theme-dark .igd-root {
+        --igd-bg:           #080c17;
+        --igd-toolbar-bg:   rgba(255,255,255,.03);
+        --igd-thead-bg:     rgba(255,255,255,.04);
+        --igd-border:       rgba(255,255,255,.08);
+        --igd-row-border:   rgba(255,255,255,.05);
+        --igd-text:         #e2e8f0;
+        --igd-text-muted:   #8b98aa;
+        --igd-text-dim:     #64748b;
+        --igd-th-text:      #64748b;
+        --igd-accent:       #818cf8;
+        --igd-ok:           #34d399;
+        --igd-badge-ok-bg:  rgba(52,211,153,.12);
+        --igd-modal-bg:     #0d1323;
+        --igd-modal-border: rgba(255,255,255,.09);
+    }
+    /* Arama kutusu placeholder rengi */
+    .igd-root input::placeholder { color: var(--igd-text-muted); opacity: 1; }
+
+    /* Filtre çubuğu — tarih + select dark tema */
+    body.app-theme-dark .page-approval-queue .form-control,
+    body.app-theme-dark .page-approval-queue .form-select {
+        background-color: rgba(255,255,255,.05);
+        border-color:     rgba(255,255,255,.10);
+        color:            #cbd5e1;
+    }
+    body.app-theme-dark .page-approval-queue .form-control:focus,
+    body.app-theme-dark .page-approval-queue .form-select:focus {
+        background-color: rgba(255,255,255,.07);
+        border-color:     rgba(129,140,248,.45);
+        color:            #e2e8f0;
+        box-shadow:       0 0 0 3px rgba(129,140,248,.15);
+    }
+    body.app-theme-dark .page-approval-queue .form-select option {
+        background: #0d1323;
+        color: #cbd5e1;
+    }
+    /* Tarih girdisi — takvim popup'ı da karanlık */
+    body.app-theme-dark .page-approval-queue input[type="date"] {
+        color-scheme: dark;
+    }
+    /* Ayraç – */
+    body.app-theme-dark .page-approval-queue .text-muted.small {
+        color: #475569 !important;
+    }
+    /* InvoiceDataGrid hover + spin */
+    .igd-row:hover { background: var(--igd-toolbar-bg) !important; }
+    .igd-btn:hover { background: rgba(100,116,139,.12) !important; }
+    .igd-btn--view:hover    { background: rgba(99,102,241,.12) !important; color: var(--igd-accent) !important; }
+    .igd-btn--lines:hover   { background: rgba(100,116,139,.12) !important; color: var(--igd-text) !important; }
+    .igd-btn--dl:hover      { background: rgba(16,185,129,.12) !important; color: var(--igd-ok) !important; }
+    .igd-btn--close:hover   { background: rgba(100,116,139,.12) !important; }
+    .igd-btn--processed:hover   { background: rgba(16,185,129,.10) !important; }
+    .igd-btn--unprocessed:hover { background: rgba(100,116,139,.10) !important; }
+    .igd-btn:disabled { pointer-events: none; }
+    @@keyframes igd-spin { to { transform: rotate(360deg); } }
+    .igd-spin { animation: igd-spin .8s linear infinite; display: inline-block; }
+
+    /* Bootstrap tablosu (DocumentLines partial için) */
+    .invoice-lines-html table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .invoice-lines-html thead tr { background: rgba(0,0,0,.04); }
+    body.app-theme-dark .invoice-lines-html thead tr { background: rgba(255,255,255,.05); }
+    .invoice-lines-html th, .invoice-lines-html td {
+        padding: 6px 10px; border-bottom: 1px solid rgba(0,0,0,.07);
+        text-align: left; color: inherit;
+    }
+    body.app-theme-dark .invoice-lines-html th,
+    body.app-theme-dark .invoice-lines-html td {
+        border-bottom-color: rgba(255,255,255,.06);
+    }
+    .invoice-lines-html th { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .invoice-lines-html tbody tr:hover { background: rgba(0,0,0,.02); }
+    body.app-theme-dark .invoice-lines-html tbody tr:hover { background: rgba(255,255,255,.03); }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide">
+    <div class="integrator-dashboard__content">
+
+        <!-- Filtre Çubuğu -->
+        <header class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2" style="margin-top: 20px; margin-left: 20px; margin-right: 16px;">
+            <div class="d-inline-flex align-items-center gap-2 flex-wrap">
+                <form id="pullPortalForm" method="post" asp-action="PullFromPortal" class="d-inline-flex align-items-center gap-2 flex-wrap m-0">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="kind" value="@Model.Kind" />
+                    <input type="hidden" name="page" value="@listState.Page" />
+                    <input type="hidden" name="pageSize" value="@listState.PageSize" />
+                    <input type="date" id="dateFrom" name="dateFrom" class="form-control form-control-sm" value="@Model.DateFrom.ToString("yyyy-MM-dd")" style="width:130px;" />
+                    <span class="text-muted small">–</span>
+                    <input type="date" id="dateTo" name="dateTo" class="form-control form-control-sm" value="@Model.DateTo.ToString("yyyy-MM-dd")" style="width:130px;" />
+                    <button type="submit" class="btn btn-primary btn-sm">Logo Portaldan Güncelle</button>
+
+                    @{ var isProcessedVal = ViewData["IsProcessed"] as bool?; }
+                    <select id="isProcessedFilter" name="isProcessed" class="form-select form-select-sm" style="width:180px;" onchange="applyIsProcessedFilter()">
+                        <option value="" selected="@(!isProcessedVal.HasValue ? "selected" : null)">Tümü (İşlenen+Bekleyen)</option>
+                        <option value="true" selected="@(isProcessedVal == true ? "selected" : null)">Sadece İşlenenler</option>
+                        <option value="false" selected="@(isProcessedVal == false ? "selected" : null)">Sadece Bekleyenler</option>
+                    </select>
+                </form>
+            </div>
+            <div class="d-none d-md-block text-muted" style="font-size: 0.8rem;">
+                <span class="fw-semibold">Liste:</span> @Model.KindTitle
+                <span class="ms-2 text-secondary">@listState.TotalCount belge</span>
+            </div>
+        </header>
+
+        <!-- Portal yükleme animasyonu -->
+        <div class="pull-overlay" id="pullOverlay">
+            <div class="pull-overlay__card">
+                <div class="pull-overlay__video-wrap">
+                    <video class="pull-overlay__video"
+                           id="pullOverlayVideo"
+                           src="/video/loading.mp4"
+                           autoplay loop muted playsinline
+                           aria-hidden="true"></video>
+                </div>
+                <p class="pull-overlay__title">Portal'dan belgeler alınıyor</p>
+                <p class="pull-overlay__sub">Lütfen bekleyin…</p>
+            </div>
+        </div>
+
+        <!-- SmartBoard kart listesi -->
+        <div id="reactApprovalBoard" style="flex:1 1 auto; min-height:0; overflow:hidden; margin-top:8px;"></div>
+
+    </div>
+</section>
+
+@section Scripts {
+<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script>
+(function () {
+    // ── Portal yükleme animasyonu ─────────────────────────────
+    var pullForm  = document.getElementById('pullPortalForm');
+    var overlay   = document.getElementById('pullOverlay');
+    var ovVideo   = document.getElementById('pullOverlayVideo');
+    if (pullForm && overlay) {
+        pullForm.addEventListener('submit', function () {
+            overlay.classList.add('is-visible');
+            if (ovVideo) { ovVideo.currentTime = 0; ovVideo.play().catch(function(){}); }
+            pullForm.querySelectorAll('button[type="submit"]').forEach(function(b) { b.disabled = true; });
+        });
+    }
+
+    // ── SmartBoard mount ──────────────────────────────────────
+    var boardCfg = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.BoardConfig,
+        new System.Text.Json.JsonSerializerOptions {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        }));
+    var boardEl = document.getElementById('reactApprovalBoard');
+
+    function doMount() {
+        if (boardEl && window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+            window.CalibraHub.mountSmartBoard(boardEl, boardCfg);
+        } else if (boardEl) {
+            console.error('[Approval] mountSmartBoard fonksiyonu bulunamadı');
+        }
+    }
+
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        doMount();
+    } else {
+        document.addEventListener('DOMContentLoaded', doMount);
+    }
+
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted) location.reload();
+    });
+})();
+
+function applyIsProcessedFilter() {
+    var val      = document.getElementById('isProcessedFilter').value;
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo   = document.getElementById('dateTo').value;
+    var kindEl   = document.querySelector('input[name="kind"]');
+    var kind     = kindEl ? kindEl.value : '';
+    var url = new URL(window.location.href);
+    if (val)      url.searchParams.set('isProcessed', val);
+    else          url.searchParams.delete('isProcessed');
+    if (dateFrom) url.searchParams.set('dateFrom', dateFrom);
+    if (dateTo)   url.searchParams.set('dateTo', dateTo);
+    if (kind)     url.searchParams.set('kind', kind);
+    url.searchParams.delete('page');
+    window.location.href = url.toString();
+}
+</script>
+}

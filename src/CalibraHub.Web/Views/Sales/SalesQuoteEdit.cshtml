@@ -1,0 +1,1794 @@
+@model CalibraHub.Web.Models.Sales.SalesQuoteEditViewModel
+@{
+    ViewData["Title"] = Model.QuoteId.HasValue ? "Teklif Duzenle" : "Yeni Teklif";
+    ViewData["FormCode"] = "SALES_QUOTE_EDIT";
+    ViewData["BodyClass"] = "page-sales-quote-edit";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quotes</td><td style='padding:6px 8px;'>Satis teklifi master bilgileri (belge no, tarih, cari hesap, temsilci, durum)</td></tr>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quote_lines</td><td style='padding:6px 8px;'>Teklif satirlari (malzeme, miktar, birim, fiyat, kombinasyon)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quote_line_details</td><td style='padding:6px 8px;'>Satir detaylari (kombinasyon ozellik aciklamalari)</td></tr>"
+        + "</table>";
+    var editId = Model.QuoteId;
+}
+
+@section Styles {
+<style>
+    .page-sales-quote-edit .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-sales-quote-edit .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .workspace-frame-body.page-sales-quote-edit .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-sales-quote-edit .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+    /* Scrollable container */
+    .sqe-scroll-container {
+        flex: 1 1 auto; overflow-y: auto; padding: 16px;
+        display: flex; flex-direction: column; gap: 16px;
+    }
+    /* Card — artik <details> elementi, katlanir */
+    details.sqe-card {
+        background: var(--app-surface, #fff);
+        border: 1px solid var(--app-border, #d4dfeb);
+        border-radius: 12px;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+    /* Backwards compat: eski .sqe-card div'leri hala calissin */
+    div.sqe-card {
+        background: var(--app-surface, #fff);
+        border: 1px solid var(--app-border, #d4dfeb);
+        border-radius: 12px;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+        flex-shrink: 0;
+    }
+    summary.sqe-card__header,
+    .sqe-card__header {
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--app-border-light, #e9eef5);
+        display: flex; align-items: center; justify-content: space-between;
+        list-style: none;              /* Default marker kaldir */
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.15s ease;
+    }
+    summary.sqe-card__header::-webkit-details-marker { display: none; }
+    summary.sqe-card__header::marker { display: none; content: ''; }
+    summary.sqe-card__header:hover {
+        background: rgba(15, 23, 42, 0.025);
+    }
+    summary.sqe-card__header h3 {
+        margin: 0; font-size: 0.8rem; text-transform: uppercase;
+        letter-spacing: 0.04em; font-weight: 700;
+        color: var(--app-text-muted, #57677d);
+        display: flex; align-items: center; gap: 10px;
+    }
+    /* Chevron — <details> acildiginda 90 derece doner */
+    summary.sqe-card__header h3::before {
+        content: '';
+        display: inline-block;
+        width: 0; height: 0;
+        border-top: 4px solid transparent;
+        border-bottom: 4px solid transparent;
+        border-left: 5px solid currentColor;
+        transition: transform 0.2s ease;
+        opacity: 0.55;
+        flex-shrink: 0;
+    }
+    details.sqe-card[open] > summary.sqe-card__header h3::before {
+        transform: rotate(90deg);
+    }
+    /* Katlandığında header border-bottom'i kaybolmasin (acikken olsun) */
+    details.sqe-card:not([open]) > summary.sqe-card__header {
+        border-bottom-color: transparent;
+    }
+    .sqe-card__header h3 { /* old div header — chevron yok */
+        margin: 0; font-size: 0.8rem; text-transform: uppercase;
+        letter-spacing: 0.04em; font-weight: 700;
+        color: var(--app-text-muted, #57677d);
+    }
+    .sqe-card__body { padding: 16px 18px; }
+
+    /* Link widget — input + "Git" buton grubu (EAV link dataType) */
+    .sqe-link-group { display: flex; align-items: stretch; gap: 8px; }
+    .sqe-link-group > .sqe-input,
+    .sqe-link-group > input[type="text"] { flex: 1 1 auto; min-width: 0; }
+    .sqe-link-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        gap: 6px; padding: 0 14px; min-height: 34px;
+        border-radius: 10px; font-size: .78rem; font-weight: 600;
+        color: #7c3aed; text-decoration: none;
+        background: rgba(139, 92, 246, 0.12);
+        border: 1px solid rgba(139, 92, 246, 0.4);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        transition: all .18s ease; cursor: pointer; flex-shrink: 0;
+    }
+    .sqe-link-btn:hover:not(.is-disabled) {
+        background: rgba(139, 92, 246, 0.22);
+        border-color: rgba(139, 92, 246, 0.6);
+        color: #5b21b6; transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.18);
+    }
+    .sqe-link-btn.is-disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
+    body.app-theme-dark .sqe-link-btn {
+        color: #c4b5fd;
+        background: rgba(139, 92, 246, 0.14);
+        border-color: rgba(139, 92, 246, 0.45);
+    }
+    body.app-theme-dark .sqe-link-btn:hover:not(.is-disabled) {
+        background: rgba(139, 92, 246, 0.25);
+        color: #e9d5ff;
+    }
+
+    /* Lookup widget (EAV lookup dataType) */
+    .sqe-lookup-group { display: flex; align-items: stretch; gap: 8px; position: relative; }
+    .sqe-lookup-group > .sqe-input,
+    .sqe-lookup-group > input[type="text"] { flex: 1 1 auto; min-width: 0; }
+    .sqe-lookup-btn, .sqe-lookup-clear {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 34px; min-height: 34px; padding: 0 10px;
+        border-radius: 10px; cursor: pointer; flex-shrink: 0;
+        border: 1px solid rgba(245, 158, 11, 0.45);
+        background: rgba(245, 158, 11, 0.12);
+        color: #d97706;
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        transition: all .18s ease;
+    }
+    .sqe-lookup-btn:hover:not(:disabled) {
+        background: rgba(245, 158, 11, 0.22);
+        border-color: rgba(245, 158, 11, 0.65);
+        transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+    }
+    .sqe-lookup-btn:disabled { opacity: .35; cursor: not-allowed; }
+    .sqe-lookup-clear {
+        background: rgba(244, 63, 94, 0.08);
+        border-color: rgba(244, 63, 94, 0.4);
+        color: #e11d48;
+    }
+    .sqe-lookup-clear:hover {
+        background: rgba(244, 63, 94, 0.18);
+        border-color: rgba(244, 63, 94, 0.6);
+    }
+    body.app-theme-dark .sqe-lookup-btn {
+        color: #fcd34d;
+        background: rgba(245, 158, 11, 0.14);
+    }
+    body.app-theme-dark .sqe-lookup-clear { color: #fda4af; }
+
+    .sqe-lookup-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+        animation: sqeLookupFadeIn .15s ease-out;
+    }
+    @@keyframes sqeLookupFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .sqe-lookup-modal {
+        width: min(900px, 95vw); max-height: 80vh;
+        display: flex; flex-direction: column;
+        background: var(--app-surface, #ffffff);
+        border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 16px;
+        box-shadow: 0 24px 72px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+        animation: sqeLookupSlideIn .2s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    @@keyframes sqeLookupSlideIn {
+        from { transform: translateY(12px) scale(0.98); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .sqe-lookup-modal header {
+        padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+        color: #d97706;
+    }
+    .sqe-lookup-modal header input {
+        flex: 1; min-width: 0;
+        background: var(--app-muted-surface, #f8fafc);
+        border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 8px; padding: 8px 12px; color: inherit;
+        font-size: .85rem; outline: none;
+    }
+    .sqe-lookup-modal header input:focus {
+        border-color: rgba(245, 158, 11, 0.55);
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+    }
+    .sqe-lookup-close {
+        background: transparent; border: none; color: inherit; cursor: pointer;
+        padding: 6px; border-radius: 6px; transition: background .15s;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .sqe-lookup-close:hover { background: rgba(0, 0, 0, 0.06); }
+    .sqe-lookup-error {
+        padding: 10px 18px; background: rgba(239, 68, 68, 0.08);
+        color: #b91c1c; font-size: .75rem;
+        border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .sqe-lookup-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+    .sqe-lookup-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .sqe-lookup-table thead th {
+        position: sticky; top: 0; z-index: 1;
+        background: var(--app-muted-surface, #f8fafc);
+        text-align: left; padding: 10px 14px;
+        font-weight: 700; text-transform: uppercase;
+        font-size: .68rem; letter-spacing: .04em; color: #b45309;
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+    }
+    .sqe-lookup-table tbody tr {
+        cursor: pointer;
+        border-bottom: 1px solid var(--app-border, #f1f5f9);
+        transition: background .12s;
+    }
+    .sqe-lookup-table tbody tr:hover { background: rgba(245, 158, 11, 0.09); }
+    .sqe-lookup-table td { padding: 9px 14px; color: var(--app-text, #334155); }
+    .sqe-lookup-empty, .sqe-lookup-sentinel {
+        text-align: center; padding: 20px;
+        color: var(--app-text-muted, #94a3b8); font-size: .75rem;
+    }
+    .sqe-lookup-sentinel span { display: inline-flex; align-items: center; gap: 6px; }
+    .sqe-lookup-sentinel .spin { animation: sqeLookupSpin .9s linear infinite; }
+    @@keyframes sqeLookupSpin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+    .sqe-lookup-footer {
+        padding: 10px 18px; font-size: .7rem; opacity: .6;
+        border-top: 1px solid var(--app-border, #e2e8f0);
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       Grid (Alt Tablo / Master-Detail) widget — Faz E
+       Card-based row list + portal modal with embedded renderer
+       ══════════════════════════════════════════════════════════ */
+    .sqe-field--grid { grid-column: 1 / -1; }
+
+    .sqe-grid-wrap {
+        border-radius: 14px;
+        background: var(--app-muted-surface, #f8fafc);
+        border: 1px solid var(--app-border, #e2e8f0);
+        padding: 14px 16px 16px;
+    }
+    .sqe-grid-header {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px; margin-bottom: 12px;
+    }
+    .sqe-grid-header__title {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.04em; color: #2563eb;
+    }
+    .sqe-grid-add-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 14px; min-height: 34px;
+        border-radius: 10px; font-size: 0.78rem; font-weight: 600;
+        color: #1d4ed8;
+        background: rgba(59, 130, 246, 0.12);
+        border: 1px solid rgba(59, 130, 246, 0.45);
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        transition: all 0.18s ease; cursor: pointer;
+    }
+    .sqe-grid-add-btn:hover:not(:disabled) {
+        background: rgba(59, 130, 246, 0.22);
+        border-color: rgba(59, 130, 246, 0.65);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(59, 130, 246, 0.18);
+    }
+    .sqe-grid-add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .sqe-grid-error {
+        padding: 10px 14px; margin-bottom: 10px;
+        background: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.25);
+        border-radius: 10px; color: #b91c1c; font-size: 0.75rem;
+    }
+    .sqe-grid-empty {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 6px; padding: 32px 16px;
+        border-radius: 12px;
+        border: 1.5px dashed var(--app-border, #e2e8f0);
+        color: var(--app-text-muted, #94a3b8); font-size: 0.82rem;
+    }
+    .sqe-grid-empty small { font-size: 0.7rem; opacity: 0.7; }
+    .sqe-grid-rows { display: flex; flex-direction: column; gap: 10px; }
+    .sqe-grid-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center; gap: 14px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: var(--app-surface, #ffffff);
+        border: 1px solid var(--app-border, #e2e8f0);
+        transition: all 0.18s ease;
+    }
+    .sqe-grid-row:hover {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 18px rgba(59, 130, 246, 0.1);
+    }
+    .sqe-grid-row__index {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 28px; height: 28px;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.14);
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        color: #1d4ed8; font-size: 0.7rem; font-weight: 700;
+    }
+    .sqe-grid-row__cells {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px 18px; min-width: 0;
+    }
+    .sqe-grid-row__cell { display: flex; flex-direction: column; min-width: 0; }
+    .sqe-grid-row__label {
+        font-size: 0.62rem; text-transform: uppercase;
+        letter-spacing: 0.04em; font-weight: 700;
+        color: var(--app-text-muted, #94a3b8); margin-bottom: 2px;
+    }
+    .sqe-grid-row__value {
+        font-size: 0.82rem; color: var(--app-text, #1e293b);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .sqe-grid-row__actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .sqe-grid-row__edit, .sqe-grid-row__delete {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px;
+        border-radius: 8px; cursor: pointer;
+        background: #ffffff;
+        border: 1px solid var(--app-border, #e2e8f0);
+        color: #64748b;
+        transition: all 0.15s;
+    }
+    .sqe-grid-row__edit:hover {
+        background: rgba(59, 130, 246, 0.15);
+        border-color: rgba(59, 130, 246, 0.5);
+        color: #1d4ed8;
+    }
+    .sqe-grid-row__delete:hover {
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #be123c;
+    }
+
+    .sqe-grid-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+        animation: sqeGridFadeIn 0.15s ease-out;
+    }
+    @@keyframes sqeGridFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .sqe-grid-modal {
+        width: min(780px, 95vw); max-height: 85vh;
+        display: flex; flex-direction: column;
+        background: var(--app-surface, #ffffff);
+        border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 16px;
+        box-shadow: 0 24px 72px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+        animation: sqeGridSlide 0.22s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    @@keyframes sqeGridSlide {
+        from { transform: translateY(16px) scale(0.97); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    /* Zorunlu alan validasyonu — kirmizi cerceve + shake */
+    .sqe-input.is-invalid, .sqe-select.is-invalid {
+        border-color: #ef4444 !important;
+        background: rgba(239,68,68,.06) !important;
+        box-shadow: 0 0 0 3px rgba(239,68,68,.2) !important;
+        animation: sqeShake 0.4s cubic-bezier(0.36,0.07,0.19,0.97);
+    }
+    @@keyframes sqeShake {
+        10%, 90% { transform: translateX(-2px); }
+        20%, 80% { transform: translateX(3px); }
+        30%, 50%, 70% { transform: translateX(-4px); }
+        40%, 60% { transform: translateX(4px); }
+    }
+    .sqe-grid-modal header {
+        padding: 16px 20px; display: flex; align-items: center; gap: 10px;
+        border-bottom: 1px solid var(--app-border, #e2e8f0);
+        color: #2563eb;
+    }
+    .sqe-grid-modal__title {
+        flex: 1; font-size: 0.88rem; font-weight: 700;
+        color: var(--app-text, #1e293b);
+    }
+    .sqe-grid-modal__close {
+        background: transparent; border: none; color: inherit;
+        cursor: pointer; padding: 6px; border-radius: 6px;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: background 0.15s;
+    }
+    .sqe-grid-modal__close:hover { background: rgba(0, 0, 0, 0.06); }
+    .sqe-grid-modal__body { flex: 1; overflow-y: auto; padding: 18px 20px; }
+    .sqe-grid-modal__footer {
+        padding: 14px 20px; display: flex; justify-content: flex-end; gap: 10px;
+        border-top: 1px solid var(--app-border, #e2e8f0);
+    }
+    .sqe-grid-modal__cancel, .sqe-grid-modal__confirm {
+        padding: 8px 18px; min-height: 36px;
+        border-radius: 10px; cursor: pointer;
+        font-size: 0.78rem; font-weight: 600;
+        transition: all 0.15s;
+    }
+    .sqe-grid-modal__cancel {
+        background: #ffffff;
+        border: 1px solid var(--app-border, #e2e8f0);
+        color: #64748b;
+    }
+    .sqe-grid-modal__cancel:hover { background: #f1f5f9; }
+    .sqe-grid-modal__confirm {
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(59, 130, 246, 0.55);
+        color: #1d4ed8;
+    }
+    .sqe-grid-modal__confirm:hover {
+        background: rgba(59, 130, 246, 0.25);
+        border-color: rgba(59, 130, 246, 0.75);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(59, 130, 246, 0.2);
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       Rule Engine (Faz G) — visibility / disabled / formula / error
+       ══════════════════════════════════════════════════════════ */
+    .sqe-field--readonly .sqe-field__readonly-wrap {
+        opacity: 0.62;
+        cursor: not-allowed;
+        position: relative;
+    }
+    .sqe-field--readonly .sqe-field__readonly-wrap::after {
+        content: '';
+        position: absolute; inset: 0;
+        border-radius: 8px;
+        background: repeating-linear-gradient(
+            45deg,
+            rgba(15, 23, 42, 0.02),
+            rgba(15, 23, 42, 0.02) 8px,
+            rgba(15, 23, 42, 0.04) 8px,
+            rgba(15, 23, 42, 0.04) 16px
+        );
+        pointer-events: none;
+    }
+    .sqe-field--formula .sqe-label::after {
+        content: ' ƒ';
+        display: inline-block;
+        margin-left: 4px;
+        padding: 1px 6px;
+        border-radius: 6px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        font-family: 'Courier New', monospace;
+        color: #7c3aed;
+        background: rgba(139, 92, 246, 0.12);
+        border: 1px solid rgba(139, 92, 246, 0.32);
+    }
+    .sqe-rule-error {
+        display: flex; align-items: flex-start; gap: 5px;
+        margin-top: 4px; padding: 5px 9px;
+        font-size: 0.7rem; line-height: 1.35;
+        color: #b91c1c;
+        background: rgba(239, 68, 68, 0.06);
+        border: 1px solid rgba(239, 68, 68, 0.28);
+        border-radius: 8px;
+    }
+    .sqe-rule-error::before {
+        content: '⚠'; flex-shrink: 0;
+        color: #dc2626; font-size: 0.78rem;
+    }
+    .sqe-rule-cycle {
+        padding: 18px 22px;
+        background: rgba(239, 68, 68, 0.07);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 12px;
+        color: #991b1b;
+    }
+    .sqe-rule-cycle strong { color: #dc2626; }
+    .sqe-rule-cycle code {
+        display: inline-block; margin-top: 4px;
+        padding: 3px 9px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #7f1d1d;
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+    }
+    /* 2-column form grid */
+    .sqe-form-grid {
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
+    }
+    .sqe-form-field label.sqe-label {
+        display: block; margin-bottom: 5px; font-size: 0.8rem;
+        font-weight: 600; color: var(--app-text-muted, #64748b);
+    }
+    .sqe-form-field--full { grid-column: 1 / -1; }
+
+    /* ── Horizontal form (etiket yanında alan) ── */
+    .sqe-hform {
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 16px 20px; max-width: 600px;
+    }
+    .sqe-hrow {
+        display: flex; align-items: center; gap: 12px; min-height: 32px;
+    }
+    .sqe-hlabel {
+        flex: 0 0 120px; text-align: left;
+        font-size: 0.84rem; font-weight: 600;
+        color: var(--app-text, #334155);
+        white-space: nowrap; user-select: none;
+    }
+    body.app-theme-dark .sqe-hlabel {
+        color: rgba(255,255,255,.7);
+    }
+    .sqe-hinput {
+        flex: 1; max-width: 280px;
+    }
+    .sqe-hinput[type="date"] {
+        max-width: 160px;
+    }
+    .sqe-hlabel--link {
+        cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
+        text-decoration-color: rgba(99,102,241,.4);
+    }
+    .sqe-hlabel--link:hover {
+        color: #6366f1; text-decoration-color: #6366f1;
+    }
+    /* Lines container */
+    .sqe-lines-container {
+        display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px;
+    }
+    /* Line item inner card */
+    .sqe-line-card {
+        border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 10px; background: var(--app-muted-surface, #f8fafc);
+        overflow: hidden;
+    }
+    .sqe-line-card__header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 6px 12px; border-bottom: 1px solid var(--app-border-light, #e9eef5);
+        background: #f1f5f9;
+    }
+    .sqe-line-card__num { font-size: 0.78rem; font-weight: 700; color: #64748b; }
+    .sqe-line-card__body { padding: 10px 12px; }
+    .sqe-line-card__row { display: flex; gap: 10px; align-items: flex-end; }
+    .sqe-line-card__row + .sqe-line-card__row { margin-top: 8px; }
+    .sqe-line-card__field { flex: 1 1 0; min-width: 0; }
+    .sqe-line-card__field--wide { flex: 2 1 0; }
+    .sqe-line-card__field label {
+        display: block; font-size: 0.72rem; font-weight: 600;
+        color: #94a3b8; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .sqe-line-card__field--total span {
+        display: block; font-size: 0.88rem; font-weight: 700; color: #1e40af;
+        padding: 6px 0; text-align: right;
+    }
+    /* Satir ekle butonu */
+    .sqe-add-line-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+        border: 1.5px solid #bfdbfe; background: #eff6ff; color: #3b82f6;
+        transition: all .16s; flex-shrink: 0;
+    }
+    .sqe-add-line-btn:hover { background: #dbeafe; border-color: #93c5fd; color: #2563eb; }
+    /* Satir sil butonu */
+    .sq-btn-del {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+        border: 1px solid #fecaca; background: #fff5f5; color: #dc2626;
+        transition: all .14s; flex-shrink: 0;
+    }
+    .sq-btn-del:hover { background: #fee2e2; border-color: #f87171; }
+    /* Kombinasyon butonu */
+    .sq-ln-combobtn {
+        display: none; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+        border: 1px solid #ddd6fe; background: #f5f3ff; color: #7c3aed;
+        font-size: 0.72rem; font-weight: 700;
+        transition: all .14s;
+    }
+    .sq-ln-combobtn:hover { background: #ede9fe; border-color: #c4b5fd; }
+    .sq-ln-combdisplay { font-size: 0.7rem; color: #7c3aed; display: none; margin-top: 2px; }
+    /* Toplamlar */
+    .sqe-totals { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 10px 8px; font-size: 0.84rem; }
+    .sqe-total-row { display: flex; gap: 16px; align-items: center; }
+    .sqe-total-label { color: #64748b; font-weight: 600; min-width: 120px; text-align: right; }
+    .sqe-total-value { font-weight: 700; min-width: 100px; text-align: right; }
+    .sqe-grand-total { font-size: 1rem; color: #1d4ed8; }
+    /* Status badge */
+    .sqe-status-badge { font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 12px; margin-left: 8px; }
+    .sqe-status-Draft { background: #f1f5f9; color: #475569; }
+    .sqe-status-Sent { background: #dbeafe; color: #1d4ed8; }
+    .sqe-status-Approved { background: #dcfce7; color: #166534; }
+    .sqe-status-Rejected { background: #fee2e2; color: #991b1b; }
+
+    /* ══════════════════════════════════════════════════════════════
+       Dark tema — Glassmorphism override'lari
+       ══════════════════════════════════════════════════════════════
+       Sayfa React Shell icinde iframe olarak acildiginda body'ye
+       `app-theme-dark` class'i gelir. Bu blok eski light stilleri
+       ezer ve mesh + glass gorunumune gecirir. */
+    body.app-theme-dark.page-sales-quote-edit,
+    body.app-theme-dark .sqe-scroll-container {
+        background-color: #0a0d17;
+        background-image:
+            radial-gradient(at 12% 8%, rgba(99,102,241,0.18) 0px, transparent 50%),
+            radial-gradient(at 88% 12%, rgba(14,165,233,0.12) 0px, transparent 50%),
+            radial-gradient(at 50% 100%, rgba(168,85,247,0.12) 0px, transparent 50%),
+            radial-gradient(at 95% 85%, rgba(20,184,166,0.08) 0px, transparent 50%);
+    }
+    body.app-theme-dark details.sqe-card,
+    body.app-theme-dark div.sqe-card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.25);
+    }
+    body.app-theme-dark summary.sqe-card__header,
+    body.app-theme-dark .sqe-card__header {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: transparent;
+    }
+    body.app-theme-dark summary.sqe-card__header:hover {
+        background: rgba(255, 255, 255, 0.025);
+    }
+    body.app-theme-dark summary.sqe-card__header h3,
+    body.app-theme-dark .sqe-card__header h3 {
+        color: rgba(255, 255, 255, 0.6);
+    }
+    body.app-theme-dark details.sqe-card:not([open]) > summary.sqe-card__header {
+        border-bottom-color: transparent;
+    }
+    body.app-theme-dark .sqe-form-field label.sqe-label {
+        color: rgba(255, 255, 255, 0.45);
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.68rem;
+        letter-spacing: 0.05em;
+    }
+    /* Tum form input/select/textarea'lar — glass effect */
+    body.app-theme-dark .sqe-card input.form-control,
+    body.app-theme-dark .sqe-tab-pane input.form-control,
+    body.app-theme-dark .sqe-card select.form-select,
+    body.app-theme-dark .sqe-tab-pane select.form-select,
+    body.app-theme-dark .sqe-card textarea.form-control,
+    body.app-theme-dark .sqe-tab-pane textarea.form-control,
+    body.app-theme-dark .entity-form-toolbar select.form-select {
+        background: rgba(255, 255, 255, 0.04) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: rgba(255, 255, 255, 0.9) !important;
+        transition: all 0.18s ease;
+    }
+    body.app-theme-dark .sqe-card input.form-control::placeholder,
+    body.app-theme-dark .sqe-tab-pane input.form-control::placeholder,
+    body.app-theme-dark .sqe-card textarea.form-control::placeholder,
+    body.app-theme-dark .sqe-tab-pane textarea.form-control::placeholder {
+        color: rgba(255, 255, 255, 0.25);
+    }
+    body.app-theme-dark .sqe-card input.form-control:focus,
+    body.app-theme-dark .sqe-tab-pane input.form-control:focus,
+    body.app-theme-dark .sqe-card select.form-select:focus,
+    body.app-theme-dark .sqe-tab-pane select.form-select:focus,
+    body.app-theme-dark .sqe-card textarea.form-control:focus,
+    body.app-theme-dark .sqe-tab-pane textarea.form-control:focus {
+        background: rgba(255, 255, 255, 0.07) !important;
+        border-color: rgba(99, 102, 241, 0.55) !important;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+        color: #fff !important;
+        outline: none;
+    }
+    /* Readonly inputs (Teklif No gibi) — daha sonuk */
+    body.app-theme-dark .sqe-card input.form-control[readonly],
+    body.app-theme-dark .sqe-tab-pane input.form-control[readonly] {
+        background: rgba(255, 255, 255, 0.02) !important;
+        color: rgba(255, 255, 255, 0.45) !important;
+        cursor: default;
+    }
+    /* Native select dropdown oklarini beyaz yap */
+    body.app-theme-dark .sqe-card select.form-select,
+    body.app-theme-dark .sqe-tab-pane select.form-select {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff80' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.5rem center !important;
+        background-size: 14px 14px !important;
+        padding-right: 28px !important;
+    }
+    body.app-theme-dark .sqe-card select.form-select option,
+    body.app-theme-dark .sqe-tab-pane select.form-select option {
+        background: #0c0f1a;
+        color: #fff;
+    }
+
+    /* Totals */
+    body.app-theme-dark .sqe-totals {
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding-top: 14px;
+        margin-top: 4px;
+    }
+    body.app-theme-dark .sqe-total-label { color: rgba(255, 255, 255, 0.45); }
+    body.app-theme-dark .sqe-total-value {
+        color: rgba(255, 255, 255, 0.85);
+        font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Mono', monospace;
+        font-variant-numeric: tabular-nums;
+    }
+    body.app-theme-dark .sqe-grand-total {
+        color: #fbbf24;
+        font-size: 1.05rem;
+    }
+    body.app-theme-dark .sqe-grand-total .sqe-total-value {
+        color: #fbbf24;
+    }
+
+    /* Status badges — dark tema */
+    body.app-theme-dark .sqe-status-Draft { background: rgba(100, 116, 139, 0.2); color: #cbd5e1; border: 1px solid rgba(100, 116, 139, 0.3); }
+    body.app-theme-dark .sqe-status-Sent { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.35); }
+    body.app-theme-dark .sqe-status-Approved { background: rgba(34, 197, 94, 0.2); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.35); }
+    body.app-theme-dark .sqe-status-Rejected { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.35); }
+    body.app-theme-dark .sqe-status-Cancelled { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
+
+    /* ── Aksiyon seridi (sabit, tabsheet altinda) ── */
+    .sqe-action-bar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 16px; flex-shrink: 0;
+        background: rgba(15,15,26,0.85); border-bottom: 1px solid rgba(255,255,255,0.06);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    }
+    body.app-theme-light .sqe-action-bar {
+        background: rgba(248,250,252,0.92); border-bottom-color: #e2e8f0;
+    }
+    .sqe-action-bar .sqe-meta {
+        margin-left: auto; font-size: 0.72rem; color: rgba(255,255,255,0.55); font-weight: 500;
+    }
+    body.app-theme-light .sqe-action-bar .sqe-meta { color: #94a3b8; }
+    .sqe-action-bar .sqe-meta strong { color: rgba(255,255,255,0.7); font-weight: 700; }
+    body.app-theme-light .sqe-action-bar .sqe-meta strong { color: #334155; }
+
+    /* ── Sol tab + sag icerik body ── */
+    .sqe-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .sqe-tab-nav {
+        width: 180px; flex-shrink: 0;
+        border-right: 1px solid var(--app-border,#dde3ee);
+        background: var(--app-surface,#fff);
+        padding: 10px 8px;
+        display: flex; flex-direction: column;
+        padding: 8px 0; overflow-y: auto;
+    }
+    body.app-theme-dark .sqe-tab-nav {
+        background: rgba(255,255,255,.02); border-right-color: rgba(255,255,255,.06);
+    }
+    .sqe-tab-btn {
+        display: block; width: 100%; text-align: left;
+        padding: 8px 14px; font-size: 0.8rem; font-weight: 600;
+        color: var(--app-text-muted,#64748b); background: none;
+        border: 1px solid transparent; border-radius: 8px;
+        margin-bottom: 2px;
+        border-left: 3px solid transparent; cursor: pointer;
+        transition: color .12s, background .12s, border-color .12s;
+    }
+    .sqe-tab-btn:hover {
+        background: var(--app-muted-surface,#f3f5f7); color: var(--app-text,#333);
+        border-color: var(--app-border,#e2e8f0);
+    }
+    body.app-theme-dark .sqe-tab-btn:hover {
+        background: rgba(255,255,255,.06); color: #e2e8f0;
+        border-color: rgba(255,255,255,.1);
+    }
+    .sqe-tab-btn.is-active {
+        color: var(--theme-accent,#6366f1);
+        background: var(--theme-accent-soft,rgba(99,102,241,.08));
+        border-color: rgba(99,102,241,.25);
+        box-shadow: 0 1px 4px rgba(99,102,241,.12);
+    }
+    body.app-theme-dark .sqe-tab-btn.is-active {
+        color: #a5b4fc;
+        background: rgba(99,102,241,.12);
+        border-color: rgba(129,140,248,.3);
+        box-shadow: 0 1px 6px rgba(99,102,241,.15);
+    }
+    .sqe-tab-content {
+        flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 16px 20px;
+    }
+    .sqe-tab-pane { display: none; }
+    .sqe-tab-pane.is-active { display: block; }
+
+    .sqe-header { display: none; }
+    .sqe-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 14px; border-radius: 10px; border: 1px solid;
+        font-size: 0.8rem; font-weight: 600; cursor: pointer;
+        transition: all 0.15s ease; background: transparent;
+        text-decoration: none;
+    }
+    .sqe-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .sqe-btn--primary {
+        background: #6366f1; border-color: #4f46e5; color: #fff;
+    }
+    .sqe-btn--primary:hover { background: #4f46e5; color: #fff; }
+    .sqe-btn--secondary {
+        background: rgba(255,255,255,0.06);
+        border-color: rgba(255,255,255,0.12);
+        color: rgba(255,255,255,0.75);
+    }
+    body.app-theme-light .sqe-btn--secondary {
+        background: #fff; border-color: #e2e8f0; color: #475569;
+    }
+    .sqe-btn--secondary:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    body.app-theme-light .sqe-btn--secondary:hover { background: #f1f5f9; color: #1e293b; }
+    .sqe-btn--danger {
+        background: rgba(239,68,68,0.1);
+        border-color: rgba(239,68,68,0.3);
+        color: #f87171;
+    }
+    body.app-theme-light .sqe-btn--danger { color: #dc2626; }
+    .sqe-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+
+    /* Entity form toolbar — Kaydet / Listeye Don / Sil (legacy, kullanilmiyor) */
+    body.app-theme-dark .entity-form-toolbar {
+        background: rgba(255, 255, 255, 0.03);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+    }
+    body.app-theme-dark .entity-form-toolbar .btn.integrator-btn-secondary,
+    body.app-theme-dark .entity-form-toolbar .btn.integrator-btn-tertiary {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: rgba(255, 255, 255, 0.75) !important;
+    }
+    body.app-theme-dark .entity-form-toolbar .btn.integrator-btn-secondary:hover,
+    body.app-theme-dark .entity-form-toolbar .btn.integrator-btn-tertiary:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #fff !important;
+    }
+    body.app-theme-dark .entity-form-toolbar .btn.integrator-btn-tertiary:not(:disabled) {
+        color: rgba(248, 113, 113, 0.9) !important;
+        border-color: rgba(248, 113, 113, 0.3) !important;
+    }
+    body.app-theme-dark .entity-form-toolbar .btn.integrator-btn-tertiary:not(:disabled):hover {
+        background: rgba(248, 113, 113, 0.1) !important;
+        color: #fca5a5 !important;
+    }
+
+    /* ── Yukleme maskesi — edit modunda alan flashini engeller ── */
+    .sqe-loading-mask {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        pointer-events: none;
+        border-radius: inherit;
+        transition: opacity 0.15s ease;
+    }
+    body.app-theme-dark  .sqe-loading-mask { background: rgba(15,23,42,0.6);  }
+    body.app-theme-light .sqe-loading-mask { background: rgba(248,250,252,0.75); }
+    .sqe-loading-mask.is-hidden { opacity: 0; pointer-events: none; }
+    .sqe-loading-mask__spinner {
+        width: 18px; height: 18px;
+        border-radius: 50%;
+        border: 2px solid rgba(99,102,241,0.25);
+        border-top-color: #6366f1;
+        animation: sqe-spin 0.7s linear infinite;
+    }
+    .sqe-loading-mask__text {
+        font-size: 12px;
+        font-weight: 500;
+    }
+    body.app-theme-dark  .sqe-loading-mask__text { color: rgba(255,255,255,0.5); }
+    body.app-theme-light .sqe-loading-mask__text { color: #64748b; }
+    @@keyframes sqe-spin { to { transform: rotate(360deg); } }
+    /* Maskenin konumlanabilmesi icin ebeveyni relative olmali */
+    .sqe-body { position: relative; }
+
+    /* Notlar textarea — icerige gore buyur, ic scroll olmaz */
+    .sqe-notes-area {
+        display: block;
+        width: 100%;
+        resize: vertical;
+        overflow-y: hidden;   /* ic scroll yok → scroll olaylari uste gider */
+        min-height: 120px;
+        line-height: 1.6;
+        transition: min-height 0.1s;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+
+    <!-- Aksiyon Seridi — sabit -->
+    <div class="sqe-action-bar" data-no-proxy>
+        <button type="button" class="sqe-btn sqe-btn--primary" onclick="sqSave()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Kaydet
+        </button>
+        <a href="/Sales/SalesQuotes" class="sqe-btn sqe-btn--secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Listeye Don
+        </a>
+        <button type="button" class="sqe-btn sqe-btn--danger" id="sqBtnDelete" disabled onclick="sqDelete()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            Sil
+        </button>
+        <select id="sqStatusSelect" class="form-select form-select-sm" style="max-width:140px;display:none;" onchange="sqChangeStatus()">
+            <option value="Draft">Taslak</option>
+            <option value="Sent">Gonderildi</option>
+            <option value="Approved">Onaylandi</option>
+            <option value="Rejected">Reddedildi</option>
+            <option value="Cancelled">Iptal</option>
+        </select>
+        <span id="sqStatusBadge"></span>
+        <span class="sqe-meta" id="sqMeta"></span>
+    </div>
+
+    <!-- Sol tab + sag icerik -->
+    <div class="sqe-body">
+
+        <!-- Yukleme maskesi: edit modunda veri gelene kadar bos alan flashini onler -->
+        <div id="sqLoadingMask" class="sqe-loading-mask@(editId.HasValue ? "" : " is-hidden")" aria-hidden="true">
+            <div class="sqe-loading-mask__spinner"></div>
+            <span class="sqe-loading-mask__text">Yukleniyor…</span>
+        </div>
+
+        <nav class="sqe-tab-nav">
+            <button type="button" class="sqe-tab-btn is-active" data-sqe-tab-btn="general" onclick="sqSwitchTab('general')">Genel Bilgiler</button>
+            <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="lines" onclick="sqSwitchTab('lines')">Kalem Bilgileri</button>
+            <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="conditions" onclick="sqSwitchTab('conditions')">Kosullar</button>
+            <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="notes" onclick="sqSwitchTab('notes')">Notlar</button>
+            <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="widgets" onclick="sqSwitchTab('widgets')">Ek Alanlar</button>
+        </nav>
+        <div class="sqe-tab-content">
+
+        <!-- TAB 1: Genel Bilgiler -->
+        <div class="sqe-tab-pane is-active" data-sqe-pane="general">
+            <div class="sqe-hform">
+                <div class="sqe-hrow">
+                    <label class="sqe-hlabel">Teklif No</label>
+                    <input id="sqQuoteNumber" class="form-control form-control-sm sqe-hinput" readonly placeholder="Kaydedildiginde olusturulur" />
+                </div>
+                <div class="sqe-hrow">
+                    <label class="sqe-hlabel">Tarih</label>
+                    <input id="sqQuoteDate" type="date" class="form-control form-control-sm sqe-hinput" />
+                </div>
+                <div class="sqe-hrow">
+                    <label class="sqe-hlabel">Gecerlilik</label>
+                    <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" />
+                </div>
+                <div class="sqe-hrow">
+                    <label class="sqe-hlabel">Para Birimi</label>
+                    <select id="sqCurrency" class="form-select form-select-sm sqe-hinput" style="max-width:120px;">
+                        <option value="TRY">TRY</option><option value="USD">USD</option><option value="EUR">EUR</option>
+                    </select>
+                </div>
+                <div class="sqe-hrow">
+                    <label class="sqe-hlabel sqe-hlabel--link" title="Cari karta gitmek icin cift tiklayin" ondblclick="sqGoToCustomerCard()">Cari Kod</label>
+                    <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput" readonly placeholder="Rehberden seciniz" />
+                    <input type="hidden" id="sqCustomerId" />
+                </div>
+                <div class="sqe-hrow">
+                    <label class="sqe-hlabel">Cari Isim</label>
+                    <input type="text" id="sqCustomerName" class="form-control form-control-sm sqe-hinput" readonly placeholder="Cari secildiginde otomatik dolar" />
+                </div>
+                <div class="sqe-hrow">
+                    <label class="sqe-hlabel">Temsilci</label>
+                    <select id="sqSalesRepId" class="form-select form-select-sm sqe-hinput"><option value="">Seciniz</option></select>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: Kalem Bilgileri -->
+        <div class="sqe-tab-pane" data-sqe-pane="lines">
+            <div id="reactSalesQuoteLineGrid" style="min-height:220px;"></div>
+            <div class="sqe-totals">
+                <div class="sqe-total-row"><span class="sqe-total-label">Ara Toplam:</span><span class="sqe-total-value" id="sqSubTotal">0,00</span></div>
+                <div class="sqe-total-row"><span class="sqe-total-label">Iskonto %</span><input id="sqDiscountRate" type="number" class="form-control form-control-sm" value="0" min="0" max="100" step="0.01" style="width:70px;text-align:right;" onchange="sqRecalc()" /><span class="sqe-total-value" id="sqDiscountAmount">0,00</span></div>
+                <div class="sqe-total-row"><span class="sqe-total-label">KDV %</span><input id="sqTaxRate" type="number" class="form-control form-control-sm" value="20" min="0" max="100" step="0.01" style="width:70px;text-align:right;" onchange="sqRecalc()" /><span class="sqe-total-value" id="sqTaxAmount">0,00</span></div>
+                <div class="sqe-total-row sqe-grand-total"><span class="sqe-total-label">GENEL TOPLAM:</span><span class="sqe-total-value" id="sqGrandTotal">0,00</span></div>
+            </div>
+        </div>
+
+        <!-- TAB 3: Kosullar -->
+        <div class="sqe-tab-pane" data-sqe-pane="conditions">
+            <div class="sqe-form-grid">
+                <div class="sqe-form-field sqe-form-field--full">
+                    <label class="sqe-label">Odeme Kosulu</label>
+                    <input id="sqPaymentTerms" class="form-control form-control-sm" placeholder="ornegin: 30 gun vadeli" />
+                </div>
+                <div class="sqe-form-field sqe-form-field--full">
+                    <label class="sqe-label">Teslimat</label>
+                    <input id="sqDeliveryTerms" class="form-control form-control-sm" placeholder="ornegin: Fabrika teslim" />
+                </div>
+                <div class="sqe-form-field sqe-form-field--full">
+                    <label class="sqe-label">Teslimat Adresi</label>
+                    <input id="sqDeliveryAddress" class="form-control form-control-sm" />
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: Notlar -->
+        <div class="sqe-tab-pane" data-sqe-pane="notes">
+            <textarea id="sqNotes" class="form-control sqe-notes-area" rows="6" placeholder="Teklif notlari..."></textarea>
+        </div>
+
+        <!-- TAB 5: Ek Alanlar -->
+        <div class="sqe-tab-pane" data-sqe-pane="widgets">
+            <div id="sqDynamicWidgets"
+                 data-form-code="SALES_QUOTE_EDIT"
+                 data-record-id="">
+            </div>
+        </div>
+
+        </div><!-- /sqe-tab-content -->
+    </div><!-- /sqe-body -->
+</section>
+
+@section Scripts {
+<script>
+    // ══════════════════════════════════════════════════════════════
+    // CalibraLineItemsGrid inline config — server-side hazirlandi
+    // (SalesController.BuildSalesQuoteLineGridConfig). Kolonlar ve
+    // meta bilgi tamamen C#'tan gelir — React bileseni hardcode yapmaz.
+    // ══════════════════════════════════════════════════════════════
+    window.__CALIBRA_SALES_QUOTE_LINE_GRID__ = @Html.Raw(Model.LineGridConfigJson);
+</script>
+<script>
+(function () {
+    // ── Tab gecis ──────────────────────────────────────────
+    window.sqSwitchTab = function(tabKey) {
+        document.querySelectorAll('[data-sqe-tab-btn]').forEach(function(btn) {
+            btn.classList.toggle('is-active', btn.getAttribute('data-sqe-tab-btn') === tabKey);
+        });
+        document.querySelectorAll('[data-sqe-pane]').forEach(function(pane) {
+            pane.classList.toggle('is-active', pane.getAttribute('data-sqe-pane') === tabKey);
+        });
+        try { localStorage.setItem('sqe-active-tab', tabKey); } catch(e) {}
+    };
+    // Her zaman Genel Bilgiler tab'indan basla
+    sqSwitchTab('general');
+
+    var searchTimer = null;
+    var currentQuoteId = @Html.Raw(editId.HasValue ? $"'{editId.Value}'" : "null");
+    var materials = [];
+    var customers = [];
+
+    // ── React CalibraLineItemsGrid bridge ─────────────────────────
+    // Grid satirlari window.__SQ_LINES__ uzerinde tutulur; sqRecalc ve
+    // sqSave bunu okur. Grid mount'tan once gelen setRows istekleri
+    // kuyruga alinir, grid hazir olunca flush edilir.
+    window.__SQ_LINES__ = [];
+    var _gridReady = false;
+    var _pendingRows = null;
+
+    function setGridRows(rows) {
+        if (_gridReady && window.CalibraHub && window.CalibraHub.salesLineGrid) {
+            window.CalibraHub.salesLineGrid.setRows(rows || []);
+        } else {
+            _pendingRows = rows || [];
+        }
+    }
+
+    function bootstrapLineGrid() {
+        var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        var CSS_URL = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+        function mountGrid() {
+            var el = document.getElementById('reactSalesQuoteLineGrid');
+            if (!el) { console.error('[SQE] grid mount element yok'); return; }
+            if (!window.CalibraHub || !window.CalibraHub.mountLineItemsGrid) {
+                console.error('[SQE] mountLineItemsGrid fonksiyonu yok');
+                return;
+            }
+            try {
+                window.CalibraHub.mountLineItemsGrid(el, window.__CALIBRA_SALES_QUOTE_LINE_GRID__, {
+                    onRowsChange: function (rows) {
+                        window.__SQ_LINES__ = rows || [];
+                        if (typeof window.sqRecalc === 'function') window.sqRecalc();
+                    }
+                });
+                // Imperative API (setRows/getRows) useEffect sonrasi hazir —
+                // polling ile bekle
+                var tries = 0;
+                var timer = setInterval(function () {
+                    if (window.CalibraHub && window.CalibraHub.salesLineGrid) {
+                        clearInterval(timer);
+                        _gridReady = true;
+                        if (_pendingRows) {
+                            window.CalibraHub.salesLineGrid.setRows(_pendingRows);
+                            _pendingRows = null;
+                        }
+                        console.log('[SQE] line grid hazir');
+                    } else if (++tries > 50) {
+                        clearInterval(timer);
+                        console.error('[SQE] grid API zaman asimi');
+                    }
+                }, 20);
+            } catch (ex) {
+                console.error('[SQE] grid mount exception:', ex);
+            }
+        }
+
+        // CSS
+        if (!document.querySelector('link[data-sqe-grid-css]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = CSS_URL;
+            link.setAttribute('data-sqe-grid-css', '1');
+            document.head.appendChild(link);
+        }
+
+        // JS bundle
+        if (window.CalibraHub && window.CalibraHub.mountLineItemsGrid) {
+            mountGrid();
+        } else {
+            var script = document.createElement('script');
+            script.src = BUNDLE_URL;
+            script.setAttribute('data-sqe-grid-js', '1');
+            script.onload = function () { setTimeout(mountGrid, 0); };
+            script.onerror = function () { console.error('[SQE] bundle yuklenemedi'); };
+            document.head.appendChild(script);
+        }
+    }
+
+    // ── Katlanir kart state persist (localStorage) ─────────────
+    // 4 kartin (genel / lines / conditions / notes) acik/kapali durumu
+    // localStorage'da tutulur. Kullanici tercih ettigi sekli koruyor.
+    function initCollapsiblePersistence() {
+        var LS_KEY = 'sqe.card-groups-open';
+        var state = {};
+        try { state = JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; }
+        catch (e) { state = {}; }
+
+        document.querySelectorAll('details.sqe-card[data-sqe-group]').forEach(function (d) {
+            var key = d.getAttribute('data-sqe-group');
+            if (!key) return;
+            // Kayitli durum false ise kapat (default: acik)
+            if (state[key] === false) d.open = false;
+            d.addEventListener('toggle', function () {
+                state[key] = d.open;
+                try { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+                catch (e) { /* quota/private — sessiz gec */ }
+            });
+        });
+    }
+
+    // Textarea'yi icerigi kadar buyutir — ic scroll olmaz, sayfa scroll'u calisir
+    function autoResizeTextarea(el) {
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // React grid'i non-blocking olarak mount et (bundle async yuklenir)
+        bootstrapLineGrid();
+
+        // Notlar textarea auto-resize
+        var sqNotesEl = document.getElementById('sqNotes');
+        if (sqNotesEl) {
+            sqNotesEl.addEventListener('input', function () { autoResizeTextarea(sqNotesEl); });
+        }
+
+        // Katlanir kart persist — markup hazir oldugunda baglan
+        initCollapsiblePersistence();
+
+        // Veri yukleme
+        (async function () {
+            try { await loadCustomers(); } catch (e) { console.error('loadCustomers hatasi:', e); }
+            try { await loadSalesReps(); } catch (e) { console.error('loadSalesReps hatasi:', e); }
+            try { await loadMaterials(); } catch (e) { console.error('loadMaterials hatasi:', e); }
+            if (currentQuoteId) {
+                await sqLoadQuote(currentQuoteId);
+            } else {
+                sqInitNew();
+            }
+            // Yukleme tamamlandi — maskeyi kaldır
+            var mask = document.getElementById('sqLoadingMask');
+            if (mask) mask.classList.add('is-hidden');
+        })();
+    });
+
+    window.sqGoToCustomerCard = function () {
+        var custId = document.getElementById('sqCustomerId').value
+        if (!custId) return
+        window.location.href = '/Finance/ContactAccountEdit?id=' + custId
+    }
+
+    function attachCustomerGuide() {
+        if (window.CalibraHub && window.CalibraHub.attachGuide) {
+            window.CalibraHub.attachGuide('#sqCustomerDisplay', 'CUSTOMERS', {
+                formCode: 'SALES_QUOTE_EDIT',
+                fillMap: { '#sqCustomerId': 'Id', '#sqCustomerName': 'AccountTitle' }
+            });
+            return true;
+        }
+        return false;
+    }
+
+    async function loadCustomers() {
+        // Rehber butonu bağla — React bundle yüklendiyse direkt, yoksa bekle
+        if (!attachCustomerGuide()) {
+            var t = setInterval(function () {
+                if (attachCustomerGuide()) clearInterval(t);
+            }, 100);
+            setTimeout(function () { clearInterval(t); }, 10000);
+        }
+    }
+
+    async function loadSalesReps() {
+        var resp = await fetch('/GeneralDefinitions/GetSalesReps');
+        if (!resp.ok) throw new Error('GetSalesReps HTTP ' + resp.status);
+        var reps = await resp.json();
+        var sel = document.getElementById('sqSalesRepId');
+        sel.innerHTML = '<option value="">Seciniz</option>';
+        reps.forEach(function (r) {
+            if (r.isActive) sel.innerHTML += '<option value="' + r.id + '">' + r.repCode + ' - ' + r.repName + '</option>';
+        });
+    }
+
+    async function loadMaterials() {
+        var resp = await fetch('/Sales/GetMaterials');
+        if (!resp.ok) throw new Error('GetMaterials HTTP ' + resp.status);
+        materials = await resp.json();
+    }
+
+    async function sqInitNew() {
+        document.getElementById('sqQuoteDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('sqValidUntil').value = '';
+        document.getElementById('sqCustomerId').value = '';
+        document.getElementById('sqCustomerDisplay').value = '';
+        document.getElementById('sqCustomerDisplay').removeAttribute('data-value');
+        document.getElementById('sqCustomerDisplay').removeAttribute('data-display');
+        document.getElementById('sqCustomerName').value = '';
+        document.getElementById('sqSalesRepId').value = '';
+        document.getElementById('sqCurrency').value = 'TRY';
+        document.getElementById('sqDiscountRate').value = '0';
+        document.getElementById('sqTaxRate').value = '20';
+        document.getElementById('sqPaymentTerms').value = '';
+        document.getElementById('sqDeliveryTerms').value = '';
+        document.getElementById('sqDeliveryAddress').value = '';
+        document.getElementById('sqNotes').value = '';
+        // Yeni teklifte kullaniciya "+ Yeni Kalem" butonuna tiklamadan
+        // dogrudan yazabilmesi icin 1 bos satir seeding yapariz.
+        setGridRows([{
+            materialCode: '',
+            materialName: '',
+            unitName: '',
+            quantity: 1,
+            unitPrice: 0,
+            discountRate: 0,
+            notes: null,
+        }]);
+        document.getElementById('sqBtnDelete').disabled = true;
+        document.getElementById('sqStatusSelect').style.display = 'none';
+        document.getElementById('sqStatusBadge').innerHTML = '';
+        sqRecalc();
+        document.getElementById('sqQuoteNumber').value = '';
+    }
+
+    async function sqLoadQuote(id) {
+        try {
+            var resp = await fetch('/Sales/GetQuote?id=' + id);
+            if (!resp.ok) throw new Error('GetQuote HTTP ' + resp.status + ' — id: ' + id);
+            var data = await resp.json();
+            if (!data || !data.quote) throw new Error('GetQuote bos veya gecersiz yanit dondu.');
+            var q = data.quote;
+            currentQuoteId = q.id;
+            document.getElementById('sqQuoteNumber').value = q.quoteNumber || '';
+            document.getElementById('sqQuoteDate').value = q.quoteDate ? q.quoteDate.split('T')[0] : '';
+            document.getElementById('sqValidUntil').value = q.validUntil ? q.validUntil.split('T')[0] : '';
+            document.getElementById('sqCustomerId').value = q.customerId != null ? q.customerId : '';
+            // Rehber display alanını doldur — Cari Kod + Cari İsim
+            var custDisp = document.getElementById('sqCustomerDisplay');
+            custDisp.value = q.customerCode || q.customerName || '';
+            custDisp.setAttribute('data-value', q.customerCode || '');
+            custDisp.setAttribute('data-display', q.customerCode || q.customerName || '');
+            document.getElementById('sqCustomerName').value = q.customerName || '';
+            document.getElementById('sqSalesRepId').value = q.salesRepId != null ? q.salesRepId : '';
+            document.getElementById('sqCurrency').value = q.currency || 'TRY';
+            document.getElementById('sqDiscountRate').value = q.discountRate ?? 0;
+            document.getElementById('sqTaxRate').value = q.taxRate ?? 20;
+            document.getElementById('sqPaymentTerms').value = q.paymentTerms || '';
+            document.getElementById('sqDeliveryTerms').value = q.deliveryTerms || '';
+            document.getElementById('sqDeliveryAddress').value = q.deliveryAddress || '';
+            var sqNotesEl2 = document.getElementById('sqNotes');
+            sqNotesEl2.value = q.notes || '';
+            autoResizeTextarea(sqNotesEl2);
+            document.getElementById('sqBtnDelete').disabled = false;
+            document.getElementById('sqStatusSelect').style.display = '';
+            document.getElementById('sqStatusSelect').value = q.status;
+            document.getElementById('sqStatusBadge').innerHTML = '<span class="sqe-status-badge sqe-status-' + q.status + '">' + statusLabel(q.status) + '</span>';
+
+            var custName = q.customerName || '';
+            var tabTitle = q.quoteNumber || 'Teklif';
+            document.title = tabTitle + (custName ? ' - ' + custName : '') + ' - CalibraHub';
+
+            // Header kartinda baslik + subtitle'i guncelle (MaterialCardEdit pattern'i)
+            var sqMetaEl = document.getElementById('sqMeta');
+            if (sqMetaEl) sqMetaEl.innerHTML = '<strong>' + tabTitle + '</strong>' + (custName ? ' — ' + custName : '');
+            var wsTab = document.querySelector('[data-workspace-title]');
+            if (wsTab) wsTab.setAttribute('data-workspace-title', tabTitle + (custName ? ' — ' + custName : ''));
+            try {
+                var activeTab = parent.document.querySelector('.workspace-tabs__scroller .workspace-tab.is-active .workspace-tab__label');
+                if (activeTab) activeTab.textContent = tabTitle;
+                var activeTabEl = parent.document.querySelector('.workspace-tabs__scroller .workspace-tab.is-active');
+                if (activeTabEl) activeTabEl.title = tabTitle + (custName ? ' — ' + custName : '');
+            } catch(e) {}
+
+            // React grid'e initial satirlari ver (bridge kuyruklar eger hazir degilse)
+            setGridRows(data.lines || []);
+            sqRecalc();
+
+            // Ek alanlar renderer'ina integer Id'yi recordId olarak yansit
+            if (window._sqDynRenderer && q.id) {
+                try {
+                    window._sqDynRenderer.reload({ recordId: String(q.id) });
+                } catch (reloadErr) {
+                    console.warn('[SQ] widget reload hatasi:', reloadErr);
+                }
+            }
+        } catch (e) {
+            console.error('sqLoadQuote hatasi:', e);
+            alert('Teklif yuklenemedi: ' + e.message);
+        }
+    }
+
+    window.sqAddLine = function () { addLineRow(null); };
+
+    function addLineRow(ln) {
+        var body = document.getElementById('sqLinesBody');
+        var idx = body.children.length + 1;
+        var card = document.createElement('div');
+        card.className = 'sqe-line-card';
+
+        var matOptions = '<option value="">Seciniz</option>' + materials.map(function (m) {
+            var sel = (ln != null) ? (ln.materialCode === m.materialCode ? ' selected' : '') : '';
+            return '<option value="' + m.id + '|' + m.materialCode + '|' + m.materialName + '|' + (m.taxRate || 20) + '|' + (m.trackCombinations ? '1' : '0') + '"' + sel + '>' + m.materialCode + ' - ' + m.materialName + '</option>';
+        }).join('');
+
+        var combCode = ln ? (ln.combinationCode || '') : '';
+        var unitVal  = ln ? (ln.unitName || '') : '';
+
+        card.innerHTML =
+            '<div class="sqe-line-card__header">' +
+                '<span class="sqe-line-card__num">#' + idx + '</span>' +
+                '<button type="button" class="sq-btn-del" onclick="sqDeleteRow(this)" title="Kalemi Sil"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>' +
+            '</div>' +
+            '<div class="sqe-line-card__body">' +
+                '<div class="sqe-line-card__row">' +
+                    '<div class="sqe-line-card__field sqe-line-card__field--wide">' +
+                        '<label>Malzeme</label>' +
+                        '<div style="display:flex;align-items:center;gap:4px;">' +
+                            '<select class="form-select form-select-sm sq-ln-material" onchange="sqOnMaterialChange(this)" style="flex:1;">' + matOptions + '</select>' +
+                            '<button type="button" class="sq-ln-combobtn" onclick="openCombModal(this)" title="Kombinasyon Sec">K</button>' +
+                        '</div>' +
+                        '<input type="hidden" class="sq-ln-combcode" value="' + sqEscAttr(combCode) + '" />' +
+                        '<div class="sq-ln-combdisplay"' + (combCode ? ' style="display:block;"' : '') + '>' + sqEsc(combCode) + '</div>' +
+                    '</div>' +
+                    '<div class="sqe-line-card__field">' +
+                        '<label>Birim</label>' +
+                        '<select class="form-select form-select-sm sq-ln-unit"><option value="">-</option></select>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="sqe-line-card__row">' +
+                    '<div class="sqe-line-card__field">' +
+                        '<label>Miktar</label>' +
+                        '<input type="number" class="form-control form-control-sm sq-ln-qty" value="' + (ln ? ln.quantity : 1) + '" min="0" step="0.01" style="text-align:right;" onchange="sqRecalc()" />' +
+                    '</div>' +
+                    '<div class="sqe-line-card__field">' +
+                        '<label>Birim Fiyat</label>' +
+                        '<input type="number" class="form-control form-control-sm sq-ln-price" value="' + (ln ? ln.unitPrice : 0) + '" min="0" step="0.01" style="text-align:right;" onchange="sqRecalc()" />' +
+                    '</div>' +
+                    '<div class="sqe-line-card__field">' +
+                        '<label>Isk.%</label>' +
+                        '<input type="number" class="form-control form-control-sm sq-ln-disc" value="' + (ln ? ln.discountRate : 0) + '" min="0" max="100" step="0.01" style="text-align:right;" onchange="sqRecalc()" />' +
+                    '</div>' +
+                    '<div class="sqe-line-card__field sqe-line-card__field--total">' +
+                        '<label>Toplam</label>' +
+                        '<span class="sq-ln-total">' + formatMoney(ln ? ln.lineTotal : 0) + '</span>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+
+        body.appendChild(card);
+
+        // Mevcut kalem yukleniyorsa: birimi yukle ve sec
+        if (ln && ln.materialCode) {
+            var unitSel  = card.querySelector('.sq-ln-unit');
+            var savedUnit = unitVal;
+            fetch('/Sales/GetMaterialUnits?materialCode=' + encodeURIComponent(ln.materialCode))
+                .then(function(r) { return r.json(); })
+                .then(function(units) {
+                    if (!unitSel) return;
+                    if (units.length === 0 && savedUnit) {
+                        unitSel.innerHTML = '<option value="' + sqEscAttr(savedUnit) + '" selected>' + sqEsc(savedUnit) + '</option>';
+                    } else {
+                        unitSel.innerHTML = '<option value="">-</option>' + units.map(function(u) {
+                            var isSel = (u.code === savedUnit || u.name === savedUnit) ? ' selected' : '';
+                            return '<option value="' + sqEscAttr(u.code) + '"' + isSel + '>' + sqEsc(u.name) + '</option>';
+                        }).join('');
+                        if (savedUnit && !units.some(function(u) { return u.code === savedUnit || u.name === savedUnit; })) {
+                            unitSel.innerHTML += '<option value="' + sqEscAttr(savedUnit) + '" selected>' + sqEsc(savedUnit) + '</option>';
+                        }
+                    }
+                })
+                .catch(function() {});
+
+            // Kombinasyon butonunu goster/gizle
+            var combBtn = card.querySelector('.sq-ln-combobtn');
+            var found = materials.find(function(m) { return m.materialCode === ln.materialCode; });
+            if (combBtn && found && found.trackCombinations) combBtn.style.display = 'inline-flex';
+        }
+    }
+
+    // Satir sil (onayli)
+    window.sqDeleteRow = function(btn) {
+        var card = btn.closest('.sqe-line-card');
+        var idx = Array.from(document.getElementById('sqLinesBody').children).indexOf(card) + 1;
+        if (!confirm(idx + '. kalemi silmek istediginizden emin misiniz?')) return;
+        card.remove();
+        // Sira numaralarini guncelle
+        Array.from(document.getElementById('sqLinesBody').children).forEach(function(el, i) {
+            var numEl = el.querySelector('.sqe-line-card__num');
+            if (numEl) numEl.textContent = '#' + (i + 1);
+        });
+        sqRecalc();
+    };
+
+    window.sqOnMaterialChange = function (sel) {
+        var val    = sel.value || '';
+        var parts  = val.split('|');
+        var card   = sel.closest('.sqe-line-card');
+        var combBtn    = card.querySelector('.sq-ln-combobtn');
+        var combInput  = card.querySelector('.sq-ln-combcode');
+        var combDisplay = card.querySelector('.sq-ln-combdisplay');
+        var unitSel    = card.querySelector('.sq-ln-unit');
+
+        if (parts.length >= 5) {
+            var taxRate   = parseFloat(parts[3]) || 20;
+            document.getElementById('sqTaxRate').value = taxRate;
+            var trackCombs = parts[4] === '1';
+            if (combBtn) combBtn.style.display = trackCombs ? 'inline-flex' : 'none';
+            if (!trackCombs) {
+                if (combInput)   { combInput.value = ''; }
+                if (combDisplay) { combDisplay.textContent = ''; combDisplay.style.display = 'none'; }
+            }
+            var matCode = parts[1];
+            if (unitSel) { unitSel.innerHTML = '<option value="">Yukleniyor...</option>'; }
+            fetch('/Sales/GetMaterialUnits?materialCode=' + encodeURIComponent(matCode))
+                .then(function(r) { return r.json(); })
+                .then(function(units) {
+                    if (!unitSel) return;
+                    if (units.length === 0) {
+                        unitSel.innerHTML = '<option value="">-</option>';
+                    } else {
+                        unitSel.innerHTML = units.map(function(u, i) {
+                            return '<option value="' + sqEscAttr(u.code) + '"' + (i === 0 ? ' selected' : '') + '>' + sqEsc(u.name) + '</option>';
+                        }).join('');
+                    }
+                })
+                .catch(function() { if (unitSel) unitSel.innerHTML = '<option value="">-</option>'; });
+        } else {
+            if (combBtn) combBtn.style.display = 'none';
+            if (unitSel) unitSel.innerHTML = '<option value="">-</option>';
+        }
+        sqRecalc();
+    };
+
+    window.sqRecalc = function () {
+        // Satirlar React CalibraLineItemsGrid'ten bridge ile geliyor.
+        // Her satirin lineTotal'i grid icinde computed kolon olarak hesaplanmis
+        // durumda — burada sadece subtotal/tax/grand hesapliyoruz.
+        var lines = window.__SQ_LINES__ || [];
+        var subTotal = 0;
+        lines.forEach(function (r) {
+            var lt = Number(r.lineTotal);
+            if (isNaN(lt) || !isFinite(lt)) {
+                // Fallback: eski teklifler lineTotal'siz gelebilir — formul ile hesapla
+                var qty = Number(r.quantity) || 0;
+                var price = Number(r.unitPrice) || 0;
+                var disc = Number(r.discountRate) || 0;
+                lt = qty * price * (1 - disc / 100);
+            }
+            subTotal += lt;
+        });
+        var discRate   = parseFloat(document.getElementById('sqDiscountRate').value || 0);
+        var taxRate    = parseFloat(document.getElementById('sqTaxRate').value || 0);
+        var discAmount = subTotal * (discRate / 100);
+        var afterDisc  = subTotal - discAmount;
+        var taxAmount  = afterDisc * (taxRate / 100);
+        var grandTotal = afterDisc + taxAmount;
+        document.getElementById('sqSubTotal').textContent      = formatMoney(subTotal);
+        document.getElementById('sqDiscountAmount').textContent = formatMoney(discAmount);
+        document.getElementById('sqTaxAmount').textContent     = formatMoney(taxAmount);
+        document.getElementById('sqGrandTotal').textContent    = formatMoney(grandTotal);
+    };
+
+    // Zorunlu alanlara kirmizi cerceve + shake animasyonu ekle
+    function sqMarkInvalid(ids) {
+        ids.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove('is-invalid');
+            void el.offsetWidth; // reflow — animasyonu yeniden tetikle
+            el.classList.add('is-invalid');
+            var clear = function() {
+                el.classList.remove('is-invalid');
+                el.removeEventListener('input', clear);
+                el.removeEventListener('change', clear);
+            };
+            el.addEventListener('input', clear);
+            el.addEventListener('change', clear);
+        });
+        if (ids.length) {
+            var first = document.getElementById(ids[0]);
+            if (first) first.focus();
+        }
+    }
+
+    window.sqSave = async function () {
+        // Ek alan (widget) zorunlu kontrolu — fetch'ten ONCE
+        if (window._sqDynRenderer && window._sqDynRenderer.validate) {
+            var dynValidation = window._sqDynRenderer.validate();
+            if (!dynValidation.valid) {
+                var shakeIds = (dynValidation.errorIds || []).map(function(id) { return 'dyn_' + id; });
+                if (shakeIds.length) sqMarkInvalid(shakeIds);
+                return;
+            }
+        }
+
+        // Satirlari React CalibraLineItemsGrid'ten al (bridge)
+        var rawLines = window.__SQ_LINES__ || [];
+        if (window.CalibraHub && window.CalibraHub.salesLineGrid) {
+            // Daha taze okuma — grid imperative API mevcut ise oradan cek
+            try { rawLines = window.CalibraHub.salesLineGrid.getRows() || rawLines; } catch (e) {}
+        }
+        var lines = rawLines
+            .filter(function (r) { return r && (r.materialCode || r.materialName); })
+            .map(function (r) {
+                return {
+                    stockCardId:     r.stockCardId != null && r.stockCardId !== '' ? parseInt(r.stockCardId, 10) : null,
+                    materialCode:    r.materialCode || '',
+                    materialName:    r.materialName || '',
+                    unitName:        r.unitName || null,
+                    quantity:        Number(r.quantity) || 0,
+                    unitPrice:       Number(r.unitPrice) || 0,
+                    discountRate:    Number(r.discountRate) || 0,
+                    combinationCode: r.combinationCode || null,
+                    notes:           r.notes || null
+                };
+            });
+        var custIdVal  = document.getElementById('sqCustomerId').value;
+        var custText   = (document.getElementById('sqCustomerName').value || '').trim() || null;
+        var payload  = {
+            id: currentQuoteId,
+            quoteDate:       document.getElementById('sqQuoteDate').value,
+            validUntil:      document.getElementById('sqValidUntil').value || null,
+            customerId:      parseInt(custIdVal) || null,
+            customerName:    custText,
+            customerAddress: null,
+            salesRepId:      parseInt(document.getElementById('sqSalesRepId').value) || null,
+            currency:        document.getElementById('sqCurrency').value,
+            discountRate:    parseFloat(document.getElementById('sqDiscountRate').value || 0),
+            taxRate:         parseFloat(document.getElementById('sqTaxRate').value || 0),
+            paymentTerms:    document.getElementById('sqPaymentTerms').value || null,
+            deliveryTerms:   document.getElementById('sqDeliveryTerms').value || null,
+            deliveryAddress: document.getElementById('sqDeliveryAddress')?.value || null,
+            notes:           document.getElementById('sqNotes').value || null,
+            lines: lines
+        };
+        try {
+            var resp = await fetch('/Sales/SaveSalesQuote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            var data = await resp.json();
+            if (!data.success) { alert('Hata: ' + data.message); return; }
+            currentQuoteId = data.quote.id;
+            document.getElementById('sqQuoteNumber').value = data.quote.quoteNumber;
+            document.getElementById('sqBtnDelete').disabled = false;
+            document.getElementById('sqStatusSelect').style.display = '';
+            document.getElementById('sqStatusSelect').value = data.quote.status;
+            document.getElementById('sqStatusBadge').innerHTML = '<span class="sqe-status-badge sqe-status-' + data.quote.status + '">' + statusLabel(data.quote.status) + '</span>';
+
+            // Header kart baslik + subtitle guncelle (yeni kayit → 'Teklif Duzenle')
+            var sqMetaEl2 = document.getElementById('sqMeta');
+            if (sqMetaEl2) sqMetaEl2.innerHTML = '<strong>' + (data.quote.quoteNumber || '') + '</strong>';
+
+            // ── Ek alanlari (WidgetMas/WidgetTra) kaydet ──
+            // RecordId = sales_quotes.Id (integer PK).
+            if (window._sqDynRenderer) {
+                try {
+                    var dynResult = await window._sqDynRenderer.save({ recordId: String(data.quote.id) });
+                    if (dynResult && dynResult.success === false) {
+                        console.warn('[SQ] widget save basarisiz:', dynResult.message);
+                    }
+                } catch (dynErr) {
+                    console.warn('[SQ] widget save hatasi:', dynErr);
+                }
+            }
+
+            alert('Teklif kaydedildi.');
+        } catch (e) { alert('Kayit hatasi: ' + e.message); }
+    };
+
+    window.sqDelete = async function () {
+        if (!currentQuoteId || !confirm('Bu teklif silinecek. Devam?')) return;
+        try {
+            await fetch('/Sales/DeleteSalesQuote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: currentQuoteId })
+            });
+            window.location.href = '/Sales/SalesQuotes';
+        } catch {}
+    };
+
+    window.sqChangeStatus = async function () {
+        if (!currentQuoteId) return;
+        var status = document.getElementById('sqStatusSelect').value;
+        try {
+            var resp = await fetch('/Sales/ChangeQuoteStatus', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: currentQuoteId, status: status })
+            });
+            var data = await resp.json();
+            if (!data.success) { alert('Hata: ' + data.message); return; }
+            document.getElementById('sqStatusBadge').innerHTML = '<span class="sqe-status-badge sqe-status-' + status + '">' + statusLabel(status) + '</span>';
+        } catch {}
+    };
+
+    function formatMoney(val) { return (val || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function statusLabel(s) { return { Draft:'Taslak', Sent:'Gonderildi', Approved:'Onaylandi', Rejected:'Reddedildi', Revised:'Revize', Cancelled:'Iptal' }[s] || s; }
+    function sqEsc(s)     { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+    function sqEscAttr(s) { return (s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+    // ── Kombinasyon Modal ──────────────────────────────────────────
+    var _combModalRow = null;
+
+    window.openCombModal = function(btn) {
+        _combModalRow = btn.closest('.sqe-line-card');
+        var sel   = _combModalRow.querySelector('.sq-ln-material');
+        var parts = (sel.value || '').split('|');
+        if (parts.length < 2) return;
+        var materialCode = parts[1];
+
+        var combList = document.getElementById('combListBody');
+        combList.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px;">Yukleniyor...</td></tr>';
+
+        fetch('/Sales/GetCombinations?materialCode=' + encodeURIComponent(materialCode))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.length === 0) {
+                    combList.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px;">Kombinasyon bulunamadi.</td></tr>';
+                } else {
+                    combList.innerHTML = data.map(function(c) {
+                        var feats = c.features.map(function(f) { return f.feature + ': ' + f.value; }).join(', ');
+                        return '<tr style="cursor:pointer;border-bottom:1px solid #f1f5f9;" onclick="selectCombination(\'' + sqEsc(c.code) + '\', this)">' +
+                            '<td style="padding:4px 8px;font-weight:600;">' + sqEsc(c.code) + '</td>' +
+                            '<td style="padding:4px 8px;font-size:0.76rem;color:#64748b;">' + sqEsc(feats) + '</td>' +
+                            '<td style="padding:4px 8px;"><button type="button" class="btn btn-sm btn-primary" style="font-size:0.7rem;padding:1px 8px;">Sec</button></td></tr>';
+                    }).join('');
+                }
+            });
+
+        var featBody = document.getElementById('combFeatBody');
+        featBody.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:12px;">Yukleniyor...</div>';
+
+        fetch('/Sales/GetMaterialFeatures?materialCode=' + encodeURIComponent(materialCode))
+            .then(function(r) { return r.json(); })
+            .then(function(features) {
+                if (features.length === 0) {
+                    featBody.innerHTML = '<div style="color:#94a3b8;padding:12px;">Bu malzeme icin ozellik tanimlanmamis.</div>';
+                } else {
+                    featBody.innerHTML = features.map(function(f) {
+                        var opts = '<option value="">-- Seciniz --</option>' + f.values.map(function(v) {
+                            return '<option value="' + sqEsc(v.code) + '">' + sqEsc(v.name) + '</option>';
+                        }).join('');
+                        return '<div class="cs-line" style="padding:4px 0;">' +
+                            '<label style="width:120px;flex-shrink:0;font-size:0.78rem;font-weight:600;color:#64748b;text-align:right;padding-right:8px;">' + sqEsc(f.featureName) + '</label>' +
+                            '<select class="form-select form-select-sm comb-feat-sel" data-feature="' + sqEsc(f.featureName) + '" style="max-width:160px;">' + opts + '</select>' +
+                            '<input type="text" class="form-control form-control-sm comb-feat-desc" placeholder="Aciklama" style="flex:1;font-size:0.76rem;" />' +
+                            '</div>';
+                    }).join('');
+                }
+            });
+
+        document.getElementById('combModal').style.display = 'flex';
+        showCombTab('list');
+    };
+
+    window.showCombTab = function(tab) {
+        document.getElementById('combTabList').style.display = tab === 'list' ? 'block' : 'none';
+        document.getElementById('combTabFeatures').style.display = tab === 'features' ? 'block' : 'none';
+        document.querySelectorAll('.comb-tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.tab === tab); });
+    };
+
+    window.selectCombination = function(code) {
+        if (!_combModalRow) return;
+        _combModalRow.querySelector('.sq-ln-combcode').value = code;
+        var disp = _combModalRow.querySelector('.sq-ln-combdisplay');
+        disp.textContent = code;
+        disp.style.display = 'block';
+        closeCombModal();
+    };
+
+    window.applyCombFeatures = function() {
+        if (!_combModalRow) return;
+        var sels = document.querySelectorAll('#combFeatBody .comb-feat-sel');
+        var codes = [];
+        sels.forEach(function(s) { if (s.value) codes.push(s.value); });
+
+        var matSel  = _combModalRow.querySelector('.sq-ln-material');
+        var parts   = (matSel.value || '').split('|');
+        var matCode = parts.length >= 2 ? parts[1] : '';
+        var combCode = codes.length > 0 ? matCode + '-' + codes.join('-') : '';
+
+        _combModalRow.querySelector('.sq-ln-combcode').value = combCode;
+        var disp = _combModalRow.querySelector('.sq-ln-combdisplay');
+        if (combCode) { disp.textContent = combCode; disp.style.display = 'block'; }
+        closeCombModal();
+    };
+
+    window.closeCombModal = function() {
+        document.getElementById('combModal').style.display = 'none';
+        _combModalRow = null;
+    };
+
+    // DynamicWidgetRenderer mount — initial recordId bos, sqLoadQuote reload ile override eder
+    (function mountDynRenderer() {
+        var el = document.getElementById('sqDynamicWidgets');
+        if (!el) return;
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+        try {
+            window._sqDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode: el.getAttribute('data-form-code') || 'SALES_QUOTE_EDIT',
+                recordId: el.getAttribute('data-record-id') || '',
+                classPrefix: 'sqe'
+            });
+        } catch (e) {
+            console.warn('[SQ] mountDynamicWidgetRenderer hatasi:', e);
+        }
+    })();
+})();
+</script>
+}
+
+<!-- Kombinasyon Secim Modal -->
+<div id="combModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;width:680px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+        <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #e2e8f0;">
+            <h4 style="margin:0;font-size:0.92rem;font-weight:700;flex:1;">Kombinasyon Secimi</h4>
+            <button type="button" onclick="closeCombModal()" style="border:none;background:none;font-size:1.2rem;cursor:pointer;color:#94a3b8;">&times;</button>
+        </div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #e2e8f0;">
+            <button type="button" class="comb-tab-btn active" data-tab="list" onclick="showCombTab('list')" style="flex:1;padding:8px;font-size:0.78rem;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;cursor:pointer;">Mevcut Kombinasyonlar</button>
+            <button type="button" class="comb-tab-btn" data-tab="features" onclick="showCombTab('features')" style="flex:1;padding:8px;font-size:0.78rem;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;cursor:pointer;">Ozelliklerden Sec</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:12px 16px;">
+            <!-- Tab 1: Mevcut Kombinasyonlar -->
+            <div id="combTabList">
+                <table style="width:100%;font-size:0.78rem;border-collapse:collapse;">
+                    <thead><tr style="border-bottom:2px solid #e2e8f0;"><th style="padding:4px 8px;text-align:left;color:#64748b;">Kod</th><th style="padding:4px 8px;text-align:left;color:#64748b;">Ozellikler</th><th style="width:60px;"></th></tr></thead>
+                    <tbody id="combListBody"></tbody>
+                </table>
+            </div>
+            <!-- Tab 2: Ozelliklerden Sec -->
+            <div id="combTabFeatures" style="display:none;">
+                <div id="combFeatBody"></div>
+                <div style="margin-top:12px;text-align:right;">
+                    <button type="button" onclick="applyCombFeatures()" class="btn btn-primary btn-sm" style="font-size:0.78rem;">Uygula</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.comb-tab-btn.active { border-bottom-color: #2563eb !important; color: #2563eb; }
+#combListBody tr:hover { background: #f8fafc; }
+</style>

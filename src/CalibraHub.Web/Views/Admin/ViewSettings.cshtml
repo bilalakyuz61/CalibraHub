@@ -1,0 +1,524 @@
+@model CalibraHub.Web.Models.Admin.ScreenDesignSettingsPageViewModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "Alan ve Widget Tanimlamalari";
+    ViewData["FormCode"] = "VIEW_SETTINGS";
+    ViewData["BodyClass"] = "page-admin-view-settings";
+
+    // Antiforgery token — Faz B'de React /api/widgets endpoint'leri
+    // [IgnoreAntiforgeryToken] ile korunmuyor; yine de yayinda tutuyoruz
+    // (eski Razor POST akisi hala kullanici icin erisilebilir).
+    var antiforgeryToken = Antiforgery.GetAndStoreTokens(ViewContext.HttpContext).RequestToken ?? string.Empty;
+
+    // Faz B: Admin panel artik /api/widgets REST API'sinden kendi verisini
+    // cekiyor. Razor inline JSON sadece minimal baslangic config'i iceriyor —
+    // form listesi, tam schema, csrf token: HEPSI React icerisinde API'den gelir.
+    //
+    // Eski Razor SelectedScreenCode ITEMS, CONTACTS gibi FormMas kodlarina donusur.
+    var legacyToFormCodeMap = new Dictionary<string, string>
+    {
+        ["material_cards"]        = "ITEMS",
+        ["contact_accounts"]      = "CONTACTS",
+        ["sales_quotes"]          = "SALES_QUOTE_EDIT",
+        ["product_configuration"] = "PRODUCT_CONFIG",
+    };
+    var initialFormCode = "ITEMS";
+    if (!string.IsNullOrWhiteSpace(Model.SelectedScreenCode) &&
+        legacyToFormCodeMap.TryGetValue(Model.SelectedScreenCode, out var mappedCode))
+    {
+        initialFormCode = mappedCode;
+    }
+
+    var adminRegistryJson = Model.UsesMaterialCardSchema
+        ? System.Text.Json.JsonSerializer.Serialize(new
+        {
+            initialFormCode = initialFormCode,
+            useApiMode = true,
+            csrfToken = antiforgeryToken  // legacy fallback — Faz B API kullanmiyor
+        }, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+        })
+        : "null";
+}
+
+@section Styles {
+@if (Model.UsesMaterialCardSchema)
+{
+    <link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+}
+<style>
+    .page-admin-view-settings .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .page-admin-view-settings .integrator-dashboard__header { flex: 0 0 auto; }
+    .page-admin-view-settings .integrator-dashboard__grid { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; gap: 4px; min-height: 0; }
+    .page-admin-view-settings .integrator-dashboard__group { flex: 0 0 auto !important; min-height: 0; overflow: visible; }
+
+    /* AdminWidgetRegistry React container: tum alani doldur */
+    .page-admin-view-settings .admin-registry-mount-wrap {
+        flex: 1 1 auto !important;
+        display: flex !important;
+        min-height: 600px;
+        overflow: hidden;
+        border-radius: 12px;
+    }
+    .page-admin-view-settings #reactAdminWidgetRegistry {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       Dark tema override'lari — Glassmorphism Shell ile uyum
+       ══════════════════════════════════════════════════════════════
+       Admin ViewSettings sayfasi React Shell icinde iframe olarak
+       acildiginda body'ye `app-theme-dark` gelir. Icerideki
+       AdminWidgetRegistryPanel (React) zaten tema uyumlu, ama disindaki
+       Razor chrome (integrator-card, screen-design-toolbar, form-select,
+       btn) light default. Bu blok dark tema icin gerekli override'lari
+       ekler; light tema davranisi bozulmaz. */
+    body.app-theme-dark.page-admin-view-settings,
+    body.app-theme-dark .page-admin-view-settings {
+        background-color: #0a0d17;
+        background-image:
+            radial-gradient(at 12% 8%, rgba(99,102,241,0.18) 0px, transparent 50%),
+            radial-gradient(at 88% 12%, rgba(14,165,233,0.12) 0px, transparent 50%),
+            radial-gradient(at 50% 100%, rgba(168,85,247,0.12) 0px, transparent 50%),
+            radial-gradient(at 95% 85%, rgba(20,184,166,0.08) 0px, transparent 50%);
+    }
+    body.app-theme-dark .page-admin-view-settings .integrator-card {
+        background: rgba(255, 255, 255, 0.04) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.25) !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+    }
+    body.app-theme-dark .page-admin-view-settings .screen-design-toolbar {
+        background: transparent;
+    }
+    body.app-theme-dark .page-admin-view-settings .screen-design-toolbar__caption,
+    body.app-theme-dark .page-admin-view-settings .form-label {
+        color: rgba(255, 255, 255, 0.5) !important;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.7rem;
+        letter-spacing: 0.04em;
+    }
+    body.app-theme-dark .page-admin-view-settings .screen-design-toolbar__screen {
+        color: rgba(255, 255, 255, 0.95) !important;
+        font-weight: 700;
+    }
+    /* Ekran selectbox */
+    body.app-theme-dark .page-admin-view-settings .form-select {
+        background-color: rgba(255, 255, 255, 0.04) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: rgba(255, 255, 255, 0.9) !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff80' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.5rem center !important;
+        background-size: 14px 14px !important;
+        padding-right: 28px !important;
+    }
+    body.app-theme-dark .page-admin-view-settings .form-select:focus {
+        background-color: rgba(255, 255, 255, 0.07) !important;
+        border-color: rgba(99, 102, 241, 0.55) !important;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+        outline: none;
+    }
+    body.app-theme-dark .page-admin-view-settings .form-select option {
+        background: #0c0f1a;
+        color: #fff;
+    }
+    /* Butonlar */
+    body.app-theme-dark .page-admin-view-settings .btn.integrator-btn-secondary {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: rgba(255, 255, 255, 0.8) !important;
+    }
+    body.app-theme-dark .page-admin-view-settings .btn.integrator-btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #fff !important;
+    }
+    body.app-theme-dark .page-admin-view-settings .btn.integrator-btn-primary {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(139, 92, 246, 0.35)) !important;
+        border: 1px solid rgba(99, 102, 241, 0.5) !important;
+        color: #fff !important;
+        box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+    }
+    body.app-theme-dark .page-admin-view-settings .btn.integrator-btn-primary:hover {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.55), rgba(139, 92, 246, 0.55)) !important;
+    }
+</style>
+}
+
+<section class="admin-content integrator-dashboard integrator-dashboard__content">
+    <div class="integrator-dashboard__grid">
+        @* Yeni nesil (React) panel kendi ModuleSelector'ini barindirir — eski
+           Razor toolbar yalnizca standart tasarimci icin render edilir. Aksi
+           halde React panel'inin ustunde bos bir "integrator-card" kalir ve
+           light arka plan "beyaz serit" olarak gozukur. *@
+        @if (!Model.UsesMaterialCardSchema)
+        {
+            <section class="integrator-dashboard__group">
+                <article class="integrator-card integrator-card--form">
+                    <div class="screen-design-toolbar entity-form-toolbar">
+                        <form method="get" asp-action="ViewSettings" id="screenSelectionForm" class="screen-design-toolbar__form">
+                            <div class="integrator-field screen-design-toolbar__field">
+                                <label for="screenCode" class="form-label">Ekran</label>
+                                <select id="screenCode" name="screenCode" asp-items="Model.ScreenOptions" class="form-select"></select>
+                            </div>
+                            <div class="screen-design-toolbar__summary">
+                                <span class="screen-design-toolbar__caption">Alan ve Widget Tanimlamalari</span>
+                                <strong class="screen-design-toolbar__screen">@Model.SelectedScreenLabel</strong>
+                            </div>
+                        </form>
+
+                        <div class="screen-design-toolbar__actions">
+                            <a class="btn btn-secondary integrator-btn-secondary"
+                               asp-action="ViewSettings"
+                               asp-route-screenCode="@Model.SelectedScreenCode">
+                                Yenile
+                            </a>
+                            <button type="button"
+                                    class="btn btn-secondary integrator-btn-secondary"
+                                    data-add-layout-tab>
+                                Yeni Sekme
+                            </button>
+                            <button type="submit"
+                                    form="standardScreenDesignForm"
+                                    class="btn btn-primary integrator-btn-primary">
+                                Tasarimi Kaydet
+                            </button>
+                        </div>
+                    </div>
+                </article>
+            </section>
+        }
+
+        @if (Model.UsesMaterialCardSchema)
+        {
+            <section class="integrator-dashboard__group admin-registry-mount-wrap">
+                <div id="reactAdminWidgetRegistry"></div>
+            </section>
+        }
+        else
+        {
+            <partial name="_StandardScreenDesigner" model="Model.StandardDesigner" />
+        }
+    </div>
+</section>
+
+@section Scripts
+{
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            const screenSelectionForm = document.getElementById("screenSelectionForm");
+            const screenCode = document.getElementById("screenCode");
+
+            if (screenSelectionForm instanceof HTMLFormElement && screenCode instanceof HTMLSelectElement) {
+                screenCode.addEventListener("change", () => {
+                    screenSelectionForm.requestSubmit();
+                });
+            }
+
+            const materialForm = document.getElementById("materialFieldDesignerForm");
+            if (materialForm instanceof HTMLFormElement) {
+                const dataType = materialForm.querySelector("[data-field-datatype]");
+                const optionsPanel = materialForm.querySelector("[data-field-options-panel]");
+                const rows = materialForm.querySelector("[data-option-rows]");
+                const addButton = materialForm.querySelector("[data-add-option-row]");
+
+                const toggleOptionsPanel = () => {
+                    if (!(dataType instanceof HTMLSelectElement) || !(optionsPanel instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    const visible = dataType.value === "Dropdown" || dataType.value === "MultiSelect";
+                    optionsPanel.hidden = !visible;
+                };
+
+                const rebuildIndexes = () => {
+                    if (!(rows instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    Array.from(rows.querySelectorAll("tr")).forEach((row, index) => {
+                        row.querySelectorAll("input").forEach((input) => {
+                            if (!(input instanceof HTMLInputElement)) {
+                                return;
+                            }
+
+                            input.name = input.name.replace(/FieldInput\.Options\[\d+\]/g, `FieldInput.Options[${index}]`);
+                            input.id = input.id.replace(/FieldInput_Options_\d+/g, `FieldInput_Options_${index}`);
+                        });
+                    });
+                };
+
+                if (addButton instanceof HTMLButtonElement && rows instanceof HTMLElement) {
+                    addButton.addEventListener("click", () => {
+                        const index = rows.querySelectorAll("tr").length;
+                        const row = document.createElement("tr");
+                        row.innerHTML = `<td><input name="FieldInput.Options[${index}].OptionId" type="hidden" /><input name="FieldInput.Options[${index}].OptionKey" class="form-control" /></td><td><input name="FieldInput.Options[${index}].OptionLabel" class="form-control" /></td><td><input name="FieldInput.Options[${index}].SortOrder" class="form-control" type="number" min="0" value="${index * 10}" /></td><td><input name="FieldInput.Options[${index}].IsActive" class="form-check-input" type="checkbox" checked /></td><td><button type="button" class="btn btn-outline-danger integrator-btn-tertiary" data-remove-option-row>Sil</button></td>`;
+                        rows.appendChild(row);
+                    });
+
+                    rows.addEventListener("click", (event) => {
+                        const button = event.target instanceof Element ? event.target.closest("[data-remove-option-row]") : null;
+                        if (!(button instanceof HTMLElement)) {
+                            return;
+                        }
+
+                        const row = button.closest("tr");
+                        if (row) {
+                            row.remove();
+                            rebuildIndexes();
+                        }
+                    });
+                }
+
+                if (dataType instanceof HTMLSelectElement) {
+                    dataType.addEventListener("change", toggleOptionsPanel);
+                    toggleOptionsPanel();
+                }
+            }
+
+            const materialGroupModal = document.getElementById("materialGroupModal");
+            if (materialGroupModal instanceof HTMLElement) {
+                const groupForm = document.getElementById("materialGroupDesignerForm");
+                const groupIdInput = groupForm?.querySelector("[name='GroupInput.GroupId']");
+                const groupKeyInput = groupForm?.querySelector("[name='GroupInput.GroupKey']");
+                const groupLabelInput = groupForm?.querySelector("[name='GroupInput.GroupLabel']");
+                const displayOrderInput = groupForm?.querySelector("[name='GroupInput.DisplayOrder']");
+                const isActiveInput = groupForm?.querySelector("[name='GroupInput.IsActive']");
+                const modalTitle = materialGroupModal.querySelector("[data-material-group-modal-title]");
+                const openNewGroupButtons = Array.from(document.querySelectorAll("[data-open-new-material-group]"));
+                const modalInstance = window.bootstrap?.Modal
+                    ? window.bootstrap.Modal.getOrCreateInstance(materialGroupModal)
+                    : null;
+
+                const updateGroupModalTitle = (isEditMode) => {
+                    if (modalTitle instanceof HTMLElement) {
+                        modalTitle.textContent = isEditMode ? "Sekmeyi Duzenle" : "Yeni Sekme";
+                    }
+                };
+
+                const prepareNewGroupModal = () => {
+                    if (!(groupForm instanceof HTMLFormElement)) {
+                        return;
+                    }
+
+                    if (groupIdInput instanceof HTMLInputElement) {
+                        groupIdInput.value = "";
+                    }
+
+                    if (groupKeyInput instanceof HTMLInputElement) {
+                        groupKeyInput.value = "";
+                    }
+
+                    if (groupLabelInput instanceof HTMLInputElement) {
+                        groupLabelInput.value = "";
+                    }
+
+                    if (displayOrderInput instanceof HTMLInputElement) {
+                        displayOrderInput.value = groupForm.dataset.newDisplayOrder ?? "10";
+                    }
+
+                    if (isActiveInput instanceof HTMLInputElement) {
+                        isActiveInput.checked = true;
+                    }
+
+                    updateGroupModalTitle(false);
+                };
+
+                openNewGroupButtons.forEach((button) => {
+                    if (!(button instanceof HTMLButtonElement)) {
+                        return;
+                    }
+
+                    button.addEventListener("click", () => {
+                        prepareNewGroupModal();
+                        modalInstance?.show();
+                    });
+                });
+
+                if (materialGroupModal.dataset.openOnLoad === "true") {
+                    updateGroupModalTitle(groupIdInput instanceof HTMLInputElement && groupIdInput.value.trim().length > 0);
+                    modalInstance?.show();
+                }
+            }
+
+            const standardDesigner = document.querySelector("[data-standard-screen-designer]");
+            if (standardDesigner instanceof HTMLElement) {
+                const tabRows = standardDesigner.querySelector("[data-layout-tabs-rows]");
+                const itemRows = standardDesigner.querySelector("[data-layout-items-rows]");
+                const addTabButtons = Array.from(document.querySelectorAll("[data-add-layout-tab]"));
+
+                if (!(tabRows instanceof HTMLElement) || !(itemRows instanceof HTMLElement)) {
+                    return;
+                }
+
+                const buildTabOptions = () => Array.from(tabRows.querySelectorAll("[data-layout-tab-row]"))
+                    .map((row, index) => {
+                        const keyInput = row.querySelector("[data-tab-key-input]");
+                        const labelInput = row.querySelector("[data-tab-label-input]");
+                        const key = keyInput instanceof HTMLInputElement ? keyInput.value.trim() : "";
+                        const label = labelInput instanceof HTMLInputElement ? labelInput.value.trim() : "";
+                        if (!key) {
+                            return null;
+                        }
+
+                        return {
+                            key,
+                            label: label || `Sekme ${index + 1}`
+                        };
+                    })
+                    .filter(Boolean);
+
+                const syncItemTabSelects = () => {
+                    const tabOptions = buildTabOptions();
+
+                    itemRows.querySelectorAll("[data-item-tab-select]").forEach((select) => {
+                        if (!(select instanceof HTMLSelectElement)) {
+                            return;
+                        }
+
+                        const currentValue = select.value;
+                        select.innerHTML = "";
+
+                        tabOptions.forEach((tab) => {
+                            const option = document.createElement("option");
+                            option.value = tab.key;
+                            option.textContent = tab.label;
+                            if (tab.key === currentValue) {
+                                option.selected = true;
+                            }
+                            select.appendChild(option);
+                        });
+
+                        if (select.options.length > 0 && select.selectedIndex < 0) {
+                            select.selectedIndex = 0;
+                        }
+                    });
+                };
+
+                const rebuildTabIndexes = () => {
+                    Array.from(tabRows.querySelectorAll("[data-layout-tab-row]")).forEach((row, index) => {
+                        row.querySelectorAll("input").forEach((input) => {
+                            if (!(input instanceof HTMLInputElement)) {
+                                return;
+                            }
+
+                            input.name = input.name.replace(/Tabs\[\d+\]/g, `Tabs[${index}]`);
+                            input.id = input.id.replace(/Tabs_\d+/g, `Tabs_${index}`);
+                        });
+                    });
+
+                    syncItemTabSelects();
+                };
+
+                const appendTabRow = () => {
+                    const index = tabRows.querySelectorAll("[data-layout-tab-row]").length;
+                    const row = document.createElement("tr");
+                    row.setAttribute("data-layout-tab-row", "1");
+                    row.innerHTML = `<td><input name="Tabs[${index}].TabKey" id="Tabs_${index}__TabKey" class="form-control" data-tab-key-input value="tab_${index + 1}" /></td><td><input name="Tabs[${index}].TabLabel" id="Tabs_${index}__TabLabel" class="form-control" data-tab-label-input value="Yeni Sekme" /></td><td><input name="Tabs[${index}].DisplayOrder" id="Tabs_${index}__DisplayOrder" class="form-control" type="number" min="0" value="${(index + 1) * 10}" /></td><td class="text-center"><input name="Tabs[${index}].IsActive" id="Tabs_${index}__IsActive" class="form-check-input" type="checkbox" checked /></td><td class="text-end"><button type="button" class="btn btn-outline-danger integrator-btn-tertiary" data-remove-layout-tab>Sil</button></td>`;
+                    tabRows.appendChild(row);
+                    syncItemTabSelects();
+                };
+
+                tabRows.addEventListener("input", syncItemTabSelects);
+                tabRows.addEventListener("change", syncItemTabSelects);
+
+                tabRows.addEventListener("click", (event) => {
+                    const button = event.target instanceof Element ? event.target.closest("[data-remove-layout-tab]") : null;
+                    if (!(button instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    const row = button.closest("[data-layout-tab-row]");
+                    if (row) {
+                        row.remove();
+                        rebuildTabIndexes();
+                    }
+                });
+
+                addTabButtons.forEach((button) => {
+                    if (!(button instanceof HTMLButtonElement)) {
+                        return;
+                    }
+
+                    button.addEventListener("click", appendTabRow);
+                });
+
+                syncItemTabSelects();
+            }
+        })();
+    </script>
+
+    @if (Model.UsesMaterialCardSchema)
+    {
+        <script>
+            // Server-side'dan inline enjekte edilen React config
+            window.__CALIBRA_ADMIN_REGISTRY__ = @Html.Raw(adminRegistryJson);
+        </script>
+        <script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"
+                onerror="console.error('[AdminRegistry] Bundle yuklenemedi')"
+                onload="console.log('[AdminRegistry] Bundle loaded, typeof window.CalibraHub =', typeof window.CalibraHub)"></script>
+        <script>
+            (function () {
+                var el = document.getElementById('reactAdminWidgetRegistry');
+                if (!el) { console.error('[AdminRegistry] Mount element yok'); return; }
+
+                function showError(msg) {
+                    el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">'
+                        + '<div>' + msg + '</div>'
+                        + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayi Yenile</button>'
+                        + '</div>';
+                }
+
+                function doMount() {
+                    var cfg = window.__CALIBRA_ADMIN_REGISTRY__;
+                    if (!cfg) { showError('Config bulunamadi'); return; }
+                    if (!window.CalibraHub || !window.CalibraHub.mountAdminWidgetRegistry) {
+                        showError('React mount fonksiyonu bulunamadi');
+                        return;
+                    }
+                    try {
+                        window.CalibraHub.mountAdminWidgetRegistry(el, cfg);
+                        console.log('[AdminRegistry] Mount successful,', (cfg.fields || []).length, 'widget');
+                    } catch (ex) {
+                        console.error('[AdminRegistry] Mount exception:', ex);
+                        showError('Mount hatasi: ' + (ex.message || ex));
+                    }
+                }
+
+                // Bundle zaten yuklu ise hemen, degilse retry
+                if (window.CalibraHub && window.CalibraHub.mountAdminWidgetRegistry) {
+                    doMount();
+                    return;
+                }
+
+                var tries = 0;
+                var timer = setInterval(function () {
+                    tries++;
+                    if (window.CalibraHub && window.CalibraHub.mountAdminWidgetRegistry) {
+                        clearInterval(timer);
+                        doMount();
+                    } else if (tries >= 30) {
+                        clearInterval(timer);
+                        showError('React bileseni yuklenemedi (timeout)');
+                    }
+                }, 100);
+
+                // bfcache koruma
+                window.addEventListener('pageshow', function (e) {
+                    if (e.persisted) location.reload();
+                });
+            })();
+        </script>
+    }
+}

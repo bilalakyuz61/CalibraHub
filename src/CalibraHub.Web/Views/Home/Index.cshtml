@@ -1,0 +1,6 @@
+@inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@{
+    ViewData["UseDashboardShell"] = true;
+    var ui = await UiText.GetFormAsync("home.dashboard");
+    ViewData["Title"] = "Ana Sayfa";
+}

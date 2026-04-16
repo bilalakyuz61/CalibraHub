@@ -1,0 +1,590 @@
+@{
+    ViewData["Title"] = "Entegrasyon Tanimlari";
+    ViewData["FormCode"] = "INTEGRATION_EVENTS";
+}
+
+@section Styles {
+<style>
+    .ie-layout { display: flex; height: 100%; overflow: hidden; }
+    .ie-form-panel { width: 500px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--app-border,#dde3ee); overflow-y: auto; overflow-x: hidden; background: var(--app-surface,#fff); }
+    .ie-form-section { padding: 10px 14px; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
+    .ie-form-section h3 { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; margin: 0 0 8px; }
+    .ie-line { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+    .ie-line > label:first-child { width: 100px; flex-shrink: 0; font-size: 0.79rem; font-weight: 600; color: #64748b; text-align: right; }
+    .ie-line > .form-control, .ie-line > .form-select, .ie-line > input[type=number] { flex: 1 1 auto; }
+    .ie-action-type { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ie-action-type label { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--app-border,#dde3ee); border-radius: 5px; cursor: pointer; font-size: 0.8rem; font-weight: 600; color: #475569; transition: all .12s; }
+    .ie-action-type input[type=radio]:checked + span { color: #1d4ed8; }
+    .ie-action-type label:has(input:checked) { background: #eff6ff; border-color: #93c5fd; }
+    .ie-panel { display: none; }
+    .ie-panel.active { display: block; }
+    .ie-sql-area { width: 100%; min-height: 130px; font-family: 'Consolas','Fira Code',monospace; font-size: 0.8rem; border: 1px solid var(--app-border,#dde3ee); border-radius: 4px; padding: 8px; resize: vertical; background: #1e1e2e; color: #cdd6f4; }
+    .ie-sql-area:focus { border-color: #3b82f6; outline: none; }
+    .ie-placeholder-hint { font-size: 0.7rem; color: #94a3b8; margin-top: 4px; }
+    .ie-placeholder-hint code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 0.67rem; }
+    .ie-params-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 6px; }
+    .ie-params-table th { padding: 3px 6px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 0.68rem; font-weight: 600; color: #64748b; }
+    .ie-params-table td { padding: 2px 3px; border: 1px solid #e2e8f0; vertical-align: middle; }
+    .ie-params-table select, .ie-params-table input[type=text] { width: 100%; font-size: 0.76rem; padding: 2px 4px; border: none; background: transparent; }
+    .ie-params-table select:focus, .ie-params-table input:focus { outline: 1px solid #93c5fd; border-radius: 2px; }
+    .ie-del-row { background: none; border: none; cursor: pointer; color: #ef4444; font-size: 0.9rem; padding: 0 3px; line-height: 1; }
+    .ie-api-field-group { margin-bottom: 6px; }
+    .ie-api-field-group h4 { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #94a3b8; margin: 6px 0 4px; }
+    .ie-body-template { width: 100%; min-height: 100px; font-family: 'Consolas','Fira Code',monospace; font-size: 0.76rem; border: 1px solid var(--app-border,#dde3ee); border-radius: 4px; padding: 6px; resize: vertical; }
+    .ie-grid-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .ie-grid-section { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .ie-log-section { flex: 0 0 auto; max-height: 200px; border-top: 1px solid var(--app-border,#dde3ee); display: flex; flex-direction: column; overflow: hidden; }
+    .ie-grid-wrap { flex: 1 1 auto; overflow-y: auto; }
+    .ie-section-hdr { padding: 7px 12px; font-size: 0.71rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; background: #fafafa; border-bottom: 1px solid #f1f5f9; flex-shrink: 0; }
+    .ie-table { width: 100%; border-collapse: collapse; font-size: 0.81rem; }
+    .ie-table th { padding: 4px 10px; text-align: left; font-size: 0.7rem; font-weight: 600; color: #64748b; background: #f8fafc; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; white-space: nowrap; }
+    .ie-table td { padding: 4px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .ie-table tr:hover { background: #f8fafc; }
+    .ie-sel-row { background: #eff6ff !important; }
+    .ie-badge { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 10px; font-size: 0.68rem; font-weight: 700; }
+    .ie-badge.sql { background: #e0f2fe; color: #0369a1; }
+    .ie-badge.proc { background: #fef9c3; color: #854d0e; }
+    .ie-badge.api { background: #dcfce7; color: #15803d; }
+    .ie-log-ok { color: #166534; }
+    .ie-log-err { color: #991b1b; }
+    .ie-msg { padding: 4px 10px; border-radius: 5px; font-size: 0.72rem; margin: 4px 14px; }
+    .ie-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .ie-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+    /* ══ Dark tema ══ */
+    body.app-theme-dark .ie-form-panel {
+        background: rgba(255,255,255,.02); border-right-color: rgba(255,255,255,.06);
+    }
+    body.app-theme-dark .ie-form-section { border-bottom-color: rgba(255,255,255,.06); }
+    body.app-theme-dark .ie-form-section h3 { color: #94a3b8; }
+    body.app-theme-dark .ie-line > label:first-child { color: #94a3b8; }
+    body.app-theme-dark .ie-action-type label {
+        border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.65);
+    }
+    body.app-theme-dark .ie-action-type label:has(input:checked) {
+        background: rgba(99,102,241,.12); border-color: rgba(129,140,248,.35); color: #a5b4fc;
+    }
+    body.app-theme-dark .ie-action-type input[type=radio]:checked + span { color: #a5b4fc; }
+    body.app-theme-dark .ie-sql-area { background: #0f172a; color: #e2e8f0; border-color: rgba(255,255,255,.1); }
+    body.app-theme-dark .ie-sql-area:focus { border-color: #818cf8; }
+    body.app-theme-dark .ie-placeholder-hint { color: #64748b; }
+    body.app-theme-dark .ie-placeholder-hint code { background: rgba(255,255,255,.06); color: #a5b4fc; }
+    body.app-theme-dark .ie-params-table th {
+        background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.08); color: #94a3b8;
+    }
+    body.app-theme-dark .ie-params-table td { border-color: rgba(255,255,255,.06); color: rgba(255,255,255,.75); }
+    body.app-theme-dark .ie-params-table select,
+    body.app-theme-dark .ie-params-table input[type=text] { color: rgba(255,255,255,.8); }
+    body.app-theme-dark .ie-params-table select:focus,
+    body.app-theme-dark .ie-params-table input:focus { outline-color: #818cf8; }
+    body.app-theme-dark .ie-body-template { background: #0f172a; color: #e2e8f0; border-color: rgba(255,255,255,.1); }
+    body.app-theme-dark .ie-section-hdr {
+        background: rgba(255,255,255,.03); color: #94a3b8;
+        border-bottom-color: rgba(255,255,255,.06);
+    }
+    body.app-theme-dark .ie-table th {
+        background: rgba(255,255,255,.04); color: #94a3b8;
+        border-bottom-color: rgba(255,255,255,.08);
+    }
+    body.app-theme-dark .ie-table td { border-bottom-color: rgba(255,255,255,.04); color: rgba(255,255,255,.78); }
+    body.app-theme-dark .ie-table tr:hover { background: rgba(255,255,255,.03); }
+    body.app-theme-dark .ie-sel-row { background: rgba(99,102,241,.1) !important; }
+    body.app-theme-dark .ie-badge.sql { background: rgba(14,165,233,.12); color: #38bdf8; }
+    body.app-theme-dark .ie-badge.proc { background: rgba(234,179,8,.1); color: #fbbf24; }
+    body.app-theme-dark .ie-badge.api { background: rgba(34,197,94,.1); color: #4ade80; }
+    body.app-theme-dark .ie-log-ok { color: #4ade80; }
+    body.app-theme-dark .ie-log-err { color: #f87171; }
+    body.app-theme-dark .ie-log-section { border-top-color: rgba(255,255,255,.06); }
+    body.app-theme-dark .ie-msg.ok { background: rgba(16,185,129,.1); color: #34d399; border-color: rgba(52,211,153,.25); }
+    body.app-theme-dark .ie-msg.err { background: rgba(239,68,68,.1); color: #f87171; border-color: rgba(248,113,113,.25); }
+    body.app-theme-dark .ie-api-field-group h4 { color: #94a3b8; }
+    body.app-theme-dark .ie-del-row { color: #f87171; }
+    body.app-theme-dark .form-check-label { color: rgba(255,255,255,.65); }
+</style>
+}
+
+<div class="entity-form-toolbar" data-no-proxy="1">
+    <button type="button" class="btn btn-primary btn-sm" onclick="ieSave()">Kaydet</button>
+    <button type="button" class="btn btn-danger btn-sm" id="ieDeleteBtn" onclick="ieDelete()" disabled>Sil</button>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="ieNew()">Yeni</button>
+    <span id="ieMsg" style="margin-left:8px;"></span>
+</div>
+
+<div class="ie-layout">
+    <!-- Form Panel -->
+    <div class="ie-form-panel">
+        <input type="hidden" id="ieId" />
+
+        <div class="ie-form-section">
+            <h3>Tanim Bilgileri</h3>
+            <div class="ie-line"><label>Adi</label><input type="text" id="ieName" class="form-control form-control-sm" placeholder="Tanim adi" /></div>
+            <div class="ie-line"><label>Kaynak</label>
+                <select id="ieEventSource" class="form-select form-select-sm">
+                    <option value="Items">Malzeme Kartlari</option>
+                    <option value="SalesQuote">Satis Teklifi</option>
+                    <option value="Customer">Cari Hesap</option>
+                    <option value="Custom">Ozel</option>
+                </select>
+            </div>
+            <div class="ie-line"><label>Tip</label>
+                <select id="ieEventType" class="form-select form-select-sm">
+                    <option value="BeforeCreate">Olusturmadan Once</option>
+                    <option value="AfterCreate">Olusturduktan Sonra</option>
+                    <option value="BeforeUpdate">Guncellemeden Once</option>
+                    <option value="AfterUpdate">Guncelledikten Sonra</option>
+                    <option value="BeforeDelete">Silmeden Once</option>
+                    <option value="AfterDelete">Sildikten Sonra</option>
+                </select>
+            </div>
+            <div class="ie-line"><label>Detay</label><input type="text" id="ieEventDetail" class="form-control form-control-sm" placeholder="Istege bagli" /></div>
+            <div class="ie-line"><label>Siralama</label><input type="number" id="ieExecutionOrder" class="form-control form-control-sm" value="0" min="0" style="width:80px;flex:none;" /></div>
+            <div class="ie-line">
+                <label></label>
+                <div class="form-check form-check-inline" style="margin:0;"><input type="checkbox" id="ieStopOnError" class="form-check-input" checked /><label class="form-check-label" style="font-size:0.78rem;" for="ieStopOnError">Hata Durumunda Durdur</label></div>
+                <div class="form-check form-check-inline" style="margin:0;"><input type="checkbox" id="ieIsActive" class="form-check-input" checked /><label class="form-check-label" style="font-size:0.78rem;" for="ieIsActive">Aktif</label></div>
+            </div>
+        </div>
+
+        <div class="ie-form-section">
+            <h3>Islem Tipi</h3>
+            <div class="ie-action-type">
+                <label><input type="radio" name="ieActionType" id="ieAtProc" value="SqlProcedure" checked onchange="ieActionTypeChange()" /><span>SQL Proseduru</span></label>
+                <label><input type="radio" name="ieActionType" id="ieAtApi" value="RestApi" onchange="ieActionTypeChange()" /><span>REST API</span></label>
+            </div>
+        </div>
+
+        <!-- SQL Procedure Panel -->
+        <div class="ie-form-section ie-panel active" id="iePanelProc">
+            <h3>SQL Proseduru</h3>
+            <div class="ie-line" style="margin-bottom:6px;"><label>Prosedur</label><input type="text" id="ieProcName" class="form-control form-control-sm" placeholder="dbo.ProcAdi" /></div>
+            <div style="font-size:0.72rem;color:#64748b;margin-bottom:4px;">Parametreler:</div>
+            <table class="ie-params-table">
+                <thead><tr><th>Parametre</th><th>Yon</th><th>Tip</th><th>Kaynak</th><th>Deger/Alan</th><th></th></tr></thead>
+                <tbody id="ieProcParams"></tbody>
+            </table>
+            <button type="button" class="btn btn-outline-secondary btn-sm" style="margin-top:6px;font-size:0.75rem;" onclick="ieAddParam()">+ Parametre Ekle</button>
+            <div class="ie-placeholder-hint" style="margin-top:4px;">Output parametreler: <code>@@ReturnCode INT OUTPUT</code> (0=basarili), <code>@@ReturnMsg NVARCHAR OUTPUT</code></div>
+        </div>
+
+        <!-- REST API Panel -->
+        <div class="ie-form-section ie-panel" id="iePanelApi">
+            <h3>REST API</h3>
+            <div class="ie-line" style="margin-bottom:6px;">
+                <label>API Profili</label>
+                <select id="ieApiProfileId" class="form-select form-select-sm">
+                    <option value="">-- Profil seciniz --</option>
+                </select>
+                <a href="/Admin/CompanySettings" target="_blank" title="Profil ekle" style="flex-shrink:0;font-size:0.75rem;color:#2563eb;white-space:nowrap;">+ Profil</a>
+            </div>
+            <div class="ie-line"><label>Endpoint</label><input type="text" id="ieApiEndpoint" class="form-control form-control-sm" placeholder="/api/v2/ARPs" /></div>
+            <div class="ie-line"><label>Method</label>
+                <select id="ieApiMethod" class="form-select form-select-sm">
+                    <option value="POST">POST</option>
+                    <option value="GET">GET</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+            </div>
+            <div class="ie-api-field-group">
+                <h4>Body Sablonu</h4>
+                <textarea id="ieApiBodyTemplate" class="ie-body-template" rows="5" placeholder='{ "CariKod": "{MaterialCode}" }'></textarea>
+                <div class="ie-placeholder-hint">Serbest JSON. <code>{PlaceholderAdi}</code> ile form verileri kullanilabilir.</div>
+            </div>
+            <div class="ie-api-field-group">
+                <h4>Basari Kriteri</h4>
+                <div class="ie-line"><label>JSON Yolu</label><input type="text" id="ieApiSuccessPath" class="form-control form-control-sm" placeholder="IsSuccessful" /></div>
+                <div class="ie-line"><label>Beklenen</label><input type="text" id="ieApiSuccessValue" class="form-control form-control-sm" placeholder="true" /></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grid Panel -->
+    <div class="ie-grid-panel">
+        <div class="ie-grid-section">
+            <div class="ie-section-hdr">Entegrasyon Tanimlari</div>
+            <div class="ie-grid-wrap">
+                <table class="ie-table">
+                    <thead><tr><th>Adi</th><th>Tip</th><th>Kaynak</th><th>Event</th><th>Sira</th><th>Aktif</th></tr></thead>
+                    <tbody id="ieDefBody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8;">Yukleniyor...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="ie-log-section">
+            <div class="ie-section-hdr">Son Islemler</div>
+            <div class="ie-grid-wrap">
+                <table class="ie-table">
+                    <thead><tr><th>Zaman</th><th>Tip</th><th>Kaynak</th><th>Event</th><th>Durum</th><th>Sure</th><th>Hata</th></tr></thead>
+                    <tbody id="ieLogBody"><tr><td colspan="7" style="text-align:center;padding:10px;color:#94a3b8;">-</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var API = function(a) { return '/Admin/' + a; };
+    var _selectedId = null;
+
+    var PLACEHOLDER_FIELDS = {
+        Items: [
+            {val:'MaterialCode', lbl:'Malzeme Kodu'},
+            {val:'MaterialName', lbl:'Malzeme Adi'},
+            {val:'MaterialTypeId', lbl:'Malzeme Tipi ID'},
+            {val:'MaterialTypeName', lbl:'Malzeme Tipi Adi'},
+            {val:'ItemId', lbl:'Malzeme ID (INT)'},
+            {val:'IsActive', lbl:'Aktif (1/0)'},
+            {val:'TrackCombinations', lbl:'Kombinasyon Takibi'}
+        ],
+        SalesQuote: [
+            {val:'DocumentNumber', lbl:'Belge No'},
+            {val:'QuoteId', lbl:'Teklif ID'},
+            {val:'CustomerId', lbl:'Musteri ID'},
+            {val:'CustomerName', lbl:'Musteri Adi'},
+            {val:'QuoteDate', lbl:'Teklif Tarihi'},
+            {val:'TotalAmount', lbl:'Toplam Tutar'},
+            {val:'SalesRepId', lbl:'Temsilci ID'}
+        ],
+        Customer: [
+            {val:'CustomerCode', lbl:'Cari Kodu'},
+            {val:'CustomerName', lbl:'Cari Adi'},
+            {val:'TaxNumber', lbl:'Vergi No'},
+            {val:'CustomerId', lbl:'Cari ID'}
+        ],
+        Custom: []
+    };
+
+    function init() { loadAll(); loadApiProfiles(); }
+
+    function loadAll() {
+        fetch(API('GetIntegrationEventsJson'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                renderDefs(data.definitions || []);
+                renderLogs(data.logs || []);
+            });
+    }
+
+    function renderDefs(defs) {
+        var tbody = document.getElementById('ieDefBody');
+        if (!defs.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8;">Tanim bulunamadi.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = defs.map(function(d) {
+            var badgeCls = d.actionType === 'SqlProcedure' ? 'proc' : d.actionType === 'RestApi' ? 'api' : 'sql';
+            var badgeLbl = d.actionType === 'SqlProcedure' ? 'PROC' : d.actionType === 'RestApi' ? 'API' : 'SQL';
+            var sel = d.id === _selectedId ? ' class="ie-sel-row"' : '';
+            return '<tr' + sel + ' style="cursor:pointer;" onclick="ieSelect(' + JSON.stringify(d) + ')">' +
+                '<td>' + esc(d.name) + '</td>' +
+                '<td><span class="ie-badge ' + badgeCls + '">' + badgeLbl + '</span></td>' +
+                '<td>' + esc(d.eventSource) + '</td>' +
+                '<td>' + esc(d.eventType) + '</td>' +
+                '<td style="text-align:center;">' + d.executionOrder + '</td>' +
+                '<td style="text-align:center;">' + (d.isActive ? '\u2713' : '') + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    function renderLogs(logs) {
+        var tbody = document.getElementById('ieLogBody');
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:10px;color:#94a3b8;">Log bulunamadi.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = logs.map(function(l) {
+            var badgeCls = l.actionType === 'SqlProcedure' ? 'proc' : l.actionType === 'RestApi' ? 'api' : 'sql';
+            var badgeLbl = l.actionType === 'SqlProcedure' ? 'PROC' : l.actionType === 'RestApi' ? 'API' : 'SQL';
+            return '<tr>' +
+                '<td style="white-space:nowrap;">' + esc(l.executedAt) + '</td>' +
+                '<td><span class="ie-badge ' + badgeCls + '">' + badgeLbl + '</span></td>' +
+                '<td>' + esc(l.eventSource) + '</td>' +
+                '<td>' + esc(l.eventType) + '</td>' +
+                '<td class="' + (l.success ? 'ie-log-ok' : 'ie-log-err') + '">' + (l.success ? 'OK' : 'HATA') + '</td>' +
+                '<td>' + l.durationMs + 'ms</td>' +
+                '<td style="font-size:0.73rem;color:#991b1b;word-break:break-word;white-space:normal;max-width:300px;">' + esc(l.errorMessage) + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    window.ieSelect = function(d) {
+        _selectedId = d.id;
+        document.getElementById('ieId').value = d.id;
+        document.getElementById('ieName').value = d.name;
+        setSelectVal('ieEventSource', d.eventSource);
+        setSelectVal('ieEventType', d.eventType);
+        document.getElementById('ieEventDetail').value = d.eventDetail || '';
+        document.getElementById('ieExecutionOrder').value = d.executionOrder;
+        document.getElementById('ieStopOnError').checked = d.stopOnError;
+        document.getElementById('ieIsActive').checked = d.isActive;
+
+        // Action type
+        var at = d.actionType || 'SqlProcedure';
+        document.querySelectorAll('input[name=ieActionType]').forEach(function(r) { r.checked = r.value === at; });
+        ieActionTypeChange();
+
+        if (at === 'SqlProcedure') {
+            document.getElementById('ieProcName').value = d.procedureName || '';
+            loadProcParams(d.parametersJson);
+        } else if (at === 'RestApi') {
+            loadApiConfig(d.apiConfigJson);
+        }
+
+        document.getElementById('ieDeleteBtn').disabled = false;
+        setMsg('', '');
+        loadAll();
+    };
+
+    window.ieNew = function() {
+        _selectedId = null;
+        document.getElementById('ieId').value = '';
+        document.getElementById('ieName').value = '';
+        document.getElementById('ieEventDetail').value = '';
+        document.getElementById('ieExecutionOrder').value = '0';
+        document.getElementById('ieStopOnError').checked = true;
+        document.getElementById('ieIsActive').checked = true;
+        document.getElementById('ieProcName').value = '';
+        document.getElementById('ieProcParams').innerHTML = '';
+        document.querySelectorAll('input[name=ieActionType]').forEach(function(r) { r.checked = r.value === 'SqlProcedure'; });
+        ieActionTypeChange();
+        clearApiForm();
+        document.getElementById('ieDeleteBtn').disabled = true;
+        setMsg('', '');
+        loadAll();
+    };
+
+    window.ieSave = function() {
+        var at = getActionType();
+        var payload = {
+            id: document.getElementById('ieId').value || null,
+            name: document.getElementById('ieName').value.trim(),
+            eventSource: document.getElementById('ieEventSource').value,
+            eventType: document.getElementById('ieEventType').value,
+            eventDetail: document.getElementById('ieEventDetail').value.trim() || null,
+            executionOrder: parseInt(document.getElementById('ieExecutionOrder').value) || 0,
+            stopOnError: document.getElementById('ieStopOnError').checked,
+            isActive: document.getElementById('ieIsActive').checked,
+            actionType: at,
+            sqlCommand: null,
+            procedureName: at === 'SqlProcedure' ? document.getElementById('ieProcName').value.trim() : null,
+            parametersJson: at === 'SqlProcedure' ? buildParamsJson() : null,
+            apiConfigJson: at === 'RestApi' ? JSON.stringify({
+                profileId: document.getElementById('ieApiProfileId').value || null,
+                endpoint: document.getElementById('ieApiEndpoint').value.trim(),
+                method: document.getElementById('ieApiMethod').value,
+                bodyTemplate: document.getElementById('ieApiBodyTemplate').value,
+                successPath: document.getElementById('ieApiSuccessPath').value.trim(),
+                successValue: document.getElementById('ieApiSuccessValue').value.trim() || 'true'
+            }) : null
+        };
+
+        if (!payload.name) { setMsg('err', 'Tanim adi zorunludur.'); return; }
+        if (at === 'SqlProcedure' && !payload.procedureName) { setMsg('err', 'Prosedur adi zorunludur.'); return; }
+        if (at === 'RestApi') {
+            try {
+                var apiCfg = JSON.parse(payload.apiConfigJson || '{}');
+                if (!apiCfg.profileId) { setMsg('err', 'API Profili secilmemis.'); return; }
+            } catch(e) { setMsg('err', 'API konfigurasyonu gecersiz JSON.'); return; }
+        }
+
+        fetch(API('SaveIntegrationEventJson'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              setMsg(d.success ? 'ok' : 'err', d.message);
+              if (d.success) loadAll();
+          });
+    };
+
+    window.ieDelete = function() {
+        if (!_selectedId) return;
+        if (!confirm('Bu tanimi silmek istediginizden emin misiniz?')) return;
+        fetch(API('DeleteIntegrationEventJson') + '?id=' + _selectedId, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                setMsg(d.success ? 'ok' : 'err', d.message);
+                if (d.success) { ieNew(); }
+            });
+    };
+
+    window.ieActionTypeChange = function() {
+        var at = getActionType();
+        document.querySelectorAll('.ie-panel').forEach(function(p) { p.classList.remove('active'); });
+        if (at === 'SqlProcedure') document.getElementById('iePanelProc').classList.add('active');
+        else {
+            document.getElementById('iePanelApi').classList.add('active');
+            loadApiProfiles();
+        }
+    };
+
+    // ── SQL Procedure Params ──────────────────────────────────────
+    window.ieAddParam = function() {
+        var tbody = document.getElementById('ieProcParams');
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td><input type="text" placeholder="@@ParamAdi" style="width:100%;font-size:0.76rem;padding:2px 4px;border:none;background:transparent;" /></td>' +
+            '<td><select style="width:100%;font-size:0.76rem;padding:2px 4px;border:none;background:transparent;"><option value="input">Input</option><option value="output">Output</option></select></td>' +
+            '<td><select style="width:100%;font-size:0.76rem;padding:2px 4px;border:none;background:transparent;"><option value="nvarchar">nvarchar</option><option value="int">int</option><option value="bigint">bigint</option><option value="decimal">decimal</option><option value="bit">bit</option><option value="datetime2">datetime2</option><option value="uniqueidentifier">guid</option></select></td>' +
+            '<td><select onchange="ieParamSrcChange(this)" style="width:100%;font-size:0.76rem;padding:2px 4px;border:none;background:transparent;"><option value="placeholder">Placeholder</option><option value="manual">Manuel</option></select></td>' +
+            '<td class="ie-param-val-cell"><select style="width:100%;font-size:0.76rem;padding:2px 4px;border:none;background:transparent;"></select></td>' +
+            '<td><button type="button" class="ie-del-row" onclick="this.closest(\'tr\').remove()">\u2715</button></td>';
+        tbody.appendChild(tr);
+        ieUpdateParamValueCell(tr.cells[3].querySelector('select'), tr.cells[4]);
+    };
+
+    window.ieParamSrcChange = function(sel) {
+        var tr = sel.closest('tr');
+        var valCell = tr.cells[4];
+        ieUpdateParamValueCell(sel, valCell);
+    };
+
+    function ieUpdateParamValueCell(srcSel, valCell) {
+        var src = srcSel.value;
+        var eventSource = document.getElementById('ieEventSource').value;
+        var fields = PLACEHOLDER_FIELDS[eventSource] || [];
+        if (src === 'placeholder') {
+            var currentVal = (valCell.querySelector('input,select') || {}).value || '';
+            if (fields.length > 0) {
+                var html = '<select style="width:100%;font-size:0.76rem;padding:2px 4px;border:none;background:transparent;">';
+                fields.forEach(function(f) { html += '<option value="' + f.val + '">' + f.lbl + '</option>'; });
+                html += '</select>';
+                valCell.innerHTML = html;
+                valCell.querySelector('select').value = currentVal;
+            } else {
+                valCell.innerHTML = '<input type="text" placeholder="AlanAdi" style="width:100%;font-size:0.76rem;padding:2px 4px;border:none;background:transparent;" value="' + esc(currentVal) + '" />';
+            }
+        } else {
+            var currentVal2 = (valCell.querySelector('input,select') || {}).value || '';
+            valCell.innerHTML = '<input type="text" placeholder="sabit_deger" style="width:100%;font-size:0.76rem;padding:2px 4px;border:none;background:transparent;" value="' + esc(currentVal2) + '" />';
+        }
+    }
+
+    document.getElementById('ieEventSource').addEventListener('change', function() {
+        document.querySelectorAll('#ieProcParams tr').forEach(function(tr) {
+            var srcSel = tr.cells[3].querySelector('select');
+            if (srcSel && srcSel.value === 'placeholder') {
+                ieUpdateParamValueCell(srcSel, tr.cells[4]);
+            }
+        });
+        if (getActionType() === 'RestApi') loadApiProfiles();
+    });
+
+    function loadProcParams(json) {
+        var tbody = document.getElementById('ieProcParams');
+        tbody.innerHTML = '';
+        if (!json) return;
+        try {
+            var params = JSON.parse(json);
+            params.forEach(function(p) {
+                ieAddParam();
+                var tr = tbody.rows[tbody.rows.length - 1];
+                tr.cells[0].querySelector('input').value = p.name || '';
+                setSelectVal2(tr.cells[1].querySelector('select'), p.direction || 'input');
+                setSelectVal2(tr.cells[2].querySelector('select'), p.type || 'nvarchar');
+                setSelectVal2(tr.cells[3].querySelector('select'), p.source || 'placeholder');
+                ieUpdateParamValueCell(tr.cells[3].querySelector('select'), tr.cells[4]);
+                var valEl = tr.cells[4].querySelector('input,select');
+                if (valEl) valEl.value = p.source === 'manual' ? (p.value || '') : (p.field || '');
+            });
+        } catch(e) {}
+    }
+
+    function buildParamsJson() {
+        var params = [];
+        document.querySelectorAll('#ieProcParams tr').forEach(function(tr) {
+            var name = tr.cells[0].querySelector('input').value.trim();
+            if (!name) return;
+            var dir = tr.cells[1].querySelector('select').value;
+            var type = tr.cells[2].querySelector('select').value;
+            var src = tr.cells[3].querySelector('select').value;
+            var valEl = tr.cells[4].querySelector('input,select');
+            var valOrField = valEl ? valEl.value.trim() : '';
+            var p = { name: name, direction: dir, type: type, source: src };
+            if (dir === 'input') {
+                if (src === 'manual') p.value = valOrField;
+                else p.field = valOrField;
+            }
+            params.push(p);
+        });
+        return JSON.stringify(params);
+    }
+
+    // ── REST API Config ──────────────────────────────────────────
+    function loadApiProfiles() {
+        fetch('/Admin/GetApiProfilesJson')
+            .then(function(r) { return r.json(); })
+            .then(function(profiles) {
+                var sel = document.getElementById('ieApiProfileId');
+                var current = sel.value;
+                while (sel.options.length > 1) sel.remove(1);
+                profiles.filter(function(p) { return p.isActive; }).forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.text = p.name + ' (' + p.authType + ')';
+                    sel.appendChild(opt);
+                });
+                if (current) sel.value = current;
+            });
+    }
+
+    function loadApiConfig(json) {
+        document.getElementById('ieApiProfileId').value = '';
+        document.getElementById('ieApiEndpoint').value = '';
+        document.getElementById('ieApiBodyTemplate').value = '';
+        document.getElementById('ieApiSuccessPath').value = '';
+        document.getElementById('ieApiSuccessValue').value = 'true';
+        setSelectVal('ieApiMethod', 'POST');
+        if (!json) return;
+        try {
+            var c = JSON.parse(json);
+            if (c.profileId) document.getElementById('ieApiProfileId').value = c.profileId;
+            document.getElementById('ieApiEndpoint').value = c.endpoint || '';
+            setSelectVal('ieApiMethod', c.method || 'POST');
+            document.getElementById('ieApiBodyTemplate').value = c.bodyTemplate || '';
+            document.getElementById('ieApiSuccessPath').value = c.successPath || '';
+            document.getElementById('ieApiSuccessValue').value = c.successValue || 'true';
+        } catch(e) {}
+    }
+
+    function clearApiForm() {
+        document.getElementById('ieApiProfileId').value = '';
+        document.getElementById('ieApiEndpoint').value = '';
+        document.getElementById('ieApiBodyTemplate').value = '';
+        document.getElementById('ieApiSuccessPath').value = '';
+        document.getElementById('ieApiSuccessValue').value = 'true';
+        setSelectVal('ieApiMethod', 'POST');
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────
+    function getActionType() {
+        var r = document.querySelector('input[name=ieActionType]:checked');
+        return r ? r.value : 'SqlProcedure';
+    }
+
+    function setMsg(type, msg) {
+        var el = document.getElementById('ieMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<span class="ie-msg ' + type + '">' + esc(msg) + '</span>';
+        if (type === 'ok') setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+
+    function setSelectVal(id, val) {
+        var sel = document.getElementById(id);
+        if (!sel) return;
+        for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === val) { sel.selectedIndex = i; return; }
+        var opt = document.createElement('option');
+        opt.value = val; opt.text = val; sel.appendChild(opt); sel.value = val;
+    }
+
+    function setSelectVal2(sel, val) {
+        for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === val) { sel.selectedIndex = i; return; }
+    }
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    init();
+})();
+</script>
+}

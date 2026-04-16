@@ -1,0 +1,1639 @@
+@model CalibraHub.Web.Models.Logistics.ProductFeatureEditViewModel
+@{
+    ViewData["Title"] = Model.FeatureId.HasValue ? "Ozellik Duzenle" : "Yeni Ozellik";
+    ViewData["FormCode"] = "PRODUCT_FEATURE_EDIT";
+    ViewData["BodyClass"] = "page-product-feature-edit";
+    var editId = (int)(ViewData["ProductFeatureEditId"] ?? 0);
+}
+
+@section Styles {
+<style>
+    /* ── Viewport setup ───────────────────────────────────────────────── */
+    .page-product-feature-edit .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-product-feature-edit .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-product-feature-edit .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-product-feature-edit .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+
+    /* ── Action bar ───────────────────────────────────────────────────── */
+    .pfe-action-bar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 16px; flex-shrink: 0;
+        background: rgba(15,15,26,0.85); border-bottom: 1px solid rgba(255,255,255,0.06);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    }
+    body.app-theme-light .pfe-action-bar {
+        background: rgba(248,250,252,0.92); border-bottom-color: #e2e8f0;
+    }
+    .pfe-action-bar .pfe-meta {
+        margin-right: auto; font-size: 0.72rem; color: rgba(255,255,255,0.5); font-weight: 500;
+    }
+    body.app-theme-light .pfe-action-bar .pfe-meta { color: #94a3b8; }
+    .pfe-action-bar .pfe-meta strong { color: rgba(255,255,255,0.75); font-weight: 700; }
+    body.app-theme-light .pfe-action-bar .pfe-meta strong { color: #334155; }
+
+    /* ── Buttons ──────────────────────────────────────────────────────── */
+    .pfe-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 14px; border-radius: 8px; border: 1px solid;
+        font-size: 0.78rem; font-weight: 600; cursor: pointer;
+        transition: all 0.12s ease; background: transparent;
+    }
+    .pfe-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .pfe-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
+    .pfe-btn--primary:hover:not(:disabled) { background: #4f46e5; }
+    .pfe-btn--secondary {
+        background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);
+        color: rgba(255,255,255,0.65);
+    }
+    body.app-theme-light .pfe-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
+    .pfe-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,0.1); color: #fff; }
+    body.app-theme-light .pfe-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
+    .pfe-btn--danger { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.25); color: #f87171; }
+    .pfe-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,0.18); }
+    body.app-theme-light .pfe-btn--danger { color: #dc2626; }
+    .pfe-btn--sm { padding: 5px 11px; font-size: 0.75rem; }
+
+    /* ── Body layout ──────────────────────────────────────────────────── */
+    .pfe-body {
+        display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden;
+    }
+
+    /* ── Sidenav ──────────────────────────────────────────────────────── */
+    .pfe-sidenav {
+        width: 192px; flex-shrink: 0;
+        border-right: 1px solid rgba(255,255,255,0.07);
+        background: rgba(255,255,255,0.02);
+        display: flex; flex-direction: column;
+        padding: 10px 0; overflow-y: auto;
+    }
+    body.app-theme-light .pfe-sidenav { background: #f8fafc; border-right-color: #e2e8f0; }
+    .pfe-sidenav-label {
+        font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.08em; color: rgba(255,255,255,0.4);
+        padding: 10px 16px 5px; margin-top: 4px;
+    }
+    .pfe-sidenav-label:first-child { margin-top: 0; }
+    body.app-theme-light .pfe-sidenav-label { color: #94a3b8; }
+    .pfe-nav-btn {
+        display: flex; align-items: center; gap: 8px;
+        width: 100%; padding: 8px 16px;
+        background: transparent; border: none;
+        border-left: 3px solid transparent;
+        color: rgba(255,255,255,0.65);
+        font-size: 0.78rem; font-weight: 500; text-align: left;
+        cursor: pointer; transition: all 0.15s; line-height: 1.35;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.app-theme-light .pfe-nav-btn { color: #64748b; }
+    .pfe-nav-btn:hover { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.9); }
+    body.app-theme-light .pfe-nav-btn:hover { background: rgba(15,23,42,0.04); color: #1e293b; }
+    .pfe-nav-btn.is-active {
+        border-left-color: #6366f1;
+        background: rgba(99,102,241,0.09);
+        color: #a5b4fc; font-weight: 600;
+    }
+    body.app-theme-light .pfe-nav-btn.is-active { background: rgba(99,102,241,0.07); color: #4f46e5; }
+    .pfe-nav-dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: currentColor; flex-shrink: 0; opacity: 0.5;
+    }
+    .pfe-nav-btn.is-active .pfe-nav-dot { opacity: 1; }
+    .pfe-nav-count {
+        margin-left: auto; padding: 1px 6px; border-radius: 999px;
+        font-size: 0.6rem; font-weight: 700; font-family: monospace;
+        background: rgba(99,102,241,0.12); color: #a5b4fc;
+        border: 1px solid rgba(99,102,241,0.25); flex-shrink: 0;
+    }
+    body.app-theme-light .pfe-nav-count { background: rgba(99,102,241,0.08); color: #4f46e5; }
+
+    /* ── Content area ─────────────────────────────────────────────────── */
+    .pfe-content {
+        flex: 1 1 auto; min-width: 0; overflow: hidden;
+        padding: 20px 24px;
+        display: flex; flex-direction: column;
+    }
+    body.app-theme-dark .pfe-content,
+    html.dark .pfe-content {
+        background: #0c0f1a;
+        background-image: radial-gradient(at 20% 30%,rgba(99,102,241,0.12) 0px,transparent 50%),
+                          radial-gradient(at 80% 20%,rgba(14,165,233,0.08) 0px,transparent 50%),
+                          radial-gradient(at 50% 80%,rgba(168,85,247,0.08) 0px,transparent 50%);
+    }
+    body.app-theme-light .pfe-content { background: #f8fafc; }
+
+    /* ── Section fill ────────────────────────────────────────────────── */
+    .pfe-section {
+        flex: 1 1 auto; min-height: 0;
+        display: flex; flex-direction: column;
+    }
+    /* Genel ve Stoklar bölümleri kendileri scroll eder (içerik azsa boşluk bırakmaz) */
+    .pfe-section[data-section="general"],
+    .pfe-section[data-section="stocks"] {
+        overflow-y: auto;
+    }
+
+    /* ── Glass card ───────────────────────────────────────────────────── */
+    .pfe-card {
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 14px; padding: 22px;
+        backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+        margin-bottom: 0;
+        flex: 1 1 auto; min-height: 0;
+        display: flex; flex-direction: column;
+    }
+    body.app-theme-light .pfe-card {
+        background: rgba(255,255,255,0.85); border-color: rgba(15,23,42,0.08);
+        box-shadow: 0 2px 6px rgba(15,23,42,0.04);
+    }
+    .pfe-card-title {
+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.06em; color: rgba(255,255,255,0.6);
+        margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;
+        flex-shrink: 0;
+    }
+    body.app-theme-light .pfe-card-title { color: #64748b; }
+    .pfe-card-title::before {
+        content: ''; width: 6px; height: 6px; border-radius: 50%; background: #6366f1; flex-shrink: 0;
+    }
+    .pfe-card-hdr {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px; gap: 12px;
+    }
+    .pfe-card-hdr .pfe-card-title { margin-bottom: 0; }
+
+    /* ── Flash animations ─────────────────────────────────────────────── */
+    @@keyframes pfeSuccessFlash {
+        0%   { border-color: rgba(255,255,255,0.1); box-shadow: none; }
+        25%  { border-color: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.25),0 0 32px rgba(16,185,129,0.35); }
+        50%  { border-color: #34d399; box-shadow: 0 0 0 6px rgba(16,185,129,0.15),0 0 40px rgba(16,185,129,0.4); }
+        75%  { border-color: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.1),0 0 24px rgba(16,185,129,0.2); }
+        100% { border-color: rgba(255,255,255,0.1); box-shadow: none; }
+    }
+    .pfe-action-bar.is-success { animation: pfeSuccessFlash 1.4s ease-out; }
+
+    /* ── Form grid & fields ───────────────────────────────────────────── */
+    .pfe-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .pfe-field { display: flex; flex-direction: column; gap: 5px; }
+    .pfe-field--full { grid-column: 1 / -1; }
+    .pfe-field label {
+        font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.65);
+        letter-spacing: 0.02em;
+    }
+    body.app-theme-light .pfe-field label { color: #64748b; }
+    .pfe-input, .pfe-select {
+        padding: 9px 12px; border-radius: 9px;
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+        color: rgba(255,255,255,0.85); font-size: 0.85rem;
+        transition: border-color 0.15s, background 0.15s;
+        width: 100%;
+    }
+    body.app-theme-light .pfe-input, body.app-theme-light .pfe-select {
+        background: #fff; border-color: #e2e8f0; color: #1e293b;
+    }
+    .pfe-input:focus, .pfe-select:focus {
+        outline: none; border-color: #6366f1;
+        background: rgba(255,255,255,0.06);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+    }
+    body.app-theme-light .pfe-input:focus, body.app-theme-light .pfe-select:focus { background: #fff; }
+    .pfe-input::placeholder { color: rgba(255,255,255,0.35); }
+    body.app-theme-light .pfe-input::placeholder { color: #94a3b8; }
+    .pfe-input[readonly] { opacity: 0.65; cursor: default; }
+    .pfe-select option { background: #0d1117; color: rgba(255,255,255,0.85); }
+    body.app-theme-light .pfe-select option { background: #fff; color: #1e293b; }
+    .pfe-select {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff80' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 14px 14px;
+        padding-right: 28px; appearance: none;
+    }
+    body.app-theme-light .pfe-select {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 14px 14px;
+    }
+    .pfe-toggle {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; border-radius: 9px; cursor: pointer; user-select: none;
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+        font-size: 0.82rem; color: rgba(255,255,255,0.7); font-weight: 500;
+    }
+    body.app-theme-light .pfe-toggle { background: #fff; border-color: #e2e8f0; color: #475569; }
+    .pfe-toggle input { margin: 0; accent-color: #6366f1; }
+
+    /* ── Value grid table ─────────────────────────────────────────────── */
+    .pfe-val-empty {
+        padding: 28px 16px; text-align: center;
+        font-size: 0.82rem; color: rgba(255,255,255,0.3); font-style: italic;
+        border: 1.5px dashed rgba(255,255,255,0.1); border-radius: 10px;
+    }
+    body.app-theme-light .pfe-val-empty { color: #94a3b8; border-color: #e2e8f0; }
+
+    /* Kolon sabiti — header + her satir ayni template'i kullanir */
+    .pfe-val-thead,
+    .pfe-val-row {
+        display: grid;
+        grid-template-columns: 36px 1fr 96px 1.8fr 64px;
+        align-items: center;
+    }
+    /* Tablo kap */
+    .pfe-val-table {
+        border-radius: 10px; overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+    body.app-theme-light .pfe-val-table { border-color: #e2e8f0; }
+    /* Baslik satiri */
+    .pfe-val-thead {
+        background: rgba(0,0,0,0.22);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    body.app-theme-light .pfe-val-thead { background: #f1f5f9; border-bottom-color: #e2e8f0; }
+    .pfe-val-th {
+        padding: 7px 10px;
+        font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.07em; color: rgba(255,255,255,0.38);
+    }
+    body.app-theme-light .pfe-val-th { color: #94a3b8; }
+    /* Veri satiri */
+    .pfe-val-row {
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        transition: background 0.1s;
+    }
+    .pfe-val-row:last-child { border-bottom: none; }
+    .pfe-val-row:hover { background: rgba(20,184,166,0.06); }
+    body.app-theme-light .pfe-val-row { border-bottom-color: #f1f5f9; }
+    body.app-theme-light .pfe-val-row:hover { background: #f0fdfa; }
+    /* Hucre */
+    .pfe-val-td {
+        padding: 9px 10px;
+        font-size: 0.82rem; color: rgba(255,255,255,0.78);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.app-theme-light .pfe-val-td { color: #334155; }
+    /* # sutunu */
+    .pfe-val-td--idx { display: flex; align-items: center; justify-content: center; padding: 0; }
+    .pfe-val-row__idx {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 22px; height: 22px; border-radius: 999px;
+        background: rgba(20,184,166,0.12); border: 1px solid rgba(20,184,166,0.28);
+        color: #5eead4; font-size: 0.62rem; font-weight: 700;
+    }
+    body.app-theme-light .pfe-val-row__idx { color: #0d9488; }
+    /* Deger sutunu */
+    .pfe-val-td--val { font-weight: 600; color: rgba(255,255,255,0.88); }
+    body.app-theme-light .pfe-val-td--val { color: #1e293b; }
+    .pfe-val-td--numeric { text-align: right; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+    .pfe-val-th.pfe-val-th--numeric { text-align: right; }
+    /* Olcu birimi sutunu */
+    .pfe-val-uom-badge {
+        display: inline-block; padding: 2px 8px; border-radius: 5px;
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+        background: rgba(20,184,166,0.12); border: 1px solid rgba(20,184,166,0.28);
+        color: #5eead4;
+    }
+    body.app-theme-light .pfe-val-uom-badge { background: #ccfbf1; border-color: #99f6e4; color: #0d9488; }
+    /* Aciklama sutunu */
+    .pfe-val-td--acik { color: rgba(255,255,255,0.4); font-size: 0.78rem; }
+    body.app-theme-light .pfe-val-td--acik { color: #94a3b8; }
+    /* Sil sutunu */
+    .pfe-val-td--del { display: flex; align-items: center; justify-content: center; padding: 0; }
+    .pfe-val-row__del {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+        background: transparent; border: 1px solid transparent;
+        color: rgba(255,255,255,0.18); transition: all 0.12s;
+    }
+    .pfe-val-row:hover .pfe-val-row__del { color: rgba(255,255,255,0.38); border-color: rgba(255,255,255,0.08); }
+    .pfe-val-row__del:hover { background: rgba(239,68,68,0.18)!important; border-color: rgba(239,68,68,0.45)!important; color: #fca5a5!important; }
+    body.app-theme-light .pfe-val-row__del { color: #d1d5db; }
+    body.app-theme-light .pfe-val-row:hover .pfe-val-row__del { border-color: #e2e8f0; color: #94a3b8; }
+    body.app-theme-light .pfe-val-row__del:hover { background: #fee2e2!important; border-color: #fca5a5!important; color: #dc2626!important; }
+
+    /* Satır düzenleme — row edit modu */
+    .pfe-val-row.is-editing { background: rgba(20,184,166,0.08); }
+    body.app-theme-light .pfe-val-row.is-editing { background: #f0fdfa; }
+    .pfe-val-row.is-editing .pfe-val-td--val,
+    .pfe-val-row.is-editing .pfe-val-td--acik { padding: 5px 6px; }
+    .pfe-val-edit-input {
+        width: 100%; padding: 5px 8px; border-radius: 6px; font-size: 0.82rem;
+        background: rgba(255,255,255,0.07); border: 1px solid rgba(20,184,166,0.4);
+        color: rgba(255,255,255,0.9); outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .pfe-val-edit-input:focus { border-color: rgba(20,184,166,0.7); box-shadow: 0 0 0 3px rgba(20,184,166,0.12); }
+    body.app-theme-light .pfe-val-edit-input { background: #fff; border-color: #14b8a6; color: #1e293b; }
+    body.app-theme-light .pfe-val-edit-input:focus { box-shadow: 0 0 0 3px rgba(20,184,166,0.12); }
+    .pfe-val-td--del-edit { display: flex; align-items: center; gap: 4px; justify-content: center; padding: 0; }
+    .pfe-val-row__save {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+        background: rgba(20,184,166,0.15); border: 1px solid rgba(20,184,166,0.4);
+        color: #5eead4; transition: all 0.12s;
+    }
+    .pfe-val-row__save:hover { background: rgba(20,184,166,0.3); border-color: rgba(20,184,166,0.7); }
+    body.app-theme-light .pfe-val-row__save { color: #0d9488; }
+
+    /* ── Add row ──────────────────────────────────────────────────────── */
+    .pfe-add-row {
+        display: flex; gap: 8px; align-items: center;
+        padding: 10px 14px; border-radius: 10px;
+        background: rgba(20,184,166,0.04); border: 1px dashed rgba(20,184,166,0.2);
+        transition: border-color 0.15s, background 0.15s;
+        flex-shrink: 0;
+    }
+    .pfe-add-row:focus-within { border-color: rgba(20,184,166,0.5); background: rgba(20,184,166,0.08); }
+    body.app-theme-light .pfe-add-row { background: #f0fdfa; border-color: #99f6e4; }
+    body.app-theme-light .pfe-add-row:focus-within { border-color: #14b8a6; }
+    .pfe-add-row__fields {
+        flex: 1; min-width: 0; display: grid;
+        grid-template-columns: 1fr 1.6fr; gap: 8px;
+    }
+    .pfe-add-row__fields .pfe-input { width: 100%; }
+
+    /* Duplicate shake — kirmizi titresim */
+    @@keyframes pfeInputShake {
+        0%,100% { transform: translateX(0); }
+        15%,45%,75% { transform: translateX(-5px); }
+        30%,60%,90% { transform: translateX(5px); }
+    }
+    .pfe-input.is-duplicate {
+        border-color: #ef4444 !important;
+        background: rgba(239,68,68,0.08) !important;
+        box-shadow: 0 0 0 3px rgba(239,68,68,0.18) !important;
+        animation: pfeInputShake 0.4s cubic-bezier(0.36,0.07,0.19,0.97);
+    }
+
+    /* ── Stock rows ───────────────────────────────────────────────────── */
+    .pfe-stock-empty {
+        padding: 28px 16px; text-align: center;
+        font-size: 0.82rem; color: rgba(255,255,255,0.3); font-style: italic;
+        border: 1.5px dashed rgba(255,255,255,0.1); border-radius: 10px;
+    }
+    body.app-theme-light .pfe-stock-empty { color: #94a3b8; border-color: #e2e8f0; }
+    .pfe-stock-rows { display: flex; flex-direction: column; gap: 8px; }
+    .pfe-stock-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 14px; border-radius: 10px;
+        background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.07);
+        transition: all 0.15s;
+    }
+    .pfe-stock-row:hover {
+        background: rgba(99,102,241,0.06); border-color: rgba(99,102,241,0.2);
+    }
+    body.app-theme-light .pfe-stock-row { background: #f8fafc; border-color: #e2e8f0; }
+    body.app-theme-light .pfe-stock-row:hover { background: #f1f5f9; border-color: #c7d2fe; }
+    .pfe-stock-row__idx {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 26px; height: 26px; border-radius: 999px;
+        background: rgba(99,102,241,0.14); border: 1px solid rgba(99,102,241,0.3);
+        color: #a5b4fc; font-size: 0.68rem; font-weight: 700; flex-shrink: 0;
+    }
+    body.app-theme-light .pfe-stock-row__idx { color: #4f46e5; }
+    .pfe-stock-row__code {
+        font-family: ui-monospace, monospace; font-size: 0.8rem; font-weight: 700;
+        color: #a5b4fc; min-width: 90px; flex-shrink: 0;
+    }
+    body.app-theme-light .pfe-stock-row__code { color: #6366f1; }
+    .pfe-stock-row__name {
+        flex: 1; font-size: 0.82rem; color: rgba(255,255,255,0.75);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.app-theme-light .pfe-stock-row__name { color: #334155; }
+    .pfe-stock-row__unlink {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 5px 10px; border-radius: 7px; font-size: 0.74rem; font-weight: 600;
+        background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25);
+        color: #f87171; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+    }
+    .pfe-stock-row__unlink:hover {
+        background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.5);
+    }
+    body.app-theme-light .pfe-stock-row__unlink { color: #dc2626; }
+
+    /* ── Delete confirm modal ─────────────────────────────────────────── */
+    .pfe-del-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+        animation: pfeDelFadeIn .15s ease-out;
+    }
+    @@keyframes pfeDelFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .pfe-del-box {
+        background: #1e293b; border: 1px solid rgba(255,255,255,.12);
+        border-radius: 16px; padding: 32px 28px; max-width: 380px; width: 90vw;
+        text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.5);
+        animation: pfeDelSlide .18s cubic-bezier(.23,1,.32,1);
+    }
+    @@keyframes pfeDelSlide {
+        from { transform: translateY(10px) scale(.97); opacity: 0; }
+        to   { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    body.app-theme-light .pfe-del-box { background: #fff; border-color: #e2e8f0; box-shadow: 0 24px 64px rgba(0,0,0,.15); }
+    .pfe-del-ico { color: #ef4444; }
+    .pfe-del-title { font-size: 1.05rem; font-weight: 700; color: #f1f5f9; margin: 0; }
+    body.app-theme-light .pfe-del-title { color: #0f172a; }
+    .pfe-del-text { font-size: .84rem; color: #94a3b8; margin: 0; }
+    body.app-theme-light .pfe-del-text { color: #64748b; }
+    .pfe-del-code {
+        font-family: monospace; font-size: .88rem; font-weight: 700; color: #fbbf24;
+        background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.25);
+        border-radius: 8px; padding: 4px 12px;
+    }
+    body.app-theme-light .pfe-del-code { color: #d97706; }
+    .pfe-del-btns { display: flex; gap: 10px; margin-top: 8px; }
+    .pfe-del-cancel {
+        display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
+        border-radius: 8px; font-size: .84rem; font-weight: 600;
+        background: rgba(255,255,255,.07); color: #f1f5f9;
+        border: 1px solid rgba(255,255,255,.1); cursor: pointer; transition: all .15s;
+    }
+    .pfe-del-cancel:disabled { opacity: .5; cursor: default; }
+    .pfe-del-cancel:hover:not(:disabled) { background: rgba(255,255,255,.13); }
+    body.app-theme-light .pfe-del-cancel { background: #f1f5f9; border-color: #e2e8f0; color: #374151; }
+    .pfe-del-confirm {
+        display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;
+        border-radius: 8px; font-size: .84rem; font-weight: 600;
+        background: linear-gradient(135deg,#ef4444,#dc2626); color: #fff;
+        border: none; cursor: pointer; transition: all .15s;
+    }
+    .pfe-del-confirm:disabled { opacity: .5; cursor: default; }
+    .pfe-del-confirm:hover:not(:disabled) { background: linear-gradient(135deg,#f87171,#ef4444); }
+
+    /* ── Value sil onay popup (küçük inline modal) ────────────────────── */
+    .pfe-confirm-backdrop {
+        position: fixed; inset: 0; z-index: 9998;
+        background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .pfe-confirm-box {
+        background: #1e293b; border: 1px solid rgba(255,255,255,.12);
+        border-radius: 16px; padding: 28px 24px; max-width: 340px; width: 90vw;
+        text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+    body.app-theme-light .pfe-confirm-box { background: #fff; border-color: #e2e8f0; }
+    .pfe-confirm-ico { color: #ef4444; }
+    .pfe-confirm-title { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin: 0; }
+    body.app-theme-light .pfe-confirm-title { color: #0f172a; }
+    .pfe-confirm-text { font-size: .82rem; color: #94a3b8; margin: 0; }
+    body.app-theme-light .pfe-confirm-text { color: #64748b; }
+    .pfe-confirm-btns { display: flex; gap: 10px; margin-top: 6px; }
+    .pfe-confirm-btn {
+        display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;
+        border-radius: 8px; font-size: .82rem; font-weight: 600; border: 1px solid; cursor: pointer; transition: all .15s;
+    }
+    .pfe-confirm-btn:disabled { opacity: .5; cursor: default; }
+    .pfe-confirm-btn--ghost { background: rgba(255,255,255,.07); color: #f1f5f9; border-color: rgba(255,255,255,.1); }
+    .pfe-confirm-btn--ghost:hover:not(:disabled) { background: rgba(255,255,255,.13); }
+    body.app-theme-light .pfe-confirm-btn--ghost { background: #f1f5f9; border-color: #e2e8f0; color: #374151; }
+    .pfe-confirm-btn--danger { background: linear-gradient(135deg,#ef4444,#dc2626); color: #fff; border-color: transparent; }
+    .pfe-confirm-btn--danger:hover:not(:disabled) { background: linear-gradient(135deg,#f87171,#ef4444); }
+
+    /* ── Stok rehber modali ───────────────────────────────────────────── */
+    .pfe-guide {
+        background: #1e293b; border: 1px solid rgba(255,255,255,.12);
+        border-radius: 16px; width: min(560px, 96vw); max-height: 80vh;
+        display: flex; flex-direction: column; overflow: hidden;
+        box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+    body.app-theme-light .pfe-guide { background: #fff; border-color: #e2e8f0; box-shadow: 0 24px 64px rgba(0,0,0,.12); }
+    .pfe-guide-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,.1);
+        background: rgba(0,0,0,.15);
+    }
+    body.app-theme-light .pfe-guide-header { border-bottom-color: #e2e8f0; background: #f8fafc; }
+    .pfe-guide-header__left { display: flex; align-items: center; gap: 8px; color: #a5b4fc; font-size: .9rem; font-weight: 700; }
+    .pfe-guide-title { color: #f1f5f9; }
+    body.app-theme-light .pfe-guide-title { color: #0f172a; }
+    .pfe-guide-close {
+        background: none; border: none; color: #94a3b8; font-size: 1.4rem;
+        cursor: pointer; padding: 4px 8px; border-radius: 6px; line-height: 1;
+        transition: background .12s, color .12s;
+    }
+    .pfe-guide-close:hover { background: rgba(255,255,255,.1); color: #f1f5f9; }
+    body.app-theme-light .pfe-guide-close:hover { background: #f1f5f9; color: #1e293b; }
+    .pfe-guide-search {
+        display: flex; align-items: center; gap: 8px; padding: 10px 18px;
+        border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    body.app-theme-light .pfe-guide-search { border-bottom-color: #e2e8f0; }
+    .pfe-guide-search__ico { color: #64748b; flex-shrink: 0; }
+    .pfe-guide-search__input {
+        flex: 1; background: transparent; border: none; outline: none;
+        color: #f1f5f9; font-size: .85rem;
+    }
+    body.app-theme-light .pfe-guide-search__input { color: #0f172a; }
+    .pfe-guide-search__input::placeholder { color: #64748b; }
+    .pfe-guide-body { flex: 1; overflow-y: auto; min-height: 200px; }
+    .pfe-guide-loading { padding: 24px; text-align: center; color: #64748b; font-size: .84rem; }
+    .pfe-guide-row {
+        display: flex; align-items: center; gap: 12px; padding: 9px 18px;
+        border-bottom: 1px solid rgba(255,255,255,.05); cursor: pointer; transition: background .1s;
+    }
+    .pfe-guide-row:last-child { border-bottom: none; }
+    .pfe-guide-row:hover { background: rgba(255,255,255,.05); }
+    body.app-theme-light .pfe-guide-row { border-bottom-color: #f1f5f9; }
+    body.app-theme-light .pfe-guide-row:hover { background: #f8fafc; }
+    .pfe-guide-row__code { font-family: ui-monospace, monospace; font-weight: 700; font-size: .8rem; color: #a5b4fc; min-width: 100px; }
+    body.app-theme-light .pfe-guide-row__code { color: #6366f1; }
+    .pfe-guide-row__name { flex: 1; font-size: .82rem; color: rgba(255,255,255,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    body.app-theme-light .pfe-guide-row__name { color: #475569; }
+    .pfe-guide-row__switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .pfe-guide-row__switch input { opacity: 0; width: 0; height: 0; }
+    .pfe-guide-row__switch .pfe-switch-track {
+        position: absolute; inset: 0; background: rgba(255,255,255,.12);
+        border-radius: 10px; transition: background .2s; cursor: pointer;
+    }
+    .pfe-guide-row__switch .pfe-switch-track::after {
+        content: ''; position: absolute; left: 2px; top: 2px;
+        width: 16px; height: 16px; background: #94a3b8; border-radius: 50%;
+        transition: transform .2s, background .2s;
+    }
+    .pfe-guide-row__switch input:checked + .pfe-switch-track { background: #6366f1; }
+    .pfe-guide-row__switch input:checked + .pfe-switch-track::after { transform: translateX(16px); background: #fff; }
+    body.app-theme-light .pfe-guide-row__switch .pfe-switch-track { background: #e2e8f0; }
+    .pfe-guide-sep {
+        padding: 6px 18px; font-size: .68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .06em; color: rgba(255,255,255,.35);
+        background: rgba(0,0,0,.15); border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    body.app-theme-light .pfe-guide-sep { color: #94a3b8; background: #f8fafc; border-bottom-color: #e2e8f0; }
+    .pfe-guide-empty { padding: 24px; text-align: center; color: #64748b; font-size: .82rem; font-style: italic; }
+    .pfe-guide-footer {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 18px; border-top: 1px solid rgba(255,255,255,.1); background: rgba(0,0,0,.15);
+    }
+    body.app-theme-light .pfe-guide-footer { border-top-color: #e2e8f0; background: #f8fafc; }
+    .pfe-guide-footer__count { font-size: .78rem; color: #94a3b8; }
+
+    /* ── Dark-mode body gradient ──────────────────────────────────────── */
+    body.app-theme-dark.page-product-feature-edit,
+    body.app-theme-dark .page-product-feature-edit {
+        background-color: #0a0d17;
+        background-image:
+            radial-gradient(at 12% 8%, rgba(99,102,241,0.18) 0px, transparent 50%),
+            radial-gradient(at 88% 12%, rgba(14,165,233,0.12) 0px, transparent 50%),
+            radial-gradient(at 50% 100%, rgba(168,85,247,0.12) 0px, transparent 50%);
+    }
+
+    /* ── Toast bildirimleri ───────────────────────────────────────────── */
+    #pfeToastContainer {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        z-index: 99999; display: flex; flex-direction: column;
+        align-items: center; gap: 10px; pointer-events: none;
+    }
+    .pfe-toast {
+        display: flex; align-items: flex-start; gap: 12px;
+        padding: 14px 20px; border-radius: 14px; min-width: 260px; max-width: 480px;
+        font-size: 0.83rem; font-weight: 500; line-height: 1.45;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.3);
+        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        pointer-events: auto; cursor: default;
+        animation: pfeToastIn 0.22s cubic-bezier(0.34,1.56,0.64,1) forwards;
+        border: 1px solid;
+    }
+    .pfe-toast.is-leaving {
+        animation: pfeToastOut 0.18s ease-in forwards;
+    }
+    .pfe-toast--ok {
+        background: rgba(16,185,129,0.15);
+        border-color: rgba(16,185,129,0.35);
+        color: #6ee7b7;
+    }
+    .pfe-toast--err {
+        background: rgba(239,68,68,0.15);
+        border-color: rgba(239,68,68,0.35);
+        color: #fca5a5;
+    }
+    body.app-theme-light .pfe-toast--ok {
+        background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.3); color: #059669;
+    }
+    body.app-theme-light .pfe-toast--err {
+        background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: #dc2626;
+    }
+    .pfe-toast__icon {
+        flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px;
+    }
+    .pfe-toast__text { flex: 1; word-break: break-word; }
+    .pfe-toast__close {
+        flex-shrink: 0; background: none; border: none; cursor: pointer;
+        padding: 0; line-height: 1; opacity: 0.6; transition: opacity .12s;
+        color: inherit; font-size: 1rem; margin-left: 4px;
+    }
+    .pfe-toast__close:hover { opacity: 1; }
+    @@keyframes pfeToastIn {
+        from { opacity: 0; transform: scale(0.82); }
+        to   { opacity: 1; transform: scale(1); }
+    }
+    @@keyframes pfeToastOut {
+        from { opacity: 1; transform: scale(1); }
+        to   { opacity: 0; transform: scale(0.82); }
+    }
+</style>
+}
+
+<!-- Toast bildirimleri -->
+<div id="pfeToastContainer"></div>
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+
+    <!-- Aksiyon Seridi -->
+    <div class="pfe-action-bar" id="pfeActionBar">
+        <button type="button" class="pfe-btn pfe-btn--primary" onclick="pfeSave()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Kaydet
+        </button>
+        <button type="button" class="pfe-btn pfe-btn--secondary" onclick="pfeBackToList()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Liste
+        </button>
+        <button type="button" class="pfe-btn pfe-btn--danger" id="pfeBtnDelete" style="display:none;" onclick="pfeDeleteFeature()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            Sil
+        </button>
+        <span class="pfe-meta" id="pfeMeta"></span>
+    </div>
+
+    <div class="pfe-body">
+
+        <!-- Sol Navigasyon -->
+        <nav class="pfe-sidenav" id="pfeSideNav" aria-label="Bolumler">
+            <span class="pfe-sidenav-label">Genel</span>
+            <button type="button" class="pfe-nav-btn is-active" data-nav-section="general">
+                <span class="pfe-nav-dot"></span>
+                Genel Bilgiler
+            </button>
+            <span class="pfe-sidenav-label">Icerik</span>
+            <button type="button" class="pfe-nav-btn" data-nav-section="values">
+                <span class="pfe-nav-dot"></span>
+                Degerler
+                <span class="pfe-nav-count" id="pfeNavValuesCount" style="display:none">0</span>
+            </button>
+            <button type="button" class="pfe-nav-btn" data-nav-section="stocks">
+                <span class="pfe-nav-dot"></span>
+                Bagli Stoklar
+                <span class="pfe-nav-count" id="pfeNavStocksCount" style="display:none">0</span>
+            </button>
+        </nav>
+
+        <!-- Sag Icerik -->
+        <div class="pfe-content" id="pfeContent">
+
+            <!-- BOLUM: Genel Bilgiler -->
+            <div class="pfe-card pfe-section" data-section="general">
+                <p class="pfe-card-title">Genel Bilgiler</p>
+                <div class="pfe-grid">
+                    <div class="pfe-field">
+                        <label>Ozellik Kodu</label>
+                        <input id="pfeCode" type="text" class="pfe-input" readonly placeholder="Kaydedildiginde olusturulur" />
+                    </div>
+                    <div class="pfe-field">
+                        <label>Ozellik Adi *</label>
+                        <input id="pfeName" type="text" class="pfe-input" placeholder="Orn: Renk, Beden, Malzeme" maxlength="255" />
+                    </div>
+                    <div class="pfe-field">
+                        <label>Veri Tipi *</label>
+                        <select id="pfeDataType" class="pfe-select">
+                            <option value="Text">Metin</option>
+                            <option value="Numeric">Sayisal</option>
+                            <option value="Date">Tarih</option>
+                        </select>
+                    </div>
+                    <div class="pfe-field">
+                        <label>Olcu Birimi</label>
+                        <input id="pfeUnitOfMeasure" type="text" class="pfe-input" placeholder="Orn: cm, kg (sayisal icin)" maxlength="20" />
+                    </div>
+                    <div class="pfe-field pfe-field--full">
+                        <label class="pfe-toggle">
+                            <input type="checkbox" id="pfeIsActive" checked />
+                            <span>Aktif</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BOLUM: Degerler -->
+            <div class="pfe-card pfe-section" data-section="values" style="display:none">
+                <p class="pfe-card-title">Degerler</p>
+                <div class="pfe-add-row" id="pfeAddValueRow">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(20,184,166,0.7)" stroke-width="2.2" stroke-linecap="round" style="flex-shrink:0"><path d="M12 5v14M5 12h14"/></svg>
+                    <div class="pfe-add-row__fields">
+                        <input type="text" id="pfeNewValueInput" class="pfe-input pfe-add-row__val" placeholder="Deger *"
+                               onkeydown="if(event.key==='Enter'){event.preventDefault();pfeAddValue();}" />
+                        <input type="text" id="pfeNewAciklamaInput" class="pfe-input pfe-add-row__acik" placeholder="Aciklama (isteğe bağlı)"
+                               onkeydown="if(event.key==='Enter'){event.preventDefault();pfeAddValue();}" />
+                    </div>
+                    <button type="button" class="pfe-btn pfe-btn--sm" style="background:rgba(20,184,166,0.15);border-color:rgba(20,184,166,0.4);color:#5eead4;flex-shrink:0;" onclick="pfeAddValue()">
+                        Ekle
+                    </button>
+                </div>
+                <div id="pfeValuesList" style="margin-top:12px; flex:1 1 auto; min-height:0; overflow-y:auto;"></div>
+            </div>
+
+            <!-- BOLUM: Bagli Stoklar -->
+            <div class="pfe-card pfe-section" data-section="stocks" style="display:none">
+                <div class="pfe-card-hdr">
+                    <p class="pfe-card-title">Bagli Stoklar</p>
+                    <button type="button" class="pfe-btn pfe-btn--secondary pfe-btn--sm" onclick="pfeOpenStockGuide()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                        Stok Ekle / Duzenle
+                    </button>
+                </div>
+                <div id="pfeStockList"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Stok Rehber Modali -->
+    <div id="pfeStockGuideBackdrop" class="pfe-del-backdrop" style="display:none;" onclick="pfeCloseStockGuide()">
+        <div class="pfe-guide" onclick="event.stopPropagation()">
+            <div class="pfe-guide-header">
+                <div class="pfe-guide-header__left">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    <span class="pfe-guide-title">Stok Rehberi</span>
+                </div>
+                <button type="button" class="pfe-guide-close" onclick="pfeCloseStockGuide()">&times;</button>
+            </div>
+            <div class="pfe-guide-search">
+                <svg class="pfe-guide-search__ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="pfeGuideSearch" class="pfe-guide-search__input" placeholder="Stok kodu veya adi ile ara..." autocomplete="off" />
+            </div>
+            <div class="pfe-guide-body" id="pfeGuideBody">
+                <div class="pfe-guide-loading">Yukleniyor...</div>
+            </div>
+            <div class="pfe-guide-footer">
+                <span class="pfe-guide-footer__count" id="pfeGuideCount">0 stok bagli</span>
+                <button type="button" class="pfe-confirm-btn pfe-confirm-btn--ghost" onclick="pfeCloseStockGuide()">Kapat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deger Sil Onay Modali -->
+    <div id="pfeValueConfirmBackdrop" class="pfe-confirm-backdrop" style="display:none;">
+        <div class="pfe-confirm-box" onclick="event.stopPropagation()">
+            <div class="pfe-confirm-ico">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </div>
+            <h3 class="pfe-confirm-title" id="pfeValueConfirmTitle">Degeri Sil</h3>
+            <p class="pfe-confirm-text" id="pfeValueConfirmText">Bu deger kalici olarak silinecek.</p>
+            <div class="pfe-confirm-btns">
+                <button type="button" class="pfe-confirm-btn pfe-confirm-btn--ghost" id="pfeValueConfirmCancel">Iptal</button>
+                <button type="button" class="pfe-confirm-btn pfe-confirm-btn--danger" id="pfeValueConfirmOk">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    <span id="pfeValueConfirmOkLabel">Evet, Sil</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ozellik Sil Onay Modali -->
+    <div id="pfeDeleteModal" class="pfe-del-backdrop" style="display:none;" onclick="pfeDeleteCancel()">
+        <div class="pfe-del-box" onclick="event.stopPropagation()">
+            <div class="pfe-del-ico">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+                </svg>
+            </div>
+            <h3 class="pfe-del-title">Ozelligi Sil</h3>
+            <p class="pfe-del-text">Bu islem geri alinamaz. Devam etmek istiyor musunuz?</p>
+            <span class="pfe-del-code" id="pfeDeleteModalCode"></span>
+            <div class="pfe-del-btns">
+                <button type="button" class="pfe-del-cancel" id="pfeDelCancelBtn" onclick="pfeDeleteCancel()">Iptal</button>
+                <button type="button" class="pfe-del-confirm" id="pfeDelConfirmBtn" onclick="pfeDeleteConfirm()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                    Evet, Sil
+                </button>
+            </div>
+        </div>
+    </div>
+
+</section>
+
+@section Scripts {
+<script>
+(function () {
+    var editId = @editId;
+    var currentId = editId > 0 ? editId : 0;
+    var linkedStocks = [];
+    var currentUom = '';
+    var currentDataType = 'Text';
+
+    function $(id) { return document.getElementById(id); }
+
+    function escHtml(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Sidenav ──────────────────────────────────────────────────────────
+    (function initSideNav() {
+        var navBtns  = document.querySelectorAll('.pfe-nav-btn[data-nav-section]');
+        var sections = document.querySelectorAll('.pfe-section[data-section]');
+
+        function activate(sectionId) {
+            navBtns.forEach(function (btn) {
+                btn.classList.toggle('is-active', btn.dataset.navSection === sectionId);
+            });
+            sections.forEach(function (sec) {
+                sec.style.display = sec.dataset.section === sectionId ? '' : 'none';
+            });
+        }
+
+        navBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () { activate(btn.dataset.navSection); });
+        });
+
+        activate('general');
+    })();
+
+    // ── Toast mesaj sistemi ────────────────────────────────────────────────
+    function showMsg(text, ok) {
+        var container = document.getElementById('pfeToastContainer');
+        if (!container) return;
+
+        var toast = document.createElement('div');
+        toast.className = 'pfe-toast ' + (ok ? 'pfe-toast--ok' : 'pfe-toast--err');
+
+        // İkon
+        var iconSvg = ok
+            ? '<svg class="pfe-toast__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+            : '<svg class="pfe-toast__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+
+        toast.innerHTML = iconSvg
+            + '<span class="pfe-toast__text">' + text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>'
+            + '<button class="pfe-toast__close" title="Kapat">✕</button>';
+
+        container.appendChild(toast);
+
+        // Kapat butonu
+        toast.querySelector('.pfe-toast__close').addEventListener('click', function () {
+            dismissToast(toast);
+        });
+
+        // Otomatik kapat
+        var timer = setTimeout(function () { dismissToast(toast); }, ok ? 3000 : 5000);
+
+        // Üzerine gelince süreyi durdur
+        toast.addEventListener('mouseenter', function () { clearTimeout(timer); });
+        toast.addEventListener('mouseleave', function () {
+            timer = setTimeout(function () { dismissToast(toast); }, 1500);
+        });
+    }
+
+    function dismissToast(toast) {
+        if (!toast || toast.classList.contains('is-leaving')) return;
+        toast.classList.add('is-leaving');
+        setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 180);
+    }
+
+    function flashSuccess() {
+        var bar = $('pfeActionBar');
+        if (!bar) return;
+        bar.classList.remove('is-success');
+        void bar.offsetWidth;
+        bar.classList.add('is-success');
+        setTimeout(function () { bar.classList.remove('is-success'); }, 1600);
+    }
+
+    // ── Badge & count helpers ─────────────────────────────────────────────
+    function updateNavCount(elemId, count) {
+        var el = $(elemId);
+        if (!el) return;
+        el.textContent = count;
+        el.style.display = count > 0 ? '' : 'none';
+    }
+
+    function pfeUpdateValuesCount() {
+        var count = $('pfeValuesList') ? $('pfeValuesList').querySelectorAll('.pfe-val-row').length : 0;
+        updateNavCount('pfeNavValuesCount', count);
+    }
+
+    function pfeUpdateStocksCount() {
+        updateNavCount('pfeNavStocksCount', linkedStocks.length);
+    }
+
+    // ── Stocks list render ────────────────────────────────────────────────
+    function renderStocksList(stocks) {
+        linkedStocks = Array.isArray(stocks) ? stocks.slice() : [];
+        var list = $('pfeStockList');
+        if (!list) return;
+        list.innerHTML = '';
+
+        if (linkedStocks.length === 0) {
+            list.innerHTML = '<div class="pfe-stock-empty">Henuz bagli stok yok. <strong>Stok Ekle / Duzenle</strong> butonunu kullanin.</div>';
+        } else {
+            var rows = document.createElement('div');
+            rows.className = 'pfe-stock-rows';
+            linkedStocks.forEach(function (s, idx) {
+                var row = document.createElement('div');
+                row.className = 'pfe-stock-row';
+                row.innerHTML =
+                    '<span class="pfe-stock-row__idx">' + (idx + 1) + '</span>' +
+                    '<span class="pfe-stock-row__code">' + escHtml(s.code) + '</span>' +
+                    '<span class="pfe-stock-row__name">' + escHtml(s.name || s.code) + '</span>';
+                var unlinkBtn = document.createElement('button');
+                unlinkBtn.type = 'button';
+                unlinkBtn.className = 'pfe-stock-row__unlink';
+                unlinkBtn.innerHTML =
+                    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
+                    ' Kaldir';
+                unlinkBtn.addEventListener('click', function () { pfeUnlinkStock(s.code); });
+                row.appendChild(unlinkBtn);
+                rows.appendChild(row);
+            });
+            list.appendChild(rows);
+        }
+
+        pfeUpdateStocksCount();
+        pfeUpdateGuideCount();
+    }
+
+    window.pfeUnlinkStock = function (code) {
+        var stock = linkedStocks.find(function (s) { return s.code === code; });
+        var label = stock ? (stock.name ? stock.code + ' — ' + stock.name : stock.code) : code;
+        pfeConfirm('"' + label + '" stok baglantisi kaldirilacak. Devam edilsin mi?', { title: 'Stok Kaldir', okLabel: 'Evet, Kaldir' }).then(function (ok) {
+            if (!ok) return;
+            linkedStocks = linkedStocks.filter(function (s) { return s.code !== code; });
+            renderStocksList(linkedStocks);
+            // Guide aciksa yenile
+            var guide = $('pfeStockGuideBackdrop');
+            if (guide && guide.style.display !== 'none') {
+                pfeRenderGuide(($('pfeGuideSearch') || {}).value || '');
+            }
+            saveStocks();
+        });
+    };
+
+    // ── Value rows (grid tablo) ───────────────────────────────────────────
+    function buildValueRow(value, idx) {
+        var row = document.createElement('div');
+        row.className = 'pfe-val-row';
+        row.dataset.valueId = value.id;
+
+        // # hücresi
+        var tdIdx = document.createElement('div');
+        tdIdx.className = 'pfe-val-td pfe-val-td--idx';
+        var idxEl = document.createElement('span');
+        idxEl.className = 'pfe-val-row__idx';
+        idxEl.textContent = idx;
+        tdIdx.appendChild(idxEl);
+
+        // Değer hücresi
+        var isNumeric = (currentDataType === 'Numeric');
+        var tdVal = document.createElement('div');
+        tdVal.className = 'pfe-val-td pfe-val-td--val' + (isNumeric ? ' pfe-val-td--numeric' : '');
+        tdVal.textContent = value.description || value.value || value.code || '-';
+
+        // Ölçü birimi hücresi
+        var tdUom = document.createElement('div');
+        tdUom.className = 'pfe-val-td pfe-val-td--uom';
+        if (currentUom) {
+            var badge = document.createElement('span');
+            badge.className = 'pfe-val-uom-badge';
+            badge.textContent = currentUom;
+            tdUom.appendChild(badge);
+        }
+
+        // Açıklama hücresi
+        var tdAcik = document.createElement('div');
+        tdAcik.className = 'pfe-val-td pfe-val-td--acik';
+        tdAcik.textContent = value.aciklama || '—';
+
+        // Aksiyon hücresi: kalem + çöp
+        var tdDel = document.createElement('div');
+        tdDel.className = 'pfe-val-td pfe-val-td--del';
+
+        var editBtn = document.createElement('button');
+        editBtn.type = 'button'; editBtn.className = 'pfe-val-row__del'; editBtn.title = 'Duzenle';
+        editBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+        editBtn.addEventListener('click', function () { pfeEnterEditMode(row, value); });
+
+        var del = document.createElement('button');
+        del.type = 'button'; del.className = 'pfe-val-row__del'; del.title = 'Sil';
+        del.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+        del.addEventListener('click', function () { pfeDeleteValue(value.id, row); });
+
+        tdDel.appendChild(editBtn);
+        tdDel.appendChild(del);
+
+        row.appendChild(tdIdx);
+        row.appendChild(tdVal);
+        row.appendChild(tdUom);
+        row.appendChild(tdAcik);
+        row.appendChild(tdDel);
+        return row;
+    }
+
+    // ── Satır inline düzenleme ────────────────────────────────────────────
+    function pfeEnterEditMode(row, value) {
+        if (row.classList.contains('is-editing')) return;
+        row.classList.add('is-editing');
+
+        var tdVal  = row.querySelector('.pfe-val-td--val');
+        var tdAcik = row.querySelector('.pfe-val-td--acik');
+        var tdDel  = row.querySelector('.pfe-val-td--del');
+
+        var origVal  = tdVal.textContent;
+        var origAcik = tdAcik.textContent === '—' ? '' : tdAcik.textContent;
+
+        // Değer inputu
+        var inpVal = document.createElement('input');
+        inpVal.type = 'text'; inpVal.className = 'pfe-val-edit-input';
+        inpVal.value = origVal;
+        tdVal.textContent = '';
+        tdVal.appendChild(inpVal);
+
+        // Açıklama inputu
+        var inpAcik = document.createElement('input');
+        inpAcik.type = 'text'; inpAcik.className = 'pfe-val-edit-input';
+        inpAcik.value = origAcik;
+        inpAcik.placeholder = 'Aciklama...';
+        tdAcik.textContent = '';
+        tdAcik.appendChild(inpAcik);
+
+        // Kaydet butonu, İptal butonu
+        tdDel.innerHTML = '';
+        tdDel.className = 'pfe-val-td pfe-val-td--del-edit';
+
+        var saveBtn = document.createElement('button');
+        saveBtn.type = 'button'; saveBtn.className = 'pfe-val-row__save'; saveBtn.title = 'Kaydet';
+        saveBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+        var cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button'; cancelBtn.className = 'pfe-val-row__del'; cancelBtn.title = 'Iptal';
+        cancelBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
+        function cancelEdit() {
+            row.classList.remove('is-editing');
+            tdVal.textContent = origVal;
+            tdAcik.textContent = origAcik || '—';
+            tdDel.className = 'pfe-val-td pfe-val-td--del';
+            tdDel.innerHTML = '';
+            var editBtn2 = document.createElement('button');
+            editBtn2.type = 'button'; editBtn2.className = 'pfe-val-row__del'; editBtn2.title = 'Duzenle';
+            editBtn2.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+            editBtn2.addEventListener('click', function () { pfeEnterEditMode(row, { id: value.id, description: origVal, aciklama: origAcik }); });
+            var del2 = document.createElement('button');
+            del2.type = 'button'; del2.className = 'pfe-val-row__del'; del2.title = 'Sil';
+            del2.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+            del2.addEventListener('click', function () { pfeDeleteValue(value.id, row); });
+            tdDel.appendChild(editBtn2);
+            tdDel.appendChild(del2);
+        }
+
+        saveBtn.addEventListener('click', function () {
+            var newVal  = inpVal.value.trim();
+            var newAcik = inpAcik.value.trim();
+            if (!newVal) { inpVal.focus(); return; }
+            pfeSaveValueEdit(value.id, newVal, newAcik, row, tdVal, tdAcik, tdDel, cancelEdit);
+        });
+        cancelBtn.addEventListener('click', cancelEdit);
+        inpVal.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
+            if (e.key === 'Escape') cancelEdit();
+        });
+        inpAcik.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); saveBtn.click(); }
+            if (e.key === 'Escape') cancelEdit();
+        });
+
+        tdDel.appendChild(saveBtn);
+        tdDel.appendChild(cancelBtn);
+        inpVal.focus(); inpVal.select();
+    }
+
+    function pfeSaveValueEdit(id, newVal, newAcik, row, tdVal, tdAcik, tdDel, cancelEdit) {
+        fetch('/Logistics/UpdateProductValueJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ id: id, description: newVal, aciklama: newAcik || null }),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) { showMsg('Guncelleme hatasi: ' + (data.message || 'Bilinmeyen'), false); return; }
+                row.classList.remove('is-editing');
+                tdVal.textContent = newVal;
+                tdAcik.textContent = newAcik || '—';
+                tdDel.className = 'pfe-val-td pfe-val-td--del';
+                tdDel.innerHTML = '';
+                var editBtn3 = document.createElement('button');
+                editBtn3.type = 'button'; editBtn3.className = 'pfe-val-row__del'; editBtn3.title = 'Duzenle';
+                editBtn3.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+                editBtn3.addEventListener('click', function () { pfeEnterEditMode(row, { id: id, description: newVal, aciklama: newAcik }); });
+                var del3 = document.createElement('button');
+                del3.type = 'button'; del3.className = 'pfe-val-row__del'; del3.title = 'Sil';
+                del3.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+                del3.addEventListener('click', function () { pfeDeleteValue(id, row); });
+                tdDel.appendChild(editBtn3);
+                tdDel.appendChild(del3);
+            })
+            .catch(function (e) { showMsg('Guncelleme hatasi: ' + e.message, false); });
+    }
+
+    function buildValuesHeader() {
+        var thead = document.createElement('div');
+        thead.className = 'pfe-val-thead';
+        var isNumeric = (currentDataType === 'Numeric');
+        ['#', 'Deger', 'Olcu Birimi', 'Aciklama', ''].forEach(function (label, i) {
+            var th = document.createElement('div');
+            th.className = 'pfe-val-th' + (i === 1 && isNumeric ? ' pfe-val-th--numeric' : '');
+            th.textContent = label;
+            thead.appendChild(th);
+        });
+        return thead;
+    }
+
+    function sortValues(values) {
+        if (!Array.isArray(values) || values.length === 0) return values;
+        var dt = currentDataType || ($('pfeDataType') ? normalizeDataType($('pfeDataType').value) : 'Text');
+        var sorted = values.slice();
+        if (dt === 'Numeric') {
+            sorted.sort(function (a, b) {
+                var na = parseFloat((a.value || a.description || '').replace(',', '.'));
+                var nb = parseFloat((b.value || b.description || '').replace(',', '.'));
+                if (isNaN(na) && isNaN(nb)) return 0;
+                if (isNaN(na)) return 1;
+                if (isNaN(nb)) return -1;
+                return na - nb;
+            });
+        } else if (dt === 'Date') {
+            sorted.sort(function (a, b) {
+                var da = new Date(a.value || a.description || '');
+                var db = new Date(b.value || b.description || '');
+                return da - db;
+            });
+        } else {
+            sorted.sort(function (a, b) {
+                var sa = (a.description || a.value || '').toLowerCase();
+                var sb = (b.description || b.value || '').toLowerCase();
+                return sa < sb ? -1 : sa > sb ? 1 : 0;
+            });
+        }
+        return sorted;
+    }
+
+    function renderValuesList(values) {
+        var vl = $('pfeValuesList');
+        vl.innerHTML = '';
+
+        if (Array.isArray(values) && values.length > 0) {
+            var sorted = sortValues(values);
+            var table = document.createElement('div');
+            table.className = 'pfe-val-table';
+            table.appendChild(buildValuesHeader());
+            sorted.forEach(function (v, i) { table.appendChild(buildValueRow(v, i + 1)); });
+            vl.appendChild(table);
+        } else {
+            var empty = document.createElement('div');
+            empty.className = 'pfe-val-empty';
+            empty.textContent = 'Henuz deger tanimlanmamis';
+            vl.appendChild(empty);
+        }
+        pfeUpdateValuesCount();
+    }
+
+    // Sildikten sonra index numaralarini guncelle
+    function reindexValueRows() {
+        var rows = $('pfeValuesList') ? $('pfeValuesList').querySelectorAll('.pfe-val-row') : [];
+        rows.forEach(function (r, i) {
+            var idx = r.querySelector('.pfe-val-row__idx');
+            if (idx) idx.textContent = i + 1;
+        });
+        pfeUpdateValuesCount();
+    }
+
+    // ── DataType → input type senkronizasyonu ────────────────────────────
+    function pfeUpdateValueInputType() {
+        var dt    = $('pfeDataType').value;
+        var input = $('pfeNewValueInput');
+        if (!input) return;
+        if (dt === 'Numeric') {
+            input.type = 'number'; input.step = 'any';
+            input.placeholder = 'Yeni sayisal deger...';
+        } else if (dt === 'Date') {
+            input.type = 'date'; input.placeholder = '';
+        } else {
+            input.type = 'text'; input.placeholder = 'Yeni deger...';
+        }
+    }
+
+    // DB legacy enum normalize
+    function normalizeDataType(raw) {
+        if (!raw) return 'Text';
+        var u = String(raw).trim().toUpperCase();
+        if (u === 'NUMBER' || u === 'NUMERIC') return 'Numeric';
+        if (u === 'DATE') return 'Date';
+        return raw;
+    }
+
+    // ── Populate ──────────────────────────────────────────────────────────
+    function populate(data) {
+        currentUom = data.unitOfMeasure || '';
+        currentDataType = normalizeDataType(data.dataType);
+        $('pfeCode').value = data.code || '';
+        $('pfeName').value = data.name || '';
+        $('pfeDataType').value = normalizeDataType(data.dataType);
+        var hasValues = Array.isArray(data.values) && data.values.length > 0;
+        $('pfeDataType').disabled = hasValues;
+        $('pfeDataType').title = hasValues ? 'Deger girilen ozelligin veri tipi degistirilemez' : '';
+        $('pfeUnitOfMeasure').value = data.unitOfMeasure || '';
+        $('pfeIsActive').checked = data.isActive !== false;
+
+        var meta = $('pfeMeta');
+        if (meta) meta.innerHTML =
+            'ID: <strong>' + (data.id || '-') + '</strong>'
+            + ' &nbsp;·&nbsp; <strong>' + escHtml(data.code || 'Yeni') + '</strong>'
+            + ' &nbsp;·&nbsp; ' + escHtml(data.name || '');
+        $('pfeBtnDelete').style.display = 'inline-flex';
+        if ($('pfeDeleteModalCode')) $('pfeDeleteModalCode').textContent = data.code || data.name || '';
+
+        renderValuesList(data.values);
+
+        if (Array.isArray(data.linkedStocks)) {
+            renderStocksList(data.linkedStocks);
+        } else if (Array.isArray(data.stockCodes)) {
+            renderStocksList(data.stockCodes.map(function (c) { return { code: c, name: c }; }));
+        } else {
+            renderStocksList([]);
+        }
+        pfeUpdateValueInputType();
+    }
+
+    // ── Load ──────────────────────────────────────────────────────────────
+    async function load() {
+        if (currentId <= 0) return;
+        try {
+            var resp = await fetch('/Logistics/GetProductFeature?id=' + currentId, { credentials: 'same-origin' });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var data = await resp.json();
+            populate(data);
+        } catch (e) {
+            console.error('[PFE] Load error:', e);
+            showMsg('Yuklenirken hata: ' + e.message, false);
+        }
+    }
+
+    // ── Save ──────────────────────────────────────────────────────────────
+    window.pfeSave = async function () {
+        var nameEl = $('pfeName');
+        var name   = nameEl.value.trim();
+        if (!name) {
+            showMsg('Ozellik adi bos olamaz', false);
+            nameEl.focus();
+            return;
+        }
+
+        var payload = {
+            id:            currentId > 0 ? currentId : null,
+            name:          name,
+            dataType:      $('pfeDataType').value,
+            unitOfMeasure: $('pfeUnitOfMeasure').value.trim() || null,
+            isActive:      $('pfeIsActive').checked,
+        };
+
+        try {
+            var resp = await fetch('/Logistics/SaveProductFeatureJson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload),
+            });
+            var data = await resp.json();
+            if (!data.success) { showMsg('Hata: ' + (data.message || 'Bilinmeyen'), false); return; }
+            if (data.id && data.id > 0) {
+                currentId = data.id;
+                if (editId <= 0) {
+                    var newUrl = '/Logistics/ProductFeatureEdit?id=' + data.id;
+                    if (location.search.indexOf('workspace=1') !== -1) newUrl += '&workspace=1';
+                    history.replaceState({}, '', newUrl);
+                }
+            }
+            flashSuccess();
+            await load();
+        } catch (e) { showMsg('Kayit hatasi: ' + e.message, false); }
+    };
+
+    // ── Delete Feature ────────────────────────────────────────────────────
+    window.pfeDeleteFeature = function () {
+        if (currentId <= 0) return;
+        $('pfeDeleteModal').style.display = '';
+    };
+    window.pfeDeleteCancel = function () {
+        $('pfeDeleteModal').style.display = 'none';
+    };
+    window.pfeDeleteConfirm = async function () {
+        var cancelBtn  = $('pfeDelCancelBtn');
+        var confirmBtn = $('pfeDelConfirmBtn');
+        if (cancelBtn)  cancelBtn.disabled  = true;
+        if (confirmBtn) confirmBtn.disabled = true;
+        try {
+            var resp = await fetch('/Logistics/DeleteProductFeatureJson?id=' + currentId, {
+                method: 'POST', credentials: 'same-origin',
+            });
+            var data = await resp.json();
+            if (data.success) {
+                pfeBackToList();
+            } else {
+                showMsg('Silme hatasi: ' + (data.message || 'Bilinmeyen'), false);
+                $('pfeDeleteModal').style.display = 'none';
+            }
+        } catch (e) {
+            showMsg('Silme hatasi: ' + e.message, false);
+            $('pfeDeleteModal').style.display = 'none';
+        } finally {
+            if (cancelBtn)  cancelBtn.disabled  = false;
+            if (confirmBtn) confirmBtn.disabled = false;
+        }
+    };
+
+    // ── Back ──────────────────────────────────────────────────────────────
+    window.pfeBackToList = function () {
+        var url = '/Logistics/ProductConfiguration';
+        if (location.search.indexOf('workspace=1') !== -1) url += '?workspace=1';
+        location.replace(url);
+    };
+
+    // ── Value: Add ────────────────────────────────────────────────────────
+    window.pfeAddValue = function () {
+        if (currentId <= 0) { showMsg('Once ozelligi kaydedin', false); return; }
+        var input    = $('pfeNewValueInput');
+        var acikEl   = $('pfeNewAciklamaInput');
+        var rawValue = (input.value || '').trim();
+        var aciklama = acikEl ? (acikEl.value || '').trim() : '';
+        if (!rawValue) { input.focus(); return; }
+
+        var existingRows = $('pfeValuesList').querySelectorAll('.pfe-val-row');
+        for (var i = 0; i < existingRows.length; i++) {
+            var rowText = (existingRows[i].querySelector('.pfe-val-row__text') || {}).textContent || '';
+            if (rowText.trim().toLowerCase() === rawValue.toLowerCase()) {
+                input.classList.remove('is-duplicate');
+                void input.offsetWidth; // reflow — animasyonu yeniden tetikle
+                input.classList.add('is-duplicate');
+                input.select();
+                setTimeout(function () { input.classList.remove('is-duplicate'); }, 600);
+                return;
+            }
+        }
+
+        var dataType = $('pfeDataType').value;
+        var payload  = { featureId: currentId, description: rawValue, aciklama: aciklama || null };
+
+        if (dataType === 'Numeric') {
+            var num = parseFloat(rawValue.replace(',', '.'));
+            if (isNaN(num)) { showMsg('Gecerli sayisal deger girin', false); input.focus(); return; }
+            payload.numericValue = num;
+        } else if (dataType === 'Date') {
+            payload.dateValue = rawValue;
+        } else {
+            payload.textValue = rawValue;
+        }
+
+        fetch('/Logistics/SaveProductValueJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) { showMsg('Hata: ' + (data.message || 'Bilinmeyen'), false); return; }
+                var vl    = $('pfeValuesList');
+                var empty = vl.querySelector('.pfe-val-empty');
+                if (empty) empty.remove();
+                var table = vl.querySelector('.pfe-val-table');
+                if (!table) {
+                    table = document.createElement('div');
+                    table.className = 'pfe-val-table';
+                    table.appendChild(buildValuesHeader());
+                    vl.appendChild(table);
+                }
+                var newIdx = table.querySelectorAll('.pfe-val-row').length + 1;
+                table.appendChild(buildValueRow({ id: data.id, description: rawValue, aciklama: aciklama || null }, newIdx));
+                input.value = '';
+                if (acikEl) acikEl.value = '';
+                input.focus();
+                pfeUpdateValuesCount();
+            })
+            .catch(function (e) { showMsg('Kayit hatasi: ' + e.message, false); });
+    };
+
+    // ── Value: Delete ─────────────────────────────────────────────────────
+    window.pfeDeleteValue = function (valueId, chipEl) {
+        if (!valueId) return;
+        pfeConfirm('Bu deger kalici olarak silinecek. Devam edilsin mi?').then(function (ok) {
+            if (!ok) return;
+            fetch('/Logistics/DeleteProductValueJson?id=' + valueId, {
+                method: 'POST', credentials: 'same-origin',
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.success) { showMsg('Silme hatasi: ' + (data.message || 'Bilinmeyen'), false); return; }
+                    chipEl.remove();
+                    var vl = $('pfeValuesList');
+                    var table = vl.querySelector('.pfe-val-table');
+                    if (table && table.querySelectorAll('.pfe-val-row').length === 0) {
+                        table.remove();
+                        var empty = document.createElement('div');
+                        empty.className = 'pfe-val-empty';
+                        empty.textContent = 'Henuz deger tanimlanmamis';
+                        vl.appendChild(empty);
+                    } else {
+                        reindexValueRows();
+                    }
+                })
+                .catch(function (e) { showMsg('Silme hatasi: ' + e.message, false); });
+        });
+    };
+
+    function pfeConfirm(text, options) {
+        var opts = options || {};
+        return new Promise(function (resolve) {
+            var backdrop = $('pfeValueConfirmBackdrop');
+            $('pfeValueConfirmTitle').textContent   = opts.title   || 'Degeri Sil';
+            $('pfeValueConfirmText').textContent    = text;
+            $('pfeValueConfirmOkLabel').textContent = opts.okLabel || 'Evet, Sil';
+            backdrop.style.display = '';
+            function close(result) {
+                backdrop.style.display = 'none';
+                $('pfeValueConfirmCancel').removeEventListener('click', onCancel);
+                $('pfeValueConfirmOk').removeEventListener('click', onOk);
+                backdrop.removeEventListener('click', onBack);
+                // Varsayılanlara sıfırla
+                $('pfeValueConfirmTitle').textContent   = 'Degeri Sil';
+                $('pfeValueConfirmOkLabel').textContent = 'Evet, Sil';
+                resolve(result);
+            }
+            function onCancel() { close(false); }
+            function onOk()     { close(true); }
+            function onBack(e)  { if (e.target === backdrop) close(false); }
+            $('pfeValueConfirmCancel').addEventListener('click', onCancel);
+            $('pfeValueConfirmOk').addEventListener('click', onOk);
+            backdrop.addEventListener('click', onBack);
+        });
+    }
+
+    // ── Stock guide ───────────────────────────────────────────────────────
+    var allStocksCache    = null;
+    var guideSearchTimer  = null;
+
+    window.pfeOpenStockGuide = function () {
+        if (currentId <= 0) { showMsg('Once ozelligi kaydedin', false); return; }
+        $('pfeStockGuideBackdrop').style.display = '';
+        $('pfeGuideSearch').value = '';
+        pfeLoadGuide();
+        setTimeout(function () { $('pfeGuideSearch').focus(); }, 80);
+    };
+
+    window.pfeCloseStockGuide = function () {
+        $('pfeStockGuideBackdrop').style.display = 'none';
+    };
+
+    function pfeLoadGuide() {
+        var body = $('pfeGuideBody');
+        body.innerHTML = '<div class="pfe-guide-loading">Yukleniyor...</div>';
+        fetch('/Logistics/StockLookup?q=', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (results) { allStocksCache = results || []; pfeRenderGuide(''); })
+            .catch(function (e) { body.innerHTML = '<div class="pfe-guide-empty">Hata: ' + escHtml(e.message) + '</div>'; });
+    }
+
+    function pfeRenderGuide(query) {
+        var body   = $('pfeGuideBody');
+        body.innerHTML = '';
+        var q      = (query || '').trim().toLowerCase();
+        var stocks = (allStocksCache || []);
+        if (q) {
+            stocks = stocks.filter(function (s) {
+                return (s.code || '').toLowerCase().indexOf(q) !== -1 ||
+                       (s.name || '').toLowerCase().indexOf(q) !== -1;
+            });
+        }
+
+        var linked   = [];
+        var unlinked = [];
+        stocks.forEach(function (s) {
+            var isLinked = linkedStocks.some(function (ls) { return ls.code === s.code; });
+            if (isLinked) linked.push(s); else unlinked.push(s);
+        });
+
+        if (stocks.length === 0) {
+            body.innerHTML = '<div class="pfe-guide-empty">Eslesme bulunamadi</div>';
+            pfeUpdateGuideCount(); return;
+        }
+
+        if (linked.length > 0) {
+            var sep1 = document.createElement('div');
+            sep1.className = 'pfe-guide-sep';
+            sep1.textContent = 'Bagli stoklar (' + linked.length + ')';
+            body.appendChild(sep1);
+            linked.forEach(function (s) { body.appendChild(pfeGuideRow(s, true)); });
+        }
+        if (unlinked.length > 0) {
+            var sep2 = document.createElement('div');
+            sep2.className = 'pfe-guide-sep';
+            sep2.textContent = 'Diger stoklar (' + unlinked.length + ')';
+            body.appendChild(sep2);
+            unlinked.forEach(function (s) { body.appendChild(pfeGuideRow(s, false)); });
+        }
+        pfeUpdateGuideCount();
+    }
+
+    function pfeGuideRow(stock, isLinked) {
+        var row = document.createElement('div');
+        row.className = 'pfe-guide-row';
+
+        var code  = document.createElement('span'); code.className  = 'pfe-guide-row__code'; code.textContent  = stock.code;
+        var name  = document.createElement('span'); name.className  = 'pfe-guide-row__name'; name.textContent  = stock.name || '';
+        var sw    = document.createElement('label'); sw.className   = 'pfe-guide-row__switch';
+        var cb    = document.createElement('input'); cb.type = 'checkbox'; cb.checked = isLinked;
+        var track = document.createElement('span'); track.className = 'pfe-switch-track';
+        sw.appendChild(cb); sw.appendChild(track);
+
+        cb.addEventListener('change', function () { pfeToggleStock(stock, cb.checked); });
+        row.addEventListener('click', function (e) {
+            if (e.target === cb || e.target === track) return;
+            cb.checked = !cb.checked; pfeToggleStock(stock, cb.checked);
+        });
+
+        row.appendChild(code); row.appendChild(name); row.appendChild(sw);
+        return row;
+    }
+
+    function pfeToggleStock(stock, checked) {
+        if (checked) {
+            if (!linkedStocks.some(function (s) { return s.code === stock.code; })) {
+                linkedStocks.push({ code: stock.code, name: stock.name || stock.code });
+            }
+        } else {
+            linkedStocks = linkedStocks.filter(function (s) { return s.code !== stock.code; });
+        }
+        pfeUpdateGuideCount();
+        renderStocksList(linkedStocks);
+        saveStocks();
+    }
+
+    function pfeUpdateGuideCount() {
+        var el = $('pfeGuideCount');
+        if (el) el.textContent = linkedStocks.length + ' stok bagli';
+    }
+
+    function saveStocks(onSuccess, onError) {
+        fetch('/Logistics/SaveProductFeatureStocksJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ featureId: currentId, stockCodes: linkedStocks.map(function (s) { return s.code; }) }),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) { showMsg('Hata: ' + (data.message || 'Bilinmeyen'), false); if (onError) onError(); return; }
+                if (onSuccess) onSuccess();
+            })
+            .catch(function (e) { showMsg('Kayit hatasi: ' + e.message, false); if (onError) onError(); });
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function () {
+        var dtSelect = $('pfeDataType');
+        if (dtSelect) dtSelect.addEventListener('change', pfeUpdateValueInputType);
+        pfeUpdateValueInputType();
+
+        var guideSearch = $('pfeGuideSearch');
+        if (guideSearch) {
+            guideSearch.addEventListener('input', function () {
+                if (guideSearchTimer) clearTimeout(guideSearchTimer);
+                guideSearchTimer = setTimeout(function () { pfeRenderGuide(guideSearch.value); }, 180);
+            });
+        }
+
+        // ESC ile modalleri kapat
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape') return;
+            if ($('pfeStockGuideBackdrop').style.display !== 'none') { pfeCloseStockGuide(); return; }
+            if ($('pfeDeleteModal').style.display !== 'none') { pfeDeleteCancel(); }
+        });
+    });
+
+    if (currentId > 0) load();
+})();
+</script>
+}

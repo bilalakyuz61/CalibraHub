@@ -1,0 +1,910 @@
+@{
+    ViewData["Title"] = "Fiyat Listesi";
+    ViewData["FormCode"] = "PRICE_LIST";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>price_list_entries</td><td style='padding:6px 8px;'>Fiyat listesi kayitlari (fiyat grubu, malzeme, doviz, alis/satis fiyat, gecerlilik tarihleri)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>price_groups</td><td style='padding:6px 8px;'>Fiyat grubu tanimlari (referans)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    /* ── Layout ── */
+    .pl-shell {
+        display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden;
+        background: #0c0f1a;
+        background-image:
+            radial-gradient(at 15% 25%, rgba(99,102,241,.10) 0, transparent 55%),
+            radial-gradient(at 85% 15%, rgba(14,165,233,.07) 0, transparent 50%),
+            radial-gradient(at 50% 85%, rgba(168,85,247,.07) 0, transparent 50%);
+    }
+    body.app-theme-light .pl-shell { background: #f8fafc; background-image: none; }
+
+    /* ── Action bar ── */
+    .pl-action-bar {
+        display: flex; align-items: center; gap: 8px; padding: 8px 18px; flex-shrink: 0;
+        background: rgba(15,15,26,.88); border-bottom: 1px solid rgba(255,255,255,.06);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    }
+    body.app-theme-light .pl-action-bar { background: rgba(248,250,252,.95); border-bottom-color: #e2e8f0; }
+
+    .pl-action-bar__meta { margin-right: auto; font-size: .72rem; font-weight: 500; color: rgba(255,255,255,.45); }
+    body.app-theme-light .pl-action-bar__meta { color: #94a3b8; }
+    .pl-action-bar__meta strong { color: rgba(255,255,255,.75); font-weight: 700; }
+    body.app-theme-light .pl-action-bar__meta strong { color: #334155; }
+
+    .pl-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 14px; border-radius: 8px; border: 1px solid;
+        font-size: .78rem; font-weight: 600; cursor: pointer;
+        transition: all .12s ease; background: transparent; white-space: nowrap;
+    }
+    .pl-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .pl-btn--primary   { background: #6366f1; border-color: #4f46e5; color: #fff; }
+    .pl-btn--primary:hover:not(:disabled) { background: #4f46e5; }
+    .pl-btn--success   { background: #16a34a; border-color: #15803d; color: #fff; }
+    .pl-btn--success:hover:not(:disabled) { background: #15803d; }
+    .pl-btn--secondary {
+        background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.10); color: rgba(255,255,255,.65);
+    }
+    body.app-theme-light .pl-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
+    .pl-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,.10); color: #fff; }
+    body.app-theme-light .pl-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
+    .pl-btn--ghost {
+        background: none; border-color: transparent; color: rgba(255,255,255,.5); padding: 5px 8px;
+    }
+    body.app-theme-light .pl-btn--ghost { color: #94a3b8; }
+    .pl-btn--ghost:hover:not(:disabled) { background: rgba(255,255,255,.07); color: #fff; }
+    body.app-theme-light .pl-btn--ghost:hover:not(:disabled) { background: #f1f5f9; color: #334155; }
+    .pl-btn--danger-ghost {
+        background: none; border-color: transparent; color: rgba(239,68,68,.6); padding: 5px 8px;
+    }
+    .pl-btn--danger-ghost:hover:not(:disabled) { background: rgba(239,68,68,.1); color: #f87171; }
+
+    /* ── Stepper ── */
+    .pl-stepper {
+        display: flex; align-items: center; justify-content: center; gap: 0;
+        padding: 12px 20px; flex-shrink: 0;
+        background: rgba(255,255,255,.025); border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    body.app-theme-light .pl-stepper { background: rgba(255,255,255,.9); border-bottom-color: #e2e8f0; }
+
+    .pl-step { display: flex; align-items: center; gap: 0; }
+    .pl-step__circle {
+        width: 28px; height: 28px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: .74rem; font-weight: 700;
+        border: 2px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.04); color: rgba(255,255,255,.3);
+        transition: all .2s;
+    }
+    body.app-theme-light .pl-step__circle { border-color: #e2e8f0; background: #f8fafc; color: #94a3b8; }
+    .pl-step__circle.is-active { border-color: #6366f1; background: #6366f1; color: #fff; box-shadow: 0 0 0 4px rgba(99,102,241,.18); }
+    .pl-step__circle.is-done   { border-color: #16a34a; background: #16a34a; color: #fff; }
+    .pl-step__label { font-size: .71rem; font-weight: 600; color: rgba(255,255,255,.3); margin-left: 7px; }
+    body.app-theme-light .pl-step__label { color: #94a3b8; }
+    .pl-step__label.is-active { color: #a5b4fc; }
+    body.app-theme-light .pl-step__label.is-active { color: #4f46e5; }
+    .pl-step__label.is-done   { color: rgba(255,255,255,.55); }
+    body.app-theme-light .pl-step__label.is-done { color: #16a34a; }
+    .pl-step__line { width: 52px; height: 2px; background: rgba(255,255,255,.08); margin: 0 10px; border-radius: 2px; }
+    body.app-theme-light .pl-step__line { background: #e2e8f0; }
+    .pl-step__line.is-done { background: #16a34a; }
+
+    /* ── Content area ── */
+    .pl-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 24px; }
+    .pl-pane { display: none; }
+    .pl-pane.is-active { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── Card ── */
+    .pl-card {
+        background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.09);
+        border-radius: 14px; padding: 20px;
+        backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    }
+    body.app-theme-light .pl-card {
+        background: rgba(255,255,255,.85); border-color: rgba(15,23,42,.07);
+        box-shadow: 0 2px 8px rgba(15,23,42,.05);
+    }
+    .pl-card-title {
+        font-size: .69rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .06em; color: rgba(255,255,255,.45);
+        margin: 0 0 14px; display: flex; align-items: center; gap: 8px;
+    }
+    body.app-theme-light .pl-card-title { color: #64748b; }
+    .pl-card-title::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #6366f1; }
+
+    /* ── Form fields ── */
+    .pl-fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    @@media (max-width:900px) { .pl-fields { grid-template-columns: repeat(2, 1fr); } }
+    @@media (max-width:500px) { .pl-fields { grid-template-columns: 1fr; } }
+
+    /* Fiyat tipi toggle butonları */
+    .pl-price-type-group { display: flex; gap: 6px; }
+    .pl-price-type-btn {
+        flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.1);
+        background: rgba(255,255,255,.04); color: rgba(255,255,255,.5);
+        font-size: .78rem; font-weight: 600; cursor: pointer; text-align: center;
+        transition: all .14s; user-select: none;
+    }
+    body.app-theme-light .pl-price-type-btn { background: #f8fafc; border-color: #e2e8f0; color: #64748b; }
+    .pl-price-type-btn:hover { background: rgba(255,255,255,.08); color: rgba(255,255,255,.75); }
+    body.app-theme-light .pl-price-type-btn:hover { background: #f1f5f9; color: #334155; }
+    .pl-price-type-btn.is-buy.is-active  { background: rgba(59,130,246,.15); border-color: rgba(59,130,246,.4); color: #93c5fd; }
+    .pl-price-type-btn.is-sell.is-active { background: rgba(16,185,129,.13); border-color: rgba(16,185,129,.4); color: #6ee7b7; }
+    .pl-price-type-btn.is-both.is-active { background: rgba(99,102,241,.14); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
+    body.app-theme-light .pl-price-type-btn.is-buy.is-active  { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+    body.app-theme-light .pl-price-type-btn.is-sell.is-active { background: #ecfdf5; border-color: #6ee7b7; color: #059669; }
+    body.app-theme-light .pl-price-type-btn.is-both.is-active { background: #eff6ff; border-color: #a5b4fc; color: #4338ca; }
+    .pl-field { display: flex; flex-direction: column; gap: 5px; }
+    .pl-field label { font-size: .72rem; font-weight: 600; color: rgba(255,255,255,.55); letter-spacing: .02em; }
+    body.app-theme-light .pl-field label { color: #64748b; }
+    .pl-field label .opt { font-weight: 400; color: rgba(255,255,255,.3); }
+    body.app-theme-light .pl-field label .opt { color: #94a3b8; }
+    .pl-input, .pl-select {
+        padding: 8px 12px; border-radius: 9px;
+        background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+        color: rgba(255,255,255,.85); font-size: .84rem; font-family: inherit;
+        transition: border-color .15s, background .15s; min-height: 36px;
+    }
+    body.app-theme-light .pl-input,
+    body.app-theme-light .pl-select { background: #fff; border-color: #e2e8f0; color: #1e293b; }
+    .pl-input:focus, .pl-select:focus {
+        outline: none; border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.14);
+        background: rgba(255,255,255,.06);
+    }
+    body.app-theme-light .pl-input:focus,
+    body.app-theme-light .pl-select:focus { background: #fff; }
+    .pl-input::placeholder { color: rgba(255,255,255,.3); }
+    body.app-theme-light .pl-input::placeholder { color: #94a3b8; }
+    .pl-select option { background: #0d1117; color: rgba(255,255,255,.85); }
+    body.app-theme-light .pl-select option { background: #fff; color: #1e293b; }
+    .pl-input[type="number"] { text-align: right; -moz-appearance: textfield; }
+    .pl-input[type="number"]::-webkit-outer-spin-button,
+    .pl-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+    /* ── Stock list (step 2) ── */
+    .pl-stock-toolbar {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .pl-stock-toolbar .pl-input { flex: 1 1 220px; min-width: 0; }
+    .pl-sel-count {
+        margin-left: auto; font-size: .73rem; font-weight: 600;
+        color: rgba(255,255,255,.45); white-space: nowrap;
+    }
+    body.app-theme-light .pl-sel-count { color: #64748b; }
+    .pl-sel-count.has-sel { color: #a5b4fc; }
+    body.app-theme-light .pl-sel-count.has-sel { color: #4f46e5; }
+
+    .pl-stock-list {
+        max-height: 300px; overflow-y: auto; border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.08);
+        background: rgba(255,255,255,.02);
+    }
+    body.app-theme-light .pl-stock-list { background: #fff; border-color: #e2e8f0; }
+    .pl-stock-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 7px 12px; border-bottom: 1px solid rgba(255,255,255,.04);
+        font-size: .8rem; cursor: pointer; user-select: none;
+        transition: background .1s;
+    }
+    body.app-theme-light .pl-stock-item { border-bottom-color: #f8fafc; }
+    .pl-stock-item:last-child { border-bottom: none; }
+    .pl-stock-item:hover { background: rgba(255,255,255,.05); }
+    body.app-theme-light .pl-stock-item:hover { background: #f8fafc; }
+    .pl-stock-item.is-checked { background: rgba(99,102,241,.1); }
+    body.app-theme-light .pl-stock-item.is-checked { background: #eff6ff; }
+    .pl-stock-item input[type=checkbox] { flex-shrink: 0; accent-color: #6366f1; width: 14px; height: 14px; cursor: pointer; }
+    .pl-stock-code { font-weight: 700; color: rgba(255,255,255,.85); min-width: 90px; font-size: .78rem; }
+    body.app-theme-light .pl-stock-code { color: #1e293b; }
+    .pl-stock-name { color: rgba(255,255,255,.5); font-size: .78rem; }
+    body.app-theme-light .pl-stock-name { color: #64748b; }
+
+    .pl-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+    .pl-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 9px; border-radius: 20px; font-size: .69rem; font-weight: 600;
+        background: rgba(99,102,241,.14); color: #a5b4fc;
+        border: 1px solid rgba(99,102,241,.25);
+    }
+    body.app-theme-light .pl-badge { background: #eff6ff; color: #3b82f6; border-color: #bfdbfe; }
+    .pl-badge-x { cursor: pointer; color: rgba(255,255,255,.35); font-size: .8rem; line-height: 1; }
+    .pl-badge-x:hover { color: #f87171; }
+    body.app-theme-light .pl-badge-x { color: #94a3b8; }
+
+    /* ── Price table (step 3) ── */
+    .pl-price-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255,255,255,.08); }
+    body.app-theme-light .pl-price-wrap { border-color: #e2e8f0; }
+    .pl-price-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .pl-price-table th {
+        padding: 8px 12px; font-size: .68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .05em; color: rgba(255,255,255,.4);
+        background: rgba(255,255,255,.03); border-bottom: 1px solid rgba(255,255,255,.07);
+        text-align: left;
+    }
+    body.app-theme-light .pl-price-table th { background: #f8fafc; border-bottom-color: #e2e8f0; color: #64748b; }
+    .pl-price-table td {
+        padding: 5px 12px; border-bottom: 1px solid rgba(255,255,255,.04);
+        vertical-align: middle;
+    }
+    body.app-theme-light .pl-price-table td { border-bottom-color: #f1f5f9; }
+    .pl-price-table tr:last-child td { border-bottom: none; }
+    .pl-price-table .num { text-align: right; }
+    .pl-price-table .pl-input { padding: 5px 10px; min-height: 30px; font-size: .8rem; width: 110px; }
+    .pl-row-num { color: rgba(255,255,255,.25); font-size: .72rem; }
+    body.app-theme-light .pl-row-num { color: #94a3b8; }
+    .pl-code-cell { font-weight: 700; color: rgba(255,255,255,.85); }
+    body.app-theme-light .pl-code-cell { color: #1e293b; }
+    .pl-name-cell { color: rgba(255,255,255,.5); }
+    body.app-theme-light .pl-name-cell { color: #64748b; }
+
+    /* ── Existing entries (bottom table) ── */
+    .pl-existing-hdr {
+        display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    .pl-existing-hdr-title {
+        font-size: .7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .06em; color: rgba(255,255,255,.4);
+    }
+    body.app-theme-light .pl-existing-hdr-title { color: #64748b; }
+    .pl-existing-hdr-title::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #6366f1; margin-right: 7px; }
+    .pl-entry-count {
+        font-size: .68rem; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+        background: rgba(99,102,241,.12); color: #a5b4fc;
+    }
+    body.app-theme-light .pl-entry-count { background: #eff6ff; color: #3b82f6; }
+
+    .pl-existing-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255,255,255,.08); }
+    body.app-theme-light .pl-existing-wrap { border-color: #e2e8f0; }
+    .pl-existing-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .pl-existing-table th {
+        padding: 7px 12px; font-size: .67rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .05em; color: rgba(255,255,255,.35);
+        background: rgba(255,255,255,.03); border-bottom: 1px solid rgba(255,255,255,.07);
+        text-align: left; white-space: nowrap;
+    }
+    body.app-theme-light .pl-existing-table th { background: #f8fafc; border-bottom-color: #e2e8f0; color: #64748b; }
+    .pl-existing-table td {
+        padding: 5px 12px; border-bottom: 1px solid rgba(255,255,255,.04);
+        vertical-align: middle;
+    }
+    body.app-theme-light .pl-existing-table td { border-bottom-color: #f1f5f9; }
+    .pl-existing-table tr:last-child td { border-bottom: none; }
+    .pl-existing-table tr:hover td { background: rgba(255,255,255,.025); }
+    body.app-theme-light .pl-existing-table tr:hover td { background: #f8fafc; }
+    .pl-existing-table tr.is-editing td { background: rgba(99,102,241,.06); }
+    body.app-theme-light .pl-existing-table tr.is-editing td { background: rgba(99,102,241,.04); }
+    .pl-existing-table .num { text-align: right; }
+    .pl-existing-table .pl-input { padding: 4px 8px; min-height: 28px; font-size: .78rem; width: 100px; }
+    .pl-entry-code { font-weight: 700; color: rgba(255,255,255,.82); }
+    body.app-theme-light .pl-entry-code { color: #1e293b; }
+    .pl-entry-name { color: rgba(255,255,255,.48); }
+    body.app-theme-light .pl-entry-name { color: #64748b; }
+    .pl-entry-cur {
+        display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: .67rem; font-weight: 700;
+        background: rgba(255,255,255,.07); color: rgba(255,255,255,.55);
+    }
+    body.app-theme-light .pl-entry-cur { background: #f1f5f9; color: #64748b; }
+    .pl-entry-date { font-size: .74rem; color: rgba(255,255,255,.45); white-space: nowrap; }
+    body.app-theme-light .pl-entry-date { color: #64748b; }
+    .pl-edit-actions { display: flex; gap: 4px; align-items: center; }
+    .pl-save-inline {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(22,163,74,.4);
+        background: rgba(22,163,74,.1); color: #4ade80; font-size: .72rem; font-weight: 600; cursor: pointer;
+        transition: all .12s;
+    }
+    body.app-theme-light .pl-save-inline { color: #16a34a; background: rgba(22,163,74,.08); border-color: rgba(22,163,74,.3); }
+    .pl-save-inline:hover { background: rgba(22,163,74,.2); }
+    .pl-cancel-inline {
+        display: inline-flex; align-items: center;
+        padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,.08);
+        background: none; color: rgba(255,255,255,.35); font-size: .72rem; cursor: pointer;
+        transition: all .12s;
+    }
+    body.app-theme-light .pl-cancel-inline { border-color: #e2e8f0; color: #94a3b8; }
+    .pl-cancel-inline:hover { background: rgba(255,255,255,.07); color: rgba(255,255,255,.6); }
+    body.app-theme-light .pl-cancel-inline:hover { background: #f1f5f9; color: #475569; }
+
+    /* ── Footer ── */
+    .pl-footer {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 20px; flex-shrink: 0;
+        background: rgba(15,15,26,.8); border-top: 1px solid rgba(255,255,255,.06);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    }
+    body.app-theme-light .pl-footer { background: rgba(248,250,252,.95); border-top-color: #e2e8f0; }
+
+    /* ── Message ── */
+    .pl-msg-bar {
+        padding: 8px 14px; border-radius: 9px; font-size: .78rem; font-weight: 600;
+        display: none; margin-bottom: 4px;
+    }
+    .pl-msg-bar.is-ok  { display: block; background: rgba(22,163,74,.12); color: #4ade80; border: 1px solid rgba(22,163,74,.25); }
+    .pl-msg-bar.is-err { display: block; background: rgba(239,68,68,.1); color: #f87171; border: 1px solid rgba(239,68,68,.2); }
+    body.app-theme-light .pl-msg-bar.is-ok  { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+    body.app-theme-light .pl-msg-bar.is-err { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+    /* ── Empty state ── */
+    .pl-empty {
+        text-align: center; padding: 28px 16px;
+        font-size: .78rem; color: rgba(255,255,255,.3); font-style: italic;
+    }
+    body.app-theme-light .pl-empty { color: #94a3b8; }
+
+    /* Delete modal */
+    .pl-modal-backdrop {
+        display: none; position: fixed; inset: 0; z-index: 9000;
+        background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
+        align-items: center; justify-content: center;
+    }
+    .pl-modal-backdrop.is-open { display: flex; }
+    .pl-modal {
+        background: #181c2e; border: 1px solid rgba(255,255,255,.1);
+        border-radius: 14px; padding: 24px; min-width: 300px; max-width: 380px;
+        box-shadow: 0 24px 60px rgba(0,0,0,.5);
+    }
+    body.app-theme-light .pl-modal { background: #fff; border-color: #e2e8f0; }
+    .pl-modal-title { font-size: .88rem; font-weight: 700; color: rgba(255,255,255,.88); margin-bottom: 8px; }
+    body.app-theme-light .pl-modal-title { color: #1e293b; }
+    .pl-modal-body { font-size: .78rem; color: rgba(255,255,255,.5); margin-bottom: 20px; line-height: 1.5; }
+    body.app-theme-light .pl-modal-body { color: #64748b; }
+    .pl-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .pl-btn--del { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); color: #f87171; }
+    .pl-btn--del:hover:not(:disabled) { background: rgba(239,68,68,.22); }
+</style>
+}
+
+<div class="pl-shell">
+
+    <!-- Action bar -->
+    <div class="pl-action-bar">
+        <span class="pl-action-bar__meta">
+            Fiyat Grubu: &nbsp;<strong id="plGroupName">Yükleniyor…</strong>
+        </span>
+    </div>
+
+    <!-- Stepper -->
+    <div class="pl-stepper">
+        <div class="pl-step">
+            <div class="pl-step__circle is-active" id="plCircle1">1</div>
+            <span class="pl-step__label is-active" id="plLabel1">Döviz &amp; Tarih</span>
+        </div>
+        <div class="pl-step__line" id="plLine1"></div>
+        <div class="pl-step">
+            <div class="pl-step__circle" id="plCircle2">2</div>
+            <span class="pl-step__label" id="plLabel2">Stok Seçimi</span>
+        </div>
+        <div class="pl-step__line" id="plLine2"></div>
+        <div class="pl-step">
+            <div class="pl-step__circle" id="plCircle3">3</div>
+            <span class="pl-step__label" id="plLabel3">Fiyat Girişi</span>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="pl-content">
+        <div id="plMsg" class="pl-msg-bar"></div>
+
+        <!-- Step 1 -->
+        <div class="pl-pane is-active" id="plStep1">
+            <div class="pl-card">
+                <div class="pl-card-title">Döviz &amp; Geçerlilik Dönemi</div>
+                <div class="pl-fields">
+                    <div class="pl-field">
+                        <label>Fiyat Tipi *</label>
+                        <div class="pl-price-type-group">
+                            <button type="button" class="pl-price-type-btn is-buy is-active" id="plPtBuy"   onclick="plSetPriceType('buy')">Alış</button>
+                            <button type="button" class="pl-price-type-btn is-sell"           id="plPtSell"  onclick="plSetPriceType('sell')">Satış</button>
+                            <button type="button" class="pl-price-type-btn is-both"           id="plPtBoth"  onclick="plSetPriceType('both')">İkisi</button>
+                        </div>
+                    </div>
+                    <div class="pl-field">
+                        <label>Döviz Tipi *</label>
+                        <select id="plCurrency" class="pl-select">
+                            <option value="">— Yükleniyor… —</option>
+                        </select>
+                    </div>
+                    <div class="pl-field">
+                        <label>Başlangıç Tarihi *</label>
+                        <input id="plValidFrom" type="date" class="pl-input" />
+                    </div>
+                    <div class="pl-field">
+                        <label>Bitiş Tarihi <span class="opt">(boş bırakılabilir)</span></label>
+                        <input id="plValidTo" type="date" class="pl-input" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mevcut kayıtlar — step 1'den de görünür -->
+            <div id="plExistingSection" style="display:none;">
+                <div class="pl-existing-hdr">
+                    <span class="pl-existing-hdr-title">Mevcut Fiyat Kayıtları</span>
+                    <span class="pl-entry-count" id="plEntryCount">0</span>
+                </div>
+                <div class="pl-existing-wrap">
+                    <table class="pl-existing-table">
+                        <thead>
+                            <tr>
+                                <th>Malzeme Kodu</th>
+                                <th>Malzeme Adı</th>
+                                <th>Döviz</th>
+                                <th class="num">Alış</th>
+                                <th class="num">Satış</th>
+                                <th>Başlangıç</th>
+                                <th>Bitiş</th>
+                                <th style="width:100px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="plExistingBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="pl-pane" id="plStep2">
+            <div class="pl-card">
+                <div class="pl-card-title">Stok Seçimi</div>
+                <div class="pl-stock-toolbar" style="margin-bottom:10px;">
+                    <input id="plStockSearch" type="search" class="pl-input" placeholder="Malzeme kodu veya adı ile filtrele…" />
+                    <button type="button" class="pl-btn pl-btn--secondary" onclick="plSelectAllFiltered()" style="white-space:nowrap;">Tümünü Seç</button>
+                    <button type="button" class="pl-btn pl-btn--ghost" onclick="plClearSelection()">Temizle</button>
+                    <span class="pl-sel-count" id="plSelCount"></span>
+                </div>
+                <div class="pl-stock-list" id="plStockList">
+                    <div class="pl-empty">Yükleniyor…</div>
+                </div>
+                <div class="pl-badges" id="plSelectedBadges" style="margin-top:10px;"></div>
+            </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="pl-pane" id="plStep3">
+            <div class="pl-card">
+                <div class="pl-card-title" id="plStep3Title">Fiyat Girişi</div>
+                <div class="pl-price-wrap">
+                    <table class="pl-price-table">
+                        <thead id="plPriceHead">
+                            <tr>
+                                <th style="width:32px;">#</th>
+                                <th>Malzeme Kodu</th>
+                                <th>Malzeme Adı</th>
+                                <th class="num" id="plThBuy">Alış Fiyatı</th>
+                                <th class="num" id="plThSell">Satış Fiyatı</th>
+                                <th style="width:40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="plPriceBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="pl-footer">
+        <button type="button" class="pl-btn pl-btn--secondary" id="plBtnPrev" onclick="plPrev()" style="display:none;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>Geri
+        </button>
+        <div></div>
+        <button type="button" class="pl-btn pl-btn--primary" id="plBtnNext" onclick="plNext()" disabled>
+            İleri<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:4px;"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+    </div>
+</div>
+
+<!-- Delete confirmation modal -->
+<div class="pl-modal-backdrop" id="plDeleteModal">
+    <div class="pl-modal">
+        <div class="pl-modal-title">Fiyat Kaydını Sil</div>
+        <div class="pl-modal-body" id="plDeleteModalBody">Bu fiyat kaydını silmek istediğinize emin misiniz?</div>
+        <div class="pl-modal-actions">
+            <button type="button" class="pl-btn pl-btn--ghost" onclick="plDeleteCancel()">Vazgeç</button>
+            <button type="button" class="pl-btn pl-btn--del" id="plDeleteConfirmBtn" onclick="plDeleteConfirm()">Sil</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    'use strict';
+    var API = function(a) { return '/PriceList/' + a; };
+    var STEPS = 3;
+    var step = 1;
+    var groupId = parseInt(new URLSearchParams(window.location.search).get('groupId')) || 0;
+    var allStocks = [];
+    var selectedStocks = [];
+    var filteredIds = new Set();
+    var pendingDeleteId = null;
+    var priceType = 'buy'; // 'buy' | 'sell' | 'both'
+
+    function esc(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function fmt(n) {
+        return (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    }
+
+    // ── Group banner ──
+    if (groupId) {
+        fetch(API('GetPriceGroup') + '?id=' + groupId)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                document.getElementById('plGroupName').textContent = d.groupCode + ' \u2014 ' + d.groupName;
+                loadExistingEntries(groupId);
+            });
+    } else {
+        document.getElementById('plGroupName').textContent = 'Grup bulunamadı';
+    }
+
+    // ── Stepper ──
+    function updateStepper() {
+        for (var i = 1; i <= STEPS; i++) {
+            var c = document.getElementById('plCircle' + i);
+            var l = document.getElementById('plLabel' + i);
+            c.className = 'pl-step__circle' + (i === step ? ' is-active' : i < step ? ' is-done' : '');
+            c.textContent = i < step ? '\u2713' : String(i);
+            l.className = 'pl-step__label' + (i === step ? ' is-active' : i < step ? ' is-done' : '');
+            if (i < STEPS) {
+                document.getElementById('plLine' + i).className = 'pl-step__line' + (i < step ? ' is-done' : '');
+            }
+            document.getElementById('plStep' + i).className = 'pl-pane' + (i === step ? ' is-active' : '');
+        }
+        document.getElementById('plBtnPrev').style.display = step > 1 ? '' : 'none';
+        var nb = document.getElementById('plBtnNext');
+        if (step === STEPS) {
+            nb.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;"><path d="M5 13l4 4L19 7"/></svg>Kaydet';
+            nb.className = 'pl-btn pl-btn--success';
+        } else {
+            nb.innerHTML = 'İleri<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:4px;"><path d="M9 18l6-6-6-6"/></svg>';
+            nb.className = 'pl-btn pl-btn--primary';
+        }
+        validateStep();
+    }
+
+    function validateStep() {
+        var nb = document.getElementById('plBtnNext');
+        if (step === 1) nb.disabled = !groupId || !document.getElementById('plCurrency').value || !document.getElementById('plValidFrom').value;
+        else if (step === 2) nb.disabled = selectedStocks.length === 0;
+        else nb.disabled = false;
+    }
+
+    window.plNext = function() {
+        if (step === STEPS) { savePrices(); return; }
+        if (step === 1) loadStocks();
+        if (step === 2) renderPriceTable();
+        step++;
+        updateStepper();
+        plMsg('');
+    };
+    window.plPrev = function() {
+        if (step <= 1) return;
+        step--;
+        updateStepper();
+        plMsg('');
+    };
+
+    function plMsg(msg, ok) {
+        var el = document.getElementById('plMsg');
+        if (!msg) { el.className = 'pl-msg-bar'; el.textContent = ''; return; }
+        el.className = 'pl-msg-bar ' + (ok ? 'is-ok' : 'is-err');
+        el.textContent = msg;
+        if (ok) setTimeout(function() { plMsg(''); }, 4000);
+    }
+
+    // ── Step 1: currencies ──
+    function loadCurrencies() {
+        fetch(API('GetCurrencies'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sel = document.getElementById('plCurrency');
+                sel.innerHTML = '<option value="">— Döviz Seçiniz —</option>' +
+                    data.map(function(c) {
+                        return '<option value="' + esc(c.code) + '">' + esc(c.code) + ' \u2014 ' + esc(c.name) + (c.symbol ? ' (' + esc(c.symbol) + ')' : '') + '</option>';
+                    }).join('');
+                sel.value = 'TRY';
+                validateStep();
+            });
+        document.getElementById('plValidFrom').value = new Date().toISOString().split('T')[0];
+    }
+    // ── Price type toggle ──
+    window.plSetPriceType = function(type) {
+        priceType = type;
+        ['buy','sell','both'].forEach(function(t) {
+            var btn = document.getElementById('plPt' + t.charAt(0).toUpperCase() + t.slice(1));
+            if (btn) btn.classList.toggle('is-active', t === type);
+        });
+    };
+
+    document.getElementById('plCurrency').addEventListener('change', validateStep);
+    document.getElementById('plValidFrom').addEventListener('change', validateStep);
+
+    // ── Step 2: stock selection ──
+    var stockTimer;
+    document.getElementById('plStockSearch').addEventListener('input', function() {
+        clearTimeout(stockTimer);
+        stockTimer = setTimeout(renderStockList, 200);
+    });
+
+    function loadStocks() {
+        if (allStocks.length) { renderStockList(); return; }
+        fetch(API('SearchStocks'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) { allStocks = data; renderStockList(); });
+    }
+
+    function renderStockList() {
+        var q = (document.getElementById('plStockSearch').value || '').trim().toLowerCase();
+        var list = document.getElementById('plStockList');
+        var filtered = allStocks.filter(function(s) {
+            return !q || s.materialCode.toLowerCase().indexOf(q) >= 0 || (s.materialName || '').toLowerCase().indexOf(q) >= 0;
+        });
+        filteredIds = new Set(filtered.map(function(s) { return s.id; }));
+
+        if (filtered.length === 0) {
+            list.innerHTML = '<div class="pl-empty">Sonuç bulunamadı.</div>';
+            updateSelectionUI(); return;
+        }
+        var selSet = new Set(selectedStocks.map(function(s) { return s.id; }));
+        list.innerHTML = filtered.map(function(s) {
+            var chk = selSet.has(s.id);
+            return '<div class="pl-stock-item' + (chk ? ' is-checked' : '') + '" onclick="plToggleStock(' + s.id + ')">'
+                + '<input type="checkbox"' + (chk ? ' checked' : '') + ' onclick="event.stopPropagation();plToggleStock(' + s.id + ')" />'
+                + '<span class="pl-stock-code">' + esc(s.materialCode) + '</span>'
+                + '<span class="pl-stock-name">' + esc(s.materialName) + '</span>'
+                + '</div>';
+        }).join('');
+        updateSelectionUI();
+    }
+
+    window.plToggleStock = function(id) {
+        var idx = selectedStocks.findIndex(function(s) { return s.id === id; });
+        if (idx >= 0) selectedStocks.splice(idx, 1);
+        else {
+            var s = allStocks.find(function(x) { return x.id === id; });
+            if (s) selectedStocks.push({ id: s.id, materialCode: s.materialCode, materialName: s.materialName, buyingPrice: 0, sellingPrice: 0 });
+        }
+        renderStockList(); validateStep();
+    };
+    window.plSelectAllFiltered = function() {
+        var selSet = new Set(selectedStocks.map(function(s) { return s.id; }));
+        allStocks.forEach(function(s) {
+            if (filteredIds.has(s.id) && !selSet.has(s.id))
+                selectedStocks.push({ id: s.id, materialCode: s.materialCode, materialName: s.materialName, buyingPrice: 0, sellingPrice: 0 });
+        });
+        renderStockList(); validateStep();
+    };
+    window.plClearSelection = function() { selectedStocks = []; renderStockList(); validateStep(); };
+    window.plRemoveSelected = function(id) {
+        selectedStocks = selectedStocks.filter(function(s) { return s.id !== id; });
+        renderStockList(); validateStep();
+    };
+
+    function updateSelectionUI() {
+        var cnt = document.getElementById('plSelCount');
+        var badges = document.getElementById('plSelectedBadges');
+        cnt.className = 'pl-sel-count' + (selectedStocks.length ? ' has-sel' : '');
+        cnt.textContent = selectedStocks.length ? selectedStocks.length + ' stok seçildi' : '';
+        badges.innerHTML = selectedStocks.map(function(s) {
+            return '<span class="pl-badge">' + esc(s.materialCode)
+                + '<span class="pl-badge-x" onclick="plRemoveSelected(' + s.id + ')">&times;</span></span>';
+        }).join('');
+    }
+
+    // ── Step 3: price entry ──
+    function renderPriceTable() {
+        var showBuy  = priceType === 'buy'  || priceType === 'both';
+        var showSell = priceType === 'sell' || priceType === 'both';
+
+        // Kolon başlıklarını göster/gizle
+        var thBuy  = document.getElementById('plThBuy');
+        var thSell = document.getElementById('plThSell');
+        if (thBuy)  thBuy.style.display  = showBuy  ? '' : 'none';
+        if (thSell) thSell.style.display = showSell ? '' : 'none';
+
+        // Kart başlığı
+        var title = priceType === 'buy' ? 'Alış Fiyatı Girişi' : priceType === 'sell' ? 'Satış Fiyatı Girişi' : 'Alış &amp; Satış Fiyatı Girişi';
+        var titleEl = document.getElementById('plStep3Title');
+        if (titleEl) titleEl.innerHTML = title;
+
+        document.getElementById('plPriceBody').innerHTML = selectedStocks.map(function(s, i) {
+            var buyCel  = showBuy
+                ? '<td class="num"><input type="number" class="pl-input" step="0.01" min="0" value="' + (s.buyingPrice || 0) + '" oninput="plUpdatePrice(' + i + ',\'buy\',this.value)" /></td>'
+                : '';
+            var sellCel = showSell
+                ? '<td class="num"><input type="number" class="pl-input" step="0.01" min="0" value="' + (s.sellingPrice || 0) + '" oninput="plUpdatePrice(' + i + ',\'sell\',this.value)" /></td>'
+                : '';
+            return '<tr>'
+                + '<td class="pl-row-num">' + (i + 1) + '</td>'
+                + '<td class="pl-code-cell">' + esc(s.materialCode) + '</td>'
+                + '<td class="pl-name-cell">' + esc(s.materialName) + '</td>'
+                + buyCel + sellCel
+                + '<td><button type="button" class="pl-btn pl-btn--danger-ghost" onclick="plRemoveFromTable(' + i + ')" title="Çıkar">'
+                + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+                + '</button></td>'
+                + '</tr>';
+        }).join('');
+    }
+    window.plUpdatePrice = function(idx, type, val) {
+        var v = parseFloat(val) || 0;
+        if (type === 'buy') selectedStocks[idx].buyingPrice = v;
+        else selectedStocks[idx].sellingPrice = v;
+    };
+    window.plRemoveFromTable = function(idx) {
+        selectedStocks.splice(idx, 1);
+        renderPriceTable();
+        if (selectedStocks.length === 0) { step = 2; updateStepper(); }
+    };
+
+    // ── Save bulk ──
+    function savePrices() {
+        var payload = {
+            priceGroupId: groupId,
+            currency: document.getElementById('plCurrency').value,
+            validFrom: document.getElementById('plValidFrom').value,
+            validTo:   document.getElementById('plValidTo').value || null,
+            lines: selectedStocks.map(function(s) {
+                return { stockCardId: s.id, materialCode: s.materialCode, materialName: s.materialName, buyingPrice: s.buyingPrice || 0, sellingPrice: s.sellingPrice || 0 };
+            })
+        };
+        var nb = document.getElementById('plBtnNext');
+        nb.disabled = true;
+        nb.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Kaydediliyor…';
+
+        fetch(API('SaveBulkPriceEntries'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) {
+                plMsg(d.message || 'Kaydedildi.', true);
+                selectedStocks = [];
+                step = 1; updateStepper();
+                loadExistingEntries(groupId);
+            } else {
+                plMsg(d.message || 'Hata oluştu.', false);
+                nb.disabled = false; updateStepper();
+            }
+        })
+        .catch(function() { plMsg('Bağlantı hatası.', false); nb.disabled = false; updateStepper(); });
+    }
+
+    // ── Existing entries ──
+    function loadExistingEntries(gid) {
+        if (!gid) return;
+        fetch(API('GetPriceListEntries') + '?groupId=' + gid)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sec  = document.getElementById('plExistingSection');
+                var body = document.getElementById('plExistingBody');
+                var cnt  = document.getElementById('plEntryCount');
+                if (!data || !data.length) { sec.style.display = 'none'; return; }
+                sec.style.display = '';
+                cnt.textContent = data.length;
+                body.innerHTML = data.map(function(e) {
+                    return '<tr id="plRow' + e.id + '">'
+                        + '<td class="pl-entry-code">' + esc(e.materialCode) + '</td>'
+                        + '<td class="pl-entry-name">' + esc(e.materialName) + '</td>'
+                        + '<td><span class="pl-entry-cur">' + esc(e.currency) + '</span></td>'
+                        + '<td class="num" id="plBuyDisp' + e.id + '">' + fmt(e.buyingPrice) + '</td>'
+                        + '<td class="num" id="plSellDisp' + e.id + '">' + fmt(e.sellingPrice) + '</td>'
+                        + '<td class="pl-entry-date">' + esc(e.validFrom || '—') + '</td>'
+                        + '<td class="pl-entry-date">' + esc(e.validTo || '—') + '</td>'
+                        + '<td>'
+                        +   '<div class="pl-edit-actions" id="plRowBtns' + e.id + '">'
+                        +     '<button type="button" class="pl-btn pl-btn--ghost" style="padding:4px 8px;" onclick="plStartEdit(' + e.id + ',' + (e.buyingPrice||0) + ',' + (e.sellingPrice||0) + ')" title="Düzenle">'
+                        +       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+                        +     '</button>'
+                        +     '<button type="button" class="pl-btn pl-btn--danger-ghost" style="padding:4px 8px;" onclick="plDeleteEntry(' + e.id + ',\'' + esc(e.materialCode) + '\')" title="Sil">'
+                        +       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>'
+                        +     '</button>'
+                        +   '</div>'
+                        + '</td>'
+                        + '</tr>';
+                }).join('');
+            });
+    }
+
+    // ── Inline edit ──
+    window.plStartEdit = function(id, buyOrig, sellOrig) {
+        var row = document.getElementById('plRow' + id);
+        var btns = document.getElementById('plRowBtns' + id);
+        if (!row || row.classList.contains('is-editing')) return;
+        row.classList.add('is-editing');
+
+        document.getElementById('plBuyDisp' + id).innerHTML =
+            '<input type="number" class="pl-input" step="0.01" min="0" id="plBuyInput' + id + '" value="' + buyOrig + '" />';
+        document.getElementById('plSellDisp' + id).innerHTML =
+            '<input type="number" class="pl-input" step="0.01" min="0" id="plSellInput' + id + '" value="' + sellOrig + '" />';
+
+        btns.innerHTML =
+            '<button type="button" class="pl-save-inline" onclick="plSaveInline(' + id + ')">'
+            + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Kaydet'
+            + '</button>'
+            + '<button type="button" class="pl-cancel-inline" onclick="plCancelEdit(' + id + ',' + buyOrig + ',' + sellOrig + ')">İptal</button>';
+
+        document.getElementById('plBuyInput' + id).focus();
+    };
+
+    window.plCancelEdit = function(id, buyOrig, sellOrig) {
+        var row = document.getElementById('plRow' + id);
+        row.classList.remove('is-editing');
+        document.getElementById('plBuyDisp' + id).textContent  = fmt(buyOrig);
+        document.getElementById('plSellDisp' + id).textContent = fmt(sellOrig);
+        document.getElementById('plRowBtns' + id).innerHTML =
+            '<button type="button" class="pl-btn pl-btn--ghost" style="padding:4px 8px;" onclick="plStartEdit(' + id + ',' + buyOrig + ',' + sellOrig + ')" title="Düzenle">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+            + '</button>'
+            + '<button type="button" class="pl-btn pl-btn--danger-ghost" style="padding:4px 8px;" onclick="plDeleteEntry(' + id + ')" title="Sil">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>'
+            + '</button>';
+    };
+
+    window.plSaveInline = function(id) {
+        var buyEl  = document.getElementById('plBuyInput' + id);
+        var sellEl = document.getElementById('plSellInput' + id);
+        var buy  = parseFloat(buyEl.value)  || 0;
+        var sell = parseFloat(sellEl.value) || 0;
+        var btn = document.querySelector('#plRowBtns' + id + ' .pl-save-inline');
+        if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+        fetch(API('UpdatePriceListEntryJson'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id, buyingPrice: buy, sellingPrice: sell })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) {
+                loadExistingEntries(groupId);
+                plMsg('Fiyat güncellendi.', true);
+            } else {
+                plMsg(d.message || 'Güncellenemedi.', false);
+                if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Kaydet'; }
+            }
+        })
+        .catch(function() {
+            plMsg('Bağlantı hatası.', false);
+            if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Kaydet'; }
+        });
+    };
+
+    // ── Delete with modal ──
+    window.plDeleteEntry = function(id, code) {
+        pendingDeleteId = id;
+        var body = document.getElementById('plDeleteModalBody');
+        body.textContent = (code ? '"' + code + '"' : 'Bu') + ' fiyat kaydını silmek istediğinize emin misiniz?';
+        document.getElementById('plDeleteModal').classList.add('is-open');
+    };
+    window.plDeleteCancel = function() {
+        pendingDeleteId = null;
+        document.getElementById('plDeleteModal').classList.remove('is-open');
+    };
+    window.plDeleteConfirm = function() {
+        if (!pendingDeleteId) return;
+        var btn = document.getElementById('plDeleteConfirmBtn');
+        btn.disabled = true; btn.textContent = 'Siliniyor…';
+        fetch(API('DeletePriceListEntryJson') + '?id=' + pendingDeleteId, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                document.getElementById('plDeleteModal').classList.remove('is-open');
+                btn.disabled = false; btn.textContent = 'Sil'; pendingDeleteId = null;
+                if (d.success) loadExistingEntries(groupId);
+                else plMsg(d.message || 'Silinemedi.', false);
+            })
+            .catch(function() {
+                document.getElementById('plDeleteModal').classList.remove('is-open');
+                btn.disabled = false; btn.textContent = 'Sil'; pendingDeleteId = null;
+                plMsg('Bağlantı hatası.', false);
+            });
+    };
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') plDeleteCancel(); });
+
+    // ── Init ──
+    loadCurrencies();
+    updateStepper();
+})();
+</script>
+}

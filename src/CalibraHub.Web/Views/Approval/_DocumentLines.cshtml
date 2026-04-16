@@ -1,0 +1,43 @@
+@model IReadOnlyList<CalibraHub.Web.Models.Approval.InvoiceLineItem>
+
+@functions {
+    string Fmt(string? s)
+    {
+        if (decimal.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, out var n))
+            return n.ToString("#,##0.00", new System.Globalization.CultureInfo("tr-TR"));
+        return s ?? "-";
+    }
+}
+
+<div class="table-responsive mb-0" style="max-height: 480px;">
+    <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.85rem;">
+        <thead class="table-light sticky-top">
+            <tr>
+                <th style="width: 2.5rem;" class="text-center">#</th>
+                <th style="min-width: 250px;">Ürün / Hizmet Ayrıntısı</th>
+                <th class="text-end" style="min-width: 90px;">Miktar</th>
+                <th class="text-end" style="min-width: 90px;">Br. Fiyat</th>
+                <th class="text-end" style="min-width: 60px;">KDV %</th>
+                <th class="text-end" style="min-width: 90px;">KDV Tutarı</th>
+                <th class="text-end" style="min-width: 100px;">Kalem Tutarı</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var line in Model)
+        {
+            <tr>
+                <td class="text-muted text-center">@(line.LineNo ?? "-")</td>
+                <td class="fw-medium text-wrap" style="max-width: 300px;">@(line.ItemName ?? "-")</td>
+                <td class="text-end">
+                    <span class="fw-semibold">@(line.Quantity ?? "-")</span> 
+                    <span class="text-muted" style="font-size: 0.75rem;">@line.UnitCode</span>
+                </td>
+                <td class="text-end font-monospace">@Fmt(line.UnitPrice)</td>
+                <td class="text-end">@(line.TaxRate ?? "-")</td>
+                <td class="text-end text-muted font-monospace">@Fmt(line.TaxAmount)</td>
+                <td class="text-end fw-semibold text-dark font-monospace">@Fmt(line.LineAmount)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

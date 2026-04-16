@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <MSBuildEnableWorkloadResolver>false</MSBuildEnableWorkloadResolver>
+    <BuildInParallel>false</BuildInParallel>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/obj_temp/**;**/obj_temp_build/**;**/bin_temp/**;**/.tmp/**;**/artifacts/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

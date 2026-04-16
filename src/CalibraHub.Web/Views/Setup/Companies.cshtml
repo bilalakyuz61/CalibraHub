@@ -1,0 +1,538 @@
+@model CalibraHub.Web.Models.Setup.SetupCompanyViewModel
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Sirket Tanimlari";
+    ViewData["BodyClass"] = "page-setup-companies";
+    var listState = Model.ListState;
+}
+
+@section Styles {
+<style>
+    .page-setup-companies .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .page-setup-companies .integrator-dashboard__header { flex: 0 0 auto; }
+
+    /* ── Sol tab iskelet ── */
+    .cmp-layout { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .cmp-tab-nav {
+        width: 168px; flex-shrink: 0;
+        border-right: 1px solid var(--app-border,#dde3ee);
+        background: var(--app-surface,#fff);
+        display: flex; flex-direction: column;
+        padding: 10px 8px; gap: 3px;
+    }
+    .cmp-tab-btn {
+        width: 100%; text-align: left;
+        padding: 7px 12px; border-radius: 7px; border: none;
+        background: transparent; cursor: pointer;
+        font-size: 0.8rem; font-weight: 500;
+        color: var(--app-text-muted, #64748b);
+        transition: background .15s, color .15s;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .cmp-tab-btn:hover { background: var(--app-muted-surface,#f1f5f9); color: var(--app-text,#1e293b); }
+    .cmp-tab-btn.is-active { background: #eff6ff; color: #2563eb; font-weight: 600; }
+    .cmp-tab-btn svg { flex-shrink: 0; }
+    .cmp-tab-content { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+    .cmp-tab-pane { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; overflow: hidden; }
+    .cmp-tab-pane.is-active { display: flex; }
+
+    /* ── Sirket tab — mevcut grid ── */
+    .cmp-company-grid {
+        display: flex; flex-direction: column; gap: 4px;
+        flex: 1 1 auto; min-height: 0; padding: 12px 16px; overflow: hidden;
+    }
+    .cmp-company-grid > section { flex: 1 1 0; min-height: 0; overflow: hidden; }
+
+    /* ── ERP tab ── */
+    .erp-tab-wrap { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .erp-mini-toolbar { flex-shrink: 0; padding: 6px 12px; border-bottom: 1px solid var(--app-border,#dde3ee); display: flex; align-items: center; gap: 6px; }
+    .erp-layout { display: flex; gap: 0; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .erp-form-panel { width: 320px; flex-shrink: 0; border-right: 1px solid var(--app-border,#dde3ee); background: var(--app-surface,#fff); display: flex; flex-direction: column; overflow-y: auto; padding: 10px 14px; }
+    .erp-grid-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .erp-grid-panel .erp-table-wrap { flex: 1 1 auto; overflow: auto; }
+    .erp-toolbar { padding: 5px 10px; border-bottom: 1px solid var(--app-border,#dde3ee); flex-shrink: 0; }
+    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child { width: 80px; flex-shrink: 0; font-size: 0.76rem; font-weight: 600; color: var(--app-text-muted,#64748b); text-align: right; }
+    .erp-grid { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .erp-grid thead th { text-align: left; padding: 3px 8px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+    .erp-grid tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; cursor: pointer; }
+    .erp-grid tbody tr:hover { background: #f8fafc; }
+    .erp-grid tbody tr.is-sel { background: #eff6ff; }
+    .erp-grid td { padding: 2px 8px; vertical-align: middle; }
+    .erp-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
+    .erp-msg, .erp-test-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
+    .erp-msg.ok, .erp-test-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .erp-msg.err, .erp-test-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+</style>
+}
+
+<section class="admin-content integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+
+    <header class="integrator-dashboard__header">
+        <div>
+            <h1>Sirket Tanimlari</h1>
+            <p class="integrator-dashboard__subtitle">
+                Sistemde tanimli sirketleri, SQL veritabani ve ERP baglanti ayarlarini yonetin.
+            </p>
+        </div>
+    </header>
+
+    <div class="cmp-layout">
+
+        <!-- ── Sol tab nav ── -->
+        <nav class="cmp-tab-nav">
+            <button class="cmp-tab-btn is-active" onclick="cmpTab('company', this)">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                Sirket Tanimlari
+            </button>
+            <button class="cmp-tab-btn" onclick="cmpTab('erp', this)">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="7" height="7"/><rect x="15" y="3" width="7" height="7"/><rect x="2" y="14" width="7" height="7"/><path d="M17.5 17.5v-4h-4v4"/><path d="M9 7h6"/><path d="M5.5 14v-3.5H9"/></svg>
+                ERP Baglanti
+            </button>
+        </nav>
+
+        <!-- ── Tab içerikleri ── -->
+        <div class="cmp-tab-content">
+
+            <!-- TAB 1: Sirket Tanimlari -->
+            <div class="cmp-tab-pane is-active" id="cmp-pane-company">
+                <div class="cmp-company-grid">
+
+                    @* Form *@
+                    <section class="integrator-dashboard__group">
+                        <article class="integrator-card integrator-card--form">
+                            <div class="integrator-card__header">
+                                <div class="integrator-card__title-wrap">
+                                    <span class="integrator-card__icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                                    </span>
+                                    <div>
+                                        <h2>@(Model.Input.Id.HasValue ? "Sirket Duzenle" : "Yeni Sirket")</h2>
+                                        <p>Sirket adi ve varsa ozel SQL veritabani baglantisinı tanimlayin.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="integrator-collapsible-card__content">
+                                <form method="post" asp-action="SaveCompany" asp-controller="Setup"
+                                      class="integrator-form" autocomplete="off">
+                                    @Html.AntiForgeryToken()
+                                    <input asp-for="Input.Id" type="hidden" />
+                                    <input type="hidden" name="page" value="@listState.Page" />
+                                    <input type="hidden" name="pageSize" value="@listState.PageSize" />
+
+                                    <section class="integrator-form-section">
+                                        <div class="integrator-form-grid">
+                                            <div class="integrator-field integrator-field--full">
+                                                <label asp-for="Input.Name" class="form-label">Sirket Adi</label>
+                                                <input asp-for="Input.Name" class="form-control" />
+                                                <span asp-validation-for="Input.Name"></span>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section class="integrator-form-section">
+                                        <h3>
+                                            SQL Veritabani Baglantisi
+                                            <span style="font-weight:400; font-size:0.82em; color:var(--app-text-muted,#64748b);">
+                                                (bos birakilirsa sistem veritabani kullanilir)
+                                            </span>
+                                        </h3>
+                                        <div class="integrator-form-grid">
+                                            <div class="integrator-field">
+                                                <label asp-for="Input.SqlServer" class="form-label">Sunucu</label>
+                                                <input asp-for="Input.SqlServer" class="form-control"
+                                                       placeholder="örn: localhost\SQLEXPRESS" autocomplete="off" />
+                                            </div>
+                                            <div class="integrator-field">
+                                                <label asp-for="Input.SqlDatabase" class="form-label">Veri Tabani</label>
+                                                <input asp-for="Input.SqlDatabase" class="form-control"
+                                                       placeholder="örn: CalibraDB" autocomplete="off" />
+                                            </div>
+                                            <div class="integrator-field">
+                                                <label asp-for="Input.SqlUsername" class="form-label">Kullanici Adi</label>
+                                                <input asp-for="Input.SqlUsername" class="form-control" autocomplete="off" />
+                                            </div>
+                                            <div class="integrator-field">
+                                                <label asp-for="Input.SqlPassword" class="form-label">Sifre</label>
+                                                <input asp-for="Input.SqlPassword" class="form-control"
+                                                       type="password" autocomplete="new-password" />
+                                            </div>
+                                        </div>
+                                        <div class="mt-2 d-flex align-items-center gap-2">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                    id="btnTestDbConn">Baglanti Test Et</button>
+                                            <span id="dbTestResult" hidden style="font-size:0.82rem"></span>
+                                        </div>
+                                    </section>
+
+                                    <div class="integrator-form-actions">
+                                        <button type="submit" class="btn btn-primary integrator-btn-primary">Kaydet</button>
+                                        @if (Model.Input.Id.HasValue)
+                                        {
+                                            <a asp-controller="Setup" asp-action="Companies"
+                                               class="btn btn-secondary integrator-btn-secondary">Yeni</a>
+                                        }
+                                    </div>
+                                </form>
+                            </div>
+                        </article>
+                    </section>
+
+                    @* Tablo *@
+                    <section class="integrator-dashboard__group">
+                        <article class="integrator-card integrator-card--table">
+                            <div class="integrator-collapsible-card__content">
+                                <div class="integrator-table-wrap">
+                                    <table class="table integrator-table integrator-table--compact">
+                                        <thead>
+                                        <tr>
+                                            <th class="calibra-grid-actions-first">Islem</th>
+                                            <th>Sirket Adi</th>
+                                            <th>SQL Baglantisi</th>
+                                            <th>Durum</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        @if (Model.Companies.Count == 0)
+                                        {
+                                            <tr>
+                                                <td colspan="4" class="integrator-table__empty">
+                                                    Kayitli sirket bulunmuyor.
+                                                </td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var company in Model.Companies)
+                                            {
+                                                <tr>
+                                                    <td class="calibra-grid-actions-first">
+                                                        <div class="material-row-actions">
+                                                            <a class="btn btn-secondary integrator-btn-secondary"
+                                                               asp-controller="Setup" asp-action="Companies"
+                                                               asp-route-id="@company.Id"
+                                                               asp-route-page="@listState.Page"
+                                                               asp-route-pageSize="@listState.PageSize">Duzenle</a>
+                                                        </div>
+                                                    </td>
+                                                    <td>@company.Name</td>
+                                                    <td>
+                                                        @if (!string.IsNullOrWhiteSpace(company.DatabaseConnectionString))
+                                                        {
+                                                            <span class="integrator-status-pill is-active">
+                                                                <span class="integrator-status-pill__dot" aria-hidden="true"></span>
+                                                                <span>Ozel DB</span>
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="integrator-status-pill is-inactive">
+                                                                <span class="integrator-status-pill__dot" aria-hidden="true"></span>
+                                                                <span>Sistem DB</span>
+                                                            </span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <span class="integrator-status-pill @(company.IsActive ? "is-active" : "is-inactive")">
+                                                            <span class="integrator-status-pill__dot" aria-hidden="true"></span>
+                                                            <span>@(company.IsActive ? "Aktif" : "Pasif")</span>
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                @await Html.PartialAsync("_GridPager", new CalibraHub.Web.Models.Shared.GridPagerViewModel
+                                {
+                                    State = listState,
+                                    ActionName = "Companies",
+                                    ControllerName = "Setup"
+                                })
+                            </div>
+                        </article>
+                    </section>
+
+                </div>
+            </div>
+
+            <!-- TAB 2: ERP Baglanti Ayarlari -->
+            <div class="cmp-tab-pane" id="cmp-pane-erp">
+                <div class="erp-tab-wrap">
+
+                    <!-- Mini toolbar -->
+                    <div class="erp-mini-toolbar">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="erpSave()">Kaydet</button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" id="erpBtnDelete" disabled onclick="erpDelete()">Sil</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="erpNew()">Yeni</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="erpTest()">SQL Baglanti Testi</button>
+                        <span id="erpInlineTestMsg" style="margin-left:4px;"></span>
+                    </div>
+
+                    <!-- Form + Grid -->
+                    <div class="erp-layout">
+                        <div class="erp-form-panel">
+                            <input type="hidden" id="erpId" value="" />
+                            <div class="cs-line">
+                                <label>Sirket *</label>
+                                <select id="erpCompanyId" class="form-select form-select-sm"></select>
+                            </div>
+                            <div class="cs-line"><label>Saglayici</label><input id="erpProvider" class="form-control form-control-sm" value="Netsis" readonly /></div>
+                            <div class="cs-line"><label>Sirket *</label><input id="erpCompany" class="form-control form-control-sm" maxlength="50" /></div>
+                            <div class="cs-line"><label>Isletme *</label><input id="erpBusiness" class="form-control form-control-sm" maxlength="100" /></div>
+                            <div class="cs-line"><label>Sube *</label><input id="erpBranch" class="form-control form-control-sm" maxlength="100" /></div>
+                            <div class="cs-line"><label>Kullanici *</label><input id="erpUsername" class="form-control form-control-sm" maxlength="160" /></div>
+                            <div class="cs-line"><label>Sifre *</label><input id="erpPassword" type="password" class="form-control form-control-sm" maxlength="300" /></div>
+                            <div class="cs-line"><label>Durum</label><div class="form-check form-switch" style="margin:0;"><input id="erpIsActive" class="form-check-input" type="checkbox" role="switch" checked /></div></div>
+                            <div id="erpMsg"></div>
+                        </div>
+                        <div class="erp-grid-panel">
+                            <div class="erp-toolbar">
+                                <input type="text" id="erpSearch" class="form-control form-control-sm"
+                                       placeholder="Sirket veya isletmeye gore ara..."
+                                       oninput="erpLoad()" style="max-width:260px;" />
+                            </div>
+                            <div class="erp-table-wrap">
+                                <table class="erp-grid">
+                                    <thead><tr>
+                                        <th style="width:60px;"></th>
+                                        <th>Tanimli Sirket</th><th>Saglayici</th><th>Sirket</th>
+                                        <th>Isletme</th><th>Sube</th><th>Kullanici</th><th>Sifre</th><th>Durum</th>
+                                    </tr></thead>
+                                    <tbody id="erpBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div><!-- /.cmp-tab-content -->
+    </div><!-- /.cmp-layout -->
+
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+    // ── Tab geçişi ──
+    function cmpTab(name, btn) {
+        document.querySelectorAll('.cmp-tab-btn').forEach(function(b) { b.classList.remove('is-active'); });
+        document.querySelectorAll('.cmp-tab-pane').forEach(function(p) { p.classList.remove('is-active'); });
+        btn.classList.add('is-active');
+        document.getElementById('cmp-pane-' + name).classList.add('is-active');
+        if (name === 'erp' && !window._erpLoaded) { window._erpLoaded = true; erpInit(); }
+    }
+
+    // ── SQL bağlantı test (Sirket tab) ──
+    (function () {
+        var btn = document.getElementById('btnTestDbConn');
+        var result = document.getElementById('dbTestResult');
+        if (!btn) return;
+        btn.addEventListener('click', async function () {
+            var server   = document.getElementById('@Html.IdFor(m => m.Input.SqlServer)').value.trim();
+            var database = document.getElementById('@Html.IdFor(m => m.Input.SqlDatabase)').value.trim();
+            var username = document.getElementById('@Html.IdFor(m => m.Input.SqlUsername)').value.trim();
+            var password = document.getElementById('@Html.IdFor(m => m.Input.SqlPassword)').value;
+            if (!server) {
+                result.hidden = false; result.style.color = '#dc2626';
+                result.textContent = 'Sunucu adi zorunludur.'; return;
+            }
+            var connStr = 'Server=' + server + ';Database=' + database
+                + ';User Id=' + username + ';Password=' + password
+                + ';TrustServerCertificate=True;';
+            btn.disabled = true;
+            result.hidden = false; result.style.color = '#64748b';
+            result.textContent = 'Test ediliyor...';
+            try {
+                var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                var resp = await fetch('@Url.Action("TestCompanyConnection", "Setup")', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                    body: JSON.stringify({ connectionString: connStr })
+                });
+                var data = await resp.json();
+                result.style.color = data.success ? '#166534' : '#dc2626';
+                result.textContent = data.message;
+            } catch {
+                result.style.color = '#dc2626';
+                result.textContent = 'Test sirasinda bir hata olustu.';
+            } finally { btn.disabled = false; }
+        });
+    })();
+
+    // ── ERP bağlantı ayarları ──
+    (function() {
+        var API = function(a) { return '/Admin/' + a; };
+        var selId = null;
+
+        window.erpInit = function() {
+            loadCompanies(erpLoad);
+        };
+
+        function loadCompanies(cb) {
+            fetch(API('GetCompaniesJson'))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var sel = document.getElementById('erpCompanyId');
+                    sel.innerHTML = '<option value="">Sirket seciniz</option>' +
+                        data.map(function(c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
+                    if (cb) cb();
+                });
+        }
+
+        window.erpLoad = function() {
+            var s = (document.getElementById('erpSearch') || {value:''}).value;
+            fetch(API('GetErpSettingsJson') + '?search=' + encodeURIComponent(s))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var body = document.getElementById('erpBody');
+                    if (data.length === 0) {
+                        body.innerHTML = '<tr><td colspan="9" class="erp-empty">Kayit bulunamadi.</td></tr>';
+                        return;
+                    }
+                    body.innerHTML = data.map(function(d) {
+                        return '<tr class="' + (d.id === selId ? 'is-sel' : '') + '" onclick="erpSelect(\'' + d.id + '\')">' +
+                            '<td onclick="event.stopPropagation()">' +
+                                '<button type="button" class="act-btn primary" title="Duzelt" onclick="erpSelect(\'' + d.id + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
+                                ' <button type="button" class="act-btn danger" title="Sil" onclick="event.stopPropagation();erpDeleteById(\'' + d.id + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>' +
+                            '</td>' +
+                            '<td>' + esc(d.companyName) + '</td>' +
+                            '<td>' + esc(d.provider) + '</td>' +
+                            '<td style="font-weight:600;">' + esc(d.company) + '</td>' +
+                            '<td>' + esc(d.business) + '</td>' +
+                            '<td>' + esc(d.branch) + '</td>' +
+                            '<td>' + esc(d.username) + '</td>' +
+                            '<td style="color:#94a3b8;">' + esc(d.passwordMasked) + '</td>' +
+                            '<td style="font-size:0.72rem;color:' + (d.isActive ? '#15803d' : '#dc2626') + ';">' + (d.isActive ? 'Aktif' : 'Pasif') + '</td>' +
+                            '</tr>';
+                    }).join('');
+                });
+        };
+
+        window.erpSelect = function(id) {
+            selId = id;
+            fetch(API('GetErpSettingJson') + '?id=' + id)
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d.id) return;
+                    document.getElementById('erpId').value = d.id;
+                    setSelectValue('erpCompanyId', d.companyId);
+                    document.getElementById('erpCompany').value = d.company || '';
+                    document.getElementById('erpBusiness').value = d.business || '';
+                    document.getElementById('erpBranch').value = d.branch || '';
+                    document.getElementById('erpUsername').value = d.username || '';
+                    document.getElementById('erpPassword').value = d.password || '';
+                    document.getElementById('erpIsActive').checked = d.isActive;
+                    document.getElementById('erpBtnDelete').disabled = false;
+                    erpLoad();
+                });
+        };
+
+        window.erpNew = function() {
+            selId = null;
+            document.getElementById('erpId').value = '';
+            document.getElementById('erpCompany').value = '';
+            document.getElementById('erpBusiness').value = '';
+            document.getElementById('erpBranch').value = '';
+            document.getElementById('erpUsername').value = '';
+            document.getElementById('erpPassword').value = '';
+            document.getElementById('erpIsActive').checked = true;
+            document.getElementById('erpBtnDelete').disabled = true;
+            erpMsg(''); erpTestMsg('');
+            erpLoad();
+        };
+
+        window.erpSave = function() {
+            fetch(API('SaveErpSettingsJson'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(buildPayload())
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { erpMsg(d.message || 'Kaydedildi.', true); erpNew(); }
+                else erpMsg(d.message || 'Hata', false);
+            });
+        };
+
+        window.erpDelete = function() {
+            var id = document.getElementById('erpId').value;
+            if (!id || !confirm('Bu ERP baglantisini silmek istediginize emin misiniz?')) return;
+            erpDeleteById(id);
+        };
+
+        window.erpDeleteById = function(id) {
+            if (!confirm('Bu ERP baglantisini silmek istediginize emin misiniz?')) return;
+            fetch(API('DeleteErpSettingsJson') + '?id=' + id, { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.success) { erpMsg('Silindi.', true); erpNew(); }
+                    else erpMsg(d.message || 'Silinemedi', false);
+                });
+        };
+
+        window.erpTest = function() {
+            erpTestMsg('Test ediliyor...', null);
+            fetch(API('TestErpConnectionJson'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(buildPayload())
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                erpTestMsg(d.message || (d.success ? 'Baglanti basarili.' : 'Baglanti basarisiz.'), d.success);
+            });
+        };
+
+        function buildPayload() {
+            return {
+                id: document.getElementById('erpId').value || null,
+                companyId: document.getElementById('erpCompanyId').value || null,
+                provider: 'Netsis',
+                company: document.getElementById('erpCompany').value,
+                business: document.getElementById('erpBusiness').value,
+                branch: document.getElementById('erpBranch').value,
+                username: document.getElementById('erpUsername').value,
+                password: document.getElementById('erpPassword').value,
+                isActive: document.getElementById('erpIsActive').checked
+            };
+        }
+
+        function setSelectValue(id, val) {
+            var sel = document.getElementById(id);
+            if (!sel) return;
+            for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === String(val)) { sel.selectedIndex = i; return; }
+            }
+        }
+
+        function erpMsg(msg, ok) {
+            var el = document.getElementById('erpMsg');
+            if (!msg) { el.innerHTML = ''; return; }
+            el.innerHTML = '<div class="erp-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+            if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+        }
+
+        function erpTestMsg(msg, ok) {
+            var el = document.getElementById('erpInlineTestMsg');
+            if (!msg) { el.innerHTML = ''; return; }
+            var cls = ok === null
+                ? 'background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;'
+                : ok ? 'background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;'
+                     : 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca;';
+            el.innerHTML = '<span style="display:inline-block;padding:3px 10px;border-radius:5px;font-size:0.72rem;' + cls + '">' + esc(msg) + '</span>';
+        }
+
+        function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    })();
+    </script>
+}

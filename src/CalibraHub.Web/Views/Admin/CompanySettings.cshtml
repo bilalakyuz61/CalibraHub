@@ -1,0 +1,964 @@
+@model CalibraHub.Web.Models.Admin.CompanyManagementViewModel
+@{
+    ViewData["Title"] = "Şirket Ayarları";
+    ViewData["FormCode"] = "COMPANY_SETTINGS";
+    ViewData["BodyClass"] = "page-admin-company";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>company</td><td style='padding:6px 8px;'>Sirket bilgileri (unvan, vergi no, adres, logo, ayarlar). Sistem DB'de tutulur.</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .page-admin-company .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-admin-company .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .cs-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+    /* Sol: dikey tab nav */
+    .cs-tab-nav {
+        width: 180px; flex-shrink: 0;
+        border-right: 1px solid var(--app-border,#dde3ee);
+        background: var(--app-surface,#fff);
+        display: flex; flex-direction: column;
+        padding: 8px 0; overflow-y: auto;
+    }
+    .cs-tab-btn {
+        display: block; width: 100%; text-align: left;
+        padding: 8px 16px; font-size: 0.82rem; font-weight: 600;
+        color: var(--app-text-muted,#64748b); background: none; border: none;
+        border-left: 3px solid transparent; cursor: pointer;
+        transition: color .12s, background .12s, border-color .12s;
+    }
+    .cs-tab-btn:hover { background: var(--app-muted-surface,#f3f5f7); color: var(--app-text,#333); }
+    .cs-tab-btn.is-active {
+        color: var(--theme-accent,#2563eb); border-left-color: var(--theme-accent,#2563eb);
+        background: var(--theme-accent-soft,rgba(37,99,235,.06));
+    }
+
+    /* Sag: tab icerigi */
+    .cs-tab-content { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 16px 20px; }
+    .cs-tab-pane { display: none; }
+    .cs-tab-pane.is-active { display: block; }
+
+    /* Form stilleri */
+    .cs-form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
+    .cs-form-field { display: flex; flex-direction: column; min-width: 0; }
+    .cs-form-field--grow { flex: 1 1 auto; }
+    .cs-form-field label { font-size: 0.78rem; font-weight: 600; color: var(--app-text-muted,#64748b); margin-bottom: 2px; }
+    .cs-section-title {
+        font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+        color: var(--app-text-muted,#94a3b8); margin: 4px 0 8px; padding-bottom: 4px;
+        border-bottom: 1px solid var(--app-border-light,#f1f5f9);
+    }
+    .cs-switch-row { display: flex; gap: 20px; align-items: center; margin-top: 4px; }
+    .cs-switch-row .form-check { margin: 0; }
+    .cs-switch-row .form-check-label { font-size: 0.8rem; font-weight: 500; }
+    .cs-line {
+        display: flex; align-items: center; gap: 12px;
+        padding: 6px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9);
+    }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child {
+        width: 130px; flex-shrink: 0;
+        font-size: 0.8rem; font-weight: 600; color: var(--app-text-muted,#64748b);
+        text-align: right; padding-right: 4px;
+    }
+    .cs-line > .form-control { flex: 1 1 auto; }
+    @@media (max-width: 768px) {
+        .cs-line { flex-direction: column; align-items: stretch; gap: 2px; }
+        .cs-line > label:first-child { width: auto; text-align: left; }
+        .cs-tab-nav { width: 100%; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--app-border,#dde3ee); padding: 0; }
+        .cs-tab-btn { border-left: none; border-bottom: 3px solid transparent; padding: 8px 12px; white-space: nowrap; }
+        .cs-tab-btn.is-active { border-left-color: transparent; border-bottom-color: var(--theme-accent,#2563eb); }
+        .cs-body { flex-direction: column; }
+    }
+    .cs-instruction {
+        margin-top: 12px; padding: 10px 14px; border-radius: 6px;
+        font-size: 0.78rem; line-height: 1.6; color: #1e293b;
+        background: #f0f9ff; border: 1px solid #bae6fd;
+    }
+    .cs-instruction strong { color: #0369a1; }
+    .cs-instruction ul { margin: 6px 0 4px 16px; padding: 0; }
+    .cs-instruction li { margin-bottom: 4px; }
+    .cs-instruction code { background: #e0f2fe; padding: 1px 5px; border-radius: 3px; font-size: 0.74rem; }
+    .cs-instruction a { color: #0369a1; text-decoration: underline; }
+    .isr-line {
+        display: flex; align-items: center; gap: 12px;
+        padding: 5px 0;
+    }
+    .isr-line > label {
+        width: 150px; flex-shrink: 0;
+        font-size: 0.8rem; font-weight: 600; color: var(--app-text-muted,#64748b);
+        text-align: right; padding-right: 4px;
+    }
+    .isr-line > .form-control, .isr-line > .form-select { width: 280px; flex: 0 0 280px; }
+    .isr-line-desc { font-size: 0.72rem; color: #94a3b8; line-height: 1.3; flex: 1 1 auto; }
+    .isr-test-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 5px 14px; border-radius: 20px;
+        border: 1px solid rgba(99,102,241,.4);
+        background: rgba(99,102,241,.06);
+        color: #6366f1; font-size: 0.78rem; font-weight: 600;
+        cursor: pointer; transition: background .15s, border-color .15s;
+        white-space: nowrap;
+    }
+    .isr-test-btn:hover {
+        background: rgba(99,102,241,.13);
+        border-color: rgba(99,102,241,.65);
+    }
+    body.app-theme-dark.page-admin-company .isr-test-btn {
+        border-color: rgba(129,140,248,.35);
+        background: rgba(129,140,248,.07);
+        color: #818cf8;
+    }
+    body.app-theme-dark.page-admin-company .isr-test-btn:hover {
+        background: rgba(129,140,248,.14);
+        border-color: rgba(129,140,248,.6);
+    }
+
+    /* Dark tema overrideları */
+    body.app-theme-dark.page-admin-company .cs-tab-nav {
+        background: rgba(255,255,255,.02);
+        border-right-color: rgba(255,255,255,.07);
+    }
+    body.app-theme-dark.page-admin-company .cs-tab-btn {
+        color: #64748b;
+    }
+    body.app-theme-dark.page-admin-company .cs-tab-btn:hover {
+        background: rgba(255,255,255,.04);
+        color: #cbd5e1;
+    }
+    body.app-theme-dark.page-admin-company .cs-tab-btn.is-active {
+        color: #818cf8;
+        border-left-color: #818cf8;
+        background: rgba(129,140,248,.07);
+    }
+    body.app-theme-dark.page-admin-company .cs-line {
+        border-bottom-color: rgba(255,255,255,.05);
+    }
+    body.app-theme-dark.page-admin-company .cs-line > label:first-child {
+        color: #64748b;
+    }
+    body.app-theme-dark.page-admin-company .cs-section-title {
+        color: #475569;
+        border-bottom-color: rgba(255,255,255,.05);
+    }
+    body.app-theme-dark.page-admin-company .cs-instruction {
+        background: rgba(14,165,233,.08);
+        border-color: rgba(14,165,233,.2);
+        color: #cbd5e1;
+    }
+    body.app-theme-dark.page-admin-company .cs-instruction strong { color: #38bdf8; }
+    body.app-theme-dark.page-admin-company .cs-instruction code {
+        background: rgba(14,165,233,.12);
+        color: #7dd3fc;
+    }
+    body.app-theme-dark.page-admin-company .cs-instruction a { color: #38bdf8; }
+    body.app-theme-dark.page-admin-company .isr-line-desc { color: #475569; }
+    body.app-theme-dark.page-admin-company .isr-line > label { color: #64748b; }
+    /* Entegrasyon API tablo — light tema */
+    #apTable { font-size: 0.85rem; }
+    #apTable thead th {
+        font-size: 0.75rem; font-weight: 600; color: #64748b;
+        padding: 6px 10px; border-bottom: 2px solid #e2e8f0;
+    }
+    .ap-td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; color: #1e293b; font-size: 0.85rem; }
+    .ap-tr-sel { background: #eff6ff !important; }
+    .ap-tr-sel .ap-td { color: #1e40af; }
+    #apTable tbody tr:hover { background: #f8fafc; }
+    .ap-btn-edit  { background:none;border:none;cursor:pointer;color:#2563eb;padding:0 4px;font-size:1rem; }
+    .ap-btn-del   { background:none;border:none;cursor:pointer;color:#ef4444;padding:0 4px;font-size:1rem; }
+    /* Entegrasyon API tablo — dark tema */
+    body.app-theme-dark.page-admin-company #apTable thead th {
+        color: #475569; border-bottom-color: rgba(255,255,255,.08);
+    }
+    body.app-theme-dark.page-admin-company .ap-td {
+        border-bottom-color: rgba(255,255,255,.05);
+        color: #cbd5e1;
+    }
+    body.app-theme-dark.page-admin-company .ap-tr-sel { background: rgba(129,140,248,.1) !important; }
+    body.app-theme-dark.page-admin-company .ap-tr-sel .ap-td { color: #a5b4fc; }
+    body.app-theme-dark.page-admin-company #apTable tbody tr:hover { background: rgba(255,255,255,.03); }
+    body.app-theme-dark.page-admin-company .ap-btn-edit  { color: #818cf8; }
+    body.app-theme-dark.page-admin-company .ap-btn-del   { color: #f87171; }
+    /* ap-msg bildirim kutulari */
+    .ap-msg-ok  { padding:5px 12px;border-radius:6px;font-size:0.78rem;background:#dcfce7;color:#15803d;border:1px solid #bbf7d0; }
+    .ap-msg-err { padding:5px 12px;border-radius:6px;font-size:0.78rem;background:#fef2f2;color:#dc2626;border:1px solid #fecaca; }
+    body.app-theme-dark.page-admin-company .ap-msg-ok  { background:rgba(16,185,129,.1);color:#34d399;border-color:rgba(52,211,153,.25); }
+    body.app-theme-dark.page-admin-company .ap-msg-err { background:rgba(239,68,68,.08);color:#f87171;border-color:rgba(248,113,113,.25); }
+    body.app-theme-dark.page-admin-company input[readonly] {
+        background: rgba(255,255,255,.03) !important;
+        cursor: not-allowed;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact">
+    <div class="integrator-dashboard__content" style="display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden;">
+
+    <div class="entity-form-toolbar" data-no-proxy style="flex:0 0 auto;">
+        <button type="button" class="btn btn-primary integrator-btn-primary" onclick="csSave()">Kaydet</button>
+    </div>
+
+    <form id="company-form" method="post" asp-action="CompanySettings" autocomplete="off" novalidate style="display:contents;">
+        @Html.AntiForgeryToken()
+        <input asp-for="Input.Id" type="hidden" />
+
+        <div class="cs-body">
+            <div class="cs-tab-nav">
+                <button type="button" class="cs-tab-btn is-active" data-cs-tab="general">Genel Bilgiler</button>
+                <button type="button" class="cs-tab-btn" data-cs-tab="mail">Mail Ayarlari</button>
+                <button type="button" class="cs-tab-btn" data-cs-tab="apiprofile">Entegrasyon API</button>
+                <button type="button" class="cs-tab-btn" data-cs-tab="integrator">Entegrator Ayarlari</button>
+                <button type="button" class="cs-tab-btn" data-cs-tab="settings">Genel Parametreler</button>
+            </div>
+
+            <div class="cs-tab-content">
+
+                <!-- Genel Bilgiler -->
+                <div class="cs-tab-pane is-active" id="cs-pane-general">
+                    <div class="cs-line">
+                        <label>Sirket Adi</label>
+                        <input asp-for="Input.Name" class="form-control form-control-sm" readonly
+                               style="background:var(--app-muted-surface,#f3f5f7);cursor:not-allowed;" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Unvan</label>
+                        <input asp-for="Input.Title" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Vergi Dairesi</label>
+                        <input asp-for="Input.TaxOffice" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Vergi Numarasi</label>
+                        <input asp-for="Input.TaxNumber" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Adres</label>
+                        <input asp-for="Input.Address" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Il</label>
+                        <input asp-for="Input.City" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Ilce</label>
+                        <input asp-for="Input.District" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Posta Kodu</label>
+                        <input asp-for="Input.PostalCode" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Durum</label>
+                        <div class="form-check form-switch" style="margin:0;padding-top:4px;">
+                            <input asp-for="Input.IsActive" class="form-check-input" type="checkbox" role="switch" />
+                            <label asp-for="Input.IsActive" class="form-check-label" style="font-size:.82rem;font-weight:600;">Aktif</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mail Ayarlari -->
+                <div class="cs-tab-pane" id="cs-pane-mail">
+                    <div class="cs-line">
+                        <label>SMTP Host</label>
+                        <input asp-for="SmtpInput.Host" class="form-control form-control-sm" placeholder="smtp.gmail.com" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Port</label>
+                        <input asp-for="SmtpInput.Port" class="form-control form-control-sm" type="number" style="max-width:100px;" />
+                    </div>
+                    <div class="cs-line">
+                        <label>SSL/TLS</label>
+                        <div class="form-check form-switch" style="margin:0;padding-top:4px;">
+                            <input asp-for="SmtpInput.UseSsl" class="form-check-input" type="checkbox" role="switch" />
+                        </div>
+                    </div>
+                    <div class="cs-line">
+                        <label>E-posta Adresi</label>
+                        <input asp-for="SmtpInput.FromEmail" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Gorunen Ad</label>
+                        <input asp-for="SmtpInput.FromDisplayName" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label>Yontem</label>
+                        <select asp-for="SmtpInput.AuthMethod" class="form-select form-select-sm" id="authMethodSelect" style="max-width:260px;">
+                            <option value="Normal">Normal Sifre</option>
+                            <option value="AppPassword">Uygulama Sifresi (2FA)</option>
+                            <option value="OAuth2">OAuth2 (Gmail/Outlook)</option>
+                        </select>
+                    </div>
+                    <div class="cs-line">
+                        <label>Kullanici Adi</label>
+                        <input asp-for="SmtpInput.Username" class="form-control form-control-sm" />
+                    </div>
+                    <div class="cs-line">
+                        <label id="smtpPasswordLabel">Sifre</label>
+                        <input asp-for="SmtpInput.Password" class="form-control form-control-sm" type="password"
+                               autocomplete="new-password" value="@Model.SmtpInput.Password" />
+                    </div>
+
+                    <div id="oauthPanel" style="display:none;">
+                        <div class="cs-line">
+                            <label>Client ID</label>
+                            <input asp-for="SmtpInput.OAuth2ClientId" class="form-control form-control-sm" />
+                        </div>
+                        <div class="cs-line">
+                            <label>Client Secret</label>
+                            <input asp-for="SmtpInput.OAuth2ClientSecret" class="form-control form-control-sm" type="password"
+                                   value="@Model.SmtpInput.OAuth2ClientSecret" />
+                        </div>
+                        <div class="cs-line">
+                            <label>Refresh Token</label>
+                            <input asp-for="SmtpInput.OAuth2RefreshToken" class="form-control form-control-sm" type="password"
+                                   value="@Model.SmtpInput.OAuth2RefreshToken" />
+                        </div>
+                    </div>
+
+                    <div class="cs-line">
+                        <label>Test Alici</label>
+                        <input asp-for="SmtpInput.TestRecipientEmail" class="form-control form-control-sm" placeholder="bos = gonderen adrese gonder" />
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnTestSmtp" style="white-space:nowrap;flex-shrink:0;">Test Et</button>
+                    </div>
+
+                    <!-- Talimatlar -->
+                    <div id="instructionNormal" class="cs-instruction" style="display:none;">
+                        <strong>Normal Sifre</strong> — SMTP sunucunuzun kullanici adi ve sifresini girin.
+                        Cogu kurumsal mail sunucusu bu yontemi destekler.
+                    </div>
+                    <div id="instructionAppPassword" class="cs-instruction" style="display:none;">
+                        <strong>Uygulama Sifresi (2FA)</strong> — Hesabinizda 2 adimli dogrulama aktifse normal sifre calismaz.
+                        <ul>
+                            <li><strong>Gmail:</strong> <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a> adresinden uygulama sifresi olusturun. Host: <code>smtp.gmail.com</code>, Port: <code>587</code>, SSL: acik.</li>
+                            <li><strong>Outlook/Microsoft 365:</strong> <a href="https://account.live.com/proofs/AppPassword" target="_blank" rel="noopener">account.live.com &gt; Guvenlik &gt; Uygulama Sifresi</a>. Host: <code>smtp.office365.com</code>, Port: <code>587</code>, SSL: acik.</li>
+                            <li><strong>Yandex:</strong> Ayarlar &gt; Guvenlik &gt; Uygulama sifreleri. Host: <code>smtp.yandex.com</code>, Port: <code>465</code>, SSL: acik.</li>
+                        </ul>
+                        Olusturulan uygulama sifresini yukaridaki <em>Uygulama Sifresi</em> alanina yapistiriniz.
+                    </div>
+                    <div id="instructionOAuth2" class="cs-instruction" style="display:none;">
+                        <strong>OAuth2</strong> — Gmail API veya Microsoft Graph ile token tabanli kimlik dogrulama.
+                        <ul>
+                            <li><strong>Gmail:</strong> Google Cloud Console &gt; APIs &gt; Gmail API etkinlestir &gt; OAuth 2.0 Client ID olustur &gt; Refresh Token al.</li>
+                            <li><strong>Outlook:</strong> Azure AD &gt; App Registration &gt; Mail.Send izni &gt; Client Secret + Refresh Token al.</li>
+                        </ul>
+                        Bu yontem en guvenli secenektir ancak kurulumu daha karmasiktir.
+                    </div>
+
+                    <input asp-for="SmtpInput.Id" type="hidden" />
+                    <input asp-for="SmtpInput.CompanyId" type="hidden" />
+                    <input asp-for="SmtpInput.Name" type="hidden" value="@(Model.SmtpInput.Name ?? "Varsayilan")" />
+                    <input asp-for="SmtpInput.IsActive" type="hidden" value="true" />
+                </div>
+
+                <!-- Ayarlar -->
+                <div class="cs-tab-pane" id="cs-pane-settings">
+                    <div class="cs-section-title">Ayarlar</div>
+                    <div class="cs-switch-row">
+                        <div class="form-check form-switch">
+                            <input asp-for="Input.IsEDocumentApprovalEnabled" class="form-check-input" type="checkbox" role="switch" />
+                            <label asp-for="Input.IsEDocumentApprovalEnabled" class="form-check-label">E-Belge Onay Sistemi</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Entegrasyon API -->
+                <div class="cs-tab-pane" id="cs-pane-apiprofile">
+                    <div id="ap-msg" style="margin-bottom:8px;"></div>
+                    <div style="display:flex;gap:16px;height:100%;min-height:0;">
+                        <!-- Form -->
+                        <div style="width:360px;flex-shrink:0;">
+                            <input type="hidden" id="apId" />
+                            <div class="cs-section-title" style="margin-bottom:8px;">Profil Bilgileri</div>
+                            <div class="cs-line"><label>Profil Adi</label><input type="text" id="apName" class="form-control form-control-sm" /></div>
+                            <div class="cs-line"><label>Base URL</label><input type="text" id="apBaseUrl" class="form-control form-control-sm" placeholder="http://localhost:7070" /></div>
+                            <div class="cs-line"><label>Auth Tipi</label>
+                                <select id="apAuthType" class="form-select form-select-sm" onchange="apAuthChange()">
+                                    <option value="None">Yok</option>
+                                    <option value="OAuth2Password">OAuth2 Password</option>
+                                    <option value="BearerStatic">Bearer (Sabit Token)</option>
+                                    <option value="BasicAuth">Basic Auth</option>
+                                    <option value="ApiKey">API Key</option>
+                                </select>
+                            </div>
+                            <div id="apAuthOAuth2" style="display:none;">
+                                <div class="cs-section-title" style="margin-top:8px;">OAuth2 Ayarlari</div>
+                                <div class="cs-line"><label>Token URL</label><input type="text" id="apOAuthTokenEndpoint" class="form-control form-control-sm" placeholder="/api/v2/token" /></div>
+                                <div class="cs-line"><label>Kullanici</label><input type="text" id="apOAuthUsername" class="form-control form-control-sm" /></div>
+                                <div class="cs-line"><label>Sifre</label><input type="password" id="apOAuthPassword" class="form-control form-control-sm" /></div>
+                                <div class="cs-section-title" style="margin-top:6px;font-size:0.68rem;">Netsis Ek Alanlar (NOXRest)</div>
+                                <div class="cs-line"><label>BranchCode</label><input type="text" id="apOAuthBranchCode" class="form-control form-control-sm" value="0" /></div>
+                                <div class="cs-line"><label>DbName</label><input type="text" id="apOAuthDbName" class="form-control form-control-sm" /></div>
+                                <div class="cs-line"><label>DbUser</label><input type="text" id="apOAuthDbUser" class="form-control form-control-sm" value="sa" /></div>
+                                <div class="cs-line"><label>DbPassword</label><input type="password" id="apOAuthDbPassword" class="form-control form-control-sm" /></div>
+                                <div class="cs-line"><label>DbType</label><input type="text" id="apOAuthDbType" class="form-control form-control-sm" value="0" /></div>
+                            </div>
+                            <div id="apAuthBearer" style="display:none;">
+                                <div class="cs-section-title" style="margin-top:8px;">Bearer Token</div>
+                                <div class="cs-line"><label>Token</label><input type="text" id="apBearerToken" class="form-control form-control-sm" /></div>
+                            </div>
+                            <div id="apAuthBasic" style="display:none;">
+                                <div class="cs-section-title" style="margin-top:8px;">Basic Auth</div>
+                                <div class="cs-line"><label>Kullanici</label><input type="text" id="apBasicUsername" class="form-control form-control-sm" /></div>
+                                <div class="cs-line"><label>Sifre</label><input type="password" id="apBasicPassword" class="form-control form-control-sm" /></div>
+                            </div>
+                            <div id="apAuthApiKey" style="display:none;">
+                                <div class="cs-section-title" style="margin-top:8px;">API Key</div>
+                                <div class="cs-line"><label>Header Adi</label><input type="text" id="apApiKeyHeader" class="form-control form-control-sm" placeholder="X-Api-Key" /></div>
+                                <div class="cs-line"><label>Deger</label><input type="text" id="apApiKeyValue" class="form-control form-control-sm" /></div>
+                            </div>
+                            <div class="cs-line" style="margin-top:8px;border:none;">
+                                <label>Aktif</label>
+                                <div class="form-check form-switch" style="margin:0;"><input type="checkbox" id="apIsActive" class="form-check-input" checked /></div>
+                            </div>
+                        </div>
+                        <!-- Grid -->
+                        <div style="flex:1 1 auto;min-width:0;overflow-y:auto;">
+                            <div class="cs-section-title" style="margin-bottom:6px;">Kayitli Profiller</div>
+                            <table style="width:100%;border-collapse:collapse;" id="apTable">
+                                <thead><tr>
+                                    <th style="width:44px;"></th>
+                                    <th style="text-align:left;">Ad</th>
+                                    <th style="text-align:left;">Tip</th>
+                                    <th style="text-align:left;">Base URL</th>
+                                    <th style="text-align:center;">Aktif</th>
+                                </tr></thead>
+                                <tbody id="apTableBody"><tr><td colspan="5" class="ap-td" style="text-align:center;color:#94a3b8;">Yukleniyor...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Entegrator Ayarlari -->
+                <div class="cs-tab-pane" id="cs-pane-integrator">
+                    <span id="isrToolbarMsg"></span>
+                    <div class="isr-form" style="max-width:720px;">
+                        <input type="hidden" id="isrId" />
+                        <input type="hidden" id="isrCompanyId" />
+                        <div class="isr-line">
+                            <label>Aktif</label>
+                            <div class="form-check form-switch" style="margin:0;padding-top:3px;">
+                                <input type="checkbox" id="isrIsActive" class="form-check-input" role="switch" checked />
+                            </div>
+                            <span class="isr-line-desc">Pasife alindiginda veri cekilmez</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Saglayici</label>
+                            <select id="isrProvider" class="form-select form-select-sm"></select>
+                            <span class="isr-line-desc">e-Belge entegrasyon saglayicisi</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Servis URL</label>
+                            <input id="isrBaseUrl" class="form-control form-control-sm" maxlength="300" placeholder="https://..." />
+                            <span class="isr-line-desc">e-Belge web servis adresi</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Kullanici Adi</label>
+                            <input id="isrUsername" class="form-control form-control-sm" maxlength="120" />
+                            <span class="isr-line-desc">Servise giris kullanici adi</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Sifre</label>
+                            <input id="isrSecret" type="password" class="form-control form-control-sm" maxlength="200"
+                                   autocomplete="new-password" placeholder="Degistirmek icin girin" />
+                            <span class="isr-line-desc">Bos birakilirsa mevcut sifre korunur</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Okunmus Belgeler</label>
+                            <div class="form-check form-switch" style="margin:0;padding-top:3px;">
+                                <input type="checkbox" id="isrInclReceived" class="form-check-input" role="switch" />
+                            </div>
+                            <span class="isr-line-desc">Daha once okunmus belgeler de cekilsin</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Portalde Okundu</label>
+                            <div class="form-check form-switch" style="margin:0;padding-top:3px;">
+                                <input type="checkbox" id="isrMarkReceived" class="form-check-input" role="switch" />
+                            </div>
+                            <span class="isr-line-desc">Belge indirilince portalde okundu olarak isaretlenir</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Kesilen e-Fatura</label>
+                            <div class="form-check form-switch" style="margin:0;padding-top:3px;">
+                                <input type="checkbox" id="isrInvoices" class="form-check-input" role="switch" />
+                            </div>
+                            <span class="isr-line-desc">Sirketin kestigi e-Faturalar da indirilsin</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Kesilen e-Arsiv</label>
+                            <div class="form-check form-switch" style="margin:0;padding-top:3px;">
+                                <input type="checkbox" id="isrArchives" class="form-check-input" role="switch" />
+                            </div>
+                            <span class="isr-line-desc">Sirketin kestigi e-Arsivler de indirilsin</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Kesilen e-Irsaliye</label>
+                            <div class="form-check form-switch" style="margin:0;padding-top:3px;">
+                                <input type="checkbox" id="isrDispatches" class="form-check-input" role="switch" />
+                            </div>
+                            <span class="isr-line-desc">Sirketin kestigi e-Irsaliyeler de indirilsin</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Zamanlanmis Gorev</label>
+                            <div class="form-check form-switch" style="margin:0;padding-top:3px;">
+                                <input type="checkbox" id="isrScheduleEnabled" class="form-check-input" role="switch" />
+                            </div>
+                            <span class="isr-line-desc">Belirtilen aralikta otomatik veri cekme</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Zaman Asimi (sn)</label>
+                            <input id="isrTimeout" type="number" class="form-control form-control-sm" value="30" />
+                            <span class="isr-line-desc">Servis istekleri icin maksimum bekleme suresi</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Geriye Bakis (gun)</label>
+                            <input id="isrLookback" type="number" class="form-control form-control-sm" value="30" />
+                            <span class="isr-line-desc">Veri cekerken kac gun geriye bakilsin</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Cekme Araligi (sn)</label>
+                            <input id="isrPolling" type="number" class="form-control form-control-sm" value="120" />
+                            <span class="isr-line-desc">Zamanlanmis gorev kac saniyede bir calissin</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Max Kayit Pull</label>
+                            <input id="isrMaxPull" type="number" class="form-control form-control-sm" value="200" />
+                            <span class="isr-line-desc">Tek seferinde cekilecek maksimum belge sayisi</span>
+                        </div>
+                        <div class="isr-line">
+                            <label>Log Saklama (Gun)</label>
+                            <input id="isrLogDays" type="number" class="form-control form-control-sm" value="30" />
+                            <span class="isr-line-desc">Entegrasyon calisma gecmisi kac gun saklansin</span>
+                        </div>
+                        <div class="isr-line" style="margin-top:6px;">
+                            <label></label>
+                            <button type="button" class="isr-test-btn" onclick="isrTest()">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="flex-shrink:0;"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                                Baglanti Test
+                            </button>
+                            <span id="isrTestMsg"></span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </form>
+
+    </div><!-- /integrator-dashboard__content -->
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+    // Genel Kaydet butonu — aktif taba göre dispatch
+    window.csSave = function() {
+        var active = document.querySelector('.cs-tab-btn.is-active');
+        var tab = active ? active.getAttribute('data-cs-tab') : 'general';
+        if (tab === 'integrator') { isrSave(); return; }
+        if (tab === 'apiprofile') { apSave(); return; }
+        document.getElementById('company-form').submit();
+    };
+
+    (function () {
+        // Auth method toggle
+        var authSelect = document.getElementById('authMethodSelect');
+        var oauthPanel = document.getElementById('oauthPanel');
+        var pwdLabel = document.getElementById('smtpPasswordLabel');
+        function updateAuth() {
+            if (!authSelect) return;
+            var m = authSelect.value;
+            if (oauthPanel) oauthPanel.style.display = m === 'OAuth2' ? 'block' : 'none';
+            if (pwdLabel) pwdLabel.textContent = m === 'AppPassword' ? 'Uygulama Sifresi' : m === 'OAuth2' ? 'Sifre (opsiyonel)' : 'Sifre';
+            // Talimatlar
+            document.querySelectorAll('.cs-instruction').forEach(function (el) { el.style.display = 'none'; });
+            var inst = document.getElementById('instruction' + m);
+            if (inst) inst.style.display = 'block';
+        }
+        if (authSelect) { authSelect.addEventListener('change', updateAuth); updateAuth(); }
+
+        // SMTP test
+        var testBtn = document.getElementById('btnTestSmtp');
+        if (testBtn) {
+            testBtn.addEventListener('click', async function () {
+                testBtn.disabled = true; testBtn.textContent = 'Test ediliyor...';
+                try {
+                    var f = document.getElementById('company-form');
+                    var fd = new FormData(f);
+                    var token = fd.get('__RequestVerificationToken') || '';
+                    var resp = await fetch('@Url.Action("TestSmtpConnectionJson", "Admin")', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'RequestVerificationToken': token
+                        },
+                        body: JSON.stringify({
+                            companyId: parseInt(fd.get('SmtpInput.CompanyId')) || 0,
+                            name: fd.get('SmtpInput.Name') || 'Test',
+                            fromEmail: fd.get('SmtpInput.FromEmail') || '',
+                            fromDisplayName: fd.get('SmtpInput.FromDisplayName') || '',
+                            host: fd.get('SmtpInput.Host') || '',
+                            port: parseInt(fd.get('SmtpInput.Port')) || 587,
+                            username: fd.get('SmtpInput.Username') || '',
+                            password: fd.get('SmtpInput.Password') || '',
+                            useSsl: fd.get('SmtpInput.UseSsl') === 'true',
+                            testRecipientEmail: fd.get('SmtpInput.TestRecipientEmail') || null
+                        })
+                    });
+                    var data = await resp.json();
+                    alert(data.isSuccess ? '✓ ' + data.message : '✗ ' + data.message);
+                } catch (e) { alert('Test hatasi: ' + e.message); }
+                finally { testBtn.disabled = false; testBtn.textContent = 'Baglanti Test Et'; }
+            });
+        }
+
+        // Tab gecisi
+        document.querySelectorAll('.cs-tab-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('.cs-tab-btn').forEach(function (b) { b.classList.remove('is-active'); });
+                document.querySelectorAll('.cs-tab-pane').forEach(function (p) { p.classList.remove('is-active'); });
+                btn.classList.add('is-active');
+                var tab = btn.getAttribute('data-cs-tab');
+                var pane = document.getElementById('cs-pane-' + tab);
+                if (pane) pane.classList.add('is-active');
+                if (tab === 'apiprofile') apLoad();
+                if (tab === 'integrator' && !window._isrInited) { window._isrInited = true; isrInit(); }
+            });
+        });
+    })();
+    </script>
+    <script>
+(function() {
+    var _apSelectedId = null;
+
+    window.apLoad = function apLoad() {
+        fetch('/Admin/GetApiProfilesJson')
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(profiles) {
+                var tbody = document.getElementById('apTableBody');
+                if (profiles.error) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;color:#991b1b;">' + apEsc(profiles.message) + '</td></tr>';
+                    return;
+                }
+                if (!profiles.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;">Profil bulunamadi. Formu doldurup Kaydet\'e basin.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = profiles.map(function(p) {
+                    var enc = JSON.stringify(p).replace(/"/g,'&quot;');
+                    var selCls = p.id === _apSelectedId ? ' ap-tr-sel' : '';
+                    return '<tr class="' + selCls + '">' +
+                        '<td class="ap-td" style="white-space:nowrap;">' +
+                            '<button type="button" class="ap-btn-edit" onclick="apSelect(' + enc + ')" title="Duzenle">&#9998;</button>' +
+                            '<button type="button" class="ap-btn-del" onclick="apDeleteById(\'' + p.id + '\')" title="Sil">&#128465;</button>' +
+                        '</td>' +
+                        '<td class="ap-td">' + apEsc(p.name) + '</td>' +
+                        '<td class="ap-td">' + apEsc(p.authType) + '</td>' +
+                        '<td class="ap-td" style="font-size:0.78rem;opacity:.75;">' + apEsc(p.baseUrl) + '</td>' +
+                        '<td class="ap-td" style="text-align:center;">' + (p.isActive ? '&#x2713;' : '') + '</td>' +
+                        '</tr>';
+                }).join('');
+            })
+            .catch(function(e) { apMsg('err', 'Liste yuklenemedi: ' + e.message); });
+    }
+
+    window.apSelect = function(p) {
+        _apSelectedId = p.id;
+        document.getElementById('apId').value = p.id;
+        document.getElementById('apName').value = p.name;
+        document.getElementById('apBaseUrl').value = p.baseUrl;
+        apSetSelect('apAuthType', p.authType || 'None');
+        document.getElementById('apIsActive').checked = p.isActive;
+        apLoadAuthConfig(p.authType, p.authConfigJson);
+        apMsg('', '');
+    };
+
+    function apClearForm() {
+        _apSelectedId = null;
+        document.getElementById('apId').value = '';
+        document.getElementById('apName').value = '';
+        document.getElementById('apBaseUrl').value = '';
+        apSetSelect('apAuthType', 'None');
+        document.getElementById('apIsActive').checked = true;
+        apClearAuth();
+        apMsg('', '');
+    }
+
+    window.apSave = function() {
+        var name = document.getElementById('apName').value.trim();
+        var baseUrl = document.getElementById('apBaseUrl').value.trim();
+        if (!name) { apMsg('err', 'Profil adi zorunludur.'); return; }
+        if (!baseUrl) { apMsg('err', 'Base URL zorunludur.'); return; }
+        var authType = document.getElementById('apAuthType').value;
+        var payload = {
+            id: document.getElementById('apId').value || null,
+            name: name,
+            baseUrl: baseUrl,
+            authType: authType,
+            authConfigJson: apBuildAuthConfig(authType),
+            isActive: document.getElementById('apIsActive').checked
+        };
+        fetch('/Admin/SaveApiProfileJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        }).then(function(d) {
+            apMsg(d.success ? 'ok' : 'err', d.message);
+            if (d.success) { apClearForm(); apLoad(); }
+        }).catch(function(e) { apMsg('err', 'Kayit hatasi: ' + e.message); });
+    };
+
+    window.apDeleteById = function(id) {
+        if (!confirm('Bu profili silmek istediginizden emin misiniz?')) return;
+        fetch('/Admin/DeleteApiProfileJson?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                apMsg(d.success ? 'ok' : 'err', d.message);
+                if (d.success) { apClearForm(); apLoad(); }
+            })
+            .catch(function(e) { apMsg('err', 'Silme hatasi: ' + e.message); });
+    };
+
+    window.apAuthChange = function() {
+        var at = document.getElementById('apAuthType').value;
+        document.getElementById('apAuthOAuth2').style.display = at === 'OAuth2Password' ? '' : 'none';
+        document.getElementById('apAuthBearer').style.display = at === 'BearerStatic' ? '' : 'none';
+        document.getElementById('apAuthBasic').style.display = at === 'BasicAuth' ? '' : 'none';
+        document.getElementById('apAuthApiKey').style.display = at === 'ApiKey' ? '' : 'none';
+    };
+
+    function apLoadAuthConfig(authType, json) {
+        apClearAuth();
+        apSetSelect('apAuthType', authType || 'None');
+        apAuthChange();
+        if (!json) return;
+        try {
+            var c = JSON.parse(json);
+            if (authType === 'OAuth2Password') {
+                document.getElementById('apOAuthTokenEndpoint').value = c.tokenEndpoint || '';
+                document.getElementById('apOAuthUsername').value = c.username || '';
+                document.getElementById('apOAuthPassword').value = c.password || '';
+                var ef = c.extraFields || {};
+                document.getElementById('apOAuthBranchCode').value = ef.branchcode || '0';
+                document.getElementById('apOAuthDbName').value = ef.dbname || '';
+                document.getElementById('apOAuthDbUser').value = ef.dbuser || 'sa';
+                document.getElementById('apOAuthDbPassword').value = ef.dbpassword || '';
+                document.getElementById('apOAuthDbType').value = ef.dbtype || '0';
+            } else if (authType === 'BearerStatic') {
+                document.getElementById('apBearerToken').value = c.token || '';
+            } else if (authType === 'BasicAuth') {
+                document.getElementById('apBasicUsername').value = c.username || '';
+                document.getElementById('apBasicPassword').value = c.password || '';
+            } else if (authType === 'ApiKey') {
+                document.getElementById('apApiKeyHeader').value = c.apiKeyHeader || '';
+                document.getElementById('apApiKeyValue').value = c.apiKeyValue || '';
+            }
+        } catch(e) {}
+    }
+
+    function apBuildAuthConfig(authType) {
+        if (authType === 'None') return null;
+        var c = {};
+        if (authType === 'OAuth2Password') {
+            c = {
+                tokenEndpoint: document.getElementById('apOAuthTokenEndpoint').value,
+                tokenField: 'access_token',
+                grantType: 'password',
+                username: document.getElementById('apOAuthUsername').value,
+                password: document.getElementById('apOAuthPassword').value,
+                extraFields: {
+                    branchcode: document.getElementById('apOAuthBranchCode').value,
+                    dbname: document.getElementById('apOAuthDbName').value,
+                    dbuser: document.getElementById('apOAuthDbUser').value,
+                    dbpassword: document.getElementById('apOAuthDbPassword').value,
+                    dbtype: document.getElementById('apOAuthDbType').value
+                }
+            };
+        } else if (authType === 'BearerStatic') {
+            c = { token: document.getElementById('apBearerToken').value };
+        } else if (authType === 'BasicAuth') {
+            c = { username: document.getElementById('apBasicUsername').value, password: document.getElementById('apBasicPassword').value };
+        } else if (authType === 'ApiKey') {
+            c = { apiKeyHeader: document.getElementById('apApiKeyHeader').value, apiKeyValue: document.getElementById('apApiKeyValue').value };
+        }
+        return JSON.stringify(c);
+    }
+
+    function apClearAuth() {
+        ['apOAuthTokenEndpoint','apOAuthUsername','apOAuthPassword','apOAuthDbName','apOAuthDbPassword',
+         'apBearerToken','apBasicUsername','apBasicPassword','apApiKeyHeader','apApiKeyValue'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        document.getElementById('apOAuthBranchCode').value = '0';
+        document.getElementById('apOAuthDbUser').value = 'sa';
+        document.getElementById('apOAuthDbType').value = '0';
+        apAuthChange();
+    }
+
+    function apMsg(type, msg) {
+        var el = document.getElementById('ap-msg');
+        if (!el) return;
+        if (!msg) { el.innerHTML = ''; return; }
+        var cls = type === 'ok' ? 'ap-msg-ok' : 'ap-msg-err';
+        el.innerHTML = '<div class="' + cls + '">' + apEsc(msg) + '</div>';
+        if (type === 'ok') setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+
+    function apSetSelect(id, val) {
+        var sel = document.getElementById(id);
+        if (!sel) return;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === val) { sel.selectedIndex = i; return; }
+        }
+    }
+
+    function apEsc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+})();
+    </script>
+    <script>
+(function() {
+    var ISR_API = function(a) { return '/Admin/' + a; };
+
+    window.isrInit = function() {
+        fetch(ISR_API('GetIntegratorFormDataJson'))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var pSel = document.getElementById('isrProvider');
+                if (pSel) pSel.innerHTML = data.providers.map(function(p) {
+                    return '<option value="' + isrEsc(p.value) + '">' + isrEsc(p.label) + '</option>';
+                }).join('');
+                var companyId = data.currentCompanyId || (data.companies && data.companies.length > 0 ? data.companies[0].id : null);
+                if (companyId) {
+                    document.getElementById('isrCompanyId').value = companyId;
+                    fetch(ISR_API('GetIntegratorsListJson') + '?companyId=' + companyId)
+                        .then(function(r) { return r.json(); })
+                        .then(function(items) { if (items && items.length > 0) isrLoad(items[0].id); });
+                }
+            });
+    };
+
+    function isrLoad(id) {
+        fetch(ISR_API('GetIntegratorJson') + '?id=' + id)
+            .then(function(r) { return r.json(); })
+            .then(function(x) {
+                if (!x) return;
+                document.getElementById('isrId').value           = x.id || '';
+                document.getElementById('isrCompanyId').value    = x.companyId || '';
+                isrSetVal('isrProvider', x.provider);
+                document.getElementById('isrBaseUrl').value      = x.baseUrl || '';
+                document.getElementById('isrUsername').value     = x.username || '';
+                document.getElementById('isrSecret').value       = '';
+                document.getElementById('isrTimeout').value      = x.timeoutSeconds || 30;
+                document.getElementById('isrLookback').value     = x.lookbackDays || 30;
+                document.getElementById('isrPolling').value      = x.pollingIntervalSeconds || 120;
+                document.getElementById('isrMaxPull').value      = x.maxRecordsPerPull || 200;
+                document.getElementById('isrLogDays').value      = x.logRetentionDays || 30;
+                document.getElementById('isrScheduleEnabled').checked       = x.scheduleEnabled;
+                document.getElementById('isrIsActive').checked              = x.isActive;
+                document.getElementById('isrInclReceived').checked          = x.includeReceivedDocumentsInPull;
+                document.getElementById('isrMarkReceived').checked          = x.markDownloadedDocumentsAsReceived;
+                document.getElementById('isrInvoices').checked              = x.includeIssuedEInvoicesInPull;
+                document.getElementById('isrArchives').checked              = x.includeIssuedEArchivesInPull;
+                document.getElementById('isrDispatches').checked            = x.includeIssuedEDispatchesInPull;
+            });
+    }
+
+    function isrBuildPayload() {
+        return {
+            id: document.getElementById('isrId').value || null,
+            companyId: document.getElementById('isrCompanyId').value || null,
+            provider: document.getElementById('isrProvider').value,
+            name: '',
+            baseUrl: document.getElementById('isrBaseUrl').value,
+            companyTaxNumber: '',
+            username: document.getElementById('isrUsername').value,
+            secret: document.getElementById('isrSecret').value,
+            timeoutSeconds: parseInt(document.getElementById('isrTimeout').value) || 30,
+            lookbackDays: parseInt(document.getElementById('isrLookback').value) || 30,
+            pollingIntervalSeconds: parseInt(document.getElementById('isrPolling').value) || 120,
+            maxRecordsPerPull: parseInt(document.getElementById('isrMaxPull').value) || 200,
+            logRetentionDays: parseInt(document.getElementById('isrLogDays').value) || 30,
+            includeReceivedDocumentsInPull: document.getElementById('isrInclReceived').checked,
+            markDownloadedDocumentsAsReceived: document.getElementById('isrMarkReceived').checked,
+            includeIssuedEInvoicesInPull: document.getElementById('isrInvoices').checked,
+            includeIssuedEArchivesInPull: document.getElementById('isrArchives').checked,
+            includeIssuedEDispatchesInPull: document.getElementById('isrDispatches').checked,
+            isActive: document.getElementById('isrIsActive').checked,
+            scheduleEnabled: document.getElementById('isrScheduleEnabled').checked
+        };
+    }
+
+    window.isrSave = function() {
+        fetch(ISR_API('SaveIntegratorSettingsJson'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(isrBuildPayload())
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              isrToolbarMsg(d.message, d.success);
+              if (d.success) {
+                  var idEl = document.getElementById('isrId');
+                  if (!idEl.value && d.id) idEl.value = d.id;
+              }
+          }).catch(function(e) { isrToolbarMsg('Hata: ' + e.message, false); });
+    };
+
+    window.isrDelete = function() {
+        var id = document.getElementById('isrId').value;
+        if (!id || !confirm('Bu entegrator ayarini silmek istediginize emin misiniz?')) return;
+        fetch(ISR_API('DeleteIntegratorSettingsJson') + '?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                isrToolbarMsg(d.message, d.success);
+                if (d.success) { document.getElementById('isrId').value = ''; }
+            });
+    };
+
+    window.isrTest = function() {
+        isrTestMsg('Test ediliyor...', null);
+        fetch(ISR_API('TestIntegratorConnectionJson'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(isrBuildPayload())
+        }).then(function(r) { return r.json(); })
+          .then(function(d) { isrTestMsg(d.message, d.success); })
+          .catch(function(e) { isrTestMsg('Baglanti hatasi: ' + e.message, false); });
+    };
+
+    function isrTestMsg(msg, ok) {
+        var el = document.getElementById('isrTestMsg');
+        if (!el) return;
+        if (!msg) { el.innerHTML = ''; return; }
+        var cls = ok === null ? 'background:rgba(100,116,139,.12);color:#94a3b8;border:1px solid rgba(100,116,139,.2);'
+            : ok ? 'background:rgba(16,185,129,.12);color:#34d399;border:1px solid rgba(52,211,153,.25);'
+                 : 'background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(248,113,113,.25);';
+        el.innerHTML = '<span style="display:inline-block;padding:3px 10px;border-radius:5px;font-size:0.72rem;' + cls + '">' + isrEsc(msg) + '</span>';
+    }
+
+    function isrToolbarMsg(msg, ok) {
+        var el = document.getElementById('isrToolbarMsg');
+        if (!el) return;
+        if (!msg) { el.innerHTML = ''; return; }
+        var cls = ok ? 'background:rgba(16,185,129,.12);color:#34d399;border:1px solid rgba(52,211,153,.25);'
+                     : 'background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(248,113,113,.25);';
+        el.innerHTML = '<span style="display:inline-block;padding:3px 10px;border-radius:5px;font-size:0.72rem;' + cls + '">' + isrEsc(msg) + '</span>';
+        if (ok) setTimeout(function() { if (el) el.innerHTML = ''; }, 3000);
+    }
+
+    function isrSetVal(id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; }
+    function isrEsc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+})();
+    </script>
+}
