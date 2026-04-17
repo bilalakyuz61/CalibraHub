@@ -121,7 +121,7 @@
             <div class="ie-line"><label>Kaynak</label>
                 <select id="ieEventSource" class="form-select form-select-sm">
                     <option value="Items">Malzeme Kartlari</option>
-                    <option value="SalesQuote">Satis Teklifi</option>
+                    <option value="Document">Satis Teklifi</option>
                     <option value="Customer">Cari Hesap</option>
                     <option value="Custom">Ozel</option>
                 </select>
@@ -237,20 +237,20 @@
             {val:'IsActive', lbl:'Aktif (1/0)'},
             {val:'TrackCombinations', lbl:'Kombinasyon Takibi'}
         ],
-        SalesQuote: [
+        Document: [
             {val:'DocumentNumber', lbl:'Belge No'},
-            {val:'QuoteId', lbl:'Teklif ID'},
-            {val:'CustomerId', lbl:'Musteri ID'},
-            {val:'CustomerName', lbl:'Musteri Adi'},
-            {val:'QuoteDate', lbl:'Teklif Tarihi'},
+            {val:'DocumentId', lbl:'Teklif ID'},
+            {val:'ContactId', lbl:'Musteri ID'},
+            {val:'ContactName', lbl:'Musteri Adi'},
+            {val:'DocumentDate', lbl:'Teklif Tarihi'},
             {val:'TotalAmount', lbl:'Toplam Tutar'},
             {val:'SalesRepId', lbl:'Temsilci ID'}
         ],
         Customer: [
-            {val:'CustomerCode', lbl:'Cari Kodu'},
-            {val:'CustomerName', lbl:'Cari Adi'},
+            {val:'ContactCode', lbl:'Cari Kodu'},
+            {val:'ContactName', lbl:'Cari Adi'},
             {val:'TaxNumber', lbl:'Vergi No'},
-            {val:'CustomerId', lbl:'Cari ID'}
+            {val:'ContactId', lbl:'Cari ID'}
         ],
         Custom: []
     };

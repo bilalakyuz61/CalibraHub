@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Zap, X, Save, Package, AlertCircle, Loader2,
-  Layers, Trash2, ChevronLeft,
+  Layers, Trash2, ChevronLeft, Pencil, Check,
 } from 'lucide-react'
 import * as api from '../../services/combinationsService'
 
@@ -110,6 +110,8 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
   const [draftCombos,    setDraftCombos]    = useState([])   // yalnızca client, taslak
   const [selectedValues, setSelectedValues] = useState({})   // {featureId: Set<valueId>}
   const [highlighted,    setHighlighted]    = useState(null) // incelenen combo kodu/draftKey
+  const [editingId,      setEditingId]      = useState(null) // duzenleme modunda olan kombinasyon id'si
+  const [editingDesc,    setEditingDesc]    = useState('')
   const [loading,        setLoading]        = useState(false)
   const [saving,         setSaving]         = useState(false)
   const [status,         setStatus]         = useState('Hazır')
@@ -140,7 +142,7 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
 
   /* ── Grid kolon şablonu ── */
   const gridCols = useMemo(
-    () => `150px repeat(${features.length}, minmax(70px,1fr)) 90px 80px 36px`,
+    () => `64px 150px repeat(${features.length}, minmax(70px,1fr)) minmax(120px,1.2fr) 90px 80px`,
     [features]
   )
 
@@ -198,14 +200,23 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
     })
   }
 
-  /* ── Grid satırı inceleme (highlight toggle) ── */
+  /* ── Grid satırı inceleme (highlight toggle) ──
+     Satır seçilince hücre değerlerini selectedValues'a yükler — kullanıcı
+     bu tabandan yeni tile'lar ekleyerek varyant üretebilir. */
   function inspectRow(rowKey) {
     const willHighlight = highlighted !== rowKey
     setHighlighted(willHighlight ? rowKey : null)
     if (willHighlight) {
       const row = allRows.find(r => r.rowKey === rowKey)
+      const seed = {}
+      for (const cell of row?.cells || []) {
+        if (!seed[cell.featureId]) seed[cell.featureId] = new Set()
+        seed[cell.featureId].add(cell.valueId)
+      }
+      setSelectedValues(seed)
       setStatus(`İnceleniyor: ${row?.code || 'Taslak'} · ${row?.locked ? 'Kayıtlı' : 'Taslak kombinasyon'}`)
     } else {
+      setSelectedValues({})
       setStatus('Vurgulama kaldırıldı')
     }
   }
@@ -353,6 +364,27 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
   function deleteDraft(draft) {
     setDraftCombos(prev => prev.filter(d => d.draftKey !== draft.draftKey))
     if (highlighted === draft.draftKey) setHighlighted(null)
+  }
+
+  /* ── Kombinasyon aciklama duzenleme ── */
+  function startEdit(row) {
+    setEditingId(row.id)
+    setEditingDesc(row.description || '')
+  }
+  function cancelEdit() {
+    setEditingId(null)
+    setEditingDesc('')
+  }
+  async function saveEdit(row) {
+    try {
+      const r = await api.updateCombinationDescription(csrfToken, row.id, editingDesc)
+      if (!r.success) { showToast(r.message || 'Guncellenemedi', 'error'); return }
+      setSavedCombos(prev => prev.map(c => c.id === row.id ? { ...c, description: editingDesc } : c))
+      setEditingId(null); setEditingDesc('')
+      showToast('Aciklama guncellendi', 'success')
+    } catch (e) {
+      showToast('Hata: ' + e.message, 'error')
+    }
   }
 
   /* ─────────────────────────────────────────────────────────────
@@ -541,11 +573,12 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
                 background: c.panel, borderBottom: `1px solid ${c.border}`,
                 flexShrink: 0, overflowX: 'hidden',
               }}>
+                <ColHdr c={c}></ColHdr>
                 <ColHdr c={c}>Kombinasyon Kodu</ColHdr>
                 {features.map(f => <ColHdr key={f.id} c={c}>{f.name}</ColHdr>)}
+                <ColHdr c={c}>Açıklama</ColHdr>
                 <ColHdr c={c}>Tarih</ColHdr>
                 <ColHdr c={c}>Durum</ColHdr>
-                <ColHdr c={c}></ColHdr>
               </div>
 
               {/* Grid gövdesi */}
@@ -569,6 +602,12 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
                     c={c}
                     onClick={() => inspectRow(row.rowKey)}
                     onDelete={() => row.locked ? deleteSaved(row) : deleteDraft(row)}
+                    onEditStart={() => startEdit(row)}
+                    onEditSave={() => saveEdit(row)}
+                    onEditCancel={cancelEdit}
+                    isEditing={editingId === row.id}
+                    editingDesc={editingDesc}
+                    setEditingDesc={setEditingDesc}
                   />
                 ))}
               </div>
@@ -669,8 +708,19 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
 function Tile({ label, isSelected, isHighlighted, c, onClick }) {
   const [hov, setHov] = useState(false)
 
+  // Hem mevcut kombinasyona ait (mor) hem de yeni seçime dahil (mavi) ise çift durum
+  const isBoth = isSelected && isHighlighted
+
   let colorSet
-  if (isHighlighted) colorSet = c.tileHi
+  if (isBoth) {
+    colorSet = {
+      bg: `linear-gradient(135deg, ${c.tileHi.bg} 0%, ${c.tileHi.bg} 48%, ${c.tileSel.bg} 52%, ${c.tileSel.bg} 100%)`,
+      bd: c.tileSel.bd,
+      tx: c.tileSel.tx,
+      sh: c.tileHi.sh,
+    }
+  }
+  else if (isHighlighted) colorSet = c.tileHi
   else if (isSelected) colorSet = c.tileSel
   else if (hov)       colorSet = { ...c.tile, bd: c.borderHi, tx: c.text }
   else                colorSet = c.tile
@@ -690,7 +740,7 @@ function Tile({ label, isSelected, isHighlighted, c, onClick }) {
         userSelect: 'none', textAlign: 'center',
         minHeight: 34, lineHeight: 1.3,
         transition: 'all .12s ease',
-        boxShadow: (isHighlighted && colorSet.sh) ? colorSet.sh : undefined,
+        boxShadow: ((isHighlighted || isBoth) && colorSet.sh) ? colorSet.sh : undefined,
       }}
     >
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -703,7 +753,10 @@ function Tile({ label, isSelected, isHighlighted, c, onClick }) {
 /* ─────────────────────────────────────────────────────────────────
    Grid satırı
 ───────────────────────────────────────────────────────────────── */
-function GridRow({ row, features, gridCols, isActive, c, onClick, onDelete }) {
+function GridRow({
+  row, features, gridCols, isActive, c, onClick, onDelete,
+  onEditStart, onEditSave, onEditCancel, isEditing, editingDesc, setEditingDesc,
+}) {
   const [hov, setHov] = useState(false)
 
   const codeColor  = isActive ? c.tileHi.tx : (row.locked ? c.bGreen.tx : c.bAmber.tx)
@@ -712,20 +765,86 @@ function GridRow({ row, features, gridCols, isActive, c, onClick, onDelete }) {
 
   return (
     <div
-      onClick={onClick}
+      onClick={isEditing ? undefined : onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
         display: 'grid', gridTemplateColumns: gridCols,
         alignItems: 'center', padding: '0 16px', minHeight: 36,
         borderBottom: `1px solid ${c.border}`,
-        cursor: 'pointer',
+        cursor: isEditing ? 'default' : 'pointer',
         background:  isActive ? c.rowAct.bg  : hov ? c.hover : 'transparent',
         borderLeft:  isActive ? `2px solid ${c.rowAct.bl}` : '2px solid transparent',
         paddingLeft: 14,
         transition:  'background .1s',
       }}
     >
+      {/* Aksiyon butonlari (sol) */}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+        {row.locked && !isEditing && (
+          <button
+            onClick={e => { e.stopPropagation(); onEditStart() }}
+            title="Aciklamayi duzenle"
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 26, height: 26, borderRadius: 6,
+              border: 'none', background: 'none', cursor: 'pointer',
+              color: c.faint, transition: 'color .12s',
+              opacity: hov ? 1 : 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#60a5fa' }}
+            onMouseLeave={e => { e.currentTarget.style.color = c.faint }}
+          >
+            <Pencil size={13} />
+          </button>
+        )}
+        {isEditing && (
+          <>
+            <button
+              onClick={e => { e.stopPropagation(); onEditSave() }}
+              title="Kaydet"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 26, height: 26, borderRadius: 6,
+                border: 'none', background: 'none', cursor: 'pointer',
+                color: '#34d399', transition: 'color .12s',
+              }}
+            >
+              <Check size={14} />
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); onEditCancel() }}
+              title="Iptal"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 26, height: 26, borderRadius: 6,
+                border: 'none', background: 'none', cursor: 'pointer',
+                color: c.muted, transition: 'color .12s',
+              }}
+            >
+              <X size={14} />
+            </button>
+          </>
+        )}
+        {!isEditing && (
+          <button
+            onClick={e => { e.stopPropagation(); onDelete() }}
+            title={row.locked ? 'Kombinasyonu sil' : 'Taslağı kaldır'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 26, height: 26, borderRadius: 6,
+              border: 'none', background: 'none', cursor: 'pointer',
+              color: c.faint, transition: 'color .12s',
+              opacity: hov ? 1 : 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#f87171' }}
+            onMouseLeave={e => { e.currentTarget.style.color = c.faint }}
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+      </span>
+
       {/* Kombinasyon kodu */}
       <span style={{
         fontFamily: 'Consolas,"Cascadia Code","Courier New",monospace',
@@ -749,6 +868,36 @@ function GridRow({ row, features, gridCols, isActive, c, onClick, onDelete }) {
         )
       })}
 
+      {/* Aciklama */}
+      {isEditing ? (
+        <input
+          type="text"
+          value={editingDesc}
+          onChange={e => setEditingDesc(e.target.value)}
+          onClick={e => e.stopPropagation()}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); onEditSave() }
+            else if (e.key === 'Escape') { e.preventDefault(); onEditCancel() }
+          }}
+          autoFocus
+          placeholder="Açıklama..."
+          style={{
+            width: '100%', height: 26, padding: '0 8px',
+            background: c.surface, border: `1px solid ${c.borderHi}`,
+            borderRadius: 4, color: c.text, fontSize: 12, outline: 'none',
+            marginRight: 6,
+          }}
+        />
+      ) : (
+        <span style={{
+          fontSize: 12, color: c.textSub,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          paddingRight: 4,
+        }}>
+          {row.description || '—'}
+        </span>
+      )}
+
       {/* Tarih */}
       <span style={{ fontSize: 11, color: c.muted }}>{row.date || '—'}</span>
 
@@ -762,23 +911,6 @@ function GridRow({ row, features, gridCols, isActive, c, onClick, onDelete }) {
       }}>
         {badgeText}
       </span>
-
-      {/* Sil */}
-      <button
-        onClick={e => { e.stopPropagation(); onDelete() }}
-        title={row.locked ? 'Kombinasyonu sil' : 'Taslağı kaldır'}
-        style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 26, height: 26, borderRadius: 6,
-          border: 'none', background: 'none', cursor: 'pointer',
-          color: c.faint, transition: 'color .12s',
-          opacity: hov ? 1 : 0,
-        }}
-        onMouseEnter={e => { e.currentTarget.style.color = '#f87171' }}
-        onMouseLeave={e => { e.currentTarget.style.color = c.faint }}
-      >
-        <Trash2 size={13} />
-      </button>
     </div>
   )
 }
@@ -891,8 +1023,7 @@ function PanelHdr({ children, c }) {
 function ColHdr({ children, c }) {
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700, color: c.muted,
-      textTransform: 'uppercase', letterSpacing: '.05em',
+      fontSize: 12, fontWeight: 700, color: c.textSub,
     }}>
       {children}
     </span>

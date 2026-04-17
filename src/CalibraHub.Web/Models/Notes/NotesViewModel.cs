@@ -67,6 +67,9 @@ public sealed class SaveNoteInput
     public Guid? FolderId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+    // Mod 2 (E2E) — tum not sifreli ise true, Content alani JSON-wrap'li ciphertext
+    public bool? IsFullyEncrypted { get; set; }
+    public string? EncryptionHint { get; set; }
 }
 
 public sealed class AddReminderInput

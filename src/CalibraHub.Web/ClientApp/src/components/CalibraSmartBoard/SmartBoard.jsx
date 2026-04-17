@@ -12,7 +12,7 @@
  *     entities:  [ { ...SmartCardProps, widgets: [master list from C#] } ],
  *     emptyText: 'Sonuc bulunamadi',
  *     // Pagination (optional — omit for client-only mode):
- *     apiUrl:     '/Finance/GetContactAccountsPage',
+ *     apiUrl:     '/Finance/GetContactsPage',
  *     totalCount: 300000,
  *     pageSize:   50,
  *   }

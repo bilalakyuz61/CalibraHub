@@ -2,7 +2,7 @@
  * DynamicWidgetRenderer — Faz C
  *
  * Ortak React bileseni — Razor edit sayfalari (MaterialCardEdit,
- * ContactAccountEdit, SalesQuoteEdit) icinden mount edilir. formCode ve
+ * ContactEdit, DocumentEdit) icinden mount edilir. formCode ve
  * recordId alir, /api/widgets/forms/{formCode}/records/{recordId}
  * endpoint'inden schema+value birlesimi yukler, dataType'a gore input
  * cizer ve kullanici kaydettiginde ayni endpoint'e POST eder.

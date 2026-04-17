@@ -1,4 +1,5 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Security;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
@@ -10,15 +11,20 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlNoteRepository : INoteRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly INoteEncryptionService _encryption;
     private readonly string _notesTable;
     private readonly string _remindersTable;
     private readonly string _sharesTable;
     private readonly string _foldersTable;
     private readonly string _attachmentsTable;
 
-    public SqlNoteRepository(SqlServerConnectionFactory connectionFactory, CalibraDatabaseOptions options)
+    public SqlNoteRepository(
+        SqlServerConnectionFactory connectionFactory,
+        INoteEncryptionService encryption,
+        CalibraDatabaseOptions options)
     {
         _connectionFactory = connectionFactory;
+        _encryption = encryption;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _notesTable = $"[{schema}].[notes]";
         _remindersTable = $"[{schema}].[note_reminders]";
@@ -37,7 +43,7 @@ public sealed class SqlNoteRepository : INoteRepository
         if (folderId.HasValue)
         {
             command.CommandText = $"""
-                SELECT n.[id], n.[company_id], n.[user_id], n.[title], n.[content], n.[created_at], n.[updated_at], n.[folder_id]
+                SELECT n.[id], n.[company_id], n.[user_id], n.[title], n.[content], n.[created_at], n.[updated_at], n.[folder_id], n.[is_pinned], n.[is_fully_encrypted], n.[encryption_hint]
                 FROM {_notesTable} n
                 WHERE n.[is_deleted] = 0
                   AND n.[company_id] = @CompanyId
@@ -50,7 +56,7 @@ public sealed class SqlNoteRepository : INoteRepository
         else
         {
             command.CommandText = $"""
-                SELECT n.[id], n.[company_id], n.[user_id], n.[title], n.[content], n.[created_at], n.[updated_at], n.[folder_id]
+                SELECT n.[id], n.[company_id], n.[user_id], n.[title], n.[content], n.[created_at], n.[updated_at], n.[folder_id], n.[is_pinned], n.[is_fully_encrypted], n.[encryption_hint]
                 FROM {_notesTable} n
                 WHERE n.[is_deleted] = 0
                   AND n.[company_id] = @CompanyId
@@ -77,7 +83,7 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [user_id], [title], [content], [created_at], [updated_at], [folder_id]
+            SELECT [id], [company_id], [user_id], [title], [content], [created_at], [updated_at], [folder_id], [is_pinned], [is_fully_encrypted], [encryption_hint]
             FROM {_notesTable}
             WHERE [id] = @Id AND [is_deleted] = 0;
             """;
@@ -96,21 +102,51 @@ public sealed class SqlNoteRepository : INoteRepository
         command.CommandText = $"""
             IF EXISTS (SELECT 1 FROM {_notesTable} WHERE [id] = @Id)
                 UPDATE {_notesTable}
-                SET [title] = @Title, [content] = @Content, [folder_id] = @FolderId, [updated_at] = @UpdatedAt
+                SET [title] = @Title, [content] = @Content, [folder_id] = @FolderId,
+                    [updated_at] = @UpdatedAt, [is_pinned] = @IsPinned,
+                    [is_fully_encrypted] = @IsFullyEncrypted, [encryption_hint] = @EncryptionHint
                 WHERE [id] = @Id;
             ELSE
-                INSERT INTO {_notesTable} ([id], [company_id], [user_id], [title], [content], [folder_id], [created_at], [updated_at], [is_deleted])
-                VALUES (@Id, @CompanyId, @UserId, @Title, @Content, @FolderId, @CreatedAt, @UpdatedAt, 0);
+                INSERT INTO {_notesTable}
+                    ([id], [company_id], [user_id], [title], [content], [folder_id],
+                     [created_at], [updated_at], [is_deleted], [is_pinned],
+                     [is_fully_encrypted], [encryption_hint])
+                VALUES
+                    (@Id, @CompanyId, @UserId, @Title, @Content, @FolderId,
+                     @CreatedAt, @UpdatedAt, 0, @IsPinned,
+                     @IsFullyEncrypted, @EncryptionHint);
             """;
         command.Parameters.Add(new SqlParameter("@Id", note.Id));
         command.Parameters.Add(new SqlParameter("@CompanyId", note.CompanyId));
         command.Parameters.Add(new SqlParameter("@UserId", note.UserId));
         command.Parameters.Add(new SqlParameter("@Title", note.Title));
-        command.Parameters.Add(new SqlParameter("@Content", (object?)note.Content ?? DBNull.Value));
+        // Content AES-Protect — DB'ye her zaman sifreli yazar (Katman 2 at-rest sifreleme).
+        // Not: Mod 2 (E2E) durumunda icerik zaten client-side sifreli geliyor; uzerine bir kat
+        // daha app-level AES uygulanir (defense-in-depth).
+        var protectedContent = _encryption.Protect(note.Content);
+        command.Parameters.Add(new SqlParameter("@Content", (object?)protectedContent ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@FolderId", (object?)note.FolderId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@CreatedAt", note.CreatedAt));
         command.Parameters.Add(new SqlParameter("@UpdatedAt", note.UpdatedAt));
+        command.Parameters.Add(new SqlParameter("@IsPinned", note.IsPinned));
+        command.Parameters.Add(new SqlParameter("@IsFullyEncrypted", note.IsFullyEncrypted));
+        command.Parameters.Add(new SqlParameter("@EncryptionHint", (object?)note.EncryptionHint ?? DBNull.Value));
 
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task TogglePinAsync(Guid id, Guid userId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_notesTable}
+            SET [is_pinned] = CASE WHEN [is_pinned] = 1 THEN 0 ELSE 1 END
+            WHERE [id] = @Id AND [user_id] = @UserId;
+            SELECT [is_pinned] FROM {_notesTable} WHERE [id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@UserId", userId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -254,13 +290,14 @@ public sealed class SqlNoteRepository : INoteRepository
                 RecurrenceType = (ReminderRecurrenceType)reader.GetInt32(3),
                 RecurrenceData = reader.IsDBNull(4) ? null : reader.GetString(4)
             };
+            var rawReminderContent = reader.IsDBNull(9) ? string.Empty : reader.GetString(9);
             var note = new Note
             {
                 Id = reader.GetGuid(5),
                 CompanyId = reader.GetInt32(6),
                 UserId = reader.GetGuid(7),
                 Title = reader.GetString(8),
-                Content = reader.IsDBNull(9) ? string.Empty : reader.GetString(9),
+                Content = _encryption.Unprotect(rawReminderContent) ?? string.Empty,
                 CreatedAt = reader.GetDateTime(10),
                 UpdatedAt = reader.GetDateTime(11),
                 FolderId = reader.IsDBNull(12) ? null : reader.GetGuid(12)
@@ -339,7 +376,7 @@ public sealed class SqlNoteRepository : INoteRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [user_id], [title], [content], [created_at], [updated_at], [folder_id]
+            SELECT [id], [company_id], [user_id], [title], [content], [created_at], [updated_at], [folder_id], [is_pinned], [is_fully_encrypted], [encryption_hint]
             FROM {_notesTable}
             WHERE [is_deleted] = 1 AND [company_id] = @CompanyId AND [user_id] = @UserId
             ORDER BY [updated_at] DESC;
@@ -518,18 +555,23 @@ public sealed class SqlNoteRepository : INoteRepository
         Description = reader.IsDBNull(7) ? null : reader.GetString(7)
     };
 
-    private static Note MapNote(SqlDataReader reader)
+    private Note MapNote(SqlDataReader reader)
     {
+        var rawContent = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
         return new Note
         {
             Id = reader.GetGuid(0),
             CompanyId = reader.GetInt32(1),
             UserId = reader.GetGuid(2),
             Title = reader.GetString(3),
-            Content = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+            // At-rest sifrelenmis icerigi coz (eski duz metin kayitlarda aynen doner)
+            Content = _encryption.Unprotect(rawContent) ?? string.Empty,
             CreatedAt = reader.GetDateTime(5),
             UpdatedAt = reader.GetDateTime(6),
-            FolderId = reader.IsDBNull(7) ? null : reader.GetGuid(7)
+            FolderId = reader.IsDBNull(7) ? null : reader.GetGuid(7),
+            IsPinned = !reader.IsDBNull(8) && reader.GetBoolean(8),
+            IsFullyEncrypted = reader.FieldCount > 9 && !reader.IsDBNull(9) && reader.GetBoolean(9),
+            EncryptionHint = reader.FieldCount > 10 && !reader.IsDBNull(10) ? reader.GetString(10) : null
         };
     }
 

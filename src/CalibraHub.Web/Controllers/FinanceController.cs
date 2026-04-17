@@ -20,16 +20,23 @@ public sealed class FinanceController : Controller
         _widgetService = widgetService;
     }
 
-    // GET /Finance/ContactAccounts — ilk sayfa ile SmartBoard
-    public async Task<IActionResult> ContactAccounts(CancellationToken ct)
+    // GET /Finance/Contacts — sayfa hemen render, veri AJAX ile gelir
+    public IActionResult Contacts()
     {
-        var boardConfig = await BuildContactAccountsBoardConfigAsync(null, 0, DefaultPageSize, ct);
-        return View(new ContactAccountsViewModel { BoardConfig = boardConfig });
+        return View(new ContactsViewModel { BoardConfig = null });
     }
 
-    // GET /Finance/GetContactAccountsPage?page=1&pageSize=50&search=abc
+    // GET /Finance/GetContactsBoardConfig — ilk yuklemede AJAX ile cagrilir
     [HttpGet]
-    public async Task<IActionResult> GetContactAccountsPage(
+    public async Task<IActionResult> GetContactsBoardConfig(CancellationToken ct)
+    {
+        var boardConfig = await BuildContactsBoardConfigAsync(null, 0, DefaultPageSize, ct);
+        return Json(boardConfig);
+    }
+
+    // GET /Finance/GetContactsPage?page=1&pageSize=50&search=abc
+    [HttpGet]
+    public async Task<IActionResult> GetContactsPage(
         int page = 1, int pageSize = 50, string? search = null, byte? accountType = null, CancellationToken ct = default)
     {
         if (page < 1) page = 1;
@@ -40,7 +47,7 @@ public sealed class FinanceController : Controller
 
         try
         {
-            var (accounts, totalCount) = await _financeService.GetContactAccountsPagedAsync(
+            var (accounts, totalCount) = await _financeService.GetContactsPagedAsync(
                 accountType, search, offset, pageSize, ct);
 
             var entities = await BuildEntitiesAsync(accounts, ct);
@@ -59,10 +66,10 @@ public sealed class FinanceController : Controller
         }
     }
 
-    private async Task<object> BuildContactAccountsBoardConfigAsync(
+    private async Task<object> BuildContactsBoardConfigAsync(
         string? search, int offset, int pageSize, CancellationToken ct)
     {
-        var (accounts, totalCount) = await _financeService.GetContactAccountsPagedAsync(
+        var (accounts, totalCount) = await _financeService.GetContactsPagedAsync(
             null, search, offset, pageSize, ct);
 
         var masterWidgets = await BuildMasterWidgetsAsync(ct);
@@ -77,7 +84,7 @@ public sealed class FinanceController : Controller
             iconColor = "cyan",
             searchPlaceholder = "Cari ara... (kod, unvan, vergi no)",
             emptyText = "Henuz cari hesap eklenmemis",
-            apiUrl = "/Finance/GetContactAccountsPage",
+            apiUrl = "/Finance/GetContactsPage",
             totalCount,
             pageSize,
             actions = new[]
@@ -88,7 +95,7 @@ public sealed class FinanceController : Controller
                     label = "Yeni Cari",
                     icon = "Plus",
                     variant = "primary",
-                    url = "/Finance/ContactAccountEdit",
+                    url = "/Finance/ContactEdit",
                 },
             },
             masterWidgets,
@@ -121,7 +128,7 @@ public sealed class FinanceController : Controller
     }
 
     private async Task<List<object>> BuildEntitiesAsync(
-        IReadOnlyCollection<ContactAccountDto> accounts, CancellationToken ct)
+        IReadOnlyCollection<ContactDto> accounts, CancellationToken ct)
     {
         var recordIds = accounts.Select(a => a.Id.ToString()).ToArray();
         var batchWidgets = recordIds.Length > 0
@@ -139,7 +146,9 @@ public sealed class FinanceController : Controller
             if (!string.IsNullOrWhiteSpace(account.TaxNumber))
                 widgets.Add(new { id = "sys_tax_no", type = "data", dataType = "text", label = "Vergi No", value = account.TaxNumber,  color = "slate"   });
             if (!string.IsNullOrWhiteSpace(account.City))
-                widgets.Add(new { id = "sys_city",   type = "data", dataType = "text", label = "Sehir",    value = account.City,       color = "teal"    });
+                widgets.Add(new { id = "sys_city",   type = "data", dataType = "text", label = "İl",       value = account.City,       color = "teal"    });
+            if (!string.IsNullOrWhiteSpace(account.District))
+                widgets.Add(new { id = "sys_district", type = "data", dataType = "text", label = "İlçe",   value = account.District,   color = "teal"    });
             widgets.Add(new { id = "sys_type", type = "data", dataType = "text", label = "Tip",
                 value = account.AccountType == 1 ? "Musteri" : "Tedarikci",
                 color = account.AccountType == 1 ? "emerald" : "violet" });
@@ -165,7 +174,7 @@ public sealed class FinanceController : Controller
                 id = account.Id,
                 title = string.IsNullOrWhiteSpace(account.AccountTitle) ? "(isimsiz)" : account.AccountTitle,
                 subtitle = account.AccountCode ?? string.Empty,
-                description = account.Address ?? string.Empty,
+                description = string.Join(" / ", new[] { account.City, account.District }.Where(s => !string.IsNullOrWhiteSpace(s))),
                 imageUrl = (string?)null,
                 statusBadge = (object?)null,
                 widgets,
@@ -173,13 +182,13 @@ public sealed class FinanceController : Controller
                 {
                     label = "Duzenle",
                     icon = "Edit",
-                    url = $"/Finance/ContactAccountEdit?id={account.Id}",
+                    url = $"/Finance/ContactEdit?id={account.Id}",
                 },
                 secondaryAction = new
                 {
                     label = "Sil",
                     icon = "Trash2",
-                    apiUrl = $"/Finance/DeleteContactAccountJson?id={account.Id}",
+                    apiUrl = $"/Finance/DeleteContactJson?id={account.Id}",
                     confirm = $"Bu cari hesabi silmek istediginizden emin misiniz? ({account.AccountCode} — {account.AccountTitle})",
                 },
             });
@@ -187,29 +196,29 @@ public sealed class FinanceController : Controller
         return entities;
     }
 
-    // GET /Finance/ContactAccountEdit
-    public async Task<IActionResult> ContactAccountEdit(int? id, CancellationToken cancellationToken)
+    // GET /Finance/ContactEdit
+    public async Task<IActionResult> ContactEdit(int? id, CancellationToken cancellationToken)
     {
-        ContactAccountDto? existing = null;
+        ContactDto? existing = null;
         if (id.HasValue && id.Value > 0)
         {
-            existing = await _financeService.GetContactAccountByIdAsync(id.Value, cancellationToken);
+            existing = await _financeService.GetContactByIdAsync(id.Value, cancellationToken);
         }
 
         ViewData["Title"] = existing is null ? "Yeni Cari Hesap" : $"Cari Düzenle — {existing.AccountCode}";
-        ViewData["ContactAccount"] = existing;
+        ViewData["Contact"] = existing;
 
         return View();
     }
 
-    // GET /Finance/GetContactAccounts?accountType=1&search=abc
+    // GET /Finance/GetContacts?accountType=1&search=abc
     [HttpGet]
-    public async Task<IActionResult> GetContactAccounts(
+    public async Task<IActionResult> GetContacts(
         byte? accountType, string? search, CancellationToken cancellationToken)
     {
         try
         {
-            var accounts = await _financeService.GetContactAccountsAsync(accountType, search, cancellationToken);
+            var accounts = await _financeService.GetContactsAsync(accountType, search, cancellationToken);
             return Json(accounts);
         }
         catch (Exception ex)
@@ -218,16 +227,16 @@ public sealed class FinanceController : Controller
         }
     }
 
-    // POST /Finance/UpsertContactAccount
+    // POST /Finance/UpsertContact
     [HttpPost]
-    public async Task<IActionResult> UpsertContactAccount(
-        [FromBody] SaveContactAccountRequest? request, CancellationToken cancellationToken)
+    public async Task<IActionResult> UpsertContact(
+        [FromBody] SaveContactRequest? request, CancellationToken cancellationToken)
     {
         if (request is null)
             return Json(new { success = false, message = "Geçersiz istek verisi." });
         try
         {
-            var (success, error, account) = await _financeService.UpsertContactAccountAsync(request, cancellationToken);
+            var (success, error, account) = await _financeService.UpsertContactAsync(request, cancellationToken);
             if (!success)
                 return Json(new { success = false, message = error });
             return Json(new { success = true, account });
@@ -238,16 +247,16 @@ public sealed class FinanceController : Controller
         }
     }
 
-    // POST /Finance/DeleteContactAccount
+    // POST /Finance/DeleteContact
     [HttpPost]
-    public async Task<IActionResult> DeleteContactAccount(
-        [FromBody] DeleteContactAccountBody? body, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteContact(
+        [FromBody] DeleteContactBody? body, CancellationToken cancellationToken)
     {
         if (body is null)
             return Json(new { success = false, message = "Geçersiz istek verisi." });
         try
         {
-            var (success, error) = await _financeService.DeleteContactAccountAsync(body.Id, cancellationToken);
+            var (success, error) = await _financeService.DeleteContactAsync(body.Id, cancellationToken);
             if (!success)
                 return Json(new { success = false, message = error });
             return Json(new { success = true });
@@ -262,11 +271,11 @@ public sealed class FinanceController : Controller
     /// SmartCard-uyumlu delete endpoint'i — query string ile id bekler.
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> DeleteContactAccountJson(int id, CancellationToken ct)
+    public async Task<IActionResult> DeleteContactJson(int id, CancellationToken ct)
     {
         try
         {
-            var (success, error) = await _financeService.DeleteContactAccountAsync(id, ct);
+            var (success, error) = await _financeService.DeleteContactAsync(id, ct);
             if (!success)
                 return Json(new { success = false, message = error });
             return Json(new { success = true });

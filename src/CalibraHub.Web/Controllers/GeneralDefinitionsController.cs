@@ -313,7 +313,16 @@ public sealed class GeneralDefinitionsController : Controller
         else
             rates = await rateRepo.GetAllRatesInRangeAsync(from, to, ct);
 
-        return Json(rates.Select(r => new { r.CurrencyCode, rateDate = r.RateDate.ToString("yyyy-MM-dd"), rateDateDisplay = r.RateDate.ToString("dd.MM.yyyy"), r.BuyingRate, r.SellingRate, r.EffectiveBuyingRate, r.EffectiveSellingRate }));
+        var allCurrencies = await _currencyService.GetAllAsync(ct);
+        var nameMap = allCurrencies.ToDictionary(c => c.Code, c => c.Name, StringComparer.OrdinalIgnoreCase);
+
+        return Json(rates.Select(r => new {
+            r.CurrencyCode,
+            currencyName = nameMap.TryGetValue(r.CurrencyCode, out var n) ? n : "",
+            rateDate = r.RateDate.ToString("yyyy-MM-dd"),
+            rateDateDisplay = r.RateDate.ToString("dd.MM.yyyy"),
+            r.BuyingRate, r.SellingRate, r.EffectiveBuyingRate, r.EffectiveSellingRate
+        }));
     }
 
     [HttpGet]

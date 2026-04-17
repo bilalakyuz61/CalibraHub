@@ -3,7 +3,7 @@
  * katlanabilir bolumlere ayirir.
  *
  * Her grup bir <details> block'u olarak acilir; header'da grup etiketi +
- * kayit sayisi. "Grupsuz" bolumu groupId=null olan field'lar icin otomatik.
+ * kayit sayisi. "Genel" bolumu groupId=null olan field'lar icin otomatik.
  * Acik/kapali durum localStorage'da tutulur (reload sonrasi ayni pozisyon).
  *
  * Props:
@@ -13,7 +13,7 @@
  */
 import { useState, useEffect, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { LayoutGrid, ChevronDown, Layers, Trash2 } from 'lucide-react'
+import { LayoutGrid, ChevronDown, Layers, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
 import WidgetRegistryCard from './WidgetRegistryCard'
 
 var STORAGE_KEY = 'calibra.admin.widgetRegistry.openGroups'
@@ -38,6 +38,7 @@ export default function WidgetRegistryList(props) {
   var onDelete = props.onDelete
   var onPlainFieldToggle = props.onPlainFieldToggle
   var onListableToggle = props.onListableToggle
+  var onReorder = props.onReorder
   var editingId = props.editingId
   var savingId = props.savingId
   var searchQuery = (props.searchQuery || '').trim().toLowerCase()
@@ -90,10 +91,10 @@ export default function WidgetRegistryList(props) {
         return true
       })
 
-    // Grupsuz bolumunu sona ekle (varsa)
+    // Genel bolumunu sona ekle (varsa)
     if (ungrouped.length > 0) {
       sorted.push({
-        group: { id: '__ungrouped', groupKey: '__ungrouped', groupLabel: 'Grupsuz' },
+        group: { id: '__ungrouped', groupKey: '__ungrouped', groupLabel: 'Genel' },
         fields: ungrouped,
       })
     }
@@ -207,7 +208,7 @@ export default function WidgetRegistryList(props) {
                     <span className="text-[10px] font-semibold text-slate-400 dark:text-white/50 bg-slate-100 dark:bg-white/[0.04] px-2 py-0.5 rounded-full">
                       {section.fields.length}
                     </span>
-                    {/* Grup sil butonu — sadece gercek gruplar (Grupsuz sanal bucket haric) */}
+                    {/* Grup sil butonu — sadece gercek gruplar (Genel sanal bucket haric) */}
                     {g.id !== '__ungrouped' && onDelete && (
                       <button
                         type="button"
@@ -236,20 +237,50 @@ export default function WidgetRegistryList(props) {
                     <div className="p-2 pt-0 flex flex-col gap-1.5 border-t border-slate-200/70 dark:border-white/[0.06]">
                       <div className="h-2" />
                       <AnimatePresence>
-                        {section.fields.map(function (field) {
+                        {section.fields
+                          .slice()
+                          .sort(function (a, b) {
+                            var ao = a.sortOrder != null ? a.sortOrder : 0
+                            var bo = b.sortOrder != null ? b.sortOrder : 0
+                            return ao - bo
+                          })
+                          .map(function (field, idx, arr) {
                           var fid = field.id || field.widgetCode || field.fieldKey
                           return (
-                            <WidgetRegistryCard
-                              key={fid}
-                              field={field}
-                              onEdit={onEdit}
-                              onToggle={onToggle}
-                              onDelete={onDelete}
-                              onPlainFieldToggle={onPlainFieldToggle}
-                              onListableToggle={onListableToggle}
-                              isEditing={editingId && editingId === fid}
-                              isSaving={savingId && savingId === fid}
-                            />
+                            <div key={fid} className="flex items-start gap-1">
+                              <div className="flex flex-col gap-0.5 pt-2.5 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={function () { if (onReorder) onReorder(field, arr[idx - 1]) }}
+                                  className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+                                  title="Yukarı taşı"
+                                >
+                                  <ArrowUp size={11} strokeWidth={2.5} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === arr.length - 1}
+                                  onClick={function () { if (onReorder) onReorder(field, arr[idx + 1]) }}
+                                  className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors disabled:opacity-20 disabled:pointer-events-none"
+                                  title="Aşağı taşı"
+                                >
+                                  <ArrowDown size={11} strokeWidth={2.5} />
+                                </button>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <WidgetRegistryCard
+                                  field={field}
+                                  onEdit={onEdit}
+                                  onToggle={onToggle}
+                                  onDelete={onDelete}
+                                  onPlainFieldToggle={onPlainFieldToggle}
+                                  onListableToggle={onListableToggle}
+                                  isEditing={editingId && editingId === fid}
+                                  isSaving={savingId && savingId === fid}
+                                />
+                              </div>
+                            </div>
                           )
                         })}
                       </AnimatePresence>

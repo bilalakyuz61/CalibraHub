@@ -77,7 +77,7 @@ public sealed class MaterialCardLookupViewModel
 
 public sealed class MaterialCardCreateInput
 {
-    public int? StockCardId { get; set; }
+    public int? ItemId { get; set; }
 
     [Required(ErrorMessage = "Malzeme kodu zorunludur.")]
     [MaxLength(50, ErrorMessage = "Malzeme kodu en fazla 50 karakter olabilir.")]
@@ -101,7 +101,7 @@ public sealed class MaterialCardCreateInput
 
 public sealed class SaveMaterialCardJsonInput
 {
-    public int? StockCardId { get; set; }
+    public int? ItemId { get; set; }
     public string MaterialCode { get; set; } = string.Empty;
     public string MaterialName { get; set; } = string.Empty;
     public string? MaterialDescription { get; set; }

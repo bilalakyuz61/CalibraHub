@@ -6,15 +6,15 @@ namespace CalibraHub.Web.Models.Admin;
 
 public sealed class MaterialCardViewSettingsViewModel
 {
-    public List<MaterialCardFieldGroupListItemViewModel> Groups { get; set; } = new();
+    public List<FieldGroupListItemViewModel> Groups { get; set; } = new();
     public List<MaterialCardFieldListItemViewModel> Fields { get; set; } = new();
-    public MaterialCardFieldGroupInput GroupInput { get; set; } = new();
+    public FieldGroupInput GroupInput { get; set; } = new();
     public MaterialCardDynamicFieldInput FieldInput { get; set; } = new();
     public IReadOnlyCollection<SelectListItem> GroupOptions { get; init; } = Array.Empty<SelectListItem>();
     public IReadOnlyCollection<SelectListItem> DataTypeOptions { get; init; } = Array.Empty<SelectListItem>();
 }
 
-public sealed class MaterialCardFieldGroupInput
+public sealed class FieldGroupInput
 {
     public Guid? GroupId { get; set; }
 
@@ -87,7 +87,7 @@ public sealed class MaterialCardFieldOptionInput
     public bool IsActive { get; set; } = true;
 }
 
-public sealed class MaterialCardFieldGroupListItemViewModel
+public sealed class FieldGroupListItemViewModel
 {
     public Guid Id { get; init; }
     public string GroupKey { get; init; } = string.Empty;

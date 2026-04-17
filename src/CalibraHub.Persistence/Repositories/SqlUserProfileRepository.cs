@@ -18,7 +18,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{schema}].[users]";
+        _tableName = $"[{schema}].[User]";
     }
 
     public async Task<IReadOnlyCollection<UserProfile>> GetAllAsync(CancellationToken cancellationToken)

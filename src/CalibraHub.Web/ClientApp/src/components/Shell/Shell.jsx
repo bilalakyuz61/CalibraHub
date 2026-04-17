@@ -26,7 +26,7 @@ import {
   // Shell internals
   Sparkles, ChevronRight, CircleDot, Bell, Moon, Sun, Search,
   Layers, MessageSquare, Languages, UserCircle, LogOut,
-  X, LayoutGrid, CheckCircle2, Wifi, Building2,
+  X, LayoutGrid, Building2,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
   Package, Folder, Boxes, Sliders, TrendingUp,
@@ -44,7 +44,7 @@ var ICON_MAP = {
   Bell: Bell, Moon: Moon, Sun: Sun,
   Layers: Layers, MessageSquare: MessageSquare, Languages: Languages,
   UserCircle: UserCircle, LogOut: LogOut, X: X, LayoutGrid: LayoutGrid,
-  CheckCircle2: CheckCircle2, Wifi: Wifi, Building2: Building2,
+  Building2: Building2,
   // Menu icons
   LayoutList: LayoutList, FileText: FileText, Files: Files,
   Archive: Archive, Truck: Truck, Package: Package, Folder: Folder,
@@ -250,8 +250,14 @@ export default function Shell(props) {
       return segs.length > 0 ? segs[segs.length - 1] : 'Sayfa'
     }
 
-    // Hic kayit yok → ilk ziyaret → initialUrl icin varsayilan tab
+    var isHomePage = function(url) {
+      var p = url ? url.split('?')[0] : '/'
+      return p === '/' || p === '/Home' || p === '/Home/Index'
+    }
+
+    // Hic kayit yok → ilk ziyaret → ana sayfa ise bos baslat, diger sayfa ise tab ac
     if (rawStored === null) {
+      if (isHomePage(initialUrl)) return []
       return [{ key: 'init-' + Date.now(), url: initialUrl, title: resolveInitialTitle(initialUrl) }]
     }
 
@@ -263,10 +269,12 @@ export default function Shell(props) {
     // Kullanici tum tab'lari kapatmis → kapali kalsin (EmptyState)
     if (stored.length === 0) return []
 
-    // Kayitli tab'lar var; aralarinda mevcut URL var mi?
-    var hasInitial = stored.some(function(t) { return t.url === initialUrl })
-    if (!hasInitial) {
-      return stored.concat([{ key: 'init-' + Date.now(), url: initialUrl, title: resolveInitialTitle(initialUrl) }])
+    // Kayitli tab'lar var; aralarinda mevcut URL var mi? Ana sayfa ise ekleme
+    if (!isHomePage(initialUrl)) {
+      var hasInitial = stored.some(function(t) { return t.url === initialUrl })
+      if (!hasInitial) {
+        return stored.concat([{ key: 'init-' + Date.now(), url: initialUrl, title: resolveInitialTitle(initialUrl) }])
+      }
     }
     return stored
   })
@@ -1026,35 +1034,14 @@ function StatusBar(props) {
       }
     >
       <div className="flex items-center gap-3">
-        <span className="flex items-center gap-1.5">
-          <CheckCircle2 size={10} className="text-emerald-400" />
-          <span>{props.system.status || 'Hazir'}</span>
-        </span>
-        <span className={dividerColor}>|</span>
-        <span className="flex items-center gap-1.5">
-          <Wifi size={10} className="text-emerald-400" />
-          <span>Baglanti aktif</span>
-        </span>
-      </div>
-
-      <div className="flex items-center gap-3">
         {props.system.company && (
-          <>
-            <span className="flex items-center gap-1.5">
-              <Building2 size={10} />
-              <span>{props.system.company}</span>
-            </span>
-            <span className={dividerColor}>·</span>
-          </>
+          <span className="flex items-center gap-1.5">
+            <Building2 size={10} />
+            <span>{props.system.company}</span>
+          </span>
         )}
-        <span>{props.system.year}</span>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <span className="flex items-center gap-1.5">
-          <UserCircle size={10} />
-          <span>{props.user.name}</span>
-        </span>
+        <span className={dividerColor}>·</span>
+        <span>v1.0.0</span>
       </div>
     </footer>
   )

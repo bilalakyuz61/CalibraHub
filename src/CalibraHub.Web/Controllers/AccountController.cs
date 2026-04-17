@@ -20,14 +20,14 @@ public sealed class AccountController : Controller
 {
     private const string DpapiPrefix = "dpapi:";
 
-    private readonly ICompanyDefinitionRepository _companyDefinitionRepository;
+    private readonly ICompanyRepository _companyDefinitionRepository;
     private readonly IUiConfigurationService _uiConfigurationService;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IUserAuthenticationService _userAuthenticationService;
     private readonly IWebHostEnvironment _env;
 
     public AccountController(
-        ICompanyDefinitionRepository companyDefinitionRepository,
+        ICompanyRepository companyDefinitionRepository,
         IUiConfigurationService uiConfigurationService,
         IUserProfileRepository userProfileRepository,
         IUserAuthenticationService userAuthenticationService,

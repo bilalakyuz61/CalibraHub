@@ -54,6 +54,20 @@ export async function saveDraftCombos(csrfToken, stockCode, draftCombos) {
   return results
 }
 
+/** Kombinasyon aciklama guncelle (POST, JSON). */
+export async function updateCombinationDescription(csrfToken, id, description) {
+  const r = await fetch('/Logistics/UpdateCombinationDescriptionJson', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'RequestVerificationToken': csrfToken,
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({ id, description }),
+  })
+  return r.json()
+}
+
 /** Kombinasyon sil (POST, FormData). */
 export async function deleteCombination(csrfToken, id) {
   const fd = new FormData()

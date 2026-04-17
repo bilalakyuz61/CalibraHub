@@ -6,14 +6,14 @@ namespace CalibraHub.Web.Models.Admin;
 
 public sealed class CompanyManagementViewModel
 {
-    public required IReadOnlyCollection<CompanyDefinitionDto> Companies { get; init; }
+    public required IReadOnlyCollection<CompanyDto> Companies { get; init; }
     public required GridListStateViewModel ListState { get; init; }
-    public CompanyDefinitionInput Input { get; init; } = new();
+    public CompanyInput Input { get; init; } = new();
     public SmtpProfileInput SmtpInput { get; init; } = new();
     public SmtpProfileDto? CurrentSmtp { get; init; }
 }
 
-public sealed class CompanyDefinitionInput
+public sealed class CompanyInput
 {
     public int? Id { get; set; }
 

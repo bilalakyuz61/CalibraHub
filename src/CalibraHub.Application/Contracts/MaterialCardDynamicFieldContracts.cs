@@ -3,16 +3,16 @@ using CalibraHub.Domain.Enums;
 namespace CalibraHub.Application.Contracts;
 
 public sealed record MaterialCardDynamicSchemaDto(
-    IReadOnlyCollection<MaterialCardFieldGroupDto> Groups,
+    IReadOnlyCollection<FieldGroupDto> Groups,
     IReadOnlyCollection<MaterialCardDynamicFieldDefinitionDto> Fields);
 
-public sealed record MaterialCardFieldGroupDto(
+public sealed record FieldGroupDto(
     Guid Id,
     string GroupKey,
     string GroupLabel,
     int DisplayOrder,
     bool IsActive,
-    string ScreenCode = "material_cards",
+    string ScreenCode = "items",
     string? LayerKey = null);
 
 public sealed record MaterialCardFieldOptionDto(
@@ -37,10 +37,10 @@ public sealed record MaterialCardDynamicFieldDefinitionDto(
     bool IsSystem,
     bool IsActive,
     IReadOnlyCollection<MaterialCardFieldOptionDto> Options,
-    string ScreenCode = "material_cards",
+    string ScreenCode = "items",
     string? LayerKey = null);
 
-public sealed record SaveMaterialCardFieldGroupRequest(
+public sealed record SaveFieldGroupRequest(
     Guid? GroupId,
     string GroupKey,
     string GroupLabel,

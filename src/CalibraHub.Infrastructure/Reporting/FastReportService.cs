@@ -55,6 +55,51 @@ public sealed class FastReportService : IReportService
         return await reader.ReadToEndAsync(ct);
     }
 
+    public Task<byte[]> ExportPdfFromBytesAsync(byte[] frxContent, DataTable data, CancellationToken ct = default)
+    {
+        if (frxContent is null || frxContent.Length == 0)
+            throw new InvalidOperationException("FRX icerigi bos.");
+
+        using var report = new Report();
+        using (var loadStream = new MemoryStream(frxContent))
+        {
+            report.Load(loadStream);
+        }
+        report.RegisterData(data, "Data");
+        report.Prepare();
+
+        using var ms = new MemoryStream();
+        var export = new PDFSimpleExport();
+        report.Export(export, ms);
+        return Task.FromResult(ms.ToArray());
+    }
+
+    public async Task<string> ExportHtmlFromBytesAsync(byte[] frxContent, DataTable data, CancellationToken ct = default)
+    {
+        if (frxContent is null || frxContent.Length == 0)
+            throw new InvalidOperationException("FRX icerigi bos.");
+
+        using var report = new Report();
+        using (var loadStream = new MemoryStream(frxContent))
+        {
+            report.Load(loadStream);
+        }
+        report.RegisterData(data, "Data");
+        report.Prepare();
+
+        using var ms = new MemoryStream();
+        var export = new HTMLExport
+        {
+            SinglePage = true,
+            Navigator = false,
+            EmbedPictures = true,
+        };
+        report.Export(export, ms);
+        ms.Position = 0;
+        using var reader = new StreamReader(ms);
+        return await reader.ReadToEndAsync(ct);
+    }
+
     private string ResolvePath(string frxFilePath)
     {
         var fullPath = Path.IsPathRooted(frxFilePath)

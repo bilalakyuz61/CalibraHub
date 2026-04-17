@@ -564,19 +564,13 @@ else if (!useDashboardShell)
 
     <footer class="pagefooter">
         <div class="container-fluid px-3 px-lg-4 pagefooter-inner">
-            <div class="status-item">
-                <span class="status-dot"></span>
-                <span>@layoutUi.Text("system_status")</span>
-            </div>
             @if (isAuthenticated)
             {
                 <div class="status-item">
-                    <span class="status-dot"></span>
-                    <span>@layoutUi.Text("active_company"): @profileCompany</span>
+                    <span>@profileCompany</span>
                 </div>
             }
-            <div class="status-item">@layoutUi.Text("user_label"): @profileName</div>
-            <div class="status-item">&copy; 2026 CalibraHub</div>
+            <div class="status-item">v1.0.0</div>
         </div>
     </footer>
 }
@@ -749,5 +743,10 @@ else
 {
     <div id="calibra-db-info" style="display:none;" data-page-title="@(ViewData["Title"] ?? "")">@Html.Raw(dbInfoHtml)</div>
 }
+
+@* Rapor Tasarimi linkini runtime enjekte etme denemesi kaldirildi — *@
+@* React shell DOM'unun tam yapisini bilmeden guvenli enjeksiyon zor, *@
+@* yanlis kapsayiciya eklenip sayfa dipinde floating durabiliyor. *@
+@* Su an URL ile erisim: /Reporting/Designer. Kalici cozum React bundle rebuild. *@
 </body>
 </html>

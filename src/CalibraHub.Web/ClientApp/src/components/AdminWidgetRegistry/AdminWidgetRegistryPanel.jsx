@@ -126,7 +126,7 @@ export default function AdminWidgetRegistryPanel(props) {
         expectedLength: payload.expectedLength != null ? payload.expectedLength : null,
         minValue:       payload.minValue       != null ? payload.minValue       : null,
         maxValue:       payload.maxValue       != null ? payload.maxValue       : null,
-        sortOrder: payload.id ? (payload.sortOrder != null ? payload.sortOrder : 0) : (maxSort + 10),
+        sortOrder: payload.sortOrder != null ? payload.sortOrder : (payload.id ? 0 : (maxSort + 10)),
         options: payload.options || null,
         isActive: payload.isActive !== false,
         isPlainField: payload.isPlainField || false,
@@ -331,6 +331,42 @@ export default function AdminWidgetRegistryPanel(props) {
 
   var editingId = editingField ? editingField.id : null
 
+  /* ── Reorder — iki widget'in sortOrder'ini takas et ──── */
+  var handleReorder = useCallback(async function(fieldA, fieldB) {
+    if (!fieldA || !fieldB || !currentFormId) return
+    var sortA = fieldA.sortOrder != null ? fieldA.sortOrder : 0
+    var sortB = fieldB.sortOrder != null ? fieldB.sortOrder : 0
+    // Ayni sortOrder ise birini 1 artir
+    if (sortA === sortB) sortB = sortA + 1
+
+    // Optimistic UI update
+    setWidgets(function(prev) {
+      return prev.map(function(w) {
+        if (w.id === fieldA.id) return Object.assign({}, w, { sortOrder: sortB })
+        if (w.id === fieldB.id) return Object.assign({}, w, { sortOrder: sortA })
+        return w
+      })
+    })
+
+    // Backend'e her iki widget'i da kaydet
+    try {
+      await Promise.all([
+        upsertWidgetApi(Object.assign({}, fieldA, { formId: currentFormId, sortOrder: sortB })),
+        upsertWidgetApi(Object.assign({}, fieldB, { formId: currentFormId, sortOrder: sortA })),
+      ])
+    } catch (e) {
+      console.error('[Reorder] error:', e)
+      // Hata olursa geri al
+      setWidgets(function(prev) {
+        return prev.map(function(w) {
+          if (w.id === fieldA.id) return Object.assign({}, w, { sortOrder: sortA })
+          if (w.id === fieldB.id) return Object.assign({}, w, { sortOrder: sortB })
+          return w
+        })
+      })
+    }
+  }, [currentFormId])
+
   // ── Widgets'i group + field olarak bucket'la ──
   // WidgetRegistryList ve GroupSelector icin derived state:
   //   groups: widgets.filter(dataType='group')  → { id, groupKey, groupLabel, sortOrder }
@@ -437,6 +473,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 onDelete={handleDelete}
                 onPlainFieldToggle={handlePlainFieldToggle}
                 onListableToggle={handleListableToggle}
+                onReorder={handleReorder}
                 editingId={editingId}
                 savingId={savingId}
                 searchQuery={searchQuery}

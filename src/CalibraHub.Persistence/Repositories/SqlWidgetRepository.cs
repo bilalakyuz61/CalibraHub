@@ -563,7 +563,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
             throw new ArgumentException($"Gecersiz FormCode: '{form.FormCode}'");
         var viewName = "v_Flat_" + form.FormCode;   // orn. v_Flat_CONTACTS
 
-        // BaseTable icin iki format destekli: "dbo.ContactAccounts" veya "ContactAccounts"
+        // BaseTable icin iki format destekli: "dbo.Contacts" veya "Contacts"
         var (baseSchema, baseTableName) = ParseQualifiedTable(form.BaseTable);
         if (!SimpleIdentifierRegex.IsMatch(baseSchema))
             throw new ArgumentException($"Gecersiz BaseTable schema: '{baseSchema}'");
@@ -677,7 +677,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
     }
 
     /// <summary>
-    /// "dbo.ContactAccounts" veya "ContactAccounts" formatindan (schema, table)
+    /// "dbo.Contacts" veya "Contacts" formatindan (schema, table)
     /// cifti uretir. Schema verilmemisse 'dbo' default. Koseli parantezler soyulur.
     /// </summary>
     private static (string Schema, string Table) ParseQualifiedTable(string raw)

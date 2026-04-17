@@ -8,6 +8,7 @@ public interface INoteRepository
     Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task SaveAsync(Note note, CancellationToken cancellationToken);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task TogglePinAsync(Guid id, Guid userId, CancellationToken cancellationToken);
 
     Task<IReadOnlyCollection<NoteReminder>> GetRemindersAsync(Guid noteId, CancellationToken cancellationToken);
     Task AddReminderAsync(NoteReminder reminder, CancellationToken cancellationToken);

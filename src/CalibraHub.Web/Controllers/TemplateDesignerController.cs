@@ -133,7 +133,7 @@ public class TemplateDesignerController : Controller
 
     // ── CalibraHub.Designer companion app API (FastReport .frx) ────────────
 
-    // GET /api/designer/template/{id} — report_templates tablosundan .frx icerigini oku
+    // GET /api/designer/template/{id} — report_templates tablosundan .frx icerigini oku (DB binary)
     [AllowAnonymous]
     [HttpGet("/api/designer/template/{id:guid}")]
     public async Task<IActionResult> GetDesignerTemplate(Guid id, CancellationToken cancellationToken)
@@ -142,7 +142,14 @@ public class TemplateDesignerController : Controller
         if (t is null) return NotFound();
 
         string? frxContent = null;
-        if (!string.IsNullOrWhiteSpace(t.FrxFilePath))
+
+        // Oncelik: DB'de saklanan binary icerik
+        if (t.FrxContent is { Length: > 0 })
+        {
+            frxContent = System.Text.Encoding.UTF8.GetString(t.FrxContent);
+        }
+        // Eski kayitlar icin file-system fallback
+        else if (!string.IsNullOrWhiteSpace(t.FrxFilePath))
         {
             var fullPath = Path.Combine(_env.WebRootPath, "Document", t.FrxFilePath);
             if (System.IO.File.Exists(fullPath))
@@ -152,7 +159,7 @@ public class TemplateDesignerController : Controller
         return Ok(new { id = t.Id, name = t.Name, type = "report", FrxContent = frxContent });
     }
 
-    // POST /api/designer/template/{id} — .frx icerigini dosyaya yaz
+    // POST /api/designer/template/{id} — .frx icerigini DB'ye yaz
     [AllowAnonymous]
     [HttpPost("/api/designer/template/{id:guid}")]
     public async Task<IActionResult> SaveDesignerTemplate(
@@ -161,13 +168,23 @@ public class TemplateDesignerController : Controller
         var t = await _reportTemplateRepo.GetByIdAsync(id, cancellationToken);
         if (t is null) return NotFound();
 
-        if (!string.IsNullOrWhiteSpace(t.FrxFilePath) && !string.IsNullOrWhiteSpace(request.FrxContent))
+        if (string.IsNullOrWhiteSpace(request.FrxContent))
+            return Ok(new { ok = true });
+
+        // DB'ye binary olarak yaz
+        var updated = new CalibraHub.Domain.Entities.ReportTemplate
         {
-            var fullPath = Path.Combine(_env.WebRootPath, "Document", t.FrxFilePath);
-            var dir = Path.GetDirectoryName(fullPath);
-            if (dir is not null) Directory.CreateDirectory(dir);
-            await System.IO.File.WriteAllTextAsync(fullPath, request.FrxContent, cancellationToken);
-        }
+            Id             = t.Id,
+            Name           = t.Name,
+            DocumentTypeId = t.DocumentTypeId,
+            FrxFilePath    = t.FrxFilePath,  // legacy alan korunur
+            FrxContent     = System.Text.Encoding.UTF8.GetBytes(request.FrxContent),
+            Description    = t.Description,
+            IsDefault      = t.IsDefault,
+            IsActive       = t.IsActive,
+            CreatedAt      = t.CreatedAt,
+        };
+        await _reportTemplateRepo.SaveAsync(updated, cancellationToken);
 
         return Ok(new { ok = true });
     }

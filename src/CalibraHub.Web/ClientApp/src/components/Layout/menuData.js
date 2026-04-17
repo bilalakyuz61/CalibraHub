@@ -28,7 +28,6 @@ const menuData = [
         icon: Layers,
         children: [
           { id: 'material-cards', label: 'Malzeme Kartlari', icon: Package, href: '/Logistics/MaterialCards' },
-          { id: 'product-config', label: 'Urun Konfigurasyonu', icon: Puzzle, href: '/Logistics/ProductConfiguration' },
         ],
       },
     ],
@@ -43,14 +42,14 @@ const menuData = [
     id: 'sales',
     label: 'Satis',
     icon: TrendingUp,
-    href: '/Sales/SalesQuotes',
+    href: '/Sales/Documents',
   },
   {
     id: 'production',
     label: 'Uretim',
     icon: Factory,
     children: [
-      { id: 'product-tree', label: 'Urun Agaci', icon: TreePine, href: '/Production/ProductTree' },
+      { id: 'product-tree', label: 'Urun Agaci', icon: TreePine, href: '/Production/BOM' },
     ],
   },
   {

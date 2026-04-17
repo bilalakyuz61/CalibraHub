@@ -326,7 +326,7 @@ public sealed class WidgetService : IWidgetService
                 .FirstOrDefault();
             if (string.IsNullOrWhiteSpace(tpl))
             {
-                throw new ArgumentException("Baglanti (link) tipi icin hedef URL sablonu zorunludur. Orn: /Finance/ContactAccountEdit?code={value}");
+                throw new ArgumentException("Baglanti (link) tipi icin hedef URL sablonu zorunludur. Orn: /Finance/ContactEdit?code={value}");
             }
             optionsJson = JsonSerializer.Serialize(new[] { tpl });
         }

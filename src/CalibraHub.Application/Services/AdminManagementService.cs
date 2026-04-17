@@ -22,7 +22,7 @@ public sealed class AdminManagementService : IAdminManagementService
     private readonly IIntegratorSettingsRepository _integratorSettingsRepository;
     private readonly ISmtpProfileRepository _smtpProfileRepository;
     private readonly IErpConnectionSettingsRepository _erpConnectionSettingsRepository;
-    private readonly ICompanyDefinitionRepository _companyDefinitionRepository;
+    private readonly ICompanyRepository _companyDefinitionRepository;
     private readonly IDepartmentRepository _departmentRepository;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IPasswordHashService _passwordHashService;
@@ -34,7 +34,7 @@ public sealed class AdminManagementService : IAdminManagementService
         IIntegratorSettingsRepository integratorSettingsRepository,
         ISmtpProfileRepository smtpProfileRepository,
         IErpConnectionSettingsRepository erpConnectionSettingsRepository,
-        ICompanyDefinitionRepository companyDefinitionRepository,
+        ICompanyRepository companyDefinitionRepository,
         IDepartmentRepository departmentRepository,
         IUserProfileRepository userProfileRepository,
         IPasswordHashService passwordHashService,
@@ -53,8 +53,8 @@ public sealed class AdminManagementService : IAdminManagementService
         _companyConnectionRegistry = companyConnectionRegistry;
     }
 
-    public async Task<int> SaveCompanyDefinitionAsync(
-        SaveCompanyDefinitionRequest request,
+    public async Task<int> SaveCompanyAsync(
+        SaveCompanyRequest request,
         CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
@@ -121,7 +121,7 @@ public sealed class AdminManagementService : IAdminManagementService
             ? null
             : request.DatabaseConnectionString.Trim();
 
-        var company = new CompanyDefinition
+        var company = new Company
         {
             Id = existingById?.Id ?? 0,
             Name = name,

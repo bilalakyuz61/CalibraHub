@@ -27,6 +27,9 @@ export function saveNote(note) {
     folderId: note.folderId || null,
     title: note.title || '',
     content: note.content || '',
+    // Mod 2 E2E: sifreli not ise content alani JSON payload tutar
+    isFullyEncrypted: !!note.isFullyEncrypted,
+    encryptionHint:   note.encryptionHint || null,
   })
 }
 
@@ -47,4 +50,8 @@ export function renameFolder(id, name) {
 
 export function deleteFolder(id) {
   return postJson(BASE + '/DeleteFolderJson', { id: id })
+}
+
+export function togglePin(id) {
+  return postJson(BASE + '/TogglePinJson', { id: id })
 }

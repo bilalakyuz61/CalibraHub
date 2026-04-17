@@ -5528,6 +5528,14 @@ body.app-theme-light {
   --app-surface: #ffffff;
   --app-content-bg: #f8fafc;
   --app-muted-surface: #f1f5f9;
+  color-scheme: light;
+}
+
+/* Native <select>/option paneli ve scrollbar OS-level render edilir — body'de
+   color-scheme: dark olmazsa koyu tema aktif olsa bile dropdown'lar beyaz gelir. */
+body.app-theme-dark,
+body.app-theme-graphite {
+  color-scheme: dark;
 }
 
 body.app-theme-graphite {
@@ -5793,6 +5801,14 @@ body.app-theme-light {
   --app-surface: #ffffff;
   --app-content-bg: #f8fafc;
   --app-muted-surface: #f1f5f9;
+  color-scheme: light;
+}
+
+/* Native <select>/option paneli ve scrollbar OS-level render edilir — body'de
+   color-scheme: dark olmazsa koyu tema aktif olsa bile dropdown'lar beyaz gelir. */
+body.app-theme-dark,
+body.app-theme-graphite {
+  color-scheme: dark;
 }
 
 body.app-theme-graphite {

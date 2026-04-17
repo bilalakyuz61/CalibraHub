@@ -139,7 +139,7 @@ public sealed class NotesController : Controller
         if (input.Id.HasValue)
         {
             var existing = await _noteRepository.GetByIdAsync(input.Id.Value, cancellationToken);
-            if (existing is null || existing.UserId != userId)
+            if (!IsOwner(existing, companyId, userId))
                 return RedirectToAction(nameof(Index));
 
             existing.Title = string.IsNullOrWhiteSpace(input.Title) ? "Adsız Not" : input.Title.Trim();
@@ -168,9 +168,9 @@ public sealed class NotesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(Guid id, Guid? folderId, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(id, cancellationToken);
-        if (note is not null && note.UserId == userId)
+        if (IsOwner(note, companyId, userId))
             await _noteRepository.DeleteAsync(id, cancellationToken);
 
         return RedirectToAction(nameof(Index), new { folderId });
@@ -207,9 +207,9 @@ public sealed class NotesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddReminder(AddReminderInput input, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
-        if (note is not null && note.UserId == userId && input.RemindAt > DateTime.Now)
+        if (IsOwner(note, companyId, userId) && input.RemindAt > DateTime.Now)
         {
             var reminder = new NoteReminder
             {
@@ -228,9 +228,9 @@ public sealed class NotesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteReminder(Guid reminderId, Guid noteId, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
-        if (note is not null && note.UserId == userId)
+        if (IsOwner(note, companyId, userId))
             await _noteRepository.DeleteReminderAsync(reminderId, cancellationToken);
 
         return RedirectToAction(nameof(Index), new { id = noteId });
@@ -240,9 +240,9 @@ public sealed class NotesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddShare(AddShareInput input, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
-        if (note is not null && note.UserId == userId && input.SharedWithUserId != userId)
+        if (IsOwner(note, companyId, userId) && input.SharedWithUserId != userId)
         {
             var share = new NoteShare
             {
@@ -259,9 +259,9 @@ public sealed class NotesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteShare(Guid shareId, Guid noteId, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
-        if (note is not null && note.UserId == userId)
+        if (IsOwner(note, companyId, userId))
             await _noteRepository.DeleteShareAsync(shareId, cancellationToken);
 
         return RedirectToAction(nameof(Index), new { id = noteId });
@@ -321,9 +321,9 @@ public sealed class NotesController : Controller
     [HttpGet]
     public async Task<IActionResult> GetAttachments(Guid noteId, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
-        if (note is null || note.UserId != userId) return Forbid();
+        if (!IsOwner(note, companyId, userId)) return Forbid();
 
         var attachments = await _noteRepository.GetAttachmentsAsync(noteId, cancellationToken);
         return Json(attachments.Select(a => new
@@ -342,9 +342,9 @@ public sealed class NotesController : Controller
     [RequestSizeLimit(20 * 1024 * 1024 + 65536)]
     public async Task<IActionResult> UploadAttachment(Guid noteId, IFormFile file, string? description, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
-        if (note is null || note.UserId != userId)
+        if (!IsOwner(note, companyId, userId))
             return Json(new { success = false, error = "Erişim reddedildi." });
 
         if (file is null || file.Length == 0)
@@ -391,12 +391,12 @@ public sealed class NotesController : Controller
     [HttpGet]
     public async Task<IActionResult> DownloadAttachment(Guid id, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var attachment = await _noteRepository.GetAttachmentByIdAsync(id, cancellationToken);
         if (attachment is null) return NotFound();
 
         var note = await _noteRepository.GetByIdAsync(attachment.NoteId, cancellationToken);
-        if (note is null || note.UserId != userId) return Forbid();
+        if (!IsOwner(note, companyId, userId)) return Forbid();
 
         var path = Path.Combine(AttachmentDir(attachment.NoteId), attachment.StoredName);
         if (!System.IO.File.Exists(path)) return NotFound();
@@ -408,12 +408,12 @@ public sealed class NotesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteAttachment(Guid id, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var attachment = await _noteRepository.GetAttachmentByIdAsync(id, cancellationToken);
         if (attachment is null) return Json(new { success = false, error = "Dosya bulunamadı." });
 
         var note = await _noteRepository.GetByIdAsync(attachment.NoteId, cancellationToken);
-        if (note is null || note.UserId != userId)
+        if (!IsOwner(note, companyId, userId))
             return Json(new { success = false, error = "Erişim reddedildi." });
 
         var path = Path.Combine(AttachmentDir(attachment.NoteId), attachment.StoredName);
@@ -528,6 +528,9 @@ public sealed class NotesController : Controller
                 title = n.Title,
                 content = n.Content,
                 updatedAt = n.UpdatedAt,
+                isPinned = n.IsPinned,
+                isFullyEncrypted = n.IsFullyEncrypted,
+                encryptionHint = n.EncryptionHint,
             }),
         });
     }
@@ -542,13 +545,15 @@ public sealed class NotesController : Controller
         if (input.Id.HasValue)
         {
             var existing = await _noteRepository.GetByIdAsync(input.Id.Value, cancellationToken);
-            if (existing is null || existing.UserId != userId)
+            if (!IsOwner(existing, companyId, userId))
                 return Json(new { success = false, message = "Not bulunamadi." });
 
             existing.Title = string.IsNullOrWhiteSpace(input.Title) ? "Adsız Not" : input.Title.Trim();
             existing.Content = input.Content ?? string.Empty;
             existing.FolderId = input.FolderId;
             existing.UpdatedAt = DateTime.Now;
+            existing.IsFullyEncrypted = input.IsFullyEncrypted ?? existing.IsFullyEncrypted;
+            existing.EncryptionHint   = input.EncryptionHint  ?? existing.EncryptionHint;
             note = existing;
         }
         else
@@ -559,21 +564,37 @@ public sealed class NotesController : Controller
                 UserId = userId,
                 FolderId = input.FolderId,
                 Title = string.IsNullOrWhiteSpace(input.Title) ? "Adsız Not" : input.Title.Trim(),
-                Content = input.Content ?? string.Empty
+                Content = input.Content ?? string.Empty,
+                IsFullyEncrypted = input.IsFullyEncrypted ?? false,
+                EncryptionHint   = input.EncryptionHint
             };
         }
 
         await _noteRepository.SaveAsync(note, cancellationToken);
-        return Json(new { success = true, id = note.Id });
+        return Json(new { success = true, id = note.Id, isFullyEncrypted = note.IsFullyEncrypted });
+    }
+
+    /// <summary>Not sabitleme durumunu degistir — JSON.</summary>
+    [HttpPost]
+    public async Task<IActionResult> TogglePinJson([FromBody] TogglePinInput input, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        // Ownership check: sirket + kullanici eslesmesi
+        var existing = await _noteRepository.GetByIdAsync(input.Id, cancellationToken);
+        if (!IsOwner(existing, companyId, userId))
+            return Json(new { success = false, message = "Erisim reddedildi." });
+        await _noteRepository.TogglePinAsync(input.Id, userId, cancellationToken);
+        var note = await _noteRepository.GetByIdAsync(input.Id, cancellationToken);
+        return Json(new { success = true, isPinned = note?.IsPinned ?? false });
     }
 
     /// <summary>Not sil — JSON.</summary>
     [HttpPost]
     public async Task<IActionResult> DeleteJson([FromBody] DeleteNoteJsonInput input, CancellationToken cancellationToken)
     {
-        var (_, userId) = GetCurrentUser();
+        var (companyId, userId) = GetCurrentUser();
         var note = await _noteRepository.GetByIdAsync(input.Id, cancellationToken);
-        if (note is not null && note.UserId == userId)
+        if (IsOwner(note, companyId, userId))
             await _noteRepository.DeleteAsync(input.Id, cancellationToken);
         return Json(new { success = true });
     }
@@ -623,6 +644,7 @@ public sealed class NotesController : Controller
     }
 
     public sealed record DeleteNoteJsonInput(Guid Id);
+    public sealed record TogglePinInput(Guid Id);
     public sealed record SaveFolderJsonInput(string Name, Guid? ParentFolderId);
     public sealed record RenameFolderJsonInput(Guid Id, string Name);
     public sealed record DeleteFolderJsonInput(Guid Id);
@@ -651,6 +673,14 @@ public sealed class NotesController : Controller
         int.TryParse(companyIdStr, out var companyId);
         return (companyId, userId);
     }
+
+    /// <summary>
+    /// Not sahipligi kontrolu — HEM kullanici HEM sirket eslesmeli.
+    /// Ayni userId farkli sirketlerde bulunabilir (ileride multi-tenant userlar);
+    /// dolayisiyla sadece UserId check'i yeterli degil.
+    /// </summary>
+    private static bool IsOwner(Note? note, int companyId, Guid userId)
+        => note is not null && note.UserId == userId && note.CompanyId == companyId;
 }
 
 public sealed record MoveNoteRequest(Guid NoteId, Guid? FolderId);

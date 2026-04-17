@@ -16,6 +16,7 @@ import { createPortal } from 'react-dom'
 import { useLookup } from './useLookup'
 import { guideSchema, guideSearch, guideResolve } from '../DynamicWidgetRenderer/dynamicWidgetService'
 import FieldSettingsForm from './FieldSettingsForm'
+import CombinationPickerModal from './CombinationPickerModal'
 
 function useIsLight() {
   var [light, setLight] = useState(function() {
@@ -108,6 +109,11 @@ export default function LineGridCell(props) {
   // ── Number / Currency / Percent ────────────────────
   if (column.type === 'number' || column.type === 'currency' || column.type === 'percent') {
     return <NumericCell column={column} value={value} onChange={onChange} baseInputClass={baseInputClass} />
+  }
+
+  // ── Combination Lookup (Kombinasyon Seçici) ────────
+  if (column.type === 'combination-lookup') {
+    return <CombinationLookupCell column={column} row={row} value={value} onChange={onChange} />
   }
 
   // ── Text (default) ─────────────────────────────────
@@ -269,6 +275,20 @@ function SelectCell(props) {
 
   var valueKey = column.optionsValueKey || 'code'
   var labelKey = column.optionsLabelKey || 'name'
+
+  // autoSelectFirst=true olan kolonlar (ornegin Birim): options yuklendiginde
+  // ve hucre bos ise, ilk secenek (master birim) varsayilan olarak atanir.
+  useEffect(function() {
+    if (!column.autoSelectFirst) return
+    if (!options || options.length === 0) return
+    if (value != null && value !== '') return
+    var first = options[0]
+    var firstVal = first ? first[valueKey] : null
+    if (firstVal != null && firstVal !== '') {
+      onChange(column.key, firstVal)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options, value, column.autoSelectFirst])
 
   return (
     <select
@@ -662,5 +682,72 @@ function GuideLookupCell(props) {
         document.body
       )}
     </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CombinationLookupCell — Kombinasyon seçim butonu + modal
+   row.trackCombinations false ise pasif (—) gösterir
+   row.combinationCode set ise butonda gözükür
+   Modal kapanınca onChange('combinationCode', code) + onChange('combinationDetails', details)
+   ══════════════════════════════════════════════════════════════ */
+function CombinationLookupCell(props) {
+  var column = props.column
+  var row = props.row
+  var value = props.value
+  var onChange = props.onChange
+  var [open, setOpen] = useState(false)
+
+  var trackable = !!row.trackCombinations
+  var materialCode = row.materialCode || ''
+
+  if (!trackable) {
+    return (
+      <div
+        className="w-full px-2.5 py-2 text-[12px] text-center text-slate-300 dark:text-white/30"
+        title="Bu malzemede kombinasyon takibi yok"
+      >—</div>
+    )
+  }
+
+  if (!materialCode) {
+    return (
+      <div
+        className="w-full px-2.5 py-2 text-[12px] text-center text-slate-300 dark:text-white/30"
+        title="Önce malzeme seçin"
+      >—</div>
+    )
+  }
+
+  var hasValue = !!value
+  return (
+    <>
+      <button
+        type="button"
+        onClick={function() { setOpen(true) }}
+        className={
+          'w-full px-2.5 py-1.5 text-[12px] font-semibold rounded-md transition-colors ' +
+          (hasValue
+            ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25'
+            : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-white/[0.05] dark:text-white/55 dark:hover:bg-white/[0.1]')
+        }
+        title={hasValue ? ('Seçili kombinasyon: ' + value) : 'Kombinasyon seç'}
+      >
+        {hasValue ? value : 'Seç...'}
+      </button>
+      {open && (
+        <CombinationPickerModal
+          materialCode={materialCode}
+          currentCode={value}
+          currentDetails={row.combinationDetails || []}
+          onApply={function(code, details) {
+            // fillPatch kullanarak combinationCode + combinationDetails'i tek state update'te set et
+            onChange('combinationCode', code, { combinationDetails: details })
+            setOpen(false)
+          }}
+          onClose={function() { setOpen(false) }}
+        />
+      )}
+    </>
   )
 }

@@ -15,7 +15,7 @@ namespace CalibraHub.Web.Controllers;
 [AllowAnonymous]
 public sealed class SetupController : Controller
 {
-    private readonly ICompanyDefinitionRepository _companyDefinitionRepository;
+    private readonly ICompanyRepository _companyDefinitionRepository;
     private readonly IDepartmentRepository _departmentRepository;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IAdminManagementService _adminManagementService;
@@ -23,7 +23,7 @@ public sealed class SetupController : Controller
     private readonly CompanyConnectionRegistry _companyConnectionRegistry;
 
     public SetupController(
-        ICompanyDefinitionRepository companyDefinitionRepository,
+        ICompanyRepository companyDefinitionRepository,
         IDepartmentRepository departmentRepository,
         IUserProfileRepository userProfileRepository,
         IAdminManagementService adminManagementService,
@@ -65,8 +65,8 @@ public sealed class SetupController : Controller
         {
             var initTaxNumber = $"TBD-{Guid.NewGuid().ToString()[..8].ToUpperInvariant()}";
 
-            var companyId = await _adminManagementService.SaveCompanyDefinitionAsync(
-                new SaveCompanyDefinitionRequest(
+            var companyId = await _adminManagementService.SaveCompanyAsync(
+                new SaveCompanyRequest(
                     null,
                     model.CompanyName,
                     model.CompanyName,
@@ -146,7 +146,7 @@ public sealed class SetupController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveCompanyDefinition(
+    public async Task<IActionResult> SaveCompany(
         [Bind(Prefix = "CompanyInput")] SetupCompanyInput input,
         int? companyPage, int? companyPageSize,
         int? userPage, int? userPageSize, CancellationToken cancellationToken)
@@ -182,8 +182,8 @@ public sealed class SetupController : Controller
                 taxNumber = $"TBD-{Guid.NewGuid().ToString()[..8].ToUpperInvariant()}";
             }
 
-            await _adminManagementService.SaveCompanyDefinitionAsync(
-                new SaveCompanyDefinitionRequest(
+            await _adminManagementService.SaveCompanyAsync(
+                new SaveCompanyRequest(
                     input.Id, input.Name, input.Name, address, null, null, null,
                     taxOffice, taxNumber,
                     false, input.IsActive,
@@ -260,7 +260,7 @@ public sealed class SetupController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeactivateCompanyDefinition(
+    public async Task<IActionResult> DeactivateCompany(
         int companyId, CancellationToken cancellationToken)
     {
         var auth = RequireAuth();
@@ -322,8 +322,8 @@ public sealed class SetupController : Controller
 
         try
         {
-            await _adminManagementService.SaveCompanyDefinitionAsync(
-                new SaveCompanyDefinitionRequest(
+            await _adminManagementService.SaveCompanyAsync(
+                new SaveCompanyRequest(
                     input.Id,
                     input.Name,
                     input.Name,
@@ -591,8 +591,8 @@ public sealed class SetupController : Controller
                 connectionString = BuildConnectionString(input.SqlServer, input.SqlDatabase, input.SqlUsername, input.SqlPassword);
             }
 
-            await _adminManagementService.SaveCompanyDefinitionAsync(
-                new SaveCompanyDefinitionRequest(
+            await _adminManagementService.SaveCompanyAsync(
+                new SaveCompanyRequest(
                     input.Id, input.Name, input.Name, address, null, null, null,
                     taxOffice, taxNumber, false, input.IsActive,
                     connectionString),

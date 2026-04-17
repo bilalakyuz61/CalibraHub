@@ -234,7 +234,7 @@ function mountShell(element, config) {
 
 /**
  * CalibraLineItemsGrid mount — Satir-ici duzenlenebilir dinamik kalem grid'i.
- * SalesQuoteEdit gibi formlarda kullanilir. Kolonlar + satirlar tamamen
+ * DocumentEdit gibi formlarda kullanilir. Kolonlar + satirlar tamamen
  * server-side config'ten gelir ("Aptal Bilesen, Zeki Veri").
  *
  * @param {HTMLElement} element

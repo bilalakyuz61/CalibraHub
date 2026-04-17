@@ -7,6 +7,7 @@ using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Persistence.Repositories;
 using CalibraHub.Worker;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -66,12 +67,26 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IIntegratorSettingsRepository, SqlIntegratorSettingsRepository>();
         services.AddScoped<ISmtpProfileRepository, SqlSmtpProfileRepository>();
         services.AddScoped<IErpConnectionSettingsRepository, SqlErpConnectionSettingsRepository>();
-        services.AddScoped<ICompanyDefinitionRepository, SqlCompanyDefinitionRepository>();
+        services.AddScoped<ICompanyRepository, SqlCompanyRepository>();
         services.AddScoped<IDepartmentRepository, SqlDepartmentRepository>();
         services.AddScoped<IUserProfileRepository, SqlUserProfileRepository>();
         services.AddScoped<IIncomingDocumentRepository, SqlIncomingDocumentRepository>();
         services.AddScoped<IIntegratorImportLogRepository, SqlPltSystemLogRepository>();
         services.AddScoped<INoteRepository, SqlNoteRepository>();
+
+        // Notlar at-rest sifreleme — Web ile ayni key ring'i paylasir.
+        // Worker sadece reminder icin metadata okur, note.Content alanini kullanmaz,
+        // o yuzden key paylasimi zorunlu degil; ama Unprotect basarisiz olursa
+        // ciphertext aynen gelir ve worker tarafindan kullanilmaz (risk yok).
+        var dpKeysPath = System.IO.Path.Combine(environment.ContentRootPath, ".app-data-protection");
+        System.IO.Directory.CreateDirectory(dpKeysPath);
+        services.AddDataProtection()
+            .SetApplicationName("CalibraHub.Web")
+            .PersistKeysToFileSystem(new System.IO.DirectoryInfo(dpKeysPath));
+        services.AddSingleton<
+            CalibraHub.Application.Abstractions.Security.INoteEncryptionService,
+            CalibraHub.Infrastructure.Security.DataProtectionNoteEncryptionService>();
+
         services.AddHostedService<DocumentImportWorker>();
         services.AddHostedService<ReminderNotificationWorker>();
         services.AddScoped<ICurrencyRepository, SqlCurrencyRepository>();

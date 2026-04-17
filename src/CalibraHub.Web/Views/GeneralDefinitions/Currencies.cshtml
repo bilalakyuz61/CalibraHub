@@ -92,6 +92,25 @@
     body.app-theme-dark input[type="date"].form-control { color-scheme: dark; }
     .cr-rate-date { font-size: 0.7rem; color: #64748b; }
     body.app-theme-dark .cr-rate-date { color: rgba(255,255,255,.4); }
+
+    /* Satir ici duzenleme input'lari */
+    .cr-inline-input {
+        width: 90px;
+        padding: 2px 5px;
+        font-size: 0.73rem;
+        text-align: right;
+        height: 24px;
+        font-variant-numeric: tabular-nums;
+        display: block;
+        margin-left: auto;   /* sag hizalama */
+    }
+    body.app-theme-dark .cr-inline-input {
+        background: rgba(255,255,255,.06);
+        border-color: rgba(255,255,255,.15);
+        color: rgba(255,255,255,.9);
+        color-scheme: dark;
+    }
+    tr[data-code] td { vertical-align: middle; }
 </style>
 }
 
@@ -187,48 +206,79 @@
             .catch(function() { showLoading(false); });
     };
 
+    var INP = 'type="number" step="0.0001" min="0" class="form-control form-control-sm cr-inline-input"';
+
     function renderRates(rates) {
         var body = document.getElementById('crRateBody');
         if (rates.length === 0) {
             body.innerHTML = '<tr><td colspan="8" class="cr-empty">Kur bilgisi bulunamadi.</td></tr>';
             return;
         }
-        body.innerHTML = rates.map(function(r) {
-            var cid = 0;
-            for (var i = 0; i < currencies.length; i++) { if (currencies[i].code === r.currencyCode) { cid = currencies[i].id; break; } }
-            return '<tr>' +
-                '<td style="white-space:nowrap;display:flex;gap:2px;">' +
-                '<button type="button" class="act-btn primary" title="Duzelt" onclick="crEditRate(' + cid + ',\'' + r.rateDate + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
-                '<button type="button" class="act-btn danger" title="Sil" onclick="crDeleteRate(\'' + r.currencyCode + '\',\'' + r.rateDate + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
-                '</td>' +
-                '<td style="font-weight:600;">' + r.currencyCode + '</td>' +
-                '<td class="cr-doviz-name">' + (function() { for (var i=0;i<currencies.length;i++) { if (currencies[i].code===r.currencyCode) return currencies[i].name||''; } return ''; })() + '</td>' +
-                '<td class="cr-rate-date">' + r.rateDateDisplay + '</td>' +
-                '<td class="cr-rate">' + fmtRate(r.buyingRate) + '</td>' +
-                '<td class="cr-rate">' + fmtRate(r.sellingRate) + '</td>' +
-                '<td class="cr-rate">' + (r.effectiveBuyingRate > 0 ? fmtRate(r.effectiveBuyingRate) : '-') + '</td>' +
-                '<td class="cr-rate">' + (r.effectiveSellingRate > 0 ? fmtRate(r.effectiveSellingRate) : '-') + '</td>' +
-                '</tr>';
-        }).join('');
+        body.innerHTML = rates.map(function(r) { return renderRateRow(r, false); }).join('');
     }
 
-    window.crEditRate = function(id, rateDate) {
-        fetch(API('GetCurrencyRate') + '?id=' + id + '&rateDate=' + rateDate)
+    function renderRateRow(r, editing) {
+        var actBtns = editing
+            ? '<button type="button" class="act-btn primary" title="Kaydet" onclick="crSaveInlineRate(this,\'' + r.currencyCode + '\',\'' + r.rateDate + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>' +
+              '<button type="button" class="act-btn" title="Iptal" onclick="crCancelInlineRate(this,\'' + r.currencyCode + '\',\'' + r.rateDate + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+            : '<button type="button" class="act-btn primary" title="Duzelt" onclick="crEditRateInline(this,\'' + r.currencyCode + '\',\'' + r.rateDate + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
+              '<button type="button" class="act-btn danger" title="Sil" onclick="crDeleteRate(\'' + r.currencyCode + '\',\'' + r.rateDate + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+
+        var buyCell    = editing ? '<input ' + INP + ' value="' + (r.buyingRate || 0) + '" data-field="buying" />'    : '<span class="cr-rate">' + fmtRate(r.buyingRate) + '</span>';
+        var sellCell   = editing ? '<input ' + INP + ' value="' + (r.sellingRate || 0) + '" data-field="selling" />'   : '<span class="cr-rate">' + fmtRate(r.sellingRate) + '</span>';
+        var effBuyCell = editing ? '<input ' + INP + ' value="' + (r.effectiveBuyingRate || 0) + '" data-field="effbuying" />'  : '<span class="cr-rate">' + (r.effectiveBuyingRate > 0 ? fmtRate(r.effectiveBuyingRate) : '-') + '</span>';
+        var effSellCell= editing ? '<input ' + INP + ' value="' + (r.effectiveSellingRate || 0) + '" data-field="effselling" />' : '<span class="cr-rate">' + (r.effectiveSellingRate > 0 ? fmtRate(r.effectiveSellingRate) : '-') + '</span>';
+
+        return '<tr data-code="' + r.currencyCode + '" data-date="' + r.rateDate + '">' +
+            '<td style="white-space:nowrap;">' + actBtns + '</td>' +
+            '<td style="font-weight:600;">' + r.currencyCode + '</td>' +
+            '<td class="cr-doviz-name">' + (r.currencyName || '') + '</td>' +
+            '<td class="cr-rate-date">' + r.rateDateDisplay + '</td>' +
+            '<td class="cr-rate">' + buyCell + '</td>' +
+            '<td class="cr-rate">' + sellCell + '</td>' +
+            '<td class="cr-rate">' + effBuyCell + '</td>' +
+            '<td class="cr-rate">' + effSellCell + '</td>' +
+            '</tr>';
+    }
+
+    // Satir ici duzenleme — satiri input moduna alir
+    window.crEditRateInline = function(btn, code, rateDate) {
+        var tr = btn.closest('tr');
+        var cells = tr.querySelectorAll('td');
+        var buyVal    = parseFloat(cells[4].textContent.replace(',','.')) || 0;
+        var sellVal   = parseFloat(cells[5].textContent.replace(',','.')) || 0;
+        var effBuyVal = cells[6].textContent.trim() === '-' ? 0 : (parseFloat(cells[6].textContent.replace(',','.')) || 0);
+        var effSellVal= cells[7].textContent.trim() === '-' ? 0 : (parseFloat(cells[7].textContent.replace(',','.')) || 0);
+        var nameText  = cells[2].textContent;
+        var dateText  = cells[3].textContent;
+        var r = { currencyCode: code, currencyName: nameText, rateDate: rateDate, rateDateDisplay: dateText,
+            buyingRate: buyVal, sellingRate: sellVal, effectiveBuyingRate: effBuyVal, effectiveSellingRate: effSellVal };
+        tr.outerHTML = renderRateRow(r, true);
+        // Focus ilk input
+        var newTr = document.querySelector('tr[data-code="' + code + '"][data-date="' + rateDate + '"]');
+        if (newTr) { var inp = newTr.querySelector('input'); if (inp) inp.focus(); }
+    };
+
+    // Kaydet
+    window.crSaveInlineRate = function(btn, code, rateDate) {
+        var tr = btn.closest('tr');
+        var get = function(f) { return parseFloat(tr.querySelector('[data-field="' + f + '"]').value) || 0; };
+        var payload = { currencyCode: code, rateDate: rateDate,
+            buyingRate: get('buying'), sellingRate: get('selling'),
+            effectiveBuyingRate: get('effbuying'), effectiveSellingRate: get('effselling') };
+        btn.disabled = true;
+        fetch(API('SaveRateJson'), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                document.getElementById('crId').value = d.id;
-                document.getElementById('crCode').value = d.code || '';
-                document.getElementById('crName').value = d.name || '';
-                document.getElementById('crSymbol').value = d.symbol || '';
-                document.getElementById('crIsActive').checked = d.isActive !== false;
-                document.getElementById('crBuying').value = d.buyingRate || '';
-                document.getElementById('crSelling').value = d.sellingRate || '';
-                document.getElementById('crEffBuying').value = d.effectiveBuyingRate || '';
-                document.getElementById('crEffSelling').value = d.effectiveSellingRate || '';
-                document.getElementById('crRateSection').style.display = '';
-                document.getElementById('crRateFields').style.display = '';
-                document.getElementById('crBtnDelete').disabled = false;
-            });
+                if (d.success) { crLoadRates(); }
+                else { showMsg(d.message || 'Hata', false); btn.disabled = false; }
+            })
+            .catch(function() { showMsg('Baglanti hatasi', false); btn.disabled = false; });
+    };
+
+    // Iptal — satiri normal gorunume dondur
+    window.crCancelInlineRate = function(btn, code, rateDate) {
+        crLoadRates();
     };
 
     window.crNew = function() {

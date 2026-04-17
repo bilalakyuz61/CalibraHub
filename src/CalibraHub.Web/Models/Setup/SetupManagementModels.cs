@@ -33,7 +33,7 @@ public sealed class SetupCompanyInput
 
 public sealed class SetupCompanyViewModel
 {
-    public required IReadOnlyCollection<CompanyDefinitionDto> Companies { get; init; }
+    public required IReadOnlyCollection<CompanyDto> Companies { get; init; }
     public required GridListStateViewModel ListState { get; init; }
     public SetupCompanyInput Input { get; init; } = new();
 }
@@ -43,7 +43,7 @@ public sealed class SetupCompanyViewModel
 public sealed class SetupDefinitionsViewModel
 {
     // Şirket bölümü
-    public required IReadOnlyCollection<CompanyDefinitionDto> Companies { get; init; }
+    public required IReadOnlyCollection<CompanyDto> Companies { get; init; }
     public required GridListStateViewModel CompanyListState { get; init; }
     public SetupCompanyInput CompanyInput { get; init; } = new();
 

@@ -213,5 +213,26 @@ public sealed class GuidesController : ControllerBase
         {
             return BadRequest(new { success = false, message = ex.Message });
         }
+        catch (Microsoft.Data.SqlClient.SqlException sqlEx)
+        {
+            Console.Error.WriteLine($"[GuideSearch] SQL hatasi (guide='{guideCode}'): {sqlEx.Number} {sqlEx.Message}");
+            return StatusCode(500, new
+            {
+                success = false,
+                message = $"SQL hatasi ({sqlEx.Number}): {sqlEx.Message}",
+                guide = guideCode
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GuideSearch] Hata (guide='{guideCode}'): {ex}");
+            return StatusCode(500, new
+            {
+                success = false,
+                message = ex.Message,
+                guide = guideCode,
+                type = ex.GetType().Name
+            });
+        }
     }
 }

@@ -68,8 +68,8 @@
         background:#f8fafc;border-right-color:#e2e8f0;
     }
     .pte-sidenav-label {
-        font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
-        color:rgba(255,255,255,0.35);padding:8px 10px 4px;
+        font-size:0.7rem;font-weight:700;
+        color:rgba(255,255,255,0.55);padding:8px 10px 4px;
     }
     body.app-theme-light .pte-sidenav-label { color:#94a3b8; }
     .pte-nav-btn {
@@ -125,8 +125,8 @@
         box-shadow:0 2px 6px rgba(15,23,42,0.04);
     }
     .pte-card-title {
-        font-size:0.7rem;font-weight:700;text-transform:uppercase;
-        letter-spacing:0.06em;color:rgba(255,255,255,0.6);
+        font-size:0.85rem;font-weight:700;
+        color:rgba(255,255,255,0.85);
         margin:0 0 14px 0;display:flex;align-items:center;gap:8px;
     }
     body.app-theme-light .pte-card-title { color:#64748b; }
@@ -235,8 +235,7 @@
     }
     body.app-theme-light .pte-comp-header { border-bottom-color:#e2e8f0; }
     .pte-comp-title {
-        font-size:0.65rem;font-weight:700;color:rgba(255,255,255,0.4);
-        text-transform:uppercase;letter-spacing:0.06em;
+        font-size:0.85rem;font-weight:700;color:rgba(255,255,255,0.85);
     }
     body.app-theme-light .pte-comp-title { color:#94a3b8; }
     .pte-comp-badge {
@@ -248,9 +247,8 @@
     .pte-comp-body { max-height:320px;overflow-y:auto;overflow-x:auto; }
     .pte-comp-table { width:100%;border-collapse:collapse;font-size:0.82rem; }
     .pte-comp-th {
-        padding:8px 10px;text-align:left;font-size:0.68rem;font-weight:600;
-        text-transform:uppercase;letter-spacing:0.04em;
-        color:rgba(255,255,255,0.4);border-bottom:1px solid rgba(255,255,255,0.08);
+        padding:8px 10px;text-align:left;font-size:0.78rem;font-weight:600;
+        color:rgba(255,255,255,0.7);border-bottom:1px solid rgba(255,255,255,0.08);
         position:sticky;top:0;z-index:3;
         background:rgba(15,15,26,0.6);backdrop-filter:blur(8px);
     }
@@ -1183,7 +1181,7 @@
     async function ptLoadExistingTree(materialCode, configCode, switchTab) {
         if (switchTab === undefined) switchTab = true;
         try {
-            var url = '/Logistics/GetProductTree?materialCode=' + encodeURIComponent(materialCode)
+            var url = '/Logistics/GetBOM?materialCode=' + encodeURIComponent(materialCode)
                 + (configCode ? '&configCode=' + encodeURIComponent(configCode) : '');
             var resp = await fetch(url, { credentials: 'include' });
             if (!resp.ok) return;
@@ -1285,7 +1283,7 @@
         };
 
         try {
-            var resp = await fetch('@Url.Action("SaveProductTree","Logistics")', {
+            var resp = await fetch('@Url.Action("SaveBOM","Logistics")', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify(payload)

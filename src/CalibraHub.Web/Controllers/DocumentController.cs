@@ -1,3 +1,7 @@
+using System.Net;
+using System.Net.Mail;
+using System.Security.Claims;
+using System.Text;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -11,26 +15,35 @@ public sealed class DocumentController : Controller
     private readonly IDocumentTypeRepository _docTypeRepo;
     private readonly IReportTemplateRepository _templateRepo;
     private readonly IDocumentGenerationService _generationService;
-    private readonly IWebHostEnvironment _env;
+    private readonly ISmtpProfileRepository _smtpProfileRepo;
 
     public DocumentController(
         IDocumentTypeRepository docTypeRepo,
         IReportTemplateRepository templateRepo,
         IDocumentGenerationService generationService,
-        IWebHostEnvironment env)
+        ISmtpProfileRepository smtpProfileRepo)
     {
         _docTypeRepo       = docTypeRepo;
         _templateRepo      = templateRepo;
         _generationService = generationService;
-        _env               = env;
+        _smtpProfileRepo   = smtpProfileRepo;
     }
 
     // ── Liste ─────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Belge şablonları ekranında gösterilmeyecek belge tipi kodları.
+    /// Şimdilik fatura ve irsaliye hariç tutulur.
+    /// </summary>
+    private static readonly HashSet<string> HiddenDocumentTypeCodes =
+        new(StringComparer.OrdinalIgnoreCase) { "fatura", "irsaliye" };
+
     [HttpGet]
     public async Task<IActionResult> Index(string? type, CancellationToken ct)
     {
-        var docTypes = await _docTypeRepo.GetAllAsync(ct);
+        var allDocTypes = await _docTypeRepo.GetAllAsync(ct);
+        var docTypes = allDocTypes.Where(d => !HiddenDocumentTypeCodes.Contains(d.Code)).ToArray();
+
         var selectedType = !string.IsNullOrEmpty(type)
             ? docTypes.FirstOrDefault(d => d.Code == type)
             : docTypes.FirstOrDefault();
@@ -56,92 +69,76 @@ public sealed class DocumentController : Controller
         {
             t.Id,
             t.Name,
-            t.FrxFilePath,
             t.Description,
             t.IsDefault,
             t.IsActive,
+            HasContent = (t.FrxContent?.Length ?? 0) > 0 || !string.IsNullOrWhiteSpace(t.FrxFilePath),
+            ContentSize = t.FrxContent?.Length ?? 0,
             CreatedAt = t.CreatedAt.ToString("dd.MM.yyyy HH:mm"),
         }));
     }
 
-    // ── FRX Yukle ─────────────────────────────────────────────────────────────
+    // ── FRX Yukle (DB'ye) ────────────────────────────────────────────────────
 
     [HttpPost]
+    [RequestSizeLimit(2_000_000)]
     public async Task<IActionResult> Upload(IFormFile file, Guid documentTypeId, string name, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
-            return BadRequest("Dosya secilmedi.");
+            return Json(new { success = false, message = "Dosya secilmedi." });
 
         if (!file.FileName.EndsWith(".frx", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("Sadece .frx dosyalari yuklenebilir.");
+            return Json(new { success = false, message = "Sadece .frx dosyalari yuklenebilir." });
 
         if (file.Length > 1_048_576)
-            return BadRequest("Dosya boyutu 1 MB'yi asamaz.");
+            return Json(new { success = false, message = "Dosya boyutu 1 MB'yi asamaz." });
 
         var docType = await _docTypeRepo.GetByIdAsync(documentTypeId, ct);
         if (docType is null)
-            return NotFound("Belge tipi bulunamadi.");
+            return Json(new { success = false, message = "Belge tipi bulunamadi." });
 
-        var dir = Path.Combine(_env.WebRootPath, "Document", "Templates", docType.Code);
-        Directory.CreateDirectory(dir);
-
-        var shortId = Guid.NewGuid().ToString("N")[..8];
-        var safeName = SanitizeFileName(name);
-        var fileName = $"{safeName}_{shortId}.frx";
-        var filePath = Path.Combine(dir, fileName);
-
-        await using (var fs = new FileStream(filePath, FileMode.Create))
+        byte[] content;
+        await using (var ms = new MemoryStream())
         {
-            await file.CopyToAsync(fs, ct);
+            await file.CopyToAsync(ms, ct);
+            content = ms.ToArray();
         }
-
-        var relativePath = $"Templates/{docType.Code}/{fileName}";
 
         var template = new Domain.Entities.ReportTemplate
         {
-            Name           = name,
+            Name           = (name ?? Path.GetFileNameWithoutExtension(file.FileName)).Trim(),
             DocumentTypeId = documentTypeId,
-            FrxFilePath    = relativePath,
+            FrxContent     = content,
         };
 
         await _templateRepo.SaveAsync(template, ct);
-
-        return Json(new { success = true, template.Id, template.FrxFilePath });
+        return Json(new { success = true, id = template.Id, name = template.Name });
     }
 
-    // ── Yeni Bos Sablon Olustur ───────────────────────────────────────────────
+    // ── Yeni Bos Sablon Olustur (DB'ye) ──────────────────────────────────────
 
     [HttpPost]
     public async Task<IActionResult> CreateBlank(Guid documentTypeId, string name, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return BadRequest("Sablon adi bos olamaz.");
+            return Json(new { success = false, message = "Sablon adi bos olamaz." });
 
         var docType = await _docTypeRepo.GetByIdAsync(documentTypeId, ct);
         if (docType is null)
-            return NotFound("Belge tipi bulunamadi.");
+            return Json(new { success = false, message = "Belge tipi bulunamadi." });
 
-        var dir = Path.Combine(_env.WebRootPath, "Document", "Templates", docType.Code);
-        Directory.CreateDirectory(dir);
+        var frxXml = MinimalFrx(name);
+        var content = Encoding.UTF8.GetBytes(frxXml);
 
-        var shortId = Guid.NewGuid().ToString("N")[..8];
-        var safeName = SanitizeFileName(name);
-        var fileName = $"{safeName}_{shortId}.frx";
-        var filePath = Path.Combine(dir, fileName);
-
-        var frxContent = MinimalFrx(name);
-        await System.IO.File.WriteAllTextAsync(filePath, frxContent, ct);
-
-        var relativePath = $"Templates/{docType.Code}/{fileName}";
         var template = new Domain.Entities.ReportTemplate
         {
-            Name           = name,
+            Name           = name.Trim(),
             DocumentTypeId = documentTypeId,
-            FrxFilePath    = relativePath,
+            FrxContent     = content,
         };
         await _templateRepo.SaveAsync(template, ct);
 
-        return Json(new { success = true, template.Id, template.FrxFilePath });
+        return Json(new { success = true, id = template.Id, name = template.Name });
     }
 
     private static string MinimalFrx(string reportName) => $"""
@@ -161,6 +158,20 @@ public sealed class DocumentController : Controller
           </ReportPage>
         </Report>
         """;
+
+    // ── FRX Indir (DB'den binary) ────────────────────────────────────────────
+
+    [HttpGet("/Document/Download/{templateId:guid}")]
+    public async Task<IActionResult> Download(Guid templateId, CancellationToken ct)
+    {
+        var template = await _templateRepo.GetByIdAsync(templateId, ct);
+        if (template is null) return NotFound();
+        if (template.FrxContent is not { Length: > 0 })
+            return NotFound("Sablon icerigi bos.");
+
+        var fileName = SanitizeFileName(template.Name) + ".frx";
+        return File(template.FrxContent, "application/xml", fileName);
+    }
 
     // ── PDF Uret ──────────────────────────────────────────────────────────────
 
@@ -222,13 +233,8 @@ public sealed class DocumentController : Controller
         if (template is null)
             return NotFound();
 
-        if (!string.IsNullOrWhiteSpace(template.FrxFilePath))
-        {
-            var fullPath = Path.Combine(_env.WebRootPath, "Document", template.FrxFilePath);
-            if (System.IO.File.Exists(fullPath))
-                System.IO.File.Delete(fullPath);
-        }
-
+        // Not: Eski kayitlardaki file system dosyalari yok sayiliyor.
+        // Yeni akiste zaten DB'de tutuluyor.
         await _templateRepo.DeleteAsync(templateId, ct);
         return Json(new { success = true });
     }
@@ -274,6 +280,7 @@ public sealed class DocumentController : Controller
             Name           = name.Trim(),
             DocumentTypeId = template.DocumentTypeId,
             FrxFilePath    = template.FrxFilePath,
+            FrxContent     = template.FrxContent,
             Description    = template.Description,
             IsDefault      = template.IsDefault,
             IsActive       = template.IsActive,
@@ -284,6 +291,86 @@ public sealed class DocumentController : Controller
         return Json(new { success = true });
     }
 
+    // ── Mail Gonder (PDF ek olarak) ─────────────────────────────────────────
+
+    [HttpPost("/Document/SendEmail")]
+    public async Task<IActionResult> SendEmail([FromBody] SendTemplateEmailRequest request, CancellationToken ct)
+    {
+        if (request is null)
+            return Json(new { success = false, message = "Gecersiz istek." });
+        if (string.IsNullOrWhiteSpace(request.ToEmail))
+            return Json(new { success = false, message = "Alici adresi zorunludur." });
+        if (string.IsNullOrWhiteSpace(request.Subject))
+            return Json(new { success = false, message = "Konu zorunludur." });
+
+        var template = await _templateRepo.GetByIdAsync(request.TemplateId, ct);
+        if (template is null)
+            return Json(new { success = false, message = "Sablon bulunamadi." });
+
+        // SMTP profili (ilk aktif profil; Admin tarafinda tanimlanan)
+        var profiles = await _smtpProfileRepo.GetAllAsync(ct);
+        var smtp = profiles.FirstOrDefault(p => p.IsActive);
+        if (smtp is null)
+            return Json(new { success = false, message = "Aktif bir SMTP profili tanimli degil. Mail ayarlarindan profil olusturun." });
+
+        try
+        {
+            byte[]? attachmentBytes = null;
+            var attachmentName = SanitizeFileName(template.Name) + ".pdf";
+
+            if (request.RecordId.HasValue && request.RecordId.Value != Guid.Empty)
+            {
+                try
+                {
+                    attachmentBytes = await _generationService.GeneratePdfAsync(template.Id, request.RecordId.Value, ct);
+                }
+                catch (Exception genEx)
+                {
+                    return Json(new { success = false, message = "PDF uretilemedi: " + genEx.Message });
+                }
+            }
+
+            using var mail = new MailMessage
+            {
+                From = new MailAddress(smtp.FromEmail, string.IsNullOrWhiteSpace(smtp.FromDisplayName) ? smtp.FromEmail : smtp.FromDisplayName),
+                Subject = request.Subject,
+                Body = request.BodyHtml ?? request.BodyText ?? string.Empty,
+                IsBodyHtml = !string.IsNullOrWhiteSpace(request.BodyHtml),
+            };
+            foreach (var addr in (request.ToEmail ?? string.Empty).Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                mail.To.Add(addr);
+
+            if (attachmentBytes is { Length: > 0 })
+            {
+                var attStream = new MemoryStream(attachmentBytes);
+                mail.Attachments.Add(new Attachment(attStream, attachmentName, "application/pdf"));
+            }
+
+            using var client = new SmtpClient(smtp.Host, smtp.Port)
+            {
+                EnableSsl = smtp.UseSsl,
+                Credentials = new NetworkCredential(smtp.Username, smtp.Password),
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                Timeout = 20_000,
+            };
+
+            await client.SendMailAsync(mail);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "Mail gonderim hatasi: " + ex.Message });
+        }
+    }
+
     private static string SanitizeFileName(string name) =>
         string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
 }
+
+public sealed record SendTemplateEmailRequest(
+    Guid TemplateId,
+    Guid? RecordId,
+    string ToEmail,
+    string Subject,
+    string? BodyHtml,
+    string? BodyText);

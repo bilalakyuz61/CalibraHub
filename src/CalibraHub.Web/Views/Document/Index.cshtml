@@ -1,7 +1,9 @@
 @{
-    ViewBag.Title     = "Belge Sablonlari";
+    ViewBag.Title        = "Belge Sablonlari";
+    ViewData["Title"]    = "Belge Sablonlari";
     ViewData["FormCode"] = "DOC_TEMPLATES";
-    ViewBag.PageTitle = "Belge Sablonlari";
+    ViewData["BodyClass"] = "page-doc-templates";
+    ViewBag.PageTitle    = "Belge Sablonlari";
 
     var docTypes     = (IReadOnlyCollection<CalibraHub.Domain.Entities.DocumentType>)(ViewBag.DocumentTypes ?? Array.Empty<CalibraHub.Domain.Entities.DocumentType>());
     var selectedType = (CalibraHub.Domain.Entities.DocumentType?)ViewBag.SelectedType;
@@ -10,431 +12,670 @@
 
 @section Styles {
 <style>
-/* ── toolbar ────────────────────────────────────────────────────── */
-.doc-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 0;
-    flex-wrap: wrap;
-}
-.doc-toolbar label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #475569;
-    white-space: nowrap;
-}
-.doc-toolbar select {
-    padding: 5px 10px;
-    font-size: 0.8rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    background: #fff;
-    color: #1e293b;
-    min-width: 180px;
-}
-.btn-new {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 16px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    border-radius: 8px;
-    border: none;
-    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-    color: #fff;
-    cursor: pointer;
-    box-shadow: 0 1px 3px rgba(124, 58, 237, 0.25), 0 1px 2px rgba(124, 58, 237, 0.12);
-    transition: transform 0.12s, box-shadow 0.12s;
-}
-.btn-new:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(124, 58, 237, 0.3), 0 2px 4px rgba(124, 58, 237, 0.15);
-}
-.btn-new:active { transform: translateY(0); box-shadow: 0 1px 2px rgba(124, 58, 237, 0.2); }
+    /* ── Page shell ──────────────────────────────────────────────── */
+    .page-doc-templates .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-doc-templates .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-doc-templates .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-doc-templates .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
 
-.designer-indicator {
-    display: inline-flex;
-    align-items: center;
-    position: relative;
-    cursor: default;
-    color: #94a3b8;
-    transition: color 0.3s;
-}
-.designer-indicator.online { color: #7c3aed; }
-.designer-indicator .dot {
-    position: absolute;
-    bottom: -1px; right: -2px;
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: #dc2626;
-    border: 1.5px solid #fff;
-    transition: background 0.3s;
-}
-.designer-indicator .dot.online { background: #22c55e; }
+    .dt-shell {
+        flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+        background: #0c0f1a;
+        background-image:
+            radial-gradient(at 20% 30%, rgba(99,102,241,.12) 0, transparent 50%),
+            radial-gradient(at 80% 20%, rgba(14,165,233,.08) 0, transparent 50%);
+    }
+    body.app-theme-light .dt-shell { background: #f8fafc; background-image: none; }
 
-/* ── grid tablo ─────────────────────────────────────────────────── */
-.doc-grid {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.8rem;
-}
-.doc-grid thead th {
-    text-align: left;
-    padding: 3px 10px;
-    font-weight: 600;
-    color: #64748b;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    border-bottom: 2px solid #e2e8f0;
-    background: #f8fafc;
-    white-space: nowrap;
-}
-.doc-grid tbody tr {
-    border-bottom: 1px solid #f1f5f9;
-    transition: background 0.1s;
-}
-.doc-grid tbody tr:hover { background: #f8fafc; }
-.doc-grid td {
-    padding: 1px 10px;
-    vertical-align: middle;
-    color: #334155;
-}
-.doc-grid td.col-no    { width: 40px; color: #94a3b8; text-align: center; }
-.doc-grid td.col-name  { font-weight: 600; }
-.editable-name {
-    cursor: pointer;
-    border-bottom: 1px dashed transparent;
-    transition: border-color 0.15s;
-}
-.editable-name:hover { border-bottom-color: #94a3b8; }
-.doc-grid td.col-path  { font-size: 0.72rem; color: #94a3b8; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.doc-grid td.col-default { text-align: center; width: 80px; }
-.doc-grid td.col-date  { font-size: 0.72rem; color: #64748b; white-space: nowrap; width: 120px; }
-.doc-grid td.col-actions { white-space: nowrap; width: 220px; }
+    /* Action bar */
+    .dt-action-bar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 16px; flex-shrink: 0;
+        background: rgba(15,15,26,.85); border-bottom: 1px solid rgba(255,255,255,.06);
+        backdrop-filter: blur(16px);
+    }
+    body.app-theme-light .dt-action-bar { background: rgba(248,250,252,.92); border-bottom-color: #e2e8f0; }
 
-.default-dot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: #22c55e;
-}
+    .dt-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 14px; border-radius: 8px; border: 1px solid;
+        font-size: .78rem; font-weight: 600; cursor: pointer;
+        transition: all .12s; background: transparent;
+    }
+    .dt-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
+    .dt-btn--primary:hover:not(:disabled) { background: #4f46e5; }
+    .dt-btn--secondary { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.65); }
+    body.app-theme-light .dt-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
+    .dt-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,.1); color: #fff; }
+    body.app-theme-light .dt-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
+    .dt-btn:disabled { opacity: .5; cursor: not-allowed; }
 
-/* ── butonlar ───────────────────────────────────────────────────── */
-.doc-grid .act-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px; height: 30px;
-    padding: 0;
-    border-radius: 6px;
-    border: 1px solid #e2e8f0;
-    background: #fff;
-    color: #475569;
-    cursor: pointer;
-    transition: background 0.1s, border-color 0.1s;
-}
-.doc-grid .act-btn:hover { background: #f1f5f9; }
-.doc-grid .act-btn.designer { color: #7c3aed; border-color: #ddd6fe; }
-.doc-grid .act-btn.designer:hover { background: #f5f3ff; border-color: #7c3aed; }
-.doc-grid .act-btn.primary { color: #1d4ed8; border-color: #bfdbfe; }
-.doc-grid .act-btn.primary:hover { background: #eff6ff; border-color: #1d4ed8; }
-.doc-grid .act-btn.danger { color: #dc2626; border-color: #fecaca; }
-.doc-grid .act-btn.danger:hover { background: #fef2f2; border-color: #dc2626; }
-.col-actions { display: flex; gap: 6px; }
+    /* Selector bar */
+    .dt-selector-bar {
+        display: flex; align-items: center; gap: 12px;
+        padding: 12px 16px; flex-shrink: 0;
+        border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    body.app-theme-light .dt-selector-bar { border-bottom-color: rgba(15,23,42,.06); }
+    .dt-selector-bar label {
+        font-size: .78rem; font-weight: 600;
+        color: rgba(255,255,255,.55);
+    }
+    body.app-theme-light .dt-selector-bar label { color: #64748b; }
+    .dt-select {
+        padding: 7px 10px; border-radius: 8px;
+        background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+        color: rgba(255,255,255,.85); font-size: .84rem;
+        min-width: 220px; outline: none;
+    }
+    body.app-theme-light .dt-select { background: #fff; border-color: #e2e8f0; color: #1e293b; }
+    .dt-select option { background: #0d1117; color: rgba(255,255,255,.9); }
+    body.app-theme-light .dt-select option { background: #fff; color: #1e293b; }
 
-/* ── upload ─────────────────────────────────────────────────────── */
-.doc-upload {
-    border: 2px dashed #cbd5e1;
-    border-radius: 8px;
-    padding: 16px;
-    text-align: center;
-    color: #94a3b8;
-    margin-top: 12px;
-    font-size: 0.8rem;
-    transition: border-color 0.15s;
-}
-.doc-upload:hover, .doc-upload.dragover { border-color: #3b82f6; background: #eff6ff; }
-.doc-upload input[type="file"] { display: none; }
-.doc-upload label { cursor: pointer; color: #3b82f6; font-weight: 600; text-decoration: underline; }
+    .dt-designer-indicator {
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-left: auto;
+        font-size: .72rem; color: rgba(255,255,255,.45);
+    }
+    body.app-theme-light .dt-designer-indicator { color: #94a3b8; }
+    .dt-dot { width: 8px; height: 8px; border-radius: 50%; background: #dc2626; }
+    .dt-dot.online { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.5); }
 
-/* ── bos ────────────────────────────────────────────────────────── */
-.doc-empty-row td {
-    text-align: center;
-    padding: 32px 10px;
-    color: #94a3b8;
-    font-style: italic;
-}
+    /* Content area */
+    .dt-content {
+        flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        padding: 16px;
+    }
+
+    /* Grid card */
+    .dt-grid-card {
+        background: rgba(255,255,255,.02);
+        border: 1px solid rgba(255,255,255,.06);
+        border-radius: 14px;
+        padding: 0; margin-bottom: 14px;
+        overflow: hidden;
+        backdrop-filter: blur(10px);
+    }
+    body.app-theme-light .dt-grid-card { background: #fff; border-color: #e2e8f0; box-shadow: 0 1px 3px rgba(15,23,42,.04); }
+
+    .dt-grid { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .dt-grid thead th {
+        text-align: left; padding: 10px 14px;
+        font-weight: 700; font-size: .7rem; text-transform: uppercase;
+        letter-spacing: .05em; color: rgba(255,255,255,.4);
+        background: rgba(15,15,26,.6);
+        border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+    body.app-theme-light .dt-grid thead th {
+        background: #f8fafc; color: #64748b; border-bottom-color: #e2e8f0;
+    }
+    .dt-grid tbody tr {
+        border-bottom: 1px solid rgba(255,255,255,.04);
+        transition: background .1s;
+    }
+    body.app-theme-light .dt-grid tbody tr { border-bottom-color: rgba(15,23,42,.05); }
+    .dt-grid tbody tr:hover { background: rgba(99,102,241,.05); }
+    body.app-theme-light .dt-grid tbody tr:hover { background: rgba(99,102,241,.04); }
+    .dt-grid td { padding: 10px 14px; color: rgba(255,255,255,.85); vertical-align: middle; }
+    body.app-theme-light .dt-grid td { color: #334155; }
+
+    .dt-col-no { width: 40px; color: rgba(255,255,255,.3); text-align: center; }
+    body.app-theme-light .dt-col-no { color: #94a3b8; }
+    .dt-name {
+        font-weight: 600; cursor: pointer;
+        border-bottom: 1px dashed transparent;
+        transition: border-color .15s, color .15s;
+    }
+    .dt-name:hover { border-bottom-color: #818cf8; color: #a5b4fc; }
+    body.app-theme-light .dt-name:hover { color: #4f46e5; }
+    .dt-col-default { width: 80px; text-align: center; }
+    .dt-col-date { width: 130px; font-size: .74rem; color: rgba(255,255,255,.45); white-space: nowrap; }
+    body.app-theme-light .dt-col-date { color: #64748b; }
+    .dt-col-actions { white-space: nowrap; width: 220px; text-align: right; }
+
+    .dt-default-dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.5);
+    }
+
+    .dt-row-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 30px; height: 30px; margin-left: 4px;
+        border-radius: 7px; border: none; cursor: pointer;
+        transition: background .12s;
+    }
+    .dt-row-btn--mail { background: rgba(16,185,129,.1); color: #34d399; }
+    .dt-row-btn--mail:hover { background: rgba(16,185,129,.2); }
+    .dt-row-btn--designer { background: rgba(139,92,246,.12); color: #c4b5fd; }
+    .dt-row-btn--designer:hover { background: rgba(139,92,246,.22); }
+    .dt-row-btn--default { background: rgba(59,130,246,.12); color: #93c5fd; }
+    .dt-row-btn--default:hover { background: rgba(59,130,246,.22); }
+    .dt-row-btn--del { background: rgba(239,68,68,.1); color: #fca5a5; }
+    .dt-row-btn--del:hover { background: rgba(239,68,68,.2); }
+    body.app-theme-light .dt-row-btn--mail     { background: rgba(16,185,129,.08); color: #059669; }
+    body.app-theme-light .dt-row-btn--designer { background: rgba(139,92,246,.08); color: #6d28d9; }
+    body.app-theme-light .dt-row-btn--default  { background: rgba(59,130,246,.08); color: #1d4ed8; }
+    body.app-theme-light .dt-row-btn--del      { background: rgba(239,68,68,.08); color: #dc2626; }
+
+    .dt-empty { padding: 40px 20px; text-align: center; color: rgba(255,255,255,.35); font-style: italic; }
+    body.app-theme-light .dt-empty { color: #94a3b8; }
+
+    /* Upload area */
+    .dt-upload {
+        border: 1.5px dashed rgba(255,255,255,.15);
+        border-radius: 12px;
+        padding: 22px;
+        text-align: center;
+        color: rgba(255,255,255,.4);
+        font-size: .84rem;
+        transition: border-color .15s, background .15s;
+        background: rgba(255,255,255,.02);
+    }
+    body.app-theme-light .dt-upload { border-color: #cbd5e1; background: #f8fafc; color: #64748b; }
+    .dt-upload.dragover { border-color: #6366f1; background: rgba(99,102,241,.06); color: rgba(255,255,255,.7); }
+    body.app-theme-light .dt-upload.dragover { background: #eff6ff; }
+    .dt-upload input[type="file"] { display: none; }
+    .dt-upload label { cursor: pointer; color: #818cf8; font-weight: 600; text-decoration: underline; margin: 0 4px; }
+    body.app-theme-light .dt-upload label { color: #6366f1; }
+
+    /* ── Mail modal ──────────────────────────────────────────────── */
+    .dt-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+        animation: dtFadeIn .15s ease-out;
+    }
+    body.app-theme-light .dt-modal-backdrop { background: rgba(15,23,42,.35); }
+    @@keyframes dtFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .dt-modal {
+        width: min(620px, 95vw); max-height: 90vh;
+        display: flex; flex-direction: column;
+        background: #1a1f2e;
+        border: 1px solid rgba(255,255,255,.1);
+        border-radius: 14px; box-shadow: 0 24px 72px rgba(0,0,0,.5);
+        overflow: hidden;
+        animation: dtSlide .22s cubic-bezier(.23,1,.32,1);
+    }
+    body.app-theme-light .dt-modal { background: #fff; border-color: #e2e8f0; }
+    @@keyframes dtSlide {
+        from { transform: translateY(12px) scale(.97); opacity: 0; }
+        to   { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
+    .dt-modal-header {
+        padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+        border-bottom: 1px solid rgba(255,255,255,.08);
+        color: rgba(255,255,255,.9);
+    }
+    body.app-theme-light .dt-modal-header { color: #1e293b; border-bottom-color: #e2e8f0; }
+    .dt-modal-header svg { color: #34d399; }
+    .dt-modal-title { font-size: .95rem; font-weight: 700; flex: 1; }
+    .dt-modal-sub   { font-size: .72rem; color: rgba(255,255,255,.45); margin-top: 2px; }
+    body.app-theme-light .dt-modal-sub { color: #94a3b8; }
+    .dt-modal-close {
+        background: transparent; border: none; cursor: pointer;
+        color: inherit; padding: 4px; border-radius: 6px;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .dt-modal-close:hover { background: rgba(255,255,255,.08); }
+    body.app-theme-light .dt-modal-close:hover { background: #f1f5f9; }
+
+    .dt-modal-body { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+
+    .dt-field { display: flex; flex-direction: column; gap: 4px; }
+    .dt-field label {
+        font-size: .72rem; font-weight: 600; color: rgba(255,255,255,.55);
+    }
+    body.app-theme-light .dt-field label { color: #64748b; }
+    .dt-input, .dt-textarea {
+        padding: 8px 12px; border-radius: 8px;
+        background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
+        color: rgba(255,255,255,.85); font-size: .84rem;
+        outline: none; font-family: inherit;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    .dt-input:focus, .dt-textarea:focus {
+        border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+    }
+    body.app-theme-light .dt-input, body.app-theme-light .dt-textarea {
+        background: #fff; border-color: #e2e8f0; color: #1e293b;
+    }
+    .dt-input::placeholder, .dt-textarea::placeholder { color: rgba(255,255,255,.25); }
+    body.app-theme-light .dt-input::placeholder, body.app-theme-light .dt-textarea::placeholder { color: #94a3b8; }
+    .dt-textarea { resize: vertical; min-height: 100px; }
+
+    .dt-modal-footer {
+        padding: 12px 18px; display: flex; justify-content: flex-end; gap: 8px;
+        border-top: 1px solid rgba(255,255,255,.08);
+    }
+    body.app-theme-light .dt-modal-footer { border-top-color: #e2e8f0; }
+
+    .dt-modal-hint {
+        font-size: .7rem; color: rgba(255,255,255,.35);
+        padding: 6px 10px; background: rgba(255,255,255,.02);
+        border-radius: 6px; border-left: 3px solid rgba(59,130,246,.4);
+    }
+    body.app-theme-light .dt-modal-hint { color: #64748b; background: #f8fafc; border-left-color: #3b82f6; }
+
+    .dt-result { padding: 8px 12px; border-radius: 8px; font-size: .78rem; font-weight: 500; display: none; }
+    .dt-result--ok  { background: rgba(16,185,129,.1); color: #6ee7b7; border: 1px solid rgba(16,185,129,.3); display: block; }
+    .dt-result--err { background: rgba(239,68,68,.1); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); display: block; }
 </style>
 }
 
-<!-- Action bar (workspace-action-bar'a kopyalanir) -->
-<div class="entity-form-toolbar">
-    @if (selectedType is not null)
-    {
-        <button type="button" class="btn-new" onclick="createBlankTemplate()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Yeni Sablon Olustur
-        </button>
-    }
-</div>
-
-<!-- Toolbar: combobox + designer durumu -->
-<div class="doc-toolbar">
-    <label for="docTypeSelect">Belge Tipi:</label>
-    <select id="docTypeSelect">
-        @foreach (var dt in docTypes)
-        {
-            if (selectedType?.Id == dt.Id)
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="dt-shell">
+        <!-- Action bar -->
+        <div class="dt-action-bar" data-no-proxy>
+            @if (selectedType is not null)
             {
-                <option value="@dt.Code" data-id="@dt.Id" selected="selected">@dt.Name</option>
+                <button type="button" class="dt-btn dt-btn--primary" onclick="dtCreateBlank()" title="Yeni bos sablon olustur ve Designer'da ac">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Yeni Sablon
+                </button>
+                <label for="dtFrxFileInput" class="dt-btn dt-btn--secondary" style="cursor:pointer">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    .frx Yukle
+                </label>
+                <input type="file" id="dtFrxFileInput" accept=".frx" style="display:none" />
             }
-            else
-            {
-                <option value="@dt.Code" data-id="@dt.Id">@dt.Name</option>
-            }
-        }
-    </select>
-    <div id="designerIndicator" class="designer-indicator" title="Designer: Bagli degil" style="margin-left:auto;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-        </svg>
-        <span class="dot"></span>
-    </div>
-</div>
+        </div>
 
-<!-- Grid -->
-@if (selectedType is not null)
-{
-    <table class="doc-grid">
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Sablon Adi</th>
-                <th>Dosya Yolu</th>
-                <th>Varsayilan</th>
-                <th>Olusturulma</th>
-                <th>Islemler</th>
-            </tr>
-        </thead>
-        <tbody id="tplBody">
-            @if (templates.Any())
-            {
-                var idx = 0;
-                @foreach (var tpl in templates)
+        <!-- Selector bar -->
+        <div class="dt-selector-bar">
+            <label for="dtTypeSelect">Belge Tipi:</label>
+            <select id="dtTypeSelect" class="dt-select">
+                @foreach (var dt in docTypes)
                 {
-                    idx++;
-                    <tr>
-                        <td class="col-no">@idx</td>
-                        <td class="col-name">
-                            <span class="editable-name" data-id="@tpl.Id" title="Duzenlemek icin tiklayin">@tpl.Name</span>
-                        </td>
-                        <td class="col-path" title="@tpl.FrxFilePath">@tpl.FrxFilePath</td>
-                        <td class="col-default">
-                            @if (tpl.IsDefault) { <span class="default-dot" title="Varsayilan"></span> }
-                        </td>
-                        <td class="col-date">@tpl.CreatedAt.ToString("dd.MM.yyyy HH:mm")</td>
-                        <td class="col-actions">
-                            <button type="button" class="act-btn designer" onclick="openInDesigner('@tpl.Id')" title="Designer'da Ac">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                            </button>
-                            @if (!tpl.IsDefault)
-                            {
-                                <button type="button" class="act-btn primary" onclick="setDefault('@tpl.Id')" title="Varsayilan Yap">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                </button>
-                            }
-                            <button type="button" class="act-btn danger" onclick="deleteTemplate('@tpl.Id')" title="Sil">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                            </button>
-                        </td>
-                    </tr>
+                    if (selectedType?.Id == dt.Id)
+                    {
+                        <option value="@dt.Code" data-id="@dt.Id" selected="selected">@dt.Name</option>
+                    }
+                    else
+                    {
+                        <option value="@dt.Code" data-id="@dt.Id">@dt.Name</option>
+                    }
                 }
+            </select>
+
+            <div class="dt-designer-indicator" id="dtDesignerIndicator" title="Designer: Bagli degil">
+                <span class="dt-dot"></span>
+                <span id="dtDesignerLabel">Designer baglanti bekleniyor</span>
+            </div>
+        </div>
+
+        <!-- Content: grid + upload -->
+        <div class="dt-content">
+            @if (selectedType is not null)
+            {
+                <div class="dt-grid-card">
+                    <table class="dt-grid">
+                        <thead>
+                            <tr>
+                                <th style="width:40px">#</th>
+                                <th>Sablon Adi</th>
+                                <th style="width:110px">Boyut</th>
+                                <th class="dt-col-default">Varsayilan</th>
+                                <th class="dt-col-date">Olusturulma</th>
+                                <th class="dt-col-actions">Islemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dtBody">
+                            @if (templates.Any())
+                            {
+                                var idx = 0;
+                                @foreach (var tpl in templates)
+                                {
+                                    idx++;
+                                    var size = tpl.FrxContent?.Length ?? 0;
+                                    <tr data-id="@tpl.Id">
+                                        <td class="dt-col-no">@idx</td>
+                                        <td><span class="dt-name" data-id="@tpl.Id" title="Ismi duzenlemek icin tiklayin">@tpl.Name</span></td>
+                                        <td style="font-size:.74rem;opacity:.6">@(size > 0 ? $"{size / 1024.0:F1} KB" : "—")</td>
+                                        <td class="dt-col-default">@if (tpl.IsDefault) { <span class="dt-default-dot" title="Varsayilan"></span> }</td>
+                                        <td class="dt-col-date">@tpl.CreatedAt.ToString("dd.MM.yyyy HH:mm")</td>
+                                        <td class="dt-col-actions">
+                                            <button type="button" class="dt-row-btn dt-row-btn--mail" onclick="dtOpenMail('@tpl.Id', @Html.Raw(System.Text.Json.JsonSerializer.Serialize(tpl.Name)))" title="Mail Gonder">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                            </button>
+                                            <button type="button" class="dt-row-btn dt-row-btn--designer" onclick="dtOpenInDesigner('@tpl.Id')" title="Designer'da Ac">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                            </button>
+                                            @if (!tpl.IsDefault)
+                                            {
+                                                <button type="button" class="dt-row-btn dt-row-btn--default" onclick="dtSetDefault('@tpl.Id')" title="Varsayilan Yap">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                                </button>
+                                            }
+                                            <button type="button" class="dt-row-btn dt-row-btn--del" onclick="dtDelete('@tpl.Id')" title="Sil">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="6" class="dt-empty">Henuz sablon yok. Yukaridan yeni sablon olusturun veya .frx yukleyin.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Upload drop zone -->
+                <div class="dt-upload" id="dtUploadArea">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle;margin-right:6px;opacity:.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <label for="dtFrxFileInput">.frx dosya sec</label>
+                    veya surukle birak
+                    <div style="font-size:.7rem;opacity:.6;margin-top:4px;">(Maks. 1 MB — DB'ye binary olarak saklanir)</div>
+                </div>
             }
             else
             {
-                <tr class="doc-empty-row">
-                    <td colspan="6">Henuz sablon yok. Yukaridan yeni sablon olusturun veya asagidan .frx yukleyin.</td>
-                </tr>
+                <div class="dt-empty">Belge tipi bulunamadi.</div>
             }
-        </tbody>
-    </table>
-
-    <!-- Upload -->
-    <div class="doc-upload" id="uploadArea">
-        <input type="file" id="frxFileInput" accept=".frx" />
-        <label for="frxFileInput">.frx dosya sec</label>
-        <span> veya surukle birak</span>
-        <span style="margin-left:8px;font-size:0.72rem;color:#cbd5e1;">(Maks. 1 MB)</span>
+        </div>
     </div>
-}
+
+    <!-- Mail modal -->
+    <div id="dtMailModal" style="display:none;">
+        <div class="dt-modal-backdrop" onclick="dtCloseMail()">
+            <div class="dt-modal" onclick="event.stopPropagation()">
+                <div class="dt-modal-header">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    <div style="flex:1">
+                        <div class="dt-modal-title">Sablon ile Mail Gonder</div>
+                        <div class="dt-modal-sub" id="dtMailTemplateName"></div>
+                    </div>
+                    <button type="button" class="dt-modal-close" onclick="dtCloseMail()" title="Kapat">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="dt-modal-body">
+                    <div class="dt-field">
+                        <label for="dtMailTo">Alici (virgul ile ayirabilirsiniz) *</label>
+                        <input type="text" id="dtMailTo" class="dt-input" placeholder="ornek@firma.com, digeri@firma.com" />
+                    </div>
+                    <div class="dt-field">
+                        <label for="dtMailSubject">Konu *</label>
+                        <input type="text" id="dtMailSubject" class="dt-input" />
+                    </div>
+                    <div class="dt-field">
+                        <label for="dtMailRecordId">Kayit ID (opsiyonel — PDF olarak ekleyecegi kaynak kayit)</label>
+                        <input type="text" id="dtMailRecordId" class="dt-input" placeholder="Guid bicimi — bos birakilirsa sadece mesaj gonderilir" />
+                    </div>
+                    <div class="dt-field">
+                        <label for="dtMailBody">Mesaj</label>
+                        <textarea id="dtMailBody" class="dt-textarea" placeholder="Mail govdesi..."></textarea>
+                    </div>
+                    <div class="dt-modal-hint">
+                        Aktif SMTP profili mail ayarlarindan ayarlanir. Kayit ID doldurulduysa ilgili belge PDF olarak ek yapilir.
+                    </div>
+                    <div id="dtMailResult" class="dt-result"></div>
+                </div>
+                <div class="dt-modal-footer">
+                    <button type="button" class="dt-btn dt-btn--secondary" onclick="dtCloseMail()">Iptal</button>
+                    <button type="button" class="dt-btn dt-btn--primary" id="dtMailSendBtn" onclick="dtSendMail()">Gonder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
 
 @section Scripts {
 <script>
-(function() {
-    let selectedTypeId = '@(selectedType?.Id.ToString() ?? "")';
+(function () {
+    var selectedTypeId = '@(selectedType?.Id.ToString() ?? "")';
+    var currentMailTemplateId = null;
 
-    // ── Combobox degisince AJAX ile grid yenile ───────────────────
-    const docTypeSelect = document.getElementById('docTypeSelect');
-    if (docTypeSelect) {
-        docTypeSelect.addEventListener('change', function() {
-            const opt = this.options[this.selectedIndex];
+    function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+    function jsonEscape(s) { return JSON.stringify(s == null ? '' : String(s)); }
+
+    // ── Belge tipi degistir ───────────────────────────────────────
+    var typeSelect = document.getElementById('dtTypeSelect');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', function () {
+            var opt = this.options[this.selectedIndex];
             selectedTypeId = opt.dataset.id;
-            loadTemplates(selectedTypeId);
+            dtLoad();
         });
     }
 
-    function loadTemplates(docTypeId) {
-        fetch('@Url.Action("Templates","Document")' + '?documentTypeId=' + docTypeId)
-            .then(r => r.json())
-            .then(data => renderGrid(data))
-            .catch(() => renderGrid([]));
+    function dtLoad() {
+        if (!selectedTypeId) return;
+        fetch('/Document/Templates?documentTypeId=' + selectedTypeId, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { renderGrid(data || []); })
+            .catch(function () { renderGrid([]); });
     }
 
-    function renderGrid(templates) {
-        const tbody = document.getElementById('tplBody');
-        if (!tbody) return;
-        if (templates.length === 0) {
-            tbody.innerHTML = '<tr class="doc-empty-row"><td colspan="6">Henuz sablon yok.</td></tr>';
-            bindEditableNames();
+    function renderGrid(list) {
+        var body = document.getElementById('dtBody');
+        if (!body) return;
+        if (list.length === 0) {
+            body.innerHTML = '<tr><td colspan="6" class="dt-empty">Henuz sablon yok. Yukaridan yeni sablon olusturun veya .frx yukleyin.</td></tr>';
             return;
         }
-        tbody.innerHTML = templates.map((t, i) => `
-            <tr>
-                <td class="col-no">${i + 1}</td>
-                <td class="col-name"><span class="editable-name" data-id="${t.id}" title="Duzenlemek icin tiklayin">${esc(t.name)}</span></td>
-                <td class="col-path" title="${esc(t.frxFilePath || '')}">${esc(t.frxFilePath || '')}</td>
-                <td class="col-default">${t.isDefault ? '<span class="default-dot" title="Varsayilan"></span>' : ''}</td>
-                <td class="col-date">${t.createdAt}</td>
-                <td class="col-actions">
-                    <button type="button" class="act-btn designer" onclick="openInDesigner('${t.id}')" title="Designer'da Ac">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                    </button>
-                    ${!t.isDefault ? `<button type="button" class="act-btn primary" onclick="setDefault('${t.id}')" title="Varsayilan Yap">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    </button>` : ''}
-                    <button type="button" class="act-btn danger" onclick="deleteTemplate('${t.id}')" title="Sil">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
-                </td>
-            </tr>`).join('');
-        bindEditableNames();
+        body.innerHTML = list.map(function (t, i) {
+            var size = t.contentSize > 0 ? (t.contentSize / 1024).toFixed(1) + ' KB' : '—';
+            return '<tr data-id="' + t.id + '">' +
+                '<td class="dt-col-no">' + (i + 1) + '</td>' +
+                '<td><span class="dt-name" data-id="' + t.id + '" title="Ismi duzenlemek icin tiklayin">' + esc(t.name) + '</span></td>' +
+                '<td style="font-size:.74rem;opacity:.6">' + esc(size) + '</td>' +
+                '<td class="dt-col-default">' + (t.isDefault ? '<span class="dt-default-dot" title="Varsayilan"></span>' : '') + '</td>' +
+                '<td class="dt-col-date">' + esc(t.createdAt) + '</td>' +
+                '<td class="dt-col-actions">' +
+                    '<button type="button" class="dt-row-btn dt-row-btn--mail" onclick="dtOpenMail(' + jsonEscape(t.id) + ',' + jsonEscape(t.name) + ')" title="Mail Gonder">' +
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' +
+                    '</button>' +
+                    '<button type="button" class="dt-row-btn dt-row-btn--designer" onclick="dtOpenInDesigner(' + jsonEscape(t.id) + ')" title="Designer\'da Ac">' +
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>' +
+                    '</button>' +
+                    (!t.isDefault ? '<button type="button" class="dt-row-btn dt-row-btn--default" onclick="dtSetDefault(' + jsonEscape(t.id) + ')" title="Varsayilan Yap">' +
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+                    '</button>' : '') +
+                    '<button type="button" class="dt-row-btn dt-row-btn--del" onclick="dtDelete(' + jsonEscape(t.id) + ')" title="Sil">' +
+                        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>' +
+                    '</button>' +
+                '</td>' +
+            '</tr>';
+        }).join('');
     }
 
-    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
     // ── Upload ────────────────────────────────────────────────────
-    const fileInput = document.getElementById('frxFileInput');
-    const uploadArea = document.getElementById('uploadArea');
-
+    var fileInput = document.getElementById('dtFrxFileInput');
+    var uploadArea = document.getElementById('dtUploadArea');
     if (fileInput) {
-        fileInput.addEventListener('change', function() {
+        fileInput.addEventListener('change', function () {
             if (this.files.length > 0) uploadFile(this.files[0]);
+            this.value = '';
         });
     }
     if (uploadArea) {
-        uploadArea.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('dragover'); });
-        uploadArea.addEventListener('dragleave', function() { this.classList.remove('dragover'); });
-        uploadArea.addEventListener('drop', function(e) {
+        uploadArea.addEventListener('dragover', function (e) { e.preventDefault(); this.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', function () { this.classList.remove('dragover'); });
+        uploadArea.addEventListener('drop', function (e) {
             e.preventDefault(); this.classList.remove('dragover');
             if (e.dataTransfer.files.length > 0) uploadFile(e.dataTransfer.files[0]);
         });
     }
 
     function uploadFile(file) {
-        if (!file.name.endsWith('.frx')) { alert('Sadece .frx dosyalari yuklenebilir.'); return; }
-        const name = prompt('Sablon adi:', file.name.replace('.frx', ''));
+        if (!file.name.toLowerCase().endsWith('.frx')) { alert('Sadece .frx dosyalari yuklenebilir.'); return; }
+        if (file.size > 1_048_576) { alert('Dosya boyutu 1 MB\'yi asamaz.'); return; }
+        var name = prompt('Sablon adi:', file.name.replace(/\.frx$/i, ''));
         if (!name) return;
-        const fd = new FormData();
+        var fd = new FormData();
         fd.append('file', file);
         fd.append('documentTypeId', selectedTypeId);
         fd.append('name', name);
-        fetch('@Url.Action("Upload", "Document")', { method: 'POST', body: fd })
-            .then(r => r.json())
-            .then(data => { if (data.success) loadTemplates(selectedTypeId); else alert(data.error || 'Yukleme basarisiz.'); })
-            .catch(() => alert('Yukleme sirasinda hata olustu.'));
+        fetch('/Document/Upload', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d.success) dtLoad(); else alert(d.message || 'Yukleme basarisiz.'); })
+            .catch(function (e) { alert('Yukleme hatasi: ' + e.message); });
     }
 
-    // ── Designer ──────────────────────────────────────────────────
-    const DESIGNER_URL = 'http://localhost:61002';
-    let designerOnline = false;
+    // ── Yeni bos sablon ───────────────────────────────────────────
+    window.dtCreateBlank = function () {
+        var name = prompt('Yeni sablon adi:');
+        if (!name) return;
+        var fd = new FormData();
+        fd.append('documentTypeId', selectedTypeId);
+        fd.append('name', name);
+        fetch('/Document/CreateBlank', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.success) { alert(d.message || 'Olusturma basarisiz.'); return; }
+                if (designerOnline) dtOpenInDesigner(d.id);
+                dtLoad();
+            })
+            .catch(function (e) { alert('Hata: ' + e.message); });
+    };
+
+    // ── Sablon ismi inline edit ───────────────────────────────────
+    document.addEventListener('click', function (e) {
+        var el = e.target.closest('.dt-name');
+        if (!el) return;
+        var id = el.dataset.id;
+        var current = el.textContent.trim();
+        var name = prompt('Sablon adi:', current);
+        if (!name || name === current) return;
+        var fd = new FormData();
+        fd.append('name', name);
+        fetch('/Document/Rename/' + id, { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d.success) dtLoad(); else alert('Yeniden adlandirma basarisiz.'); });
+    });
+
+    // ── Varsayilan yap / Sil ──────────────────────────────────────
+    window.dtSetDefault = function (id) {
+        fetch('/Document/SetDefault/' + id, { method: 'POST', credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d.success) dtLoad(); });
+    };
+    window.dtDelete = function (id) {
+        if (!confirm('Bu sablonu silmek istediginize emin misiniz?')) return;
+        fetch('/Document/Delete/' + id, { method: 'POST', credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d.success) dtLoad(); });
+    };
+
+    // ── Designer status ───────────────────────────────────────────
+    var DESIGNER_URL = 'http://localhost:61002';
+    var designerOnline = false;
 
     function checkDesigner() {
         fetch(DESIGNER_URL + '/ping', { mode: 'cors' })
-            .then(r => r.json())
-            .then(d => { designerOnline = d.ok === true; updateStatus(); })
-            .catch(() => { designerOnline = false; updateStatus(); });
+            .then(function (r) { return r.json(); })
+            .then(function (d) { designerOnline = d.ok === true; updateDesignerStatus(); })
+            .catch(function () { designerOnline = false; updateDesignerStatus(); });
     }
-    function updateStatus() {
-        const el = document.getElementById('designerIndicator');
-        if (!el) return;
-        const dot = el.querySelector('.dot');
+    function updateDesignerStatus() {
+        var ind = document.getElementById('dtDesignerIndicator');
+        if (!ind) return;
+        var dot = ind.querySelector('.dt-dot');
+        var label = document.getElementById('dtDesignerLabel');
         if (dot) dot.classList.toggle('online', designerOnline);
-        el.classList.toggle('online', designerOnline);
-        el.title = designerOnline ? 'Designer: Bagli' : 'Designer: Bagli degil';
+        if (label) label.textContent = designerOnline ? 'Designer bagli' : 'Designer bagli degil';
+        ind.title = designerOnline ? 'Designer: Bagli' : 'Designer: Bagli degil';
     }
     checkDesigner();
-    setInterval(checkDesigner, 10000);
+    setInterval(checkDesigner, 10_000);
 
-    window.openInDesigner = function(id) {
+    window.dtOpenInDesigner = function (id) {
         if (!designerOnline) { alert('CalibraHub Designer calismiyor.\nLutfen CalibraHub.Designer.exe baslatin.'); return; }
         fetch(DESIGNER_URL + '/open?id=' + id + '&url=' + encodeURIComponent(location.origin), { mode: 'cors' })
-            .then(r => r.json())
-            .then(d => { if (!d.ok) alert('Designer acamadi.'); })
-            .catch(() => alert('Designer ile iletisim kurulamadi.'));
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (!d.ok) alert('Designer acamadi.'); })
+            .catch(function () { alert('Designer ile iletisim kurulamadi.'); });
     };
 
-    // ── Yeni Sablon ───────────────────────────────────────────────
-    window.createBlankTemplate = function() {
-        const name = prompt('Sablon adi:');
-        if (!name) return;
-        const fd = new FormData();
-        fd.append('documentTypeId', selectedTypeId);
-        fd.append('name', name);
-        fetch('@Url.Action("CreateBlank", "Document")', { method: 'POST', body: fd })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    if (designerOnline) openInDesigner(data.id);
-                    loadTemplates(selectedTypeId);
-                } else alert(data.error || 'Olusturma basarisiz.');
+    // ── Mail modal ────────────────────────────────────────────────
+    window.dtOpenMail = function (id, name) {
+        currentMailTemplateId = id;
+        document.getElementById('dtMailTemplateName').textContent = 'Sablon: ' + (name || '-');
+        document.getElementById('dtMailSubject').value = name || 'Belge';
+        document.getElementById('dtMailTo').value = '';
+        document.getElementById('dtMailBody').value = '';
+        document.getElementById('dtMailRecordId').value = '';
+        var res = document.getElementById('dtMailResult');
+        res.className = 'dt-result'; res.textContent = ''; res.style.display = 'none';
+        document.getElementById('dtMailModal').style.display = 'block';
+        setTimeout(function () { document.getElementById('dtMailTo').focus(); }, 50);
+    };
+    window.dtCloseMail = function () {
+        document.getElementById('dtMailModal').style.display = 'none';
+        currentMailTemplateId = null;
+    };
+    window.dtSendMail = function () {
+        if (!currentMailTemplateId) return;
+        var to = document.getElementById('dtMailTo').value.trim();
+        var subject = document.getElementById('dtMailSubject').value.trim();
+        var body = document.getElementById('dtMailBody').value;
+        var recordId = document.getElementById('dtMailRecordId').value.trim();
+
+        if (!to || !subject) {
+            showMailResult('Alici ve konu zorunludur.', false);
+            return;
+        }
+
+        var payload = {
+            templateId: currentMailTemplateId,
+            recordId:   recordId || null,
+            toEmail:    to,
+            subject:    subject,
+            bodyText:   body || null,
+            bodyHtml:   null,
+        };
+
+        var btn = document.getElementById('dtMailSendBtn');
+        btn.disabled = true;
+        btn.textContent = 'Gonderiliyor...';
+
+        fetch('/Document/SendEmail', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.success) {
+                    showMailResult('Mail basariyla gonderildi.', true);
+                    setTimeout(dtCloseMail, 1200);
+                } else {
+                    showMailResult(d.message || 'Gonderim basarisiz.', false);
+                }
             })
-            .catch(() => alert('Hata olustu.'));
-    };
-
-    // ── Inline Rename ─────────────────────────────────────────────
-    function bindEditableNames() {
-        document.querySelectorAll('.editable-name').forEach(el => {
-            el.addEventListener('click', function() {
-                const id = this.dataset.id;
-                const current = this.textContent.trim();
-                const newName = prompt('Sablon adi:', current);
-                if (!newName || newName === current) return;
-                const fd = new FormData();
-                fd.append('name', newName);
-                fetch('/Document/Rename/' + id, { method: 'POST', body: fd })
-                    .then(r => r.json())
-                    .then(d => { if (d.success) loadTemplates(selectedTypeId); else alert('Yeniden adlandirma basarisiz.'); })
-                    .catch(() => alert('Hata olustu.'));
+            .catch(function (e) { showMailResult('Baglanti hatasi: ' + e.message, false); })
+            .finally(function () {
+                btn.disabled = false;
+                btn.textContent = 'Gonder';
             });
-        });
-    }
-    bindEditableNames();
+    };
 
-    // ── Actions ───────────────────────────────────────────────────
-    window.setDefault = function(id) {
-        fetch('/Document/SetDefault/' + id, { method: 'POST' })
-            .then(r => r.json()).then(d => { if (d.success) loadTemplates(selectedTypeId); })
-            .catch(() => alert('Islem basarisiz.'));
-    };
-    window.deleteTemplate = function(id) {
-        if (!confirm('Bu sablonu silmek istediginize emin misiniz?')) return;
-        fetch('/Document/Delete/' + id, { method: 'POST' })
-            .then(r => r.json()).then(d => { if (d.success) loadTemplates(selectedTypeId); })
-            .catch(() => alert('Silme basarisiz.'));
-    };
+    function showMailResult(text, ok) {
+        var res = document.getElementById('dtMailResult');
+        res.textContent = text;
+        res.className = 'dt-result ' + (ok ? 'dt-result--ok' : 'dt-result--err');
+        res.style.display = 'block';
+    }
 })();
 </script>
 }

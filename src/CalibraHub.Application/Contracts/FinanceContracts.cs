@@ -1,6 +1,6 @@
 namespace CalibraHub.Application.Contracts;
 
-public sealed record ContactAccountDto(
+public sealed record ContactDto(
     int Id,
     byte AccountType,
     string AccountCode,
@@ -12,11 +12,12 @@ public sealed record ContactAccountDto(
     string? Email,
     string? Address,
     string? City,
+    string? District,
     bool IsActive,
     int? PriceGroupId,
     DateTime CreatedAt);
 
-public sealed record SaveContactAccountRequest(
+public sealed record SaveContactRequest(
     int? Id,
     byte AccountType,
     string AccountCode,
@@ -28,7 +29,8 @@ public sealed record SaveContactAccountRequest(
     string? Email,
     string? Address,
     string? City,
+    string? District,
     bool IsActive,
     int? PriceGroupId);
 
-public sealed record DeleteContactAccountBody(int Id);
+public sealed record DeleteContactBody(int Id);

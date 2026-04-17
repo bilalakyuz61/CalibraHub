@@ -17,7 +17,7 @@ public sealed class SqlDepartmentRepository : IDepartmentRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{schema}].[departments]";
+        _tableName = $"[{schema}].[Department]";
     }
 
     public async Task<IReadOnlyCollection<Department>> GetAllAsync(CancellationToken cancellationToken)

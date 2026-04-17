@@ -1,5 +1,5 @@
 @{
-    ViewData["Title"] = "Olcu Birimi Tanimlamalari";
+    ViewData["Title"] = "Ölçü Birimleri";
     ViewData["FormCode"] = "MEASURE_UNITS";
     ViewData["BodyClass"] = "page-measure-units";
     ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
@@ -29,7 +29,6 @@
         flex: 1 1 auto; min-height: 0; height: 100%;
     }
 
-    /* ── Shell ── */
     .mu-shell {
         flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
         background: #0c0f1a;
@@ -39,7 +38,6 @@
     }
     body.app-theme-light .mu-shell { background: #f8fafc; background-image: none; }
 
-    /* ── Action bar ── */
     .mu-action-bar {
         display: flex; align-items: center; gap: 8px;
         padding: 8px 16px; flex-shrink: 0;
@@ -58,16 +56,9 @@
     .mu-btn--secondary { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.65); }
     body.app-theme-light .mu-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
     .mu-btn--secondary:hover { background: rgba(255,255,255,.1); color: #fff; }
-    .mu-btn--danger { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.25); color: #f87171; }
-    .mu-btn--danger:hover { background: rgba(239,68,68,.18); }
-    .mu-btn:disabled { opacity: .4; cursor: not-allowed; }
 
-    /* ── Body ── */
-    .mu-body {
-        display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden;
-    }
+    .mu-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 
-    /* ── Left: Form ── */
     .mu-form-panel {
         width: 340px; flex-shrink: 0;
         border-right: 1px solid rgba(255,255,255,.07);
@@ -77,8 +68,8 @@
     }
     body.app-theme-light .mu-form-panel { background: #f8fafc; border-right-color: #e2e8f0; }
     .mu-form-title {
-        font-size: .7rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: .06em; color: rgba(255,255,255,.4); margin-bottom: 14px;
+        font-size: .85rem; font-weight: 700;
+        color: rgba(255,255,255,.85); margin-bottom: 14px;
     }
     body.app-theme-light .mu-form-title { color: #94a3b8; }
 
@@ -103,88 +94,39 @@
     }
     body.app-theme-light .mu-input { background: #fff; border-color: #e2e8f0; color: #1e293b; }
     .mu-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .mu-input::placeholder { color: rgba(255,255,255,.25); }
+    body.app-theme-light .mu-input::placeholder { color: #94a3b8; }
     .mu-input[type="number"] { -moz-appearance: textfield; }
     .mu-input[type="number"]::-webkit-outer-spin-button,
     .mu-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-    .mu-input::placeholder { color: rgba(255,255,255,.25); }
-    body.app-theme-light .mu-input::placeholder { color: #94a3b8; }
 
-    /* Switch */
-    .mu-switch { position: relative; width: 40px; height: 22px; display: inline-block; flex-shrink: 0; }
+    .mu-switch-wrap { display: flex; align-items: center; gap: 8px; }
+    .mu-switch { position: relative; width: 44px; height: 24px; display: inline-block; flex-shrink: 0; }
     .mu-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
     .mu-switch-track {
-        position: absolute; inset: 0; border-radius: 22px; cursor: pointer;
-        background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.15); transition: .25s;
+        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
+        background: #ef4444; border: 1px solid #f87171; transition: .25s;
     }
-    .mu-switch input:checked + .mu-switch-track { background: #6366f1; border-color: #818cf8; }
+    .mu-switch input:checked + .mu-switch-track { background: #10b981; border-color: #34d399; }
     .mu-switch-track::before {
-        content: ''; position: absolute; height: 16px; width: 16px;
+        content: ''; position: absolute; height: 18px; width: 18px;
         left: 2px; top: 2px; border-radius: 50%;
-        background: rgba(255,255,255,.6); transition: .25s;
+        background: rgba(255,255,255,.85); transition: .25s;
     }
-    .mu-switch input:checked + .mu-switch-track::before { transform: translateX(18px); background: #fff; }
-    body.app-theme-light .mu-switch-track { background: #e2e8f0; border-color: #cbd5e1; }
+    .mu-switch input:checked + .mu-switch-track::before { transform: translateX(20px); background: #fff; }
+    body.app-theme-light .mu-switch-track { background: #fca5a5; border-color: #f87171; }
+    body.app-theme-light .mu-switch input:checked + .mu-switch-track { background: #10b981; border-color: #34d399; }
+    .mu-switch-label { font-size: .76rem; font-weight: 600; color: #ef4444; transition: color .25s; }
+    .mu-switch-label--active { color: #10b981; }
+    body.app-theme-light .mu-switch-label { color: #dc2626; }
+    body.app-theme-light .mu-switch-label--active { color: #059669; }
 
-    .mu-msg {
-        margin-top: 10px; padding: 6px 10px; border-radius: 8px;
-        font-size: .76rem; font-weight: 500;
-    }
+    .mu-msg { margin-top: 10px; padding: 6px 10px; border-radius: 8px; font-size: .76rem; font-weight: 500; }
     .mu-msg--ok { background: rgba(16,185,129,.1); color: #6ee7b7; border: 1px solid rgba(16,185,129,.3); }
     .mu-msg--err { background: rgba(239,68,68,.1); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
     body.app-theme-light .mu-msg--ok { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
     body.app-theme-light .mu-msg--err { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
 
-    /* ── Right: Grid ── */
-    .mu-grid-panel {
-        flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
-    }
-    .mu-search-bar {
-        padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.06); flex-shrink: 0;
-    }
-    body.app-theme-light .mu-search-bar { border-bottom-color: #e2e8f0; }
-    .mu-table-wrap { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
-    .mu-grid { width: 100%; border-collapse: collapse; font-size: .82rem; }
-    .mu-grid thead th {
-        position: sticky; top: 0; z-index: 1;
-        text-align: left; padding: 8px 12px;
-        font-weight: 700; font-size: .7rem; text-transform: uppercase;
-        letter-spacing: .04em; color: rgba(255,255,255,.4);
-        background: rgba(15,15,26,.9); border-bottom: 1px solid rgba(255,255,255,.06);
-    }
-    body.app-theme-light .mu-grid thead th {
-        background: #f8fafc; color: #64748b; border-bottom-color: #e2e8f0;
-    }
-    .mu-grid tbody tr {
-        cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04);
-        transition: background .1s;
-    }
-    .mu-grid tbody tr:hover { background: rgba(99,102,241,.06); }
-    body.app-theme-light .mu-grid tbody tr:hover { background: rgba(99,102,241,.04); }
-    .mu-grid tbody tr.is-sel { background: rgba(99,102,241,.12); }
-    body.app-theme-light .mu-grid tbody tr.is-sel { background: rgba(99,102,241,.08); }
-    .mu-grid td { padding: 7px 12px; color: rgba(255,255,255,.8); }
-    body.app-theme-light .mu-grid td { color: #334155; }
-    .mu-grid .mu-code { font-weight: 700; color: #a5b4fc; }
-    body.app-theme-light .mu-grid .mu-code { color: #4f46e5; }
-    .mu-badge {
-        display: inline-block; padding: 2px 8px; border-radius: 999px;
-        font-size: .68rem; font-weight: 600;
-    }
-    .mu-badge--ok { background: rgba(16,185,129,.12); color: #6ee7b7; }
-    .mu-badge--off { background: rgba(239,68,68,.1); color: #fca5a5; }
-    body.app-theme-light .mu-badge--ok { background: #dcfce7; color: #15803d; }
-    body.app-theme-light .mu-badge--off { background: #fef2f2; color: #dc2626; }
-    .mu-del-btn {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 24px; height: 24px; border-radius: 6px; border: none;
-        background: rgba(239,68,68,.08); color: #f87171; cursor: pointer;
-        transition: background .12s;
-    }
-    .mu-del-btn:hover { background: rgba(239,68,68,.2); }
-    .mu-empty { text-align: center; padding: 32px; color: rgba(255,255,255,.3); font-size: .84rem; }
-    body.app-theme-light .mu-empty { color: #94a3b8; }
-
-    /* Validation — shake + red border */
     .mu-input.is-invalid {
         border-color: #ef4444 !important;
         background: rgba(239,68,68,.06) !important;
@@ -197,13 +139,54 @@
         30%, 50%, 70% { transform: translateX(-4px); }
         40%, 60% { transform: translateX(4px); }
     }
+
+    .mu-grid-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .mu-search-bar { padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.06); flex-shrink: 0; }
+    body.app-theme-light .mu-search-bar { border-bottom-color: #e2e8f0; }
+    .mu-table-wrap { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+    .mu-grid { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .mu-grid thead th {
+        position: sticky; top: 0; z-index: 1;
+        text-align: left; padding: 8px 12px;
+        font-weight: 700; font-size: .78rem;
+        color: rgba(255,255,255,.7);
+        background: rgba(15,15,26,.9); border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+    body.app-theme-light .mu-grid thead th { background: #f8fafc; color: #64748b; border-bottom-color: #e2e8f0; }
+    .mu-grid tbody tr {
+        cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04); transition: background .1s;
+    }
+    .mu-grid tbody tr:hover { background: rgba(99,102,241,.06); }
+    body.app-theme-light .mu-grid tbody tr:hover { background: rgba(99,102,241,.04); }
+    .mu-grid tbody tr.is-sel { background: rgba(99,102,241,.12); }
+    body.app-theme-light .mu-grid tbody tr.is-sel { background: rgba(99,102,241,.08); }
+    .mu-grid td { padding: 7px 12px; color: rgba(255,255,255,.8); }
+    body.app-theme-light .mu-grid td { color: #334155; }
+    .mu-grid .mu-code { font-weight: 700; color: #a5b4fc; }
+    body.app-theme-light .mu-grid .mu-code { color: #4f46e5; }
+    .mu-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .68rem; font-weight: 600; }
+    .mu-badge--ok { background: rgba(16,185,129,.12); color: #6ee7b7; }
+    .mu-badge--off { background: rgba(239,68,68,.1); color: #fca5a5; }
+    body.app-theme-light .mu-badge--ok { background: #dcfce7; color: #15803d; }
+    body.app-theme-light .mu-badge--off { background: #fef2f2; color: #dc2626; }
+    .mu-row-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 6px; border: none; cursor: pointer;
+        transition: background .12s;
+    }
+    .mu-row-btn--edit { background: rgba(99,102,241,.08); color: #a5b4fc; }
+    .mu-row-btn--edit:hover { background: rgba(99,102,241,.2); }
+    .mu-row-btn--del { background: rgba(239,68,68,.08); color: #f87171; }
+    .mu-row-btn--del:hover { background: rgba(239,68,68,.2); }
+    body.app-theme-light .mu-row-btn--edit { background: rgba(99,102,241,.06); color: #4f46e5; }
+    body.app-theme-light .mu-row-btn--del { background: rgba(239,68,68,.06); color: #dc2626; }
+    .mu-empty { text-align: center; padding: 32px; color: rgba(255,255,255,.3); font-size: .84rem; }
+    body.app-theme-light .mu-empty { color: #94a3b8; }
 </style>
 }
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
-
     <div class="mu-shell">
-        <!-- Action bar -->
         <div class="mu-action-bar" data-no-proxy>
             <button type="button" class="mu-btn mu-btn--primary" onclick="muSave()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -213,14 +196,9 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
                 Yeni
             </button>
-            <button type="button" class="mu-btn mu-btn--danger" id="muBtnDelete" disabled onclick="muDelete()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                Sil
-            </button>
         </div>
 
         <div class="mu-body">
-            <!-- Sol: Form -->
             <div class="mu-form-panel">
                 <div class="mu-form-title">Birim Bilgileri</div>
                 <input type="hidden" id="muId" value="" />
@@ -235,24 +213,26 @@
                     </div>
                     <div class="mu-row">
                         <label>Intl Kod</label>
-                        <input id="muIntlCode" class="mu-input" maxlength="20" placeholder="Orn: KGM, LTR, MTR" style="max-width:120px;" />
+                        <input id="muIntlCode" class="mu-input" maxlength="20" placeholder="Orn: KGM, LTR" style="max-width:120px;" />
                     </div>
                     <div class="mu-row">
                         <label>Sira</label>
-                        <input id="muSortOrder" class="mu-input" type="number" min="0" value="0" style="max-width:80px;-moz-appearance:textfield;" />
+                        <input id="muSortOrder" class="mu-input" type="number" min="0" value="0" style="max-width:80px;" />
                     </div>
                     <div class="mu-row">
                         <label>Durum</label>
-                        <div class="mu-switch">
-                            <input type="checkbox" id="muIsActive" checked />
-                            <span class="mu-switch-track"></span>
+                        <div class="mu-switch-wrap">
+                            <label class="mu-switch" for="muIsActive">
+                                <input type="checkbox" id="muIsActive" checked onchange="var lbl=document.getElementById('muSwitchLabel'); if(this.checked){lbl.textContent='Aktif';lbl.className='mu-switch-label mu-switch-label--active';}else{lbl.textContent='Pasif';lbl.className='mu-switch-label';}" />
+                                <span class="mu-switch-track"></span>
+                            </label>
+                            <span id="muSwitchLabel" class="mu-switch-label mu-switch-label--active">Aktif</span>
                         </div>
                     </div>
                 </div>
                 <div id="muMsg"></div>
             </div>
 
-            <!-- Sag: Liste -->
             <div class="mu-grid-panel">
                 <div class="mu-search-bar">
                     <input type="text" id="muSearch" class="mu-input" placeholder="Kod veya ada gore ara..." oninput="muLoad()" style="max-width:260px;" />
@@ -260,7 +240,7 @@
                 <div class="mu-table-wrap">
                     <table class="mu-grid">
                         <thead><tr>
-                            <th style="width:36px;"></th>
+                            <th style="width:70px;"></th>
                             <th>Kod</th>
                             <th>Ad</th>
                             <th>Intl Kod</th>
@@ -272,13 +252,13 @@
             </div>
         </div>
     </div>
-
 </section>
 
 @section Scripts {
 <script>
 (function() {
     var selId = 0;
+    var $id = function(id) { return document.getElementById(id); };
 
     function escHtml(s) {
         var d = document.createElement('div');
@@ -286,125 +266,131 @@
         return d.innerHTML;
     }
 
-    muLoad();
+    function muMarkInvalid(ids) {
+        ids.forEach(function(id) {
+            var el = $id(id);
+            if (!el) return;
+            el.classList.remove('is-invalid');
+            void el.offsetWidth;
+            el.classList.add('is-invalid');
+            var clear = function() { el.classList.remove('is-invalid'); el.removeEventListener('input', clear); };
+            el.addEventListener('input', clear);
+        });
+        var first = $id(ids[0]);
+        if (first) first.focus();
+    }
+
+    function muMsg(msg, ok) {
+        var el = $id('muMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="mu-msg ' + (ok ? 'mu-msg--ok' : 'mu-msg--err') + '">' + escHtml(msg) + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
 
     window.muLoad = function() {
-        var s = document.getElementById('muSearch').value;
+        var s = $id('muSearch').value;
         fetch('/Logistics/GetAllMeasureUnits?search=' + encodeURIComponent(s), { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                var body = document.getElementById('muBody');
+                var body = $id('muBody');
                 if (!data || data.length === 0) {
                     body.innerHTML = '<tr><td colspan="5" class="mu-empty">Henuz olcu birimi tanimlanmamis.</td></tr>';
                     return;
                 }
                 body.innerHTML = data.map(function(d) {
-                    return '<tr class="' + (d.id === selId ? 'is-sel' : '') + '" onclick="muSelect(' + d.id + ')">' +
-                        '<td onclick="event.stopPropagation()"><button type="button" class="mu-del-btn" title="Sil" onclick="muDeleteRow(' + d.id + ')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></td>' +
+                    return '<tr class="' + (d.id === selId ? 'is-sel' : '') + '">' +
+                        '<td onclick="event.stopPropagation()" style="white-space:nowrap;">' +
+                            '<button type="button" class="mu-row-btn mu-row-btn--edit" title="Duzenle" onclick="muSelect(' + d.id + ')">' +
+                                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+                            '</button> ' +
+                            '<button type="button" class="mu-row-btn mu-row-btn--del" title="Sil" onclick="muDeleteRow(' + d.id + ')">' +
+                                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>' +
+                            '</button>' +
+                        '</td>' +
                         '<td class="mu-code">' + escHtml(d.unitCode) + '</td>' +
                         '<td>' + escHtml(d.unitName) + '</td>' +
                         '<td style="opacity:.6">' + escHtml(d.intlCode || '') + '</td>' +
                         '<td><span class="mu-badge ' + (d.isActive ? 'mu-badge--ok' : 'mu-badge--off') + '">' + (d.isActive ? 'Aktif' : 'Pasif') + '</span></td></tr>';
                 }).join('');
-            });
+            })
+            .catch(function(e) { console.error('[MU] load error:', e); });
     };
+
+    function muClearInvalid() {
+        document.querySelectorAll('.mu-input.is-invalid').forEach(function(el) {
+            el.classList.remove('is-invalid');
+        });
+    }
 
     window.muSelect = function(id) {
         selId = id;
+        muClearInvalid();
+        muMsg('');
         fetch('/Logistics/GetMeasureUnit?id=' + id, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                document.getElementById('muId').value = d.id;
-                document.getElementById('muCode').value = d.unitCode;
-                document.getElementById('muName').value = d.unitName;
-                document.getElementById('muIntlCode').value = d.intlCode || '';
-                document.getElementById('muSortOrder').value = d.sortOrder;
-                document.getElementById('muIsActive').checked = d.isActive;
-                document.getElementById('muBtnDelete').disabled = false;
+                $id('muId').value = d.id;
+                $id('muCode').value = d.unitCode;
+                $id('muName').value = d.unitName;
+                $id('muIntlCode').value = d.intlCode || '';
+                $id('muSortOrder').value = d.sortOrder;
+                $id('muIsActive').checked = !!d.isActive;
+                var sl = $id('muSwitchLabel');
+                if (sl) { sl.textContent = d.isActive ? 'Aktif' : 'Pasif'; sl.className = 'mu-switch-label' + (d.isActive ? ' mu-switch-label--active' : ''); }
                 muLoad();
             });
     };
 
     window.muNew = function() {
         selId = 0;
-        document.getElementById('muId').value = '';
-        document.getElementById('muCode').value = '';
-        document.getElementById('muName').value = '';
-        document.getElementById('muIntlCode').value = '';
-        document.getElementById('muSortOrder').value = '0';
-        document.getElementById('muIsActive').checked = true;
-        document.getElementById('muBtnDelete').disabled = true;
+        muClearInvalid();
+        $id('muId').value = '';
+        $id('muCode').value = '';
+        $id('muName').value = '';
+        $id('muIntlCode').value = '';
+        $id('muSortOrder').value = '0';
+        $id('muIsActive').checked = true;
         muMsg('');
         muLoad();
     };
 
-    function muMarkInvalid(ids) {
-        ids.forEach(function(id) {
-            var el = document.getElementById(id);
-            if (!el) return;
-            el.classList.remove('is-invalid');
-            void el.offsetWidth;
-            el.classList.add('is-invalid');
-            var clear = function() {
-                el.classList.remove('is-invalid');
-                el.removeEventListener('input', clear);
-            };
-            el.addEventListener('input', clear);
-        });
-        var first = document.getElementById(ids[0]);
-        if (first) first.focus();
-    }
-
     window.muSave = function() {
-        var code = document.getElementById('muCode').value.trim();
-        var name = document.getElementById('muName').value.trim();
+        var code = $id('muCode').value.trim();
+        var name = $id('muName').value.trim();
         var invalid = [];
         if (!code) invalid.push('muCode');
         if (!name) invalid.push('muName');
         if (invalid.length > 0) { muMarkInvalid(invalid); return; }
 
         var payload = {
-            id: parseInt(document.getElementById('muId').value) || null,
+            id: parseInt($id('muId').value) || null,
             unitCode: code,
             unitName: name,
-            intlCode: document.getElementById('muIntlCode').value.trim() || null,
-            sortOrder: parseInt(document.getElementById('muSortOrder').value) || 0,
-            isActive: document.getElementById('muIsActive').checked
+            intlCode: $id('muIntlCode').value.trim() || null,
+            sortOrder: parseInt($id('muSortOrder').value) || 0,
+            isActive: $id('muIsActive').checked
         };
-        console.log('[MU] save payload:', JSON.stringify(payload));
+
         fetch('/Logistics/SaveMeasureUnitJson', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            redirect: 'manual',
             body: JSON.stringify(payload)
         })
         .then(function(r) {
-            console.log('[MU] response status:', r.status, 'type:', r.type);
-            // redirect: manual -> opaqueredirect (status=0) means auth redirect
-            if (r.type === 'opaqueredirect' || r.status === 0) {
-                throw new Error('Oturum suresi dolmus. Sayfayi yenileyip tekrar deneyin.');
+            if (r.redirected || !r.ok) {
+                return r.text().then(function(t) {
+                    console.error('[MU] save response:', r.status, t.substring(0, 200));
+                    throw new Error('Sunucu hatasi (HTTP ' + r.status + '). Sayfayi yenileyip tekrar deneyin.');
+                });
             }
-            if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         })
         .then(function(d) {
-            console.log('[MU] save result:', d);
-            if (d.success) { muMsg('Kaydedildi.', true); muNew(); }
-            else muMsg(d.message || 'Hata', false);
+            if (d && d.success) { muMsg('Kaydedildi.', true); muNew(); }
+            else muMsg((d && d.message) || 'Bilinmeyen hata', false);
         })
-        .catch(function(e) { console.error('[MU] save error:', e); muMsg(e.message || 'Baglanti hatasi', false); });
-    };
-
-    window.muDelete = function() {
-        var id = parseInt(document.getElementById('muId').value);
-        if (!id || !confirm('Bu olcu birimini silmek istediginize emin misiniz?')) return;
-        fetch('/Logistics/DeleteMeasureUnitJson?id=' + id, { method: 'POST', credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success) { muMsg('Silindi.', true); muNew(); }
-                else muMsg(d.message || 'Silinemedi', false);
-            });
+        .catch(function(e) { muMsg(e.message || 'Baglanti hatasi', false); });
     };
 
     window.muDeleteRow = function(id) {
@@ -412,19 +398,17 @@
         fetch('/Logistics/DeleteMeasureUnitJson?id=' + id, { method: 'POST', credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                if (d.success) {
+                if (d && d.success) {
                     if (selId === id) muNew();
                     else muLoad();
+                } else {
+                    muMsg((d && d.message) || 'Silinemedi', false);
                 }
-            });
+            })
+            .catch(function(e) { muMsg(e.message || 'Baglanti hatasi', false); });
     };
 
-    function muMsg(msg, ok) {
-        var el = document.getElementById('muMsg');
-        if (!msg) { el.innerHTML = ''; return; }
-        el.innerHTML = '<div class="mu-msg ' + (ok ? 'mu-msg--ok' : 'mu-msg--err') + '">' + msg + '</div>';
-        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
-    }
+    muLoad();
 })();
 </script>
 }

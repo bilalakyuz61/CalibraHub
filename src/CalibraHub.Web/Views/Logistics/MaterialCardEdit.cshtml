@@ -92,8 +92,8 @@
         box-shadow: 0 2px 6px rgba(15,23,42,0.04);
     }
     .mce-card-title {
-        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.06em; color: rgba(255,255,255,0.6);
+        font-size: 0.85rem; font-weight: 700;
+        color: rgba(255,255,255,0.85);
         margin: 0 0 14px 0; display: flex; align-items: center; gap: 8px;
     }
     body.app-theme-light .mce-card-title { color: #64748b; }
@@ -110,12 +110,12 @@
     }
     .mce-row:last-child { border-bottom: none; }
     body.app-theme-light .mce-row { border-bottom-color: rgba(15,23,42,0.06); }
-    .mce-row > label {
+    .mce-row > label:not(.mce-switch) {
         width: 140px; min-width: 140px; flex-shrink: 0;
         font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.55);
         letter-spacing: 0.02em; text-align: right; padding-right: 4px;
     }
-    body.app-theme-light .mce-row > label { color: #64748b; }
+    body.app-theme-light .mce-row > label:not(.mce-switch) { color: #64748b; }
     .mce-row .mce-input,
     .mce-row .mce-select { flex: 1 1 auto; min-width: 0; }
 
@@ -151,6 +151,15 @@
     body.app-theme-light .mce-textarea:focus { background: #fff; }
     .mce-input::placeholder { color: rgba(255,255,255,0.4); }
     body.app-theme-light .mce-input::placeholder { color: #94a3b8; }
+    .mce-input.is-invalid, .mce-select.is-invalid {
+        border-color: #ef4444 !important;
+        box-shadow: 0 0 0 3px rgba(239,68,68,0.18) !important;
+        background: rgba(239,68,68,0.06) !important;
+    }
+    /* Ardisik aktiflik: onceki satir doldurulmadan sonraki pasif */
+    .mce-row-disabled { opacity: 0.45; pointer-events: none; }
+    .mce-row-disabled .mce-input,
+    .mce-row-disabled .mce-select { cursor: not-allowed; }
     .mce-textarea { resize: vertical; min-height: 80px; font-family: inherit; }
     .mce-required::after { content: ' *'; color: #f87171; }
 
@@ -341,8 +350,8 @@
         position: sticky; top: 0; z-index: 1;
         background: var(--app-surface, #1a1f2e);
         text-align: left; padding: 10px 14px;
-        font-weight: 700; text-transform: uppercase;
-        font-size: 0.68rem; letter-spacing: 0.04em;
+        font-weight: 700;
+        font-size: 0.78rem;
         color: #fbbf24;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
@@ -403,8 +412,8 @@
     }
     .mce-grid-header__title {
         display: flex; align-items: center; gap: 8px;
-        font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.04em; color: #60a5fa;
+        font-size: 0.85rem; font-weight: 700;
+        color: #60a5fa;
     }
     body.app-theme-light .mce-grid-header__title { color: #2563eb; }
     .mce-grid-add-btn {
@@ -482,9 +491,8 @@
     }
     .mce-grid-row__cell { display: flex; flex-direction: column; min-width: 0; }
     .mce-grid-row__label {
-        font-size: 0.62rem; text-transform: uppercase;
-        letter-spacing: 0.04em; font-weight: 700;
-        color: rgba(255, 255, 255, 0.35); margin-bottom: 2px;
+        font-size: 0.72rem; font-weight: 600;
+        color: rgba(255, 255, 255, 0.55); margin-bottom: 2px;
     }
     body.app-theme-light .mce-grid-row__label { color: #94a3b8; }
     .mce-grid-row__value {
@@ -816,8 +824,9 @@
 
     /* Switch (iOS-style toggle) */
     .mce-switch {
-        position: relative; width: 40px; height: 22px;
-        display: inline-block; flex-shrink: 0;
+        position: relative; width: 40px !important; height: 22px;
+        display: inline-block; flex: 0 0 40px; flex-shrink: 0;
+        max-width: 40px; min-width: 40px; cursor: pointer;
     }
     .mce-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
     .mce-switch-track {
@@ -825,7 +834,7 @@
         background: rgba(255,255,255,0.12);
         border: 1px solid rgba(255,255,255,0.15); transition: .25s;
     }
-    .mce-switch input:checked + .mce-switch-track { background: #6366f1; border-color: #818cf8; }
+    .mce-switch input:checked + .mce-switch-track { background: #10b981; border-color: #34d399; box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
     .mce-switch-track::before {
         content: ''; position: absolute; height: 16px; width: 16px;
         left: 2px; top: 2px; border-radius: 50%;
@@ -838,15 +847,38 @@
         background: #e2e8f0; border-color: #cbd5e1;
     }
     body.app-theme-light .mce-switch input:checked + .mce-switch-track {
-        background: #6366f1; border-color: #4f46e5;
+        background: #10b981; border-color: #059669; box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
     }
 
+    /* Mesaj barı: formun üstünde yukarıdan aşağı belirir, formu itmez (absolute) */
     .mce-message {
-        padding: 10px 14px; border-radius: 10px; margin-bottom: 16px;
-        font-size: 0.8rem; font-weight: 500; display: none;
+        position: absolute; top: 12px; left: 50%;
+        min-width: 260px; max-width: min(560px, 80%);
+        padding: 10px 16px; border-radius: 10px;
+        font-size: 0.82rem; font-weight: 500;
+        z-index: 50; pointer-events: none;
+        opacity: 0; transform: translate(-50%, -120%);
+        transition: opacity .25s ease, transform .3s cubic-bezier(.34,1.56,.64,1);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+        backdrop-filter: blur(8px);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .mce-message.ok { background: rgba(16,185,129,0.1); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); display: block; }
-    .mce-message.err { background: rgba(239,68,68,0.1); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); display: block; }
+    .mce-message.ok, .mce-message.err {
+        opacity: 1; transform: translate(-50%, 0);
+        pointer-events: auto;
+    }
+    .mce-message.ok {
+        background: rgba(16,185,129,0.92); color: #fff;
+        border: 1px solid rgba(16,185,129,0.4);
+    }
+    .mce-message.err {
+        background: rgba(239,68,68,0.92); color: #fff;
+        border: 1px solid rgba(239,68,68,0.4);
+    }
+    body.app-theme-light .mce-message.ok { background: #10b981; }
+    body.app-theme-light .mce-message.err { background: #ef4444; }
+    /* .mce-content parent'ı relative olmalı — position: absolute referansı için */
+    .mce-content { position: relative; }
 
     /* ── Katlanir dinamik alan gruplari ──────────────────────────── */
     .mce-group-details {
@@ -863,8 +895,8 @@
     .mce-group-summary {
         padding: 14px 18px; cursor: pointer; user-select: none;
         display: flex; align-items: center; gap: 10px;
-        font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.06em; color: rgba(255,255,255,0.7);
+        font-size: 0.85rem; font-weight: 700;
+        color: rgba(255,255,255,0.85);
         list-style: none;
     }
     body.app-theme-light .mce-group-summary { color: #64748b; }
@@ -905,19 +937,19 @@
         display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden;
     }
     .mce-sidenav {
-        width: 192px; flex-shrink: 0;
+        width: 200px; flex-shrink: 0;
         border-right: 1px solid rgba(255,255,255,0.07);
         background: rgba(255,255,255,0.02);
         display: flex; flex-direction: column;
-        padding: 10px 0; overflow-y: auto;
+        padding: 10px 8px; gap: 4px; overflow-y: auto;
     }
     body.app-theme-light .mce-sidenav {
         background: #f8fafc; border-right-color: #e2e8f0;
     }
     .mce-sidenav-label {
-        font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
-        letter-spacing: 0.08em; color: rgba(255,255,255,0.4);
-        padding: 10px 16px 5px; margin-top: 4px;
+        font-size: 0.7rem; font-weight: 700;
+        color: rgba(255,255,255,0.55);
+        padding: 6px 8px 2px; margin-top: 6px;
     }
     .mce-sidenav-label:first-child { margin-top: 0; }
     body.app-theme-light .mce-sidenav-label { color: #94a3b8; }
@@ -925,28 +957,33 @@
     .mce-content [data-dyn-group-id] { display: none; }
     .mce-nav-btn {
         display: flex; align-items: center; gap: 8px;
-        width: 100%; padding: 8px 16px;
-        background: transparent; border: none;
-        border-left: 3px solid transparent;
-        color: rgba(255,255,255,0.65);
-        font-size: 0.78rem; font-weight: 500; text-align: left;
+        width: 100%; padding: 8px 12px;
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        color: rgba(255,255,255,0.6);
+        font-size: 0.76rem; font-weight: 500; text-align: left;
         cursor: pointer; transition: all 0.15s; line-height: 1.35;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    body.app-theme-light .mce-nav-btn { color: #64748b; }
+    body.app-theme-light .mce-nav-btn {
+        color: #64748b; background: #f1f5f9; border-color: #e2e8f0;
+    }
     .mce-nav-btn:hover {
-        background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.85);
+        background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85);
+        border-color: rgba(255,255,255,0.15);
     }
     body.app-theme-light .mce-nav-btn:hover {
-        background: rgba(15,23,42,0.04); color: #1e293b;
+        background: #e2e8f0; color: #1e293b; border-color: #cbd5e1;
     }
     .mce-nav-btn.is-active {
-        border-left-color: #6366f1;
-        background: rgba(99,102,241,0.09);
-        color: #a5b4fc; font-weight: 600;
+        background: rgba(16,185,129,0.12);
+        border-color: rgba(16,185,129,0.35);
+        color: #34d399; font-weight: 600;
     }
     body.app-theme-light .mce-nav-btn.is-active {
-        background: rgba(99,102,241,0.07); color: #4f46e5;
+        background: rgba(16,185,129,0.1);
+        border-color: rgba(16,185,129,0.3);
+        color: #059669;
     }
     .mce-nav-dot {
         width: 6px; height: 6px; border-radius: 50%;
@@ -956,10 +993,10 @@
     .mce-nav-count {
         margin-left: auto; padding: 1px 6px; border-radius: 999px;
         font-size: 0.6rem; font-weight: 700; font-family: monospace;
-        background: rgba(99,102,241,0.12); color: #a5b4fc;
-        border: 1px solid rgba(99,102,241,0.25); flex-shrink: 0;
+        background: rgba(16,185,129,0.12); color: #34d399;
+        border: 1px solid rgba(16,185,129,0.25); flex-shrink: 0;
     }
-    body.app-theme-light .mce-nav-count { background: rgba(99,102,241,0.08); color: #4f46e5; }
+    body.app-theme-light .mce-nav-count { background: rgba(16,185,129,0.08); color: #059669; }
 
     /* Kombinasyonlar tablosu */
     .mce-comb-table {
@@ -969,8 +1006,8 @@
         padding: 7px 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06);
     }
     .mce-comb-th {
-        font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;
-        color: rgba(165,180,252,0.6); font-weight: 600;
+        font-size: 0.78rem;
+        color: rgba(165,180,252,0.85); font-weight: 600;
     }
     .mce-comb-code {
         font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.78rem;
@@ -1098,6 +1135,11 @@
                 <span class="mce-nav-dot"></span>
                 Ölçü Birimleri
             </button>
+            <button type="button" class="mce-nav-btn" id="mceNavFeatures" style="display:none;">
+                <span class="mce-nav-dot"></span>
+                Özellikler
+                <span class="mce-nav-count" id="mceFeatCount">0</span>
+            </button>
             <button type="button" class="mce-nav-btn" id="mceNavCombinations" style="display:none;">
                 <span class="mce-nav-dot"></span>
                 Kombinasyonlar
@@ -1134,11 +1176,11 @@
                         </select>
                     </div>
                     <div class="mce-row">
-                        <label>Kombinasyon Takibi</label>
-                        <div class="mce-switch">
+                        <label for="mceTrackCombinations">Kombinasyon Takibi</label>
+                        <label class="mce-switch" for="mceTrackCombinations">
                             <input type="checkbox" id="mceTrackCombinations" />
                             <span class="mce-switch-track"></span>
-                        </div>
+                        </label>
                     </div>
                 </div>
                 <textarea id="mceMaterialDescription" style="display:none;"></textarea>
@@ -1188,11 +1230,32 @@
                     </div>
                 </div>
                 <div id="mceUnitError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
-                <div style="margin-top:14px;">
-                    <button type="button" class="mce-btn mce-btn--primary" id="mceUnitSaveBtn" onclick="mceUnitSave()" style="font-size:.78rem;padding:6px 16px;">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                        Kaydet
+                <div style="margin-top:10px;font-size:.72rem;color:rgba(255,255,255,.45);">
+                    Yaptığınız değişiklikler malzeme kartı kaydedildiğinde otomatik güncellenir.
+                </div>
+            </div>
+
+            <!-- Özellikler (Özellik Eşleştirme) — sadece trackCombinations açıkken -->
+            <div class="mce-card mce-section-anchor" id="mceFeaturesCard" style="display:none;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;">
+                    <p class="mce-card-title" style="margin:0;">Özellik Eşleştirme</p>
+                    <button type="button" class="mce-btn mce-btn--secondary" id="mceGoToCombGenBtn" onclick="mceGoToCombinationGenerator()" style="font-size:.75rem;padding:5px 12px;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+                        Kombinasyon Üretici
                     </button>
+                </div>
+                <div style="font-size:.78rem;color:rgba(255,255,255,.45);margin-bottom:12px;">
+                    Bu malzeme kartında kombinasyon üretirken hangi özellikler kullanılabilsin? Aşağıdan seçiniz ve kaydediniz.
+                </div>
+                <div id="mceFeaturesList" style="display:flex;flex-direction:column;gap:8px;">
+                    <!-- Feature row'lar JS tarafından render edilir -->
+                </div>
+                <div id="mceFeaturesEmpty" style="display:none;padding:18px;text-align:center;color:rgba(255,255,255,.35);font-size:.82rem;font-style:italic;">
+                    Henüz hiç özellik tanımlanmamış. Önce "Özellik ve Kombinasyon" sayfasından özellik ekleyin.
+                </div>
+                <div id="mceFeaturesError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
+                <div style="margin-top:12px;font-size:.72rem;color:rgba(255,255,255,.45);">
+                    Yaptığınız değişiklikler malzeme kartı kaydedildiğinde otomatik uygulanır.
                 </div>
             </div>
 
@@ -1248,13 +1311,20 @@
 
     function $(id) { return document.getElementById(id); }
 
+    var _mceMsgTimer = null;
     function showMsg(text, ok) {
         var m = $('mceMsg');
+        if (!m) return;
+        // Animasyonu yeniden basa almak icin classlari temizle, reflow tetikle
+        m.className = 'mce-message';
+        void m.offsetWidth; // reflow
         m.textContent = text;
         m.className = 'mce-message ' + (ok ? 'ok' : 'err');
-        setTimeout(function() {
+        if (_mceMsgTimer) clearTimeout(_mceMsgTimer);
+        _mceMsgTimer = setTimeout(function() {
             m.className = 'mce-message';
-            m.textContent = '';
+            // Animasyon bittikten sonra metni temizle
+            setTimeout(function() { m.textContent = ''; }, 350);
         }, 4000);
     }
 
@@ -1316,12 +1386,21 @@
     function updateCombNav(trackEnabled, count) {
         var btn = $('mceNavCombinations');
         var badge = $('mceCombCount');
-        if (!btn) return;
-        btn.style.display = trackEnabled ? '' : 'none';
-        if (badge) badge.textContent = String(count || 0);
-        // Aktif sekme kombinasyonlarsa ve tracking kapandiysa General'e don
-        if (!trackEnabled && btn.classList.contains('is-active')) {
-            if (window.mceNavigateToSection) window.mceNavigateToSection('general');
+        if (btn) {
+            btn.style.display = trackEnabled ? '' : 'none';
+            if (badge) badge.textContent = String(count || 0);
+            if (!trackEnabled && btn.classList.contains('is-active')) {
+                if (window.mceNavigateToSection) window.mceNavigateToSection('general');
+            }
+        }
+
+        // Ozellikler nav butonu da trackCombinations ile paralel gorunurluk
+        var featBtn = $('mceNavFeatures');
+        if (featBtn) {
+            featBtn.style.display = trackEnabled ? '' : 'none';
+            if (!trackEnabled && featBtn.classList.contains('is-active')) {
+                if (window.mceNavigateToSection) window.mceNavigateToSection('general');
+            }
         }
     }
 
@@ -1394,7 +1473,6 @@
             var dynValidation = window._mceDynRenderer.validate();
             if (!dynValidation.valid) {
                 allValid = false;
-                // DynamicWidgetRenderer kendi setSaveAttemptErrors'ini tetikledi (is-invalid sinifi)
                 // Ana form gecerliyse (kod+ad dolu), ilk hatalı alanin bulundugu bolume git
                 if (invalid.length === 0) {
                     var firstErrId = (dynValidation.errorIds || [])[0];
@@ -1408,6 +1486,18 @@
                     }
                 }
             }
+        }
+
+        // Ana form hatasi varsa Genel Bilgiler sayfasina git
+        if (invalid.length > 0 && window.mceNavigateToSection) {
+            window.mceNavigateToSection('general');
+        }
+
+        // Olcu birimleri validasyonu — secili birimin carpani bos/0 olmamali
+        if (typeof mceUnitValidateAll === 'function' && !mceUnitValidateAll()) {
+            allValid = false;
+            if (window.mceNavigateToSection) window.mceNavigateToSection('units');
+            showMsg('Olcu birimi secilen satirlarda carpan degeri sifirdan buyuk olmalidir.', false);
         }
 
         // Herhangi bir hata varsa kaydetme
@@ -1464,6 +1554,26 @@
                         })
                         .catch(function(err) { console.warn('[MCE] widget save hatasi:', err); });
                 } catch (e) { console.warn('[MCE] dyn renderer cagrilamadi:', e); }
+            }
+
+            // ── Olcu birimlerini de ayni save akisinda kaydet ──
+            if (typeof window.mceUnitSave === 'function' && currentId > 0) {
+                window.mceUnitSave().then(function(res) {
+                    if (res && res.success === false && !res.skipped) {
+                        console.warn('[MCE] olcu birimi kaydi basarisiz:', res.message);
+                    }
+                }).catch(function(err) { console.warn('[MCE] unit save hatasi:', err); });
+            }
+
+            // ── Ozellik eslestirmelerini de ayni save akisinda kaydet ──
+            // (Sadece trackCombinations acikken + Ozellikler sekmesi bir kere yuklendiyse liste doludur)
+            var tracking = $('mceTrackCombinations') && $('mceTrackCombinations').checked;
+            var featList = document.getElementById('mceFeaturesList');
+            if (tracking && featList && featList.querySelector('.mce-feature-chk') && currentId > 0) {
+                if (typeof window.mceFeatureSave === 'function') {
+                    try { window.mceFeatureSave({ silent: true }); }
+                    catch (e) { console.warn('[MCE] feature save hatasi:', e); }
+                }
             }
         })
         .catch(function(e) {
@@ -1553,6 +1663,27 @@
         location.replace(url);
     };
 
+    // Kombinasyon Uretici ekranina stockCode on-secili olarak git.
+    // Parent window'u hedefleyerek workspace tab sistemi yeni bir tab acar
+    // (ayni malzeme karti tab'inda kalmaz).
+    window.mceGoToCombinationGenerator = function() {
+        var codeEl = document.getElementById('mceMaterialCode');
+        var code = codeEl ? codeEl.value.trim() : '';
+        if (!code) { showMsg('Once malzeme kodunu doldurup kaydediniz.', false); return; }
+
+        var url = '/Logistics/ProductCombinations?stockCode=' + encodeURIComponent(code);
+
+        try {
+            // iframe icindeysek parent'i hedefle — tab sistemi otomatik yeni tab olusturur
+            if (window.top && window.top !== window) {
+                window.top.location.href = url;
+                return;
+            }
+        } catch (e) { /* cross-origin vs. sessiz fallback */ }
+
+        window.location.href = url;
+    };
+
     // ── Grup katlanma durumu persist (localStorage) ───────────────
     // Kullanici hangi gruplari acik/kapali birakmissa ekrani tekrar actiginda
     // ayni duruma donek. Anahtar: "mce-groups-open" (tum MaterialCardEdit icin ortak)
@@ -1612,6 +1743,10 @@
             var unitsCard = document.getElementById('mceUnitsCard');
             if (unitsCard) unitsCard.style.display = (key === 'units') ? '' : 'none';
 
+            // Ozellikler karti
+            var featuresCard = document.getElementById('mceFeaturesCard');
+            if (featuresCard) featuresCard.style.display = (key === 'features') ? '' : 'none';
+
             // Kombinasyonlar karti
             var combCard = document.getElementById('mceCombinationsCard');
             if (combCard) combCard.style.display = (key === 'combinations') ? '' : 'none';
@@ -1638,6 +1773,16 @@
                 setActive(navUnits);
                 activateSection('units');
                 if (currentId > 0) mceUnitLoad();
+            });
+        }
+
+        // Ozellikler butonu (sadece trackCombinations ac ikiyken nav'da gorunur)
+        var navFeatures = document.getElementById('mceNavFeatures');
+        if (navFeatures) {
+            navFeatures.addEventListener('click', function() {
+                setActive(navFeatures);
+                activateSection('features');
+                if (currentId > 0) mceFeatureLoad();
             });
         }
 
@@ -1687,6 +1832,14 @@
 
             // Mevcut aktif bolumu yeniden uygula (render sonrasi gruplar gizlenmeli)
             activateSection(_activeKey);
+            // Aktif buton vurgusunu da yeniden uygula — buildGroupNav butonlari
+            // silip yeniden olusturduğu icin is-active class'i kaybolur
+            var activeBtn = null;
+            if (_activeKey === 'general') activeBtn = navGeneral;
+            else if (_activeKey === 'units') activeBtn = navUnits;
+            else if (_activeKey === 'combinations') activeBtn = navComb;
+            else activeBtn = sidenav.querySelector('[data-group-nav="' + _activeKey + '"]');
+            if (activeBtn) setActive(activeBtn);
         }
 
         // DynamicWidgetsCard icinde data-dyn-group-id elementleri belirince nav'i yenile
@@ -1720,9 +1873,14 @@
         // Baslangic: Genel Bilgiler aktif
         setActive(navGeneral);
 
-        // Dis erisim: mceSave() widget hata bolumune gidebilsin
+        // Dis erisim: mceSave() hata bolumune gidebilsin
         window.mceNavigateToSection = function(gid) {
-            var navBtn = sidenav.querySelector('[data-group-nav="' + gid + '"]');
+            var navBtn;
+            if (gid === 'general') navBtn = navGeneral;
+            else if (gid === 'units') navBtn = navUnits;
+            else if (gid === 'features') navBtn = navFeatures;
+            else if (gid === 'combinations') navBtn = navComb;
+            else navBtn = sidenav.querySelector('[data-group-nav="' + gid + '"]');
             setActive(navBtn || null);
             activateSection(gid);
         };
@@ -1804,20 +1962,129 @@
         });
     }
 
+    function mceShowUnitWarning(msg) {
+        var errDiv = document.getElementById('mceUnitError');
+        if (!errDiv) return;
+        errDiv.textContent = msg;
+        errDiv.style.display = msg ? 'block' : 'none';
+    }
+
+    /**
+     * Ana birim + birim 1..5 arasinda ayni olcu birimi iki kez secilemesin.
+     * Her dropdown'in option'larini dolasip, baska bir satirda kullanilmis
+     * option'lari (kendi secimi haric) disabled yapar.
+     */
+    function mceUnitRefreshSelects() {
+        var usedCodes = new Set();
+        var master = document.getElementById('mceUnitMaster');
+        if (master && master.value) usedCodes.add(master.value);
+        for (var i = 1; i <= 5; i++) {
+            var row = document.querySelector('[data-unit-line="' + i + '"]');
+            if (!row) continue;
+            var sel = row.querySelector('.mce-unit-code');
+            if (sel && sel.value) usedCodes.add(sel.value);
+        }
+
+        function updateSelect(sel) {
+            if (!sel) return;
+            var own = sel.value;
+            Array.prototype.forEach.call(sel.options, function(opt) {
+                if (!opt.value) { opt.disabled = false; return; }
+                opt.disabled = (opt.value !== own) && usedCodes.has(opt.value);
+            });
+        }
+
+        updateSelect(master);
+        for (var j = 1; j <= 5; j++) {
+            var r2 = document.querySelector('[data-unit-line="' + j + '"]');
+            if (!r2) continue;
+            updateSelect(r2.querySelector('.mce-unit-code'));
+        }
+
+        // Satir aktifligi: ardisik kural
+        mceUnitRefreshEnabledRows();
+    }
+
+    /**
+     * Ardisik aktiflik: Birim N tanimlanmadan Birim N+1 pasif kalir.
+     * "Tanimli" = kod dropdown'da secim yapilmis.
+     */
+    function mceUnitRefreshEnabledRows() {
+        var prevFilled = true; // Birim 1 her zaman aktif
+        for (var i = 1; i <= 5; i++) {
+            var row = document.querySelector('[data-unit-line="' + i + '"]');
+            if (!row) continue;
+            var codeEl = row.querySelector('.mce-unit-code');
+            var multEl = row.querySelector('.mce-unit-mult');
+            var shouldEnable = prevFilled;
+            if (codeEl) codeEl.disabled = !shouldEnable;
+            if (multEl) multEl.disabled = !shouldEnable;
+            row.classList.toggle('mce-row-disabled', !shouldEnable);
+            // Satir pasifse icerigini temizle (yanlis veri kalmasin)
+            if (!shouldEnable) {
+                if (codeEl) codeEl.value = '';
+                if (multEl) { multEl.value = ''; multEl.classList.remove('is-invalid'); }
+            }
+            // Bir sonraki satir icin: bu satir hem aktif hem kod dolu olmali
+            prevFilled = shouldEnable && !!(codeEl && codeEl.value);
+        }
+    }
+
+    /**
+     * Birim seçili ise carpan > 0 olmali.
+     * Kod dolu ama carpan bos/0 ise input'a is-invalid class'i eklenir.
+     */
+    function mceUnitValidateRow(row) {
+        if (!row) return true;
+        var codeEl = row.querySelector('.mce-unit-code');
+        var multEl = row.querySelector('.mce-unit-mult');
+        if (!codeEl || !multEl) return true;
+        var hasCode = !!codeEl.value;
+        var mult = parseFloat(multEl.value) || 0;
+        if (hasCode && mult <= 0) {
+            multEl.classList.add('is-invalid');
+            return false;
+        }
+        multEl.classList.remove('is-invalid');
+        return true;
+    }
+    function mceUnitValidateAll() {
+        var ok = true;
+        for (var i = 1; i <= 5; i++) {
+            var row = document.querySelector('[data-unit-line="' + i + '"]');
+            if (!mceUnitValidateRow(row)) ok = false;
+        }
+        return ok;
+    }
+
     window.mceUnitLoad = function() {
-        if (!currentId || currentId <= 0) return;
-        fetch('/Logistics/GetStockUnitConversions?stockCardId=' + currentId, { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
+        // Kaydedilmis kayit varsa conversions da gelir; yeni kartta sadece availableUnits cekilir
+        var url = currentId && currentId > 0
+            ? '/Logistics/GetStockUnitConversions?stockCardId=' + currentId
+            : '/Logistics/GetStockUnitConversions?stockCardId=0';
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(function(data) {
                 _availableUnits = data.availableUnits || [];
+                console.log('[MCE] unitLoad: availableUnits=' + _availableUnits.length + ', conversions=' + (data.conversions || []).length);
                 mceUnitPopulateSelects();
+
+                // Ölçü birimi tanimli degilse kullaniciyi uyar
+                if (_availableUnits.length === 0) {
+                    mceShowUnitWarning('Hic aktif olcu birimi tanimlanmamis. Lutfen once Lojistik > Sabit Tanimlamalar > Olcu Birimleri ekranindan tanimlama yapiniz.');
+                } else {
+                    mceShowUnitWarning('');
+                }
 
                 var conversions = data.conversions || [];
                 // Satır 0 (line_no=0) → master birim
                 var master = conversions.find(function(c) { return c.lineNo === 0; });
                 if (master) document.getElementById('mceUnitMaster').value = master.unitCode;
 
-                // Satır 1–5
+                // Satır 1–5 — scope cakismasini onlemek icin yerel ad
                 for (var i = 1; i <= 5; i++) {
                     var row = document.querySelector('[data-unit-line="' + i + '"]');
                     if (!row) continue;
@@ -1826,17 +2093,83 @@
                     row.querySelector('.mce-unit-mult').value = conv ? conv.multiplier : '';
                 }
                 _unitLoaded = true;
+
+                // Dropdown'larda tekrari engelle + change listener'lari bagla (bir kez)
+                mceUnitRefreshSelects();
+                mceUnitBindListenersOnce();
             })
             .catch(function(e) { console.error('[MCE] unit load error:', e); });
     };
 
-    window.mceUnitSave = function() {
-        if (!currentId || currentId <= 0) { showMsg('Once malzeme kartini kaydedin.', false); return; }
-        var errDiv = document.getElementById('mceUnitError');
-        errDiv.style.display = 'none';
+    var _unitListenersBound = false;
+    function mceUnitBindListenersOnce() {
+        if (_unitListenersBound) return;
+        _unitListenersBound = true;
 
+        // Ana birim degistiginde refresh
+        var master = document.getElementById('mceUnitMaster');
+        if (master) {
+            master.addEventListener('change', function() { mceUnitRefreshSelects(); });
+        }
+        // Her satir: kod degistiginde dropdown'lari yenile + carpana odaklan.
+        // Anlik kirmizi uyari / titresim YOK — dogrulama Kaydet'te yapilir.
+        for (var i = 1; i <= 5; i++) {
+            (function(i) {
+                var row = document.querySelector('[data-unit-line="' + i + '"]');
+                if (!row) return;
+                var codeEl = row.querySelector('.mce-unit-code');
+                var multEl = row.querySelector('.mce-unit-mult');
+                if (codeEl) {
+                    codeEl.addEventListener('change', function() {
+                        mceUnitRefreshSelects();
+                        // Onceden isaretlenmis is-invalid (kaydet sirasindan kalma) varsa temizle
+                        if (multEl) multEl.classList.remove('is-invalid');
+                        if (codeEl.value) {
+                            // Kod secildiyse carpan 0 ise temizle ve odaklan
+                            if (multEl && !parseFloat(multEl.value)) {
+                                multEl.value = '';
+                                multEl.focus();
+                            }
+                        } else {
+                            // Kod temizlendiyse carpan da sifirlansin
+                            if (multEl) multEl.value = '';
+                        }
+                    });
+                }
+                // Kullanici carpan yazarken onceki hata isaretini temizle
+                if (multEl) {
+                    multEl.addEventListener('input', function() {
+                        if (parseFloat(multEl.value) > 0) multEl.classList.remove('is-invalid');
+                    });
+                }
+            })(i);
+        }
+    }
+
+    /**
+     * Olcu birimlerini kaydeder. Promise (success: bool, message?: string) doner.
+     * Genel Kaydet (mceSave) icinden cagrildigi icin buton referansi kullanilmaz.
+     * stockCardId=0 ise (yeni kart, henuz kayit yok) atlar.
+     */
+    window.mceUnitSave = function() {
+        var errDiv = document.getElementById('mceUnitError');
+        if (errDiv) errDiv.style.display = 'none';
+
+        if (!currentId || currentId <= 0) {
+            return Promise.resolve({ success: true, skipped: true });
+        }
+
+        // Tum satirlari dogrula (carpan > 0 kurali)
+        if (!mceUnitValidateAll()) {
+            var msg0 = 'Olcu birimi secilen satirlarda carpan degeri sifirdan buyuk olmalidir.';
+            if (errDiv) { errDiv.textContent = msg0; errDiv.style.display = 'block'; }
+            return Promise.resolve({ success: false, message: msg0 });
+        }
+
+        // Birim satirlarindan data topla
         var items = [];
-        var masterCode = document.getElementById('mceUnitMaster').value;
+        var masterEl = document.getElementById('mceUnitMaster');
+        var masterCode = masterEl ? masterEl.value : '';
         if (masterCode) items.push({ unitCode: masterCode, multiplier: 1 });
 
         var usedCodes = masterCode ? [masterCode.toUpperCase()] : [];
@@ -1847,30 +2180,29 @@
             var code = row.querySelector('.mce-unit-code').value;
             var mult = parseFloat(row.querySelector('.mce-unit-mult').value) || 0;
             if (!code) continue;
-            // Tekrar kontrolü
             var upper = code.toUpperCase();
             if (usedCodes.indexOf(upper) !== -1) {
-                errDiv.textContent = 'Ayni olcu birimi birden fazla tanimlanamaz: ' + code;
-                errDiv.style.display = 'block';
-                return;
+                var msg1 = 'Ayni olcu birimi birden fazla tanimlanamaz: ' + code;
+                if (errDiv) { errDiv.textContent = msg1; errDiv.style.display = 'block'; }
+                return Promise.resolve({ success: false, message: msg1 });
             }
             usedCodes.push(upper);
             if (mult <= 0) {
-                errDiv.textContent = '"' + code + '" icin carpan degeri sifirdan buyuk olmalidir.';
-                errDiv.style.display = 'block';
-                return;
+                var msg2 = '"' + code + '" icin carpan degeri sifirdan buyuk olmalidir.';
+                if (errDiv) { errDiv.textContent = msg2; errDiv.style.display = 'block'; }
+                return Promise.resolve({ success: false, message: msg2 });
             }
             items.push({ unitCode: code, multiplier: mult });
         }
 
-        // Master birim line_no=0, diger satirlar sirayla line_no=1..5
+        // Hic birim tanimlanmamissa sunucuya gitme (mevcut kayit varsa temizle:
+        // yine de sunucuya bos items gonderip temizlenmesini saglayalim)
         var payload = {
             stockCardId: currentId,
-            items: items.map(function(it, idx) { return { unitCode: it.unitCode, multiplier: it.multiplier }; })
+            items: items.map(function(it) { return { unitCode: it.unitCode, multiplier: it.multiplier }; })
         };
 
-        document.getElementById('mceUnitSaveBtn').disabled = true;
-        fetch('/Logistics/SaveStockUnitConversions', {
+        return fetch('/Logistics/SaveStockUnitConversions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
@@ -1878,19 +2210,128 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            document.getElementById('mceUnitSaveBtn').disabled = false;
-            if (data.success) {
-                flashSuccess();
-            } else {
-                errDiv.textContent = data.message || 'Hata';
+            if (!data.success && errDiv) {
+                errDiv.textContent = data.message || 'Olcu birimi kaydi hatali.';
                 errDiv.style.display = 'block';
             }
+            return data;
         })
         .catch(function(e) {
-            document.getElementById('mceUnitSaveBtn').disabled = false;
-            errDiv.textContent = 'Baglanti hatasi: ' + e.message;
-            errDiv.style.display = 'block';
+            var msg = 'Baglanti hatasi: ' + e.message;
+            if (errDiv) { errDiv.textContent = msg; errDiv.style.display = 'block'; }
+            return { success: false, message: msg };
         });
+    };
+
+    // ── Ozellik Eslestirme (Kombinasyon Takibi acik iken) ──────────
+    function featureEsc(s) {
+        var d = document.createElement('div');
+        d.textContent = s == null ? '' : String(s);
+        return d.innerHTML;
+    }
+
+    window.mceFeatureLoad = function() {
+        if (!currentId || currentId <= 0) return;
+        var listEl = document.getElementById('mceFeaturesList');
+        var emptyEl = document.getElementById('mceFeaturesEmpty');
+        var errEl = document.getElementById('mceFeaturesError');
+        var okEl = document.getElementById('mceFeaturesOk');
+        if (errEl) errEl.style.display = 'none';
+        if (okEl) okEl.style.display = 'none';
+        if (listEl) listEl.innerHTML = '<div style="padding:12px;color:rgba(255,255,255,.35);font-size:.8rem;">Yukleniyor...</div>';
+
+        fetch('/Logistics/GetStockFeatures?stockCardId=' + currentId, { credentials: 'same-origin' })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                var features = (data && data.features) || [];
+                if (features.length === 0) {
+                    listEl.innerHTML = '';
+                    if (emptyEl) emptyEl.style.display = '';
+                    updateFeatureCount(0, 0);
+                    return;
+                }
+                if (emptyEl) emptyEl.style.display = 'none';
+
+                listEl.innerHTML = features.map(function(f) {
+                    var checked = f.linked ? 'checked' : '';
+                    var chkId = 'mceFeatChk_' + f.id;
+                    return '' +
+                        '<div class="mce-feature-row" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .12s;">' +
+                            '<div style="flex:1;min-width:0;">' +
+                                '<div style="font-size:.86rem;font-weight:600;color:rgba(255,255,255,.85);">' + featureEsc(f.name) + '</div>' +
+                                '<div style="font-size:.7rem;color:rgba(255,255,255,.4);margin-top:2px;">' +
+                                    featureEsc(f.code || '') +
+                                    (f.dataType ? ' · <span style="color:#a5b4fc;">' + featureEsc(f.dataType) + '</span>' : '') +
+                                    (f.unitOfMeasure ? ' · ' + featureEsc(f.unitOfMeasure) : '') +
+                                '</div>' +
+                            '</div>' +
+                            '<label class="mce-switch" for="' + chkId + '">' +
+                                '<input type="checkbox" id="' + chkId + '" class="mce-feature-chk" data-feature-id="' + f.id + '" ' + checked + ' />' +
+                                '<span class="mce-switch-track"></span>' +
+                            '</label>' +
+                        '</div>';
+                }).join('');
+
+                var linkedCount = features.filter(function(f) { return f.linked; }).length;
+                updateFeatureCount(linkedCount, features.length);
+            })
+            .catch(function(e) {
+                listEl.innerHTML = '';
+                if (errEl) {
+                    errEl.textContent = 'Yukleme hatasi: ' + e.message;
+                    errEl.style.display = 'block';
+                }
+            });
+    };
+
+    function updateFeatureCount(linked, total) {
+        var badge = document.getElementById('mceFeatCount');
+        if (badge) badge.textContent = linked + '/' + total;
+    }
+
+    window.mceFeatureSave = function(opts) {
+        opts = opts || {};
+        if (!currentId || currentId <= 0) return Promise.resolve({ success: false, skipped: true });
+        var errEl = document.getElementById('mceFeaturesError');
+        if (errEl) errEl.style.display = 'none';
+
+        var ids = [];
+        document.querySelectorAll('#mceFeaturesList .mce-feature-chk:checked').forEach(function(cb) {
+            var id = parseInt(cb.getAttribute('data-feature-id'), 10);
+            if (id > 0) ids.push(id);
+        });
+
+        return fetch('/Logistics/SaveStockFeatures', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ stockCardId: currentId, featureIds: ids }),
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data && data.success) {
+                    var total = document.querySelectorAll('#mceFeaturesList .mce-feature-chk').length;
+                    updateFeatureCount(ids.length, total);
+                } else {
+                    if (errEl && !opts.silent) {
+                        errEl.textContent = (data && data.message) || 'Ozellik kaydetme basarisiz.';
+                        errEl.style.display = 'block';
+                    }
+                    console.warn('[MCE] feature save:', (data && data.message) || 'unknown');
+                }
+                return data;
+            })
+            .catch(function(e) {
+                if (errEl && !opts.silent) {
+                    errEl.textContent = 'Baglanti hatasi: ' + e.message;
+                    errEl.style.display = 'block';
+                }
+                console.warn('[MCE] feature save error:', e);
+                return { success: false, message: e.message };
+            });
     };
 
 })();

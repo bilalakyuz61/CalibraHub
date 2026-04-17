@@ -36,14 +36,14 @@
                                            "productcombinations";
     var logisticsMaterialCardsActive = controller == "logistics" &&
                                        action is "materialcards" or "savematerialcard" or "deletematerialcard";
-    var logisticsProductTreesActive = controller == "logistics" &&
+    var logisticsBOMsActive = controller == "logistics" &&
                                       action is "producttrees" or "saveproducttree" or "deleteproducttree";
     var logisticsMeasureUnitsActive = controller == "logistics" &&
                                       action is "measureunitdefinitions" or "savemeasureunitdefinition" or "deletemeasureunitdefinition";
     var logisticsMaterialGroupsActive = controller == "logistics" &&
                                         action is "materialgroups" or "savematerialgroup" or "deletematerialgroup";
     var financeOpen = controller == "finance";
-    var financeContactAccountsActive = controller == "finance" && action == "contactaccounts";
+    var financeContactsActive = controller == "finance" && action == "contactaccounts";
     var ui = await UiText.GetFormAsync("shared.main_menu");
     var collapseMenuText = ui.Text("collapse_menu");
     var searchPlaceholderText = ui.Text("search_placeholder");
@@ -57,10 +57,10 @@
     var purchaseText = ui.Text("purchase");
     var salesText = ui.Text("sales");
     var productConfigurationText = ui.Text("product_configuration");
-    var materialCardsText = ui.Text("material_cards");
+    var materialCardsText = ui.Text("items");
     var productTreesText = "Ürün Ağacı";
     var fixedDefinitionsText = ui.Text("fixed_definitions");
-    var warehouseLocationsText = ui.Text("warehouse_locations");
+    var warehouseLocationsText = ui.Text("locations");
     var measureUnitsText = ui.Text("measure_units");
     var settingsText = ui.Text("settings");
     var companyDefinitionText = ui.Text("company_definition");
@@ -71,7 +71,7 @@
     var projectInstructionsText = "Proje Talimatlari";
     var materialCardDesignText = ui.Text("screen_design_settings");
     var systemLogReportText = ui.Text("system_log_report");
-    var logisticsWarehouseLocationsActive = controller == "logistics" &&
+    var logisticsLocationsActive = controller == "logistics" &&
                                             action is "warehouselocations" or
                                                 "savewarehouselocation" or
                                                 "deletewarehouselocation";
@@ -134,13 +134,13 @@
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-general-orgchart">
                     <a class="side-subitem @(orgChartActive ? "active" : string.Empty)"
                        asp-controller="OrgChart" asp-action="Index"
-                       title="Organizasyon Semasi">
+                       title="Organizasyon Şeması">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                         </span>
-                        <span class="menu-text">Organizasyon Semasi</span>
+                        <span class="menu-text">Organizasyon Şeması</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Organizasyon Semasi favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Organizasyon Şeması favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
@@ -290,7 +290,7 @@
                         <div class="menu-group-content-inner">
                         <div class="menu-entry" data-menu-entry data-favorite-key="main-sales-quotes">
                             <a class="side-subitem @(ViewContext.RouteData.Values["controller"]?.ToString() == "Sales" ? "active" : "")"
-                               asp-controller="Sales" asp-action="SalesQuotes" title="Satis Teklifi">
+                               asp-controller="Sales" asp-action="Documents" title="Satış Teklifi">
                                 <span class="menu-icon" aria-hidden="true">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -299,9 +299,9 @@
                                         <line x1="16" y1="17" x2="8" y2="17"/>
                                     </svg>
                                 </span>
-                                <span class="menu-text">Satis Teklifi</span>
+                                <span class="menu-text">Satış Teklifi</span>
                             </a>
-                            <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Satis Teklifi favorilere ekle">
+                            <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Satış Teklifi favorilere ekle">
                                 <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                             </button>
                         </div>
@@ -322,8 +322,8 @@
         <div class="menu-group-content">
             <div class="menu-group-content-inner">
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-uretim-product-trees">
-                    <a class="side-subitem @(logisticsProductTreesActive ? "active" : string.Empty)"
-                       asp-controller="Logistics" asp-action="ProductTrees"
+                    <a class="side-subitem @(logisticsBOMsActive ? "active" : string.Empty)"
+                       asp-controller="Logistics" asp-action="BOMs"
                        title="@productTreesText">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20v-6h4v6a2 2 0 002 2h3a2 2 0 002-2v-3a2 2 0 00-2-2h-3v-4h3a2 2 0 002-2V6a2 2 0 00-2-2h-3a2 2 0 00-2 2v3a2 2 0 002 2h1v4h-3a2 2 0 01-2-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v3a2 2 0 002 2h3a2 2 0 002-2v-3"/></svg>
@@ -359,8 +359,8 @@
                     <div class="menu-group-content">
                         <div class="menu-group-content-inner">
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-finance-contact-accounts">
-                                <a class="side-subitem @(financeContactAccountsActive ? "active" : string.Empty)"
-                                   asp-controller="Finance" asp-action="ContactAccounts"
+                                <a class="side-subitem @(financeContactsActive ? "active" : string.Empty)"
+                                   asp-controller="Finance" asp-action="Contacts"
                                    title="Cari Hesaplar">
                                     <span class="menu-icon" aria-hidden="true">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -379,7 +379,7 @@
     </details>
 
     @{
-        var genDefOpen = controller == "generaldefinitions" || controller == "pricelist" || cardGroupsActive || logisticsWarehouseLocationsActive || logisticsMeasureUnitsActive;
+        var genDefOpen = controller == "generaldefinitions" || controller == "pricelist" || cardGroupsActive || logisticsLocationsActive || logisticsMeasureUnitsActive;
     var priceGroupsActive = controller == "pricelist" && action == "pricegroups";
     var priceListActive   = controller == "pricelist" && action == "pricelist";
     }
@@ -390,7 +390,7 @@
                     <path d="M4 6h16M4 12h16M4 18h16"/>
                 </svg>
             </span>
-            <span class="menu-text">Genel Tanimlamalar</span>
+            <span class="menu-text">Genel Tanımlamalar</span>
         </summary>
 
         <div class="menu-group-content">
@@ -398,65 +398,65 @@
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-salesrep">
                     <a class="side-subitem @(genDefOpen && action == "salesrepresentatives" ? "active" : string.Empty)"
                        asp-controller="GeneralDefinitions" asp-action="SalesRepresentatives"
-                       title="Satis Temsilcileri">
+                       title="Satış Temsilcileri">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         </span>
-                        <span class="menu-text">Satis Temsilcileri</span>
+                        <span class="menu-text">Satış Temsilcileri</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Satis Temsilcileri favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Satış Temsilcileri favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-currencies">
                     <a class="side-subitem @(genDefOpen && action == "currencies" ? "active" : string.Empty)"
                        asp-controller="GeneralDefinitions" asp-action="Currencies"
-                       title="Doviz Tanimlamalari">
+                       title="Döviz Tanımlamaları">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h4.5a1.5 1.5 0 0 1 0 3H9m0 0h5a1.5 1.5 0 0 1 0 3H9"/></svg>
                         </span>
-                        <span class="menu-text">Doviz Tanimlamalari</span>
+                        <span class="menu-text">Döviz Tanımlamaları</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Doviz Tanimlamalari favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Döviz Tanımlamaları favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-warehouse-locations">
-                    <a class="side-subitem @(logisticsWarehouseLocationsActive ? "active" : string.Empty)"
-                       asp-controller="Logistics" asp-action="WarehouseLocations"
-                       title="Lokasyon Tanimlamalari">
+                    <a class="side-subitem @(logisticsLocationsActive ? "active" : string.Empty)"
+                       asp-controller="Logistics" asp-action="Locations"
+                       title="Lokasyon Tanımlamaları">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V8l8-4 8 4v12"></path><path d="M8 20v-4h8v4"></path></svg>
                         </span>
-                        <span class="menu-text">Lokasyon Tanimlamalari</span>
+                        <span class="menu-text">Lokasyon Tanımlamaları</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Lokasyon Tanimlamalari favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Lokasyon Tanımlamaları favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-measure-units">
                     <a class="side-subitem @(logisticsMeasureUnitsActive ? "active" : string.Empty)"
-                       asp-controller="Logistics" asp-action="MeasureUnitDefinitions"
-                       title="Olcu Birimi Tanimlamalari">
+                       asp-controller="Logistics" asp-action="Units"
+                       title="Ölçü Birimleri">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h16"></path><path d="M4 12h16"></path><path d="M4 16h16"></path><path d="M8 6v12"></path></svg>
                         </span>
-                        <span class="menu-text">Olcu Birimi Tanimlamalari</span>
+                        <span class="menu-text">Ölçü Birimleri</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Olcu Birimi Tanimlamalari favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Ölçü Birimleri favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-card-groups">
                     <a class="side-subitem @(cardGroupsActive ? "active" : string.Empty)"
                        asp-controller="Definitions" asp-action="CardGroups"
-                       title="Grup Tanimlamalari">
+                       title="Grup Tanımlamaları">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h6"/><circle cx="18" cy="15" r="3"/><path d="m21 18-1.5-1.5"/></svg>
                         </span>
-                        <span class="menu-text">Grup Tanimlamalari</span>
+                        <span class="menu-text">Grup Tanımlamaları</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Grup Tanimlamalari favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Grup Tanımlamaları favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
@@ -483,8 +483,10 @@
 
     @{
         var documentOpen = controller == "document";
+        var reportingDesignerActive = controller == "reporting" && action == "designer";
+        var designGroupOpen = documentOpen || reportingDesignerActive;
     }
-    <details class="side-group" @(documentOpen ? "open" : null)>
+    <details class="side-group" @(designGroupOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -492,7 +494,7 @@
                     <path d="M3 9h18M9 21V9"/>
                 </svg>
             </span>
-            <span class="menu-text">Tasarim</span>
+            <span class="menu-text">Tasarım</span>
         </summary>
 
         <div class="menu-group-content">
@@ -500,13 +502,27 @@
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-doc-templates">
                     <a class="side-subitem @(documentOpen ? "active" : string.Empty)"
                        asp-controller="Document" asp-action="Index"
-                       title="Belge Sablonlari">
+                       title="Belge Şablonları">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h7l5 5v11H7z"/><path d="M14 4v5h5"/><path d="M10 12h6"/><path d="M10 16h4"/></svg>
                         </span>
-                        <span class="menu-text">Belge Sablonlari</span>
+                        <span class="menu-text">Belge Şablonları</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Belge Sablonlari favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Belge Şablonları favorilere ekle">
+                        <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                    </button>
+                </div>
+
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-reporting-designer">
+                    <a class="side-subitem @(reportingDesignerActive ? "active" : string.Empty)"
+                       asp-controller="Reporting" asp-action="Designer"
+                       title="Rapor Tasarımı">
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V6"/><path d="M17 16v-4"/></svg>
+                        </span>
+                        <span class="menu-text">Rapor Tasarımı</span>
+                    </a>
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Rapor Tasarımı favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
@@ -555,31 +571,31 @@
 
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-integration-events">
                     <a class="side-subitem @(integrationEventsActive ? "active" : string.Empty)"
-                       asp-controller="Admin" asp-action="IntegrationEvents" title="Entegrasyon Tanimlari">
+                       asp-controller="Admin" asp-action="IntegrationEvents" title="Entegrasyon Tanımları">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                             </svg>
                         </span>
-                        <span class="menu-text">Entegrasyon Tanimlari</span>
+                        <span class="menu-text">Entegrasyon Tanımları</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Entegrasyon Tanimlari favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Entegrasyon Tanımları favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
 
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-viewsettings">
                     <a class="side-subitem @(viewSettingsActive ? "active" : string.Empty)"
-                       asp-controller="Admin" asp-action="ViewSettings" title="Alan ve Widget Tanimlamalari">
+                       asp-controller="Admin" asp-action="ViewSettings" title="Alan ve Widget Tanımlamaları">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                                 <path d="M3 9h18M9 21V9"/>
                             </svg>
                         </span>
-                        <span class="menu-text">Alan ve Widget Tanimlamalari</span>
+                        <span class="menu-text">Alan ve Widget Tanımlamaları</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Alan ve Widget Tanimlamalari favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Alan ve Widget Tanımlamaları favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
@@ -590,7 +606,7 @@
 
                     <div class="menu-entry" data-menu-entry data-favorite-key="main-setup-definitions">
                         <a class="side-subitem @(setupDefinitionsActive ? "active" : string.Empty)"
-                           asp-controller="Setup" asp-action="Definitions" title="Sirket ve Kullanici Tanimlari">
+                           asp-controller="Setup" asp-action="Definitions" title="Şirket ve Kullanıcı Tanımları">
                             <span class="menu-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                     <rect x="2" y="7" width="20" height="14" rx="2"/>
@@ -598,9 +614,9 @@
                                     <path d="M12 12v4m-2-2h4"/>
                                 </svg>
                             </span>
-                            <span class="menu-text">Sirket ve Kullanici Tanimlari</span>
+                            <span class="menu-text">Şirket ve Kullanıcı Tanımları</span>
                         </a>
-                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Genel Tanimlar favorilere ekle">
+                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Genel Tanımlar favorilere ekle">
                             <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                         </button>
                     </div>

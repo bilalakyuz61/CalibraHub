@@ -210,8 +210,8 @@ public sealed class AdminController : Controller
         var myCompany = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
 
         var input = myCompany is null
-            ? new CompanyDefinitionInput()
-            : new CompanyDefinitionInput
+            ? new CompanyInput()
+            : new CompanyInput
             {
                 Id = myCompany.Id,
                 Name = myCompany.Name,
@@ -253,7 +253,7 @@ public sealed class AdminController : Controller
 
         return View(new CompanyManagementViewModel
         {
-            Companies = Array.Empty<CompanyDefinitionDto>(),
+            Companies = Array.Empty<CompanyDto>(),
             ListState = new GridListStateViewModel(),
             Input = input,
             SmtpInput = smtpInput,
@@ -264,7 +264,7 @@ public sealed class AdminController : Controller
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CompanySettings(
-        CompanyDefinitionInput input,
+        CompanyInput input,
         [Bind(Prefix = "SmtpInput")] SmtpProfileInput smtpInput,
         CancellationToken cancellationToken)
     {
@@ -275,8 +275,8 @@ public sealed class AdminController : Controller
 
         try
         {
-            await _adminManagementService.SaveCompanyDefinitionAsync(
-                new SaveCompanyDefinitionRequest(
+            await _adminManagementService.SaveCompanyAsync(
+                new SaveCompanyRequest(
                     input.Id,
                     input.Name,
                     input.Title,
@@ -324,7 +324,7 @@ public sealed class AdminController : Controller
             ModelState.AddModelError(string.Empty, ex.Message);
             return View(new CompanyManagementViewModel
             {
-                Companies = Array.Empty<CompanyDefinitionDto>(),
+                Companies = Array.Empty<CompanyDto>(),
                 ListState = new GridListStateViewModel(),
                 Input = input
             });
@@ -594,7 +594,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveMaterialCardFieldGroup(
+    public async Task<IActionResult> SaveFieldGroup(
         MaterialCardViewSettingsViewModel model,
         CancellationToken cancellationToken)
     {
@@ -629,8 +629,8 @@ public sealed class AdminController : Controller
 
         try
         {
-            await _logisticsConfigurationService.SaveMaterialCardFieldGroupAsync(
-                new SaveMaterialCardFieldGroupRequest(
+            await _logisticsConfigurationService.SaveFieldGroupAsync(
+                new SaveFieldGroupRequest(
                     model.GroupInput.GroupId,
                     model.GroupInput.GroupKey,
                     model.GroupInput.GroupLabel,
@@ -2213,7 +2213,7 @@ public sealed class AdminController : Controller
         source.Contains(value, StringComparison.OrdinalIgnoreCase);
 
     private async Task<CompanyManagementViewModel> BuildCompanyViewModelAsync(
-        CompanyDefinitionInput input,
+        CompanyInput input,
         int? page,
         int? pageSize,
         CancellationToken cancellationToken)
@@ -2462,13 +2462,13 @@ public sealed class AdminController : Controller
     /// </summary>
     private static string NormalizeForScreenFilter(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return "material_cards";
+        if (string.IsNullOrWhiteSpace(raw)) return "items";
         var lower = raw.Trim().ToLowerInvariant();
         return lower switch
         {
-            "materialcards"   => "material_cards",
-            "contactaccounts" => "contact_accounts",
-            "salesquotes"     => "sales_quotes",
+            "materialcards"   => "items",
+            "contactaccounts" => "contacts",
+            "salesquotes"     => "documents",
             _ => lower,
         };
     }
@@ -2482,7 +2482,7 @@ public sealed class AdminController : Controller
         var schema = await _logisticsConfigurationService.GetMaterialCardDynamicSchemaAsync(cancellationToken);
 
         // Screen-code bazli filter: yalnizca sectigimiz ekrana (ornegin
-        // sales_quotes) ait gruplar ve field'lar gosterilir. "material_cards"
+        // sales_quotes) ait gruplar ve field'lar gosterilir. "items"
         // default ise MaterialCards widget'lari gelir. Eski kayitlarda
         // ScreenCode "MaterialCards" (CamelCase) olabilir — normalize edilmis.
         var targetScreenCode = string.IsNullOrWhiteSpace(screenCode)
@@ -2515,7 +2515,7 @@ public sealed class AdminController : Controller
         return new MaterialCardViewSettingsViewModel
         {
             Groups = groups
-                .Select(x => new MaterialCardFieldGroupListItemViewModel
+                .Select(x => new FieldGroupListItemViewModel
                 {
                     Id = x.Id,
                     GroupKey = x.GroupKey,
@@ -2561,11 +2561,11 @@ public sealed class AdminController : Controller
                 })
                 .ToList(),
             GroupInput = selectedGroup is null
-                ? new MaterialCardFieldGroupInput
+                ? new FieldGroupInput
                 {
                     DisplayOrder = nextGroupDisplayOrder
                 }
-                : new MaterialCardFieldGroupInput
+                : new FieldGroupInput
                 {
                     GroupId = selectedGroup.Id,
                     GroupKey = selectedGroup.GroupKey,

@@ -1,4 +1,5 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -16,8 +17,8 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     {
         _cf = cf;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tblGroups  = $"[{schema}].[price_groups]";
-        _tblEntries = $"[{schema}].[price_list_entries]";
+        _tblGroups  = $"[{schema}].[PriceGroup]";
+        _tblEntries = $"[{schema}].[PriceList]";
     }
 
     // ── Fiyat Gruplari ────────────────────────────────────────────────────────
@@ -87,22 +88,23 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     // ── Fiyat Kalemleri ──────────────────────────────────────────────────────
 
     private const string EntryCols =
-        "[id],[price_group_id],[stock_card_id],[material_code],[material_name]," +
+        "[id],[price_group_id],[item_id],[material_code],[material_name]," +
+        "[combination_code],[combination_name]," +
         "[currency],[buying_price],[selling_price],[valid_from],[valid_to],[is_active],[created_at],[updated_at]";
 
-    public async Task<IReadOnlyCollection<PriceListEntry>> GetEntriesByGroupAsync(int groupId, CancellationToken ct)
+    public async Task<IReadOnlyCollection<PriceList>> GetEntriesByGroupAsync(int groupId, CancellationToken ct)
     {
-        var list = new List<PriceListEntry>();
+        var list = new List<PriceList>();
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
-        cmd.CommandText = $"SELECT {EntryCols} FROM {_tblEntries} WHERE [price_group_id]=@GroupId ORDER BY [material_code],[valid_from];";
+        cmd.CommandText = $"SELECT {EntryCols} FROM {_tblEntries} WHERE [price_group_id]=@GroupId ORDER BY [material_code],[combination_code],[valid_from];";
         cmd.Parameters.Add(new SqlParameter("@GroupId", groupId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(MapEntry(r));
         return list;
     }
 
-    public async Task<PriceListEntry?> GetEntryByIdAsync(int id, CancellationToken ct)
+    public async Task<PriceList?> GetEntryByIdAsync(int id, CancellationToken ct)
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
@@ -112,21 +114,21 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         return await r.ReadAsync(ct) ? MapEntry(r) : null;
     }
 
-    public async Task<int> AddEntryAsync(PriceListEntry e, CancellationToken ct)
+    public async Task<int> AddEntryAsync(PriceList e, CancellationToken ct)
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_tblEntries}
-                ([price_group_id],[stock_card_id],[material_code],[material_name],[currency],[buying_price],[selling_price],[valid_from],[valid_to],[is_active],[created_at],[updated_at])
-            VALUES (@GroupId,@SCardId,@MatCode,@MatName,@Currency,@BuyPrice,@SellPrice,@ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE());
+                ([price_group_id],[item_id],[material_code],[material_name],[combination_code],[combination_name],[currency],[buying_price],[selling_price],[valid_from],[valid_to],[is_active],[created_at],[updated_at])
+            VALUES (@GroupId,@SCardId,@MatCode,@MatName,@ComboCode,@ComboName,@Currency,@BuyPrice,@SellPrice,@ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         AddEntryParams(cmd, e);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
 
-    public async Task AddBulkEntriesAsync(IReadOnlyCollection<PriceListEntry> entries, CancellationToken ct)
+    public async Task AddBulkEntriesAsync(IReadOnlyCollection<PriceList> entries, CancellationToken ct)
     {
         if (entries.Count == 0) return;
         await using var conn = await _cf.OpenConnectionAsync(ct);
@@ -136,21 +138,22 @@ public sealed class SqlPriceListRepository : IPriceListRepository
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
                 INSERT INTO {_tblEntries}
-                    ([price_group_id],[stock_card_id],[material_code],[material_name],[currency],[buying_price],[selling_price],[valid_from],[valid_to],[is_active],[created_at],[updated_at])
-                VALUES (@GroupId,@SCardId,@MatCode,@MatName,@Currency,@BuyPrice,@SellPrice,@ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE());
+                    ([price_group_id],[item_id],[material_code],[material_name],[combination_code],[combination_name],[currency],[buying_price],[selling_price],[valid_from],[valid_to],[is_active],[created_at],[updated_at])
+                VALUES (@GroupId,@SCardId,@MatCode,@MatName,@ComboCode,@ComboName,@Currency,@BuyPrice,@SellPrice,@ValidFrom,@ValidTo,@Active,GETDATE(),GETDATE());
                 """;
             AddEntryParams(cmd, e);
             await cmd.ExecuteNonQueryAsync(ct);
         }
     }
 
-    public async Task UpdateEntryAsync(PriceListEntry e, CancellationToken ct)
+    public async Task UpdateEntryAsync(PriceList e, CancellationToken ct)
     {
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_tblEntries} SET
                 [material_code]=@MatCode,[material_name]=@MatName,
+                [combination_code]=@ComboCode,[combination_name]=@ComboName,
                 [currency]=@Currency,[buying_price]=@BuyPrice,[selling_price]=@SellPrice,
                 [valid_from]=@ValidFrom,[valid_to]=@ValidTo,
                 [is_active]=@Active,[updated_at]=GETDATE()
@@ -159,6 +162,8 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         cmd.Parameters.Add(new SqlParameter("@Id", e.Id));
         cmd.Parameters.Add(new SqlParameter("@MatCode",   e.MaterialCode));
         cmd.Parameters.Add(new SqlParameter("@MatName",   (object?)e.MaterialName ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@ComboCode", (object?)e.CombinationCode ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@ComboName", (object?)e.CombinationName ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Currency",  e.Currency));
         cmd.Parameters.Add(new SqlParameter("@BuyPrice",  e.BuyingPrice));
         cmd.Parameters.Add(new SqlParameter("@SellPrice", e.SellingPrice));
@@ -177,14 +182,124 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    // ── Upsert (bulk) ────────────────────────────────────────────────────────
+
+    public async Task<BulkUpsertResult> UpsertBulkEntriesAsync(
+        IReadOnlyCollection<PriceList> entries, CancellationToken ct)
+    {
+        if (entries.Count == 0) return new BulkUpsertResult(0, 0);
+        var inserted = 0;
+        var updated  = 0;
+
+        await using var conn = await _cf.OpenConnectionAsync(ct);
+        foreach (var e in entries)
+        {
+            // MERGE pattern — per-row (toplu satir sayisi dusuk oldugu icin yeterli)
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                MERGE {_tblEntries} AS tgt
+                USING (SELECT
+                        @GroupId   AS price_group_id,
+                        @SCardId   AS item_id,
+                        @MatCode   AS material_code,
+                        @ComboCode AS combination_code,
+                        @Currency  AS currency,
+                        @ValidFrom AS valid_from
+                      ) AS src
+                ON tgt.[price_group_id] = src.price_group_id
+                   AND ISNULL(tgt.[item_id], -1) = ISNULL(src.item_id, -1)
+                   AND tgt.[material_code] = src.material_code
+                   AND ISNULL(tgt.[combination_code], N'') = ISNULL(src.combination_code, N'')
+                   AND tgt.[currency] = src.currency
+                   AND tgt.[valid_from] = src.valid_from
+                WHEN MATCHED THEN
+                    UPDATE SET
+                        [material_name]    = @MatName,
+                        [combination_name] = @ComboName,
+                        [buying_price]     = @BuyPrice,
+                        [selling_price]    = @SellPrice,
+                        [valid_to]         = @ValidTo,
+                        [is_active]        = @Active,
+                        [updated_at]       = GETDATE()
+                WHEN NOT MATCHED THEN
+                    INSERT ([price_group_id],[item_id],[material_code],[material_name],
+                            [combination_code],[combination_name],[currency],
+                            [buying_price],[selling_price],[valid_from],[valid_to],
+                            [is_active],[created_at],[updated_at])
+                    VALUES (@GroupId,@SCardId,@MatCode,@MatName,
+                            @ComboCode,@ComboName,@Currency,
+                            @BuyPrice,@SellPrice,@ValidFrom,@ValidTo,
+                            @Active,GETDATE(),GETDATE())
+                OUTPUT $action AS Act;
+                """;
+            AddEntryParams(cmd, e);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            if (await r.ReadAsync(ct))
+            {
+                var act = r.GetString(0);
+                if (string.Equals(act, "INSERT", StringComparison.OrdinalIgnoreCase)) inserted++;
+                else if (string.Equals(act, "UPDATE", StringComparison.OrdinalIgnoreCase)) updated++;
+            }
+        }
+
+        return new BulkUpsertResult(inserted, updated);
+    }
+
+    // ── Mevcut Fiyat Sorgusu ─────────────────────────────────────────────────
+
+    public async Task<IReadOnlyCollection<ExistingPriceRow>> GetExistingPricesAsync(
+        int priceGroupId, string currency, DateTime validFrom,
+        IReadOnlyCollection<PriceEntryKey> keys, CancellationToken ct)
+    {
+        if (keys.Count == 0) return Array.Empty<ExistingPriceRow>();
+
+        var list = new List<ExistingPriceRow>();
+        await using var conn = await _cf.OpenConnectionAsync(ct);
+
+        // Basit yaklasim: her key icin tek sorgu (anahtarlar genelde az sayida)
+        foreach (var k in keys)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT TOP(1) [item_id],[material_code],[combination_code],[buying_price],[selling_price]
+                FROM {_tblEntries}
+                WHERE [price_group_id] = @GroupId
+                  AND [material_code]  = @MatCode
+                  AND ISNULL([combination_code], N'') = ISNULL(@ComboCode, N'')
+                  AND [currency]       = @Currency
+                  AND [is_active]      = 1
+                ORDER BY [valid_from] DESC;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@GroupId",   priceGroupId));
+            cmd.Parameters.Add(new SqlParameter("@MatCode",   k.MaterialCode));
+            cmd.Parameters.Add(new SqlParameter("@ComboCode", (object?)k.CombinationCode ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@Currency",  currency));
+
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            if (await r.ReadAsync(ct))
+            {
+                list.Add(new ExistingPriceRow(
+                    ItemId:     r.IsDBNull(0) ? null : r.GetInt32(0),
+                    MaterialCode:    r.GetString(1),
+                    CombinationCode: r.IsDBNull(2) ? null : r.GetString(2),
+                    BuyingPrice:     r.GetDecimal(3),
+                    SellingPrice:    r.GetDecimal(4)));
+            }
+        }
+
+        return list;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static void AddEntryParams(SqlCommand cmd, PriceListEntry e)
+    private static void AddEntryParams(SqlCommand cmd, PriceList e)
     {
         cmd.Parameters.Add(new SqlParameter("@GroupId",   e.PriceGroupId));
-        cmd.Parameters.Add(new SqlParameter("@SCardId",   (object?)e.StockCardId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@SCardId",   (object?)e.ItemId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@MatCode",   e.MaterialCode));
         cmd.Parameters.Add(new SqlParameter("@MatName",   (object?)e.MaterialName ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@ComboCode", (object?)e.CombinationCode ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@ComboName", (object?)e.CombinationName ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Currency",  e.Currency));
         cmd.Parameters.Add(new SqlParameter("@BuyPrice",  e.BuyingPrice));
         cmd.Parameters.Add(new SqlParameter("@SellPrice", e.SellingPrice));
@@ -204,20 +319,22 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         UpdatedAt   = r.GetDateTime(6)
     };
 
-    private static PriceListEntry MapEntry(SqlDataReader r) => new()
+    private static PriceList MapEntry(SqlDataReader r) => new()
     {
-        Id           = r.GetInt32(0),
-        PriceGroupId = r.GetInt32(1),
-        StockCardId  = r.IsDBNull(2) ? null : r.GetInt32(2),
-        MaterialCode = r.GetString(3),
-        MaterialName = r.IsDBNull(4) ? null : r.GetString(4),
-        Currency     = r.GetString(5),
-        BuyingPrice  = r.GetDecimal(6),
-        SellingPrice = r.GetDecimal(7),
-        ValidFrom    = r.GetDateTime(8),
-        ValidTo      = r.IsDBNull(9) ? null : r.GetDateTime(9),
-        IsActive     = r.GetBoolean(10),
-        CreatedAt    = r.GetDateTime(11),
-        UpdatedAt    = r.GetDateTime(12)
+        Id              = r.GetInt32(0),
+        PriceGroupId    = r.GetInt32(1),
+        ItemId     = r.IsDBNull(2) ? null : r.GetInt32(2),
+        MaterialCode    = r.GetString(3),
+        MaterialName    = r.IsDBNull(4) ? null : r.GetString(4),
+        CombinationCode = r.IsDBNull(5) ? null : r.GetString(5),
+        CombinationName = r.IsDBNull(6) ? null : r.GetString(6),
+        Currency        = r.GetString(7),
+        BuyingPrice     = r.GetDecimal(8),
+        SellingPrice    = r.GetDecimal(9),
+        ValidFrom       = r.GetDateTime(10),
+        ValidTo         = r.IsDBNull(11) ? null : r.GetDateTime(11),
+        IsActive        = r.GetBoolean(12),
+        CreatedAt       = r.GetDateTime(13),
+        UpdatedAt       = r.GetDateTime(14)
     };
 }

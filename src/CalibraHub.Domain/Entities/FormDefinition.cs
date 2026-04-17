@@ -10,7 +10,7 @@ namespace CalibraHub.Domain.Entities;
 /// BaseTable, BaseRecordKey
 ///
 /// Faz H — Flattened View:
-///   BaseTable     → Bu form'un fiziksel karsilik tablosu (orn. 'dbo.ContactAccounts')
+///   BaseTable     → Bu form'un fiziksel karsilik tablosu (orn. 'dbo.Contacts')
 ///   BaseRecordKey → WidgetTra.RecordId'ye denk gelen kolon (orn. 'AccountCode')
 ///   Ikisi de dolu ise v_Flat_{FormCode} view'i dinamik olarak olusturulur;
 ///   EAV widget'lari pivot edilip base tablonun kolonlariyla birlesir.

@@ -14,23 +14,28 @@ public static class UserAuthorizationCatalog
                 UserPermission.ViewIncomingDocuments,
                 UserPermission.ApproveDocuments,
                 UserPermission.RejectDocuments,
-                UserPermission.ExportReports
+                UserPermission.ExportReports,
+                UserPermission.ViewReports,
+                UserPermission.DesignReports
             },
             [UserRole.Approver] = new[]
             {
                 UserPermission.ViewIncomingDocuments,
                 UserPermission.ApproveDocuments,
-                UserPermission.RejectDocuments
+                UserPermission.RejectDocuments,
+                UserPermission.ViewReports
             },
             [UserRole.Operator] = new[]
             {
-                UserPermission.ViewIncomingDocuments
+                UserPermission.ViewIncomingDocuments,
+                UserPermission.ViewReports
             },
             [UserRole.Auditor] = new[]
             {
                 UserPermission.ViewIncomingDocuments,
                 UserPermission.ExportReports,
-                UserPermission.ViewAuditLogs
+                UserPermission.ViewAuditLogs,
+                UserPermission.ViewReports
             }
         };
 
@@ -66,6 +71,9 @@ public static class UserAuthorizationCatalog
             UserPermission.ExportReports => "Rapor Aktarimi",
             UserPermission.ViewAuditLogs => "Denetim Kayitlarini Goruntuleme",
             UserPermission.ManageCompanySettings => "Sirket Tanimlama Yonetimi",
+            UserPermission.ViewReports => "Rapor Goruntuleme",
+            UserPermission.DesignReports => "Rapor Tasarlama",
+            UserPermission.ManageReports => "Rapor Yonetimi",
             _ => permission.ToString()
         };
 }

@@ -84,7 +84,7 @@
 
     window.wlLoad = function() {
         var s = document.getElementById('wlSearch').value;
-        fetch(API('GetAllWarehouseLocations') + '?search=' + encodeURIComponent(s))
+        fetch(API('GetAllLocations') + '?search=' + encodeURIComponent(s))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 allLocations = data;
@@ -125,7 +125,7 @@
 
     window.wlSelect = function(id) {
         selId = id;
-        fetch(API('GetWarehouseLocation') + '?id=' + id)
+        fetch(API('GetLocation') + '?id=' + id)
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 document.getElementById('wlId').value = d.id;
@@ -174,7 +174,7 @@
             volumeCapacity: vVal !== '' ? parseFloat(vVal) : null,
             isActive: document.getElementById('wlIsActive').checked
         };
-        fetch(API('SaveWarehouseLocationJson'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+        fetch(API('SaveLocationJson'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (d.success) { wlMsg('Kaydedildi.', true); wlNew(); }
@@ -185,7 +185,7 @@
     window.wlDelete = function() {
         var id = parseInt(document.getElementById('wlId').value);
         if (!id || !confirm('Bu lokasyonu silmek istediginize emin misiniz?')) return;
-        fetch(API('DeleteWarehouseLocationJson') + '?id=' + id, { method: 'POST' })
+        fetch(API('DeleteLocationJson') + '?id=' + id, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (d.success) { wlMsg('Silindi.', true); wlNew(); }
@@ -195,7 +195,7 @@
 
     window.wlDeleteRow = function(id) {
         if (!confirm('Bu lokasyonu silmek istediginize emin misiniz?')) return;
-        fetch(API('DeleteWarehouseLocationJson') + '?id=' + id, { method: 'POST' })
+        fetch(API('DeleteLocationJson') + '?id=' + id, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) { if (d.success) wlLoad(); });
     };

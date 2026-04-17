@@ -67,6 +67,7 @@ export default function WidgetBuilderForm(props) {
   var [textConstraints, setTextConstraints] = useState('')   // rehber kisit JSON dizisi
   var [permissionKey, setPermissionKey] = useState('')       // backend'de saklanmayan UI-only alan
   var [groupId, setGroupId]             = useState(null)     // → payload.parentId (int|null)
+  var [sortOrder, setSortOrder]         = useState('')       // → payload.sortOrder (int)
   var [isActive, setIsActive]           = useState(true)
   var [isPlainField, setIsPlainField]   = useState(false)
   var [isRequired, setIsRequired]       = useState(false)
@@ -118,6 +119,7 @@ export default function WidgetBuilderForm(props) {
           ? editingField.parentId
           : (editingField.groupId || null)
       )
+      setSortOrder(editingField.sortOrder != null ? String(editingField.sortOrder) : '')
       setIsActive(editingField.isActive !== false)
       setIsPlainField(editingField.isPlainField === true)
       setIsRequired(editingField.isRequired === true)
@@ -154,6 +156,7 @@ export default function WidgetBuilderForm(props) {
       setMaxValue('')
       setPermissionKey('')
       setGroupId(null)
+      setSortOrder('')
       setIsActive(true)
       setIsPlainField(false)
       setIsRequired(false)
@@ -375,6 +378,7 @@ export default function WidgetBuilderForm(props) {
           ? parseFloat(maxValue)
           : null,
         options: payloadOptions,
+        sortOrder: sortOrder !== '' && !isNaN(parseInt(sortOrder, 10)) ? parseInt(sortOrder, 10) : null,
         isActive: isActive,
         isPlainField: isPlainField,
         isRequired: isRequired,

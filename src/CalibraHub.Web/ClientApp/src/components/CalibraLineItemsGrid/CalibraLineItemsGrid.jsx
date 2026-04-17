@@ -2,7 +2,7 @@
  * CalibraLineItemsGrid — Dinamik, satir-ici duzenlenebilir kalem grid'i
  *
  * "Aptal Bilesen, Zeki Veri": Kolonlar + satirlar C#'tan gelen JSON
- * (BuildSalesQuoteLineGridConfig) ile dinamik cizilir. React icinde hardcoded
+ * (BuildDocumentLineGridConfig) ile dinamik cizilir. React icinde hardcoded
  * alan ismi / siralama YOK.
  *
  * Glassmorphism container + Tailwind + framer-motion satir animasyonlari.
@@ -69,7 +69,10 @@ function TR_FMT(n, precision) {
 
 export default function CalibraLineItemsGrid(props) {
   var config = props.config || { columns: [], rows: [], labels: {}, footer: {} }
-  var columns = Array.isArray(config.columns) ? config.columns : []
+  var allColumns = Array.isArray(config.columns) ? config.columns : []
+  // Kolonlari yerlesime gore ayir: satir icinde mi, yoksa satirin altinda mi render edilecek?
+  var columns = allColumns.filter(function(c) { return c.placement !== 'row-below' })
+  var belowColumns = allColumns.filter(function(c) { return c.placement === 'row-below' })
   var labels = config.labels || {}
   var footer = config.footer || {}
   var onRowsChange = props.onRowsChange
@@ -80,7 +83,7 @@ export default function CalibraLineItemsGrid(props) {
   // ── State: satirlar ──
   var [rows, setRows] = useState(function() {
     return (config.rows || []).map(function(r) {
-      return applyComputed(Object.assign({ _uid: makeUid() }, r), columns)
+      return applyComputed(Object.assign({ _uid: makeUid() }, r), allColumns)
     })
   })
 
@@ -104,7 +107,7 @@ export default function CalibraLineItemsGrid(props) {
     var api = {
       setRows: function(newRows) {
         var next = (newRows || []).map(function(r) {
-          return applyComputed(Object.assign({ _uid: makeUid() }, r), columns)
+          return applyComputed(Object.assign({ _uid: makeUid() }, r), allColumns)
         })
         setRows(next)
       },
@@ -135,23 +138,23 @@ export default function CalibraLineItemsGrid(props) {
         if (fillPatch) {
           Object.keys(fillPatch).forEach(function(k) { next[k] = fillPatch[k] })
         }
-        return applyComputed(next, columns)
+        return applyComputed(next, allColumns)
       })
     })
-  }, [columns])
+  }, [allColumns])
 
   // ── Yeni satir ekle ──
   function handleAddRow() {
     setRows(function(prev) {
       var blank = { _uid: makeUid() }
-      columns.forEach(function(c) {
+      allColumns.forEach(function(c) {
         if (c.type === 'number' || c.type === 'currency' || c.type === 'percent') {
           blank[c.key] = 0
         } else {
           blank[c.key] = ''
         }
       })
-      return prev.concat([applyComputed(blank, columns)])
+      return prev.concat([applyComputed(blank, allColumns)])
     })
   }
 
@@ -200,6 +203,7 @@ export default function CalibraLineItemsGrid(props) {
     <div className="calibra-line-grid rounded-2xl overflow-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
       {/* Header row */}
       <div className="flex items-center border-b border-slate-200 bg-slate-50/80 dark:bg-white/[0.03] dark:border-white/[0.08]">
+        <div className="w-3 flex-shrink-0" />
         {columns.map(function(col) {
           var Icon = resolveIcon(col.icon)
           var align =
@@ -236,34 +240,65 @@ export default function CalibraLineItemsGrid(props) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4, height: 0 }}
                   transition={{ duration: 0.18 }}
-                  className="flex items-stretch border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors"
+                  className="border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors"
                 >
-                  {columns.map(function(col) {
-                    return (
-                      <div
-                        key={col.key}
-                        className="flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04]"
-                        style={widthCss(col)}
+                  <div className="flex items-stretch">
+                    <div className="w-3 flex-shrink-0" />
+                    {columns.map(function(col) {
+                      return (
+                        <div
+                          key={col.key}
+                          className="flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04]"
+                          style={widthCss(col)}
+                        >
+                          <LineGridCell
+                            column={col}
+                            row={row}
+                            value={row[col.key]}
+                            onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                          />
+                        </div>
+                      )
+                    })}
+                    <div className="w-10 flex-shrink-0 flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={function() { handleDeleteRow(row._uid) }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:text-white/30 dark:hover:text-rose-400 dark:hover:bg-rose-500/10 transition-colors"
+                        title="Sil"
                       >
-                        <LineGridCell
-                          column={col}
-                          row={row}
-                          value={row[col.key]}
-                          onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                        />
-                      </div>
-                    )
-                  })}
-                  <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                    <button
-                      type="button"
-                      onClick={function() { handleDeleteRow(row._uid) }}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:text-white/30 dark:hover:text-rose-400 dark:hover:bg-rose-500/10 transition-colors"
-                      title="Sil"
-                    >
-                      <Trash2 size={13} strokeWidth={1.8} />
-                    </button>
+                        <Trash2 size={13} strokeWidth={1.8} />
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Satir alti kolonlar (placement: row-below) — ornegin "Not" */}
+                  {belowColumns.length > 0 && (
+                    <div className="flex flex-col gap-1 pl-3 pr-3 pb-2">
+                      {belowColumns.map(function(col) {
+                        var Icon = resolveIcon(col.icon)
+                        return (
+                          <div
+                            key={col.key}
+                            className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/60 dark:border-white/[0.06] dark:bg-white/[0.02]"
+                          >
+                            <div className="flex items-center gap-1.5 pl-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50 flex-shrink-0">
+                              <Icon size={11} strokeWidth={1.8} className="text-slate-400 dark:text-white/40 flex-shrink-0" />
+                              <span>{col.label}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <LineGridCell
+                                column={col}
+                                row={row}
+                                value={row[col.key]}
+                                onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </motion.div>
               )
             })}

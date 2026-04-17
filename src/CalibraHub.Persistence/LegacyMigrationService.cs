@@ -34,7 +34,7 @@ namespace CalibraHub.Persistence;
 /// Business key (RecordId) cozumleme:
 ///   ITEMS:            entity_id Guid → int (IntToGuid inverse) → Items.MaterialCode
 ///   CONTACTS:         entity_id Guid → int → contact_accounts.account_code
-///   SALES_QUOTE_EDIT: entity_id Guid → sales_quotes.quote_number (native Guid)
+///   SALES_QUOTE_EDIT: entity_id Guid → sales_quotes.document_number (native Guid)
 /// </summary>
 public sealed class LegacyMigrationService : ILegacyMigrationService
 {
@@ -57,6 +57,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
     private static readonly Dictionary<string, string> ScreenCodeToFormCode =
         new(StringComparer.OrdinalIgnoreCase)
         {
+            // Legacy slug'lar (geri uyum icin korunur)
             ["material_cards"]        = "ITEMS",
             ["materialcards"]         = "ITEMS",
             ["contact_accounts"]      = "CONTACTS",
@@ -66,6 +67,10 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
             ["sales_quote_edit"]      = "SALES_QUOTE_EDIT",
             ["product_configuration"] = "PRODUCT_CONFIG",
             ["product_config"]        = "PRODUCT_CONFIG",
+            // Yeni slug'lar (Phase 2 slug rename)
+            ["items"]                 = "ITEMS",
+            ["contacts"]              = "CONTACTS",
+            ["documents"]             = "SALES_QUOTE_EDIT",
         };
 
     private static readonly Dictionary<string, string?> LegacyDataTypeToNew =
@@ -311,15 +316,15 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         async Task<Dictionary<int, string>> GetAccountCodes()
         {
             if (accountCodeById != null) return accountCodeById;
-            // ContactAccounts tablosu PascalCase: Id / AccountCode
-            accountCodeById = await LoadBusinessKeysIntAsync(conn, "ContactAccounts", "Id", "AccountCode", ct);
+            // Contacts tablosu PascalCase: Id / AccountCode
+            accountCodeById = await LoadBusinessKeysIntAsync(conn, "Contacts", "Id", "AccountCode", ct);
             return accountCodeById;
         }
         async Task<Dictionary<Guid, string>> GetQuoteNumbers()
         {
             if (quoteNumberById != null) return quoteNumberById;
-            // sales_quotes tablosu snake_case: id / quote_number
-            quoteNumberById = await LoadBusinessKeysGuidAsync(conn, "sales_quotes", "id", "quote_number", ct);
+            // sales_quotes tablosu snake_case: id / document_number
+            quoteNumberById = await LoadBusinessKeysGuidAsync(conn, "sales_quotes", "id", "document_number", ct);
             return quoteNumberById;
         }
 
@@ -471,7 +476,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [id], [screen_code], [group_key], [group_label], [display_order]
-            FROM [{_schema}].[material_card_field_groups]
+            FROM [{_schema}].[FieldGroup]
             WHERE [is_active] = 1;";
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -494,7 +499,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [id], [screen_code], [group_id], [field_key], [field_label], [data_type], [display_order]
-            FROM [{_schema}].[material_card_field_settings]
+            FROM [{_schema}].[Field]
             WHERE [is_active] = 1;";
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
@@ -595,7 +600,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
 
     /// <summary>
     /// Guid PK'li entity tablolarindan Id → BusinessKey map yukler.
-    /// Kullanim: sales_quotes/id/quote_number
+    /// Kullanim: sales_quotes/id/document_number
     /// </summary>
     private async Task<Dictionary<Guid, string>> LoadBusinessKeysGuidAsync(
         SqlConnection conn, string table, string idColumn, string keyColumn, CancellationToken ct)

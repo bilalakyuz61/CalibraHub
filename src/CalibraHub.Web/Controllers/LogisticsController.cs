@@ -54,21 +54,13 @@ public sealed class LogisticsController : Controller
             {
                 GridKey = "logistics-material-cards",
                 Page = 1,
-                PageSize = 20,
+                PageSize = MaterialCardPageSize,
                 TotalCount = 0,
                 TotalPages = 0,
                 ItemLabel = "malzeme karti",
-                PageSizeOptions = BuildPageSizeOptions(20)
+                PageSizeOptions = BuildPageSizeOptions(MaterialCardPageSize)
             },
             StockInput = new MaterialCardCreateInput(),
-            MeasureUnits = (await _logisticsConfigurationService.GetMeasureUnitDefinitionsAsync(cancellationToken))
-                .Where(u => u.IsActive)
-                .Select(u => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem(u.UnitName, u.UnitCode))
-                .ToList(),
-            SupplierAccounts = (await _financeService.GetContactAccountsAsync(null, null, cancellationToken))
-                .Where(a => a.IsActive)
-                .Select(a => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem($"{a.AccountCode} â€” {a.AccountTitle}", a.AccountCode))
-                .ToList(),
             AvailableColumns = MaterialCardGridColumns,
             VisibleColumns = await GetMaterialCardVisibleColumnsAsync(cancellationToken),
             BoardConfig = boardConfig
@@ -81,13 +73,66 @@ public sealed class LogisticsController : Controller
     /// Tum mantik server-side: entity basliklari, widget listesi, link URL'leri
     /// ve aksiyon butonlari burada kararlastirilir. React tarafi yalniz cizer.
     /// </summary>
+    private const int MaterialCardPageSize = 50;
+
     private async Task<object> BuildMaterialCardsBoardConfigAsync(CancellationToken ct)
     {
-        var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-        var activeCards = snapshot.StockCards.Where(x => x.IsActive).OrderBy(x => x.MaterialCode).ToArray();
+        var (cards, totalCount) = await _logisticsConfigurationService.GetItemsPagedAsync(null, 0, MaterialCardPageSize, ct);
+        var masterWidgets = await BuildItemsMasterWidgetsAsync(ct);
+        var entities = await BuildMaterialCardEntitiesAsync(cards, ct);
 
-        // Master widget listesi â€” ITEMS form kodundaki admin-tanimli dinamik widget'lar
-        // SmartBoardConfigPanel icin IWidgetService uzerinden cekiliyor.
+        return new
+        {
+            boardKey = "logistics-material-cards",
+            title = "Malzeme Kartlari",
+            subtitle = totalCount.ToString("N0") + " malzeme",
+            icon = "Package",
+            iconColor = "indigo",
+            searchPlaceholder = "Malzeme ara... (kod, isim)",
+            emptyText = "Henuz malzeme eklenmemis",
+            apiUrl = "/Logistics/GetMaterialCardsPage",
+            totalCount,
+            pageSize = MaterialCardPageSize,
+            actions = new[]
+            {
+                new
+                {
+                    id = "new",
+                    label = "Yeni Malzeme",
+                    icon = "Package",
+                    variant = "primary",
+                    url = "/Logistics/MaterialCardEdit"
+                }
+            },
+            masterWidgets,
+            entities
+        };
+    }
+
+    // GET /Logistics/GetMaterialCardsPage?page=2&pageSize=50&search=abc
+    [HttpGet]
+    public async Task<IActionResult> GetMaterialCardsPage(
+        int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 10) pageSize = 10;
+        if (pageSize > 200) pageSize = 200;
+        var offset = (page - 1) * pageSize;
+
+        try
+        {
+            var (cards, totalCount) = await _logisticsConfigurationService.GetItemsPagedAsync(search, offset, pageSize, ct);
+            var entities = await BuildMaterialCardEntitiesAsync(cards, ct);
+            return Json(new { entities, totalCount, page, pageSize });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = ex.Message });
+        }
+    }
+
+    private async Task<List<object>> BuildItemsMasterWidgetsAsync(CancellationToken ct)
+    {
         var masterWidgets = new List<object>();
         var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("ITEMS", ct);
         if (itemsSchema != null)
@@ -107,26 +152,24 @@ public sealed class LogisticsController : Controller
                 });
             }
         }
+        return masterWidgets;
+    }
 
-        // Batch widget degerleri â€” tum aktif kartlar icin tek sorgu
-        // RecordId = Items.Id (integer PK, string olarak WidgetTra'da saklanir)
-        var recordIds = activeCards
-            .Select(c => c.Id.ToString())
-            .ToArray();
-        var batchWidgets = masterWidgets.Count > 0 && recordIds.Length > 0
+    private async Task<List<object>> BuildMaterialCardEntitiesAsync(
+        IReadOnlyCollection<ItemDto> cards, CancellationToken ct)
+    {
+        var recordIds = cards.Select(c => c.Id.ToString()).ToArray();
+        var batchWidgets = recordIds.Length > 0
             ? await _widgetService.GetBatchRenderModelsAsync("ITEMS", recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<CalibraHub.Application.Contracts.WidgetRenderDto>>();
 
         var entities = new List<object>();
-        foreach (var card in activeCards)
+        foreach (var card in cards)
         {
-            // Stok resmi â€” base64 data URL. Yok ise fallback null (React
-            // tarafi placeholder ikon cizer).
             string? cardImageUrl = (card.ImageData != null && card.ImageData.Length > 0 && !string.IsNullOrWhiteSpace(card.ImageMimeType))
                 ? $"data:{card.ImageMimeType};base64,{Convert.ToBase64String(card.ImageData)}"
                 : null;
 
-            // Widget degerleri â€” bu kartÄ±n degerlerini renderDtos'tan al
             var cardWidgets = new List<object>();
             var recordId = card.Id.ToString();
             if (batchWidgets.TryGetValue(recordId, out var renderDtos))
@@ -172,27 +215,7 @@ public sealed class LogisticsController : Controller
                 }
             });
         }
-
-        return new {
-            boardKey = "logistics-material-cards",
-            title = "Malzeme Kartlari",
-            subtitle = $"{entities.Count} malzeme",
-            icon = "Package",
-            iconColor = "indigo",
-            searchPlaceholder = "Malzeme ara... (kod, isim)",
-            emptyText = "Henuz malzeme eklenmemis",
-            actions = new[] {
-                new {
-                    id = "new",
-                    label = "Yeni Malzeme",
-                    icon = "Package",
-                    variant = "primary",
-                    url = "/Logistics/MaterialCardEdit"
-                }
-            },
-            masterWidgets = masterWidgets,
-            entities = entities
-        };
+        return entities;
     }
 
     [HttpGet]
@@ -200,21 +223,21 @@ public sealed class LogisticsController : Controller
     {
         ViewData["MaterialCardEditId"] = id ?? 0;
 
-        // Yeni EAV widget renderer icin integer Id â€” ViewBag'e aktar.
+        // Yeni EAV widget renderer icin integer Id - ViewBag'e aktar.
         ViewBag.ItemId = id.HasValue && id.Value > 0 ? id.Value.ToString() : string.Empty;
 
         return View();
     }
     
     [HttpGet]
-    public async Task<IActionResult> ProductTrees(CancellationToken cancellationToken)
+    public async Task<IActionResult> BOMs(CancellationToken cancellationToken)
     {
         ViewBag.Title = "ÃœrÃ¼n AÄŸacÄ±";
         return View();
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetProductTree(
+    public async Task<IActionResult> GetBOM(
         string materialCode,
         string? configCode,
         CancellationToken cancellationToken)
@@ -222,7 +245,7 @@ public sealed class LogisticsController : Controller
         if (string.IsNullOrWhiteSpace(materialCode))
             return BadRequest(new { found = false });
 
-        var tree = await _logisticsConfigurationService.GetProductTreeByCodeAsync(materialCode, configCode, cancellationToken);
+        var tree = await _logisticsConfigurationService.GetBOMByCodeAsync(materialCode, configCode, cancellationToken);
         if (tree is null)
             return Ok(new { found = false });
 
@@ -246,8 +269,8 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveProductTree(
-        [FromBody] SaveProductTreeRequest request,
+    public async Task<IActionResult> SaveBOM(
+        [FromBody] SaveBOMRequest request,
         CancellationToken cancellationToken)
     {
         if (request is null)
@@ -255,7 +278,7 @@ public sealed class LogisticsController : Controller
 
         try
         {
-            var id = await _logisticsConfigurationService.SaveProductTreeAsync(request, cancellationToken);
+            var id = await _logisticsConfigurationService.SaveBOMAsync(request, cancellationToken);
             return Ok(new { success = true, id });
         }
         catch (ArgumentException ex)
@@ -267,7 +290,7 @@ public sealed class LogisticsController : Controller
     [HttpGet]
     public async Task<IActionResult> StockLookup(string? q, CancellationToken cancellationToken)
     {
-        var cards = await _logisticsConfigurationService.GetStockCardsForLookupAsync(cancellationToken);
+        var cards = await _logisticsConfigurationService.GetItemsForLookupAsync(cancellationToken);
         var query = (q ?? "").Trim().ToLowerInvariant();
         var filtered = cards
             .Where(s => string.IsNullOrEmpty(query)
@@ -303,15 +326,15 @@ public sealed class LogisticsController : Controller
 
 
     [HttpGet]
-    public IActionResult WarehouseLocations() => View();
+    public IActionResult Locations() => View();
 
     [HttpGet]
-    public IActionResult MeasureUnitDefinitions() => View();
+    public IActionResult Units() => View();
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveWarehouseLocation(
-        [Bind(Prefix = "LocationInput")] WarehouseLocationInput input,
+    public async Task<IActionResult> SaveLocation(
+        [Bind(Prefix = "LocationInput")] LocationInput input,
         string? search,
         int? page,
         int? pageSize,
@@ -319,16 +342,16 @@ public sealed class LogisticsController : Controller
     {
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildWarehouseLocationsViewModelAsync(input, search, page, pageSize, cancellationToken);
-            return View(nameof(WarehouseLocations), invalidModel);
+            var invalidModel = await BuildLocationsViewModelAsync(input, search, page, pageSize, cancellationToken);
+            return View(nameof(Locations), invalidModel);
         }
 
         try
         {
             if (input.Id.HasValue)
             {
-                await _logisticsConfigurationService.UpdateWarehouseLocationAsync(
-                    new UpdateWarehouseLocationRequest(
+                await _logisticsConfigurationService.UpdateLocationAsync(
+                    new UpdateLocationRequest(
                         input.Id.Value,
                         input.ParentId,
                         input.LocationTypeCode,
@@ -344,8 +367,8 @@ public sealed class LogisticsController : Controller
             }
             else
             {
-                await _logisticsConfigurationService.CreateWarehouseLocationAsync(
-                    new CreateWarehouseLocationRequest(
+                await _logisticsConfigurationService.CreateLocationAsync(
+                    new CreateLocationRequest(
                         input.ParentId,
                         input.LocationTypeCode,
                         input.LocationCode,
@@ -359,20 +382,20 @@ public sealed class LogisticsController : Controller
                 TempData["AdminSuccess"] = "Lokasyon kaydi olusturuldu.";
             }
 
-            return RedirectToAction(nameof(WarehouseLocations), new { search, page, pageSize });
+            return RedirectToAction(nameof(Locations), new { search, page, pageSize });
         }
         catch (ArgumentException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildWarehouseLocationsViewModelAsync(input, search, page, pageSize, cancellationToken);
-            return View(nameof(WarehouseLocations), invalidModel);
+            var invalidModel = await BuildLocationsViewModelAsync(input, search, page, pageSize, cancellationToken);
+            return View(nameof(Locations), invalidModel);
         }
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveMeasureUnitDefinition(
-        [Bind(Prefix = "Input")] MeasureUnitDefinitionInput input,
+    public async Task<IActionResult> SaveUnit(
+        [Bind(Prefix = "Input")] UnitInput input,
         string? search,
         int? page,
         int? pageSize,
@@ -380,16 +403,16 @@ public sealed class LogisticsController : Controller
     {
         if (!ModelState.IsValid)
         {
-            var invalidModel = await BuildMeasureUnitDefinitionsViewModelAsync(input, search, page, pageSize, cancellationToken);
-            return View(nameof(MeasureUnitDefinitions), invalidModel);
+            var invalidModel = await BuildUnitsViewModelAsync(input, search, page, pageSize, cancellationToken);
+            return View(nameof(Units), invalidModel);
         }
 
         try
         {
             if (input.Id.HasValue)
             {
-                await _logisticsConfigurationService.UpdateMeasureUnitDefinitionAsync(
-                    new UpdateMeasureUnitDefinitionRequest(
+                await _logisticsConfigurationService.UpdateUnitAsync(
+                    new UpdateUnitRequest(
                         input.Id.Value,
                         input.UnitCode,
                         input.UnitName,
@@ -402,8 +425,8 @@ public sealed class LogisticsController : Controller
             }
             else
             {
-                await _logisticsConfigurationService.CreateMeasureUnitDefinitionAsync(
-                    new CreateMeasureUnitDefinitionRequest(
+                await _logisticsConfigurationService.CreateUnitAsync(
+                    new CreateUnitRequest(
                         input.UnitCode,
                         input.UnitName,
                         input.IntlCode,
@@ -414,19 +437,19 @@ public sealed class LogisticsController : Controller
                 TempData["AdminSuccess"] = "Olcu birimi kaydi olusturuldu.";
             }
 
-            return RedirectToAction(nameof(MeasureUnitDefinitions), new { search, page, pageSize });
+            return RedirectToAction(nameof(Units), new { search, page, pageSize });
         }
         catch (ArgumentException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildMeasureUnitDefinitionsViewModelAsync(input, search, page, pageSize, cancellationToken);
-            return View(nameof(MeasureUnitDefinitions), invalidModel);
+            var invalidModel = await BuildUnitsViewModelAsync(input, search, page, pageSize, cancellationToken);
+            return View(nameof(Units), invalidModel);
         }
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteWarehouseLocation(
+    public async Task<IActionResult> DeleteLocation(
         int id,
         string? search,
         int? page,
@@ -435,21 +458,21 @@ public sealed class LogisticsController : Controller
     {
         try
         {
-            await _logisticsConfigurationService.DeleteWarehouseLocationAsync(id, cancellationToken);
+            await _logisticsConfigurationService.DeleteLocationAsync(id, cancellationToken);
             TempData["AdminSuccess"] = "Lokasyon kaydi silindi.";
-            return RedirectToAction(nameof(WarehouseLocations), new { search, page, pageSize });
+            return RedirectToAction(nameof(Locations), new { search, page, pageSize });
         }
         catch (ArgumentException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildWarehouseLocationsViewModelAsync(new WarehouseLocationInput(), search, page, pageSize, cancellationToken);
-            return View(nameof(WarehouseLocations), invalidModel);
+            var invalidModel = await BuildLocationsViewModelAsync(new LocationInput(), search, page, pageSize, cancellationToken);
+            return View(nameof(Locations), invalidModel);
         }
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteMeasureUnitDefinition(
+    public async Task<IActionResult> DeleteUnit(
         int id,
         string? search,
         int? page,
@@ -458,24 +481,24 @@ public sealed class LogisticsController : Controller
     {
         try
         {
-            await _logisticsConfigurationService.DeleteMeasureUnitDefinitionAsync(id, cancellationToken);
+            await _logisticsConfigurationService.DeleteUnitAsync(id, cancellationToken);
             TempData["AdminSuccess"] = "Olcu birimi kaydi silindi.";
-            return RedirectToAction(nameof(MeasureUnitDefinitions), new { search, page, pageSize });
+            return RedirectToAction(nameof(Units), new { search, page, pageSize });
         }
         catch (ArgumentException ex)
         {
             ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildMeasureUnitDefinitionsViewModelAsync(new MeasureUnitDefinitionInput(), search, page, pageSize, cancellationToken);
-            return View(nameof(MeasureUnitDefinitions), invalidModel);
+            var invalidModel = await BuildUnitsViewModelAsync(new UnitInput(), search, page, pageSize, cancellationToken);
+            return View(nameof(Units), invalidModel);
         }
     }
 
-    /* â”€â”€ Ã–lÃ§Ã¼ Birimi JSON Endpoint'leri â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* â"€â"€ Ã–lÃ§Ã¼ Birimi JSON Endpoint'leri â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 
     [HttpGet]
     public async Task<IActionResult> GetAllMeasureUnits(string? search, CancellationToken ct)
     {
-        var all = await _logisticsConfigurationService.GetMeasureUnitDefinitionsAsync(ct);
+        var all = await _logisticsConfigurationService.GetUnitsAsync(ct);
         var filtered = all
             .OrderBy(x => x.SortOrder).ThenBy(x => x.UnitCode, StringComparer.OrdinalIgnoreCase)
             .Where(x =>
@@ -489,14 +512,14 @@ public sealed class LogisticsController : Controller
     [HttpGet]
     public async Task<IActionResult> GetMeasureUnit(int id, CancellationToken ct)
     {
-        var all = await _logisticsConfigurationService.GetMeasureUnitDefinitionsAsync(ct);
+        var all = await _logisticsConfigurationService.GetUnitsAsync(ct);
         var item = all.FirstOrDefault(x => x.Id == id);
         if (item is null) return NotFound();
         return Json(new { item.Id, item.UnitCode, item.UnitName, item.IntlCode, item.SortOrder, item.IsActive });
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveMeasureUnitJson([FromBody] MeasureUnitDefinitionInput input, CancellationToken ct)
+    public async Task<IActionResult> SaveMeasureUnitJson([FromBody] UnitInput input, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(input.UnitCode) || string.IsNullOrWhiteSpace(input.UnitName))
             return Json(new { success = false, message = "Kod ve ad bos olamaz." });
@@ -504,13 +527,13 @@ public sealed class LogisticsController : Controller
         {
             if (input.Id.HasValue && input.Id.Value > 0)
             {
-                await _logisticsConfigurationService.UpdateMeasureUnitDefinitionAsync(
-                    new UpdateMeasureUnitDefinitionRequest(input.Id.Value, input.UnitCode, input.UnitName, input.IntlCode, input.SortOrder, input.IsActive), ct);
+                await _logisticsConfigurationService.UpdateUnitAsync(
+                    new UpdateUnitRequest(input.Id.Value, input.UnitCode, input.UnitName, input.IntlCode, input.SortOrder, input.IsActive), ct);
             }
             else
             {
-                await _logisticsConfigurationService.CreateMeasureUnitDefinitionAsync(
-                    new CreateMeasureUnitDefinitionRequest(input.UnitCode, input.UnitName, input.IntlCode, input.SortOrder, input.IsActive), ct);
+                await _logisticsConfigurationService.CreateUnitAsync(
+                    new CreateUnitRequest(input.UnitCode, input.UnitName, input.IntlCode, input.SortOrder, input.IsActive), ct);
             }
             return Json(new { success = true });
         }
@@ -525,7 +548,7 @@ public sealed class LogisticsController : Controller
     {
         try
         {
-            await _logisticsConfigurationService.DeleteMeasureUnitDefinitionAsync(id, ct);
+            await _logisticsConfigurationService.DeleteUnitAsync(id, ct);
             return Json(new { success = true });
         }
         catch (ArgumentException ex)
@@ -534,12 +557,12 @@ public sealed class LogisticsController : Controller
         }
     }
 
-    /* â”€â”€ Lokasyon JSON Endpoint'leri â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* â"€â"€ Lokasyon JSON Endpoint'leri â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 
     [HttpGet]
-    public async Task<IActionResult> GetAllWarehouseLocations(string? search, CancellationToken ct)
+    public async Task<IActionResult> GetAllLocations(string? search, CancellationToken ct)
     {
-        var all = await _logisticsConfigurationService.GetWarehouseLocationsAsync(ct);
+        var all = await _logisticsConfigurationService.GetLocationsAsync(ct);
         var lookup = all.ToDictionary(x => x.Id);
         var filtered = all
             .OrderBy(x => x.SortOrder).ThenBy(x => x.LocationCode, StringComparer.OrdinalIgnoreCase)
@@ -572,15 +595,15 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetWarehouseLocation(int id, CancellationToken ct)
+    public async Task<IActionResult> GetLocation(int id, CancellationToken ct)
     {
-        var all = await _logisticsConfigurationService.GetWarehouseLocationsAsync(ct);
+        var all = await _logisticsConfigurationService.GetLocationsAsync(ct);
         var item = all.FirstOrDefault(x => x.Id == id);
         if (item is null) return NotFound();
         return Json(new
         {
             item.Id, item.ParentId,
-            locationTypeCode = NormalizeWarehouseLocationTypeCode(item.LocationTypeCode),
+            locationTypeCode = NormalizeLocationTypeCode(item.LocationTypeCode),
             item.LocationCode,
             locationName = item.LocationName ?? string.Empty,
             item.SortOrder, item.MaxWeightCapacity, item.VolumeCapacity, item.IsActive
@@ -588,23 +611,23 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveWarehouseLocationJson([FromBody] WarehouseLocationInput input, CancellationToken ct)
+    public async Task<IActionResult> SaveLocationJson([FromBody] LocationInput input, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(input.LocationTypeCode) || string.IsNullOrWhiteSpace(input.LocationCode))
             return Json(new { success = false, message = "Lokasyon tipi ve kod bos olamaz." });
         try
         {
-            var typeCode = NormalizeWarehouseLocationTypeCode(input.LocationTypeCode);
+            var typeCode = NormalizeLocationTypeCode(input.LocationTypeCode);
             if (input.Id.HasValue && input.Id.Value > 0)
             {
-                await _logisticsConfigurationService.UpdateWarehouseLocationAsync(
-                    new UpdateWarehouseLocationRequest(input.Id.Value, input.ParentId, typeCode, input.LocationCode,
+                await _logisticsConfigurationService.UpdateLocationAsync(
+                    new UpdateLocationRequest(input.Id.Value, input.ParentId, typeCode, input.LocationCode,
                         input.LocationName, input.SortOrder, input.MaxWeightCapacity, input.VolumeCapacity, input.IsActive), ct);
             }
             else
             {
-                await _logisticsConfigurationService.CreateWarehouseLocationAsync(
-                    new CreateWarehouseLocationRequest(input.ParentId, typeCode, input.LocationCode,
+                await _logisticsConfigurationService.CreateLocationAsync(
+                    new CreateLocationRequest(input.ParentId, typeCode, input.LocationCode,
                         input.LocationName, input.SortOrder, input.MaxWeightCapacity, input.VolumeCapacity, input.IsActive), ct);
             }
             return Json(new { success = true });
@@ -616,11 +639,11 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeleteWarehouseLocationJson(int id, CancellationToken ct)
+    public async Task<IActionResult> DeleteLocationJson(int id, CancellationToken ct)
     {
         try
         {
-            await _logisticsConfigurationService.DeleteWarehouseLocationAsync(id, ct);
+            await _logisticsConfigurationService.DeleteLocationAsync(id, ct);
             return Json(new { success = true });
         }
         catch (ArgumentException ex)
@@ -629,7 +652,7 @@ public sealed class LogisticsController : Controller
         }
     }
 
-    /* â”€â”€ Malzeme GruplarÄ± â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+    /* â"€â"€ Malzeme GruplarÄ± â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 
     [HttpGet]
     public IActionResult MaterialGroups()
@@ -665,7 +688,7 @@ public sealed class LogisticsController : Controller
         }
     }
 
-    /// <summary>Grup sil â€” kategorideki gÃ¼ncel listeyi dÃ¶ner.</summary>
+    /// <summary>Grup sil - kategorideki gÃ¼ncel listeyi dÃ¶ner.</summary>
     [HttpPost]
     public async Task<IActionResult> DeleteMaterialGroupInline(
         [FromBody] DeleteMaterialGroupBody body,
@@ -742,19 +765,19 @@ public sealed class LogisticsController : Controller
 
         try
         {
-            if (!stockInput.StockCardId.HasValue || stockInput.StockCardId.Value == 0)
+            if (!stockInput.ItemId.HasValue || stockInput.ItemId.Value == 0)
             {
                 var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
-                var existingMaterialCard = snapshot.StockCards.FirstOrDefault(x =>
+                var existingMaterialCard = snapshot.Items.FirstOrDefault(x =>
                     string.Equals(x.MaterialCode, stockInput.MaterialCode.Trim(), StringComparison.OrdinalIgnoreCase));
 
                 if (existingMaterialCard is not null)
                 {
-                    stockInput.StockCardId = existingMaterialCard.Id;
+                    stockInput.ItemId = existingMaterialCard.Id;
                 }
             }
 
-            var isUpdate = stockInput.StockCardId.HasValue && stockInput.StockCardId.Value != 0;
+            var isUpdate = stockInput.ItemId.HasValue && stockInput.ItemId.Value != 0;
             var currentUserName = User.FindFirstValue(System.Security.Claims.ClaimTypes.Name);
 
             byte[]? imageData = null;
@@ -777,7 +800,7 @@ public sealed class LogisticsController : Controller
             var companyId = GetCompanyId();
             var placeholders = new Dictionary<string, string>
             {
-                ["EntityId"] = (stockInput.StockCardId ?? 0).ToString(),
+                ["EntityId"] = (stockInput.ItemId ?? 0).ToString(),
                 ["UserName"] = User.FindFirstValue(System.Security.Claims.ClaimTypes.Name) ?? "system",
                 ["MaterialCode"] = stockInput.MaterialCode ?? "",
                 ["MaterialName"] = stockInput.MaterialName ?? "",
@@ -788,12 +811,12 @@ public sealed class LogisticsController : Controller
 
             if (isUpdate)
             {
-                placeholders["EntityId"] = stockInput.StockCardId!.Value.ToString();
-                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "StockCard", "BeforeUpdate", placeholders, cancellationToken);
+                placeholders["EntityId"] = stockInput.ItemId!.Value.ToString();
+                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeUpdate", placeholders, cancellationToken);
 
-                await _logisticsConfigurationService.UpdateStockCardAsync(
-                    new UpdateStockCardRequest(
-                        StockCardId: stockInput.StockCardId!.Value,
+                await _logisticsConfigurationService.UpdateItemAsync(
+                    new UpdateItemRequest(
+                        ItemId: stockInput.ItemId!.Value,
                         MaterialCode: stockInput.MaterialCode,
                         MaterialName: stockInput.MaterialName,
                         MaterialDescription: stockInput.MaterialDescription,
@@ -803,14 +826,14 @@ public sealed class LogisticsController : Controller
                         ImageMimeType: imageMimeType),
                     cancellationToken);
 
-                _integrationEventService.FireAfterEvent(companyId, "StockCard", "AfterUpdate", placeholders);
+                _integrationEventService.FireAfterEvent(companyId, "Item", "AfterUpdate", placeholders);
             }
             else
             {
-                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "StockCard", "BeforeCreate", placeholders, cancellationToken);
+                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeCreate", placeholders, cancellationToken);
 
-                await _logisticsConfigurationService.CreateStockCardAsync(
-                    new CreateStockCardRequest(
+                await _logisticsConfigurationService.CreateItemAsync(
+                    new CreateItemRequest(
                         MaterialCode: stockInput.MaterialCode,
                         MaterialName: stockInput.MaterialName,
                         MaterialDescription: stockInput.MaterialDescription,
@@ -820,15 +843,15 @@ public sealed class LogisticsController : Controller
                         ImageMimeType: imageMimeType),
                     cancellationToken);
 
-                _integrationEventService.FireAfterEvent(companyId, "StockCard", "AfterCreate", placeholders);
+                _integrationEventService.FireAfterEvent(companyId, "Item", "AfterCreate", placeholders);
             }
 
             // Kaydedilen/guncellenen kartin ID'sini bul
-            var savedCardId = stockInput.StockCardId;
+            var savedCardId = stockInput.ItemId;
             if (!isUpdate && (savedCardId == null || savedCardId == 0))
             {
                 var refreshed = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
-                var created = refreshed.StockCards
+                var created = refreshed.Items
                     .FirstOrDefault(x => string.Equals(x.MaterialCode, stockInput.MaterialCode, StringComparison.OrdinalIgnoreCase));
                 if (created != null) savedCardId = created.Id;
             }
@@ -869,7 +892,7 @@ public sealed class LogisticsController : Controller
             var companyId = GetCompanyId();
             // Silinecek kartin bilgilerini placeholder'lara ekle
             var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
-            var card = snapshot.StockCards.FirstOrDefault(x => x.Id == stockCardId);
+            var card = snapshot.Items.FirstOrDefault(x => x.Id == stockCardId);
             var placeholders = new Dictionary<string, string>
             {
                 ["EntityId"] = stockCardId.ToString(),
@@ -881,9 +904,9 @@ public sealed class LogisticsController : Controller
                 ["IsActive"] = card?.IsActive == true ? "1" : "0"
             };
 
-            await _integrationEventService.ExecuteBeforeEventAsync(companyId, "StockCard", "BeforeDelete", placeholders, cancellationToken);
-            await _logisticsConfigurationService.DeactivateStockCardAsync(stockCardId, cancellationToken);
-            _integrationEventService.FireAfterEvent(companyId, "StockCard", "AfterDelete", placeholders);
+            await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeDelete", placeholders, cancellationToken);
+            await _logisticsConfigurationService.DeactivateItemAsync(stockCardId, cancellationToken);
+            _integrationEventService.FireAfterEvent(companyId, "Item", "AfterDelete", placeholders);
 
             if (IsAjaxRequest(Request))
             {
@@ -940,8 +963,8 @@ public sealed class LogisticsController : Controller
     {
         try
         {
-            await _logisticsConfigurationService.ConfigureStockCardAsync(
-                new ConfigureStockCardRequest(
+            await _logisticsConfigurationService.ConfigureItemAsync(
+                new ConfigureItemRequest(
                     stockCardId,
                     isConfigurable,
                     (propertyIds ?? new List<Guid>()).ToArray()),
@@ -965,9 +988,9 @@ public sealed class LogisticsController : Controller
     public async Task<IActionResult> ProductConfiguration(CancellationToken cancellationToken)
     {
         // Yeni akis: SmartBoard cart listesi. Eski 7 parametreli tab/pagination
-        // yaklasimi kaldirildi â€” SmartBoard kendi UI state'ini yonetiyor.
+        // yaklasimi kaldirildi - SmartBoard kendi UI state'ini yonetiyor.
         // Eski SaveProductFeature / UpdateProductFeature / SaveProductValue vb.
-        // action'lari hala DB'ye yaziyor ama artik UI'dan cagrilmiyor â€” yeni
+        // action'lari hala DB'ye yaziyor ama artik UI'dan cagrilmiyor - yeni
         // ProductFeatureEdit sayfasi kullaniliyor.
         var boardConfig = await BuildProductConfigurationBoardConfigAsync(cancellationToken);
         return View(new ProductConfigurationViewModel { BoardConfig = boardConfig });
@@ -977,7 +1000,7 @@ public sealed class LogisticsController : Controller
     // BuildProductConfigurationBoardConfigAsync
     //
     // Urun Konfigurasyonu (Features/Ozellikler) icin SmartBoard kart config'i
-    // uretir. Her feature bir kart â€” icinde DataType, deger sayisi, ornek
+    // uretir. Her feature bir kart - icinde DataType, deger sayisi, ornek
     // degerler, bagli stok sayisi, aktif/pasif durumu widget'lari. Admin
     // panelden sales_quotes/contact_accounts gibi dynamic widget tanimlamak
     // icin "product_configuration" screenCode'u ile schema cagrisi yapilir.
@@ -987,7 +1010,7 @@ public sealed class LogisticsController : Controller
         var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
         var features = snapshot.Features.Where(f => f.IsActive).OrderBy(f => f.Name).ToArray();
 
-        // Feature-stock linkleri â€” ProductConfigurationItemDto.FeatureId nullable int
+        // Feature-stock linkleri - ProductConfigurationItemDto.FeatureId nullable int
         var stockLinksByFeature = new Dictionary<int, List<string>>();
         if (snapshot.Configurations != null)
         {
@@ -1021,7 +1044,7 @@ public sealed class LogisticsController : Controller
 
             var widgets = new List<object>();
 
-            // â”€â”€ Sistem widget'lari â”€â”€
+            // â"€â"€ Sistem widget'lari â"€â"€
             widgets.Add(new
             {
                 id = "sys_datatype",
@@ -1088,7 +1111,7 @@ public sealed class LogisticsController : Controller
                 color = stockCodes.Count > 0 ? "blue" : "slate",
             });
 
-            // Admin dinamik widget'lari yeni WidgetMas/WidgetTra altyapisina tasindi â€”
+            // Admin dinamik widget'lari yeni WidgetMas/WidgetTra altyapisina tasindi -
             // SmartBoard entegrasyonu ileride IWidgetService uzerinden eklenecek.
 
             entities.Add(new
@@ -1116,7 +1139,7 @@ public sealed class LogisticsController : Controller
             });
         }
 
-        // â”€â”€ Master widget sablonu (âš™ SmartBoardConfigPanel icin) â”€â”€
+        // â"€â"€ Master widget sablonu (âš™ SmartBoardConfigPanel icin) â"€â"€
         // Sistem widget'lari sabit; PRODUCT_CONFIG form kodundaki admin widget'lar ekleniyor.
         var masterWidgets = new List<object>
         {
@@ -1144,7 +1167,7 @@ public sealed class LogisticsController : Controller
         return new
         {
             boardKey = "product-configuration",
-            title = "Urun Ozellikleri",
+            title = "Ozellik ve Kombinasyon",
             subtitle = $"{entities.Count} ozellik",
             icon = "Sliders",
             iconColor = "teal",
@@ -1200,9 +1223,9 @@ public sealed class LogisticsController : Controller
         _ => "slate",
     };
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // ProductFeatureEdit â€” yeni edit sayfasi (MaterialCardEdit pattern'i)
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+    // ProductFeatureEdit - yeni edit sayfasi (MaterialCardEdit pattern'i)
+    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     [HttpGet]
     public IActionResult ProductFeatureEdit(int? id)
     {
@@ -1211,7 +1234,7 @@ public sealed class LogisticsController : Controller
     }
 
     /// <summary>
-    /// Feature detay fetch â€” edit sayfasi load'da cagirir.
+    /// Feature detay fetch - edit sayfasi load'da cagirir.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetProductFeature(int id, CancellationToken ct)
@@ -1240,7 +1263,7 @@ public sealed class LogisticsController : Controller
             .ToArray();
 
         // Stok adlarini cek (chip etiketi icin)
-        var stockCards = await _logisticsConfigurationService.GetStockCardsForLookupAsync(ct);
+        var stockCards = await _logisticsConfigurationService.GetItemsForLookupAsync(ct);
         var stockByCode = stockCards
             .GroupBy(s => (s.MaterialCode ?? string.Empty).ToUpperInvariant())
             .ToDictionary(g => g.Key, g => g.First().MaterialName ?? g.First().MaterialCode);
@@ -1269,7 +1292,7 @@ public sealed class LogisticsController : Controller
     }
 
     /// <summary>
-    /// Feature kaydet â€” yeni veya guncelleme. Vanilla JS edit formu JSON body POST eder.
+    /// Feature kaydet - yeni veya guncelleme. Vanilla JS edit formu JSON body POST eder.
     /// </summary>
     [HttpPost]
     public async Task<IActionResult> SaveProductFeatureJson(
@@ -1291,7 +1314,7 @@ public sealed class LogisticsController : Controller
             int savedId;
             if (input.Id.HasValue && input.Id.Value > 0)
             {
-                // Update â€” mevcut feature
+                // Update - mevcut feature
                 await _logisticsConfigurationService.UpdateProductConfigurationFeatureAsync(
                     new UpdateProductConfigurationFeatureRequest(
                         input.Id.Value,
@@ -1303,7 +1326,7 @@ public sealed class LogisticsController : Controller
             }
             else
             {
-                // Create â€” yeni feature
+                // Create - yeni feature
                 savedId = await _logisticsConfigurationService.CreateProductConfigurationFeatureAsync(
                     new CreateProductConfigurationFeatureRequest(
                         input.Name.Trim(),
@@ -1322,7 +1345,7 @@ public sealed class LogisticsController : Controller
     }
 
     /// <summary>
-    /// SmartCard-uyumlu delete endpoint'i â€” query string id, body'siz POST.
+    /// SmartCard-uyumlu delete endpoint'i - query string id, body'siz POST.
     /// </summary>
     [HttpPost]
     public async Task<IActionResult> DeleteProductFeatureJson(int id, CancellationToken ct)
@@ -1345,9 +1368,9 @@ public sealed class LogisticsController : Controller
         string? UnitOfMeasure,
         bool IsActive = true);
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // ProductFeatureEdit Phase 2 â€” Ozellik degeri ekle/sil (JSON)
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+    // ProductFeatureEdit Phase 2 - Ozellik degeri ekle/sil (JSON)
+    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
     /// <summary>
     /// Feature'a yeni deger ekler. React/vanilla JS inline form JSON body POST eder.
@@ -1384,7 +1407,7 @@ public sealed class LogisticsController : Controller
     }
 
     /// <summary>
-    /// Feature degeri sil â€” SmartCard/inline delete ile uyumlu, body'siz query string id.
+    /// Feature degeri sil - SmartCard/inline delete ile uyumlu, body'siz query string id.
     /// Mevcut DeleteProductValue action (antiforgery + redirect) dokunulmaz.
     /// </summary>
     [HttpPost]
@@ -1428,9 +1451,9 @@ public sealed class LogisticsController : Controller
         DateTime? DateValue,
         string? Aciklama = null);
 
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // ProductFeatureEdit Phase 3 â€” Ozellik stok baglama (JSON)
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+    // ProductFeatureEdit Phase 3 - Ozellik stok baglama (JSON)
+    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
     /// <summary>
     /// Feature'a bagli stok listesini tamamen yeniden yazar (full replace).
@@ -1992,7 +2015,7 @@ public sealed class LogisticsController : Controller
     }
 
     /// <summary>
-    /// Stok kodlarÄ± listesi â€” React Kombinasyon ekranÄ± iÃ§in.
+    /// Stok kodlarÄ± listesi - React Kombinasyon ekranÄ± iÃ§in.
     /// YalnÄ±zca hem Ã¶zellik baÄŸlantÄ±sÄ± olan hem de stok kartÄ± bulunan kodlar dÃ¶ndÃ¼rÃ¼lÃ¼r;
     /// bÃ¶ylece kombinasyon kaydetme sÄ±rasÄ±nda "malzeme kodu bulunamadÄ±" hatasÄ± oluÅŸmaz.
     /// </summary>
@@ -2002,8 +2025,8 @@ public sealed class LogisticsController : Controller
         var snapshot      = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(cancellationToken);
         var stockSnapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
 
-        // Stok kartÄ± indeksi â€” hÄ±zlÄ± arama iÃ§in
-        var cardIndex = stockSnapshot.StockCards
+        // Stok kartÄ± indeksi - hÄ±zlÄ± arama iÃ§in
+        var cardIndex = stockSnapshot.Items
             .GroupBy(s => s.MaterialCode.Trim().ToUpperInvariant())
             .ToDictionary(g => g.Key, g => g.First());
 
@@ -2027,7 +2050,7 @@ public sealed class LogisticsController : Controller
     }
 
     /// <summary>
-    /// Stoka ait Ã¶zellikler + deÄŸerler + mevcut kombinasyonlar â€” React Kombinasyon Matrisi ekranÄ± iÃ§in.
+    /// Stoka ait Ã¶zellikler + deÄŸerler + mevcut kombinasyonlar - React Kombinasyon Matrisi ekranÄ± iÃ§in.
     /// Cross-product hesaplanmaz; mevcut DB kayÄ±tlarÄ± doÄŸrudan dÃ¶ndÃ¼rÃ¼lÃ¼r. Client tarafÄ± cross-product Ã¼retir.
     /// </summary>
     [HttpGet]
@@ -2105,9 +2128,10 @@ public sealed class LogisticsController : Controller
                     .ToArray();
                 return new
                 {
-                    id    = config.Id,
-                    code  = config.ConfigCode,
-                    date  = config.CreatedDate.ToString("dd.MM.yyyy"),
+                    id          = config.Id,
+                    code        = config.ConfigCode,
+                    description = config.ConfigName,
+                    date        = config.CreatedDate.ToString("dd.MM.yyyy"),
                     cells
                 };
             })
@@ -2125,7 +2149,7 @@ public sealed class LogisticsController : Controller
         var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(cancellationToken);
         var stockSnapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
 
-        var allStockCodes = stockSnapshot.StockCards
+        var allStockCodes = stockSnapshot.Items
             .Where(x => x.TrackCombinations)
             .Select(x => x.MaterialCode)
             .Concat(snapshot.FeatureStockLinks.Select(x => x.StockCode))
@@ -2140,7 +2164,7 @@ public sealed class LogisticsController : Controller
         var stockCodeOptions = allStockCodes
             .Select(code => 
             {
-                var st = stockSnapshot.StockCards.FirstOrDefault(s => string.Equals(s.MaterialCode, code, StringComparison.OrdinalIgnoreCase));
+                var st = stockSnapshot.Items.FirstOrDefault(s => string.Equals(s.MaterialCode, code, StringComparison.OrdinalIgnoreCase));
                 var textLabel = st != null ? $"{code} - {st.MaterialName}" : code;
                 return new SelectListItem(textLabel, code, string.Equals(code, resolvedStockCode, StringComparison.OrdinalIgnoreCase));
             })
@@ -2195,16 +2219,16 @@ public sealed class LogisticsController : Controller
             }
         }
 
-        var selectedStockCard = resolvedStockCode != null
-            ? stockSnapshot.StockCards.FirstOrDefault(x => string.Equals(x.MaterialCode, resolvedStockCode, StringComparison.OrdinalIgnoreCase))
+        var selectedItem = resolvedStockCode != null
+            ? stockSnapshot.Items.FirstOrDefault(x => string.Equals(x.MaterialCode, resolvedStockCode, StringComparison.OrdinalIgnoreCase))
             : null;
 
         return View(new ProductCombinationsViewModel
         {
             StockCodeOptions = stockCodeOptions,
             SelectedStockCode = resolvedStockCode,
-            SelectedStockId = selectedStockCard?.Id,
-            SelectedStockName = selectedStockCard?.MaterialName,
+            SelectedStockId = selectedItem?.Id,
+            SelectedStockName = selectedItem?.MaterialName,
             LinkedFeatures = linkedFeatures,
             Combinations = combinations
         });
@@ -2387,6 +2411,25 @@ public sealed class LogisticsController : Controller
     {
         await _logisticsConfigurationService.DeleteProductConfigurationItemAsync(id, cancellationToken);
         return Json(new { success = true });
+    }
+
+    public sealed record UpdateCombinationDescriptionRequest(int Id, string? Description);
+
+    [HttpPost]
+    public async Task<IActionResult> UpdateCombinationDescriptionJson(
+        [FromBody] UpdateCombinationDescriptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _logisticsConfigurationService.UpdateProductCombinationDescriptionAsync(
+                request.Id, request.Description, cancellationToken);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
     }
 
     public sealed record AddSingleCombinationRequest(string StockCode, int[] ValueIds);
@@ -2607,7 +2650,7 @@ public sealed class LogisticsController : Controller
             .Select(x => x.StockCode)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var featureStockOptions = stockSnapshot.StockCards
+        var featureStockOptions = stockSnapshot.Items
             .Where(x => x.IsActive && x.TrackCombinations)
             .OrderBy(x => x.MaterialCode, StringComparer.OrdinalIgnoreCase)
             .Select(x => new ProductFeatureStockOptionViewModel
@@ -2618,7 +2661,7 @@ public sealed class LogisticsController : Controller
             })
             .ToArray();
 
-        var materialCodeOptions = stockSnapshot.StockCards
+        var materialCodeOptions = stockSnapshot.Items
             .Where(x => x.IsActive)
             .OrderBy(x => x.MaterialCode, StringComparer.OrdinalIgnoreCase)
             .Select(x => new SelectListItem(
@@ -2756,10 +2799,10 @@ public sealed class LogisticsController : Controller
             })
             .ToArray();
 
-        var measureUnits = await _logisticsConfigurationService.GetMeasureUnitDefinitionsAsync(cancellationToken);
+        var measureUnits = await _logisticsConfigurationService.GetUnitsAsync(cancellationToken);
         var unitOfMeasureOptions = measureUnits
             .Where(x => x.IsActive)
-            .Select(x => new SelectListItem($"{x.UnitCode} â€” {x.UnitName}", x.UnitCode))
+            .Select(x => new SelectListItem($"{x.UnitCode} - {x.UnitName}", x.UnitCode))
             .ToArray();
 
         return new ProductConfigurationViewModel
@@ -2818,16 +2861,16 @@ public sealed class LogisticsController : Controller
     }
 
 
-    private async Task<WarehouseLocationsViewModel> BuildWarehouseLocationsViewModelAsync(
-        WarehouseLocationInput input,
+    private async Task<LocationsViewModel> BuildLocationsViewModelAsync(
+        LocationInput input,
         string? search,
         int? page,
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        var locations = await _logisticsConfigurationService.GetWarehouseLocationsAsync(cancellationToken);
+        var locations = await _logisticsConfigurationService.GetLocationsAsync(cancellationToken);
         var layout = await _uiConfigurationService.GetScreenDesignLayoutAsync(
-            ScreenDesignCatalog.WarehouseLocationsScreenCode,
+            ScreenDesignCatalog.LocationsScreenCode,
             cancellationToken);
         var lookup = locations.ToDictionary(x => x.Id);
         var normalizedSearch = search?.Trim() ?? string.Empty;
@@ -2864,7 +2907,7 @@ public sealed class LogisticsController : Controller
             .Select(x =>
             {
                 var parent = x.ParentId.HasValue ? lookup.GetValueOrDefault(x.ParentId.Value) : null;
-                return new WarehouseLocationRowViewModel
+                return new LocationRowViewModel
                 {
                     Id = x.Id,
                     ParentId = x.ParentId,
@@ -2894,7 +2937,7 @@ public sealed class LogisticsController : Controller
             .Take(resolvedPageSize)
             .ToArray();
 
-        return new WarehouseLocationsViewModel
+        return new LocationsViewModel
         {
             Locations = rows,
             LocationTypeOptions = locationTypeOptions,
@@ -2913,16 +2956,16 @@ public sealed class LogisticsController : Controller
     }
 
 
-    private async Task<MeasureUnitDefinitionsViewModel> BuildMeasureUnitDefinitionsViewModelAsync(
-        MeasureUnitDefinitionInput input,
+    private async Task<UnitsViewModel> BuildUnitsViewModelAsync(
+        UnitInput input,
         string? search,
         int? page,
         int? pageSize,
         CancellationToken cancellationToken)
     {
-        var definitions = await _logisticsConfigurationService.GetMeasureUnitDefinitionsAsync(cancellationToken);
+        var definitions = await _logisticsConfigurationService.GetUnitsAsync(cancellationToken);
         var layout = await _uiConfigurationService.GetScreenDesignLayoutAsync(
-            ScreenDesignCatalog.MeasureUnitDefinitionsScreenCode,
+            ScreenDesignCatalog.UnitsScreenCode,
             cancellationToken);
         var normalizedSearch = search?.Trim() ?? string.Empty;
         var filteredDefinitions = definitions
@@ -2932,7 +2975,7 @@ public sealed class LogisticsController : Controller
                 string.IsNullOrWhiteSpace(normalizedSearch) ||
                 ContainsInsensitive(x.UnitCode, normalizedSearch) ||
                 ContainsInsensitive(x.UnitName, normalizedSearch))
-            .Select(x => new MeasureUnitDefinitionRowViewModel
+            .Select(x => new UnitRowViewModel
             {
                 Id = x.Id,
                 UnitCode = x.UnitCode,
@@ -2950,7 +2993,7 @@ public sealed class LogisticsController : Controller
             .Take(resolvedPageSize)
             .ToArray();
 
-        return new MeasureUnitDefinitionsViewModel
+        return new UnitsViewModel
         {
             Definitions = rows,
             LayoutTabs = BuildScreenLayoutTabs(layout),
@@ -2973,7 +3016,7 @@ public sealed class LogisticsController : Controller
     {
         var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
 
-        var allMaterialCards = snapshot.StockCards
+        var allMaterialCards = snapshot.Items
             .Select(x => new MaterialCardRowViewModel
             {
                 Id = x.Id,
@@ -3054,9 +3097,9 @@ public sealed class LogisticsController : Controller
                 PageSizeOptions = BuildPageSizeOptions(listQuery.PageSize)
             },
             StockInput = stockInput,
-            SelectedMeta = stockInput.StockCardId.HasValue && stockInput.StockCardId.Value != 0
-                ? snapshot.StockCards
-                    .Where(x => x.Id == stockInput.StockCardId.Value)
+            SelectedMeta = stockInput.ItemId.HasValue && stockInput.ItemId.Value != 0
+                ? snapshot.Items
+                    .Where(x => x.Id == stockInput.ItemId.Value)
                     .Select(x => new MaterialCardMetaViewModel
                     {
                         CreatedByUserId = x.CreatedByUserId,
@@ -3067,13 +3110,13 @@ public sealed class LogisticsController : Controller
                     .FirstOrDefault()
                 : null,
             Combinations = combinations,
-            MeasureUnits = (await _logisticsConfigurationService.GetMeasureUnitDefinitionsAsync(cancellationToken))
+            MeasureUnits = (await _logisticsConfigurationService.GetUnitsAsync(cancellationToken))
                 .Where(u => u.IsActive)
                 .Select(u => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem(u.UnitName, u.UnitCode))
                 .ToList(),
-            SupplierAccounts = (await _financeService.GetContactAccountsAsync(null, null, cancellationToken))
+            SupplierAccounts = (await _financeService.GetContactsAsync(null, null, cancellationToken))
                 .Where(a => a.IsActive)
-                .Select(a => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem($"{a.AccountCode} â€” {a.AccountTitle}", a.AccountCode))
+                .Select(a => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem($"{a.AccountCode} - {a.AccountTitle}", a.AccountCode))
                 .ToList(),
             AvailableColumns = MaterialCardGridColumns,
             VisibleColumns = await GetMaterialCardVisibleColumnsAsync(cancellationToken)
@@ -3189,7 +3232,7 @@ public sealed class LogisticsController : Controller
         }
 
         var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
-        var stockCard = snapshot.StockCards.FirstOrDefault(x => x.Id == stockCardId.Value);
+        var stockCard = snapshot.Items.FirstOrDefault(x => x.Id == stockCardId.Value);
         if (stockCard is null)
         {
             return new MaterialCardCreateInput();
@@ -3197,7 +3240,7 @@ public sealed class LogisticsController : Controller
 
         return new MaterialCardCreateInput
         {
-            StockCardId = stockCard.Id,
+            ItemId = stockCard.Id,
             MaterialCode = stockCard.MaterialCode,
             MaterialName = stockCard.MaterialName,
             MaterialDescription = stockCard.MaterialDescription,
@@ -3243,7 +3286,7 @@ public sealed class LogisticsController : Controller
 
     private static IReadOnlyCollection<SelectListItem> BuildLocationTypeOptions(string? selectedValue)
     {
-        var normalizedSelectedValue = NormalizeWarehouseLocationTypeCode(selectedValue);
+        var normalizedSelectedValue = NormalizeLocationTypeCode(selectedValue);
 
         return
         [
@@ -3279,7 +3322,7 @@ public sealed class LogisticsController : Controller
         return locationTypeCode ?? "-";
     }
 
-    private static string NormalizeWarehouseLocationTypeCode(string? locationTypeCode)
+    private static string NormalizeLocationTypeCode(string? locationTypeCode)
     {
         if (string.Equals(locationTypeCode, "AISLE", StringComparison.OrdinalIgnoreCase))
         {
@@ -3293,7 +3336,7 @@ public sealed class LogisticsController : Controller
         string? selectedUnitOfMeasure,
         CancellationToken cancellationToken)
     {
-        var definitions = await _logisticsConfigurationService.GetMeasureUnitDefinitionsAsync(cancellationToken);
+        var definitions = await _logisticsConfigurationService.GetUnitsAsync(cancellationToken);
         var options = definitions
             .Where(x => x.IsActive)
             .OrderBy(x => x.SortOrder)
@@ -3491,7 +3534,7 @@ public sealed class LogisticsController : Controller
             .Replace("stok", "malzeme");
     }
 
-    // â”€â”€ Grid kolon yonetimi â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â"€â"€ Grid kolon yonetimi â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
     private static readonly GridColumnDefinition[] MaterialCardGridColumns =
     [
@@ -3520,7 +3563,7 @@ public sealed class LogisticsController : Controller
         return Guid.TryParse(raw, out var id) ? id : Guid.Empty;
     }
 
-    // â”€â”€ AJAX JSON Endpoint'leri (MaterialCards) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â"€â"€ AJAX JSON Endpoint'leri (MaterialCards) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
     [HttpGet]
     public async Task<IActionResult> GetMaterialCards(
@@ -3535,7 +3578,7 @@ public sealed class LogisticsController : Controller
         var listQuery = NormalizeMaterialCardListQuery(search, sortBy, sortDirection, page, resolvedPageSize);
 
         var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-        var allRows = snapshot.StockCards
+        var allRows = snapshot.Items
             .Select(x => new MaterialCardRowViewModel
             {
                 Id = x.Id,
@@ -3579,7 +3622,7 @@ public sealed class LogisticsController : Controller
     public async Task<IActionResult> GetMaterialCard(int id, CancellationToken ct)
     {
         var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-        var card = snapshot.StockCards.FirstOrDefault(x => x.Id == id);
+        var card = snapshot.Items.FirstOrDefault(x => x.Id == id);
         if (card is null) return NotFound();
 
         string? imageUrl = card.ImageData != null && card.ImageMimeType != null
@@ -3642,16 +3685,16 @@ public sealed class LogisticsController : Controller
         try
         {
             // Ayni kodla mevcut kart varsa guncellemeye yonlendir
-            if (!input.StockCardId.HasValue || input.StockCardId.Value == 0)
+            if (!input.ItemId.HasValue || input.ItemId.Value == 0)
             {
                 var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-                var existing = snapshot.StockCards.FirstOrDefault(x =>
+                var existing = snapshot.Items.FirstOrDefault(x =>
                     string.Equals(x.MaterialCode, input.MaterialCode.Trim(), StringComparison.OrdinalIgnoreCase));
                 if (existing is not null)
-                    input.StockCardId = existing.Id;
+                    input.ItemId = existing.Id;
             }
 
-            var isUpdate = input.StockCardId.HasValue && input.StockCardId.Value != 0;
+            var isUpdate = input.ItemId.HasValue && input.ItemId.Value != 0;
 
             // Resim islemleri
             byte[]? imageData = null;
@@ -3671,7 +3714,7 @@ public sealed class LogisticsController : Controller
             var companyId = GetCompanyId();
             var placeholders = new Dictionary<string, string>
             {
-                ["EntityId"] = (input.StockCardId ?? 0).ToString(),
+                ["EntityId"] = (input.ItemId ?? 0).ToString(),
                 ["UserName"] = User.FindFirstValue(ClaimTypes.Name) ?? "system",
                 ["MaterialCode"] = input.MaterialCode ?? "",
                 ["MaterialName"] = input.MaterialName ?? "",
@@ -3682,12 +3725,12 @@ public sealed class LogisticsController : Controller
 
             if (isUpdate)
             {
-                placeholders["EntityId"] = input.StockCardId!.Value.ToString();
-                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "StockCard", "BeforeUpdate", placeholders, ct);
+                placeholders["EntityId"] = input.ItemId!.Value.ToString();
+                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeUpdate", placeholders, ct);
 
-                await _logisticsConfigurationService.UpdateStockCardAsync(
-                    new UpdateStockCardRequest(
-                        StockCardId: input.StockCardId!.Value,
+                await _logisticsConfigurationService.UpdateItemAsync(
+                    new UpdateItemRequest(
+                        ItemId: input.ItemId!.Value,
                         MaterialCode: input.MaterialCode,
                         MaterialName: input.MaterialName,
                         MaterialDescription: input.MaterialDescription,
@@ -3697,14 +3740,14 @@ public sealed class LogisticsController : Controller
                         ImageMimeType: imageMimeType),
                     ct);
 
-                _integrationEventService.FireAfterEvent(companyId, "StockCard", "AfterUpdate", placeholders);
+                _integrationEventService.FireAfterEvent(companyId, "Item", "AfterUpdate", placeholders);
             }
             else
             {
-                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "StockCard", "BeforeCreate", placeholders, ct);
+                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeCreate", placeholders, ct);
 
-                await _logisticsConfigurationService.CreateStockCardAsync(
-                    new CreateStockCardRequest(
+                await _logisticsConfigurationService.CreateItemAsync(
+                    new CreateItemRequest(
                         MaterialCode: input.MaterialCode,
                         MaterialName: input.MaterialName,
                         MaterialDescription: input.MaterialDescription,
@@ -3714,15 +3757,15 @@ public sealed class LogisticsController : Controller
                         ImageMimeType: imageMimeType),
                     ct);
 
-                _integrationEventService.FireAfterEvent(companyId, "StockCard", "AfterCreate", placeholders);
+                _integrationEventService.FireAfterEvent(companyId, "Item", "AfterCreate", placeholders);
             }
 
             // Kaydedilen kartin ID'sini dondur
-            var savedCardId = input.StockCardId;
+            var savedCardId = input.ItemId;
             if (!isUpdate && (savedCardId == null || savedCardId == 0))
             {
                 var refreshed = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-                var created = refreshed.StockCards
+                var created = refreshed.Items
                     .FirstOrDefault(x => string.Equals(x.MaterialCode, input.MaterialCode, StringComparison.OrdinalIgnoreCase));
                 if (created != null) savedCardId = created.Id;
             }
@@ -3751,7 +3794,7 @@ public sealed class LogisticsController : Controller
         {
             var companyId = GetCompanyId();
             var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-            var card = snapshot.StockCards.FirstOrDefault(x => x.Id == id);
+            var card = snapshot.Items.FirstOrDefault(x => x.Id == id);
             var placeholders = new Dictionary<string, string>
             {
                 ["EntityId"] = id.ToString(),
@@ -3763,9 +3806,9 @@ public sealed class LogisticsController : Controller
                 ["IsActive"] = card?.IsActive == true ? "1" : "0"
             };
 
-            await _integrationEventService.ExecuteBeforeEventAsync(companyId, "StockCard", "BeforeDelete", placeholders, ct);
-            await _logisticsConfigurationService.DeactivateStockCardAsync(id, ct);
-            _integrationEventService.FireAfterEvent(companyId, "StockCard", "AfterDelete", placeholders);
+            await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeDelete", placeholders, ct);
+            await _logisticsConfigurationService.DeactivateItemAsync(id, ct);
+            _integrationEventService.FireAfterEvent(companyId, "Item", "AfterDelete", placeholders);
 
             return Json(new { success = true, message = "Malzeme karti silindi." });
         }
@@ -3794,7 +3837,7 @@ public sealed class LogisticsController : Controller
     public async Task<IActionResult> GetStockUnitConversions(int stockCardId, CancellationToken ct)
     {
         var items = await _logisticsConfigurationService.GetStockUnitConversionsAsync(stockCardId, ct);
-        var units = await _logisticsConfigurationService.GetMeasureUnitDefinitionsAsync(ct);
+        var units = await _logisticsConfigurationService.GetUnitsAsync(ct);
         return Json(new
         {
             conversions = items.Select(x => new { x.LineNo, x.UnitCode, x.Multiplier }),
@@ -3807,7 +3850,7 @@ public sealed class LogisticsController : Controller
     [HttpPost]
     public async Task<IActionResult> SaveStockUnitConversions([FromBody] SaveStockUnitConversionsInput input, CancellationToken ct)
     {
-        if (input.StockCardId <= 0)
+        if (input.ItemId <= 0)
             return Json(new { success = false, message = "Stok karti ID gerekli." });
 
         var items = (input.Items ?? [])
@@ -3820,12 +3863,82 @@ public sealed class LogisticsController : Controller
         if (codes.Distinct().Count() != codes.Count)
             return Json(new { success = false, message = "Ayni olcu birimi birden fazla tanimlanamaz." });
 
-        await _logisticsConfigurationService.SaveStockUnitConversionsAsync(input.StockCardId, items, ct);
+        await _logisticsConfigurationService.SaveStockUnitConversionsAsync(input.ItemId, items, ct);
         return Json(new { success = true });
+    }
+
+    // ── Stok Karti <-> Ozellik Eslestirmesi (Kombinasyon Takibi acik iken) ──
+
+    /// <summary>
+    /// Bir stok karti için mevcut tum FEATURE listesini + bu karta bagli olanlari doner.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetStockFeatures(int stockCardId, CancellationToken ct)
+    {
+        var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
+        var card = snapshot.Items.FirstOrDefault(s => s.Id == stockCardId);
+        if (card is null) return NotFound(new { success = false, message = "Stok karti bulunamadi." });
+
+        var productCfg = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
+
+        var linkedFeatureIds = productCfg.FeatureStockLinks
+            .Where(l => string.Equals(l.StockCode, card.MaterialCode.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Select(l => l.FeatureId)
+            .ToHashSet();
+
+        var allFeatures = productCfg.Features
+            .Where(f => f.IsActive)
+            .OrderBy(f => f.Name)
+            .Select(f => new
+            {
+                id = f.Id,
+                code = f.Code,
+                name = f.Name,
+                dataType = f.DataType,
+                unitOfMeasure = f.UnitOfMeasure,
+                linked = linkedFeatureIds.Contains(f.Id)
+            })
+            .ToArray();
+
+        return Json(new
+        {
+            materialCode = card.MaterialCode,
+            features = allFeatures,
+        });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveStockFeatures([FromBody] SaveStockFeaturesInput input, CancellationToken ct)
+    {
+        if (input is null || input.ItemId <= 0)
+            return Json(new { success = false, message = "Stok karti ID gerekli." });
+
+        try
+        {
+            var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
+            var card = snapshot.Items.FirstOrDefault(s => s.Id == input.ItemId);
+            if (card is null) return Json(new { success = false, message = "Stok karti bulunamadi." });
+
+            await _logisticsConfigurationService.SetFeaturesForItemAsync(
+                card.MaterialCode,
+                input.FeatureIds ?? Array.Empty<int>(),
+                ct);
+
+            return Json(new { success = true });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "Sunucu hatası: " + ex.Message });
+        }
     }
 }
 
-public sealed record SaveStockUnitConversionsInput(int StockCardId, SaveStockUnitConversionLineInput[]? Items);
+public sealed record SaveStockUnitConversionsInput(int ItemId, SaveStockUnitConversionLineInput[]? Items);
 public sealed record SaveStockUnitConversionLineInput(string UnitCode, decimal Multiplier);
+public sealed record SaveStockFeaturesInput(int ItemId, int[]? FeatureIds);
 
 public sealed record SaveProductCombinationsRequest(string StockCode, string[]? SelectedCombinations);

@@ -1,10 +1,13 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Persistence.Database;
+using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models.Logistics;
 using CalibraHub.Web.Models.Sales;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using System.Globalization;
 using System.Security.Claims;
 
@@ -13,32 +16,36 @@ namespace CalibraHub.Web.Controllers;
 [Authorize]
 public sealed class SalesController : Controller
 {
-    private readonly ISalesQuoteService _quoteService;
+    private readonly IDocumentService _quoteService;
     private readonly IFinanceService _financeService;
     private readonly ILogisticsConfigurationService _logisticsService;
     private readonly IUiConfigurationService _uiConfigurationService;
     private readonly IWidgetService _widgetService;
     private readonly IFieldSettingRepository _fieldSettings;
+    private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly string _schema;
 
-    private static readonly GridColumnDefinition[] SalesQuoteGridColumns =
+    private static readonly GridColumnDefinition[] DocumentGridColumns =
     [
-        new() { Key = "QuoteNumber",  Label = "Teklif No" },
-        new() { Key = "QuoteDate",    Label = "Tarih" },
-        new() { Key = "CustomerName", Label = "Musteri" },
+        new() { Key = "DocumentNumber",  Label = "Teklif No" },
+        new() { Key = "DocumentDate",    Label = "Tarih" },
+        new() { Key = "ContactName", Label = "Musteri" },
         new() { Key = "GrandTotal",   Label = "Toplam" },
         new() { Key = "Status",       Label = "Durum" },
     ];
 
-    private static readonly string[] DefaultSalesQuoteColumns =
-        ["QuoteNumber", "QuoteDate", "CustomerName", "GrandTotal", "Status"];
+    private static readonly string[] DefaultDocumentColumns =
+        ["DocumentNumber", "DocumentDate", "ContactName", "GrandTotal", "Status"];
 
     public SalesController(
-        ISalesQuoteService quoteService,
+        IDocumentService quoteService,
         IFinanceService financeService,
         ILogisticsConfigurationService logisticsService,
         IUiConfigurationService uiConfigurationService,
         IWidgetService widgetService,
-        IFieldSettingRepository fieldSettings)
+        IFieldSettingRepository fieldSettings,
+        SqlServerConnectionFactory connectionFactory,
+        CalibraDatabaseOptions dbOptions)
     {
         _quoteService = quoteService;
         _financeService = financeService;
@@ -46,6 +53,8 @@ public sealed class SalesController : Controller
         _uiConfigurationService = uiConfigurationService;
         _widgetService = widgetService;
         _fieldSettings = fieldSettings;
+        _connectionFactory = connectionFactory;
+        _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
     private Guid GetUserId()
@@ -55,21 +64,21 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> SalesQuotes(CancellationToken ct)
+    public async Task<IActionResult> Documents(CancellationToken ct)
     {
         var userId = GetUserId();
         var cols = await _uiConfigurationService.GetGridColumnPreferencesAsync(userId, "sales-quotes", ct);
-        var boardConfig = await BuildSalesQuotesBoardConfigAsync(ct);
-        return View(new SalesQuotesViewModel
+        var boardConfig = await BuildDocumentsBoardConfigAsync(ct);
+        return View(new DocumentsViewModel
         {
-            AvailableColumns = SalesQuoteGridColumns,
-            VisibleColumns = cols.Count > 0 ? cols : DefaultSalesQuoteColumns,
+            AvailableColumns = DocumentGridColumns,
+            VisibleColumns = cols.Count > 0 ? cols : DefaultDocumentColumns,
             BoardConfig = boardConfig,
         });
     }
 
     // ════════════════════════════════════════════════════════════════
-    // BuildSalesQuotesBoardConfigAsync
+    // BuildDocumentsBoardConfigAsync
     //
     // SmartBoard (CalibraSmartBoard) icin server-side BoardConfig objesi
     // uretir. Malzeme Kartlari ekraninin ayni mimarisi — "Zeki Veri, Aptal
@@ -77,7 +86,7 @@ public sealed class SalesController : Controller
     //
     // Widget JSON kontrati: { id, type:"data", dataType, label, value, detail, color }
     // ════════════════════════════════════════════════════════════════
-    private async Task<object> BuildSalesQuotesBoardConfigAsync(CancellationToken ct)
+    private async Task<object> BuildDocumentsBoardConfigAsync(CancellationToken ct)
     {
         var quotes = await _quoteService.GetQuotesAsync(search: null, status: null, ct);
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
@@ -127,7 +136,7 @@ public sealed class SalesController : Controller
                 value = quote.LineCount.ToString(CultureInfo.InvariantCulture), detail = "kalem",
                 color = "slate" });
             widgets.Add(new { id = "w_tarih", type = "data", dataType = "date", label = "Tarih",
-                value = quote.QuoteDate.ToString("dd.MM.yyyy", trCulture), detail = (string?)null,
+                value = quote.DocumentDate.ToString("dd.MM.yyyy", trCulture), detail = (string?)null,
                 color = "slate" });
             if (quote.ValidUntil.HasValue)
             {
@@ -162,8 +171,8 @@ public sealed class SalesController : Controller
             entities.Add(new
             {
                 id = quote.Id,
-                title = string.IsNullOrWhiteSpace(quote.CustomerName) ? "(musterisiz)" : quote.CustomerName,
-                subtitle = quote.QuoteNumber ?? string.Empty,
+                title = string.IsNullOrWhiteSpace(quote.ContactName) ? "(musterisiz)" : quote.ContactName,
+                subtitle = quote.DocumentNumber ?? string.Empty,
                 description = string.Empty,
                 imageUrl = (string?)null,
                 statusBadge = (object?)null,
@@ -172,14 +181,14 @@ public sealed class SalesController : Controller
                 {
                     label = "Duzenle",
                     icon = "Edit",
-                    url = $"/Sales/SalesQuoteEdit?id={quote.Id}",
+                    url = $"/Sales/DocumentEdit?id={quote.Id}",
                 },
                 secondaryAction = new
                 {
                     label = "Sil",
                     icon = "Trash2",
-                    apiUrl = $"/Sales/DeleteSalesQuoteJson?id={quote.Id}",
-                    confirm = $"Bu teklifi silmek istediginizden emin misiniz? ({quote.QuoteNumber})",
+                    apiUrl = $"/Sales/DeleteDocumentJson?id={quote.Id}",
+                    confirm = $"Bu teklifi silmek istediginizden emin misiniz? ({quote.DocumentNumber})",
                 },
             });
         }
@@ -201,7 +210,7 @@ public sealed class SalesController : Controller
                     label = "Yeni Teklif",
                     icon = "Plus",
                     variant = "primary",
-                    url = "/Sales/SalesQuoteEdit",
+                    url = "/Sales/DocumentEdit",
                 },
             },
             masterWidgets,
@@ -234,7 +243,7 @@ public sealed class SalesController : Controller
     };
 
     [HttpPost]
-    public async Task<IActionResult> SaveSalesQuoteGridColumns([FromBody] string[] columns, CancellationToken ct)
+    public async Task<IActionResult> SaveDocumentGridColumns([FromBody] string[] columns, CancellationToken ct)
     {
         var userId = GetUserId();
         if (userId == Guid.Empty) return Unauthorized();
@@ -243,27 +252,27 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> SalesQuoteEdit(Guid? id, CancellationToken ct)
+    public async Task<IActionResult> DocumentEdit(Guid? id, CancellationToken ct)
     {
         // Satır grid kolonlarına rehber binding'lerini runtime'da inject et
         var bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
-        var lineGridConfig = BuildSalesQuoteLineGridConfig(bindings);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
         };
-        var vm = new SalesQuoteEditViewModel
+        var vm = new DocumentEditViewModel
         {
-            QuoteId = id,
+            DocumentId = id,
             LineGridConfigJson = System.Text.Json.JsonSerializer.Serialize(lineGridConfig, jsonOpts),
         };
 
-        return View("SalesQuoteEdit", vm);
+        return View("DocumentEdit", vm);
     }
 
     // ════════════════════════════════════════════════════════════════
-    // BuildSalesQuoteLineGridConfig
+    // BuildDocumentLineGridConfig
     //
     // Satis teklifi kalem grid'i (CalibraLineItemsGrid React bileseni) icin
     // server-side kolon ve meta JSON'i hazirlar. "Aptal Bilesen, Zeki Veri":
@@ -273,7 +282,7 @@ public sealed class SalesController : Controller
     //   text, text-lookup, select, number, currency, percent, date
     // Computed hucreler: formula string'i gelir, React guvenli evaluator ile hesaplar.
     // ════════════════════════════════════════════════════════════════
-    private object BuildSalesQuoteLineGridConfig(
+    private object BuildDocumentLineGridConfig(
         IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
@@ -303,8 +312,9 @@ public sealed class SalesController : Controller
                     lookupLabelKey = "materialName",
                     lookupFillMap = new Dictionary<string, string>
                     {
-                        ["materialName"] = "MaterialName",
-                        ["stockCardId"]  = "Id",
+                        ["materialName"]      = "MaterialName",
+                        ["stockCardId"]       = "Id",
+                        ["trackCombinations"] = "TrackCombinations",
                     },
                     width    = 150,
                     required = matBinding?.IsRequired ?? false,
@@ -323,12 +333,26 @@ public sealed class SalesController : Controller
                 },
                 new
                 {
+                    key = "combinationCode",
+                    label = "Kombinasyon",
+                    type = "combination-lookup",
+                    width = 140,
+                    align = "center",
+                    icon = "CircleDot",
+                    // Sadece row.trackCombinations=true iken aktif olur (client-side kontrol)
+                    visibleWhenKey = "trackCombinations",
+                },
+                new
+                {
                     key = "unitName",
                     label = "Birim",
                     type = "select",
                     optionsUrl = "/Sales/GetMaterialUnits?materialCode={materialCode}",
                     optionsValueKey = "code",
                     optionsLabelKey = "name",
+                    // Secenekler geldiginde hucre bos ise ilk option (master birim)
+                    // otomatik atanir. Kullanici farkli birim secmek isterse degistirebilir.
+                    autoSelectFirst = true,
                     width = 90,
                     align = "center",
                     icon = "Ruler",
@@ -383,7 +407,7 @@ public sealed class SalesController : Controller
                     key = "notes",
                     label = "Not",
                     type = "text",
-                    width = 160,
+                    placement = "row-below",
                     align = "left",
                     icon = "StickyNote",
                 },
@@ -406,7 +430,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetSalesQuotes(string? search, string? status, CancellationToken ct)
+    public async Task<IActionResult> GetDocuments(string? search, string? status, CancellationToken ct)
     {
         var quotes = await _quoteService.GetQuotesAsync(search, status, ct);
         return Json(quotes);
@@ -431,7 +455,7 @@ public sealed class SalesController : Controller
     [HttpGet]
     public async Task<IActionResult> GetCustomers(CancellationToken ct)
     {
-        var accounts = await _financeService.GetContactAccountsAsync(null, null, ct);
+        var accounts = await _financeService.GetContactsAsync(null, null, ct);
         return Json(accounts);
     }
 
@@ -439,7 +463,7 @@ public sealed class SalesController : Controller
     public async Task<IActionResult> GetMaterials(CancellationToken ct)
     {
         var snapshot = await _logisticsService.GetSnapshotAsync(ct);
-        var materials = snapshot.StockCards
+        var materials = snapshot.Items
             .Where(x => x.IsActive)
             .Select(x => new { x.Id, x.MaterialCode, x.MaterialName, x.TaxRate, x.TrackCombinations })
             .OrderBy(x => x.MaterialCode)
@@ -459,7 +483,7 @@ public sealed class SalesController : Controller
         var unitName = "";
         if (!string.IsNullOrWhiteSpace(unitCode))
         {
-            var allUnits = await _logisticsService.GetMeasureUnitDefinitionsAsync(ct);
+            var allUnits = await _logisticsService.GetUnitsAsync(ct);
             var unit = allUnits.FirstOrDefault(u => string.Equals(u.UnitCode, unitCode, StringComparison.OrdinalIgnoreCase));
             unitName = unit?.UnitName ?? unitCode;
         }
@@ -479,7 +503,7 @@ public sealed class SalesController : Controller
         if (string.IsNullOrWhiteSpace(materialCode)) return result;
 
         // Tum olcu birimi tanimlari (kod→isim lookup)
-        var allUnits = await _logisticsService.GetMeasureUnitDefinitionsAsync(ct);
+        var allUnits = await _logisticsService.GetUnitsAsync(ct);
         var unitNameLookup = allUnits
             .Where(u => u.IsActive)
             .ToDictionary(u => u.UnitCode.Trim().ToUpperInvariant(), u => u.UnitName, StringComparer.OrdinalIgnoreCase);
@@ -513,15 +537,25 @@ public sealed class SalesController : Controller
                 result.Add(new { code = convCode, name = Resolve(convCode) });
         }
 
-        // Hicbir birim tanimli degilse fallback: tum aktif birimleri doner
-        if (result.Count == 0)
+        // 4) stock_unit_conversions tablosundan da birimleri topla — stok kartinin
+        // "Birim Donusumleri" ekraninda eklenen birimler burada saklanir.
+        // ItemId'yi materials snapshot'tan cozeriz.
+        var snapshot = await _logisticsService.GetSnapshotAsync(ct);
+        var stockCard = snapshot.Items.FirstOrDefault(x =>
+            string.Equals(x.MaterialCode, materialCode, StringComparison.OrdinalIgnoreCase));
+        if (stockCard != null)
         {
-            foreach (var u in allUnits.Where(x => x.IsActive))
+            var conversions = await _logisticsService.GetStockUnitConversionsAsync(stockCard.Id, ct);
+            foreach (var cv in conversions)
             {
-                result.Add(new { code = u.UnitCode, name = u.UnitName });
+                if (!string.IsNullOrWhiteSpace(cv.UnitCode) && usedCodes.Add(cv.UnitCode))
+                    result.Add(new { code = cv.UnitCode, name = Resolve(cv.UnitCode) });
             }
         }
 
+        // Malzeme kartinda birim tanimli degilse — tum sistem birimlerini
+        // doldurmuyoruz (kullanici kafasi karisiyor). Bos liste doneriz;
+        // kullanici malzeme kartini duzenleyip birim tanimlamali.
         return result;
     }
 
@@ -557,7 +591,7 @@ public sealed class SalesController : Controller
     [HttpGet]
     public async Task<IActionResult> GetMeasureUnits(CancellationToken ct)
     {
-        var units = await _logisticsService.GetMeasureUnitDefinitionsAsync(ct);
+        var units = await _logisticsService.GetUnitsAsync(ct);
         return Json(units.Where(u => u.IsActive).Select(u => new { code = u.UnitCode, name = u.UnitName }));
     }
 
@@ -588,15 +622,51 @@ public sealed class SalesController : Controller
         {
             var values = snapshot.Values
                 .Where(v => v.FeatureId == feature.Id && v.IsActive)
-                .Select(v => new { code = v.Code, name = v.Description })
+                .Select(v => new { id = v.Id, code = v.Code, name = v.Description })
                 .ToArray();
-            features.Add(new { featureName = feature.Name, featureCode = feature.Code, values });
+            features.Add(new { featureId = feature.Id, featureName = feature.Name, featureCode = feature.Code, values });
         }
         return Json(features);
     }
 
+    /// <summary>
+    /// Satış teklifi satırı için yeni kombinasyon çöz veya oluştur.
+    /// Aynı özellik-değer setine sahip mevcut CONFIG varsa onu döner (matched=true);
+    /// yoksa yeni bir CONFIG kaydı üretilir (matched=false).
+    /// </summary>
     [HttpPost]
-    public async Task<IActionResult> SaveSalesQuote([FromBody] SaveSalesQuoteRequest request, CancellationToken ct)
+    public async Task<IActionResult> ResolveOrCreateCombination(
+        [FromBody] ResolveCombinationRequest request, CancellationToken ct)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.MaterialCode))
+            return Json(new { success = false, message = "Malzeme kodu zorunludur." });
+        if (request.Selections == null || request.Selections.Count == 0)
+            return Json(new { success = false, message = "En az bir özellik değeri seçmelisiniz." });
+
+        try
+        {
+            var result = await _logisticsService.ResolveOrCreateCombinationAsync(request, ct);
+            return Json(new
+            {
+                success = true,
+                matched = result.Matched,
+                configId = result.ConfigId,
+                code = result.Code,
+                name = result.Name,
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "Sunucu hatası: " + ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveDocument([FromBody] SaveDocumentRequest request, CancellationToken ct)
     {
         var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
         var (success, error, quote) = await _quoteService.SaveQuoteAsync(request, userName, ct);
@@ -605,7 +675,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeleteSalesQuote([FromBody] DeleteQuoteBody body, CancellationToken ct)
+    public async Task<IActionResult> DeleteDocument([FromBody] DeleteQuoteBody body, CancellationToken ct)
     {
         await _quoteService.DeleteQuoteAsync(body.Id, ct);
         return Json(new { success = true });
@@ -614,12 +684,12 @@ public sealed class SalesController : Controller
     /// <summary>
     /// SmartCard-uyumlu delete endpoint'i — query string ile id bekler.
     /// SmartCard.jsx secondaryAction.apiUrl body'siz POST gonderdiği icin
-    /// mevcut DeleteSalesQuote (body binding) kullanilamaz. Bu wrapper ayni
+    /// mevcut DeleteDocument (body binding) kullanilamaz. Bu wrapper ayni
     /// servisi cagirir ve ayni cevabi doner (MaterialCards DeleteMaterialCardJson
     /// pattern'i ile ayni).
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> DeleteSalesQuoteJson(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DeleteDocumentJson(Guid id, CancellationToken ct)
     {
         try
         {
@@ -637,6 +707,108 @@ public sealed class SalesController : Controller
     {
         var (success, error) = await _quoteService.ChangeStatusAsync(body.Id, body.Status, ct);
         if (!success) return Json(new { success = false, message = error });
+        return Json(new { success = true });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Ekli Dosyalar — sales_quote_attachments
+    // Raw ADO.NET: tablo sadece bu controller tarafindan okunuyor,
+    // service/repository layer acmaya degmeyecek kadar kucuk bir yuzey.
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    public async Task<IActionResult> GetQuoteAttachments(Guid quoteId, CancellationToken ct)
+    {
+        var list = new List<object>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [id],[file_name],[mime_type],[file_size],[uploaded_at]
+            FROM [{_schema}].[sales_quote_attachments]
+            WHERE [document_id] = @DocumentId AND [is_active] = 1
+            ORDER BY [uploaded_at] DESC;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@DocumentId", quoteId));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new
+            {
+                id = r.GetGuid(0),
+                fileName = r.GetString(1),
+                mimeType = r.IsDBNull(2) ? null : r.GetString(2),
+                fileSize = r.GetInt64(3),
+                uploadedAt = r.GetDateTime(4),
+            });
+        }
+        return Json(list);
+    }
+
+    [HttpPost]
+    [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB per dosya
+    public async Task<IActionResult> UploadQuoteAttachment(
+        [FromForm] Guid quoteId,
+        [FromForm] List<IFormFile> files,
+        CancellationToken ct)
+    {
+        if (files == null || files.Count == 0)
+            return BadRequest(new { success = false, message = "Dosya yok." });
+
+        var user = User.Identity?.Name ?? "unknown";
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        foreach (var file in files)
+        {
+            if (file.Length <= 0) continue;
+            await using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var bytes = ms.ToArray();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                INSERT INTO [{_schema}].[sales_quote_attachments]
+                    ([id],[document_id],[file_name],[mime_type],[file_size],[content],[uploaded_by],[uploaded_at],[is_active])
+                VALUES (@Id,@DocumentId,@FileName,@Mime,@Size,@Content,@User,SYSUTCDATETIME(),1);
+                """;
+            cmd.Parameters.Add(new SqlParameter("@Id", Guid.NewGuid()));
+            cmd.Parameters.Add(new SqlParameter("@DocumentId", quoteId));
+            cmd.Parameters.Add(new SqlParameter("@FileName", file.FileName ?? "file"));
+            cmd.Parameters.Add(new SqlParameter("@Mime", (object?)file.ContentType ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@Size", (long)bytes.Length));
+            cmd.Parameters.Add(new SqlParameter("@Content", bytes));
+            cmd.Parameters.Add(new SqlParameter("@User", user));
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        return Json(new { success = true });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> DownloadQuoteAttachment(Guid id, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [file_name],[mime_type],[content]
+            FROM [{_schema}].[sales_quote_attachments]
+            WHERE [id] = @Id AND [is_active] = 1;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Id", id));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return NotFound();
+        var fileName = r.GetString(0);
+        var mime = r.IsDBNull(1) ? "application/octet-stream" : r.GetString(1);
+        var content = (byte[])r[2];
+        return File(content, mime, fileName);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteQuoteAttachment([FromBody] DeleteQuoteBody body, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"UPDATE [{_schema}].[sales_quote_attachments] SET [is_active] = 0 WHERE [id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id", body.Id));
+        await cmd.ExecuteNonQueryAsync(ct);
         return Json(new { success = true });
     }
 }

@@ -18,7 +18,7 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         _table = $"[{schema}].[report_templates]";
     }
 
-    private const string Columns = "[id],[name],[document_type_id],[frx_file_path],[description],[is_default],[is_active],[created_at],[updated_at]";
+    private const string Columns = "[id],[name],[document_type_id],[frx_file_path],[description],[is_default],[is_active],[created_at],[updated_at],[frx_content]";
 
     public async Task<IReadOnlyCollection<ReportTemplate>> GetAllAsync(CancellationToken cancellationToken)
     {
@@ -73,16 +73,21 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
             MERGE {_table} AS tgt
             USING (SELECT @Id AS [id]) AS src ON tgt.[id] = src.[id]
             WHEN MATCHED THEN
-                UPDATE SET [name]=@Name,[document_type_id]=@DocTypeId,[frx_file_path]=@FrxFilePath,
+                UPDATE SET [name]=@Name,[document_type_id]=@DocTypeId,[frx_file_path]=@FrxFilePath,[frx_content]=@FrxContent,
                            [description]=@Description,[is_default]=@IsDefault,[is_active]=@IsActive,[updated_at]=GETDATE()
             WHEN NOT MATCHED THEN
-                INSERT ([id],[name],[document_type_id],[frx_file_path],[description],[is_default],[is_active],[created_at],[updated_at])
-                VALUES (@Id,@Name,@DocTypeId,@FrxFilePath,@Description,@IsDefault,@IsActive,GETDATE(),GETDATE());
+                INSERT ([id],[name],[document_type_id],[frx_file_path],[frx_content],[description],[is_default],[is_active],[created_at],[updated_at])
+                VALUES (@Id,@Name,@DocTypeId,@FrxFilePath,@FrxContent,@Description,@IsDefault,@IsActive,GETDATE(),GETDATE());
             """;
         command.Parameters.Add(new SqlParameter("@Id", entity.Id));
         command.Parameters.Add(new SqlParameter("@Name", entity.Name));
         command.Parameters.Add(new SqlParameter("@DocTypeId", entity.DocumentTypeId));
         command.Parameters.Add(new SqlParameter("@FrxFilePath", (object?)entity.FrxFilePath ?? DBNull.Value));
+        var frxContentParam = new SqlParameter("@FrxContent", System.Data.SqlDbType.VarBinary, -1)
+        {
+            Value = (object?)entity.FrxContent ?? DBNull.Value
+        };
+        command.Parameters.Add(frxContentParam);
         command.Parameters.Add(new SqlParameter("@Description", (object?)entity.Description ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsDefault", entity.IsDefault));
         command.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
@@ -109,5 +114,6 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         IsActive       = r.GetBoolean(6),
         CreatedAt      = r.GetDateTime(7),
         UpdatedAt      = r.GetDateTime(8),
+        FrxContent     = r.IsDBNull(9) ? null : (byte[])r.GetValue(9),
     };
 }

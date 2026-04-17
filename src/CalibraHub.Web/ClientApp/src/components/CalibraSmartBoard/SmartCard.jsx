@@ -415,21 +415,17 @@ export default function SmartCard(props) {
 
           {/* Kimlik */}
           <div
-            className="flex items-center gap-3.5 px-5 py-3.5 flex-shrink-0 min-w-[260px] max-w-[320px] cursor-pointer group"
+            className="flex items-center gap-3.5 pl-3 pr-5 py-3.5 flex-shrink-0 w-[340px] cursor-pointer group"
             onClick={function() {
               if (primaryAction && primaryAction.url) navigateInFrame(primaryAction.url)
             }}
           >
-            {imageUrl ? (
+            {imageUrl && (
               <img
                 src={imageUrl}
                 alt={title}
                 className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-white/10 flex-shrink-0"
               />
-            ) : (
-              <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/8 flex items-center justify-center flex-shrink-0">
-                <CircleDot size={18} className="text-slate-400 dark:text-white/40" strokeWidth={1.5} />
-              </div>
             )}
 
             <div className="flex-1 min-w-0">

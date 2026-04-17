@@ -93,7 +93,7 @@ builder.Services.AddScoped<IIntegrationApiProfileRepository, SqlIntegrationApiPr
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IIntegrationEventService, IntegrationEventService>();
-builder.Services.AddScoped<ISalesQuoteRepository, SqlSalesQuoteRepository>();
+builder.Services.AddScoped<IDocumentRepository, SqlDocumentRepository>();
 builder.Services.AddScoped<IUserSettingRepository, SqlUserSettingRepository>();
 builder.Services.AddScoped<ISalesRepresentativeRepository, SqlSalesRepresentativeRepository>();
 builder.Services.AddScoped<ISalesRepresentativeService, SalesRepresentativeService>();
@@ -101,7 +101,7 @@ builder.Services.AddScoped<ICurrencyRepository, SqlCurrencyRepository>();
 builder.Services.AddScoped<IExchangeRateRepository, SqlExchangeRateRepository>();
 builder.Services.AddScoped<ICurrencyService, CurrencyService>();
 builder.Services.AddSingleton<ITcmbExchangeRateClient, TcmbExchangeRateClient>();
-builder.Services.AddScoped<ISalesQuoteService, SalesQuoteService>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
 // SQL View tabanli Rehber (Lookup / LOV) sistemi
 builder.Services.AddScoped<IGuideRepository, SqlGuideRepository>();
 builder.Services.AddScoped<IGuideService, GuideService>();
@@ -112,6 +112,13 @@ builder.Services.AddScoped<IFormRepository, SqlFormRepository>();
 // Sabit alan ayarlari (FldSet — rehber eslestirme)
 builder.Services.AddScoped<IFieldSettingRepository, SqlFieldSettingRepository>();
 
+// Dinamik Raporlama Modulu (RptView / RptDef / ReportEngine)
+builder.Services.AddScoped<IRptViewRepository, SqlRptViewRepository>();
+builder.Services.AddScoped<IRptDefinitionRepository, SqlRptDefinitionRepository>();
+builder.Services.AddScoped<IRptRunLogRepository, SqlRptRunLogRepository>();
+builder.Services.AddScoped<IReportQueryExecutor, SqlReportQueryExecutor>();
+builder.Services.AddScoped<IReportEngineService, ReportEngineService>();
+
 // EAV widget sistemi
 builder.Services.AddScoped<IWidgetRepository, SqlWidgetRepository>();
 builder.Services.AddScoped<IWidgetService, WidgetService>();
@@ -121,13 +128,19 @@ builder.Services.AddScoped<ILegacyMigrationService, CalibraHub.Persistence.Legac
 builder.Services.AddScoped<IPriceListRepository, SqlPriceListRepository>();
 builder.Services.AddScoped<IPriceListService, PriceListService>();
 
+// Notlar at-rest sifreleme (Katman 2) — DataProtection tabanli AES.
+// Implementation Infrastructure katmanında — Worker de aynı servisi kullanır.
+builder.Services.AddSingleton<
+    CalibraHub.Application.Abstractions.Security.INoteEncryptionService,
+    CalibraHub.Infrastructure.Security.DataProtectionNoteEncryptionService>();
+
 if (useInMemoryPersistence)
 {
     builder.Services.AddScoped<InMemoryDevelopmentBootstrapper>();
     builder.Services.AddScoped<IIntegratorSettingsRepository, InMemoryIntegratorSettingsRepository>();
     builder.Services.AddScoped<ISmtpProfileRepository, InMemorySmtpProfileRepository>();
     builder.Services.AddScoped<IErpConnectionSettingsRepository, InMemoryErpConnectionSettingsRepository>();
-    builder.Services.AddScoped<ICompanyDefinitionRepository, InMemoryCompanyDefinitionRepository>();
+    builder.Services.AddScoped<ICompanyRepository, InMemoryCompanyRepository>();
     builder.Services.AddScoped<IDepartmentRepository, InMemoryDepartmentRepository>();
     builder.Services.AddScoped<IUserProfileRepository, InMemoryUserProfileRepository>();
     builder.Services.AddScoped<IUiLabelTranslationRepository, InMemoryUiLabelTranslationRepository>();
@@ -143,7 +156,7 @@ else
     builder.Services.AddScoped<IIntegratorSettingsRepository, SqlIntegratorSettingsRepository>();
     builder.Services.AddScoped<ISmtpProfileRepository, SqlSmtpProfileRepository>();
     builder.Services.AddScoped<IErpConnectionSettingsRepository, SqlErpConnectionSettingsRepository>();
-    builder.Services.AddScoped<ICompanyDefinitionRepository, SqlCompanyDefinitionRepository>();
+    builder.Services.AddScoped<ICompanyRepository, SqlCompanyRepository>();
     builder.Services.AddScoped<IDepartmentRepository, SqlDepartmentRepository>();
     builder.Services.AddScoped<IUserProfileRepository, SqlUserProfileRepository>();
     builder.Services.AddScoped<IUiLabelTranslationRepository, SqlUiLabelTranslationRepository>();
@@ -226,12 +239,34 @@ using (var scope = app.Services.CreateScope())
     }
 
     // Seed per-company connection registry from DB
-    var companyRepo = scope.ServiceProvider.GetRequiredService<ICompanyDefinitionRepository>();
+    var companyRepo = scope.ServiceProvider.GetRequiredService<ICompanyRepository>();
     var registry = app.Services.GetRequiredService<CompanyConnectionRegistry>();
     var allCompanies = await companyRepo.GetAllAsync(CancellationToken.None);
     foreach (var c in allCompanies)
     {
         registry.Set(c.Id, c.DatabaseConnectionString);
+    }
+
+    // Per-company guide view tazeleme — CREATE OR ALTER VIEW idempotent,
+    // eski sema ile kurulmus sirket DB'lerinde cbv_Guide_* view'larini gunceller.
+    // Kolon ekleme/cikarma sonrasi rehber aramasinin calismasi icin zorunlu.
+    if (!useInMemoryPersistence)
+    {
+        var dbInitForCompanies = scope.ServiceProvider.GetRequiredService<CalibraDatabaseInitializer>();
+        foreach (var c in allCompanies)
+        {
+            if (string.IsNullOrWhiteSpace(c.DatabaseConnectionString)) continue;
+            try
+            {
+                await dbInitForCompanies.EnsureGuideSchemaForConnectionAsync(
+                    c.DatabaseConnectionString, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex,
+                    "[Guide Schema] Sirket {CompanyId} icin view tazeleme basarisiz", c.Id);
+            }
+        }
     }
 }
 

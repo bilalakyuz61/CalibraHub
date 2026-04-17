@@ -146,7 +146,14 @@ export async function guideSearch(guideCode, opts) {
     headers: { 'Accept': 'application/json' },
   })
   if (resp.status === 404) return null
-  if (!resp.ok) throw new Error('guideSearch HTTP ' + resp.status)
+  if (!resp.ok) {
+    var detail = ''
+    try {
+      var body = await resp.json()
+      if (body && body.message) detail = ': ' + body.message
+    } catch (_) { /* body JSON degil */ }
+    throw new Error('guideSearch HTTP ' + resp.status + detail)
+  }
   return await resp.json()
 }
 

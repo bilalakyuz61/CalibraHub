@@ -37,8 +37,10 @@ public sealed class DocumentGenerationService : IDocumentGenerationService
         var docType = await _docTypeRepo.GetByIdAsync(template.DocumentTypeId, ct)
             ?? throw new InvalidOperationException($"Belge tipi bulunamadi: {template.DocumentTypeId}");
 
-        if (string.IsNullOrWhiteSpace(template.FrxFilePath))
-            throw new InvalidOperationException("Sablon icin FRX dosya yolu tanimlanmamis.");
+        var hasContent = template.FrxContent is { Length: > 0 };
+        var hasFilePath = !string.IsNullOrWhiteSpace(template.FrxFilePath);
+        if (!hasContent && !hasFilePath)
+            throw new InvalidOperationException("Sablon icin FRX icerigi tanimlanmamis.");
 
         if (string.IsNullOrWhiteSpace(docType.SqlViewName))
             throw new InvalidOperationException($"Belge tipi '{docType.Name}' icin SQL View tanimlanmamis.");
@@ -47,7 +49,9 @@ public sealed class DocumentGenerationService : IDocumentGenerationService
         _logger.LogDebug("PDF uretiliyor: template={Template}, record={Record}, rows={Rows}",
             template.Name, recordId, data.Rows.Count);
 
-        return await _reportService.ExportPdfAsync(template.FrxFilePath, data, ct);
+        return hasContent
+            ? await _reportService.ExportPdfFromBytesAsync(template.FrxContent!, data, ct)
+            : await _reportService.ExportPdfAsync(template.FrxFilePath!, data, ct);
     }
 
     public async Task<string> GenerateHtmlPreviewAsync(Guid templateId, Guid recordId, CancellationToken ct = default)
@@ -58,14 +62,18 @@ public sealed class DocumentGenerationService : IDocumentGenerationService
         var docType = await _docTypeRepo.GetByIdAsync(template.DocumentTypeId, ct)
             ?? throw new InvalidOperationException($"Belge tipi bulunamadi: {template.DocumentTypeId}");
 
-        if (string.IsNullOrWhiteSpace(template.FrxFilePath))
-            throw new InvalidOperationException("Sablon icin FRX dosya yolu tanimlanmamis.");
+        var hasContent = template.FrxContent is { Length: > 0 };
+        var hasFilePath = !string.IsNullOrWhiteSpace(template.FrxFilePath);
+        if (!hasContent && !hasFilePath)
+            throw new InvalidOperationException("Sablon icin FRX icerigi tanimlanmamis.");
 
         if (string.IsNullOrWhiteSpace(docType.SqlViewName))
             throw new InvalidOperationException($"Belge tipi '{docType.Name}' icin SQL View tanimlanmamis.");
 
         var data = await _dataRepo.GetReportDataAsync(docType.SqlViewName, recordId, ct);
-        return await _reportService.ExportHtmlAsync(template.FrxFilePath, data, ct);
+        return hasContent
+            ? await _reportService.ExportHtmlFromBytesAsync(template.FrxContent!, data, ct)
+            : await _reportService.ExportHtmlAsync(template.FrxFilePath!, data, ct);
     }
 
     public async Task<string> GenerateZplAsync(Guid recordId, string documentTypeCode, CancellationToken ct = default)
