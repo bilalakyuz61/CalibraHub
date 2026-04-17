@@ -86,6 +86,8 @@ builder.Services.AddSingleton<ICompanyConnectionRegistry>(sp => sp.GetRequiredSe
 builder.Services.AddSingleton<SqlServerConnectionFactory>();
 builder.Services.AddScoped<ILogisticsConfigurationRepository, SqlLogisticsConfigurationRepository>();
 builder.Services.AddScoped<IFinanceRepository, SqlFinanceRepository>();
+builder.Services.AddScoped<IDbSchemaRepository, SqlDbSchemaRepository>();
+builder.Services.AddScoped<IDbSchemaService, DbSchemaService>();
 builder.Services.AddScoped<ICardGroupRepository, SqlCardGroupRepository>();
 builder.Services.AddScoped<IDesignTemplateRepository, SqlDesignTemplateRepository>();
 builder.Services.AddScoped<IIntegrationEventRepository, SqlIntegrationEventRepository>();

@@ -1,0 +1,92 @@
+@{
+    ViewData["Title"] = "Veritabani Haritasi";
+    ViewData["AdminMenu"] = "db-schema";
+    ViewData["FormCode"] = "ADMIN_DB_SCHEMA";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sys.tables + sys.columns + sys.indexes + sys.foreign_keys</td>"
+        + "<td style='padding:6px 8px;'>Aktif sirket DB'sinin sistem katalogu — fiziksel metadata okuma (PII olmayan)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .sch-layout { display: flex; gap: 0; height: 100%; overflow: hidden; }
+    .sch-list-panel { width: 320px; flex-shrink: 0; border-right: 1px solid var(--app-border, #dde3ee); background: var(--app-surface, #fff); display: flex; flex-direction: column; overflow: hidden; }
+    .sch-detail-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .sch-toolbar { padding: 8px 12px; border-bottom: 1px solid var(--app-border, #dde3ee); display: flex; gap: 8px; align-items: center; background: var(--app-surface, #fff); }
+    .sch-toolbar input[type="search"] { flex: 1 1 auto; padding: 5px 10px; font-size: 0.82rem; border: 1px solid var(--app-border, #cbd5e1); border-radius: 5px; background: var(--app-surface, #fff); color: inherit; }
+    .sch-toolbar .sch-count { font-size: 0.72rem; color: var(--app-text-muted, #64748b); white-space: nowrap; }
+    .sch-list { flex: 1 1 auto; overflow-y: auto; padding: 4px 0; }
+    .sch-table-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-size: 0.82rem; cursor: pointer; border-bottom: 1px solid var(--app-border-light, #f1f5f9); }
+    .sch-table-row:hover { background: var(--app-bg-hover, #f8fafc); }
+    .sch-table-row.active { background: rgba(37, 99, 235, 0.08); border-left: 3px solid #2563eb; padding-left: 9px; font-weight: 600; }
+    .sch-table-name { font-family: 'Consolas', 'Monaco', monospace; }
+    .sch-row-count { color: var(--app-text-muted, #94a3b8); font-size: 0.72rem; }
+    .sch-detail-header { padding: 10px 16px; border-bottom: 1px solid var(--app-border, #dde3ee); background: var(--app-surface, #fff); display: flex; justify-content: space-between; align-items: center; }
+    .sch-detail-title { font-family: 'Consolas', 'Monaco', monospace; font-size: 1rem; font-weight: 600; color: #2563eb; }
+    .sch-detail-meta { font-size: 0.74rem; color: var(--app-text-muted, #64748b); }
+    .sch-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--app-border, #dde3ee); background: var(--app-surface, #fff); }
+    .sch-tab { padding: 8px 14px; font-size: 0.78rem; cursor: pointer; border-bottom: 2px solid transparent; color: var(--app-text-muted, #64748b); }
+    .sch-tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+    .sch-tab-body { flex: 1 1 auto; overflow: auto; padding: 12px 16px; }
+    .sch-data-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .sch-data-table thead th { text-align: left; padding: 6px 10px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; position: sticky; top: 0; }
+    .sch-data-table tbody tr { border-bottom: 1px solid #f1f5f9; }
+    .sch-data-table tbody tr:hover { background: #f8fafc; }
+    .sch-data-table td { padding: 4px 10px; vertical-align: top; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.76rem; }
+    .sch-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.68rem; font-weight: 600; margin-right: 4px; }
+    .sch-badge.pk { background: #fef3c7; color: #92400e; }
+    .sch-badge.fk { background: #dbeafe; color: #1e40af; }
+    .sch-badge.idx { background: #dcfce7; color: #166534; }
+    .sch-badge.nullable { background: #f1f5f9; color: #64748b; }
+    .sch-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--app-text-muted, #94a3b8); font-style: italic; font-size: 0.9rem; }
+    .sch-export-dropdown { position: relative; }
+    .sch-export-btn { padding: 5px 10px; font-size: 0.8rem; border: 1px solid var(--app-border, #cbd5e1); border-radius: 5px; background: var(--app-surface, #fff); color: inherit; cursor: pointer; }
+    .sch-export-btn:hover { background: var(--app-bg-hover, #f8fafc); }
+    .sch-export-menu { display: none; position: absolute; right: 0; top: 100%; margin-top: 4px; background: var(--app-surface, #fff); border: 1px solid var(--app-border, #dde3ee); border-radius: 5px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); min-width: 160px; z-index: 10; }
+    .sch-export-menu.open { display: block; }
+    .sch-export-menu a { display: block; padding: 8px 14px; font-size: 0.82rem; color: inherit; text-decoration: none; }
+    .sch-export-menu a:hover { background: var(--app-bg-hover, #f8fafc); }
+</style>
+}
+
+<div class="sch-layout">
+    <div class="sch-list-panel">
+        <div class="sch-toolbar">
+            <input type="search" id="sch-search" placeholder="Tablo ara..." autocomplete="off" />
+            <span class="sch-count" id="sch-count">0</span>
+        </div>
+        <div class="sch-list" id="sch-list">
+            <div style="padding:12px;color:#94a3b8;font-size:0.82rem;">Yukleniyor...</div>
+        </div>
+    </div>
+    <div class="sch-detail-panel">
+        <div class="sch-detail-header">
+            <div>
+                <div class="sch-detail-title" id="sch-detail-title">Tablo secin</div>
+                <div class="sch-detail-meta" id="sch-detail-meta"></div>
+            </div>
+            <div class="sch-export-dropdown">
+                <button type="button" class="sch-export-btn" id="sch-export-btn">📥 Export ▾</button>
+                <div class="sch-export-menu" id="sch-export-menu">
+                    <a href="/admin/db-schema/export?format=csv">CSV (tablo × kolon)</a>
+                    <a href="/admin/db-schema/export?format=json">JSON (tum sema)</a>
+                    <a href="/admin/db-schema/export?format=mermaid">Mermaid ER (.mmd)</a>
+                    <a href="/admin/db-schema/export?format=markdown">Markdown (.md)</a>
+                </div>
+            </div>
+        </div>
+        <div class="sch-tabs" id="sch-tabs" style="display:none;">
+            <div class="sch-tab active" data-tab="columns">📋 Kolonlar <span id="sch-col-count"></span></div>
+            <div class="sch-tab" data-tab="indexes">🔑 Indeksler <span id="sch-idx-count"></span></div>
+            <div class="sch-tab" data-tab="fks">🔗 FK'ler <span id="sch-fk-count"></span></div>
+        </div>
+        <div class="sch-tab-body" id="sch-tab-body">
+            <div class="sch-empty">Sol panelden bir tablo secin — fiziksel sema metadata'si burada goruntulenir.</div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/js/dbSchema.js?v=1" asp-append-version="true"></script>
+}

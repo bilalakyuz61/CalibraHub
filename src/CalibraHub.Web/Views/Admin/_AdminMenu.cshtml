@@ -5,7 +5,7 @@
     var panelModuleOpen = activeMenu is "dashboard";
     var guideModuleOpen = activeMenu is "guide-management" or "form-management";
     var systemSettingsOpen = activeMenu is "company-settings" or "integrator-settings" or "mail-settings" or "erp-settings" or "appearance" or "project-instructions";
-    var logsOpen = activeMenu is "system-logs";
+    var logsOpen = activeMenu is "system-logs" or "db-schema";
     var viewSettingsOpen = activeMenu is "view-settings-screens" or "view-settings-material-cards";
     var settingsOpen = systemSettingsOpen || logsOpen || viewSettingsOpen;
     var organizationModuleOpen = activeMenu is "users" or "departments" or "roles";
@@ -275,6 +275,18 @@
                                     <span class="menu-text">@systemLogReportText</span>
                                 </a>
                                 <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="@($"{systemLogReportText} favorilere ekle")">
+                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                                </button>
+                            </div>
+                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-db-schema">
+                                <a class="admin-nav-item @(activeMenu == "db-schema" ? "active" : string.Empty)"
+                                   href="/admin/db-schema" title="Veritabani Haritasi">
+                                    <span class="menu-icon" aria-hidden="true">
+                                        <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path></svg>
+                                    </span>
+                                    <span class="menu-text">Veritabani Haritasi</span>
+                                </a>
+                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Veritabani Haritasi favorilere ekle">
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
