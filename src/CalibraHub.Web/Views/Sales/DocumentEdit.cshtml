@@ -1057,12 +1057,12 @@
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel sqe-hlabel--link" title="Cari karta gitmek icin cift tiklayin" ondblclick="sqGoToCustomerCard()">Cari Kod</label>
-                    <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput" readonly placeholder="Rehberden seciniz" />
+                    <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput" readonly placeholder="Rehberden seciniz" style="max-width:140px;" />
                     <input type="hidden" id="sqCustomerId" />
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel">Cari Isim</label>
-                    <input type="text" id="sqCustomerName" class="form-control form-control-sm sqe-hinput" readonly placeholder="Cari secildiginde otomatik dolar" />
+                    <input type="text" id="sqCustomerName" class="form-control form-control-sm sqe-hinput" readonly placeholder="Cari secildiginde otomatik dolar" style="max-width:560px;" />
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel">Temsilci</label>
@@ -1545,9 +1545,10 @@
             document.getElementById('sqCustomerId').value = q.contactId != null ? q.contactId : '';
             // Rehber display alanını doldur — Cari Kod + Cari İsim
             var custDisp = document.getElementById('sqCustomerDisplay');
-            custDisp.value = q.contactCode || q.contactName || '';
+            // Cari Kod alani yalnizca AccountCode'u gosterir; isim ayri alanda
+            custDisp.value = q.contactCode || '';
             custDisp.setAttribute('data-value', q.contactCode || '');
-            custDisp.setAttribute('data-display', q.contactCode || q.contactName || '');
+            custDisp.setAttribute('data-display', q.contactCode || '');
             document.getElementById('sqCustomerName').value = q.contactName || '';
             document.getElementById('sqSalesRepId').value = q.salesRepId != null ? q.salesRepId : '';
             document.getElementById('sqCurrency').value = q.currency || 'TRY';
