@@ -1615,7 +1615,7 @@ public sealed class CalibraDatabaseInitializer
                 CREATE TABLE [{schemaForSql}].[FeatureValue]
                 (
                     [id] INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_configuration_property_values] PRIMARY KEY,
-                    [property_id] UNIQUEIDENTIFIER NOT NULL,
+                    [feature_id] UNIQUEIDENTIFIER NOT NULL,
                     [code] NVARCHAR(30) NOT NULL,
                     [description] NVARCHAR(160) NOT NULL,
                     [value] NVARCHAR(160) NOT NULL,
@@ -1624,17 +1624,17 @@ public sealed class CalibraDatabaseInitializer
                     [created_at] DATETIME2 NOT NULL,
                     [updated_at] DATETIME2 NOT NULL,
                     CONSTRAINT [fk_configuration_property_values_property_id]
-                        FOREIGN KEY ([property_id]) REFERENCES [{schemaForSql}].[Feature]([id])
+                        FOREIGN KEY ([feature_id]) REFERENCES [{schemaForSql}].[Feature]([id])
                 );
 
                 EXEC(N'
                     CREATE UNIQUE INDEX [ux_configuration_property_values_property_id_value]
-                        ON [{schemaForSql}].[FeatureValue]([property_id], [value]);
+                        ON [{schemaForSql}].[FeatureValue]([feature_id], [value]);
                 ');
 
                 EXEC(N'
                     CREATE UNIQUE INDEX [ux_configuration_property_values_property_id_code]
-                        ON [{schemaForSql}].[FeatureValue]([property_id], [code]);
+                        ON [{schemaForSql}].[FeatureValue]([feature_id], [code]);
                 ');
             END;
 
@@ -1683,7 +1683,7 @@ public sealed class CalibraDatabaseInitializer
             BEGIN
                 EXEC(N'
                     CREATE UNIQUE INDEX [ux_configuration_property_values_property_id_code]
-                        ON [{schemaForSql}].[FeatureValue]([property_id], [code]);
+                        ON [{schemaForSql}].[FeatureValue]([feature_id], [code]);
                 ');
             END;
 
