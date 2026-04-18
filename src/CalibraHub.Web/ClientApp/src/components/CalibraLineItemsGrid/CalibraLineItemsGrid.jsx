@@ -81,6 +81,8 @@ export default function CalibraLineItemsGrid(props) {
   var [deleteTarget, setDeleteTarget] = useState(null)
   // ── Duzeltme modu per satir (kilit/unlock mantigi icin altyapi) ──
   var [editingRowUid, setEditingRowUid] = useState(null)
+  // ── "Not ekle" ile acilan satirlar (row-below kolonlarini gostermek icin) ──
+  var [openNoteRows, setOpenNoteRows] = useState(function() { return {} })
 
   // ── State: satirlar ──
   var [rows, setRows] = useState(function() {
@@ -191,6 +193,34 @@ export default function CalibraLineItemsGrid(props) {
   function canEdit(row) { return row.__canEdit !== false }
   function canDelete(row) { return row.__canDelete !== false }
 
+  // ── Not paneli toggle ──
+  // Panel acik: manuel acildi (openNoteRows[uid]) VEYA below kolonlardan en az birinin value'su dolu
+  function hasAnyBelowValue(row) {
+    for (var i = 0; i < belowColumns.length; i++) {
+      var v = row[belowColumns[i].key]
+      if (v != null && String(v).trim() !== '') return true
+    }
+    return false
+  }
+  function isNoteOpen(row) {
+    return openNoteRows[row._uid] === true || hasAnyBelowValue(row)
+  }
+  function toggleNote(rowUid) {
+    setOpenNoteRows(function(prev) {
+      var next = Object.assign({}, prev)
+      if (next[rowUid]) delete next[rowUid]
+      else next[rowUid] = true
+      return next
+    })
+    // Acildiginda below cell'in ilk input'una fokus
+    requestAnimationFrame(function() {
+      var rowEl = document.querySelector('[data-row-uid="' + rowUid + '"]')
+      if (!rowEl) return
+      var input = rowEl.querySelector('[data-below-cell] input, [data-below-cell] textarea')
+      if (input && typeof input.focus === 'function') input.focus()
+    })
+  }
+
   // ── Footer subtotal hesapla ──
   var subtotals = useMemo(function() {
     var out = {}
@@ -223,7 +253,7 @@ export default function CalibraLineItemsGrid(props) {
     <div className="calibra-line-grid rounded-2xl overflow-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
       {/* Header row */}
       <div className="flex items-center border-b border-slate-200 bg-slate-50/80 dark:bg-white/[0.03] dark:border-white/[0.08]">
-        <div className="w-[72px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
+        <div className="w-[104px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
           Islem
         </div>
         {columns.map(function(col) {
@@ -265,7 +295,7 @@ export default function CalibraLineItemsGrid(props) {
                   className="border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors"
                 >
                   <div className="flex items-stretch">
-                    <div className="w-[72px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                    <div className="w-[104px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
                       <button
                         type="button"
                         onClick={function() { if (canEdit(row)) handleEditRow(row._uid) }}
@@ -281,6 +311,20 @@ export default function CalibraLineItemsGrid(props) {
                       >
                         {canEdit(row) ? <Pencil size={13} strokeWidth={1.8} /> : <Lock size={12} strokeWidth={1.8} />}
                       </button>
+                      {belowColumns.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={function() { toggleNote(row._uid) }}
+                          className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+                            isNoteOpen(row)
+                              ? 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'
+                              : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:text-white/30 dark:hover:text-amber-300 dark:hover:bg-amber-500/10'
+                          )}
+                          title={isNoteOpen(row) ? (hasAnyBelowValue(row) ? 'Not dolu — gizle' : 'Notu kapat') : 'Not ekle'}
+                        >
+                          <StickyNote size={13} strokeWidth={1.8} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={function() { if (canDelete(row)) handleDeleteRow(row._uid) }}
@@ -313,14 +357,16 @@ export default function CalibraLineItemsGrid(props) {
                     })}
                   </div>
 
-                  {/* Satir alti kolonlar (placement: row-below) — ornegin "Not" */}
-                  {belowColumns.length > 0 && (
-                    <div className="flex flex-col gap-1 pl-3 pr-3 pb-2 pt-3 mt-2 border-t border-slate-100 dark:border-white/[0.06]">
+                  {/* Satir alti kolonlar (placement: row-below) — ornegin "Not".
+                      Panel sadece kullanici "Not ekle" butonuna basinca VEYA not doluysa gorunur. */}
+                  {belowColumns.length > 0 && isNoteOpen(row) && (
+                    <div className="flex flex-col gap-1 pl-3 pr-3 pb-2 pt-1 border-t border-slate-100 dark:border-white/[0.06]">
                       {belowColumns.map(function(col) {
                         var Icon = resolveIcon(col.icon)
                         return (
                           <div
                             key={col.key}
+                            data-below-cell
                             className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/60 dark:border-white/[0.06] dark:bg-white/[0.02]"
                           >
                             <div className="flex items-center gap-1.5 pl-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50 flex-shrink-0">
