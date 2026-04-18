@@ -24,6 +24,7 @@ public sealed class DbSchemaService : IDbSchemaService
     {
         var raw = await _repository.GetTablesAsync(cancellationToken);
         return raw
+            .Where(t => CalibraTableCatalog.IsOwned(t.Name))
             .Select(t =>
             {
                 var entityType = FindEntityType(t.Name);
@@ -57,8 +58,12 @@ public sealed class DbSchemaService : IDbSchemaService
 
     public async Task<string> BuildMermaidErAsync(CancellationToken cancellationToken)
     {
-        var tables = await _repository.GetTablesAsync(cancellationToken);
-        var fks = await _repository.GetAllForeignKeysAsync(cancellationToken);
+        var tables = (await _repository.GetTablesAsync(cancellationToken))
+            .Where(t => CalibraTableCatalog.IsOwned(t.Name))
+            .ToList();
+        var fks = (await _repository.GetAllForeignKeysAsync(cancellationToken))
+            .Where(fk => CalibraTableCatalog.IsOwned(fk.FromTable) && CalibraTableCatalog.IsOwned(fk.ToTable))
+            .ToList();
         var fkByTable = fks
             .GroupBy(fk => fk.FromTable, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
