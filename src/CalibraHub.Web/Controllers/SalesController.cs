@@ -667,12 +667,22 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveDocument([FromBody] SaveDocumentRequest request, CancellationToken ct)
+    public async Task<IActionResult> SaveDocument([FromBody] SaveDocumentRequest? request, CancellationToken ct)
     {
+        if (request is null)
+            return Json(new { success = false, message = "Gecersiz istek govdesi. Tarih ve zorunlu alanlari kontrol ediniz." });
+
         var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
-        var (success, error, quote) = await _quoteService.SaveQuoteAsync(request, userName, ct);
-        if (!success) return Json(new { success = false, message = error });
-        return Json(new { success = true, quote });
+        try
+        {
+            var (success, error, quote) = await _quoteService.SaveQuoteAsync(request, userName, ct);
+            if (!success) return Json(new { success = false, message = error });
+            return Json(new { success = true, quote });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "Kayit hatasi: " + ex.Message });
+        }
     }
 
     [HttpPost]

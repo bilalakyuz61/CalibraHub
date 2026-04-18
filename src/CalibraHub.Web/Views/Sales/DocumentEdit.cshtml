@@ -1540,7 +1540,8 @@
             var q = data.quote;
             currentQuoteId = q.id;
             document.getElementById('sqQuoteNumber').value = q.documentNumber || '';
-            document.getElementById('sqQuoteDate').value = q.quoteDate ? q.quoteDate.split('T')[0] : '';
+            var docDate = q.documentDate || q.quoteDate;
+            document.getElementById('sqQuoteDate').value = docDate ? docDate.split('T')[0] : '';
             document.getElementById('sqValidUntil').value = q.validUntil ? q.validUntil.split('T')[0] : '';
             document.getElementById('sqCustomerId').value = q.contactId != null ? q.contactId : '';
             // Rehber display alanını doldur — Cari Kod + Cari İsim
