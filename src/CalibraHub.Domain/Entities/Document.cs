@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using CalibraHub.Domain.Common;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
@@ -8,8 +7,11 @@ namespace CalibraHub.Domain.Entities;
 /// Tum ticari belgelerin konsolide baslik tablosu (teklif/siparis/fatura).
 /// DocumentTypeId kolonu belge turunu ayirir.
 /// </summary>
-public sealed class Document : Entity
+public sealed class Document
 {
+    [Description("Birincil anahtar. IDENTITY.")]
+    public int Id { get; init; }
+
     [Description("Kullaniciya gosterilen belge numarasi (seri-sayac, benzersiz).")]
     public required string DocumentNumber { get; init; }
 
@@ -57,7 +59,7 @@ public sealed class Document : Entity
     public int RevisionNo { get; set; }
 
     [Description("Revizyon durumunda onceki belge id'si. FK -> Document.Id")]
-    public Guid? ParentDocumentId { get; set; }
+    public int? ParentDocumentId { get; set; }
 
     public string? Notes { get; set; }
     public string? CreatedBy { get; set; }

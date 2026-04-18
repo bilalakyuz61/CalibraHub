@@ -2,7 +2,7 @@ namespace CalibraHub.Application.Abstractions.Services;
 
 public interface IDocumentGenerationService
 {
-    Task<byte[]> GeneratePdfAsync(Guid templateId, Guid recordId, CancellationToken ct = default);
-    Task<string> GenerateHtmlPreviewAsync(Guid templateId, Guid recordId, CancellationToken ct = default);
-    Task<string> GenerateZplAsync(Guid recordId, string documentTypeCode, CancellationToken ct = default);
+    Task<byte[]> GeneratePdfAsync(int templateId, int recordId, CancellationToken ct = default);
+    Task<string> GenerateHtmlPreviewAsync(int templateId, int recordId, CancellationToken ct = default);
+    Task<string> GenerateZplAsync(int recordId, string documentTypeCode, CancellationToken ct = default);
 }

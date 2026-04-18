@@ -47,7 +47,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             SELECT q.[id],q.[document_number],q.[document_date],q.[valid_until],q.[contact_id],q.[contact_name],q.[contact_address],
                    q.[sales_rep_id],q.[currency],q.[sub_total],q.[discount_rate],q.[discount_amount],q.[tax_rate],q.[tax_amount],q.[grand_total],
                    q.[payment_terms],q.[delivery_terms],q.[delivery_address],q.[status],q.[revision_no],q.[parent_document_id],
-                   q.[notes],q.[created_by],q.[created_at],q.[updated_at],q.[is_active],
+                   q.[notes],q.[created_by],q.[created_at],q.[updated_at],q.[is_active],q.[document_type_id],
                    (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[document_id] = q.[id] AND l.[is_active] = 1) AS [line_count]
             FROM {_quoteTable} q
             {where.Replace("[", "q.[")}
@@ -59,18 +59,15 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         return list;
     }
 
-    public async Task<Document?> GetByIdAsync(Guid id, CancellationToken ct)
+    public async Task<Document?> GetByIdAsync(int id, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        // customer_code icin Contacts'tan cek — once Id uzerinden, eger
-        // Id bos ise (eski kayitlarda rehber cozulmeden kaydedilmis olabilir)
-        // contact_name ile AccountTitle eslestirmesiyle fallback yapariz.
         cmd.CommandText = $"""
             SELECT q.[id],q.[document_number],q.[document_date],q.[valid_until],q.[contact_id],q.[contact_name],q.[contact_address],
                    q.[sales_rep_id],q.[currency],q.[sub_total],q.[discount_rate],q.[discount_amount],q.[tax_rate],q.[tax_amount],q.[grand_total],
                    q.[payment_terms],q.[delivery_terms],q.[delivery_address],q.[status],q.[revision_no],q.[parent_document_id],
-                   q.[notes],q.[created_by],q.[created_at],q.[updated_at],q.[is_active],
+                   q.[notes],q.[created_by],q.[created_at],q.[updated_at],q.[is_active],q.[document_type_id],
                    COALESCE(ca_id.[AccountCode], ca_name.[AccountCode]) AS customer_code
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca_id
@@ -86,7 +83,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         return await r.ReadAsync(ct) ? MapQuote(r) : null;
     }
 
-    public async Task<IReadOnlyCollection<DocumentLine>> GetLinesAsync(Guid quoteId, CancellationToken ct)
+    public async Task<IReadOnlyCollection<DocumentLine>> GetLinesAsync(int documentId, CancellationToken ct)
     {
         var list = new List<DocumentLine>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -96,19 +93,27 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                    [quantity],[unit_price],[discount_rate],[line_total],[combination_code],[notes],[is_active]
             FROM {_lineTable} WHERE [document_id] = @DocumentId AND [is_active] = 1 ORDER BY [line_no];
             """;
-        cmd.Parameters.Add(new SqlParameter("@DocumentId", quoteId));
+        cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(MapLine(r));
         return list;
     }
 
-    public async Task UpsertAsync(Document q, CancellationToken ct)
+    /// <summary>
+    /// INSERT (Id=0) veya UPDATE (Id&gt;0). Yeni kayit icin IDENTITY tarafindan atanan
+    /// Id'yi Document.Id yazmak mumkun degil (init-only) — bunun yerine yeni Id
+    /// caller'a return edilir.
+    /// </summary>
+    public async Task<int> UpsertAsync(Document q, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_quoteTable} WHERE [id] = @Id)
+
+        if (q.Id > 0)
+        {
+            cmd.CommandText = $"""
                 UPDATE {_quoteTable} SET
+                    [document_type_id]=@DocumentTypeId,
                     [document_date]=@DocumentDate, [valid_until]=@ValidUntil,
                     [contact_id]=@ContactId, [contact_name]=@ContactName, [contact_address]=@ContactAddress,
                     [sales_rep_id]=@SalesRepId,
@@ -116,22 +121,32 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                     [discount_amount]=@DiscountAmount, [tax_rate]=@TaxRate, [tax_amount]=@TaxAmount,
                     [grand_total]=@GrandTotal, [payment_terms]=@PaymentTerms, [delivery_terms]=@DeliveryTerms,
                     [delivery_address]=@DeliveryAddress, [status]=@Status, [revision_no]=@RevisionNo,
+                    [parent_document_id]=@ParentDocumentId,
                     [notes]=@Notes, [updated_at]=@UpdatedAt
-                WHERE [id] = @Id
-            ELSE
+                WHERE [id] = @Id;
+                SELECT @Id;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@Id", q.Id));
+        }
+        else
+        {
+            cmd.CommandText = $"""
                 INSERT INTO {_quoteTable}
-                    ([id],[document_number],[document_date],[valid_until],[contact_id],[contact_name],[contact_address],
+                    ([document_number],[document_type_id],[document_date],[valid_until],[contact_id],[contact_name],[contact_address],
                      [sales_rep_id],[currency],[sub_total],[discount_rate],[discount_amount],[tax_rate],[tax_amount],[grand_total],
                      [payment_terms],[delivery_terms],[delivery_address],[status],[revision_no],[parent_document_id],
                      [notes],[created_by],[created_at],[updated_at],[is_active])
                 VALUES
-                    (@Id,@DocumentNumber,@DocumentDate,@ValidUntil,@ContactId,@ContactName,@ContactAddress,
+                    (@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@ContactId,@ContactName,@ContactAddress,
                      @SalesRepId,@Currency,@SubTotal,@DiscountRate,@DiscountAmount,@TaxRate,@TaxAmount,@GrandTotal,
                      @PaymentTerms,@DeliveryTerms,@DeliveryAddress,@Status,@RevisionNo,@ParentDocumentId,
                      @Notes,@CreatedBy,@CreatedAt,@UpdatedAt,@IsActive);
-            """;
-        cmd.Parameters.Add(new SqlParameter("@Id", q.Id));
+                SELECT CAST(SCOPE_IDENTITY() AS INT);
+                """;
+        }
+
         cmd.Parameters.Add(new SqlParameter("@DocumentNumber", q.DocumentNumber));
+        cmd.Parameters.Add(new SqlParameter("@DocumentTypeId", (object?)q.DocumentTypeId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DocumentDate", q.DocumentDate));
         cmd.Parameters.Add(new SqlParameter("@ValidUntil", (object?)q.ValidUntil ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@ContactId", (object?)q.ContactId ?? DBNull.Value));
@@ -156,33 +171,34 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.Parameters.Add(new SqlParameter("@CreatedAt", q.CreatedAt));
         cmd.Parameters.Add(new SqlParameter("@UpdatedAt", q.UpdatedAt));
         cmd.Parameters.Add(new SqlParameter("@IsActive", q.IsActive));
-        await cmd.ExecuteNonQueryAsync(ct);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
     }
 
-    public async Task SaveLinesAsync(Guid quoteId, IReadOnlyCollection<DocumentLine> lines, CancellationToken ct)
+    public async Task SaveLinesAsync(int documentId, IReadOnlyCollection<DocumentLine> lines, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        // Mevcut satirlari sil
+        // Mevcut satirlari sil (CASCADE ile detail'lar da silinir)
         await using (var del = conn.CreateCommand())
         {
             del.CommandText = $"DELETE FROM {_lineTable} WHERE [document_id] = @DocumentId;";
-            del.Parameters.Add(new SqlParameter("@DocumentId", quoteId));
+            del.Parameters.Add(new SqlParameter("@DocumentId", documentId));
             await del.ExecuteNonQueryAsync(ct);
         }
-        // Yeni satirlari ekle
+        // Yeni satirlari ekle — id IDENTITY tarafindan uretilir
         foreach (var ln in lines)
         {
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
                 INSERT INTO {_lineTable}
-                    ([id],[document_id],[line_no],[item_id],[material_code],[material_name],[unit_name],
+                    ([document_id],[line_no],[item_id],[material_code],[material_name],[unit_name],
                      [quantity],[unit_price],[discount_rate],[line_total],[combination_code],[notes],[is_active])
                 VALUES
-                    (@Id,@DocumentId,@LineNo,@ItemId,@MaterialCode,@MaterialName,@UnitName,
+                    (@DocumentId,@LineNo,@ItemId,@MaterialCode,@MaterialName,@UnitName,
                      @Quantity,@UnitPrice,@DiscountRate,@LineTotal,@CombinationCode,@Notes,@IsActive);
                 """;
-            cmd.Parameters.Add(new SqlParameter("@Id", ln.Id));
-            cmd.Parameters.Add(new SqlParameter("@DocumentId", ln.DocumentId));
+            cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
             cmd.Parameters.Add(new SqlParameter("@LineNo", ln.LineNo));
             cmd.Parameters.Add(new SqlParameter("@ItemId", (object?)ln.ItemId ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@MaterialCode", ln.MaterialCode));
@@ -199,7 +215,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         }
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken ct)
+    public async Task DeleteAsync(int id, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -209,7 +225,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<string> GetNextQuoteNumberAsync(CancellationToken ct)
+    public async Task<string> GetNextDocumentNumberAsync(CancellationToken ct)
     {
         // Format: TKL202600000001 (15 karakter) — TKL + yyyy + 8 haneli sira
         var prefix = "TKL" + DateTime.Now.ToString("yyyy");
@@ -233,8 +249,10 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 
     private static Document MapQuote(SqlDataReader r) => new()
     {
-        Id = r.GetGuid(r.GetOrdinal("id")),
+        Id = r.GetInt32(r.GetOrdinal("id")),
         DocumentNumber = r.GetString(r.GetOrdinal("document_number")),
+        DocumentTypeId = TryGetOrdinal(r, "document_type_id") is int dtOrd && dtOrd >= 0 && !r.IsDBNull(dtOrd)
+            ? r.GetInt32(dtOrd) : null,
         DocumentDate = r.GetDateTime(r.GetOrdinal("document_date")),
         ValidUntil = r.IsDBNull(r.GetOrdinal("valid_until")) ? null : r.GetDateTime(r.GetOrdinal("valid_until")),
         ContactId = r.IsDBNull(r.GetOrdinal("contact_id")) ? null : r.GetInt32(r.GetOrdinal("contact_id")),
@@ -255,7 +273,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         DeliveryAddress = r.IsDBNull(r.GetOrdinal("delivery_address")) ? null : r.GetString(r.GetOrdinal("delivery_address")),
         Status = Enum.TryParse<DocumentStatus>(r.GetString(r.GetOrdinal("status")), out var s) ? s : DocumentStatus.Draft,
         RevisionNo = r.GetInt32(r.GetOrdinal("revision_no")),
-        ParentDocumentId = r.IsDBNull(r.GetOrdinal("parent_document_id")) ? null : r.GetGuid(r.GetOrdinal("parent_document_id")),
+        ParentDocumentId = r.IsDBNull(r.GetOrdinal("parent_document_id")) ? null : r.GetInt32(r.GetOrdinal("parent_document_id")),
         Notes = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
         CreatedBy = r.IsDBNull(r.GetOrdinal("created_by")) ? null : r.GetString(r.GetOrdinal("created_by")),
         CreatedAt = r.GetDateTime(r.GetOrdinal("created_at")),
@@ -269,8 +287,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var combOrd = TryGetOrdinal(r, "combination_code");
         return new()
         {
-            Id = r.GetGuid(r.GetOrdinal("id")),
-            DocumentId = r.GetGuid(r.GetOrdinal("document_id")),
+            Id = r.GetInt32(r.GetOrdinal("id")),
+            DocumentId = r.GetInt32(r.GetOrdinal("document_id")),
             LineNo = r.GetInt32(r.GetOrdinal("line_no")),
             ItemId = r.IsDBNull(r.GetOrdinal("item_id")) ? null : r.GetInt32(r.GetOrdinal("item_id")),
             MaterialCode = r.GetString(r.GetOrdinal("material_code")),
@@ -293,7 +311,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 
     // ── Line Details (ozellik-deger aciklamalari) ────────────────────────
 
-    public async Task<IReadOnlyCollection<DocumentLineDetail>> GetLineDetailsAsync(Guid quoteLineId, CancellationToken ct)
+    public async Task<IReadOnlyCollection<DocumentLineDetail>> GetLineDetailsAsync(int documentLineId, CancellationToken ct)
     {
         var list = new List<DocumentLineDetail>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -302,13 +320,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             SELECT [id],[quote_line_id],[feature_name],[value_code],[value_name],[description],[line_order]
             FROM {_detailTable} WHERE [quote_line_id] = @LineId ORDER BY [line_order];
             """;
-        cmd.Parameters.Add(new SqlParameter("@LineId", quoteLineId));
+        cmd.Parameters.Add(new SqlParameter("@LineId", documentLineId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
             list.Add(new DocumentLineDetail
             {
                 Id = r.GetInt32(0),
-                QuoteLineId = r.GetGuid(1),
+                QuoteLineId = r.GetInt32(1),
                 FeatureName = r.GetString(2),
                 ValueCode = r.GetString(3),
                 ValueName = r.GetString(4),
@@ -318,13 +336,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         return list;
     }
 
-    public async Task SaveLineDetailsAsync(Guid quoteLineId, IReadOnlyCollection<DocumentLineDetail> details, CancellationToken ct)
+    public async Task SaveLineDetailsAsync(int documentLineId, IReadOnlyCollection<DocumentLineDetail> details, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using (var del = conn.CreateCommand())
         {
             del.CommandText = $"DELETE FROM {_detailTable} WHERE [quote_line_id] = @LineId;";
-            del.Parameters.Add(new SqlParameter("@LineId", quoteLineId));
+            del.Parameters.Add(new SqlParameter("@LineId", documentLineId));
             await del.ExecuteNonQueryAsync(ct);
         }
         var order = 0;
@@ -336,7 +354,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 INSERT INTO {_detailTable} ([quote_line_id],[feature_name],[value_code],[value_name],[description],[line_order])
                 VALUES (@LineId, @Feature, @ValCode, @ValName, @Desc, @Order);
                 """;
-            cmd.Parameters.Add(new SqlParameter("@LineId", quoteLineId));
+            cmd.Parameters.Add(new SqlParameter("@LineId", documentLineId));
             cmd.Parameters.Add(new SqlParameter("@Feature", d.FeatureName));
             cmd.Parameters.Add(new SqlParameter("@ValCode", d.ValueCode));
             cmd.Parameters.Add(new SqlParameter("@ValName", d.ValueName));

@@ -252,7 +252,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> DocumentEdit(Guid? id, CancellationToken ct)
+    public async Task<IActionResult> DocumentEdit(int? id, CancellationToken ct)
     {
         // Satır grid kolonlarına rehber binding'lerini runtime'da inject et
         var bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
@@ -437,7 +437,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetQuote(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetQuote(int id, CancellationToken ct)
     {
         var quote = await _quoteService.GetQuoteByIdAsync(id, ct);
         if (quote == null) return NotFound();
@@ -448,7 +448,7 @@ public sealed class SalesController : Controller
     [HttpGet]
     public async Task<IActionResult> GetNextQuoteNumber(CancellationToken ct)
     {
-        var number = await _quoteService.GetNextQuoteNumberAsync(ct);
+        var number = await _quoteService.GetNextDocumentNumberAsync(ct);
         return Json(new { number });
     }
 
@@ -689,7 +689,7 @@ public sealed class SalesController : Controller
     /// pattern'i ile ayni).
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> DeleteDocumentJson(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DeleteDocumentJson(int id, CancellationToken ct)
     {
         try
         {
@@ -813,5 +813,5 @@ public sealed class SalesController : Controller
     }
 }
 
-public sealed record DeleteQuoteBody(Guid Id);
-public sealed record ChangeStatusBody(Guid Id, string Status);
+public sealed record DeleteQuoteBody(int Id);
+public sealed record ChangeStatusBody(int Id, string Status);

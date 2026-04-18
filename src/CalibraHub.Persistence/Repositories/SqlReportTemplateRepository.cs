@@ -32,7 +32,7 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         return list;
     }
 
-    public async Task<IReadOnlyCollection<ReportTemplate>> GetByDocumentTypeIdAsync(Guid documentTypeId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<ReportTemplate>> GetByDocumentTypeIdAsync(int documentTypeId, CancellationToken cancellationToken)
     {
         var list = new List<ReportTemplate>();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
@@ -45,7 +45,7 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         return list;
     }
 
-    public async Task<ReportTemplate?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<ReportTemplate?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -55,7 +55,7 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
     }
 
-    public async Task<ReportTemplate?> GetDefaultByDocumentTypeIdAsync(Guid documentTypeId, CancellationToken cancellationToken)
+    public async Task<ReportTemplate?> GetDefaultByDocumentTypeIdAsync(int documentTypeId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -65,21 +65,29 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
     }
 
-    public async Task SaveAsync(ReportTemplate entity, CancellationToken cancellationToken)
+    public async Task<int> SaveAsync(ReportTemplate entity, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            MERGE {_table} AS tgt
-            USING (SELECT @Id AS [id]) AS src ON tgt.[id] = src.[id]
-            WHEN MATCHED THEN
-                UPDATE SET [name]=@Name,[document_type_id]=@DocTypeId,[frx_file_path]=@FrxFilePath,[frx_content]=@FrxContent,
-                           [description]=@Description,[is_default]=@IsDefault,[is_active]=@IsActive,[updated_at]=GETDATE()
-            WHEN NOT MATCHED THEN
-                INSERT ([id],[name],[document_type_id],[frx_file_path],[frx_content],[description],[is_default],[is_active],[created_at],[updated_at])
-                VALUES (@Id,@Name,@DocTypeId,@FrxFilePath,@FrxContent,@Description,@IsDefault,@IsActive,GETDATE(),GETDATE());
-            """;
-        command.Parameters.Add(new SqlParameter("@Id", entity.Id));
+        if (entity.Id > 0)
+        {
+            command.CommandText = $"""
+                UPDATE {_table}
+                    SET [name]=@Name,[document_type_id]=@DocTypeId,[frx_file_path]=@FrxFilePath,[frx_content]=@FrxContent,
+                        [description]=@Description,[is_default]=@IsDefault,[is_active]=@IsActive,[updated_at]=GETDATE()
+                    WHERE [id]=@Id;
+                SELECT @Id;
+                """;
+            command.Parameters.Add(new SqlParameter("@Id", entity.Id));
+        }
+        else
+        {
+            command.CommandText = $"""
+                INSERT INTO {_table} ([name],[document_type_id],[frx_file_path],[frx_content],[description],[is_default],[is_active],[created_at],[updated_at])
+                VALUES (@Name,@DocTypeId,@FrxFilePath,@FrxContent,@Description,@IsDefault,@IsActive,GETDATE(),GETDATE());
+                SELECT CAST(SCOPE_IDENTITY() AS INT);
+                """;
+        }
         command.Parameters.Add(new SqlParameter("@Name", entity.Name));
         command.Parameters.Add(new SqlParameter("@DocTypeId", entity.DocumentTypeId));
         command.Parameters.Add(new SqlParameter("@FrxFilePath", (object?)entity.FrxFilePath ?? DBNull.Value));
@@ -91,10 +99,11 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         command.Parameters.Add(new SqlParameter("@Description", (object?)entity.Description ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsDefault", entity.IsDefault));
         command.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task DeleteAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -105,9 +114,9 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
 
     private static ReportTemplate Map(SqlDataReader r) => new()
     {
-        Id             = r.GetGuid(0),
+        Id             = r.GetInt32(0),
         Name           = r.GetString(1),
-        DocumentTypeId = r.GetGuid(2),
+        DocumentTypeId = r.GetInt32(2),
         FrxFilePath    = r.IsDBNull(3) ? null : r.GetString(3),
         Description    = r.IsDBNull(4) ? null : r.GetString(4),
         IsDefault      = r.GetBoolean(5),

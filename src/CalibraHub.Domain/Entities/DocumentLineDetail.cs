@@ -3,7 +3,7 @@ namespace CalibraHub.Domain.Entities;
 public sealed class DocumentLineDetail
 {
     public int Id { get; init; }
-    public Guid QuoteLineId { get; init; }
+    public int QuoteLineId { get; init; }
     public string FeatureName { get; set; } = string.Empty;
     public string ValueCode { get; set; } = string.Empty;
     public string ValueName { get; set; } = string.Empty;

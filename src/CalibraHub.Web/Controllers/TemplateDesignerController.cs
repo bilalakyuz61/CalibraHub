@@ -135,8 +135,8 @@ public class TemplateDesignerController : Controller
 
     // GET /api/designer/template/{id} — report_templates tablosundan .frx icerigini oku (DB binary)
     [AllowAnonymous]
-    [HttpGet("/api/designer/template/{id:guid}")]
-    public async Task<IActionResult> GetDesignerTemplate(Guid id, CancellationToken cancellationToken)
+    [HttpGet("/api/designer/template/{id:int}")]
+    public async Task<IActionResult> GetDesignerTemplate(int id, CancellationToken cancellationToken)
     {
         var t = await _reportTemplateRepo.GetByIdAsync(id, cancellationToken);
         if (t is null) return NotFound();
@@ -161,9 +161,9 @@ public class TemplateDesignerController : Controller
 
     // POST /api/designer/template/{id} — .frx icerigini DB'ye yaz
     [AllowAnonymous]
-    [HttpPost("/api/designer/template/{id:guid}")]
+    [HttpPost("/api/designer/template/{id:int}")]
     public async Task<IActionResult> SaveDesignerTemplate(
-        Guid id, [FromBody] SaveFrxRequest request, CancellationToken cancellationToken)
+        int id, [FromBody] SaveFrxRequest request, CancellationToken cancellationToken)
     {
         var t = await _reportTemplateRepo.GetByIdAsync(id, cancellationToken);
         if (t is null) return NotFound();

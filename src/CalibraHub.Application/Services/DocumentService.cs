@@ -27,15 +27,15 @@ public sealed class DocumentService : IDocumentService
         )).ToArray();
     }
 
-    public async Task<DocumentDto?> GetQuoteByIdAsync(Guid id, CancellationToken ct)
+    public async Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct)
     {
         var q = await _repo.GetByIdAsync(id, ct);
         return q == null ? null : MapDto(q);
     }
 
-    public async Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(Guid quoteId, CancellationToken ct)
+    public async Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct)
     {
-        var lines = await _repo.GetLinesAsync(quoteId, ct);
+        var lines = await _repo.GetLinesAsync(documentId, ct);
         var result = new List<DocumentLineDto>(lines.Count);
         foreach (var ln in lines)
         {
@@ -53,11 +53,10 @@ public sealed class DocumentService : IDocumentService
         SaveDocumentRequest request, string? createdBy, CancellationToken ct)
     {
         // ── Cari cozumleme ─────────────────────────────────────
-        // Id yoksa ContactCode (AccountCode) uzerinden aktif cari bulup Id'yi cozeriz.
-        int? resolvedCustomerId = request.ContactId;
-        string? resolvedCustomerName = request.ContactName;
+        int? resolvedContactId = request.ContactId;
+        string? resolvedContactName = request.ContactName;
 
-        if (!resolvedCustomerId.HasValue && !string.IsNullOrWhiteSpace(request.ContactCode))
+        if (!resolvedContactId.HasValue && !string.IsNullOrWhiteSpace(request.ContactCode))
         {
             var code = request.ContactCode.Trim();
             var matches = await _financeService.GetContactsAsync(null, code, ct);
@@ -65,35 +64,35 @@ public sealed class DocumentService : IDocumentService
                 a.IsActive && string.Equals(a.AccountCode, code, StringComparison.OrdinalIgnoreCase));
             if (exact != null)
             {
-                resolvedCustomerId = exact.Id;
-                if (string.IsNullOrWhiteSpace(resolvedCustomerName))
-                    resolvedCustomerName = exact.AccountTitle;
+                resolvedContactId = exact.Id;
+                if (string.IsNullOrWhiteSpace(resolvedContactName))
+                    resolvedContactName = exact.AccountTitle;
             }
         }
 
-        if (!resolvedCustomerId.HasValue && string.IsNullOrWhiteSpace(resolvedCustomerName))
+        if (!resolvedContactId.HasValue && string.IsNullOrWhiteSpace(resolvedContactName))
             return (false, "Cari (musteri) zorunludur. Kalem eklemeden once cari seciniz.", null);
         if (request.Lines.Count == 0)
             return (false, "En az bir satir eklenmeli.", null);
 
-        // Request artik resolve edilmis Id'yi kullanir
-        request = request with { ContactId = resolvedCustomerId, ContactName = resolvedCustomerName };
+        request = request with { ContactId = resolvedContactId, ContactName = resolvedContactName };
 
-        var isNew = !request.Id.HasValue || request.Id.Value == Guid.Empty;
-        var quoteNumber = isNew ? await _repo.GetNextQuoteNumberAsync(ct) : "";
+        var isNew = !request.Id.HasValue || request.Id.Value == 0;
+        var quoteNumber = isNew ? await _repo.GetNextDocumentNumberAsync(ct) : "";
 
         // Satirlari hesapla
-        var lineEntities = new List<DocumentLine>();
+        var lineRequests = request.Lines.ToArray();
         decimal subTotal = 0;
+        var lineEntities = new List<DocumentLine>(lineRequests.Length);
         int lineNo = 1;
-        foreach (var ln in request.Lines)
+        foreach (var ln in lineRequests)
         {
             var lineDiscountMultiplier = 1m - (ln.DiscountRate / 100m);
             var lineTotal = ln.Quantity * ln.UnitPrice * lineDiscountMultiplier;
             subTotal += lineTotal;
             lineEntities.Add(new DocumentLine
             {
-                DocumentId = request.Id ?? Guid.Empty,
+                // DocumentId 0 — UpsertAsync sonrasi quote.Id ile set edecegiz
                 LineNo = lineNo++,
                 ItemId = ln.ItemId,
                 MaterialCode = ln.MaterialCode,
@@ -118,6 +117,7 @@ public sealed class DocumentService : IDocumentService
             quote = new Document
             {
                 DocumentNumber = quoteNumber,
+                DocumentTypeId = request.DocumentTypeId,
                 DocumentDate = request.DocumentDate,
                 ValidUntil = request.ValidUntil,
                 ContactId = request.ContactId,
@@ -141,43 +141,75 @@ public sealed class DocumentService : IDocumentService
         }
         else
         {
-            quote = await _repo.GetByIdAsync(request.Id!.Value, ct)
+            var existing = await _repo.GetByIdAsync(request.Id!.Value, ct)
                     ?? throw new InvalidOperationException("Teklif bulunamadi.");
 
-            // Kayitli kalem varsa cari degistirilemez
             var existingLines = await _repo.GetLinesAsync(request.Id.Value, ct);
-            if (existingLines.Count > 0 && quote.ContactId != request.ContactId)
+            if (existingLines.Count > 0 && existing.ContactId != request.ContactId)
                 return (false, "Kalem girilmis belgenin cari kodu degistirilemez.", null);
 
-            quote.DocumentDate = request.DocumentDate;
-            quote.ValidUntil = request.ValidUntil;
-            quote.ContactId = request.ContactId;
-            quote.ContactName = request.ContactName;
-            quote.ContactAddress = request.ContactAddress;
-            quote.SalesRepId = request.SalesRepId;
-            quote.Currency = request.Currency ?? "TRY";
-            quote.SubTotal = Math.Round(subTotal, 4);
-            quote.DiscountRate = request.DiscountRate;
-            quote.DiscountAmount = discountAmount;
-            quote.TaxRate = request.TaxRate;
-            quote.TaxAmount = taxAmount;
-            quote.GrandTotal = Math.Round(grandTotal, 4);
-            quote.PaymentTerms = request.PaymentTerms;
-            quote.DeliveryTerms = request.DeliveryTerms;
-            quote.DeliveryAddress = request.DeliveryAddress;
-            quote.Notes = request.Notes;
-            quote.UpdatedAt = DateTime.Now;
+            existing.DocumentTypeId = request.DocumentTypeId ?? existing.DocumentTypeId;
+            existing.DocumentDate = request.DocumentDate;
+            existing.ValidUntil = request.ValidUntil;
+            existing.ContactId = request.ContactId;
+            existing.ContactName = request.ContactName;
+            existing.ContactAddress = request.ContactAddress;
+            existing.SalesRepId = request.SalesRepId;
+            existing.Currency = request.Currency ?? "TRY";
+            existing.SubTotal = Math.Round(subTotal, 4);
+            existing.DiscountRate = request.DiscountRate;
+            existing.DiscountAmount = discountAmount;
+            existing.TaxRate = request.TaxRate;
+            existing.TaxAmount = taxAmount;
+            existing.GrandTotal = Math.Round(grandTotal, 4);
+            existing.PaymentTerms = request.PaymentTerms;
+            existing.DeliveryTerms = request.DeliveryTerms;
+            existing.DeliveryAddress = request.DeliveryAddress;
+            existing.Notes = request.Notes;
+            existing.UpdatedAt = DateTime.Now;
+            quote = existing;
         }
 
-        await _repo.UpsertAsync(quote, ct);
+        var savedId = await _repo.UpsertAsync(quote, ct);
 
-        // Satirlari kaydet
-        foreach (var ln in lineEntities)
+        // Upsert sonrasi yeni Id'yi entity'ye ata (init-only oldugu icin yeni instance)
+        if (isNew)
         {
-            // DocumentId'yi set et (yeni kayitlarda)
-            var field = typeof(DocumentLine).GetProperty("DocumentId");
-            // init-only oldugundan reflection ile set edemeyiz — yeni entity olusturalim
+            quote = new Document
+            {
+                Id = savedId,
+                DocumentNumber = quote.DocumentNumber,
+                DocumentTypeId = quote.DocumentTypeId,
+                DocumentDate = quote.DocumentDate,
+                ValidUntil = quote.ValidUntil,
+                ContactId = quote.ContactId,
+                ContactName = quote.ContactName,
+                ContactAddress = quote.ContactAddress,
+                ContactCode = quote.ContactCode,
+                SalesRepId = quote.SalesRepId,
+                Currency = quote.Currency,
+                SubTotal = quote.SubTotal,
+                DiscountRate = quote.DiscountRate,
+                DiscountAmount = quote.DiscountAmount,
+                TaxRate = quote.TaxRate,
+                TaxAmount = quote.TaxAmount,
+                GrandTotal = quote.GrandTotal,
+                PaymentTerms = quote.PaymentTerms,
+                DeliveryTerms = quote.DeliveryTerms,
+                DeliveryAddress = quote.DeliveryAddress,
+                Status = quote.Status,
+                RevisionNo = quote.RevisionNo,
+                ParentDocumentId = quote.ParentDocumentId,
+                Notes = quote.Notes,
+                CreatedBy = quote.CreatedBy,
+                CreatedAt = quote.CreatedAt,
+                UpdatedAt = quote.UpdatedAt,
+                IsActive = quote.IsActive,
+                LineCount = quote.LineCount,
+            };
         }
+
+        // Satirlari kaydet — DocumentId'yi yeni Id ile set et
         var finalLines = lineEntities.Select(ln => new DocumentLine
         {
             DocumentId = quote.Id,
@@ -197,13 +229,11 @@ public sealed class DocumentService : IDocumentService
         await _repo.SaveLinesAsync(quote.Id, finalLines, ct);
 
         // Satir detaylarini (ozellik-deger-aciklama) kaydet
-        // SaveLinesAsync muhtemelen satirlari replace ettigi icin, yeni Id'lerini yeniden okuyoruz.
         var savedLines = await _repo.GetLinesAsync(quote.Id, ct);
         var byLineNo = savedLines.ToDictionary(l => l.LineNo);
-        var reqLineArr = request.Lines.ToArray();
-        for (int i = 0; i < reqLineArr.Length; i++)
+        for (int i = 0; i < lineRequests.Length; i++)
         {
-            var reqLine = reqLineArr[i];
+            var reqLine = lineRequests[i];
             var lineNoForThis = i + 1;
             if (!byLineNo.TryGetValue(lineNoForThis, out var savedLine)) continue;
 
@@ -225,12 +255,12 @@ public sealed class DocumentService : IDocumentService
         return (true, null, MapDto(quote));
     }
 
-    public async Task DeleteQuoteAsync(Guid id, CancellationToken ct)
+    public async Task DeleteQuoteAsync(int id, CancellationToken ct)
     {
         await _repo.DeleteAsync(id, ct);
     }
 
-    public async Task<(bool Success, string? Error)> ChangeStatusAsync(Guid id, string newStatus, CancellationToken ct)
+    public async Task<(bool Success, string? Error)> ChangeStatusAsync(int id, string newStatus, CancellationToken ct)
     {
         var quote = await _repo.GetByIdAsync(id, ct);
         if (quote == null) return (false, "Teklif bulunamadi.");
@@ -244,7 +274,7 @@ public sealed class DocumentService : IDocumentService
         return (true, null);
     }
 
-    public Task<string> GetNextQuoteNumberAsync(CancellationToken ct) => _repo.GetNextQuoteNumberAsync(ct);
+    public Task<string> GetNextDocumentNumberAsync(CancellationToken ct) => _repo.GetNextDocumentNumberAsync(ct);
 
     private static DocumentDto MapDto(Document q) => new(
         q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
@@ -255,7 +285,8 @@ public sealed class DocumentService : IDocumentService
         q.PaymentTerms, q.DeliveryTerms, q.DeliveryAddress,
         q.Status.ToString(), q.RevisionNo, q.ParentDocumentId, q.Notes,
         q.CreatedBy, q.CreatedAt, q.UpdatedAt, q.IsActive,
-        q.ContactCode);
+        q.ContactCode,
+        q.DocumentTypeId);
 
     private static DocumentLineDto MapLineDto(DocumentLine ln, IReadOnlyList<DocumentLineDetailDto>? details = null) => new(
         ln.Id, ln.DocumentId, ln.LineNo,

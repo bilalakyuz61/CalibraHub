@@ -18,7 +18,7 @@ public sealed partial class SqlReportDataRepository : IReportDataRepository
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
     }
 
-    public async Task<DataTable> GetReportDataAsync(string sqlViewName, Guid recordId, CancellationToken cancellationToken)
+    public async Task<DataTable> GetReportDataAsync(string sqlViewName, int recordId, CancellationToken cancellationToken)
     {
         ValidateViewName(sqlViewName);
         var dt = new DataTable("Data");

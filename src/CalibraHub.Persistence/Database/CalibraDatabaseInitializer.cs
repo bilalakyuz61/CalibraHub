@@ -70,6 +70,8 @@ public sealed class CalibraDatabaseInitializer
             Console.WriteLine("[DB INIT] MigrateColumnRenamesAsync completed successfully.");
             await MigrateScreenCodesAsync(connection, cancellationToken);
             Console.WriteLine("[DB INIT] MigrateScreenCodesAsync completed successfully.");
+            await MigrateDocumentPkToIntAsync(connection, cancellationToken);
+            Console.WriteLine("[DB INIT] MigrateDocumentPkToIntAsync completed successfully.");
             await MigrateIntegratorSettingsTableAsync(connection, cancellationToken);
             await EnsureSchemaAndTablesAsync(connection, cancellationToken);
             await EnsureIntegratorLoginColumnsAsync(connection, cancellationToken);
@@ -4398,13 +4400,15 @@ public sealed class CalibraDatabaseInitializer
             BEGIN
                 CREATE TABLE [{s}].[Document]
                 (
-                    [id]                UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [document_number]      NVARCHAR(15)     NOT NULL,
-                    [document_date]        DATETIME2(0)     NOT NULL,
+                    [id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document] PRIMARY KEY,
+                    [document_number]   NVARCHAR(15)     NOT NULL,
+                    [document_type_id]  INT              NULL,
+                    [document_date]     DATETIME2(0)     NOT NULL,
                     [valid_until]       DATETIME2(0)     NULL,
-                    [contact_id]       INT              NULL,
-                    [contact_name]     NVARCHAR(200)    NULL,
-                    [contact_address]  NVARCHAR(500)    NULL,
+                    [contact_id]        INT              NULL,
+                    [contact_name]      NVARCHAR(200)    NULL,
+                    [contact_address]   NVARCHAR(500)    NULL,
+                    [sales_rep_id]      INT              NULL,
                     [currency]          NVARCHAR(5)      NOT NULL DEFAULT(N'TRY'),
                     [sub_total]         DECIMAL(18,4)    NOT NULL DEFAULT(0),
                     [discount_rate]     DECIMAL(5,2)     NOT NULL DEFAULT(0),
@@ -4417,27 +4421,26 @@ public sealed class CalibraDatabaseInitializer
                     [delivery_address]  NVARCHAR(500)    NULL,
                     [status]            NVARCHAR(20)     NOT NULL DEFAULT(N'Draft'),
                     [revision_no]       INT              NOT NULL DEFAULT(0),
-                    [parent_document_id]   UNIQUEIDENTIFIER NULL,
+                    [parent_document_id] INT             NULL,
                     [notes]             NVARCHAR(MAX)    NULL,
                     [created_by]        NVARCHAR(120)    NULL,
                     [created_at]        DATETIME2(0)     NOT NULL,
                     [updated_at]        DATETIME2(0)     NOT NULL,
                     [is_active]         BIT              NOT NULL DEFAULT(1)
                 );
-                CREATE UNIQUE INDEX [ux_sales_quotes_number] ON [{s}].[Document]([document_number]);
-                CREATE INDEX [ix_sales_quotes_status] ON [{s}].[Document]([status]);
-                CREATE INDEX [ix_sales_quotes_customer] ON [{s}].[Document]([contact_id]);
+                CREATE UNIQUE INDEX [ux_document_number] ON [{s}].[Document]([document_number]);
+                CREATE INDEX [ix_document_status] ON [{s}].[Document]([status]);
+                CREATE INDEX [ix_document_contact] ON [{s}].[Document]([contact_id]);
             END;
 
-            -- sales_rep_id kolonu ekle (yoksa)
+            -- sales_rep_id kolonu ekle (yoksa — eski DB icin)
             IF COL_LENGTH(N'[{s}].[Document]', N'sales_rep_id') IS NULL
                 ALTER TABLE [{s}].[Document] ADD [sales_rep_id] INT NULL;
 
-            -- document_type_id FK kolonu (Phase 2 konsolidasyon): teklif/siparis/fatura tek tabloda
+            -- document_type_id FK kolonu (Phase 2 konsolidasyon) + backfill
             IF COL_LENGTH(N'[{s}].[Document]', N'document_type_id') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[Document] ADD [document_type_id] UNIQUEIDENTIFIER NULL;
-                -- Mevcut satirlari default 'QUOTE' tipine backfill et
+                ALTER TABLE [{s}].[Document] ADD [document_type_id] INT NULL;
                 EXEC(N'UPDATE [{s}].[Document]
                        SET [document_type_id] = (SELECT TOP 1 [id] FROM [{s}].[document_types] WHERE [code] = N''QUOTE'')
                        WHERE [document_type_id] IS NULL');
@@ -4447,10 +4450,10 @@ public sealed class CalibraDatabaseInitializer
             BEGIN
                 CREATE TABLE [{s}].[DocumentLine]
                 (
-                    [id]              UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [document_id]        UNIQUEIDENTIFIER NOT NULL,
+                    [id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document_line] PRIMARY KEY,
+                    [document_id]     INT              NOT NULL,
                     [line_no]         INT              NOT NULL DEFAULT(0),
-                    [item_id]   INT              NULL,
+                    [item_id]         INT              NULL,
                     [material_code]   NVARCHAR(50)     NOT NULL,
                     [material_name]   NVARCHAR(200)    NOT NULL,
                     [unit_name]       NVARCHAR(40)     NULL,
@@ -4460,10 +4463,10 @@ public sealed class CalibraDatabaseInitializer
                     [line_total]      DECIMAL(18,4)    NOT NULL DEFAULT(0),
                     [notes]           NVARCHAR(500)    NULL,
                     [is_active]       BIT              NOT NULL DEFAULT(1),
-                    CONSTRAINT [fk_sales_quote_lines_quote] FOREIGN KEY ([document_id])
+                    CONSTRAINT [fk_document_line_document] FOREIGN KEY ([document_id])
                         REFERENCES [{s}].[Document]([id])
                 );
-                CREATE INDEX [ix_sales_quote_lines_quote] ON [{s}].[DocumentLine]([document_id]);
+                CREATE INDEX [ix_document_line_document] ON [{s}].[DocumentLine]([document_id]);
             END;
             """;
 
@@ -4636,7 +4639,7 @@ public sealed class CalibraDatabaseInitializer
                 CREATE TABLE [{s}].[sales_quote_line_details]
                 (
                     [id]             INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [quote_line_id]  UNIQUEIDENTIFIER  NOT NULL,
+                    [quote_line_id]  INT               NOT NULL,
                     [feature_name]   NVARCHAR(200)     NOT NULL,
                     [value_code]     NVARCHAR(100)     NOT NULL,
                     [value_name]     NVARCHAR(200)     NOT NULL,
@@ -4686,7 +4689,7 @@ public sealed class CalibraDatabaseInitializer
             BEGIN
                 CREATE TABLE [{s}].[document_types]
                 (
-                    [id]            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                    [id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document_types] PRIMARY KEY,
                     [code]          NVARCHAR(50)     NOT NULL,
                     [name]          NVARCHAR(200)    NOT NULL,
                     [sql_view_name] NVARCHAR(128)    NULL,
@@ -4711,9 +4714,9 @@ public sealed class CalibraDatabaseInitializer
             BEGIN
                 CREATE TABLE [{s}].[report_templates]
                 (
-                    [id]               UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                    [id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_report_templates] PRIMARY KEY,
                     [name]             NVARCHAR(200)    NOT NULL,
-                    [document_type_id] UNIQUEIDENTIFIER NOT NULL,
+                    [document_type_id] INT              NOT NULL,
                     [frx_file_path]    NVARCHAR(500)    NULL,
                     [frx_content]      VARBINARY(MAX)   NULL,
                     [description]      NVARCHAR(500)    NULL,
@@ -4739,28 +4742,27 @@ public sealed class CalibraDatabaseInitializer
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static readonly (Guid Id, string Code, string Name, string? SqlViewName, string? Description)[] DefaultDocumentTypes =
+    private static readonly (string Code, string Name, string? SqlViewName, string? Description)[] DefaultDocumentTypes =
     [
-        (Guid.Parse("a1000001-0000-0000-0000-000000000001"), "fatura",        "Fatura",        "vw_Invoice",        "Satis faturasi sablonu"),
-        (Guid.Parse("a1000001-0000-0000-0000-000000000002"), "irsaliye",      "Irsaliye",      "vw_DeliveryNote",   "Sevk irsaliyesi sablonu"),
-        (Guid.Parse("a1000001-0000-0000-0000-000000000003"), "urun_barkodu",  "Urun Barkodu",  "vw_ProductBarcode", "Urun barkod etiketi"),
-        (Guid.Parse("a1000001-0000-0000-0000-000000000004"), "raf_etiketi",   "Raf Etiketi",   "vw_ShelfLabel",     "Depo raf etiketi"),
-        (Guid.Parse("a1000001-0000-0000-0000-000000000005"), "satis_teklifi", "Satis Teklifi", "vw_Document",     "Satis teklifi sablonu"),
+        ("fatura",        "Fatura",        "vw_Invoice",        "Satis faturasi sablonu"),
+        ("irsaliye",      "Irsaliye",      "vw_DeliveryNote",   "Sevk irsaliyesi sablonu"),
+        ("urun_barkodu",  "Urun Barkodu",  "vw_ProductBarcode", "Urun barkod etiketi"),
+        ("raf_etiketi",   "Raf Etiketi",   "vw_ShelfLabel",     "Depo raf etiketi"),
+        ("satis_teklifi", "Satis Teklifi", "vw_Document",       "Satis teklifi sablonu"),
     ];
 
     private async Task SeedDocumentTypesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
-        foreach (var (id, code, name, viewName, desc) in DefaultDocumentTypes)
+        foreach (var (code, name, viewName, desc) in DefaultDocumentTypes)
         {
             var commandText = $"""
                 IF NOT EXISTS (SELECT 1 FROM [{s}].[document_types] WHERE [code] = @Code)
-                    INSERT INTO [{s}].[document_types] ([id],[code],[name],[sql_view_name],[description],[is_active],[created_at],[updated_at])
-                    VALUES (@Id, @Code, @Name, @ViewName, @Description, 1, GETDATE(), GETDATE());
+                    INSERT INTO [{s}].[document_types] ([code],[name],[sql_view_name],[description],[is_active],[created_at],[updated_at])
+                    VALUES (@Code, @Name, @ViewName, @Description, 1, GETDATE(), GETDATE());
                 """;
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = commandText;
-            cmd.Parameters.AddWithValue("@Id", id);
             cmd.Parameters.AddWithValue("@Code", code);
             cmd.Parameters.AddWithValue("@Name", name);
             cmd.Parameters.AddWithValue("@ViewName", (object?)viewName ?? DBNull.Value);
@@ -5893,6 +5895,89 @@ public sealed class CalibraDatabaseInitializer
 
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sb.ToString();
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Phase 3: Document / DocumentLine / document_types / report_templates
+    /// tablolarinin PK ve FK kolonlarini UNIQUEIDENTIFIER'dan INT IDENTITY'e tasir.
+    ///
+    /// Strateji: Eger Document.id kolonu hala uniqueidentifier ise, Document ekosistemini
+    /// (DocumentLine + Document + report_templates + document_types) tamamen DROP eder.
+    /// Sonraki EnsureDocumentTypesTableAsync + EnsureDocumentTablesAsync + SeedDocumentTypesAsync
+    /// cagrilari yeni schemada (INT IDENTITY) tabloyu olusturur.
+    ///
+    /// NOT: Bu metod mevcut Document/DocumentLine satirlarini SILER. Dev/test DB icin
+    /// kabul edilebilir; production icin proper data migration (GUID -> INT mapping + FK
+    /// cozme) yazilmasi gerekir.
+    /// </summary>
+    private async Task MigrateDocumentPkToIntAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            -- Kontrol: Document.id tipi hala uniqueidentifier mi?
+            IF OBJECT_ID(N'[{s}].[Document]', N'U') IS NOT NULL
+               AND EXISTS (
+                   SELECT 1 FROM sys.columns c
+                   JOIN sys.types t ON c.system_type_id = t.system_type_id
+                   WHERE c.object_id = OBJECT_ID(N'[{s}].[Document]')
+                     AND c.name = N'id'
+                     AND t.name = N'uniqueidentifier'
+               )
+            BEGIN
+                -- Bagli FK'leri drop et (constraint isimlerinden bagimsiz)
+                DECLARE @drop NVARCHAR(MAX) = N'';
+                SELECT @drop = @drop + N'ALTER TABLE ' + QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id))
+                             + N'.' + QUOTENAME(OBJECT_NAME(fk.parent_object_id))
+                             + N' DROP CONSTRAINT ' + QUOTENAME(fk.name) + N'; '
+                  FROM sys.foreign_keys fk
+                 WHERE fk.referenced_object_id IN (
+                        OBJECT_ID(N'[{s}].[Document]'),
+                        OBJECT_ID(N'[{s}].[document_types]')
+                 );
+                IF LEN(@drop) > 0 EXEC sp_executesql @drop;
+
+                -- Tablolari drop et (LineDetail -> Line -> Document)
+                IF OBJECT_ID(N'[{s}].[sales_quote_line_details]', N'U') IS NOT NULL
+                    DROP TABLE [{s}].[sales_quote_line_details];
+                IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+                    DROP TABLE [{s}].[DocumentLine];
+                IF OBJECT_ID(N'[{s}].[Document]', N'U') IS NOT NULL
+                    DROP TABLE [{s}].[Document];
+                IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+                    DROP TABLE [{s}].[report_templates];
+                IF OBJECT_ID(N'[{s}].[document_types]', N'U') IS NOT NULL
+                    DROP TABLE [{s}].[document_types];
+
+                PRINT '[DB INIT] Document ekosistemi GUID PK''den INT IDENTITY''ye migrate ediliyor — tablolar drop edildi, yeniden olusturulacak.';
+            END;
+
+            -- Eger document_types hala GUID PK'li ise (Document yoksa ama document_types kalmissa) onu da drop et
+            IF OBJECT_ID(N'[{s}].[document_types]', N'U') IS NOT NULL
+               AND EXISTS (
+                   SELECT 1 FROM sys.columns c
+                   JOIN sys.types t ON c.system_type_id = t.system_type_id
+                   WHERE c.object_id = OBJECT_ID(N'[{s}].[document_types]')
+                     AND c.name = N'id'
+                     AND t.name = N'uniqueidentifier'
+               )
+            BEGIN
+                DECLARE @drop2 NVARCHAR(MAX) = N'';
+                SELECT @drop2 = @drop2 + N'ALTER TABLE ' + QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id))
+                              + N'.' + QUOTENAME(OBJECT_NAME(fk.parent_object_id))
+                              + N' DROP CONSTRAINT ' + QUOTENAME(fk.name) + N'; '
+                  FROM sys.foreign_keys fk
+                 WHERE fk.referenced_object_id = OBJECT_ID(N'[{s}].[document_types]');
+                IF LEN(@drop2) > 0 EXEC sp_executesql @drop2;
+
+                IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+                    DROP TABLE [{s}].[report_templates];
+                DROP TABLE [{s}].[document_types];
+            END;
+            """;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 

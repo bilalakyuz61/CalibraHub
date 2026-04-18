@@ -62,7 +62,7 @@ public sealed class DocumentController : Controller
     // ── Sablonlar (AJAX) ──────────────────────────────────────────────────────
 
     [HttpGet]
-    public async Task<IActionResult> Templates(Guid documentTypeId, CancellationToken ct)
+    public async Task<IActionResult> Templates(int documentTypeId, CancellationToken ct)
     {
         var templates = await _templateRepo.GetByDocumentTypeIdAsync(documentTypeId, ct);
         return Json(templates.Select(t => new
@@ -82,7 +82,7 @@ public sealed class DocumentController : Controller
 
     [HttpPost]
     [RequestSizeLimit(2_000_000)]
-    public async Task<IActionResult> Upload(IFormFile file, Guid documentTypeId, string name, CancellationToken ct)
+    public async Task<IActionResult> Upload(IFormFile file, int documentTypeId, string name, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
             return Json(new { success = false, message = "Dosya secilmedi." });
@@ -118,7 +118,7 @@ public sealed class DocumentController : Controller
     // ── Yeni Bos Sablon Olustur (DB'ye) ──────────────────────────────────────
 
     [HttpPost]
-    public async Task<IActionResult> CreateBlank(Guid documentTypeId, string name, CancellationToken ct)
+    public async Task<IActionResult> CreateBlank(int documentTypeId, string name, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Json(new { success = false, message = "Sablon adi bos olamaz." });
@@ -162,7 +162,7 @@ public sealed class DocumentController : Controller
     // ── FRX Indir (DB'den binary) ────────────────────────────────────────────
 
     [HttpGet("/Document/Download/{templateId:guid}")]
-    public async Task<IActionResult> Download(Guid templateId, CancellationToken ct)
+    public async Task<IActionResult> Download(int templateId, CancellationToken ct)
     {
         var template = await _templateRepo.GetByIdAsync(templateId, ct);
         if (template is null) return NotFound();
@@ -176,7 +176,7 @@ public sealed class DocumentController : Controller
     // ── PDF Uret ──────────────────────────────────────────────────────────────
 
     [HttpGet("/Document/Generate/{templateId:guid}/{recordId:guid}")]
-    public async Task<IActionResult> Generate(Guid templateId, Guid recordId, CancellationToken ct)
+    public async Task<IActionResult> Generate(int templateId, int recordId, CancellationToken ct)
     {
         try
         {
@@ -194,7 +194,7 @@ public sealed class DocumentController : Controller
     // ── PDF Onizleme ──────────────────────────────────────────────────────────
 
     [HttpGet("/Document/Preview/{templateId:guid}/{recordId:guid}")]
-    public async Task<IActionResult> Preview(Guid templateId, Guid recordId, CancellationToken ct)
+    public async Task<IActionResult> Preview(int templateId, int recordId, CancellationToken ct)
     {
         try
         {
@@ -211,7 +211,7 @@ public sealed class DocumentController : Controller
     // ── ZPL Cikti ─────────────────────────────────────────────────────────────
 
     [HttpGet("/Document/Zpl/{recordId:guid}")]
-    public async Task<IActionResult> Zpl(Guid recordId, string type, CancellationToken ct)
+    public async Task<IActionResult> Zpl(int recordId, string type, CancellationToken ct)
     {
         try
         {
@@ -227,7 +227,7 @@ public sealed class DocumentController : Controller
     // ── Sablon Sil ────────────────────────────────────────────────────────────
 
     [HttpPost("/Document/Delete/{templateId:guid}")]
-    public async Task<IActionResult> Delete(Guid templateId, CancellationToken ct)
+    public async Task<IActionResult> Delete(int templateId, CancellationToken ct)
     {
         var template = await _templateRepo.GetByIdAsync(templateId, ct);
         if (template is null)
@@ -242,7 +242,7 @@ public sealed class DocumentController : Controller
     // ── Varsayilan Yap ────────────────────────────────────────────────────────
 
     [HttpPost("/Document/SetDefault/{templateId:guid}")]
-    public async Task<IActionResult> SetDefault(Guid templateId, CancellationToken ct)
+    public async Task<IActionResult> SetDefault(int templateId, CancellationToken ct)
     {
         var template = await _templateRepo.GetByIdAsync(templateId, ct);
         if (template is null)
@@ -265,7 +265,7 @@ public sealed class DocumentController : Controller
     // ── Yeniden Adlandir ────────────────────────────────────────────────────
 
     [HttpPost("/Document/Rename/{templateId:guid}")]
-    public async Task<IActionResult> Rename(Guid templateId, [FromForm] string name, CancellationToken ct)
+    public async Task<IActionResult> Rename(int templateId, [FromForm] string name, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(name))
             return BadRequest("Sablon adi bos olamaz.");
@@ -318,7 +318,7 @@ public sealed class DocumentController : Controller
             byte[]? attachmentBytes = null;
             var attachmentName = SanitizeFileName(template.Name) + ".pdf";
 
-            if (request.RecordId.HasValue && request.RecordId.Value != Guid.Empty)
+            if (request.RecordId.HasValue && request.RecordId.Value > 0)
             {
                 try
                 {
@@ -368,8 +368,8 @@ public sealed class DocumentController : Controller
 }
 
 public sealed record SendTemplateEmailRequest(
-    Guid TemplateId,
-    Guid? RecordId,
+    int TemplateId,
+    int? RecordId,
     string ToEmail,
     string Subject,
     string? BodyHtml,

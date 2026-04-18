@@ -1,12 +1,20 @@
-using CalibraHub.Domain.Common;
+using System.ComponentModel;
 
 namespace CalibraHub.Domain.Entities;
 
-public sealed class DocumentLine : Entity
+public sealed class DocumentLine
 {
-    public Guid DocumentId { get; init; }
+    [Description("Birincil anahtar. IDENTITY.")]
+    public int Id { get; init; }
+
+    [Description("Bagli oldugu belge. FK -> Document.Id")]
+    public int DocumentId { get; init; }
+
     public int LineNo { get; set; }
+
+    [Description("Stok karti referansi. FK -> Item.Id")]
     public int? ItemId { get; set; }
+
     public required string MaterialCode { get; set; }
     public required string MaterialName { get; set; }
     public string? UnitName { get; set; }
@@ -16,5 +24,7 @@ public sealed class DocumentLine : Entity
     public decimal LineTotal { get; set; }
     public string? CombinationCode { get; set; }
     public string? Notes { get; set; }
+
+    [Description("Soft delete — listede gosterilir mi?")]
     public bool IsActive { get; set; } = true;
 }

@@ -29,7 +29,7 @@ public sealed class DocumentGenerationService : IDocumentGenerationService
         _logger        = logger;
     }
 
-    public async Task<byte[]> GeneratePdfAsync(Guid templateId, Guid recordId, CancellationToken ct = default)
+    public async Task<byte[]> GeneratePdfAsync(int templateId, int recordId, CancellationToken ct = default)
     {
         var template = await _templateRepo.GetByIdAsync(templateId, ct)
             ?? throw new InvalidOperationException($"Sablon bulunamadi: {templateId}");
@@ -54,7 +54,7 @@ public sealed class DocumentGenerationService : IDocumentGenerationService
             : await _reportService.ExportPdfAsync(template.FrxFilePath!, data, ct);
     }
 
-    public async Task<string> GenerateHtmlPreviewAsync(Guid templateId, Guid recordId, CancellationToken ct = default)
+    public async Task<string> GenerateHtmlPreviewAsync(int templateId, int recordId, CancellationToken ct = default)
     {
         var template = await _templateRepo.GetByIdAsync(templateId, ct)
             ?? throw new InvalidOperationException($"Sablon bulunamadi: {templateId}");
@@ -76,7 +76,7 @@ public sealed class DocumentGenerationService : IDocumentGenerationService
             : await _reportService.ExportHtmlAsync(template.FrxFilePath!, data, ct);
     }
 
-    public async Task<string> GenerateZplAsync(Guid recordId, string documentTypeCode, CancellationToken ct = default)
+    public async Task<string> GenerateZplAsync(int recordId, string documentTypeCode, CancellationToken ct = default)
     {
         var docType = await _docTypeRepo.GetByCodeAsync(documentTypeCode, ct)
             ?? throw new InvalidOperationException($"Belge tipi bulunamadi: {documentTypeCode}");

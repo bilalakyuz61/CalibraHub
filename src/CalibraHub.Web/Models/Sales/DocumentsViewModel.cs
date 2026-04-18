@@ -14,7 +14,7 @@ public sealed class DocumentsViewModel
 
 public sealed class DocumentEditViewModel
 {
-    public Guid? DocumentId { get; set; }
+    public int? DocumentId { get; set; }
 
     /// <summary>
     /// CalibraLineItemsGrid icin server-side JSON config (pre-serialized).
