@@ -19,8 +19,8 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Plus, Trash2, Hash, FileText, Ruler, Sigma, DollarSign,
-  Percent, Calculator, StickyNote, CircleDot,
+  Plus, Trash2, Pencil, Hash, FileText, Ruler, Sigma, DollarSign,
+  Percent, Calculator, StickyNote, CircleDot, Lock,
 } from 'lucide-react'
 import LineGridCell from './LineGridCell'
 import { evaluate } from './formulaEvaluator'
@@ -79,6 +79,8 @@ export default function CalibraLineItemsGrid(props) {
 
   // ── Silme onay modali ──
   var [deleteTarget, setDeleteTarget] = useState(null)
+  // ── Duzeltme modu per satir (kilit/unlock mantigi icin altyapi) ──
+  var [editingRowUid, setEditingRowUid] = useState(null)
 
   // ── State: satirlar ──
   var [rows, setRows] = useState(function() {
@@ -171,6 +173,24 @@ export default function CalibraLineItemsGrid(props) {
     setDeleteTarget(null)
   }
 
+  // ── Satir duzelt (kilit/unlock altyapisi) ──
+  // Su an icin: duzelt butonu satirin ilk editable input'una fokus verir.
+  // row.__canEdit === false ise buton pasif; ileride condition'a gore set edilir.
+  function handleEditRow(rowUid) {
+    setEditingRowUid(function(prev) { return prev === rowUid ? null : rowUid })
+    // İlk editable cell'e fokus (requestAnimationFrame ile DOM hazir olsun)
+    requestAnimationFrame(function() {
+      var rowEl = document.querySelector('[data-row-uid="' + rowUid + '"]')
+      if (!rowEl) return
+      var firstInput = rowEl.querySelector('input:not([disabled]), select:not([disabled]), textarea:not([disabled])')
+      if (firstInput && typeof firstInput.focus === 'function') firstInput.focus()
+    })
+  }
+
+  // Row-level flag helpers — default: her ikisi de true
+  function canEdit(row) { return row.__canEdit !== false }
+  function canDelete(row) { return row.__canDelete !== false }
+
   // ── Footer subtotal hesapla ──
   var subtotals = useMemo(function() {
     var out = {}
@@ -203,7 +223,9 @@ export default function CalibraLineItemsGrid(props) {
     <div className="calibra-line-grid rounded-2xl overflow-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
       {/* Header row */}
       <div className="flex items-center border-b border-slate-200 bg-slate-50/80 dark:bg-white/[0.03] dark:border-white/[0.08]">
-        <div className="w-3 flex-shrink-0" />
+        <div className="w-[72px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
+          Islem
+        </div>
         {columns.map(function(col) {
           var Icon = resolveIcon(col.icon)
           var align =
@@ -221,7 +243,6 @@ export default function CalibraLineItemsGrid(props) {
             </div>
           )
         })}
-        <div className="w-10 flex-shrink-0" />
       </div>
 
       {/* Data rows */}
@@ -236,6 +257,7 @@ export default function CalibraLineItemsGrid(props) {
               return (
                 <motion.div
                   key={row._uid}
+                  data-row-uid={row._uid}
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4, height: 0 }}
@@ -243,7 +265,36 @@ export default function CalibraLineItemsGrid(props) {
                   className="border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors"
                 >
                   <div className="flex items-stretch">
-                    <div className="w-3 flex-shrink-0" />
+                    <div className="w-[72px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                      <button
+                        type="button"
+                        onClick={function() { if (canEdit(row)) handleEditRow(row._uid) }}
+                        disabled={!canEdit(row)}
+                        className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+                          !canEdit(row)
+                            ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                            : (editingRowUid === row._uid
+                                ? 'text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-500/15'
+                                : 'text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10')
+                        )}
+                        title={canEdit(row) ? 'Duzelt' : 'Bu satir duzeltilemez'}
+                      >
+                        {canEdit(row) ? <Pencil size={13} strokeWidth={1.8} /> : <Lock size={12} strokeWidth={1.8} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={function() { if (canDelete(row)) handleDeleteRow(row._uid) }}
+                        disabled={!canDelete(row)}
+                        className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+                          !canDelete(row)
+                            ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                            : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:text-white/30 dark:hover:text-rose-400 dark:hover:bg-rose-500/10'
+                        )}
+                        title={canDelete(row) ? 'Sil' : 'Bu satir silinemez'}
+                      >
+                        {canDelete(row) ? <Trash2 size={13} strokeWidth={1.8} /> : <Lock size={12} strokeWidth={1.8} />}
+                      </button>
+                    </div>
                     {columns.map(function(col) {
                       return (
                         <div
@@ -260,16 +311,6 @@ export default function CalibraLineItemsGrid(props) {
                         </div>
                       )
                     })}
-                    <div className="w-10 flex-shrink-0 flex items-center justify-center">
-                      <button
-                        type="button"
-                        onClick={function() { handleDeleteRow(row._uid) }}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:text-white/30 dark:hover:text-rose-400 dark:hover:bg-rose-500/10 transition-colors"
-                        title="Sil"
-                      >
-                        <Trash2 size={13} strokeWidth={1.8} />
-                      </button>
-                    </div>
                   </div>
 
                   {/* Satir alti kolonlar (placement: row-below) — ornegin "Not" */}
