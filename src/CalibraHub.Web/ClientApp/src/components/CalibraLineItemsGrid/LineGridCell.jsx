@@ -18,6 +18,28 @@ import { guideSchema, guideSearch, guideResolve } from '../DynamicWidgetRenderer
 import FieldSettingsForm from './FieldSettingsForm'
 import CombinationPickerModal from './CombinationPickerModal'
 
+/**
+ * Bir obje'den verilen key ile deger oku — case-insensitive.
+ * ASP.NET Core JSON bazen camelCase bazen PascalCase dondugu icin
+ * lookupFillMap'te tanimli source key'i hangi formda olursa olsun yakalar.
+ * Oncelik: birebir match -> lowerCamel -> UpperCamel -> case-insensitive scan.
+ */
+function readCaseInsensitive(obj, key) {
+  if (!obj || key == null) return undefined
+  if (obj[key] !== undefined) return obj[key]
+  var first = key.charAt(0)
+  var lowerKey = first.toLowerCase() + key.slice(1)
+  if (obj[lowerKey] !== undefined) return obj[lowerKey]
+  var upperKey = first.toUpperCase() + key.slice(1)
+  if (obj[upperKey] !== undefined) return obj[upperKey]
+  var needle = key.toLowerCase()
+  var keys = Object.keys(obj)
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i].toLowerCase() === needle) return obj[keys[i]]
+  }
+  return undefined
+}
+
 function useIsLight() {
   var [light, setLight] = useState(function() {
     return document.body.classList.contains('app-theme-light')
@@ -184,14 +206,14 @@ function TextLookupCell(props) {
 
   function handlePick(opt) {
     var patch = {}
-    patch[column.key] = opt[valueKey]
+    patch[column.key] = readCaseInsensitive(opt, valueKey)
     if (column.lookupFillMap) {
       Object.keys(column.lookupFillMap).forEach(function(rowKey) {
         var optKey = column.lookupFillMap[rowKey]
-        patch[rowKey] = opt[optKey]
+        patch[rowKey] = readCaseInsensitive(opt, optKey)
       })
     }
-    onChange(column.key, opt[valueKey], patch)
+    onChange(column.key, patch[column.key], patch)
     setOpen(false)
     setFilter('')
   }
@@ -464,7 +486,8 @@ function GuideLookupCell(props) {
     if (column.lookupFillMap && guideRow.cells) {
       Object.keys(column.lookupFillMap).forEach(function(gridKey) {
         var cellKey = column.lookupFillMap[gridKey]
-        if (guideRow.cells[cellKey] != null) patch[gridKey] = guideRow.cells[cellKey]
+        var val = readCaseInsensitive(guideRow.cells, cellKey)
+        if (val != null) patch[gridKey] = val
       })
     }
     setDisplayVal(guideRow.value || '')

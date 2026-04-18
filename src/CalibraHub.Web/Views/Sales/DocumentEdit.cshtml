@@ -1540,16 +1540,16 @@
             if (!data || !data.quote) throw new Error('GetQuote bos veya gecersiz yanit dondu.');
             var q = data.quote;
             currentQuoteId = q.id;
-            document.getElementById('sqQuoteNumber').value = q.quoteNumber || '';
+            document.getElementById('sqQuoteNumber').value = q.documentNumber || '';
             document.getElementById('sqQuoteDate').value = q.quoteDate ? q.quoteDate.split('T')[0] : '';
             document.getElementById('sqValidUntil').value = q.validUntil ? q.validUntil.split('T')[0] : '';
-            document.getElementById('sqCustomerId').value = q.customerId != null ? q.customerId : '';
+            document.getElementById('sqCustomerId').value = q.contactId != null ? q.contactId : '';
             // Rehber display alanını doldur — Cari Kod + Cari İsim
             var custDisp = document.getElementById('sqCustomerDisplay');
-            custDisp.value = q.customerCode || q.customerName || '';
-            custDisp.setAttribute('data-value', q.customerCode || '');
-            custDisp.setAttribute('data-display', q.customerCode || q.customerName || '');
-            document.getElementById('sqCustomerName').value = q.customerName || '';
+            custDisp.value = q.contactCode || q.contactName || '';
+            custDisp.setAttribute('data-value', q.contactCode || '');
+            custDisp.setAttribute('data-display', q.contactCode || q.contactName || '');
+            document.getElementById('sqCustomerName').value = q.contactName || '';
             document.getElementById('sqSalesRepId').value = q.salesRepId != null ? q.salesRepId : '';
             document.getElementById('sqCurrency').value = q.currency || 'TRY';
             document.getElementById('sqDiscountRate').value = q.discountRate ?? 0;
@@ -1565,8 +1565,8 @@
             document.getElementById('sqStatusSelect').value = q.status;
             document.getElementById('sqStatusBadge').innerHTML = '<span class="sqe-status-badge sqe-status-' + q.status + '">' + statusLabel(q.status) + '</span>';
 
-            var custName = q.customerName || '';
-            var tabTitle = q.quoteNumber || 'Teklif';
+            var custName = q.contactName || '';
+            var tabTitle = q.documentNumber || 'Teklif';
             document.title = tabTitle + (custName ? ' - ' + custName : '') + ' - CalibraHub';
 
             // Header kartinda baslik + subtitle'i guncelle (MaterialCardEdit pattern'i)
@@ -1861,12 +1861,12 @@
         var custText   = (document.getElementById('sqCustomerName').value || '').trim() || null;
         var payload  = {
             id: currentQuoteId,
-            quoteDate:       document.getElementById('sqQuoteDate').value,
+            documentDate:    document.getElementById('sqQuoteDate').value,
             validUntil:      document.getElementById('sqValidUntil').value || null,
-            customerId:      parseInt(custIdVal) || null,
-            customerCode:    custCodeVal || null,
-            customerName:    custText,
-            customerAddress: null,
+            contactId:       parseInt(custIdVal) || null,
+            contactCode:     custCodeVal || null,
+            contactName:     custText,
+            contactAddress:  null,
             salesRepId:      parseInt(document.getElementById('sqSalesRepId').value) || null,
             currency:        document.getElementById('sqCurrency').value,
             discountRate:    parseFloat(document.getElementById('sqDiscountRate').value || 0),
@@ -1886,7 +1886,7 @@
             var data = await resp.json();
             if (!data.success) { CalibraAlert.error(data.message || 'Bilinmeyen hata'); return; }
             currentQuoteId = data.quote.id;
-            document.getElementById('sqQuoteNumber').value = data.quote.quoteNumber;
+            document.getElementById('sqQuoteNumber').value = data.quote.documentNumber;
             document.getElementById('sqBtnDelete').disabled = false;
             document.getElementById('sqStatusSelect').style.display = '';
             document.getElementById('sqStatusSelect').value = data.quote.status;
@@ -1894,7 +1894,7 @@
 
             // Header kart baslik + subtitle guncelle (yeni kayit → 'Teklif Duzenle')
             var sqMetaEl2 = document.getElementById('sqMeta');
-            if (sqMetaEl2) sqMetaEl2.innerHTML = '<strong>' + (data.quote.quoteNumber || '') + '</strong>';
+            if (sqMetaEl2) sqMetaEl2.innerHTML = '<strong>' + (data.quote.documentNumber || '') + '</strong>';
 
             // ── Ek alanlari (WidgetMas/WidgetTra) kaydet ──
             // RecordId = sales_quotes.Id (integer PK).

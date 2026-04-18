@@ -1139,12 +1139,12 @@ body.app-theme-dark .wiz-hlabel {
 
         var payload = {
             id: null,
-            quoteDate:       $id('wizQuoteDate').value,
+            documentDate:    $id('wizQuoteDate').value,
             validUntil:      $id('wizValidUntil').value || null,
-            customerId:      parseInt(custIdVal) || null,
-            customerCode:    custCodeVal || null,
-            customerName:    custText,
-            customerAddress: null,
+            contactId:       parseInt(custIdVal) || null,
+            contactCode:     custCodeVal || null,
+            contactName:     custText,
+            contactAddress:  null,
             salesRepId:      parseInt($id('wizSalesRepId').value) || null,
             currency:        $id('wizCurrency').value,
             discountRate:    parseFloat($id('wizDiscountRate').value || 0),
@@ -1176,7 +1176,7 @@ body.app-theme-dark .wiz-hlabel {
             }
 
             // ── Başarı ────────────────────────────────────────────
-            var quoteNum = data.quote && data.quote.quoteNumber ? data.quote.quoteNumber : 'Oluşturuldu';
+            var quoteNum = data.quote && data.quote.documentNumber ? data.quote.documentNumber : 'Oluşturuldu';
             var quoteId  = data.quote && data.quote.id ? data.quote.id : null;
             $id('wizSuccessSub').textContent = 'Teklif No: ' + quoteNum;
             $id('wizSuccessOverlay').classList.add('visible');
