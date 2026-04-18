@@ -30,7 +30,28 @@ public sealed record DbColumnDto(
     bool IsPrimaryKey,
     bool IsIdentity,
     bool IsForeignKey,
-    string? ForeignKeyTarget);
+    string? ForeignKeyTarget,
+    /// <summary>
+    /// C# Entity property'si uzerindeki [System.ComponentModel.Description]
+    /// attribute degerinden okunur. Bulunamazsa null.
+    /// </summary>
+    string? Description = null,
+    /// <summary>
+    /// C# property'nin tipi bir Enum ise (veya Nullable&lt;Enum&gt;), enum
+    /// degerleri + isimleri. Aksi halde null.
+    /// </summary>
+    IReadOnlyList<DbEnumValueDto>? EnumValues = null,
+    /// <summary>
+    /// C# Entity property ismi (varsa). Snake_case -> PascalCase donusumu
+    /// sonrasi eslesen property adi. Bulunamazsa null — reflection mapping
+    /// eksikligini gosterir.
+    /// </summary>
+    string? ClrPropertyName = null);
+
+public sealed record DbEnumValueDto(
+    string Name,
+    long Value,
+    string? Description);
 
 public sealed record DbIndexDto(
     string Name,

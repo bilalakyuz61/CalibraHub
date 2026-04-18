@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Globalization;
+using System.Reflection;
 using System.Text;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
@@ -9,6 +11,9 @@ namespace CalibraHub.Application.Services;
 public sealed class DbSchemaService : IDbSchemaService
 {
     private readonly IDbSchemaRepository _repository;
+    // Tablo ismi -> Type cache (hem 'Item', hem 'Items' gibi varyasyonlari destekler)
+    private static readonly Lazy<IReadOnlyDictionary<string, Type>> EntityTypeIndex =
+        new(BuildEntityTypeIndex, LazyThreadSafetyMode.ExecutionAndPublication);
 
     public DbSchemaService(IDbSchemaRepository repository)
     {
@@ -18,8 +23,21 @@ public sealed class DbSchemaService : IDbSchemaService
     public Task<IReadOnlyList<DbTableSummaryDto>> GetTablesAsync(CancellationToken cancellationToken)
         => _repository.GetTablesAsync(cancellationToken);
 
-    public Task<DbTableDetailDto?> GetTableDetailAsync(string schema, string name, CancellationToken cancellationToken)
-        => _repository.GetTableDetailAsync(schema, name, cancellationToken);
+    public async Task<DbTableDetailDto?> GetTableDetailAsync(string schema, string name, CancellationToken cancellationToken)
+    {
+        var detail = await _repository.GetTableDetailAsync(schema, name, cancellationToken);
+        if (detail is null) return null;
+
+        var entityType = FindEntityType(name);
+        if (entityType is null) return detail; // reflection eslesmesi yoksa raw sema
+
+        var properties = entityType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var enrichedColumns = detail.Columns
+            .Select(c => EnrichColumn(c, properties))
+            .ToList();
+
+        return detail with { Columns = enrichedColumns };
+    }
 
     public async Task<string> BuildMermaidErAsync(CancellationToken cancellationToken)
     {
@@ -168,5 +186,102 @@ public sealed class DbSchemaService : IDbSchemaService
         foreach (var ch in name)
             sb.Append(char.IsLetterOrDigit(ch) || ch == '_' ? ch : '_');
         return sb.ToString();
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Reflection enrichment: [Description] ve Enum degerlerini
+    // C# Domain entity'lerinden okuyarak UI sozlugune yansitir.
+    // ────────────────────────────────────────────────────────────
+
+    private static Type? FindEntityType(string tableName)
+    {
+        var index = EntityTypeIndex.Value;
+        return index.TryGetValue(tableName, out var t) ? t : null;
+    }
+
+    private static IReadOnlyDictionary<string, Type> BuildEntityTypeIndex()
+    {
+        // Domain assembly'sinden CalibraHub.Domain.Entities namespace'indeki tum public class'lari index'le.
+        // Tablo ismi cesitlemeleri: 'Contact', 'contact', 'Contacts', 'ContactAccounts' (legacy).
+        var dict = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var domainAssembly = typeof(Domain.Entities.Contact).Assembly;
+            foreach (var t in domainAssembly.GetTypes())
+            {
+                if (t.Namespace != "CalibraHub.Domain.Entities") continue;
+                if (!t.IsClass || t.IsAbstract) continue;
+                dict[t.Name] = t;
+            }
+        }
+        catch
+        {
+            // Reflection yuklenirken sorun olursa bos index ile devam et.
+        }
+        return dict;
+    }
+
+    private static DbColumnDto EnrichColumn(DbColumnDto column, PropertyInfo[] properties)
+    {
+        var matched = MatchProperty(column.Name, properties);
+        if (matched is null) return column;
+
+        var description = matched.GetCustomAttribute<DescriptionAttribute>()?.Description;
+
+        var propertyType = Nullable.GetUnderlyingType(matched.PropertyType) ?? matched.PropertyType;
+        IReadOnlyList<DbEnumValueDto>? enumValues = null;
+        if (propertyType.IsEnum)
+        {
+            enumValues = GetEnumValues(propertyType);
+        }
+
+        return column with
+        {
+            ClrPropertyName = matched.Name,
+            Description = description,
+            EnumValues = enumValues,
+        };
+    }
+
+    private static PropertyInfo? MatchProperty(string columnName, PropertyInfo[] properties)
+    {
+        // 1) Direkt eslesme (case-insensitive): AccountType, Id gibi PascalCase kolonlari yakalar.
+        var direct = properties.FirstOrDefault(p =>
+            string.Equals(p.Name, columnName, StringComparison.OrdinalIgnoreCase));
+        if (direct is not null) return direct;
+
+        // 2) Snake_case -> PascalCase: document_type_id -> DocumentTypeId
+        var pascal = SnakeToPascal(columnName);
+        return properties.FirstOrDefault(p =>
+            string.Equals(p.Name, pascal, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string SnakeToPascal(string snake)
+    {
+        if (string.IsNullOrWhiteSpace(snake)) return snake;
+        var parts = snake.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        var sb = new StringBuilder(snake.Length);
+        foreach (var part in parts)
+        {
+            if (part.Length == 0) continue;
+            sb.Append(char.ToUpperInvariant(part[0]));
+            if (part.Length > 1) sb.Append(part[1..]);
+        }
+        return sb.ToString();
+    }
+
+    private static IReadOnlyList<DbEnumValueDto> GetEnumValues(Type enumType)
+    {
+        var names = Enum.GetNames(enumType);
+        var result = new List<DbEnumValueDto>(names.Length);
+        foreach (var name in names)
+        {
+            var field = enumType.GetField(name, BindingFlags.Public | BindingFlags.Static);
+            var description = field?.GetCustomAttribute<DescriptionAttribute>()?.Description;
+            var rawValue = field?.GetRawConstantValue();
+            var numericValue = rawValue is null ? 0L : Convert.ToInt64(rawValue, CultureInfo.InvariantCulture);
+            result.Add(new DbEnumValueDto(name, numericValue, description));
+        }
+        return result;
     }
 }

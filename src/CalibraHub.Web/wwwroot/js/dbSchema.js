@@ -159,6 +159,7 @@
             const typeDisplay = formatType(c);
             const fkTarget = c.foreignKeyTarget ? `<div style="color:#64748b;font-size:0.72rem;">→ ${escapeHtml(c.foreignKeyTarget)}</div>` : '';
             const def = c.defaultDefinition ? `<code>${escapeHtml(c.defaultDefinition)}</code>` : '<span style="color:#cbd5e1;">—</span>';
+            const dictionary = renderDictionary(c);
             return `
                 <tr>
                     <td>${c.ordinalPosition}</td>
@@ -166,15 +167,51 @@
                     <td>${escapeHtml(typeDisplay)}</td>
                     <td>${badges || '<span style="color:#cbd5e1;">—</span>'}</td>
                     <td>${def}</td>
+                    <td class="sch-dict-cell">${dictionary}</td>
                 </tr>`;
         }).join('');
         return `
             <table class="sch-data-table">
                 <thead>
-                    <tr><th style="width:40px;">#</th><th>Kolon</th><th>Tip</th><th>Ozellikler</th><th>Default</th></tr>
+                    <tr>
+                        <th style="width:40px;">#</th>
+                        <th>Kolon</th>
+                        <th>Tip</th>
+                        <th>Ozellikler</th>
+                        <th>Default</th>
+                        <th>Aciklama / Sozluk</th>
+                    </tr>
                 </thead>
                 <tbody>${rows}</tbody>
             </table>`;
+    }
+
+    function renderDictionary(c) {
+        const parts = [];
+
+        if (c.description) {
+            parts.push(`<div class="sch-desc">${escapeHtml(c.description)}</div>`);
+        }
+
+        if (Array.isArray(c.enumValues) && c.enumValues.length > 0) {
+            const items = c.enumValues.map(ev => {
+                const label = ev.description ? ` — ${escapeHtml(ev.description)}` : '';
+                return `<li><code>${ev.value}</code> <strong>${escapeHtml(ev.name)}</strong>${label}</li>`;
+            }).join('');
+            parts.push(`<details class="sch-enum-details"${c.enumValues.length <= 5 ? ' open' : ''}>
+                <summary>Enum: ${escapeHtml(c.clrPropertyName || '')} (${c.enumValues.length} deger)</summary>
+                <ul class="sch-enum-list">${items}</ul>
+            </details>`);
+        }
+
+        if (parts.length === 0) {
+            const marker = c.clrPropertyName
+                ? `<span style="color:#cbd5e1;font-size:0.72rem;">(${escapeHtml(c.clrPropertyName)} — aciklama yok)</span>`
+                : '<span style="color:#fca5a5;font-size:0.72rem;" title="C# Entity property eslesmesi bulunamadi">⚠ Entity eslesmesi yok</span>';
+            return marker;
+        }
+
+        return parts.join('');
     }
 
     function renderIndexes(indexes) {

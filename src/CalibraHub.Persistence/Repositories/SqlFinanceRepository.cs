@@ -188,7 +188,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
 
     private static void AddParams(SqlCommand cmd, Contact a)
     {
-        cmd.Parameters.Add(new SqlParameter("@AccountType",    a.AccountType));
+        cmd.Parameters.Add(new SqlParameter("@AccountType",    (byte)a.AccountType));
         cmd.Parameters.Add(new SqlParameter("@AccountCode",    a.AccountCode));
         cmd.Parameters.Add(new SqlParameter("@AccountTitle",   a.AccountTitle));
         cmd.Parameters.Add(new SqlParameter("@TaxNumber",      (object?)a.TaxNumber      ?? DBNull.Value));
@@ -206,7 +206,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
     private static Contact MapRow(SqlDataReader r) => new()
     {
         Id             = r.GetInt32(0),
-        AccountType    = r.GetByte(1),
+        AccountType    = (Domain.Enums.ContactType)r.GetByte(1),
         AccountCode    = r.GetString(2),
         AccountTitle   = r.GetString(3),
         TaxNumber      = r.IsDBNull(4)  ? null : r.GetString(4),

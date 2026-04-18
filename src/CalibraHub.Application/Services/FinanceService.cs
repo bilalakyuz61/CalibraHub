@@ -53,7 +53,7 @@ public sealed class FinanceService : IFinanceService
             var updated = new Contact
             {
                 Id = existing.Id,
-                AccountType = request.AccountType,
+                AccountType = (Domain.Enums.ContactType)request.AccountType,
                 AccountCode = code,
                 AccountTitle = request.AccountTitle?.Trim() ?? string.Empty,
                 TaxNumber = NullIfEmpty(request.TaxNumber),
@@ -75,7 +75,7 @@ public sealed class FinanceService : IFinanceService
         {
             var entity = new Contact
             {
-                AccountType = request.AccountType,
+                AccountType = (Domain.Enums.ContactType)request.AccountType,
                 AccountCode = code,
                 AccountTitle = request.AccountTitle?.Trim() ?? string.Empty,
                 TaxNumber = NullIfEmpty(request.TaxNumber),
@@ -124,7 +124,7 @@ public sealed class FinanceService : IFinanceService
     }
 
     private static ContactDto ToDto(Contact a) => new(
-        a.Id, a.AccountType, a.AccountCode, a.AccountTitle,
+        a.Id, (byte)a.AccountType, a.AccountCode, a.AccountTitle,
         a.TaxNumber, a.IdentityNumber, a.TaxOffice, a.Phone, a.Email, a.Address, a.City, a.District,
         a.IsActive, a.PriceGroupId, a.CreatedAt);
 
