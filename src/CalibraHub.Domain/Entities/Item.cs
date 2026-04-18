@@ -1,5 +1,8 @@
+using System.ComponentModel;
+
 namespace CalibraHub.Domain.Entities;
 
+[Description("Stok/malzeme kartlari. DocumentLine.ItemId, PriceList.ItemId ve stok-konfigurasyon mapping tablolari bu tabloya FK ile baglidir. TrackCombinations = urun konfigurasyon ozelliklerinin acik oldugunu belirtir.")]
 public sealed class Item
 {
     public int Id { get; init; }

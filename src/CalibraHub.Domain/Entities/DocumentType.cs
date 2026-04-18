@@ -3,6 +3,7 @@ using System.ComponentModel;
 namespace CalibraHub.Domain.Entities;
 
 /// <summary>Belge turu (QUOTE, ORDER, INVOICE, vb.) — Document.DocumentTypeId bu tabloya baglidir.</summary>
+[Description("Belge turleri sozlugu: teklif, siparis, irsaliye, fatura, etiket vb. her belgeyi ayirir ve raporlama icin SQL view adini (sql_view_name) tutar.")]
 public sealed class DocumentType
 {
     [Description("Birincil anahtar. IDENTITY.")]

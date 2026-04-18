@@ -1,5 +1,8 @@
+using System.ComponentModel;
+
 namespace CalibraHub.Domain.Entities;
 
+[Description("Urun agaci baslik (Bill of Materials). ParentMaterialCode ile Item tablosuna, ConfigurationCode ile varyanta baglanir. Bilesenleri BOMLine tablosunda 1-N iliskiyle tutulur.")]
 public class BOM
 {
     public int Id { get; init; }

@@ -2,6 +2,7 @@ using System.ComponentModel;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("Document tablosundaki belgelerin satir detaylari (malzeme, adet, birim fiyat, iskonto, satir toplami). DocumentId FK ile basliga baglidir; ItemId FK ise stok kartina.")]
 public sealed class DocumentLine
 {
     [Description("Birincil anahtar. IDENTITY.")]

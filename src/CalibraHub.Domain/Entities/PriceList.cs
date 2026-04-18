@@ -1,5 +1,8 @@
+using System.ComponentModel;
+
 namespace CalibraHub.Domain.Entities;
 
+[Description("Fiyat listesi satirlari — PriceGroup + Item (veya serbest material_code) eslemesiyle alis/satis fiyatlari, para birimi ve gecerlilik tarihleri. CombinationCode ile konfigurasyonlu urunler icin varyant bazli fiyatlandirma.")]
 public sealed class PriceList
 {
     public int Id { get; set; }

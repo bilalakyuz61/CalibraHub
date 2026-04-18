@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("Dinamik alan gruplari (widget/EAV altyapisi). Ekran tabanli (ScreenCode) sekmeler/katmanlar. Field tablosu bu grupla eslesir.")]
 public sealed class FieldGroup : Entity
 {
     public string ScreenCode { get; init; } = "MaterialCards";

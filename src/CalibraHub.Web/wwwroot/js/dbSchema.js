@@ -70,8 +70,10 @@
         const html = state.filteredTables.map(t => {
             const key = `${t.schema}.${t.name}`;
             const active = state.selected === key ? ' active' : '';
+            const tooltip = t.description ? escapeAttr(t.description) : '';
+            const hasDesc = t.description ? ' has-desc' : '';
             return `
-                <div class="sch-table-row${active}" data-schema="${escapeAttr(t.schema)}" data-name="${escapeAttr(t.name)}">
+                <div class="sch-table-row${active}${hasDesc}" data-schema="${escapeAttr(t.schema)}" data-name="${escapeAttr(t.name)}" title="${tooltip}">
                     <span class="sch-table-name">${escapeHtml(t.name)}</span>
                     <span class="sch-row-count">${formatNumber(t.rowCount)}</span>
                 </div>`;
@@ -122,7 +124,10 @@
     function renderDetail() {
         const d = state.detail;
         if (!d) return;
-        ELS.detailMeta.textContent = `Satir: ${formatNumber(d.rowCount)} • Kolon: ${d.columns.length} • Indeks: ${d.indexes.length} • FK (giden): ${d.outgoingForeignKeys.length} • FK (gelen): ${d.incomingForeignKeys.length}`;
+        const metaLine = `Satir: ${formatNumber(d.rowCount)} • Kolon: ${d.columns.length} • Indeks: ${d.indexes.length} • FK (giden): ${d.outgoingForeignKeys.length} • FK (gelen): ${d.incomingForeignKeys.length}`;
+        ELS.detailMeta.innerHTML = d.description
+            ? `<div class="sch-table-summary">${escapeHtml(d.description)}</div><div class="sch-meta-line">${escapeHtml(metaLine)}</div>`
+            : `<div class="sch-meta-line">${escapeHtml(metaLine)}</div>`;
         ELS.colCount.textContent = `(${d.columns.length})`;
         ELS.idxCount.textContent = `(${d.indexes.length})`;
         ELS.fkCount.textContent = `(${d.outgoingForeignKeys.length + d.incomingForeignKeys.length})`;

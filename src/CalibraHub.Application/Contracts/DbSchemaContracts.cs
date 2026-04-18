@@ -6,7 +6,12 @@ public sealed record DbTableSummaryDto(
     string Name,
     long RowCount,
     int ColumnCount,
-    int ForeignKeyCount);
+    int ForeignKeyCount,
+    /// <summary>
+    /// Entity sinif seviyesindeki [System.ComponentModel.Description]'dan
+    /// okunan kisa tablo ozeti. Eslesme yoksa null.
+    /// </summary>
+    string? Description = null);
 
 /// <summary>Tablo detayi — kolonlar, indeksler, FK'ler (iki yonlu).</summary>
 public sealed record DbTableDetailDto(
@@ -16,7 +21,11 @@ public sealed record DbTableDetailDto(
     IReadOnlyList<DbColumnDto> Columns,
     IReadOnlyList<DbIndexDto> Indexes,
     IReadOnlyList<DbForeignKeyDto> OutgoingForeignKeys,
-    IReadOnlyList<DbForeignKeyDto> IncomingForeignKeys);
+    IReadOnlyList<DbForeignKeyDto> IncomingForeignKeys,
+    /// <summary>Tablo seviyesi [Description] (Entity sinifindan).</summary>
+    string? Description = null,
+    /// <summary>Eslesen C# Entity tipinin tam adi (debugging icin).</summary>
+    string? ClrTypeName = null);
 
 public sealed record DbColumnDto(
     int OrdinalPosition,

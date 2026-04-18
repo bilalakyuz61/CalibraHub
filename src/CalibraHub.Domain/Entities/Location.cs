@@ -1,5 +1,8 @@
+using System.ComponentModel;
+
 namespace CalibraHub.Domain.Entities;
 
+[Description("Depo ve raf lokasyonlari. Kendi uzerinde self-reference (ParentId) ile hiyerarsi: Depo > Kat > Kor > Raf > Goz. LocationTypeCode ile tip ayrimi.")]
 public sealed class Location
 {
     public int Id { get; init; }

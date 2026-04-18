@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("Feature tablosundaki ozelliklere ait secilebilir degerler (ornegin 'Renk' ozelligi icin Kirmizi/Mavi/Yesil). FeatureId FK -> Feature.Id.")]
 public sealed class FeatureValue : Entity
 {
     public Guid PropertyId { get; init; }

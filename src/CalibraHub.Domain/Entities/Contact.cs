@@ -4,6 +4,7 @@ using CalibraHub.Domain.Enums;
 namespace CalibraHub.Domain.Entities;
 
 /// <summary>Cari hesap — musteri, satici veya her ikisi.</summary>
+[Description("Cari hesaplar (musteri + satici). Dokumanlarin ContactId FK'si bu tabloya baglanir; fiyat gruplari ve vergi bilgileri burada tutulur.")]
 public sealed class Contact
 {
     [Description("Birincil anahtar. IDENTITY.")]

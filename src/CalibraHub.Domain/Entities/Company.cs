@@ -1,5 +1,8 @@
+using System.ComponentModel;
+
 namespace CalibraHub.Domain.Entities;
 
+[Description("Sirket tanimlari. Her sirket icin ayri connection string (per-company DB mimarisi). Login sirasinda sirket secimi bu tablodan yapilir. IsEDocumentApprovalEnabled = e-fatura / e-irsaliye onay akislarinin aktif olup olmadigini belirler.")]
 public sealed class Company
 {
     public int Id { get; set; }

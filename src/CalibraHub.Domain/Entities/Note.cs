@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("Kullanici notlari — opsiyonel E2E sifreleme destegi (IsFullyEncrypted=true ise icerigi sadece kullanici parolasi ile cozulebilir, sunucu icerigi asla goremez). Klasorler, hatirlaticilar, paylasimlar ve ekler ayri tablolardadir.")]
 public sealed class Note : Entity
 {
     public int CompanyId { get; init; }

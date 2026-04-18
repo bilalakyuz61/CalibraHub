@@ -7,6 +7,7 @@ namespace CalibraHub.Domain.Entities;
 /// Tum ticari belgelerin konsolide baslik tablosu (teklif/siparis/fatura).
 /// DocumentTypeId kolonu belge turunu ayirir.
 /// </summary>
+[Description("Teklif, siparis ve fatura gibi tum ticari belgelerin basligi. DocumentTypeId ile tur ayrilir; DocumentLine tablosu ile 1-N iliskilidir. Tutar hesaplamalari (sub_total, discount, tax, grand_total) burada yazilir.")]
 public sealed class Document
 {
     [Description("Birincil anahtar. IDENTITY.")]

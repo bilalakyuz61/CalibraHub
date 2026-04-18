@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("Dinamik alan (EAV widget) tanimlari. FieldGroup uzerinden ekranlara baglanir; FieldKey runtime'da widget deger kolonuna karsilik gelir.")]
 public sealed class Field : Entity
 {
     public required string FieldKey { get; init; }

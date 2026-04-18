@@ -20,8 +20,18 @@ public sealed class DbSchemaService : IDbSchemaService
         _repository = repository;
     }
 
-    public Task<IReadOnlyList<DbTableSummaryDto>> GetTablesAsync(CancellationToken cancellationToken)
-        => _repository.GetTablesAsync(cancellationToken);
+    public async Task<IReadOnlyList<DbTableSummaryDto>> GetTablesAsync(CancellationToken cancellationToken)
+    {
+        var raw = await _repository.GetTablesAsync(cancellationToken);
+        return raw
+            .Select(t =>
+            {
+                var entityType = FindEntityType(t.Name);
+                var description = entityType?.GetCustomAttribute<DescriptionAttribute>()?.Description;
+                return t with { Description = description };
+            })
+            .ToList();
+    }
 
     public async Task<DbTableDetailDto?> GetTableDetailAsync(string schema, string name, CancellationToken cancellationToken)
     {
@@ -31,12 +41,18 @@ public sealed class DbSchemaService : IDbSchemaService
         var entityType = FindEntityType(name);
         if (entityType is null) return detail; // reflection eslesmesi yoksa raw sema
 
+        var tableDescription = entityType.GetCustomAttribute<DescriptionAttribute>()?.Description;
         var properties = entityType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
         var enrichedColumns = detail.Columns
             .Select(c => EnrichColumn(c, properties))
             .ToList();
 
-        return detail with { Columns = enrichedColumns };
+        return detail with
+        {
+            Columns = enrichedColumns,
+            Description = tableDescription,
+            ClrTypeName = entityType.FullName,
+        };
     }
 
     public async Task<string> BuildMermaidErAsync(CancellationToken cancellationToken)
@@ -128,6 +144,12 @@ public sealed class DbSchemaService : IDbSchemaService
             if (detail is null) continue;
 
             sb.Append("## `").Append(t.Schema).Append('.').Append(t.Name).AppendLine("`");
+            if (!string.IsNullOrWhiteSpace(detail.Description))
+            {
+                sb.AppendLine();
+                sb.Append("> ").AppendLine(detail.Description);
+            }
+            sb.AppendLine();
             sb.Append("Satir sayisi: **").Append(t.RowCount.ToString("N0", CultureInfo.InvariantCulture)).AppendLine("**");
             sb.AppendLine();
             sb.AppendLine("| Kolon | Tip | Null | Default | PK | FK → |");

@@ -1,8 +1,10 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Common;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("EAV (Entity-Attribute-Value) tasarim seviyesi ozellik/nitelik tanimlari. Urun konfigurasyonu (renk, boyut, beden vb.) icin kullanilir; ozelliklerin secilebilir degerleri FeatureValue tablosunda tutulur.")]
 public sealed class Feature : Entity
 {
     public required string Code { get; init; }
