@@ -1171,7 +1171,7 @@ body.app-theme-dark .wiz-hlabel {
             if (!data.success) {
                 btn.disabled = false;
                 wizUpdateFooter();
-                alert('Kayıt hatası: ' + (data.message || 'Bilinmeyen hata'));
+                CalibraAlert.error(data.message || 'Bilinmeyen hata');
                 return;
             }
 
@@ -1191,7 +1191,7 @@ body.app-theme-dark .wiz-hlabel {
         } catch (ex) {
             btn.disabled = false;
             wizUpdateFooter();
-            alert('Bağlantı hatası: ' + ex.message);
+            CalibraAlert.error('Bağlantı hatası: ' + ex.message);
         }
     }
 

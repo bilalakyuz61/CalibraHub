@@ -1245,7 +1245,7 @@
 
     async function sqAttUpload(files) {
         if (!currentQuoteId) {
-            alert('Dosya eklemek icin once teklifi kaydedin.');
+            CalibraAlert.warning('Dosya eklemek icin once teklifi kaydedin.');
             document.getElementById('sqAttFile').value = '';
             return;
         }
@@ -1257,7 +1257,7 @@
             var resp = await fetch('/Sales/UploadQuoteAttachment', { method: 'POST', body: fd });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
         } catch (e) {
-            alert('Yukleme hatasi: ' + (e.message||e));
+            CalibraAlert.error('Yukleme hatasi: ' + (e.message||e));
         } finally {
             document.getElementById('sqAttFile').value = '';
             sqAttLoad();
@@ -1273,7 +1273,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: id })
             });
-        } catch (e) { alert('Silme hatasi: ' + (e.message||e)); }
+        } catch (e) { CalibraAlert.error('Silme hatasi: ' + (e.message||e)); }
         sqAttLoad();
     };
     // Her zaman Genel Bilgiler tab'indan basla
@@ -1609,7 +1609,7 @@
             }
         } catch (e) {
             console.error('sqLoadQuote hatasi:', e);
-            alert('Teklif yuklenemedi: ' + e.message);
+            CalibraAlert.error('Teklif yuklenemedi: ' + e.message);
         }
     }
 
@@ -1836,7 +1836,7 @@
         if (missingCombos.length > 0) {
             sqActivateTab('lines');
             var names = missingCombos.map(function (r) { return r.materialCode || r.materialName; }).join(', ');
-            alert('Kombinasyon takipli olan su malzeme(ler) icin kombinasyon secilmeli: ' + names);
+            CalibraAlert.warning('Kombinasyon takipli olan su malzeme(ler) icin kombinasyon secilmeli: ' + names);
             return;
         }
 
@@ -1884,7 +1884,7 @@
                 body: JSON.stringify(payload)
             });
             var data = await resp.json();
-            if (!data.success) { alert('Hata: ' + data.message); return; }
+            if (!data.success) { CalibraAlert.error(data.message || 'Bilinmeyen hata'); return; }
             currentQuoteId = data.quote.id;
             document.getElementById('sqQuoteNumber').value = data.quote.quoteNumber;
             document.getElementById('sqBtnDelete').disabled = false;
@@ -1910,7 +1910,7 @@
             }
 
             sqFlashSaveSuccess();
-        } catch (e) { alert('Kayit hatasi: ' + e.message); }
+        } catch (e) { CalibraAlert.error('Kayit hatasi: ' + e.message); }
     };
 
     /* Kaydet onayi icin ust uyari yerine aksiyon seridinde yesil sweep. */
@@ -1945,7 +1945,7 @@
                 body: JSON.stringify({ id: currentQuoteId, status: status })
             });
             var data = await resp.json();
-            if (!data.success) { alert('Hata: ' + data.message); return; }
+            if (!data.success) { CalibraAlert.error(data.message || 'Bilinmeyen hata'); return; }
             document.getElementById('sqStatusBadge').innerHTML = '<span class="sqe-status-badge sqe-status-' + status + '">' + statusLabel(status) + '</span>';
         } catch {}
     };
