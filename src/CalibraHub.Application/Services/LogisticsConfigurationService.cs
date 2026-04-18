@@ -486,7 +486,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 NormalizeProductDataTypeValue(x.DataType),
                 x.IsActive,
                 x.CreatedDate,
-                string.IsNullOrWhiteSpace(x.RelatedMaterialCode) ? null : x.RelatedMaterialCode.Trim()))
+                string.IsNullOrWhiteSpace(x.RelatedMaterialCode) ? null : x.RelatedMaterialCode.Trim(),
+                x.VisibleInDesign))
             .ToArray();
 
         var featureLookup = features.ToDictionary(x => x.Id);
@@ -580,7 +581,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var unitOfMeasure = request.DataType == ConfigurationFieldDataType.Numeric && !string.IsNullOrWhiteSpace(request.UnitOfMeasure)
             ? request.UnitOfMeasure.Trim()
             : null;
-        var createdFeature = await _repository.AddProductFeatureAsync(name, normalizedDataType, request.IsActive, unitOfMeasure, cancellationToken);
+        var createdFeature = await _repository.AddProductFeatureAsync(name, normalizedDataType, request.IsActive, unitOfMeasure, request.VisibleInDesign, cancellationToken);
         return createdFeature.Id;
     }
 
@@ -818,6 +819,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             normalizedName,
             normalizedDataType,
             unitOfMeasure,
+            request.VisibleInDesign,
             cancellationToken);
     }
 

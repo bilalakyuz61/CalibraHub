@@ -1801,8 +1801,17 @@ public sealed class CalibraDatabaseInitializer
                     [DataType] NVARCHAR(20) NULL,
                     [RelatedMaterialCode] NVARCHAR(50) NULL,
                     [IsActive] BIT NOT NULL CONSTRAINT [df_ProductConfiguration_IsActive] DEFAULT(1),
+                    [VisibleInDesign] BIT NOT NULL CONSTRAINT [df_ProductConfiguration_VisibleInDesign] DEFAULT(1),
                     [CreatedDate] DATETIME NOT NULL CONSTRAINT [df_ProductConfiguration_CreatedDate] DEFAULT(GETDATE())
                 );
+            END;
+
+            IF OBJECT_ID(N'[{schemaForSql}].[ProductConfiguration]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[ProductConfiguration]', N'VisibleInDesign') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[ProductConfiguration]
+                ADD [VisibleInDesign] BIT NOT NULL
+                    CONSTRAINT [df_ProductConfiguration_VisibleInDesign] DEFAULT(1);
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[ProductConfiguration]', N'U') IS NOT NULL

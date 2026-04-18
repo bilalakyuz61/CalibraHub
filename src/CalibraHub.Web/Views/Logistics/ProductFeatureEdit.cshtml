@@ -234,6 +234,28 @@
     body.app-theme-light .pfe-toggle { background: #fff; border-color: #e2e8f0; color: #475569; }
     .pfe-toggle input { margin: 0; accent-color: #6366f1; }
 
+    /* ── Switchkey (iOS-style pill) ─────────────────────────────────────── */
+    .pfe-switchkey {
+        display: flex; align-items: center; gap: 12px; user-select: none;
+        padding: 10px 12px; border-radius: 9px; cursor: pointer;
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+        font-size: 0.82rem; color: rgba(255,255,255,0.7); font-weight: 500;
+    }
+    body.app-theme-light .pfe-switchkey { background: #fff; border-color: #e2e8f0; color: #475569; }
+    .pfe-switchkey__track {
+        position: relative; flex-shrink: 0; width: 40px; height: 22px;
+        background: rgba(255,255,255,.12); border-radius: 11px; transition: background .2s;
+    }
+    body.app-theme-light .pfe-switchkey__track { background: #e2e8f0; }
+    .pfe-switchkey__track::after {
+        content: ''; position: absolute; left: 2px; top: 2px;
+        width: 18px; height: 18px; background: #94a3b8; border-radius: 50%;
+        transition: transform .2s, background .2s;
+    }
+    .pfe-switchkey input { position: absolute; opacity: 0; pointer-events: none; }
+    .pfe-switchkey input:checked ~ .pfe-switchkey__track { background: #6366f1; }
+    .pfe-switchkey input:checked ~ .pfe-switchkey__track::after { transform: translateX(18px); background: #fff; }
+
     /* ── Value grid table ─────────────────────────────────────────────── */
     .pfe-val-empty {
         padding: 28px 16px; text-align: center;
@@ -722,6 +744,13 @@
                         <label class="pfe-toggle">
                             <input type="checkbox" id="pfeIsActive" checked />
                             <span>Aktif</span>
+                        </label>
+                    </div>
+                    <div class="pfe-field pfe-field--full">
+                        <label class="pfe-switchkey">
+                            <input type="checkbox" id="pfeVisibleInDesign" checked />
+                            <span class="pfe-switchkey__track"></span>
+                            <span>Dizaynda gorunsun</span>
                         </label>
                     </div>
                 </div>
@@ -1257,6 +1286,7 @@
         $('pfeDataType').title = hasValues ? 'Deger girilen ozelligin veri tipi degistirilemez' : '';
         $('pfeUnitOfMeasure').value = data.unitOfMeasure || '';
         $('pfeIsActive').checked = data.isActive !== false;
+        $('pfeVisibleInDesign').checked = data.visibleInDesign !== false;
 
         var meta = $('pfeMeta');
         if (meta) meta.innerHTML =
@@ -1303,11 +1333,12 @@
         }
 
         var payload = {
-            id:            currentId > 0 ? currentId : null,
-            name:          name,
-            dataType:      $('pfeDataType').value,
-            unitOfMeasure: $('pfeUnitOfMeasure').value.trim() || null,
-            isActive:      $('pfeIsActive').checked,
+            id:               currentId > 0 ? currentId : null,
+            name:             name,
+            dataType:         $('pfeDataType').value,
+            unitOfMeasure:    $('pfeUnitOfMeasure').value.trim() || null,
+            isActive:         $('pfeIsActive').checked,
+            visibleInDesign:  $('pfeVisibleInDesign').checked,
         };
 
         try {

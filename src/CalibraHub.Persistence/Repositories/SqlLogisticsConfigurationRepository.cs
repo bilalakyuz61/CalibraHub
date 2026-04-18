@@ -660,7 +660,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [Id], [ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]
+            SELECT [Id], [ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate], [VisibleInDesign]
             FROM {_productConfigurationTableName}
             ORDER BY [RecordType], [ParentId], [RecordCode], [Id];
             """;
@@ -678,7 +678,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 DataType = reader.IsDBNull(5) ? null : reader.GetString(5),
                 RelatedMaterialCode = reader.IsDBNull(6) ? null : reader.GetString(6),
                 IsActive = reader.GetBoolean(7),
-                CreatedDate = reader.GetDateTime(8)
+                CreatedDate = reader.GetDateTime(8),
+                VisibleInDesign = reader.GetBoolean(9)
             });
         }
 
@@ -742,6 +743,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         string dataType,
         bool isActive,
         string? unitOfMeasure,
+        bool visibleInDesign,
         CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
@@ -761,9 +763,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET @GeneratedCode = N'OZ' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
             INSERT INTO {_productConfigurationTableName}
-                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
+                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [VisibleInDesign], [CreatedDate])
             VALUES
-                (NULL, N'FEATURE', @GeneratedCode, @RecordName, @DataType, @UnitOfMeasure, @IsActive, GETDATE());
+                (NULL, N'FEATURE', @GeneratedCode, @RecordName, @DataType, @UnitOfMeasure, @IsActive, @VisibleInDesign, GETDATE());
 
             SELECT CAST(SCOPE_IDENTITY() AS INT) AS [Id], @GeneratedCode AS [Code];
 
@@ -774,6 +776,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@DataType", dataType));
         command.Parameters.Add(new SqlParameter("@IsActive", isActive));
         command.Parameters.Add(new SqlParameter("@UnitOfMeasure", (object?)unitOfMeasure ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@VisibleInDesign", visibleInDesign));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -1008,7 +1011,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, CancellationToken cancellationToken)
+    public async Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, bool visibleInDesign, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1016,7 +1019,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             UPDATE {_productConfigurationTableName}
             SET [RecordName]          = @RecordName,
                 [DataType]            = @DataType,
-                [RelatedMaterialCode] = @UnitOfMeasure
+                [RelatedMaterialCode] = @UnitOfMeasure,
+                [VisibleInDesign]     = @VisibleInDesign
             WHERE [Id] = @Id
               AND [RecordType] = N'FEATURE';
             """;
@@ -1025,6 +1029,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@RecordName", name));
         command.Parameters.Add(new SqlParameter("@DataType", dataType));
         command.Parameters.Add(new SqlParameter("@UnitOfMeasure", (object?)unitOfMeasure ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@VisibleInDesign", visibleInDesign));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

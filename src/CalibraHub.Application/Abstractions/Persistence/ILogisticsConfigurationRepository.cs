@@ -46,6 +46,7 @@ public interface ILogisticsConfigurationRepository
         string dataType,
         bool isActive,
         string? unitOfMeasure,
+        bool visibleInDesign,
         CancellationToken cancellationToken);
     Task<(int Id, string Code)> AddProductValueAsync(
         int featureId,
@@ -74,7 +75,7 @@ public interface ILogisticsConfigurationRepository
         CancellationToken cancellationToken);
     /// <summary>Bir stok kartina bagli FEATURE_STOCK kayitlarini full replace eder.</summary>
     Task ReplaceStockFeatureLinksAsync(string stockCode, int[] featureIds, CancellationToken cancellationToken);
-    Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, CancellationToken cancellationToken);
+    Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, bool visibleInDesign, CancellationToken cancellationToken);
     Task DeleteProductFeatureAsync(int id, CancellationToken cancellationToken);
     Task DeleteProductValueAsync(int id, CancellationToken cancellationToken);
     Task DeleteProductConfigAsync(int id, CancellationToken cancellationToken);

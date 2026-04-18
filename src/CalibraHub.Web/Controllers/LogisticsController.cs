@@ -1285,6 +1285,7 @@ public sealed class LogisticsController : Controller
             dataType = feature.DataType,
             unitOfMeasure = feature.UnitOfMeasure,
             isActive = feature.IsActive,
+            visibleInDesign = feature.VisibleInDesign,
             values,
             stockCodes,
             linkedStocks,
@@ -1320,7 +1321,8 @@ public sealed class LogisticsController : Controller
                         input.Id.Value,
                         input.Name.Trim(),
                         dataType,
-                        input.UnitOfMeasure),
+                        input.UnitOfMeasure,
+                        input.VisibleInDesign),
                     ct);
                 savedId = input.Id.Value;
             }
@@ -1332,7 +1334,8 @@ public sealed class LogisticsController : Controller
                         input.Name.Trim(),
                         dataType,
                         input.IsActive,
-                        input.UnitOfMeasure),
+                        input.UnitOfMeasure,
+                        input.VisibleInDesign),
                     ct);
             }
 
@@ -1366,7 +1369,8 @@ public sealed class LogisticsController : Controller
         string Name,
         string DataType,
         string? UnitOfMeasure,
-        bool IsActive = true);
+        bool IsActive = true,
+        bool VisibleInDesign = true);
 
     // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     // ProductFeatureEdit Phase 2 - Ozellik degeri ekle/sil (JSON)
