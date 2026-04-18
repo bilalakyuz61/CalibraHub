@@ -37,6 +37,7 @@ public static class MenuDefinition
             new("settings.company",           "Şirket Ayarları",        "Building2",   "/Admin/CompanySettings",    null),
             new("settings.integrationevents", "Entegrasyon Tanımları",  "Zap",         "/Admin/IntegrationEvents",  null),
             new("settings.viewsettings",      "Ekran Tasarım Ayarları", "LayoutGrid",  "/Admin/ViewSettings",       null),
+            new("settings.dbschema",          "Veritabanı Haritası",    "Database",    "/admin/db-schema",          null),
         };
         if (isSystemAdmin)
         {

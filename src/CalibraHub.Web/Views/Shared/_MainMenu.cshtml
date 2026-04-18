@@ -600,6 +600,23 @@
                     </button>
                 </div>
 
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-db-schema">
+                    <a class="side-subitem @(controller == "dbschema" ? "active" : string.Empty)"
+                       href="/admin/db-schema" title="Veritabanı Haritası">
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <ellipse cx="12" cy="5" rx="8" ry="3"/>
+                                <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/>
+                                <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/>
+                            </svg>
+                        </span>
+                        <span class="menu-text">Veritabanı Haritası</span>
+                    </a>
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Veritabanı Haritası favorilere ekle">
+                        <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                    </button>
+                </div>
+
                 @if (isSystemAdmin)
                 {
                     <div class="menu-group-divider" style="margin:4px 12px; border-top:1px solid var(--app-border,#e0e0e0);"></div>
@@ -617,23 +634,6 @@
                             <span class="menu-text">Şirket ve Kullanıcı Tanımları</span>
                         </a>
                         <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Genel Tanımlar favorilere ekle">
-                            <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
-                        </button>
-                    </div>
-
-                    <div class="menu-entry" data-menu-entry data-favorite-key="main-db-schema">
-                        <a class="side-subitem @(controller == "dbschema" ? "active" : string.Empty)"
-                           href="/admin/db-schema" title="Veritabanı Haritası">
-                            <span class="menu-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                                    <ellipse cx="12" cy="5" rx="8" ry="3"/>
-                                    <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/>
-                                    <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/>
-                                </svg>
-                            </span>
-                            <span class="menu-text">Veritabanı Haritası</span>
-                        </a>
-                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Veritabanı Haritası favorilere ekle">
                             <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                         </button>
                     </div>
