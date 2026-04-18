@@ -1018,6 +1018,36 @@
     body.app-theme-light .mce-comb-td { border-bottom-color: rgba(0,0,0,0.06); }
     body.app-theme-light .mce-comb-code { color: #4f46e5; }
     body.app-theme-light .mce-comb-name { color: #334155; }
+    /* Kombinasyon kodu link + aciklama inline input + ust toolbar */
+    .mce-comb-toolbar { display:flex; justify-content:flex-end; padding:6px 4px 10px 4px; }
+    .mce-comb-goto-btn {
+        display:inline-flex; align-items:center; gap:6px;
+        padding:6px 12px; font-size:0.78rem; font-weight:600;
+        color:#a5b4fc; background:rgba(165,180,252,0.1);
+        border:1px solid rgba(165,180,252,0.25); border-radius:6px;
+        text-decoration:none; transition: background 0.15s, color 0.15s;
+    }
+    .mce-comb-goto-btn:hover { background:rgba(165,180,252,0.2); color:#c7d2fe; }
+    body.app-theme-light .mce-comb-goto-btn { color:#4f46e5; background:rgba(79,70,229,0.08); border-color:rgba(79,70,229,0.2); }
+    body.app-theme-light .mce-comb-goto-btn:hover { background:rgba(79,70,229,0.15); }
+
+    .mce-comb-link { color: inherit; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; cursor: pointer; }
+    .mce-comb-link:hover { color: #c7d2fe; text-decoration-style: solid; }
+    body.app-theme-light .mce-comb-link:hover { color: #3730a3; }
+
+    .mce-comb-desc-input {
+        width: 100%; padding: 4px 8px; font-size: 0.8rem;
+        background: transparent; color: inherit;
+        border: 1px solid transparent; border-radius: 4px;
+        transition: border-color 0.15s, background 0.15s;
+    }
+    .mce-comb-desc-input:hover { border-color: rgba(255,255,255,0.1); }
+    .mce-comb-desc-input:focus { outline: none; border-color: rgba(165,180,252,0.6); background: rgba(255,255,255,0.03); }
+    body.app-theme-light .mce-comb-desc-input:hover { border-color: rgba(0,0,0,0.1); }
+    body.app-theme-light .mce-comb-desc-input:focus { border-color: rgba(79,70,229,0.55); background: rgba(0,0,0,0.02); }
+    .mce-comb-desc-input.is-saving { border-color: rgba(245,158,11,0.5); }
+    .mce-comb-desc-input.is-saved { border-color: rgba(16,185,129,0.6); background: rgba(16,185,129,0.08); }
+    .mce-comb-desc-input.is-error { border-color: rgba(239,68,68,0.6); background: rgba(239,68,68,0.06); }
     .mce-comb-empty {
         padding: 32px 16px; text-align: center;
         color: rgba(255,255,255,0.35); font-size: 0.82rem;
@@ -1359,29 +1389,121 @@
         return d.innerHTML;
     }
 
+    // Kombinasyon detayi popup icin cache — {id: combinationName}
+    var combNameById = {};
+
     function renderCombinations(combos) {
         var body = $('mceCombBody');
         if (!body) return;
+
+        // Ust araç satiri — Kombinasyon Uret ekranına yonlendirme
+        var matCode = ($('mceMaterialCode') && $('mceMaterialCode').value) || '';
+        var toolbar = '<div class="mce-comb-toolbar">'
+                    + '<a href="/Logistics/ProductCombinations?stockCode=' + encodeURIComponent(matCode)
+                    + '" class="mce-comb-goto-btn" title="Yeni kombinasyon ekle veya mevcutlari duzenle">'
+                    + 'Kombinasyon Uret / Duzenle &rarr;'
+                    + '</a></div>';
+
         if (!combos || combos.length === 0) {
-            body.innerHTML = '<div class="mce-comb-empty">Henuz kombinasyon tanimlanmamis.</div>';
+            body.innerHTML = toolbar + '<div class="mce-comb-empty">Henuz kombinasyon tanimlanmamis.</div>';
             return;
         }
-        var html = '<table class="mce-comb-table"><thead><tr>' +
-            '<th class="mce-comb-th">#</th>' +
+
+        combNameById = {};
+        var html = toolbar + '<table class="mce-comb-table"><thead><tr>' +
+            '<th class="mce-comb-th" style="width:40px;">#</th>' +
             '<th class="mce-comb-th">Kod</th>' +
-            '<th class="mce-comb-th">Tanim</th>' +
+            '<th class="mce-comb-th">Aciklama</th>' +
             '</tr></thead><tbody>';
         for (var i = 0; i < combos.length; i++) {
             var c = combos[i];
+            combNameById[c.id] = c.combinationName || '';
             html += '<tr>' +
                 '<td class="mce-comb-td" style="width:40px;opacity:0.4;">' + (i + 1) + '</td>' +
-                '<td class="mce-comb-td mce-comb-code">' + escHtml(c.combinationCode || '') + '</td>' +
-                '<td class="mce-comb-td mce-comb-name">' + escHtml(c.combinationName || '') + '</td>' +
+                '<td class="mce-comb-td mce-comb-code">' +
+                    '<a href="#" class="mce-comb-link" data-comb-id="' + c.id + '" onclick="mceShowCombinationDetails(' + c.id + ', event); return false;">'
+                    + escHtml(c.combinationCode || '') + '</a>'
+                + '</td>' +
+                '<td class="mce-comb-td">' +
+                    '<input type="text" class="mce-comb-desc-input" data-comb-id="' + c.id + '" value="' + escHtml(c.description || '') + '" placeholder="Aciklama girin..." />'
+                + '</td>' +
                 '</tr>';
         }
         html += '</tbody></table>';
         body.innerHTML = html;
+
+        // Inline edit: blur'da AJAX save
+        body.querySelectorAll('.mce-comb-desc-input').forEach(function(inp) {
+            inp.addEventListener('blur', function() { mceSaveCombinationDescription(inp); });
+            inp.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+                else if (e.key === 'Escape') { inp.value = inp.defaultValue; inp.blur(); }
+            });
+        });
     }
+
+    // ── Kombinasyon aciklamasi kaydet (inline) ──
+    function mceSaveCombinationDescription(inp) {
+        var id = parseInt(inp.getAttribute('data-comb-id'), 10);
+        if (!id || id <= 0) return;
+        var newVal = (inp.value || '').trim();
+        if (newVal === (inp.defaultValue || '').trim()) return;  // degisiklik yoksa skip
+        inp.classList.add('is-saving');
+        fetch('/Logistics/UpdateCombinationDescriptionJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id, description: newVal })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            inp.classList.remove('is-saving');
+            if (res && res.success) {
+                inp.defaultValue = newVal;
+                inp.classList.add('is-saved');
+                setTimeout(function() { inp.classList.remove('is-saved'); }, 1200);
+            } else {
+                inp.classList.add('is-error');
+                CalibraAlert.error('Aciklama kaydedilemedi: ' + (res && res.message ? res.message : 'Bilinmeyen hata'));
+            }
+        })
+        .catch(function(e) {
+            inp.classList.remove('is-saving');
+            inp.classList.add('is-error');
+            CalibraAlert.error('Aciklama kaydedilemedi: ' + e.message);
+        });
+    }
+
+    // ── Kombinasyon detay popup (ozellik/deger listesi) ──
+    window.mceShowCombinationDetails = function(id, ev) {
+        if (ev) ev.preventDefault();
+        var detail = combNameById[id] || '';
+        // "Motor Gucu: 100 | Renk: Kirmizi | ..." formatini parse et
+        var pairs = detail.split('|').map(function(s) { return s.trim(); }).filter(Boolean);
+        var listHtml = pairs.length
+            ? '<ul style="margin:0;padding:0;list-style:none;">' +
+              pairs.map(function(p) {
+                  var idx = p.indexOf(':');
+                  var label = idx > 0 ? p.slice(0, idx).trim() : p;
+                  var val   = idx > 0 ? p.slice(idx + 1).trim() : '';
+                  return '<li style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--sch-divider,rgba(255,255,255,.06));">'
+                      + '<span style="min-width:160px;font-weight:600;color:var(--app-text-muted,#64748b);">' + escHtml(label) + '</span>'
+                      + '<span style="flex:1;">' + escHtml(val) + '</span></li>';
+              }).join('') +
+              '</ul>'
+            : '<div style="color:var(--app-text-muted,#64748b);">Bu kombinasyon icin ozellik detayi bulunamadi.</div>';
+
+        if (window.CalibraAlert && CalibraAlert.show) {
+            CalibraAlert.show(detail || '', { type: 'info', title: 'Kombinasyon Ozellikleri', okText: 'Kapat' });
+            // CalibraAlert textContent kullaniyor — HTML listesi icin ayri bir popup tercih ettik
+            setTimeout(function() {
+                var overlay = document.getElementById('__calibra_alert__');
+                if (overlay) {
+                    var body = overlay.querySelector('div > div:nth-child(2)');
+                    if (body) body.innerHTML = listHtml;
+                }
+            }, 10);
+        }
+    };
 
     function updateCombNav(trackEnabled, count) {
         var btn = $('mceNavCombinations');

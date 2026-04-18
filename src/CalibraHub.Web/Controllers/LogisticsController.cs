@@ -3649,7 +3649,10 @@ public sealed class LogisticsController : Controller
                 {
                     id = c.Id,
                     combinationCode = c.ConfigCode ?? string.Empty,
-                    combinationName = valNames.Count > 0 ? string.Join(" | ", valNames) : (c.ConfigName ?? string.Empty)
+                    // combinationName = otomatik uretilen ozellik detay ("Motor Gucu: 100 | Renk: Kirmizi | ...")
+                    // description   = kullaniciya ozel aciklama (ConfigName = RecordName)
+                    combinationName = valNames.Count > 0 ? string.Join(" | ", valNames) : string.Empty,
+                    description     = c.ConfigName ?? string.Empty
                 });
             }
         }
