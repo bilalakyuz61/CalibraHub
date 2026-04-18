@@ -605,17 +605,22 @@ function NewTab(props) {
     })
   }
 
+  // Dark modda <select>'in kendisi ve acilan option paneli icin
+  // solid koyu arka plan veriyoruz — transparan rgba'da Windows/Chrome
+  // bazen light default render ediyor.
+  var selectBg = isLight ? '#ffffff' : '#1e293b'
+  var selectFg = isLight ? '#1e293b' : '#e2e8f0'
   var inputStyle = {
     padding: '7px 10px', borderRadius: 8,
-    background: isLight ? '#fff' : 'rgba(255,255,255,.04)',
-    border: '1px solid ' + (isLight ? '#e2e8f0' : 'rgba(255,255,255,.1)'),
-    color: textColor,
+    background: selectBg,
+    border: '1px solid ' + (isLight ? '#e2e8f0' : 'rgba(255,255,255,.14)'),
+    color: selectFg,
     fontSize: '.82rem',
     outline: 'none',
-    // Native <select>'in option paneli OS/browser default'u cizer.
-    // color-scheme = dark → option paneli de koyu temalı render edilir.
+    // colorScheme = dark → option paneli de koyu temalı render edilir (browser destekliyorsa).
     colorScheme: isLight ? 'light' : 'dark',
   }
+  var optionStyle = { background: selectBg, color: selectFg }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -643,9 +648,9 @@ function NewTab(props) {
               }}
               style={inputStyle}
             >
-              <option value="">— Seçiniz —</option>
+              <option value="" style={optionStyle}>— Seçiniz —</option>
               {(f.values || []).map(function(v) {
-                return <option key={v.id} value={v.id}>{v.name}</option>
+                return <option key={v.id} value={v.id} style={optionStyle}>{v.name}</option>
               })}
             </select>
             <input
