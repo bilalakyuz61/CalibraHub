@@ -1464,6 +1464,9 @@
         var resp = await fetch('/Sales/GetMaterials');
         if (!resp.ok) throw new Error('GetMaterials HTTP ' + resp.status);
         materials = await resp.json();
+        // React CombinationLookupCell icin fallback snapshot — row.trackCombinations
+        // lookupFillMap ile gelmezse bu global'den materialCode ile cozuluyor.
+        window.__SQ_MATERIALS__ = materials;
     }
 
     /**

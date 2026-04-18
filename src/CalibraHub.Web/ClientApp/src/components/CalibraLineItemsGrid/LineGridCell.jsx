@@ -721,8 +721,20 @@ function CombinationLookupCell(props) {
   var onChange = props.onChange
   var [open, setOpen] = useState(false)
 
-  var trackable = !!row.trackCombinations
   var materialCode = row.materialCode || ''
+  var trackable = !!row.trackCombinations
+  // Fallback: lookupFillMap ile row'a trackCombinations gelmemisse global materials
+  // snapshot'undan materialCode ile kontrol et (sales quote sayfasinda set edilir).
+  if (!trackable && materialCode && typeof window !== 'undefined' && Array.isArray(window.__SQ_MATERIALS__)) {
+    var match = window.__SQ_MATERIALS__.find(function (m) {
+      var mc = m.materialCode != null ? m.materialCode : m.MaterialCode
+      return mc === materialCode
+    })
+    if (match) {
+      var tc = match.trackCombinations != null ? match.trackCombinations : match.TrackCombinations
+      if (tc === true) trackable = true
+    }
+  }
 
   if (!trackable) {
     return (
