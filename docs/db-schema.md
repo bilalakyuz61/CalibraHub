@@ -1,13 +1,49 @@
 # CalibraHub Veritabanı Şeması
 
 Kaynak: `src/CalibraHub.Persistence/Database/CalibraDatabaseInitializer.cs`
-Toplam tablo: 47 (eski isimli stale girdiler kaldırıldı — yeni isimli tablolar: Contact, Item, Unit, Feature, FeatureValue, FieldGroup, Field, BOM, BOMLine, Location, Document, DocumentLine, PriceGroup, PriceList, User, Department — henüz dokümante edilmedi)
+Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 
 > Tüm tablolar per-company schema (`[{s}]`) altında oluşturulur. Sadece `dbo.Forms` global `dbo` schema'sındadır. Tip ve kısıtlar `CREATE TABLE` bloklarından birebir kopyalanmıştır; `ALTER TABLE ... ADD` ile sonradan eklenen kolonlar "(eklendi)" notu ile işaretlenmiştir. Bazı tablolar migration blokları sonucunda yeniden oluşturulur — bu durumlarda en güncel tanım kullanılmıştır.
 
 ---
 
 ## Kullanıcı & Yetki
+
+### `Department`
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | UNIQUEIDENTIFIER | NOT NULL | PK `pk_departments`, DEFAULT `NEWSEQUENTIALID()` |
+| code | NVARCHAR(20) | NOT NULL | |
+| name | NVARCHAR(100) | NOT NULL | |
+| parent_department_id | UNIQUEIDENTIFIER | NULL | |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_departments_is_active` |
+
+**Indexler:**
+- `ux_departments_code` UNIQUE (code)
+
+### `User`
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | UNIQUEIDENTIFIER | NOT NULL | PK `pk_users`, DEFAULT `NEWSEQUENTIALID()` |
+| full_name | NVARCHAR(100) | NOT NULL | |
+| email | NVARCHAR(120) | NOT NULL | |
+| employee_code | NVARCHAR(30) | NOT NULL | |
+| department_id | UNIQUEIDENTIFIER | NOT NULL | FK `fk_users_departments_department_id` → `Department(id)` |
+| supervisor_user_id | UNIQUEIDENTIFIER | NULL | FK `fk_users_users_supervisor_user_id` → `User(id)` |
+| role | NVARCHAR(50) | NOT NULL | |
+| permissions | NVARCHAR(MAX) | NOT NULL | |
+| password_hash | NVARCHAR(512) | NOT NULL | |
+| language_code | NVARCHAR(20) | NOT NULL | DEFAULT(N'tr-TR') `df_users_language_code` |
+| theme_code | NVARCHAR(20) | NOT NULL | DEFAULT(N'light') `df_users_theme_code` |
+| grid_preferences_json | NVARCHAR(MAX) | NULL | (eklendi — ALTER guard) |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_users_is_active` |
+| company_id | INT | NOT NULL | DEFAULT(0) `df_users_company_id_default` (eklendi) |
+
+**Indexler:**
+- `ux_users_email` UNIQUE (email)
+- `ux_users_employee_code` UNIQUE (employee_code)
 
 ### `user_settings`
 
@@ -53,7 +89,103 @@ Toplam tablo: 47 (eski isimli stale girdiler kaldırıldı — yeni isimli tablo
 
 ---
 
+## Cari
+
+### `Contact`
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| Id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
+| AccountType | TINYINT | NOT NULL | DEFAULT 1 |
+| AccountCode | NVARCHAR(20) | NOT NULL | UNIQUE `uq_contact_accounts_code` |
+| AccountTitle | NVARCHAR(200) | NOT NULL | |
+| TaxNumber | NVARCHAR(10) | NULL | |
+| IdentityNumber | NVARCHAR(11) | NULL | |
+| TaxOffice | NVARCHAR(100) | NULL | |
+| Phone | NVARCHAR(30) | NULL | |
+| Email | NVARCHAR(200) | NULL | |
+| Address | NVARCHAR(500) | NULL | |
+| City | NVARCHAR(100) | NULL | |
+| IsActive | BIT | NOT NULL | DEFAULT 1 |
+| PriceGroupId | INT | NULL | |
+| CreatedAt | DATETIME2 | NOT NULL | |
+| District | NVARCHAR(100) | NULL | (eklendi — EnsureContactColumnsAsync) |
+
+**Indexler:**
+- `uq_contact_accounts_code` UNIQUE (AccountCode)
+- `ix_contact_accounts_type` (AccountType)
+
+---
+
 ## Stok & Lojistik
+
+### `Item`
+
+> Malzeme/stok kartı. Eski ad: `stock_cards` → `Items` → `Item`.
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
+| material_code | NVARCHAR(50) | NOT NULL | |
+| material_name | NVARCHAR(160) | NOT NULL | |
+| material_description | NVARCHAR(500) | NULL | |
+| material_type_id | INT | NULL | |
+| material_unit | NVARCHAR(40) | NULL | |
+| track_combinations | BIT | NOT NULL | DEFAULT(0) |
+| tax_rate | DECIMAL(5,2) | NOT NULL | DEFAULT(20) |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_Items_is_active` |
+| created_at | DATETIME2 | NOT NULL | |
+| created_by_user_id | INT | NULL | |
+| modified_at | DATETIME2 | NULL | |
+| modified_by_user_id | INT | NULL | |
+| updated_at | DATETIME2 | NOT NULL | |
+| created_by | NVARCHAR(100) | NULL | |
+| updated_by | NVARCHAR(100) | NULL | |
+| image_data | VARBINARY(MAX) | NULL | |
+| image_mime_type | NVARCHAR(50) | NULL | |
+
+**Indexler:**
+- `ux_Items_material_code` UNIQUE (material_code)
+
+### `Location`
+
+> Depo/konum ağacı (self-referencing).
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| Id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
+| ParentId | INT | NULL | FK `FK_Location_Parent` → self |
+| LocationTypeCode | NVARCHAR(20) | NULL | |
+| LocationCode | NVARCHAR(50) | NOT NULL | |
+| LocationName | NVARCHAR(100) | NULL | |
+| SortOrder | INT | NOT NULL | DEFAULT(0) `df_Locations_SortOrder` |
+| MaxWeightCapacity | DECIMAL(18,2) | NULL | |
+| VolumeCapacity | DECIMAL(18,2) | NULL | |
+| IsActive | BIT | NOT NULL | DEFAULT(1) `df_Locations_IsActive` |
+
+**Indexler:**
+- `ux_Locations_LocationCode` UNIQUE (LocationCode)
+- `ix_Locations_ParentId` (ParentId)
+- `ix_Locations_LocationTypeCode` (LocationTypeCode)
+
+### `Unit`
+
+> Ölçü birimleri (adet, kg, m, vb.).
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| Id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
+| UnitCode | NVARCHAR(20) | NOT NULL | |
+| UnitName | NVARCHAR(100) | NOT NULL | |
+| IntlCode | NVARCHAR(10) | NULL | (eklendi) |
+| SortOrder | INT | NOT NULL | DEFAULT(0) `df_measure_unit_definitions_sort_order` |
+| IsActive | BIT | NOT NULL | DEFAULT(1) `df_measure_unit_definitions_is_active` |
+| CreatedAt | DATETIME2 | NOT NULL | |
+| UpdatedAt | DATETIME2 | NOT NULL | |
+
+**Indexler:**
+- `ux_measure_unit_definitions_unit_code` UNIQUE (UnitCode)
+- `ix_measure_unit_definitions_sort_order` (SortOrder, UnitCode)
 
 ### `stock_unit_conversions`
 
@@ -71,6 +203,86 @@ Toplam tablo: 47 (eski isimli stale girdiler kaldırıldı — yeni isimli tablo
 ---
 
 ## Ürün Özellik / Konfigürasyon
+
+### `Feature`
+
+> EAV özellik/nitelik tanımları (renk, boyut, vb.). Ürün konfigürasyonunda kullanılır; seçilebilir değerler `FeatureValue` tablosunda.
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PK `pk_configuration_properties` |
+| code | NVARCHAR(50) | NOT NULL | |
+| name | NVARCHAR(120) | NOT NULL | |
+| data_type | NVARCHAR(30) | NOT NULL | |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_configuration_properties_is_active` |
+| created_at | DATETIME2 | NOT NULL | |
+| updated_at | DATETIME2 | NOT NULL | |
+
+**Indexler:**
+- `ux_configuration_properties_code` UNIQUE (code)
+
+### `FeatureValue`
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PK `pk_configuration_property_values` |
+| feature_id | UNIQUEIDENTIFIER | NOT NULL | FK `fk_configuration_property_values_property_id` → `Feature(id)` |
+| code | NVARCHAR(30) | NOT NULL | |
+| description | NVARCHAR(160) | NOT NULL | |
+| value | NVARCHAR(160) | NOT NULL | |
+| sort_order | INT | NOT NULL | DEFAULT(0) `df_configuration_property_values_sort_order` |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_configuration_property_values_is_active` |
+| created_at | DATETIME2 | NOT NULL | |
+| updated_at | DATETIME2 | NOT NULL | |
+
+**Indexler:**
+- `ux_configuration_property_values_property_id_value` UNIQUE (feature_id, value)
+- `ux_configuration_property_values_property_id_code` UNIQUE (feature_id, code)
+
+### `FieldGroup`
+
+> Malzeme kartı (ve diğer ekranlar) için alan gruplama tanımları.
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PK `pk_material_card_field_groups` |
+| group_key | NVARCHAR(60) | NOT NULL | |
+| group_label | NVARCHAR(120) | NOT NULL | |
+| display_order | INT | NOT NULL | DEFAULT(0) `df_material_card_field_groups_display_order` |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_material_card_field_groups_is_active` |
+| created_at | DATETIME2 | NOT NULL | |
+| updated_at | DATETIME2 | NOT NULL | |
+| screen_code | NVARCHAR(60) | NOT NULL | DEFAULT(N'MaterialCards') (eklendi) |
+| layer_key | NVARCHAR(32) | NULL | (eklendi) |
+
+**Indexler:**
+- `ux_material_card_field_groups_group_key` UNIQUE (group_key)
+
+### `Field`
+
+> Dinamik alan tanımları (label, tip, görünürlük, zorunluluk, varsayılan, vb.).
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PK `pk_material_card_field_settings` |
+| group_id | UNIQUEIDENTIFIER | NULL | FK `fk_material_card_field_settings_group_id` → `FieldGroup(id)` |
+| field_key | NVARCHAR(60) | NOT NULL | |
+| field_label | NVARCHAR(120) | NOT NULL | |
+| data_type | NVARCHAR(30) | NOT NULL | DEFAULT(N'STRING') `df_material_card_field_settings_data_type` |
+| is_visible | BIT | NOT NULL | DEFAULT(1) `df_material_card_field_settings_is_visible` |
+| is_required | BIT | NOT NULL | DEFAULT(0) `df_material_card_field_settings_is_required` |
+| default_value | NVARCHAR(500) | NULL | |
+| display_order | INT | NOT NULL | DEFAULT(0) `df_material_card_field_settings_display_order` |
+| column_span | INT | NOT NULL | DEFAULT(1) `df_material_card_field_settings_column_span` |
+| is_system | BIT | NOT NULL | DEFAULT(0) `df_material_card_field_settings_is_system` |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_material_card_field_settings_is_active` |
+| created_at | DATETIME2 | NOT NULL | |
+| updated_at | DATETIME2 | NOT NULL | |
+| screen_code | NVARCHAR(60) | NOT NULL | DEFAULT(N'MaterialCards') (eklendi) |
+| layer_key | NVARCHAR(32) | NULL | (eklendi) |
+
+**Indexler:**
+- `ux_material_card_field_settings_field_key` UNIQUE (field_key)
 
 ### `material_card_field_options`
 
@@ -100,6 +312,7 @@ Toplam tablo: 47 (eski isimli stale girdiler kaldırıldı — yeni isimli tablo
 | DataType | NVARCHAR(20) | NULL | |
 | RelatedMaterialCode | NVARCHAR(50) | NULL | |
 | IsActive | BIT | NOT NULL | DEFAULT(1) `df_ProductConfiguration_IsActive` |
+| VisibleInDesign | BIT | NOT NULL | DEFAULT(1) `df_ProductConfiguration_VisibleInDesign` (FEATURE kayıtları için "Dizaynda görünsün") (eklendi) |
 | CreatedDate | DATETIME | NOT NULL | DEFAULT(GETDATE()) `df_ProductConfiguration_CreatedDate` |
 
 **Indexler:**
@@ -146,6 +359,36 @@ Toplam tablo: 47 (eski isimli stale girdiler kaldırıldı — yeni isimli tablo
 
 ## Malzeme Grupları & Ürün Ağacı
 
+### `BOM`
+
+> Bill of Materials — ürün ağacı başlık kaydı.
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| Id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
+| ParentMaterialCode | NVARCHAR(100) | NOT NULL | |
+| ConfigurationCode | NVARCHAR(100) | NULL | |
+| Description | NVARCHAR(500) | NULL | |
+| ImageData | VARBINARY(MAX) | NULL | |
+| ImageMimeType | NVARCHAR(100) | NULL | |
+| CreatedAt | DATETIME2 | NOT NULL | DEFAULT GETDATE() `df_product_trees_created_at` |
+| UpdatedAt | DATETIME2 | NOT NULL | DEFAULT GETDATE() `df_product_trees_updated_at` |
+| ImageFitMode | NVARCHAR(20) | NULL | (eklendi) |
+
+### `BOMLine`
+
+> Ürün ağacı bileşen satırı.
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| Id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
+| BOMId | INT | NOT NULL | FK `fk_product_tree_lines_trees` → `BOM(Id)` ON DELETE CASCADE |
+| ComponentMaterialCode | NVARCHAR(100) | NOT NULL | |
+| ComponentConfigCode | NVARCHAR(100) | NULL | |
+| Quantity | DECIMAL(18,4) | NOT NULL | DEFAULT 1 `df_product_tree_lines_qty` |
+| ScrapRatio | DECIMAL(18,4) | NOT NULL | DEFAULT 0 `df_product_tree_lines_scrap` |
+| LineGuid | UNIQUEIDENTIFIER | NOT NULL | DEFAULT NEWID() `df_product_tree_lines_guid` |
+
 ### `MaterialGroupMappings`
 
 | Kolon | Tip | Null | Default / Not |
@@ -173,6 +416,69 @@ Toplam tablo: 47 (eski isimli stale girdiler kaldırıldı — yeni isimli tablo
 ---
 
 ## Satış Teklifi
+
+### `Document`
+
+> Generic belge başlık kaydı. `document_type_id` → `document_types` (QUOTE, ORDER, INVOICE, vb.). Eski ad: `sales_quotes`. Phase 3 sonrası INT IDENTITY PK.
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PK `pk_document` |
+| document_number | NVARCHAR(15) | NOT NULL | |
+| document_type_id | INT | NULL | FK → `document_types(id)` (default `QUOTE`'a backfill) (eklendi Phase 2) |
+| document_date | DATETIME2(0) | NOT NULL | |
+| valid_until | DATETIME2(0) | NULL | |
+| contact_id | INT | NULL | |
+| contact_name | NVARCHAR(200) | NULL | |
+| contact_address | NVARCHAR(500) | NULL | |
+| sales_rep_id | INT | NULL | |
+| currency | NVARCHAR(5) | NOT NULL | DEFAULT(N'TRY') |
+| sub_total | DECIMAL(18,4) | NOT NULL | DEFAULT(0) |
+| discount_rate | DECIMAL(5,2) | NOT NULL | DEFAULT(0) |
+| discount_amount | DECIMAL(18,4) | NOT NULL | DEFAULT(0) |
+| tax_rate | DECIMAL(5,2) | NOT NULL | DEFAULT(20) |
+| tax_amount | DECIMAL(18,4) | NOT NULL | DEFAULT(0) |
+| grand_total | DECIMAL(18,4) | NOT NULL | DEFAULT(0) |
+| payment_terms | NVARCHAR(500) | NULL | |
+| delivery_terms | NVARCHAR(500) | NULL | |
+| delivery_address | NVARCHAR(500) | NULL | |
+| status | NVARCHAR(20) | NOT NULL | DEFAULT(N'Draft') |
+| revision_no | INT | NOT NULL | DEFAULT(0) |
+| parent_document_id | INT | NULL | |
+| notes | NVARCHAR(MAX) | NULL | |
+| created_by | NVARCHAR(120) | NULL | |
+| created_at | DATETIME2(0) | NOT NULL | |
+| updated_at | DATETIME2(0) | NOT NULL | |
+| is_active | BIT | NOT NULL | DEFAULT(1) |
+
+**Indexler:**
+- `ux_document_number` UNIQUE (document_number)
+- `ix_document_status` (status)
+- `ix_document_contact` (contact_id)
+
+### `DocumentLine`
+
+> Belge satırları. Eski ad: `sales_quote_lines`. Phase 3 sonrası INT IDENTITY PK.
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PK `pk_document_line` |
+| document_id | INT | NOT NULL | FK `fk_document_line_document` → `Document(id)` |
+| line_no | INT | NOT NULL | DEFAULT(0) |
+| item_id | INT | NULL | |
+| material_code | NVARCHAR(50) | NOT NULL | |
+| material_name | NVARCHAR(200) | NOT NULL | |
+| unit_name | NVARCHAR(40) | NULL | |
+| quantity | DECIMAL(18,4) | NOT NULL | DEFAULT(0) |
+| unit_price | DECIMAL(18,4) | NOT NULL | DEFAULT(0) |
+| discount_rate | DECIMAL(5,2) | NOT NULL | DEFAULT(0) |
+| line_total | DECIMAL(18,4) | NOT NULL | DEFAULT(0) |
+| notes | NVARCHAR(500) | NULL | |
+| is_active | BIT | NOT NULL | DEFAULT(1) |
+| combination_code | NVARCHAR(100) | NULL | (eklendi) |
+
+**Indexler:**
+- `ix_document_line_document` (document_id)
 
 ### `sales_quote_attachments`
 
@@ -223,6 +529,49 @@ Toplam tablo: 47 (eski isimli stale girdiler kaldırıldı — yeni isimli tablo
 ---
 
 ## Fiyat Listesi & Döviz
+
+### `PriceGroup`
+
+> Fiyat grubu (cari veya kanal bazlı).
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
+| group_code | NVARCHAR(50) | NOT NULL | |
+| group_name | NVARCHAR(150) | NOT NULL | |
+| description | NVARCHAR(500) | NULL | |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_price_groups_is_active` |
+| created_at | DATETIME2 | NOT NULL | |
+| updated_at | DATETIME2 | NOT NULL | |
+
+**Indexler:**
+- `ux_price_groups_code` UNIQUE (group_code)
+
+### `PriceList`
+
+> Fiyat listesi satırları (grup × stok × kombinasyon × tarih → alış/satış fiyatı).
+
+| Kolon | Tip | Null | Default / Not |
+|-------|-----|------|---------------|
+| id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
+| price_group_id | INT | NOT NULL | FK `fk_price_list_entries_price_groups` → `PriceGroup(id)` |
+| item_id | INT | NULL | |
+| material_code | NVARCHAR(60) | NOT NULL | |
+| material_name | NVARCHAR(200) | NULL | |
+| combination_code | NVARCHAR(100) | NULL | (eklendi) |
+| combination_name | NVARCHAR(300) | NULL | (eklendi) |
+| currency | NVARCHAR(10) | NOT NULL | DEFAULT(N'TRY') `df_price_list_entries_currency` |
+| buying_price | DECIMAL(18,4) | NOT NULL | DEFAULT(0) `df_price_list_entries_buying_price` |
+| selling_price | DECIMAL(18,4) | NOT NULL | DEFAULT(0) `df_price_list_entries_selling_price` |
+| valid_from | DATE | NOT NULL | |
+| valid_to | DATE | NULL | |
+| is_active | BIT | NOT NULL | DEFAULT(1) `df_price_list_entries_is_active` |
+| created_at | DATETIME2 | NOT NULL | |
+| updated_at | DATETIME2 | NOT NULL | |
+
+**Indexler:**
+- `ix_price_list_entries_group_mat` (price_group_id, material_code)
+- `ix_price_list_entries_lookup` (price_group_id, item_id, combination_code, valid_from)
 
 ### `currencies`
 
