@@ -75,6 +75,16 @@ public sealed class DocumentService : IDocumentService
         if (request.Lines.Count == 0)
             return (false, "En az bir satir eklenmeli.", null);
 
+        // Kombinasyon takibi acik olan stok icin kombinasyon kodu zorunlu
+        foreach (var ln in request.Lines)
+        {
+            if (ln.TrackCombinations && string.IsNullOrWhiteSpace(ln.CombinationCode))
+            {
+                var label = string.IsNullOrWhiteSpace(ln.MaterialCode) ? "Secili satir" : $"'{ln.MaterialCode}'";
+                return (false, $"{label} stokunda kombinasyon takibi acik; kombinasyon secilmelidir.", null);
+            }
+        }
+
         request = request with { ContactId = resolvedContactId, ContactName = resolvedContactName };
 
         var isNew = !request.Id.HasValue || request.Id.Value == 0;

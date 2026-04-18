@@ -42,7 +42,12 @@ public sealed record SaveDocumentRequest(
 public sealed record SaveDocumentLineRequest(
     int? Id, int? ItemId, string MaterialCode, string MaterialName, string? UnitName,
     decimal Quantity, decimal UnitPrice, decimal DiscountRate, string? CombinationCode, string? Notes,
-    IReadOnlyList<SaveQuoteLineDetailItem>? CombinationDetails = null);
+    IReadOnlyList<SaveQuoteLineDetailItem>? CombinationDetails = null,
+    /// <summary>
+    /// Client tarafindan doldurulur — Item.TrackCombinations. Server-side save sirasinda
+    /// true ise CombinationCode zorunlu olarak kontrol edilir.
+    /// </summary>
+    bool TrackCombinations = false);
 
 public sealed record SaveQuoteLineDetailItem(
     string FeatureName,

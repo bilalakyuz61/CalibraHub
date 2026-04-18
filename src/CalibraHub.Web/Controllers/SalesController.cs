@@ -312,9 +312,10 @@ public sealed class SalesController : Controller
                     lookupLabelKey = "materialName",
                     lookupFillMap = new Dictionary<string, string>
                     {
-                        ["materialName"]      = "MaterialName",
-                        ["stockCardId"]       = "Id",
-                        ["trackCombinations"] = "TrackCombinations",
+                        // ASP.NET Core default JSON naming policy camelCase — source key'leri kucuk harf
+                        ["materialName"]      = "materialName",
+                        ["stockCardId"]       = "id",
+                        ["trackCombinations"] = "trackCombinations",
                     },
                     width    = 220,
                     required = matBinding?.IsRequired ?? false,

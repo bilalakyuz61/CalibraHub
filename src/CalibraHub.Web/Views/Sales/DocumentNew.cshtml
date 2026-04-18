@@ -1119,7 +1119,8 @@ body.app-theme-dark .wiz-hlabel {
             .filter(function (r) { return r && r.materialCode; })
             .map(function (r) {
                 return {
-                    stockCardId:        r.stockCardId != null && r.stockCardId !== '' ? parseInt(r.stockCardId, 10) : null,
+                    itemId:             r.stockCardId != null && r.stockCardId !== '' ? parseInt(r.stockCardId, 10) : null,
+                    trackCombinations:  r.trackCombinations === true,
                     materialCode:       r.materialCode || '',
                     materialName:       r.materialName || '',
                     unitName:           r.unitName || null,
