@@ -17,6 +17,7 @@ import { useLookup } from './useLookup'
 import { guideSchema, guideSearch, guideResolve } from '../DynamicWidgetRenderer/dynamicWidgetService'
 import FieldSettingsForm from './FieldSettingsForm'
 import CombinationPickerModal from './CombinationPickerModal'
+import { Shuffle, Lock } from 'lucide-react'
 
 /**
  * Bir obje'den verilen key ile deger oku — case-insensitive.
@@ -719,6 +720,7 @@ function CombinationLookupCell(props) {
   var row = props.row
   var value = props.value
   var onChange = props.onChange
+  var compact = !!props.compact // true: action-column icon button; false: inline cell button
   var [open, setOpen] = useState(false)
 
   var materialCode = row.materialCode || ''
@@ -736,6 +738,49 @@ function CombinationLookupCell(props) {
     }
   }
 
+  // ── Compact (action-column) mode ──
+  if (compact) {
+    var disabled = !trackable || !materialCode
+    var disabledTitle = !trackable
+      ? 'Bu malzemede kombinasyon takibi yok'
+      : (!materialCode ? 'Once malzeme seciniz' : '')
+    var hasValueCompact = !!value
+    return (
+      <>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={function() { if (!disabled) setOpen(true) }}
+          className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+            disabled
+              ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+              : (hasValueCompact
+                  ? 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15 hover:bg-violet-100 dark:hover:bg-violet-500/25'
+                  : 'text-slate-400 hover:text-violet-500 hover:bg-violet-50 dark:text-white/30 dark:hover:text-violet-300 dark:hover:bg-violet-500/10')
+          )}
+          title={disabled
+            ? disabledTitle
+            : (hasValueCompact ? ('Secili kombinasyon: ' + value + ' — degistir') : 'Kombinasyon sec')}
+        >
+          {disabled ? <Lock size={12} strokeWidth={1.8} /> : <Shuffle size={13} strokeWidth={1.8} />}
+        </button>
+        {open && (
+          <CombinationPickerModal
+            materialCode={materialCode}
+            currentCode={value}
+            currentDetails={row.combinationDetails || []}
+            onApply={function(code, details) {
+              onChange('combinationCode', code, { combinationDetails: details })
+              setOpen(false)
+            }}
+            onClose={function() { setOpen(false) }}
+          />
+        )}
+      </>
+    )
+  }
+
+  // ── Inline (grid cell) mode — eski davranis ──
   if (!trackable) {
     return (
       <div
@@ -786,3 +831,5 @@ function CombinationLookupCell(props) {
     </>
   )
 }
+
+export { CombinationLookupCell }

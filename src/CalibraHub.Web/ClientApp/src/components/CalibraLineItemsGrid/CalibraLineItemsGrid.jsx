@@ -22,7 +22,7 @@ import {
   Plus, Trash2, Pencil, Hash, FileText, Ruler, Sigma, DollarSign,
   Percent, Calculator, StickyNote, CircleDot, Lock,
 } from 'lucide-react'
-import LineGridCell from './LineGridCell'
+import LineGridCell, { CombinationLookupCell } from './LineGridCell'
 import { evaluate } from './formulaEvaluator'
 
 /* Lucide icon haritasi — C#'taki icon string'ini React bilesenine cevirir */
@@ -70,9 +70,15 @@ function TR_FMT(n, precision) {
 export default function CalibraLineItemsGrid(props) {
   var config = props.config || { columns: [], rows: [], labels: {}, footer: {} }
   var allColumns = Array.isArray(config.columns) ? config.columns : []
-  // Kolonlari yerlesime gore ayir: satir icinde mi, yoksa satirin altinda mi render edilecek?
-  var columns = allColumns.filter(function(c) { return c.placement !== 'row-below' })
+  // Kolonlari yerlesime gore ayir:
+  //   - row-below  : satirin altinda (ornek: Not)
+  //   - inline     : satir icinde cell olarak
+  //   - action     : Islem kolonuna buton olarak (combination-lookup burada)
+  var columns = allColumns.filter(function(c) {
+    return c.placement !== 'row-below' && c.type !== 'combination-lookup'
+  })
   var belowColumns = allColumns.filter(function(c) { return c.placement === 'row-below' })
+  var actionLookupColumns = allColumns.filter(function(c) { return c.type === 'combination-lookup' })
   var labels = config.labels || {}
   var footer = config.footer || {}
   var onRowsChange = props.onRowsChange
@@ -253,7 +259,7 @@ export default function CalibraLineItemsGrid(props) {
     <div className="calibra-line-grid rounded-2xl overflow-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
       {/* Header row */}
       <div className="flex items-center border-b border-slate-200 bg-slate-50/80 dark:bg-white/[0.03] dark:border-white/[0.08]">
-        <div className="w-[104px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
+        <div className="w-[140px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
           Islem
         </div>
         {columns.map(function(col) {
@@ -295,7 +301,7 @@ export default function CalibraLineItemsGrid(props) {
                   className="border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors"
                 >
                   <div className="flex items-stretch">
-                    <div className="w-[104px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                    <div className="w-[140px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
                       <button
                         type="button"
                         onClick={function() { if (canEdit(row)) handleEditRow(row._uid) }}
@@ -311,6 +317,18 @@ export default function CalibraLineItemsGrid(props) {
                       >
                         {canEdit(row) ? <Pencil size={13} strokeWidth={1.8} /> : <Lock size={12} strokeWidth={1.8} />}
                       </button>
+                      {actionLookupColumns.map(function(col) {
+                        return (
+                          <CombinationLookupCell
+                            key={col.key}
+                            compact={true}
+                            column={col}
+                            row={row}
+                            value={row[col.key]}
+                            onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                          />
+                        )
+                      })}
                       {belowColumns.length > 0 && (
                         <button
                           type="button"
