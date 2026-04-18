@@ -316,7 +316,7 @@ public sealed class SalesController : Controller
                         ["stockCardId"]       = "Id",
                         ["trackCombinations"] = "TrackCombinations",
                     },
-                    width    = 150,
+                    width    = 220,
                     required = matBinding?.IsRequired ?? false,
                     align    = "left",
                     icon     = "Hash",

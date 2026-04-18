@@ -274,7 +274,7 @@ export default function CalibraLineItemsGrid(props) {
 
                   {/* Satir alti kolonlar (placement: row-below) — ornegin "Not" */}
                   {belowColumns.length > 0 && (
-                    <div className="flex flex-col gap-1 pl-3 pr-3 pb-2">
+                    <div className="flex flex-col gap-1 pl-3 pr-3 pb-2 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
                       {belowColumns.map(function(col) {
                         var Icon = resolveIcon(col.icon)
                         return (
