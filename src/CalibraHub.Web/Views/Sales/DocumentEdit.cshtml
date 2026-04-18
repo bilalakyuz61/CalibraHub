@@ -1161,23 +1161,19 @@
     function flashCustomerRequired() {
         var disp = document.getElementById('sqCustomerDisplay');
         if (!disp) return;
+        // Kirmizi cerceve + shake animasyonu; kullanici input'a ilk karakter yazdiginda temizlenir
         disp.classList.add('is-invalid', 'sqe-flash');
         setTimeout(function() { disp.classList.remove('sqe-flash'); }, 600);
+        var clearInvalid = function() {
+            disp.classList.remove('is-invalid');
+            disp.removeEventListener('input', clearInvalid);
+            disp.removeEventListener('change', clearInvalid);
+        };
+        disp.addEventListener('input', clearInvalid);
+        disp.addEventListener('change', clearInvalid);
         // Genel Bilgiler sekmesine don ve focus ver
         sqActivateTab('general');
         setTimeout(function() { disp.focus(); }, 50);
-        // Uyari mesaji
-        var msg = document.getElementById('sqCustomerWarn');
-        if (!msg) {
-            msg = document.createElement('div');
-            msg.id = 'sqCustomerWarn';
-            msg.className = 'sqe-customer-warn';
-            msg.textContent = 'Once musteri (cari) seciniz.';
-            var row = disp.closest('.sqe-hrow');
-            if (row && row.parentNode) row.parentNode.insertBefore(msg, row.nextSibling);
-        }
-        msg.classList.add('is-visible');
-        setTimeout(function() { if (msg) msg.classList.remove('is-visible'); }, 3500);
     }
 
     function sqActivateTab(tabKey) {
