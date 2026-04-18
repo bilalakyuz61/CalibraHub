@@ -1859,6 +1859,13 @@
         var custIdVal  = document.getElementById('sqCustomerId').value;
         var custCodeVal = (document.getElementById('sqCustomerDisplay').value || '').trim();
         var custText   = (document.getElementById('sqCustomerName').value || '').trim() || null;
+
+        // Cari zorunlu kontrolu — ekran ortasi uyari yerine input'ta kirmizi shake
+        if (!custIdVal && !custCodeVal && !custText) {
+            flashCustomerRequired();
+            return;
+        }
+
         var payload  = {
             id: currentQuoteId,
             documentDate:    document.getElementById('sqQuoteDate').value,
