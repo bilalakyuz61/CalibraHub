@@ -41,6 +41,33 @@ function readCaseInsensitive(obj, key) {
   return undefined
 }
 
+/**
+ * Rehber (guide) view'inde taxRate/stockCardId/trackCombinations gibi satis teklifi
+ * icin kritik alanlar eksik kalabilir — DocumentEdit sayfasinin yukledigi
+ * window.__SQ_MATERIALS__ snapshot'undan materialCode ile esleyip eksik alanlari
+ * tamamlar. patch zaten doluysa override etmez.
+ */
+function enrichMaterialPatch(patch, materialCode) {
+  if (!patch || !materialCode) return patch
+  if (typeof window === 'undefined' || !Array.isArray(window.__SQ_MATERIALS__)) return patch
+  var target = String(materialCode).trim().toLowerCase()
+  var m = window.__SQ_MATERIALS__.find(function(x) {
+    var mc = readCaseInsensitive(x, 'materialCode')
+    return String(mc || '').trim().toLowerCase() === target
+  })
+  if (!m) return patch
+  function fillIfMissing(key, val) {
+    if (val == null) return
+    if (patch[key] == null) patch[key] = val
+  }
+  fillIfMissing('taxRate',           readCaseInsensitive(m, 'taxRate'))
+  fillIfMissing('stockCardId',       readCaseInsensitive(m, 'id'))
+  fillIfMissing('trackCombinations', readCaseInsensitive(m, 'trackCombinations'))
+  fillIfMissing('locationId',        readCaseInsensitive(m, 'defaultLocationId'))
+  fillIfMissing('materialName',      readCaseInsensitive(m, 'materialName'))
+  return patch
+}
+
 function useIsLight() {
   var [light, setLight] = useState(function() {
     return document.body.classList.contains('app-theme-light')
@@ -119,7 +146,7 @@ export default function LineGridCell(props) {
   if (column.type === 'text-lookup') {
     // guideCode varsa tam modal deneyimi (buton + tum kolonlar)
     if (column.guideCode) {
-      return <GuideLookupCell column={column} value={value} onChange={onChange} baseInputClass={baseInputClass} />
+      return <GuideLookupCell column={column} row={row} value={value} onChange={onChange} baseInputClass={baseInputClass} />
     }
     return <TextLookupCell column={column} row={row} value={value} onChange={onChange} baseInputClass={baseInputClass} alignClass={alignClass} />
   }
@@ -191,6 +218,24 @@ function TextLookupCell(props) {
     }
   }, [open])
 
+  // ── Auto-open (guided new-line workflow) ──
+  // handleAddRow sonrasi grid 'material' stage event'i firlatir; kendi row'umuz
+  // ve bizim column.key === 'materialCode' ise input'u focus ederiz — onFocus
+  // handler zaten dropdown'i acar ve filter'i sifirlar.
+  useEffect(function () {
+    function onAutoOpen(e) {
+      var d = e.detail || {}
+      if (d.stage !== 'material') return
+      if (d.rowUid !== (row && row._uid)) return
+      if (column.key !== 'materialCode') return
+      if (inputRef.current) {
+        try { inputRef.current.focus() } catch (_) {}
+      }
+    }
+    window.addEventListener('lineGrid:autoOpenStage', onAutoOpen)
+    return function () { window.removeEventListener('lineGrid:autoOpenStage', onAutoOpen) }
+  }, [row && row._uid, column.key])
+
   var valueKey = column.lookupValueKey || 'code'
   var labelKey = column.lookupLabelKey || 'name'
 
@@ -211,12 +256,82 @@ function TextLookupCell(props) {
     if (column.lookupFillMap) {
       Object.keys(column.lookupFillMap).forEach(function(rowKey) {
         var optKey = column.lookupFillMap[rowKey]
-        patch[rowKey] = readCaseInsensitive(opt, optKey)
+        var val = readCaseInsensitive(opt, optKey)
+        // Undefined degerler varsayilani silmesin; sadece tanimli olanlari uygula
+        if (val !== undefined) patch[rowKey] = val
       })
     }
+    // Eksik alanlari global materials snapshot'undan tamamla (taxRate vb.)
+    enrichMaterialPatch(patch, patch[column.key])
     onChange(column.key, patch[column.key], patch)
     setOpen(false)
     setFilter('')
+    triggerSilentLineSave()
+    // Guided workflow chain: material secildikten sonra trackCombinations=true
+    // ise kombinasyon modal'ini ac; degilse direkt ek alanlar modal'ini ac.
+    // Sadece materialCode column'u icin tetikle.
+    if (column.key === 'materialCode') {
+      var tracks = patch.trackCombinations === true
+      var nextStage = tracks ? 'combo' : 'extras'
+      requestAnimationFrame(function () {
+        try {
+          window.dispatchEvent(new CustomEvent('lineGrid:autoOpenStage', {
+            detail: { rowUid: row && row._uid, stage: nextStage }
+          }))
+        } catch (_) {}
+      })
+    }
+  }
+
+  // Manuel yazim sonrasi blur: girilen kod options icinde birebir varsa pick et —
+  // boylece lookupFillMap uygulanir (taxRate, stockCardId, vb. satira gelir).
+  function handleBlur() {
+    // Dropdown pick'i onMouseDown ile handle ediyor; burada filter degeri varsa degerlendir.
+    if (!open) return
+    var typed = (filter || '').trim()
+    if (!typed) { setOpen(false); return }
+    var exact = (lookup.options || []).find(function(o) {
+      var v = String(readCaseInsensitive(o, valueKey) || '').trim().toLowerCase()
+      return v === typed.toLowerCase()
+    })
+    if (exact) { handlePick(exact); return }
+    // Dropdown'da eslesme yok — global materials snapshot'unda ara (ornegin
+    // guideSearch sonuclari farkli filtrelenmis olabilir). Bulursa lookupFillMap
+    // alanlarini doldur + sessiz kaydet.
+    var enriched = { }
+    enriched[column.key] = typed
+    enrichMaterialPatch(enriched, typed)
+    var enrichedHasFill = Object.keys(enriched).some(function(k) {
+      return k !== column.key && enriched[k] != null
+    })
+    if (enrichedHasFill) {
+      onChange(column.key, typed, enriched)
+      setOpen(false)
+      setFilter('')
+      triggerSilentLineSave()
+      return
+    }
+    // Eslesme yok — yazili degeri ham olarak kaydet, lookupFillMap alanlarini temizle
+    var rawPatch = {}
+    rawPatch[column.key] = typed
+    if (column.lookupFillMap) {
+      Object.keys(column.lookupFillMap).forEach(function(rowKey) { rawPatch[rowKey] = null })
+    }
+    onChange(column.key, typed, rawPatch)
+    setOpen(false)
+    setFilter('')
+  }
+
+  // Satir-ici sessiz kayit — materialCode basariyla cozulunce calisir.
+  // window.sqSave({ silent:true }) KITT animasyonu olmadan kayder.
+  // column.saveOnResolve !== false ise tetiklenir (sales quote varsayilani).
+  function triggerSilentLineSave() {
+    if (column.saveOnResolve === false) return
+    if (typeof window === 'undefined' || typeof window.sqSave !== 'function') return
+    // Setstate'in render'a commit olmasi icin kucuk bir delay
+    setTimeout(function() {
+      try { window.sqSave({ silent: true }) } catch (e) { /* ignore */ }
+    }, 150)
   }
 
   var dropdownBaseStyle = isLight
@@ -250,6 +365,13 @@ function TextLookupCell(props) {
         value={open ? filter : (value == null ? '' : String(value))}
         onFocus={function() { setOpen(true); setFilter(''); calcPos() }}
         onChange={function(e) { setFilter(e.target.value); setOpen(true) }}
+        onBlur={function() {
+          // 120ms delay: dropdown item tiklamasi onBlur'dan once handlePick'i tamamlasin
+          setTimeout(handleBlur, 120)
+        }}
+        onKeyDown={function(e) {
+          if (e.key === 'Enter') { e.preventDefault(); handleBlur() }
+        }}
         className={props.baseInputClass + ' font-mono'}
         placeholder={column.placeholder || 'Ara...'}
       />
@@ -394,10 +516,28 @@ var GUIDE_PAGE_SIZE = 50
 
 function GuideLookupCell(props) {
   var column   = props.column
+  var row      = props.row  // row reference — auto-open chain icin
   var value    = props.value
   var onChange = props.onChange
 
   var isLight = useIsLight()
+
+  // ── Auto-open (guided new-line workflow) ──
+  // Grid 'material' stage event firlattiginda modal'i otomatik ac — rehber
+  // sayfasinda dogrudan arama. Stok secilince pickRow chain'i devam ettirir.
+  useEffect(function () {
+    function onAutoOpen(e) {
+      var d = e.detail || {}
+      if (d.stage !== 'material') return
+      if (d.rowUid !== (row && row._uid)) return
+      if (column.key !== 'materialCode') return
+      // Modal'i ac
+      setModalOpen(true)
+    }
+    window.addEventListener('lineGrid:autoOpenStage', onAutoOpen)
+    return function () { window.removeEventListener('lineGrid:autoOpenStage', onAutoOpen) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row && row._uid, column.key])
 
   var [displayVal, setDisplayVal] = useState('')
   var [modalOpen, setModalOpen]   = useState(false)
@@ -491,15 +631,93 @@ function GuideLookupCell(props) {
         if (val != null) patch[gridKey] = val
       })
     }
+    // Rehber view'i taxRate/stockCardId/trackCombinations barindirmayabilir —
+    // satis teklifi sayfasinin yukledigi global materials snapshot'undan tamamla.
+    enrichMaterialPatch(patch, guideRow.value)
     setDisplayVal(guideRow.value || '')
     onChange(column.key, guideRow.value, patch)
     closeModal()
+    // Rehberden basarili secim → sessiz satir kaydi (KITT yok)
+    if (column.saveOnResolve !== false && typeof window !== 'undefined' && typeof window.sqSave === 'function') {
+      setTimeout(function() {
+        try { window.sqSave({ silent: true }) } catch (e) { /* ignore */ }
+      }, 150)
+    }
+    // Guided workflow chain: material secildikten sonra trackCombinations=true
+    // ise kombinasyon modal'ini ac; degilse direkt ek alanlar modal'ini ac.
+    if (column.key === 'materialCode' && row && row._uid) {
+      var tracks = patch.trackCombinations === true
+      var nextStage = tracks ? 'combo' : 'extras'
+      requestAnimationFrame(function () {
+        try {
+          window.dispatchEvent(new CustomEvent('lineGrid:autoOpenStage', {
+            detail: { rowUid: row._uid, stage: nextStage }
+          }))
+        } catch (_) {}
+      })
+    }
   }
 
   function clearValue(e) {
-    e.stopPropagation()
+    if (e && e.stopPropagation) e.stopPropagation()
     setDisplayVal('')
-    onChange(column.key, null, { [column.key]: null })
+    var clearPatch = { [column.key]: null }
+    if (column.lookupFillMap) {
+      Object.keys(column.lookupFillMap).forEach(function (k) { clearPatch[k] = null })
+    }
+    onChange(column.key, null, clearPatch)
+  }
+
+  // Manuel kod yazma/paste sonrasi blur'da: kod gecerli mi kontrol et,
+  // gecerliyse tum alanlari (lookupFillMap'e gore) otomatik doldur,
+  // gecerli degilse kirmizi titrese (shake) animasyonu ile uyari ver.
+  var [isShaking, setIsShaking] = useState(false)
+  var inputElRef = useRef(null)
+
+  function triggerShake() {
+    setIsShaking(true)
+    setTimeout(function () { setIsShaking(false) }, 550)
+  }
+
+  async function validateAndApply() {
+    var v = (displayVal || '').trim()
+    var currentVal = value == null ? '' : String(value)
+    if (v === currentVal) return // degisme yok
+    if (!v) { clearValue(); return } // bos -> tumunu temizle
+    if (!column.guideCode) {
+      // Rehber yoksa direkt set et (validation yok)
+      onChange(column.key, v, { [column.key]: v })
+      return
+    }
+    try {
+      var result = await guideSearch(column.guideCode, { search: v, page: 1, pageSize: 10 })
+      var rows = (result && result.rows) || []
+      var exact = rows.find(function (r) {
+        return String(r.value || '').trim().toLowerCase() === v.toLowerCase()
+      })
+      if (exact) {
+        // pickRow zaten lookupFillMap uygulayip patch ile parent'a iletiyor
+        pickRow(exact)
+      } else {
+        triggerShake()
+        // Degeri eski haline don
+        setDisplayVal(currentVal)
+      }
+    } catch (e) {
+      triggerShake()
+      setDisplayVal(currentVal)
+    }
+  }
+
+  function handleInputKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (inputElRef.current) inputElRef.current.blur()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setDisplayVal(value == null ? '' : String(value))
+      if (inputElRef.current) inputElRef.current.blur()
+    }
   }
 
   var schemaColumns  = (schema && schema.columns) || []
@@ -526,21 +744,27 @@ function GuideLookupCell(props) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', gap: 2 }}>
-      {/* Değer alanı */}
+      {/* Değer alanı — manuel girise izin verir, blur'da validate eder */}
       <input
+        ref={inputElRef}
         type="text"
         value={displayVal}
         onChange={function(e) {
-          var v = e.target.value
-          setDisplayVal(v)
-          onChange(column.key, v, { [column.key]: v, materialName: '', stockCardId: null })
+          // Sadece local state'i guncelle — parent'a gonderme henuz.
+          // Boylece elle kod yazarken materialName/unit/stockCardId gibi alanlar silinmez.
+          setDisplayVal(e.target.value)
         }}
+        onBlur={validateAndApply}
+        onKeyDown={handleInputKeyDown}
         placeholder={column.placeholder || 'Kod giriniz...'}
+        className={isShaking ? 'lgc-invalid-shake' : ''}
         style={{
           flex: 1, height: '100%', background: inputBg,
-          border: (column.required && !value && !displayVal)
-            ? '1px solid rgba(239,68,68,0.7)'
-            : inputBdr,
+          border: isShaking
+            ? '1px solid #ef4444'
+            : (column.required && !value && !displayVal)
+              ? '1px solid rgba(239,68,68,0.7)'
+              : inputBdr,
           borderRadius: 5, padding: '0 8px', fontSize: 12, color: inputColor,
           cursor: 'text', outline: 'none', minWidth: 0,
           fontFamily: 'Consolas, monospace',
@@ -723,6 +947,23 @@ function CombinationLookupCell(props) {
   var compact = !!props.compact // true: action-column icon button; false: inline cell button
   var [open, setOpen] = useState(false)
 
+  // ── Auto-open (guided new-line workflow) ──
+  // Grid 'combo' stage event'i → kombinasyon modal'ini ac. Malzeme secildikten
+  // sonra LineGridCell.handlePick / GuideLookupCell.pickRow tarafindan firlatilir.
+  useEffect(function () {
+    function onAutoOpen(e) {
+      var d = e.detail || {}
+      if (d.stage !== 'combo') return
+      if (d.rowUid !== (row && row._uid)) return
+      // Malzeme secildi ama combination takibi yoksa modal disabled — yine de
+      // cagri no-op olur; picker icinde materialCode kontrolu zaten var.
+      setOpen(true)
+    }
+    window.addEventListener('lineGrid:autoOpenStage', onAutoOpen)
+    return function () { window.removeEventListener('lineGrid:autoOpenStage', onAutoOpen) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row && row._uid])
+
   var materialCode = row.materialCode || ''
   var trackable = !!row.trackCombinations
   // Fallback: lookupFillMap ile row'a trackCombinations gelmemisse global materials
@@ -745,22 +986,31 @@ function CombinationLookupCell(props) {
       ? 'Bu malzemede kombinasyon takibi yok'
       : (!materialCode ? 'Once malzeme seciniz' : '')
     var hasValueCompact = !!value
+    // Renk mantigi:
+    //  - disabled (takip kapali veya malzeme yok) → gri/lock
+    //  - takip acik AND secim YAPILMIS  → yesil (basariyla secili)
+    //  - takip acik AND secim YAPILMAMIS → kirmizi (zorunlu, eksik)
+    var btnClassCompact
+    if (disabled) {
+      btnClassCompact = 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+    } else if (hasValueCompact) {
+      btnClassCompact = 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/20 dark:hover:bg-emerald-500/30'
+    } else {
+      btnClassCompact = 'text-rose-600 bg-rose-100 hover:bg-rose-200 dark:text-rose-300 dark:bg-rose-500/20 dark:hover:bg-rose-500/30'
+    }
     return (
       <>
         <button
           type="button"
           disabled={disabled}
           onClick={function() { if (!disabled) setOpen(true) }}
-          className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-            disabled
-              ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-              : (hasValueCompact
-                  ? 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15 hover:bg-violet-100 dark:hover:bg-violet-500/25'
-                  : 'text-slate-400 hover:text-violet-500 hover:bg-violet-50 dark:text-white/30 dark:hover:text-violet-300 dark:hover:bg-violet-500/10')
-          )}
+          data-comb-btn=""
+          data-row-uid={row._uid || ''}
+          data-needs-combo={(!disabled && !hasValueCompact) ? '1' : '0'}
+          className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + btnClassCompact}
           title={disabled
             ? disabledTitle
-            : (hasValueCompact ? ('Secili kombinasyon: ' + value + ' — degistir') : 'Kombinasyon sec')}
+            : (hasValueCompact ? ('Secili kombinasyon: ' + value + ' — degistir') : 'Kombinasyon zorunlu — secim yapiniz')}
         >
           {disabled ? <Lock size={12} strokeWidth={1.8} /> : <Shuffle size={13} strokeWidth={1.8} />}
         </button>
@@ -769,9 +1019,21 @@ function CombinationLookupCell(props) {
             materialCode={materialCode}
             currentCode={value}
             currentDetails={row.combinationDetails || []}
-            onApply={function(code, details) {
-              onChange('combinationCode', code, { combinationDetails: details })
+            onApply={function(configId, code, details) {
+              // combinationId — DB'deki FK; combinationCode — display; details — ozellik listesi
+              onChange('combinationCode', code, { combinationId: configId, combinationDetails: details })
               setOpen(false)
+              // Guided workflow chain: kombinasyon secildikten sonra ek alanlar
+              // modal'ini grid seviyesinde ac (extras stage).
+              if (row && row._uid) {
+                requestAnimationFrame(function () {
+                  try {
+                    window.dispatchEvent(new CustomEvent('lineGrid:autoOpenStage', {
+                      detail: { rowUid: row._uid, stage: 'extras' }
+                    }))
+                  } catch (_) {}
+                })
+              }
             }}
             onClose={function() { setOpen(false) }}
           />
@@ -800,18 +1062,20 @@ function CombinationLookupCell(props) {
   }
 
   var hasValue = !!value
+  // Inline mode renkleri: secili → yesil, eksik → kirmizi
+  var inlineBtnClass = hasValue
+    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-emerald-500/30'
+    : 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:hover:bg-rose-500/30'
   return (
     <>
       <button
         type="button"
         onClick={function() { setOpen(true) }}
-        className={
-          'w-full px-2.5 py-1.5 text-[12px] font-semibold rounded-md transition-colors ' +
-          (hasValue
-            ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/25'
-            : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-white/[0.05] dark:text-white/55 dark:hover:bg-white/[0.1]')
-        }
-        title={hasValue ? ('Seçili kombinasyon: ' + value) : 'Kombinasyon seç'}
+        data-comb-btn=""
+        data-row-uid={row._uid || ''}
+        data-needs-combo={hasValue ? '0' : '1'}
+        className={'w-full px-2.5 py-1.5 text-[12px] font-semibold rounded-md transition-colors ' + inlineBtnClass}
+        title={hasValue ? ('Seçili kombinasyon: ' + value) : 'Kombinasyon zorunlu — secim yapiniz'}
       >
         {hasValue ? value : 'Seç...'}
       </button>
@@ -820,10 +1084,21 @@ function CombinationLookupCell(props) {
           materialCode={materialCode}
           currentCode={value}
           currentDetails={row.combinationDetails || []}
-          onApply={function(code, details) {
-            // fillPatch kullanarak combinationCode + combinationDetails'i tek state update'te set et
-            onChange('combinationCode', code, { combinationDetails: details })
+          onApply={function(configId, code, details) {
+            // fillPatch kullanarak combinationId + combinationCode + combinationDetails'i tek state update'te set et
+            onChange('combinationCode', code, { combinationId: configId, combinationDetails: details })
             setOpen(false)
+            // Guided workflow chain: kombinasyon secildikten sonra ek alanlar
+            // modal'ini grid seviyesinde ac (extras stage).
+            if (row && row._uid) {
+              requestAnimationFrame(function () {
+                try {
+                  window.dispatchEvent(new CustomEvent('lineGrid:autoOpenStage', {
+                    detail: { rowUid: row._uid, stage: 'extras' }
+                  }))
+                } catch (_) {}
+              })
+            }
           }}
           onClose={function() { setOpen(false) }}
         />

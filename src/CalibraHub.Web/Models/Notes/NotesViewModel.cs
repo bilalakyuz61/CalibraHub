@@ -78,12 +78,20 @@ public sealed class AddReminderInput
     public DateTime RemindAt { get; set; }
     public ReminderRecurrenceType RecurrenceType { get; set; } = ReminderRecurrenceType.None;
     public string? RecurrenceData { get; set; }
+    public ReminderDeliveryChannel DeliveryChannel { get; set; } = ReminderDeliveryChannel.InApp;
+    public Guid? TargetUserId { get; set; }
 }
 
 public sealed class AddShareInput
 {
     public Guid NoteId { get; set; }
     public Guid SharedWithUserId { get; set; }
+}
+
+public sealed class DeleteReminderJsonInput
+{
+    public Guid ReminderId { get; set; }
+    public Guid NoteId { get; set; }
 }
 
 public sealed class SaveFolderInput

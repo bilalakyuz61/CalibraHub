@@ -13,6 +13,9 @@ public sealed class Document
     [Description("Birincil anahtar. IDENTITY.")]
     public int Id { get; init; }
 
+    [Description("Belgenin ait oldugu sirket. FK -> Company.Id. Kayit anindaki oturum kullanicisinin sirketinden otomatik doldurulur.")]
+    public int CompanyId { get; set; }
+
     [Description("Kullaniciya gosterilen belge numarasi (seri-sayac, benzersiz).")]
     public required string DocumentNumber { get; init; }
 

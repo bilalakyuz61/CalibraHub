@@ -48,7 +48,8 @@ public sealed record ProductConfigurationItemDto(
 
 public sealed record ProductConfigurationFeatureStockLinkDto(
     int FeatureId,
-    string StockCode);
+    string StockCode,
+    bool PrintDescriptionInDesign = true);
 
 public sealed record CreateProductConfigurationFeatureRequest(
     string Name,

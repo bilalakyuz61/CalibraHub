@@ -22,18 +22,19 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import * as notifApi from '../../services/notificationsService'
 import {
   // Shell internals
-  Sparkles, ChevronRight, CircleDot, Bell, Moon, Sun, Search,
+  Sparkles, ChevronLeft, ChevronRight, CircleDot, Bell, BellRing, Moon, Sun, Search,
   Layers, MessageSquare, Languages, UserCircle, LogOut,
-  X, LayoutGrid, Building2,
+  X, LayoutGrid, Building2, Check,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
   Package, Folder, Boxes, Sliders, TrendingUp,
   Factory, Network, Coins, Users, Settings2,
   DollarSign, MapPin, Ruler, Tag, Settings,
   Plug, Mail, Database, Zap, UserCog,
-  BookOpen
+  BookOpen, Clock
 } from 'lucide-react'
 
 /* Menu icon name → React bileseni haritasi. Tree-shaking icin named import
@@ -53,7 +54,7 @@ var ICON_MAP = {
   Settings2: Settings2, DollarSign: DollarSign, MapPin: MapPin,
   Ruler: Ruler, Tag: Tag, Settings: Settings, Plug: Plug,
   Mail: Mail, Database: Database, Zap: Zap, UserCog: UserCog,
-  BookOpen: BookOpen,
+  BookOpen: BookOpen, Clock: Clock,
 }
 
 function resolveIcon(name) {
@@ -204,6 +205,143 @@ export default function Shell(props) {
 
   /* ── Profile popover ───────────────────────── */
   var [profileOpen, setProfileOpen] = useState(false)
+  var [openTabsOpen, setOpenTabsOpen] = useState(false)
+  var [dirtyTabs, setDirtyTabs] = useState({}) // { tabKey: true }
+  var iframeRefs = useRef({})
+
+  /* ── Bildirim dropdown + polling ─────────────
+     ReminderNotificationWorker her 60 sn'de bir bildirim uretebilir;
+     biz de 60 sn'de unread count'u tazeleyelim. Dropdown aciksa full list
+     yuklenir ve goruntulenir. */
+  var [notifOpen, setNotifOpen] = useState(false)
+  var [notifItems, setNotifItems] = useState([])
+  var [notifUnread, setNotifUnread] = useState(0)
+  var notifBtnRef = useRef(null)
+  var notifPanelRef = useRef(null)
+
+  useEffect(function () {
+    // Baslangic + 60 sn polling
+    function refreshCount() {
+      notifApi.unreadCount().then(function (d) {
+        setNotifUnread((d && d.unreadCount) || 0)
+      })
+    }
+    refreshCount()
+    var tid = setInterval(refreshCount, 60000)
+    return function () { clearInterval(tid) }
+  }, [])
+
+  useEffect(function () {
+    if (!notifOpen) return
+    // Acildi — full listeyi cek
+    notifApi.list(30).then(function (d) {
+      setNotifItems((d && d.items) || [])
+      setNotifUnread((d && d.unreadCount) || 0)
+    })
+    function handleOutside(e) {
+      if (notifBtnRef.current && notifBtnRef.current.contains(e.target)) return
+      if (notifPanelRef.current && notifPanelRef.current.contains(e.target)) return
+      setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return function () { document.removeEventListener('mousedown', handleOutside) }
+  }, [notifOpen])
+
+  function handleNotifClick(n) {
+    if (!n.isRead) {
+      notifApi.markRead(n.id)
+      setNotifItems(function (prev) { return prev.map(function (x) { return x.id === n.id ? { ...x, isRead: true } : x }) })
+      setNotifUnread(function (c) { return Math.max(0, c - 1) })
+    }
+    if (n.link) window.location.href = n.link
+  }
+
+  function handleMarkAllRead() {
+    notifApi.markAllRead()
+    setNotifItems(function (prev) { return prev.map(function (x) { return { ...x, isRead: true } }) })
+    setNotifUnread(0)
+  }
+
+  function formatNotifTime(iso) {
+    if (!iso) return ''
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso)
+    if (!m) return iso
+    var now = new Date()
+    var y = parseInt(m[1], 10), mo = parseInt(m[2], 10), d = parseInt(m[3], 10)
+    if (now.getFullYear() === y && (now.getMonth() + 1) === mo && now.getDate() === d) {
+      return m[4] + ':' + m[5]
+    }
+    return d + '.' + m[2] + '.' + y + ' ' + m[4] + ':' + m[5]
+  }
+
+  /* ── Baglanti durumu izleme ──────────────────────────────────────
+     Sunucu duser (ornek dotnet restart) tarayici iframe icinde
+     "localhost baglanmayi reddetti" hatasi gosterir — tema-uyumsuz.
+     Asagidaki polling ile biz de tespit eder, ustune tema-uyumlu bir
+     "baglanti koptu" overlay'i cikaririz. Server geri gelince
+     otomatik dismiss + aktif tab'i reload eder. */
+  var [connectionLost, setConnectionLost] = useState(false)
+  var [reconnecting, setReconnecting] = useState(false)
+  var connectionLostRef = useRef(false)
+  useEffect(function () {
+    connectionLostRef.current = connectionLost
+  }, [connectionLost])
+
+  useEffect(function () {
+    var cancelled = false
+    var controller
+
+    async function ping() {
+      if (cancelled) return
+      try {
+        controller = new AbortController()
+        var timer = setTimeout(function () { controller.abort() }, 4000)
+        // Lightweight: HEAD istegi ile sadece baglanti kontrolu — body indirmez.
+        // Any status (200/302/401) OK — sunucu cevap veriyorsa baglanti var.
+        await fetch('/Home/Index', {
+          method: 'HEAD',
+          signal: controller.signal,
+          credentials: 'same-origin',
+          cache: 'no-store',
+        })
+        clearTimeout(timer)
+        if (cancelled) return
+        if (connectionLostRef.current) {
+          // Reconnect — iframe'leri reload et ve overlay'i kapat
+          setReconnecting(true)
+          setTimeout(function () {
+            if (cancelled) return
+            Object.values(iframeRefs.current).forEach(function (el) {
+              try { if (el && el.src) el.src = el.src } catch (e) {}
+            })
+            setConnectionLost(false)
+            setReconnecting(false)
+          }, 400)
+        }
+      } catch (e) {
+        if (cancelled) return
+        if (!connectionLostRef.current) setConnectionLost(true)
+      }
+    }
+
+    // Ilk kontrol hemen, sonra her 5 saniyede bir
+    ping()
+    var intervalId = setInterval(ping, 5000)
+
+    // Ayrica offline/online browser event'leri
+    function onOffline() { setConnectionLost(true) }
+    function onOnline()  { ping() }
+    window.addEventListener('offline', onOffline)
+    window.addEventListener('online', onOnline)
+
+    return function () {
+      cancelled = true
+      clearInterval(intervalId)
+      if (controller) controller.abort()
+      window.removeEventListener('offline', onOffline)
+      window.removeEventListener('online', onOnline)
+    }
+  }, [])
 
   /* ── Sidebar expand state ──────────────────── */
   var parentMap = useRef(buildParentMap(menu))
@@ -336,9 +474,76 @@ export default function Shell(props) {
     setActiveMenuKey(node.key)
   }
 
+  /* ── Ic pencere (iframe) ici tetikleyicilerin kullandigi genel API ──
+     Satis teklifi gridinden "Stok Kartina Git" gibi kisayollar,
+     window.top.CalibraHub.openWorkspaceTab({ url, title, matchPath })
+     cagirarak yeni bir tab acar (mevcut tab'i kapatmadan). matchPath
+     verilmisse ayni prefix'e sahip varolan tab varsa URL'i ona aktarir
+     (iframe re-mount, yeni ?id=X ile acilir). */
+  var openWorkspaceTabRef = useRef(null)
+  openWorkspaceTabRef.current = function openWorkspaceTab(arg) {
+    if (!arg || !arg.url) return
+    var url = String(arg.url)
+    var title = arg.title || 'Yeni Sekme'
+    var matchPath = arg.matchPath || null
+
+    // 1) Ayni URL ile mevcut tab varsa → sadece aktive et
+    var exactExisting = tabs.find(function (t) { return t.url === url })
+    if (exactExisting) { setActiveTabKey(exactExisting.key); return }
+
+    // 2) matchPath verilmisse ayni kategoriye ait mevcut tab'i yeni URL ile guncelle
+    //    (iframe re-render, kullaniciya yeni belge/id ile ayni tab icinde acilir).
+    if (matchPath) {
+      var existingByPath = tabs.find(function (t) {
+        // Normalize: ?workspace=1 ve query string'i yoksay, path baslangicini kontrol et
+        try {
+          var tPath = (t.url || '').split('?')[0].toLowerCase()
+          var mPath = matchPath.toLowerCase()
+          return tPath === mPath || tPath.indexOf(mPath.toLowerCase()) === 0
+        } catch (_) { return false }
+      })
+      if (existingByPath) {
+        // URL'i degistir → iframe re-mount, yeni id ile acilir
+        setTabs(function (prev) {
+          return prev.map(function (t) {
+            return t.key === existingByPath.key ? Object.assign({}, t, { url: url, title: title }) : t
+          })
+        })
+        setActiveTabKey(existingByPath.key)
+        return
+      }
+    }
+
+    // 3) Yeni tab ac
+    var newTab = {
+      key: 'tab-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      url: url,
+      title: title,
+    }
+    setTabs(function (prev) {
+      var next = prev.concat([newTab])
+      if (next.length > 24) next = next.slice(next.length - 24)
+      return next
+    })
+    setActiveTabKey(newTab.key)
+  }
+  // Global API: iframe'den window.top.CalibraHub.openWorkspaceTab(...) ile cagrilir.
+  useEffect(function () {
+    if (typeof window === 'undefined') return undefined
+    window.CalibraHub = window.CalibraHub || {}
+    window.CalibraHub.openWorkspaceTab = function (arg) {
+      if (openWorkspaceTabRef.current) openWorkspaceTabRef.current(arg)
+    }
+    return function () {
+      if (window.CalibraHub) delete window.CalibraHub.openWorkspaceTab
+    }
+  }, [])
+
   /* ── Tab close ──────────────────────────────── */
-  function closeTab(key, e) {
-    if (e) e.stopPropagation()
+  // Ortak kapatma onay modali: kind === 'single' | 'all'
+  var [closeConfirm, setCloseConfirm] = useState(null)
+
+  function performCloseSingle(key) {
     setTabs(function(prev) {
       var idx = prev.findIndex(function(t) { return t.key === key })
       var next = prev.filter(function(t) { return t.key !== key })
@@ -350,6 +555,83 @@ export default function Shell(props) {
       }
       return next
     })
+    setDirtyTabs(function(prev) {
+      if (!prev[key]) return prev
+      var next = Object.assign({}, prev); delete next[key]; return next
+    })
+    delete iframeRefs.current[key]
+  }
+
+  function performCloseAll() {
+    setTabs([])
+    setActiveTabKey(null)
+    setDirtyTabs({})
+    iframeRefs.current = {}
+  }
+
+  function closeTab(key, e) {
+    if (e) e.stopPropagation()
+    if (dirtyTabs[key]) {
+      var t = tabs.find(function(x) { return x.key === key })
+      setCloseConfirm({
+        kind: 'single',
+        key: key,
+        title: 'Sayfayi Kapat?',
+        message: (t && t.title ? '"' + t.title + '" sayfasinda ' : 'Bu sayfada ') +
+                 'kaydedilmemis degisiklik var. Yine de kapatilsin mi?'
+      })
+      return
+    }
+    performCloseSingle(key)
+  }
+
+  function closeAllTabs() {
+    var dirtyCount = Object.keys(dirtyTabs).length
+    setCloseConfirm({
+      kind: 'all',
+      title: 'Tum Sayfalari Kapat?',
+      message: dirtyCount > 0
+        ? dirtyCount + ' sayfada kaydedilmemis degisiklik var. Tum sekmeleri kapatmak istiyor musunuz?'
+        : 'Tum sekmeleri kapatmak istiyor musunuz?'
+    })
+  }
+
+  function handleCloseConfirmAccept() {
+    var c = closeConfirm
+    setCloseConfirm(null)
+    if (!c) return
+    if (c.kind === 'single') performCloseSingle(c.key)
+    else if (c.kind === 'all') performCloseAll()
+  }
+  function handleCloseConfirmCancel() {
+    setCloseConfirm(null)
+  }
+
+  /* ── Iframe → parent mesaj dinleyicisi (dirty state) ─────── */
+  useEffect(function() {
+    function onMsg(e) {
+      var d = e && e.data
+      if (!d || typeof d !== 'object') return
+      if (d.type === 'calibra:dirty' && d.key) {
+        setDirtyTabs(function(prev) {
+          var isDirty = !!d.isDirty
+          var was = !!prev[d.key]
+          if (isDirty === was) return prev
+          var next = Object.assign({}, prev)
+          if (isDirty) next[d.key] = true; else delete next[d.key]
+          return next
+        })
+      }
+    }
+    window.addEventListener('message', onMsg)
+    return function() { window.removeEventListener('message', onMsg) }
+  }, [])
+
+  /* ── Iframe yuklendiginde handshake: tab key'i iframe'e gonder ── */
+  function handleIframeLoad(key) {
+    var el = iframeRefs.current[key]
+    if (!el || !el.contentWindow) return
+    try { el.contentWindow.postMessage({ type: 'calibra:init', key: key }, '*') } catch (ex) { /* ignore */ }
   }
 
   /* ── Tema/dil tercihlerini backend'e kaydet ───
@@ -407,6 +689,7 @@ export default function Shell(props) {
         expandedNodes={expandedNodes}
         onToggleNode={toggleExpand}
         onSelectLeaf={openNodeAsTab}
+        system={system}
       />
 
       {/* Sag: Ana alan */}
@@ -415,7 +698,9 @@ export default function Shell(props) {
         <Header
           isDark={isDark}
           user={user}
-          onProfileClick={function() { setProfileOpen(function(o) { return !o }) }}
+          tabsCount={tabs.length}
+          onProfileClick={function() { setProfileOpen(function(o) { return !o }); setOpenTabsOpen(false) }}
+          onOpenTabsClick={function() { setOpenTabsOpen(function(o) { return !o }); setProfileOpen(false) }}
         />
 
         <AnimatePresence>
@@ -435,12 +720,35 @@ export default function Shell(props) {
               />
             </>
           )}
+          {openTabsOpen && (
+            <>
+              <div
+                style={{ position: 'fixed', inset: 0, zIndex: 39 }}
+                onClick={function() { setOpenTabsOpen(false) }}
+              />
+              <OpenTabsPopover
+                isDark={isDark}
+                tabs={tabs}
+                activeTabKey={activeTabKey}
+                dirtyTabs={dirtyTabs}
+                onTabClick={function(key) {
+                    // Popover ACIK KALSIN — kullanici baska bir sayfaya da hemen gecebilsin.
+                    // Kapatma sadece disariya tiklama (backdrop) veya kapat butonu ile olur.
+                    setActiveTabKey(key)
+                }}
+                onTabClose={closeTab}
+                onCloseAll={function() { closeAllTabs(); setOpenTabsOpen(false) }}
+                onClose={function() { setOpenTabsOpen(false) }}
+              />
+            </>
+          )}
         </AnimatePresence>
 
         <TabBar
           isDark={isDark}
           tabs={tabs}
           activeKey={activeTabKey}
+          dirtyTabs={dirtyTabs}
           onTabClick={setActiveTabKey}
           onTabClose={closeTab}
         />
@@ -457,6 +765,8 @@ export default function Shell(props) {
               return (
                 <iframe
                   key={t.key}
+                  ref={function(el) { if (el) iframeRefs.current[t.key] = el; else delete iframeRefs.current[t.key] }}
+                  onLoad={function() { handleIframeLoad(t.key) }}
                   src={appendWorkspaceFlag(t.url)}
                   title={t.title}
                   className="absolute inset-0 w-full h-full border-0"
@@ -470,9 +780,239 @@ export default function Shell(props) {
           )}
         </div>
 
-        <StatusBar isDark={isDark} system={system} user={user} />
       </div>
+
+      {/* ── Baglanti koptu overlay'i — tema uyumlu, sevimli animasyon ──
+          Sunucu cevap vermezse (localhost reddetti), iframe'lerin uzerine gelir.
+          Server geri gelince otomatik kaybolur + iframe'ler reload edilir. */}
+      <AnimatePresence>
+        {connectionLost && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[9500] flex items-center justify-center p-6"
+            style={{
+              background: isDark ? 'rgba(10,13,23,.85)' : 'rgba(248,250,252,.85)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.96, y: -8 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.96, y: -8 }}
+              transition={{ duration: 0.22, ease: [0.2, 0.8, 0.3, 1] }}
+              className={
+                'relative w-full max-w-md rounded-2xl overflow-hidden shadow-2xl border ' +
+                (isDark
+                  ? 'bg-gradient-to-br from-slate-800 to-slate-900 border-white/10'
+                  : 'bg-white border-slate-200')
+              }
+            >
+              {/* Ust seridi — kirmizi/amber animasyonlu */}
+              <div
+                className="h-1"
+                style={{
+                  background: 'linear-gradient(90deg, #ef4444, #f59e0b, #ef4444)',
+                  backgroundSize: '200% 100%',
+                  animation: 'shellConnLostShimmer 2s linear infinite',
+                }}
+              />
+
+              <div className="px-8 py-8 flex flex-col items-center text-center gap-3">
+                {/* Sevimli animasyonlu baglanti yok ikonu */}
+                <motion.div
+                  animate={{ y: [0, -4, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  className={'w-20 h-20 rounded-full flex items-center justify-center ' + (isDark ? 'bg-rose-500/15' : 'bg-rose-50')}
+                >
+                  <svg
+                    width="44" height="44" viewBox="0 0 24 24" fill="none"
+                    stroke={isDark ? '#fca5a5' : '#ef4444'}
+                    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                  >
+                    <path d="M1 1l22 22"/>
+                    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+                    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+                    <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+                    <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+                    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                    <line x1="12" y1="20" x2="12.01" y2="20"/>
+                  </svg>
+                </motion.div>
+
+                <h3 className={'text-lg font-bold ' + (isDark ? 'text-white' : 'text-slate-900')}>
+                  {reconnecting ? 'Bağlantı Geri Geldi!' : 'Bağlantı Kesildi'}
+                </h3>
+
+                {reconnecting ? (
+                  <p className={'text-sm ' + (isDark ? 'text-emerald-300' : 'text-emerald-700')}>
+                    ✓ Sunucu tekrar erişilebilir. Sayfalar yükleniyor...
+                  </p>
+                ) : (
+                  <>
+                    <p className={'text-sm ' + (isDark ? 'text-white/70' : 'text-slate-600')}>
+                      Sunucu ile iletişim kurulamıyor. Bu genellikle kısa süreli bir kesintidir;
+                      sunucu hazır olduğunda otomatik bağlanacağız.
+                    </p>
+                    <div className={'flex items-center gap-2 mt-2 text-xs ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                      </span>
+                      <span>Yeniden deneniyor...</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Shimmer animasyonu — baglanti overlay'i icin. */}
+      <style>{`
+        @keyframes shellConnLostShimmer {
+          0%   { background-position: 0% 0%; }
+          100% { background-position: 200% 0%; }
+        }
+      `}</style>
+
+      {/* Kapatma onay modali — ekran ortasinda, 5 sn geri sayim sonunda kapatir */}
+      <AnimatePresence>
+        {closeConfirm && (
+          <CloseConfirmModal
+            isDark={isDark}
+            title={closeConfirm.title}
+            message={closeConfirm.message}
+            onAccept={handleCloseConfirmAccept}
+            onCancel={handleCloseConfirmCancel}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CloseConfirmModal — 5 sn geri sayim, iptal edilmezse otomatik kapatir
+   ══════════════════════════════════════════════════════════════ */
+function CloseConfirmModal(props) {
+  var isDark = props.isDark
+  var DURATION_MS = 5000
+  var [remainingMs, setRemainingMs] = useState(DURATION_MS)
+  var startRef = useRef(Date.now())
+  var timerRef = useRef(null)
+
+  useEffect(function() {
+    startRef.current = Date.now()
+    function tick() {
+      var elapsed = Date.now() - startRef.current
+      var rem = Math.max(0, DURATION_MS - elapsed)
+      setRemainingMs(rem)
+      if (rem <= 0) {
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+        props.onAccept()
+        return
+      }
+    }
+    timerRef.current = setInterval(tick, 100)
+    return function() {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    }
+  }, [])
+
+  useEffect(function() {
+    function onKey(e) {
+      if (e.key === 'Escape') props.onCancel()
+      else if (e.key === 'Enter') props.onAccept()
+    }
+    document.addEventListener('keydown', onKey)
+    return function() { document.removeEventListener('keydown', onKey) }
+  }, [])
+
+  var seconds = Math.ceil(remainingMs / 1000)
+  var progressPct = (remainingMs / DURATION_MS) * 100
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      onClick={props.onCancel}
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-5"
+      style={{
+        background: 'rgba(0,0,0,.55)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.96, y: -6 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.96, y: -6 }}
+        transition={{ duration: 0.18 }}
+        onClick={function(e) { e.stopPropagation() }}
+        className={
+          'w-full max-w-md rounded-2xl overflow-hidden shadow-2xl ' +
+          (isDark
+            ? 'bg-[#1e293b] border border-white/10 text-white'
+            : 'bg-white border border-slate-200 text-slate-900')
+        }
+      >
+        <div className="p-6 flex flex-col items-center text-center gap-3">
+          <div className={'w-14 h-14 rounded-full flex items-center justify-center ' + (isDark ? 'bg-rose-500/15' : 'bg-rose-50')}>
+            <X size={28} strokeWidth={2.4} className="text-rose-500" />
+          </div>
+          <h3 className="text-base font-bold">{props.title}</h3>
+          <p className={'text-sm ' + (isDark ? 'text-white/70' : 'text-slate-600')}>
+            {props.message}
+          </p>
+          <p className={'text-[11.5px] font-medium mt-1 ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+            <strong>{seconds}</strong> saniye icinde iptal edilmezse otomatik kapatilir.
+          </p>
+
+          {/* Geri sayim cubugu */}
+          <div className={'w-full h-1.5 rounded-full overflow-hidden ' + (isDark ? 'bg-white/8' : 'bg-slate-100')}>
+            <div
+              style={{
+                width: progressPct + '%',
+                height: '100%',
+                background: 'linear-gradient(90deg,#f43f5e,#ef4444)',
+                transition: 'width 100ms linear',
+              }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 mt-3 w-full">
+            <button
+              type="button"
+              onClick={props.onCancel}
+              autoFocus
+              className={
+                'flex-1 px-4 py-2 rounded-lg text-sm font-bold transition-colors ' +
+                (isDark
+                  ? 'bg-white/10 text-white border border-white/15 hover:bg-white/20'
+                  : 'bg-slate-100 text-slate-800 border border-slate-200 hover:bg-slate-200')
+              }
+            >
+              Iptal
+            </button>
+            <button
+              type="button"
+              onClick={props.onAccept}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 shadow-md shadow-rose-500/30 transition-all flex items-center justify-center gap-1.5"
+            >
+              <X size={14} strokeWidth={2.6} />
+              Kapat
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -537,6 +1077,7 @@ function Sidebar(props) {
         'relative z-10 flex flex-col w-[260px] flex-shrink-0 border-r backdrop-blur-xl transition-colors duration-500 ' +
         borderColor + ' ' + bgColor
       }
+      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
     >
       {/* Brand */}
       <div className={'flex items-center gap-2.5 px-5 h-14 border-b ' + borderColor}>
@@ -571,6 +1112,7 @@ function Sidebar(props) {
             value={searchTerm}
             onChange={function(e) { setSearchTerm(e.target.value) }}
             placeholder="Menude ara..."
+            style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
             className={
               'w-full pl-9 pr-8 py-1.5 rounded-lg text-[12px] transition-all focus:outline-none ' +
               (isDark
@@ -619,9 +1161,17 @@ function Sidebar(props) {
       </nav>
 
       <div className={'px-4 py-3 border-t ' + borderColor}>
-        <div className={'flex items-center gap-2 text-[10px] ' + (isDark ? 'text-white/55' : 'text-slate-500')}>
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
-          <span>Sistem calisiyor</span>
+        <div className={'flex items-center gap-2 text-[10px] font-mono ' + (isDark ? 'text-white/55' : 'text-slate-500')}>
+          {props.system && props.system.company && (
+            <span className="flex items-center gap-1.5 truncate">
+              <Building2 size={11} className="flex-shrink-0" />
+              <span className="truncate">{props.system.company}</span>
+            </span>
+          )}
+          {props.system && props.system.company && (
+            <span className={isDark ? 'text-white/20' : 'text-slate-300'}>·</span>
+          )}
+          <span className="flex-shrink-0">v1.0.0</span>
         </div>
       </div>
     </aside>
@@ -648,10 +1198,11 @@ function SidebarNode(props) {
   // Cerceve (border) kaldirildi — dar sidebar'da kart gibi gorunen hat
   // yerine yalnizca arka plan opakligi ile aktif/hover durumu ayirt edilir.
   var base = 'flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-sm font-medium cursor-pointer transition-all group'
+  // Aktif menu item: yesil (acik konumdaki sayfayi vurgular)
   var variant = isActive
     ? (isDark
-      ? 'bg-indigo-500/20 text-white'
-      : 'bg-indigo-100 text-indigo-700')
+      ? 'bg-emerald-500/20 text-white ring-1 ring-emerald-500/30'
+      : 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200')
     : (isDark
       ? 'text-white/60 hover:bg-white/[0.05] hover:text-white'
       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900')
@@ -661,17 +1212,17 @@ function SidebarNode(props) {
       <motion.div
         whileTap={{ scale: 0.98 }}
         onClick={handleClick}
-        className={base + ' ' + variant}
-        style={{ marginLeft: level * 12, marginBottom: 2 }}
+        className={base + ' ' + variant + ' select-none'}
+        style={{ marginLeft: level * 12, marginBottom: 2, userSelect: 'none', WebkitUserSelect: 'none' }}
       >
         <Icon
           size={15}
           strokeWidth={1.8}
           className={isActive
-            ? (isDark ? 'text-indigo-300' : 'text-indigo-600')
+            ? (isDark ? 'text-emerald-300' : 'text-emerald-600')
             : (isDark ? 'text-white/40 group-hover:text-white/80' : 'text-slate-400 group-hover:text-slate-700')}
         />
-        <span className="flex-1 truncate text-[13px]">{node.label}</span>
+        <span className="flex-1 truncate text-[13px] select-none">{node.label}</span>
         {hasChildren && (
           <motion.span
             animate={{ rotate: expanded ? 90 : 0 }}
@@ -682,7 +1233,7 @@ function SidebarNode(props) {
           </motion.span>
         )}
         {isActive && !hasChildren && (
-          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
         )}
       </motion.div>
 
@@ -745,6 +1296,29 @@ function Header(props) {
         >
           <Bell size={15} strokeWidth={1.8} />
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
+        </button>
+
+        <button
+          onClick={props.onOpenTabsClick}
+          className={
+            'relative p-2 rounded-xl transition-colors ' +
+            (isDark ? 'hover:bg-white/5 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
+          }
+          title="Acik Sayfalar"
+        >
+          <Layers size={15} strokeWidth={1.8} />
+          {props.tabsCount > 0 && (
+            <span
+              className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                color: '#fff',
+                boxShadow: '0 2px 6px rgba(99,102,241,0.45)',
+              }}
+            >
+              {props.tabsCount}
+            </span>
+          )}
         </button>
 
         <div className={'w-px h-6 ' + (isDark ? 'bg-white/10' : 'bg-slate-200')} />
@@ -837,7 +1411,6 @@ function ProfilePopover(props) {
       <div className={isDark ? 'h-px bg-white/10' : 'h-px bg-slate-200'} />
 
       <div className="py-2 px-2">
-        <PopoverRow isDark={isDark} icon={Layers} label="Acik Sayfalar" badge="" />
         <PopoverRow isDark={isDark} icon={MessageSquare} label="Mesajlar" badge="" />
 
         {/* Language switch */}
@@ -870,29 +1443,30 @@ function ProfilePopover(props) {
           </div>
         </div>
 
-        {/* Theme switch */}
-        <div className={
-          'flex items-center gap-3 px-3 py-2 rounded-xl ' +
-          (isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-100')
-        }>
+        {/* Theme — switch yerine tiklanabilir ikon satiri.
+            Ikon "hedef durumu" gosterir: dark iken Sun (tiklayinca light'a gec),
+            light iken Moon (tiklayinca dark'a gec). */}
+        <button
+          type="button"
+          onClick={props.onThemeToggle}
+          className={
+            'w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left ' +
+            (isDark ? 'hover:bg-white/[0.05]' : 'hover:bg-slate-100')
+          }
+        >
           {isDark
-            ? <Moon size={15} strokeWidth={1.8} className="text-white/50" />
-            : <Sun size={15} strokeWidth={1.8} className="text-amber-500" />}
-          <span className={'flex-1 text-[13px] font-medium ' + (isDark ? 'text-white/80' : 'text-slate-700')}>
+            ? <Sun  size={16} strokeWidth={2} className="text-amber-400" />
+            : <Moon size={16} strokeWidth={2} className="text-slate-700" />}
+          <span className={'flex-1 text-[13px] font-medium ' + (isDark ? 'text-white/85' : 'text-slate-700')}>
             Tema
           </span>
-          <button
-            onClick={props.onThemeToggle}
-            className={'relative w-10 h-5 rounded-full transition-colors ' + (isDark ? 'bg-indigo-500/60' : 'bg-slate-300')}
-          >
-            <motion.div
-              className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
-              initial={false}
-              animate={{ left: isDark ? 22 : 2 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-            />
-          </button>
-        </div>
+          <span className={
+            'text-[11px] font-semibold uppercase tracking-wider ' +
+            (isDark ? 'text-white/45' : 'text-slate-500')
+          }>
+            {isDark ? 'Koyu' : 'Açık'}
+          </span>
+        </button>
 
         <PopoverRow isDark={isDark} icon={UserCircle} label="Profil Bilgileri" />
       </div>
@@ -913,6 +1487,159 @@ function ProfilePopover(props) {
           <LogOut size={15} strokeWidth={2} />
           <span>Cikis Yap</span>
         </a>
+      </div>
+    </motion.div>
+  )
+}
+
+function OpenTabsPopover(props) {
+  var isDark = props.isDark
+  var tabs = props.tabs || []
+  var ref = useRef(null)
+
+  useEffect(function() {
+    function onDoc(e) {
+      if (ref.current && !ref.current.contains(e.target)) props.onClose()
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') props.onClose()
+    }
+    var t = setTimeout(function() { document.addEventListener('mousedown', onDoc) }, 10)
+    document.addEventListener('keydown', onKey)
+    return function() {
+      clearTimeout(t)
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [])
+
+  var glassBg = isDark ? 'rgba(12, 15, 26, 0.92)' : 'rgba(255, 255, 255, 0.96)'
+  var glassBorder = isDark ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid rgba(15, 23, 42, 0.1)'
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: -8, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.96 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+      className="absolute right-20 top-16 z-40 w-64 rounded-2xl overflow-hidden"
+      style={{
+        background: glassBg,
+        backdropFilter: 'blur(28px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(28px) saturate(140%)',
+        border: glassBorder,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+      }}
+    >
+      <div className="p-3 pb-2 flex items-center gap-2.5">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{
+            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+            boxShadow: '0 6px 14px rgba(99,102,241,0.3)',
+          }}
+        >
+          <Layers size={15} strokeWidth={2} className="text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className={'text-sm font-bold ' + (isDark ? 'text-white' : 'text-slate-900')}>
+            Acik Sayfalar
+          </h3>
+          <p className={'text-[11px] ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
+            {tabs.length} sayfa acik
+          </p>
+        </div>
+      </div>
+
+      <div className={isDark ? 'h-px bg-white/10' : 'h-px bg-slate-200'} />
+
+      <div className="py-2 px-2 max-h-[420px] overflow-y-auto smartcard-widgets-scroll">
+        {tabs.length === 0 && (
+          <div className={'px-3 py-6 text-center text-[12px] italic ' + (isDark ? 'text-white/35' : 'text-slate-400')}>
+            Hicbir sayfa acik degil.
+          </div>
+        )}
+        {/* Tumunu Kapat — sayfa listesinin en ustunde, ayri bir "sayfa" gorunumunde.
+            Diger liste elemanlarinin row stiliyle hizali ama kirmizi/danger tema. */}
+        {tabs.length > 0 && (
+          <motion.div
+            whileHover={{ x: 1 }}
+            whileTap={{ scale: 0.985 }}
+            onClick={function() { if (props.onCloseAll) props.onCloseAll() }}
+            className={
+              'group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all mb-1 ' +
+              (isDark
+                ? 'bg-rose-500/10 hover:bg-rose-500/20 border border-rose-400/25 hover:border-rose-400/50 text-rose-200 hover:text-white'
+                : 'bg-rose-50 hover:bg-rose-100 border border-rose-200 hover:border-rose-400 text-rose-700 hover:text-rose-800')
+            }
+            title="Tum sekmeleri kapat"
+          >
+            <span
+              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
+              style={{
+                background: isDark ? 'rgba(244,63,94,0.25)' : 'rgba(244,63,94,0.12)',
+                boxShadow: '0 0 8px rgba(244,63,94,0.35)',
+              }}
+            >
+              <X size={12} strokeWidth={2.6} />
+            </span>
+            <span className="flex-1 text-[12.5px] font-semibold">
+              Tümünü Kapat
+            </span>
+            <span className={'text-[10.5px] font-mono tabular-nums ' + (isDark ? 'text-rose-200/70' : 'text-rose-500')}>
+              {tabs.length}
+            </span>
+          </motion.div>
+        )}
+        {tabs.map(function(t) {
+          var isActive = t.key === props.activeTabKey
+          var isDirty = !!(props.dirtyTabs && props.dirtyTabs[t.key])
+          var dotBg = isDirty
+            ? '#22c55e'
+            : (isActive ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : (isDark ? 'rgba(255,255,255,0.25)' : '#cbd5e1'))
+          var dotShadow = isDirty
+            ? '0 0 8px rgba(34,197,94,0.95), 0 0 14px rgba(34,197,94,0.55)'
+            : (isActive ? '0 0 8px rgba(99,102,241,0.8)' : 'none')
+          return (
+            <div
+              key={t.key}
+              onClick={function() { if (props.onTabClick) props.onTabClick(t.key) }}
+              className={
+                'group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-colors ' +
+                (isActive
+                  ? (isDark ? 'bg-indigo-500/15 text-white' : 'bg-indigo-50 text-indigo-900')
+                  : (isDark ? 'hover:bg-white/[0.04] text-white/70' : 'hover:bg-slate-100 text-slate-600'))
+              }
+              title={isDirty ? 'Kaydedilmemis degisiklik: ' + t.title : t.title}
+            >
+              <span
+                className={'w-1.5 h-1.5 rounded-full flex-shrink-0 ' + (isDirty ? 'calibra-dirty-dot' : '')}
+                style={{ background: dotBg, boxShadow: dotShadow }}
+              />
+              <span className="flex-1 truncate text-[12.5px] font-medium">
+                {t.title}
+              </span>
+              <button
+                type="button"
+                onClick={function(e) {
+                  e.stopPropagation()
+                  if (props.onTabClose) props.onTabClose(t.key, e)
+                }}
+                className={
+                  'w-6 h-6 rounded flex items-center justify-center transition-all ' +
+                  (isDark
+                    ? 'bg-rose-500/15 hover:bg-rose-500/30 border border-rose-400/30 text-rose-300 hover:text-rose-100'
+                    : 'bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-500 hover:text-rose-700')
+                }
+                title="Sekmeyi kapat"
+                aria-label="Sekmeyi kapat"
+              >
+                <X size={13} strokeWidth={3} />
+              </button>
+            </div>
+          )
+        })}
       </div>
     </motion.div>
   )
@@ -954,17 +1681,102 @@ function PopoverRow(props) {
 function TabBar(props) {
   var isDark = props.isDark
   var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
+  var scrollRef = useRef(null)
+  var [canLeft, setCanLeft] = useState(false)
+  var [canRight, setCanRight] = useState(false)
+
+  function recomputeOverflow() {
+    var el = scrollRef.current
+    if (!el) return
+    var l = el.scrollLeft
+    var max = el.scrollWidth - el.clientWidth
+    setCanLeft(l > 1)
+    setCanRight(max - l > 1)
+  }
+
+  useEffect(function() {
+    recomputeOverflow()
+    var el = scrollRef.current
+    if (!el) return
+    el.addEventListener('scroll', recomputeOverflow)
+    window.addEventListener('resize', recomputeOverflow)
+    return function() {
+      el.removeEventListener('scroll', recomputeOverflow)
+      window.removeEventListener('resize', recomputeOverflow)
+    }
+  }, [])
+
+  // Tab listesi degistiginde / aktif tab degistiginde overflow yeniden hesapla
+  // ve aktif tab'i gorunur hale getir.
+  useEffect(function() {
+    recomputeOverflow()
+    var el = scrollRef.current
+    if (!el || !props.activeKey) return
+    var active = el.querySelector('[data-tab-key="' + props.activeKey + '"]')
+    if (active && active.scrollIntoView) {
+      active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+    }
+  }, [props.tabs.length, props.activeKey])
+
+  function scrollBy(dx) {
+    var el = scrollRef.current
+    if (!el) return
+    el.scrollBy({ left: dx, behavior: 'smooth' })
+  }
+
+  function handleWheel(e) {
+    // Vertical wheel → horizontal scroll (shift+wheel veya trackpad zaten dogal)
+    if (e.deltaY !== 0 && e.deltaX === 0) {
+      var el = scrollRef.current
+      if (!el) return
+      el.scrollLeft += e.deltaY
+      e.preventDefault()
+    }
+  }
+
+  var chevronBtn = 'absolute top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-md flex items-center justify-center transition-colors ' +
+    (isDark ? 'bg-[#0a0d17] border border-white/10 text-white/60 hover:text-white hover:bg-white/[0.06]'
+            : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100')
 
   return (
     <div
-      className={'flex items-center gap-1 px-4 h-11 border-b flex-shrink-0 relative overflow-x-auto smartcard-widgets-scroll ' + borderColor}
+      className={'flex items-center h-11 border-b flex-shrink-0 relative ' + borderColor}
       style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
     >
+      {canLeft && (
+        <button
+          type="button"
+          onClick={function() { scrollBy(-200) }}
+          className={chevronBtn}
+          style={{ left: 4 }}
+          title="Sola kaydir"
+        >
+          <ChevronLeft size={14} strokeWidth={2.2} />
+        </button>
+      )}
+      {canRight && (
+        <button
+          type="button"
+          onClick={function() { scrollBy(200) }}
+          className={chevronBtn}
+          style={{ right: 4 }}
+          title="Saga kaydir"
+        >
+          <ChevronRight size={14} strokeWidth={2.2} />
+        </button>
+      )}
+      <div
+        ref={scrollRef}
+        onWheel={handleWheel}
+        className="flex items-center gap-1 flex-1 h-full overflow-x-auto smartcard-widgets-scroll"
+        style={{ paddingLeft: canLeft ? 34 : 16, paddingRight: canRight ? 34 : 16 }}
+      >
       {props.tabs.map(function(t) {
         var isActive = t.key === props.activeKey
         return (
           <div
             key={t.key}
+            data-tab-key={t.key}
             onClick={function() { props.onTabClick(t.key) }}
             onMouseDown={function(e) { e.preventDefault() }}
             className={
@@ -973,8 +1785,18 @@ function TabBar(props) {
                 ? (isDark ? 'text-white bg-white/[0.06]' : 'text-slate-900 bg-slate-100')
                 : (isDark ? 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'))
             }
-            title={t.title}
+            title={(props.dirtyTabs && props.dirtyTabs[t.key]) ? 'Kaydedilmemis degisiklik: ' + t.title : t.title}
           >
+            {props.dirtyTabs && props.dirtyTabs[t.key] && (
+              <span
+                className="calibra-dirty-dot"
+                style={{
+                  width: 7, height: 7, borderRadius: 9999, flexShrink: 0,
+                  background: '#22c55e',
+                  boxShadow: '0 0 8px rgba(34,197,94,0.95), 0 0 14px rgba(34,197,94,0.55)',
+                }}
+              />
+            )}
             <span className="truncate select-none">{t.title}</span>
             <button
               onClick={function(e) { props.onTabClose(t.key, e) }}
@@ -999,6 +1821,7 @@ function TabBar(props) {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

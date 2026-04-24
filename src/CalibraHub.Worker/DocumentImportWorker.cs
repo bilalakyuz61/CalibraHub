@@ -9,6 +9,7 @@ namespace CalibraHub.Worker;
 
 public sealed class DocumentImportWorker : BackgroundService
 {
+    private const string TaskCode = "DOC_IMPORT";
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DocumentImportWorker> _logger;
 
@@ -22,11 +23,28 @@ public sealed class DocumentImportWorker : BackgroundService
     {
         _logger.LogInformation("Belge ice aktarma worker'i baslatildi.");
 
+        // Startup registration
+        try
+        {
+            using var regScope = _scopeFactory.CreateScope();
+            var repo = regScope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
+            await repo.UpsertRegistrationAsync(new ScheduledTask
+            {
+                Code                = TaskCode,
+                Name                = "Belge Ice Aktarim",
+                Description         = "Aktif entegratorlerden belgeleri cekip DB'ye aktarir.",
+                ScheduleDescription = "Entegrator polling interval'ine gore",
+                IsEnabled           = true,
+            }, stoppingToken);
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "ScheduledTask register failed."); }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             using var scope = _scopeFactory.CreateScope();
             var importService = scope.ServiceProvider.GetRequiredService<IDocumentImportService>();
             var integratorSettingsRepository = scope.ServiceProvider.GetRequiredService<IIntegratorSettingsRepository>();
+            var taskRepo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
 
             try
             {
@@ -40,6 +58,15 @@ public sealed class DocumentImportWorker : BackgroundService
                     result.SkippedCount,
                     (int)nextDelay.TotalSeconds);
 
+                try
+                {
+                    await taskRepo.ReportRunAsync(TaskCode, 0,
+                        $"{result.ImportedCount} eklendi, {result.SkippedCount} atlandi.",
+                        null,
+                        DateTime.UtcNow.Add(nextDelay), stoppingToken);
+                }
+                catch { /* swallow */ }
+
                 await Task.Delay(nextDelay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -49,6 +76,12 @@ public sealed class DocumentImportWorker : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Belge ice aktarma worker'inda hata olustu.");
+                try
+                {
+                    await taskRepo.ReportRunAsync(TaskCode, 1, ex.Message, null,
+                        DateTime.UtcNow.AddSeconds(30), stoppingToken);
+                }
+                catch { /* swallow */ }
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
         }

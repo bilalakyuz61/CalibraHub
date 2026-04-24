@@ -89,7 +89,7 @@ public static class UiCatalog
                 Label("erp_settings", "ERP Baglanti Ayarlari", "ERP Connection Settings"),
                 Label("appearance", "Dil Etiketleri", "Language Labels"),
                 Label("material_card_design", "Malzeme Karti Tasarimi", "Material Card Design"),
-                Label("screen_design_settings", "Ekran Tasarim Ayarlari", "Screen Design Settings"),
+                Label("screen_design_settings", "Alan ve Widget Tanimlari", "Field & Widget Definitions"),
                 Label("system_log_report", "Sistem Log Raporu", "System Log Report")),
             ["shared.admin_menu"] = Form(
                 "shared.admin_menu",
@@ -110,7 +110,7 @@ public static class UiCatalog
                 Label("appearance", "Dil Etiketleri", "Language Labels"),
                 Label("views", "Gorunumler", "Views"),
                 Label("items", "Malzeme Kartlari", "Material Cards"),
-                Label("screen_design_settings", "Ekran Tasarim Ayarlari", "Screen Design Settings"),
+                Label("screen_design_settings", "Alan ve Widget Tanimlari", "Field & Widget Definitions"),
                 Label("log", "Log", "Logs"),
                 Label("system_log_report", "Sistem Log Raporu", "System Log Report"),
                 Label("definitions", "Tanimlar", "Definitions"),

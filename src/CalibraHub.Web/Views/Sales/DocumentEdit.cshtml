@@ -13,6 +13,15 @@
 
 @section Styles {
 <style>
+    /* Sayfa genelinde number input spinner'larini gizle (yukari/asagi ok tuslari) */
+    .page-sales-quote-edit input[type="number"]::-webkit-outer-spin-button,
+    .page-sales-quote-edit input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    .page-sales-quote-edit input[type="number"] {
+        -moz-appearance: textfield;
+    }
     .page-sales-quote-edit .integrator-dashboard { height: 100%; min-height: 0; }
     .page-sales-quote-edit .integrator-dashboard__content {
         display: flex !important; flex-direction: column;
@@ -378,7 +387,7 @@
         border-color: #ef4444 !important;
         background: rgba(239,68,68,.06) !important;
         box-shadow: 0 0 0 3px rgba(239,68,68,.2) !important;
-        animation: sqeShake 0.4s cubic-bezier(0.36,0.07,0.19,0.97);
+        animation: sqeShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
     }
     @@keyframes sqeShake {
         10%, 90% { transform: translateX(-2px); }
@@ -522,6 +531,27 @@
     body.app-theme-dark .sqe-hlabel {
         color: rgba(255,255,255,.7);
     }
+    /* Cari Isim: input degil, salt-okunur etiket (span) */
+    .sqe-hlabel-value {
+        display: inline-block;
+        padding: 4px 0;
+        font-size: 0.86rem;
+        font-weight: 600;
+        color: #1e293b;
+        min-height: 1.4em;
+    }
+    body.app-theme-dark .sqe-hlabel-value {
+        color: rgba(255,255,255,.92);
+    }
+    .sqe-hlabel-value:empty::before {
+        content: attr(data-placeholder);
+        color: rgba(100,116,139,.55);
+        font-weight: 400;
+        font-style: italic;
+    }
+    body.app-theme-dark .sqe-hlabel-value:empty::before {
+        color: rgba(255,255,255,.35);
+    }
     .sqe-hinput {
         flex: 1; max-width: 280px;
     }
@@ -534,12 +564,8 @@
         background: rgba(255, 255, 255, 0.04) !important;
         color: rgba(255, 255, 255, 0.5);
     }
-    .sqe-hinput.sqe-flash { animation: sqeShake 0.45s cubic-bezier(.36,.07,.19,.97) both; }
-    @@keyframes sqeShake {
-        10%, 90% { transform: translateX(-2px); }
-        20%, 80% { transform: translateX(2px); }
-        30%, 50%, 70% { transform: translateX(-4px); }
-        40%, 60% { transform: translateX(4px); }
+    .sqe-hinput.sqe-flash {
+        animation: sqeShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
     }
     .sqe-customer-warn {
         display: none;
@@ -616,11 +642,68 @@
     .sq-ln-combobtn:hover { background: #ede9fe; border-color: #c4b5fd; }
     .sq-ln-combdisplay { font-size: 0.7rem; color: #7c3aed; display: none; margin-top: 2px; }
     /* Toplamlar */
-    .sqe-totals { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 10px 8px; font-size: 0.84rem; }
-    .sqe-total-row { display: flex; gap: 16px; align-items: center; }
-    .sqe-total-label { color: #64748b; font-weight: 600; min-width: 120px; text-align: right; }
-    .sqe-total-value { font-weight: 700; min-width: 100px; text-align: right; }
-    .sqe-grand-total { font-size: 1rem; color: #1d4ed8; }
+    /* Toplamlar: 3 kolon grid — etiket | kontrol (input/boş) | tutar. Her satir
+       grid'e katildigi icin tutarlar her zaman ayni X kolonunda hizalanir. */
+    .sqe-totals {
+        display: grid;
+        grid-template-columns: auto 56px 120px;
+        column-gap: 14px; row-gap: 6px;
+        justify-content: end; align-items: center;
+        padding: 10px 8px;
+        font-size: 0.84rem;
+    }
+    .sqe-kdv-rows { display: contents; }
+    .sqe-total-label { color: rgba(255,255,255,.55); font-weight: 600; text-align: right; white-space: nowrap; }
+    body.app-theme-light .sqe-total-label { color: #64748b; }
+    .sqe-total-control { justify-self: end; width: 100%; }
+    .sqe-total-value { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: rgba(255,255,255,.85); }
+    body.app-theme-light .sqe-total-value { color: #1e293b; }
+    /* Genel İskonto input — tema uyumlu, dar, ortalanmis (% degeri) */
+    .sqe-total-input {
+        width: 100%;
+        max-width: 50px;
+        padding: 3px 4px;
+        border-radius: 6px;
+        font-size: 0.82rem;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        background: rgba(255,255,255,.06);
+        border: 1px solid rgba(255,255,255,.12);
+        color: rgba(255,255,255,.92);
+        transition: border-color .12s, background .12s;
+    }
+    body.app-theme-light .sqe-total-input {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        color: #1e293b;
+    }
+    .sqe-total-input:hover {
+        background: rgba(255,255,255,.1);
+        border-color: rgba(255,255,255,.18);
+    }
+    body.app-theme-light .sqe-total-input:hover {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+    }
+    .sqe-total-input:focus {
+        outline: none;
+        border-color: #6366f1;
+        background: rgba(99,102,241,.08);
+        box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+    }
+    body.app-theme-light .sqe-total-input:focus {
+        background: #eef2ff;
+        border-color: #4f46e5;
+        box-shadow: 0 0 0 3px rgba(79,70,229,.15);
+    }
+    /* Sayisal alanlarda yukari/asagi ok tuslarini gizle */
+    .sq-no-spinner::-webkit-outer-spin-button,
+    .sq-no-spinner::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    .sq-no-spinner { -moz-appearance: textfield; }
+    .sqe-grand-total { font-size: 1rem; color: #1d4ed8; font-weight: 800; }
     /* Status badge */
     .sqe-status-badge { font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 12px; margin-left: 8px; }
     .sqe-status-Draft { background: #f1f5f9; color: #475569; }
@@ -759,26 +842,48 @@
         backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
         position: relative; overflow: hidden;
     }
-    /* Kaydet basarisi — uyari yerine aksiyon seridinde yesil sweep animasyonu */
+    /* Kaydet basarisi — K.I.T.T. on tarayici tarzi; basari icin yesil.
+       Ince yesil bir "goz" seridin alt kenarinda soldan saga ve geri surukleniyor. */
+    .sqe-action-bar::before {
+        content: ''; position: absolute;
+        left: 0; right: 0; bottom: 0;
+        height: 2px;
+        pointer-events: none; opacity: 0;
+        background: linear-gradient(90deg,
+            rgba(0, 60, 20, 0) 0%,
+            rgba(10, 120, 40, .55) 50%,
+            rgba(0, 60, 20, 0) 100%);
+    }
     .sqe-action-bar::after {
-        content: ''; position: absolute; inset: 0;
+        content: ''; position: absolute;
+        left: 0; bottom: -1px;
+        width: 18%; height: 4px;
         pointer-events: none; opacity: 0;
         background: linear-gradient(90deg,
             transparent 0%,
-            rgba(34,197,94,0) 15%,
-            rgba(34,197,94,.55) 50%,
-            rgba(34,197,94,0) 85%,
+            rgba(34, 197, 94, .35) 18%,
+            rgba(74, 255, 140, 1) 50%,
+            rgba(34, 197, 94, .35) 82%,
             transparent 100%);
-        transform: translateX(-100%);
+        box-shadow:
+            0 0 10px 2px rgba(34, 197, 94, .95),
+            0 0 22px 6px rgba(34, 197, 94, .55),
+            0 0 40px 12px rgba(34, 197, 94, .22);
+        border-radius: 50%;
     }
-    .sqe-action-bar.is-save-flash::after {
-        animation: sqeSaveFlash 900ms ease-out forwards;
+    .sqe-action-bar.is-save-flash::before { animation: sqeKittBg   1800ms ease-out forwards; }
+    .sqe-action-bar.is-save-flash::after  { animation: sqeKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+    @@keyframes sqeKittBg {
+        0%, 100% { opacity: 0; }
+        10%, 90% { opacity: 1; }
     }
-    @@keyframes sqeSaveFlash {
-        0%   { opacity: 0; transform: translateX(-100%); }
-        15%  { opacity: 1; }
-        85%  { opacity: 1; }
-        100% { opacity: 0; transform: translateX(100%); }
+    @@keyframes sqeKittScan {
+        0%   { opacity: 0; left: 0; }
+        8%   { opacity: 1; }
+        48%  { opacity: 1; left: 82%; }
+        52%  { opacity: 1; left: 82%; }
+        92%  { opacity: 1; left: 0; }
+        100% { opacity: 0; left: 0; }
     }
     body.app-theme-light .sqe-action-bar {
         background: rgba(248,250,252,0.92); border-bottom-color: #e2e8f0;
@@ -789,6 +894,99 @@
     body.app-theme-light .sqe-action-bar .sqe-meta { color: #94a3b8; }
     .sqe-action-bar .sqe-meta strong { color: rgba(255,255,255,0.7); font-weight: 700; }
     body.app-theme-light .sqe-action-bar .sqe-meta strong { color: #334155; }
+
+    /* ── Islemler menusu (cark ikonu + dropdown) ───────────────── */
+    .sqe-actions-menu {
+        position: relative;
+        margin-left: auto;   /* sqe-meta bos iken bile en saga yaslansin */
+        display: flex; align-items: center;
+    }
+    .sqe-action-bar .sqe-meta + .sqe-actions-menu { margin-left: 12px; }  /* meta dolu ise yanina yakin */
+    .sqe-actions-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px;
+        font-size: 0.78rem; font-weight: 600;
+        color: rgba(255,255,255,0.78);
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background .12s, color .12s, border-color .12s, transform .12s;
+    }
+    .sqe-actions-btn:hover {
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+        border-color: rgba(255,255,255,0.18);
+    }
+    .sqe-actions-btn svg { flex-shrink: 0; }
+    .sqe-actions-btn .sqe-actions-caret { transition: transform .15s; opacity: 0.7; }
+    .sqe-actions-menu.is-open .sqe-actions-btn { background: rgba(99,102,241,0.16); color: #c7d2fe; border-color: rgba(99,102,241,0.40); }
+    .sqe-actions-menu.is-open .sqe-actions-btn .sqe-actions-caret { transform: rotate(180deg); opacity: 1; }
+    body.app-theme-light .sqe-actions-btn {
+        color: #334155; background: #fff; border-color: #e2e8f0;
+    }
+    body.app-theme-light .sqe-actions-btn:hover {
+        background: #f8fafc; border-color: #cbd5e1; color: #0f172a;
+    }
+    body.app-theme-light .sqe-actions-menu.is-open .sqe-actions-btn {
+        background: rgba(99,102,241,0.08); color: #4338ca; border-color: rgba(99,102,241,0.45);
+    }
+
+    /* position: fixed — .sqe-action-bar'da overflow:hidden oldugu icin
+       absolute konumlu dropdown kesiliyordu. Fixed + JS ile viewport-relative
+       top/left set edilir (sqToggleActionsMenu hesaplar). */
+    .sqe-actions-dropdown {
+        position: fixed;
+        top: 0; left: 0;
+        min-width: 180px;
+        display: none;
+        flex-direction: column;
+        gap: 2px;
+        padding: 6px;
+        border-radius: 10px;
+        background: rgba(15, 19, 30, 0.98);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(99,102,241,0.08);
+        z-index: 10000;
+        animation: sqeActionsDropIn 140ms cubic-bezier(.2,.8,.3,1);
+    }
+    .sqe-actions-dropdown.is-open { display: flex; }
+    body.app-theme-light .sqe-actions-dropdown {
+        background: #fff;
+        border-color: #e2e8f0;
+        box-shadow: 0 12px 40px rgba(15, 23, 42, 0.16);
+    }
+    @@keyframes sqeActionsDropIn {
+        from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0)    scale(1);    }
+    }
+    .sqe-actions-item {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 10px;
+        font-size: 0.78rem; font-weight: 500;
+        color: rgba(255,255,255,0.82);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        cursor: pointer;
+        text-align: left;
+        transition: background .1s, color .1s, border-color .1s;
+    }
+    .sqe-actions-item:hover {
+        background: rgba(99,102,241,0.14);
+        color: #c7d2fe;
+        border-color: rgba(99,102,241,0.28);
+    }
+    .sqe-actions-item:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(99,102,241,0.35);
+    }
+    .sqe-actions-item svg { flex-shrink: 0; opacity: 0.8; }
+    .sqe-actions-item:hover svg { opacity: 1; }
+    body.app-theme-light .sqe-actions-item { color: #334155; }
+    body.app-theme-light .sqe-actions-item:hover {
+        background: rgba(99,102,241,0.08); color: #4338ca; border-color: rgba(99,102,241,0.25);
+    }
 
     /* ── Sol tab + sag icerik body ── */
     .sqe-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
@@ -834,9 +1032,361 @@
     }
     .sqe-tab-content {
         flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 16px 20px;
+        /* Tab degisimlerinde scrollbar gelip gitme ile panel genisligi kaymasin */
+        scrollbar-gutter: stable;
     }
     .sqe-tab-pane { display: none; }
     .sqe-tab-pane.is-active { display: block; }
+
+    /* ── Ek Alanlar — grup alt sekmeleri (yatay) ── */
+    .sqe-sub-tab-nav {
+        display: flex; flex-wrap: wrap; gap: 4px;
+        padding: 0 2px 10px 2px; margin-bottom: 10px;
+        border-bottom: 1px solid var(--app-border,#e2e8f0);
+    }
+    .sqe-sub-tab-nav:empty { display: none; }
+    body.app-theme-dark .sqe-sub-tab-nav { border-bottom-color: rgba(255,255,255,.08); }
+    .sqe-sub-tab-btn {
+        padding: 6px 14px; font-size: 0.78rem; font-weight: 600;
+        color: var(--app-text-muted,#64748b); background: none;
+        border: 1px solid transparent; border-radius: 999px;
+        cursor: pointer; transition: color .12s, background .12s, border-color .12s;
+    }
+    .sqe-sub-tab-btn:hover {
+        background: var(--app-muted-surface,#f3f5f7); color: var(--app-text,#333);
+        border-color: var(--app-border,#e2e8f0);
+    }
+    body.app-theme-dark .sqe-sub-tab-btn:hover {
+        background: rgba(255,255,255,.05); color: #e2e8f0;
+        border-color: rgba(255,255,255,.1);
+    }
+    .sqe-sub-tab-btn.is-active {
+        color: #15803d; background: rgba(34,197,94,.12);
+        border-color: rgba(34,197,94,.35);
+    }
+    body.app-theme-dark .sqe-sub-tab-btn.is-active {
+        color: #86efac; background: rgba(34,197,94,.16);
+        border-color: rgba(74,222,128,.40);
+    }
+
+    /* Kalem Ek Alanlari modali — sag panel stilleri.
+       Sol panelde grup ismi zaten tab olarak gorundugu icin sagdaki <details>
+       kart cercevesi ve basligi (summary) gizlenir; alanlar label-solda +
+       deger-sagda yatay grid seklinde zarifce dizilir. */
+    .sqe-extras-fields { color: rgba(255,255,255,0.92); }
+    .sqe-extras-fields .sqe-dyn-root {
+        display: flex; flex-direction: column; gap: 6px;
+    }
+    .sqe-extras-fields details.sqe-card,
+    .sqe-extras-fields .sqe-card {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        margin-bottom: 0 !important;
+        overflow: visible !important;
+    }
+    .sqe-extras-fields details.sqe-card > summary,
+    .sqe-extras-fields .sqe-card > summary.sqe-card-title,
+    .sqe-extras-fields .sqe-card > summary {
+        display: none !important;
+    }
+    /* Eskiden tek sutun flex-column'a zorluyordu; simdi renderer'in 12-col
+       grid'i (colSpan) gecerli olsun diye sadece gap tanimliyoruz. */
+    .sqe-extras-fields .sqe-grid-2 {
+        gap: 14px; margin-top: 0 !important;
+    }
+    .sqe-extras-fields .sqe-field {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        align-items: center;
+        gap: 12px;
+        padding: 4px 2px;
+        border: none;
+        background: transparent;
+    }
+    .sqe-extras-fields .sqe-field > label.sqe-label {
+        font-size: 13px; font-weight: 600;
+        color: rgba(255,255,255,0.78);
+        letter-spacing: 0.01em;
+        margin: 0; padding: 0;
+        text-transform: none;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .sqe-extras-fields .sqe-field > *:not(label) {
+        min-width: 0;
+    }
+    .sqe-extras-fields .sqe-input,
+    .sqe-extras-fields .sqe-select,
+    .sqe-extras-fields input.sqe-input,
+    .sqe-extras-fields select.sqe-select,
+    .sqe-extras-fields textarea {
+        width: 100%;
+        font-size: 13px;
+        padding: 7px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(10,14,24,0.55);
+        color: rgba(255,255,255,0.92);
+        outline: none;
+        transition: border-color .12s, box-shadow .12s;
+    }
+    .sqe-extras-fields .sqe-input:focus,
+    .sqe-extras-fields .sqe-select:focus,
+    .sqe-extras-fields textarea:focus {
+        border-color: rgba(99,102,241,0.55);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    .sqe-extras-fields .sqe-input.is-invalid,
+    .sqe-extras-fields .sqe-select.is-invalid,
+    .sqe-extras-fields textarea.is-invalid {
+        border-color: #ef4444 !important;
+        box-shadow: 0 0 0 3px rgba(239,68,68,.22) !important;
+    }
+    .sqe-extras-fields .sqe-rule-error {
+        grid-column: 2 / -1;
+        font-size: 11px; color: #fca5a5; margin-top: 3px;
+    }
+
+    /* Widget wrapper — Ek Alanlar pane icindeki ana kap.
+       Gruplar ARTIK DIKEY olarak alt alta siralanir; sub-tab bar ise scroll-to
+       nav olarak calisir. Her grubun <summary> etiketi gorunur section header
+       olur; kart cercevesi minimal, bolmeler arasi bolucu cizgi var. */
+    .sqe-widget-wrap { display: block; color: rgba(255,255,255,0.92); }
+    body.app-theme-light .sqe-widget-wrap { color: #1e293b; }
+    /* Gruplar dikeyde alt alta dizilir. */
+    .sqe-widget-wrap .sqe-dyn-root {
+        display: flex; flex-direction: column; gap: 28px;
+    }
+    .sqe-widget-wrap details.sqe-card,
+    .sqe-widget-wrap .sqe-card {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        margin-bottom: 0 !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        scroll-margin-top: 20px;  /* pill'e tiklayinca header altina denk gelsin */
+    }
+    /* Grup basligi — section header (eskiden gizliydi, simdi gorunur) */
+    .sqe-widget-wrap details.sqe-card > summary,
+    .sqe-widget-wrap .sqe-card > summary.sqe-card-title {
+        display: flex !important;
+        align-items: center;
+        gap: 10px;
+        padding: 0 2px 12px 2px !important;
+        margin: 0 0 12px 0 !important;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: rgba(255,255,255,0.88);
+        letter-spacing: 0.01em;
+        list-style: none !important;
+        cursor: default !important;
+        user-select: none;
+    }
+    body.app-theme-light .sqe-widget-wrap details.sqe-card > summary,
+    body.app-theme-light .sqe-widget-wrap .sqe-card > summary.sqe-card-title {
+        border-bottom-color: rgba(15,23,42,0.10);
+        color: #0f172a;
+    }
+    .sqe-widget-wrap details.sqe-card > summary::-webkit-details-marker,
+    .sqe-widget-wrap details.sqe-card > summary::marker {
+        display: none; content: '';
+    }
+    /* Sol tarafina kucuk renkli bir isaret koy — grup ayrici olarak */
+    .sqe-widget-wrap details.sqe-card > summary::before {
+        content: '';
+        width: 3px; height: 14px; border-radius: 2px;
+        background: linear-gradient(180deg, #6366f1 0%, #a855f7 100%);
+        flex-shrink: 0;
+    }
+    /* Grid-2 konteyneri — React inline olarak 12-kolonlu grid + gap uygular
+       (colSpan feature). CSS burada sadece default gap/margin tanimlar;
+       !important ile override etmiyoruz ki renderer'in 12-col grid'i calissin. */
+    .sqe-widget-wrap .sqe-grid-2 {
+        gap: 14px;
+        margin-top: 0 !important;
+    }
+    /* Her alan kendi iç kutusunu korur (label-solda / input-sagda) ama
+       disarida colSpan'a gore grid hucresine yerlesir. Dis cerceve/background
+       KALDIRILDI — modern label kendi outlined cercevesini cizer, standart
+       label'da input kendi border'ini tasir; ek kart/rectangle gereksiz. */
+    /* Klasik baslik: label + input AYNI satirda. Label kendi genisliginde
+       (max-content), sonra kucuk bosluk, input kalan alani doldurur.
+       Cell daraldiginda label truncate olur (0'a kadar kuculebilir). */
+    .sqe-widget-wrap .sqe-field {
+        display: grid;
+        grid-template-columns: minmax(0, max-content) 1fr;
+        align-items: center;
+        column-gap: 10px;
+        padding: 4px 2px;
+        border: none;
+        background: transparent;
+    }
+    .sqe-widget-wrap .sqe-field > label.sqe-label {
+        font-size: 13.5px; font-weight: 600;
+        color: rgba(255,255,255,0.78);
+        letter-spacing: 0.01em;
+        margin: 0; padding: 0;
+        text-transform: none;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.app-theme-light .sqe-widget-wrap .sqe-field > label.sqe-label {
+        color: #334155;
+    }
+    .sqe-widget-wrap .sqe-field > *:not(label) { min-width: 0; }
+    /* ── Karisik label stilli satir hizalamasi ──────────────────
+       Ayni grid satirinda hem klasik (label-solda, .sqe-field) hem modern
+       (floating label, .calibra-modern-wrap) alanlar bulununca input ust
+       kenarlari hizalanmiyordu (modern 12px padding-top ile floating label
+       icin yer ayirirken, klasik bunu yapmiyordu). Cozum: satirdaki butun
+       cocuklari TOP hizasina sabitle ve klasik alana ayni 12px ust bosluk
+       ver — boylece iki turdeki input ust noktasi ayni Y'ye duser. */
+    .sqe-widget-wrap .sqe-grid-2:has(.calibra-modern-wrap) {
+        align-items: start;
+    }
+    .sqe-widget-wrap .sqe-grid-2:has(.calibra-modern-wrap) .sqe-field {
+        padding-top: 12px;
+    }
+    .sqe-widget-wrap .sqe-input,
+    .sqe-widget-wrap .sqe-select,
+    .sqe-widget-wrap input.sqe-input,
+    .sqe-widget-wrap select.sqe-select,
+    .sqe-widget-wrap textarea,
+    .sqe-widget-wrap input[type="text"],
+    .sqe-widget-wrap input[type="number"],
+    .sqe-widget-wrap input[type="date"],
+    .sqe-widget-wrap input[type="datetime-local"],
+    .sqe-widget-wrap input[type="time"],
+    .sqe-widget-wrap select {
+        width: 100%;
+        font-size: 13px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(10,14,24,0.55);
+        color: rgba(255,255,255,0.92);
+        outline: none;
+        transition: border-color .12s, box-shadow .12s;
+        font-family: inherit;
+    }
+    body.app-theme-light .sqe-widget-wrap .sqe-input,
+    body.app-theme-light .sqe-widget-wrap .sqe-select,
+    body.app-theme-light .sqe-widget-wrap input[type="text"],
+    body.app-theme-light .sqe-widget-wrap input[type="number"],
+    body.app-theme-light .sqe-widget-wrap input[type="date"],
+    body.app-theme-light .sqe-widget-wrap input[type="datetime-local"],
+    body.app-theme-light .sqe-widget-wrap input[type="time"],
+    body.app-theme-light .sqe-widget-wrap select,
+    body.app-theme-light .sqe-widget-wrap textarea {
+        background: #fff;
+        border-color: #e2e8f0;
+        color: #1e293b;
+    }
+    .sqe-widget-wrap .sqe-input:focus,
+    .sqe-widget-wrap .sqe-select:focus,
+    .sqe-widget-wrap textarea:focus,
+    .sqe-widget-wrap input:focus,
+    .sqe-widget-wrap select:focus {
+        border-color: rgba(99,102,241,0.55);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    .sqe-widget-wrap .sqe-input.is-invalid,
+    .sqe-widget-wrap .sqe-select.is-invalid,
+    .sqe-widget-wrap textarea.is-invalid,
+    .sqe-widget-wrap input.is-invalid,
+    .sqe-widget-wrap select.is-invalid {
+        border-color: #ef4444 !important;
+        box-shadow: 0 0 0 3px rgba(239,68,68,.22) !important;
+    }
+
+    /* Tema tutarliligi — kalem Ek Alanlari modali icindeki tum input/select/textarea.
+       Modal backdrop zaten dark; icerdeki form elemanlari semi-transparan bg yerine
+       OPAQUE tema rengini alir. Modern floating-label (.calibra-modern-wrap) icinde
+       de ayni kural gecerli — label "kesim" efekti icin input bg ile uyumlu kalir. */
+    body.app-theme-dark .sqe-widget-wrap input.sqe-input,
+    body.app-theme-dark .sqe-widget-wrap select.sqe-select,
+    body.app-theme-dark .sqe-widget-wrap textarea,
+    body.app-theme-dark .sqe-widget-wrap .calibra-modern-wrap input,
+    body.app-theme-dark .sqe-widget-wrap .calibra-modern-wrap select,
+    body.app-theme-dark .sqe-widget-wrap .calibra-modern-wrap textarea {
+        background: rgba(12, 17, 28, 0.92) !important;
+        border-color: rgba(148, 163, 184, 0.22) !important;
+        color: rgba(255, 255, 255, 0.92) !important;
+    }
+    body.app-theme-light .sqe-widget-wrap input.sqe-input,
+    body.app-theme-light .sqe-widget-wrap select.sqe-select,
+    body.app-theme-light .sqe-widget-wrap textarea,
+    body.app-theme-light .sqe-widget-wrap .calibra-modern-wrap input,
+    body.app-theme-light .sqe-widget-wrap .calibra-modern-wrap select,
+    body.app-theme-light .sqe-widget-wrap .calibra-modern-wrap textarea {
+        background: #ffffff !important;
+        border-color: #e2e8f0 !important;
+        color: #1e293b !important;
+    }
+    /* Focus tema uyumlu */
+    body.app-theme-dark .sqe-widget-wrap input.sqe-input:focus,
+    body.app-theme-dark .sqe-widget-wrap select.sqe-select:focus,
+    body.app-theme-dark .sqe-widget-wrap textarea:focus {
+        background: rgba(20, 27, 42, 0.95) !important;
+        border-color: #6366f1 !important;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22) !important;
+    }
+    body.app-theme-light .sqe-widget-wrap input.sqe-input:focus,
+    body.app-theme-light .sqe-widget-wrap select.sqe-select:focus,
+    body.app-theme-light .sqe-widget-wrap textarea:focus {
+        background: #ffffff !important;
+        border-color: #6366f1 !important;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
+    }
+    /* Modern label — arka plan seffaf; sadece metin rengini tema'ya gore ayarla. */
+    body.app-theme-dark .sqe-widget-wrap .calibra-modern-label {
+        color: rgba(165, 180, 252, 0.92) !important;
+    }
+    body.app-theme-light .sqe-widget-wrap .calibra-modern-label {
+        color: #475569 !important;
+    }
+    /* Date input — tarayicinin kendi acilir simgesi (calendar picker) dark tema
+       ile zit renk gostermesin. WebKit picker indicator'unu invert eder. */
+    body.app-theme-dark .sqe-widget-wrap input[type="date"]::-webkit-calendar-picker-indicator,
+    body.app-theme-dark .sqe-widget-wrap input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+    body.app-theme-dark .sqe-widget-wrap input[type="time"]::-webkit-calendar-picker-indicator {
+        filter: invert(1) opacity(0.7);
+    }
+
+    .sqe-widget-wrap .sqe-rule-error {
+        grid-column: 2 / -1;
+        font-size: 11px; color: #fca5a5; margin-top: 3px;
+    }
+    /* Date picker ikon rengi dark temada beyaza yakin olsun */
+    .sqe-widget-wrap input[type="date"]::-webkit-calendar-picker-indicator,
+    .sqe-widget-wrap input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+    .sqe-widget-wrap input[type="time"]::-webkit-calendar-picker-indicator {
+        filter: invert(0.8);
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    body.app-theme-light .sqe-widget-wrap input[type="date"]::-webkit-calendar-picker-indicator,
+    body.app-theme-light .sqe-widget-wrap input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+    body.app-theme-light .sqe-widget-wrap input[type="time"]::-webkit-calendar-picker-indicator {
+        filter: none;
+        opacity: 0.6;
+    }
+    .sqe-widget-empty {
+        padding: 24px 16px; text-align: center;
+        font-size: 0.82rem; color: var(--app-text-muted,#64748b);
+        border: 1px dashed var(--app-border,#cbd5e1);
+        border-radius: 12px;
+        background: var(--app-muted-surface,#f8fafc);
+    }
+    body.app-theme-dark .sqe-widget-empty {
+        color: rgba(255,255,255,.45);
+        border-color: rgba(255,255,255,.12);
+        background: rgba(255,255,255,.02);
+    }
+    .sqe-widget-empty.is-hidden { display: none; }
 
     /* Ekli Dosyalar tabi */
     .sqe-att-wrap { display: flex; flex-direction: column; gap: 14px; padding: 8px 2px; }
@@ -942,7 +1492,10 @@
         color: #fca5a5 !important;
     }
 
-    /* ── Yukleme maskesi — edit modunda alan flashini engeller ── */
+    /* ── Yukleme maskesi — edit modunda alan flashini engeller ──
+       Fade kaldirildi: transition opacity sirasinda semi-transparent maske
+       arkasindan field'lar gorunur ve "sonradan dolma" izlenimi yaratiyordu.
+       Artik opak (koyu/acik tema) zemin + display:none ile tamamen sakli. */
     .sqe-loading-mask {
         position: absolute;
         inset: 0;
@@ -953,11 +1506,10 @@
         gap: 8px;
         pointer-events: none;
         border-radius: inherit;
-        transition: opacity 0.15s ease;
     }
-    body.app-theme-dark  .sqe-loading-mask { background: rgba(15,23,42,0.6);  }
-    body.app-theme-light .sqe-loading-mask { background: rgba(248,250,252,0.75); }
-    .sqe-loading-mask.is-hidden { opacity: 0; pointer-events: none; }
+    body.app-theme-dark  .sqe-loading-mask { background: #0b1020; }
+    body.app-theme-light .sqe-loading-mask { background: #f8fafc; }
+    .sqe-loading-mask.is-hidden { display: none !important; }
     .sqe-loading-mask__spinner {
         width: 18px; height: 18px;
         border-radius: 50%;
@@ -1013,6 +1565,52 @@
         </select>
         <span id="sqStatusBadge"></span>
         <span class="sqe-meta" id="sqMeta"></span>
+
+        <!-- Islemler menusu butonu — sag uca yaslanmis cark ikonu.
+             Dropdown asagida ayri bir div olarak; .sqe-action-bar'in
+             backdrop-filter + overflow:hidden stacking context'i disinda
+             konumlandirilir. -->
+        <div class="sqe-actions-menu" id="sqActionsMenu">
+            <button type="button"
+                    class="sqe-actions-btn"
+                    id="sqActionsBtn"
+                    aria-haspopup="menu"
+                    aria-expanded="false"
+                    title="Islemler"
+                    onclick="sqToggleActionsMenu(event)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>Islemler</span>
+                <svg class="sqe-actions-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Islemler Dropdown — aksiyon sertinin DISINDA ki backdrop-filter +
+         overflow stacking context'i icin kesilmesin. JS ile sqActionsBtn'in
+         viewport koordinatlarina gore pozisyonlanir. -->
+    <div class="sqe-actions-dropdown" role="menu" id="sqActionsDropdown">
+        <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionPrint(event)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 6 2 18 2 18 9"/>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                <rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            <span>Yazdir</span>
+        </button>
+        <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionChangeType(event)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="17 1 21 5 17 9"/>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                <polyline points="7 23 3 19 7 15"/>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+            </svg>
+            <span>Tur Degistir</span>
+        </button>
     </div>
 
     <!-- Sol tab + sag icerik -->
@@ -1062,7 +1660,7 @@
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel">Cari Isim</label>
-                    <input type="text" id="sqCustomerName" class="form-control form-control-sm sqe-hinput" readonly placeholder="Cari secildiginde otomatik dolar" style="max-width:560px;" />
+                    <span id="sqCustomerName" class="sqe-hlabel-value" data-placeholder="Cari secildiginde otomatik dolar"></span>
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel">Temsilci</label>
@@ -1075,11 +1673,26 @@
         <div class="sqe-tab-pane" data-sqe-pane="lines">
             <div id="reactDocumentLineGrid" style="min-height:220px;"></div>
             <div class="sqe-totals">
-                <div class="sqe-total-row"><span class="sqe-total-label">Ara Toplam (Brut):</span><span class="sqe-total-value" id="sqSubTotal">0,00</span></div>
-                <div class="sqe-total-row"><span class="sqe-total-label">Kalem Iskontosu:</span><span class="sqe-total-value" id="sqLineDiscountAmount">0,00</span></div>
-                <div class="sqe-total-row"><span class="sqe-total-label">Genel Iskonto %</span><input id="sqDiscountRate" type="number" class="form-control form-control-sm" value="0" min="0" max="100" step="0.01" style="width:70px;text-align:right;" onchange="sqRecalc()" /><span class="sqe-total-value" id="sqDiscountAmount">0,00</span></div>
-                <div class="sqe-total-row"><span class="sqe-total-label">KDV %</span><input id="sqTaxRate" type="number" class="form-control form-control-sm" value="20" min="0" max="100" step="0.01" style="width:70px;text-align:right;" onchange="sqRecalc()" /><span class="sqe-total-value" id="sqTaxAmount">0,00</span></div>
-                <div class="sqe-total-row sqe-grand-total"><span class="sqe-total-label">Genel Toplam:</span><span class="sqe-total-value" id="sqGrandTotal">0,00</span></div>
+                <span class="sqe-total-label">Ara Toplam (Brut):</span>
+                <span class="sqe-total-control"></span>
+                <span class="sqe-total-value" id="sqSubTotal">0,00</span>
+
+                <span class="sqe-total-label">Kalem Iskontosu:</span>
+                <span class="sqe-total-control"></span>
+                <span class="sqe-total-value" id="sqLineDiscountAmount">0,00</span>
+
+                <span class="sqe-total-label">Genel Iskonto %</span>
+                <input id="sqDiscountRate" type="number" class="sqe-total-input sq-no-spinner sq-no-negative" value="0" min="0" max="100" step="0.01"
+                       oninput="(function(el){var v=parseFloat(el.value);if(isNaN(v))return;if(v<0)el.value=0;else if(v>100)el.value=100;sqRecalc();})(this)"
+                       onchange="(function(el){var v=parseFloat(el.value);if(isNaN(v))el.value=0;else if(v<0)el.value=0;else if(v>100)el.value=100;sqRecalc();})(this)" />
+                <span class="sqe-total-value" id="sqDiscountAmount">0,00</span>
+
+                <!-- Dinamik KDV satirlari — sqRecalc tarafindan doldurulur -->
+                <div id="sqKdvRows" class="sqe-kdv-rows"></div>
+
+                <span class="sqe-total-label sqe-grand-total">Genel Toplam:</span>
+                <span class="sqe-total-control"></span>
+                <span class="sqe-total-value sqe-grand-total" id="sqGrandTotal">0,00</span>
             </div>
         </div>
 
@@ -1108,9 +1721,28 @@
 
         <!-- TAB 5: Ek Alanlar -->
         <div class="sqe-tab-pane" data-sqe-pane="widgets">
-            <div id="sqDynamicWidgets"
-                 data-form-code="SALES_QUOTE_EDIT"
-                 data-record-id="">
+            <!-- Not: eskiden sqWidgetSubTabs yatay pill'leri vardi; kullanici her grup
+                 basligini zaten <summary> olarak bir kez gorunur istiyor — sub-tab
+                 kaldirildi. Gruplar DynamicWidgetRenderer tarafindan dikey (alt alta)
+                 basilir, her biri kendi section header'i ile (sqe-widget-wrap CSS). -->
+            <div id="sqWidgetCardWrap" class="sqe-widget-wrap">
+                <div id="sqDynamicWidgets"
+                     data-form-code="SALES_QUOTE_EDIT"
+                     data-record-id="">
+                </div>
+            </div>
+            <div id="sqWidgetEmpty" class="sqe-widget-empty is-hidden" data-sq-ext-v="2026-04-21-b">
+                <div id="sqWidgetEmptyMsg">
+                    <div>Widget API teshisi bekleniyor…</div>
+                </div>
+                <div style="margin-top:10px;">
+                    <button type="button" id="sqWidgetReloadBtn" class="btn btn-sm"
+                            style="font-size:0.72rem;padding:4px 10px;"
+                            onclick="sqReloadWidgets()">Yeniden yukle</button>
+                </div>
+                <div style="margin-top:8px;font-size:0.64rem;opacity:0.35;font-family:monospace;">
+                    ext-v: 2026-04-21-b
+                </div>
             </div>
         </div>
 
@@ -1194,6 +1826,19 @@
         }
         sqActivateTab(tabKey);
         if (tabKey === 'attachments') sqAttLoad();
+        // Notlar sekmesi ilk kez acildiginda textarea gizliyken scrollHeight=0
+        // donduruluyor ve sqLoadQuote icindeki autoResizeTextarea cagirisi boyu
+        // dogru hesaplayamiyor. Gorunur hale geldiginde yeniden boyutlandir.
+        if (tabKey === 'notes') {
+            var sqNotesEl3 = document.getElementById('sqNotes');
+            if (sqNotesEl3) autoResizeTextarea(sqNotesEl3);
+        }
+        // Ek Alanlar sekmesi her aktiflendiginde probe'u tetikle — admin'de
+        // tanim degisse bile (ya da ilk yuklemede race varsa) kullanici
+        // dogru teshisi hemen gorur.
+        if (tabKey === 'widgets' && typeof window.sqProbeWidgets === 'function') {
+            window.sqProbeWidgets();
+        }
     };
 
     // ── Ekli Dosyalar yonetimi ──
@@ -1403,22 +2048,68 @@
             sqNotesEl.addEventListener('input', function () { autoResizeTextarea(sqNotesEl); });
         }
 
+        // Sekmeler arasi veri senkronizasyonu:
+        // Baska bir sekmede (ornek malzeme karti) stok/birim/KDV degisirse,
+        // bu sayfaya geri donuldugunde cache'lenmis materials ve units snapshot'lari
+        // stale olabilir. Focus/visibility alindiginda cache'leri invalide et.
+        function sqRefreshLookupCaches() {
+            try {
+                if (window.CalibraHub && window.CalibraHub.clearLookupCache) {
+                    window.CalibraHub.clearLookupCache();
+                }
+            } catch (e) { /* sessizce gec */ }
+            // Materyal snapshot'ini yeniden fetch et (bridge fallback'leri icin)
+            loadMaterials().catch(function (e) { console.warn('[SQ] materials refresh hatasi:', e); });
+        }
+        window.addEventListener('focus', sqRefreshLookupCaches);
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') sqRefreshLookupCaches();
+        });
+
+        // Sayisal input'lari koru: eksi girisi engelle + spinner'lar CSS ile gizli.
+        // Capturing phase — React'in kendi handler'lari calismadan once devreye girer.
+        document.addEventListener('input', function (e) {
+            var t = e.target;
+            if (t && t.tagName === 'INPUT' && t.type === 'number') {
+                if (parseFloat(t.value) < 0) t.value = '0';
+            }
+        }, true);
+        document.addEventListener('keydown', function (e) {
+            var t = e.target;
+            if (t && t.tagName === 'INPUT' && t.type === 'number' && (e.key === '-' || e.key === 'Subtract')) {
+                e.preventDefault();
+            }
+        }, true);
+
         // Katlanir kart persist — markup hazir oldugunda baglan
         initCollapsiblePersistence();
 
-        // Veri yukleme
+        // Veri yukleme — uc baslangic fetch'i birbirinden bagimsiz, paralel cek.
+        // loadCustomers rehber React bundle'ini beklemeyi icerir (attach ile birlikte).
+        // Tum ustu tamamlandiktan sonra sqLoadQuote alanlari tek seferde doldurur ve
+        // maske kalkar. Bu sayede kullanici field'lari "sonradan dolma" gormez.
         (async function () {
-            try { await loadCustomers(); } catch (e) { console.error('loadCustomers hatasi:', e); }
-            try { await loadSalesReps(); } catch (e) { console.error('loadSalesReps hatasi:', e); }
-            try { await loadMaterials(); } catch (e) { console.error('loadMaterials hatasi:', e); }
+            try {
+                await Promise.all([
+                    loadCustomers().catch(function(e) { console.error('loadCustomers hatasi:', e); }),
+                    loadSalesReps().catch(function(e) { console.error('loadSalesReps hatasi:', e); }),
+                    loadMaterials().catch(function(e) { console.error('loadMaterials hatasi:', e); }),
+                ]);
+            } catch (e) { console.error('Paralel yukleme hatasi:', e); }
+
             if (currentQuoteId) {
-                await sqLoadQuote(currentQuoteId);
+                try { await sqLoadQuote(currentQuoteId); }
+                catch (e) { console.error('sqLoadQuote hatasi:', e); }
             } else {
                 sqInitNew();
             }
-            // Yukleme tamamlandi — maskeyi kaldır
-            var mask = document.getElementById('sqLoadingMask');
-            if (mask) mask.classList.add('is-hidden');
+
+            // Son bir rAF — React wrapper/layout shift'leri bu frame'de settle eder,
+            // maske bir sonraki frame'de kalktiginda tum alanlar zaten tam ayarlanmistir.
+            requestAnimationFrame(function () {
+                var mask = document.getElementById('sqLoadingMask');
+                if (mask) mask.classList.add('is-hidden');
+            });
         })();
     });
 
@@ -1440,13 +2131,34 @@
     }
 
     async function loadCustomers() {
-        // Rehber butonu bağla — React bundle yüklendiyse direkt, yoksa bekle
-        if (!attachCustomerGuide()) {
-            var t = setInterval(function () {
-                if (attachCustomerGuide()) clearInterval(t);
-            }, 100);
-            setTimeout(function () { clearInterval(t); }, 10000);
-        }
+        // 1) window.CalibraHub.attachGuide hazir olana kadar bekle — bundle async.
+        // 2) attachGuide cagirildiktan sonra React kendi wrapper'ini ASENKRON render eder.
+        //    Wrapper DOM'a eklenip icinde cocuklar olusana kadar bekleyip Promise'i
+        //    oyle resolve ederiz; boylece sqLoadQuote degerleri yazdiginda React
+        //    bileseninin useEffect'i zaten mount olmus ve data-display kontrolunu
+        //    yapar → "sonradan dolma" hissi olusmaz.
+        return new Promise(function (resolve) {
+            function whenGuideAttached(cb) {
+                if (attachCustomerGuide()) { cb(); return; }
+                var attempts = 0;
+                var t = setInterval(function () {
+                    if (attachCustomerGuide()) { clearInterval(t); cb(); return; }
+                    if (++attempts > 60) { clearInterval(t); cb(); } // ~6s sonra vazgec
+                }, 100);
+            }
+            function whenWrapperReady(cb) {
+                var attempts = 0;
+                var tries = setInterval(function () {
+                    var disp = document.getElementById('sqCustomerDisplay');
+                    var wrap = disp && disp.parentNode
+                        ? disp.parentNode.querySelector('.ffl-wrapper') : null;
+                    // React render tamamlandiginda wrapper'da en az bir child (buton/SVG) olur
+                    if (wrap && wrap.children.length > 0) { clearInterval(tries); cb(); return; }
+                    if (++attempts > 30) { clearInterval(tries); cb(); } // ~3s
+                }, 100);
+            }
+            whenGuideAttached(function () { whenWrapperReady(resolve); });
+        });
     }
 
     async function loadSalesReps() {
@@ -1504,11 +2216,10 @@
         document.getElementById('sqCustomerDisplay').value = '';
         document.getElementById('sqCustomerDisplay').removeAttribute('data-value');
         document.getElementById('sqCustomerDisplay').removeAttribute('data-display');
-        document.getElementById('sqCustomerName').value = '';
+        document.getElementById('sqCustomerName').textContent = '';
         document.getElementById('sqSalesRepId').value = '';
         document.getElementById('sqCurrency').value = 'TRY';
         document.getElementById('sqDiscountRate').value = '0';
-        document.getElementById('sqTaxRate').value = '20';
         document.getElementById('sqPaymentTerms').value = '';
         document.getElementById('sqDeliveryTerms').value = '';
         document.getElementById('sqDeliveryAddress').value = '';
@@ -1518,10 +2229,11 @@
         setGridRows([{
             materialCode: '',
             materialName: '',
-            unitName: '',
+            unitId: null,
             quantity: 1,
             unitPrice: 0,
             discountRate: 0,
+            locationId: null,
             notes: null,
         }]);
         document.getElementById('sqBtnDelete').disabled = true;
@@ -1550,11 +2262,10 @@
             custDisp.value = q.contactCode || '';
             custDisp.setAttribute('data-value', q.contactCode || '');
             custDisp.setAttribute('data-display', q.contactCode || '');
-            document.getElementById('sqCustomerName').value = q.contactName || '';
+            document.getElementById('sqCustomerName').textContent = q.contactName || '';
             document.getElementById('sqSalesRepId').value = q.salesRepId != null ? q.salesRepId : '';
             document.getElementById('sqCurrency').value = q.currency || 'TRY';
             document.getElementById('sqDiscountRate').value = q.discountRate ?? 0;
-            document.getElementById('sqTaxRate').value = q.taxRate ?? 20;
             document.getElementById('sqPaymentTerms').value = q.paymentTerms || '';
             document.getElementById('sqDeliveryTerms').value = q.deliveryTerms || '';
             document.getElementById('sqDeliveryAddress').value = q.deliveryAddress || '';
@@ -1583,15 +2294,15 @@
             } catch(e) {}
 
             // React grid'e initial satirlari ver (bridge kuyruklar eger hazir degilse).
-            // DB'den gelen satirlarda materialin trackCombinations/stockCardId bilgisi yok —
-            // daha once yuklenmis materials listesinden enjekte ediyoruz ki kombinasyon
-            // kolonu ilgili satirlarda aktif (secilebilir) hale gelsin.
+            // ln.itemId DB source-of-truth; materialCode/materialName/combinationCode ise server
+            // JOIN ile Item + ProductConfiguration'dan turetilen display degerler. Grid row
+            // stockCardId alani icin itemId'yi kullanir (legacy alias).
             var initialLines = (data.lines || []).map(function (ln) {
-                var m = (materials || []).find(function (x) { return x.materialCode === ln.materialCode; });
-                if (!m) return ln;
+                var m = (materials || []).find(function (x) { return x.id === ln.itemId });
                 return Object.assign({}, ln, {
-                    stockCardId:       ln.stockCardId ?? m.id,
-                    trackCombinations: m.trackCombinations === true,
+                    stockCardId:       ln.itemId,
+                    trackCombinations: m ? m.trackCombinations === true : false,
+                    taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
                 });
             });
             setGridRows(initialLines);
@@ -1600,14 +2311,19 @@
             // Kalemi olan belgelerde cari kodu degistirilemez
             window.applyCustomerLock(initialLines.length > 0);
 
-            // Ek alanlar renderer'ina integer Id'yi recordId olarak yansit
-            if (window._sqDynRenderer && q.id) {
-                try {
-                    window._sqDynRenderer.reload({ recordId: String(q.id) });
-                } catch (reloadErr) {
-                    console.warn('[SQ] widget reload hatasi:', reloadErr);
+            // Satirlardaki eksik zorunlu widget bilgisi (⚙ rengi icin)
+            var initialInvalid = Array.isArray(data.invalidLineIds) ? data.invalidLineIds : [];
+            // Grid hazir olana kadar kucuk bir delay — setRows sonrasi state'i bas.
+            setTimeout(function () {
+                if (window.CalibraHub && window.CalibraHub.salesLineGrid
+                    && typeof window.CalibraHub.salesLineGrid.setInvalidLines === 'function') {
+                    window.CalibraHub.salesLineGrid.setInvalidLines(initialInvalid);
                 }
-            }
+            }, 80);
+
+            // Ek alanlar renderer'ina integer Id'yi recordId olarak yansit.
+            // Polling: renderer ve ic handleRef hazir olana kadar bekle, sonra reload.
+            if (q.id) sqReloadRenderer(String(q.id));
         } catch (e) {
             console.error('sqLoadQuote hatasi:', e);
             CalibraAlert.error('Teklif yuklenemedi: ' + e.message);
@@ -1726,8 +2442,6 @@
         var unitSel    = card.querySelector('.sq-ln-unit');
 
         if (parts.length >= 5) {
-            var taxRate   = parseFloat(parts[3]) || 20;
-            document.getElementById('sqTaxRate').value = taxRate;
             var trackCombs = parts[4] === '1';
             if (combBtn) combBtn.style.display = trackCombs ? 'inline-flex' : 'none';
             if (!trackCombs) {
@@ -1757,33 +2471,78 @@
     };
 
     window.sqRecalc = function () {
-        // Satirlar React CalibraLineItemsGrid'ten bridge ile geliyor.
-        // Her satir icin: qty*price = brut, qty*price*disc% = kalem iskontosu.
-        // Ara Toplam = brut; sonra kalem iskonto cikarilir, genel iskonto cikarilir,
-        // KDV eklenir → Genel Toplam.
+        // Her satir icin qty*price = brut, iskonto ve kdv oranlari uygulanir.
+        // Genel iskonto tum satirlara orantili yansir. KDV, her satirin kendi
+        // oranina gore hesaplanir ve oranlar bazinda gruplanir — farkli oranlar
+        // varsa alt kisimda ayri satir olarak gosterilir.
         var lines = window.__SQ_LINES__ || [];
         var grossSubTotal = 0;
         var lineDiscountTotal = 0;
+        var perLineAfterLine = [];  // [{ afterLine, taxRate }]
         lines.forEach(function (r) {
+            // Kod (materialCode) girilmemis satirlar toplamlara ve KDV oran
+            // bucket'larina dahil edilmez — yeni eklenen bos satirin varsayilan
+            // KDV orani (%20) alt kisimda "KDV (%20): 0,00" olarak gorunmesin.
+            var code = r.materialCode;
+            if (code == null || String(code).trim() === '') return;
             var qty   = Number(r.quantity)     || 0;
             var price = Number(r.unitPrice)    || 0;
             var disc  = Number(r.discountRate) || 0;
-            var gross = qty * price;
+            var tax   = Number(r.taxRate);
+            if (!isFinite(tax)) tax = 20;
+            var gross     = qty * price;
+            var lineDisc  = gross * (disc / 100);
+            var afterLine = gross - lineDisc;
             grossSubTotal     += gross;
-            lineDiscountTotal += gross * (disc / 100);
+            lineDiscountTotal += lineDisc;
+            perLineAfterLine.push({ afterLine: afterLine, taxRate: tax });
         });
+        var discRateInput = document.getElementById('sqDiscountRate');
+        var discRate = parseFloat(discRateInput.value);
+        if (!isFinite(discRate) || discRate < 0) discRate = 0;
+
         var netAfterLineDisc = grossSubTotal - lineDiscountTotal;
-        var discRate   = parseFloat(document.getElementById('sqDiscountRate').value || 0);
-        var taxRate    = parseFloat(document.getElementById('sqTaxRate').value || 0);
-        var discAmount = netAfterLineDisc * (discRate / 100);
-        var afterDisc  = netAfterLineDisc - discAmount;
-        var taxAmount  = afterDisc * (taxRate / 100);
-        var grandTotal = afterDisc + taxAmount;
-        document.getElementById('sqSubTotal').textContent          = formatMoney(grossSubTotal);
+        var globalDiscAmount = netAfterLineDisc * (discRate / 100);
+        var afterAllDisc     = netAfterLineDisc - globalDiscAmount;
+        var globalDiscFactor = netAfterLineDisc > 0 ? (afterAllDisc / netAfterLineDisc) : 1;
+
+        // KDV gruplama — her oran icin toplam KDV tutari
+        var taxBuckets = {};
+        perLineAfterLine.forEach(function (x) {
+            var netLine = x.afterLine * globalDiscFactor;
+            var taxAmt  = netLine * (x.taxRate / 100);
+            var key     = x.taxRate.toFixed(2);
+            if (!taxBuckets[key]) taxBuckets[key] = { rate: x.taxRate, amount: 0 };
+            taxBuckets[key].amount += taxAmt;
+        });
+        var taxTotal = 0;
+        Object.values(taxBuckets).forEach(function (b) { taxTotal += b.amount; });
+        var grandTotal = afterAllDisc + taxTotal;
+
+        document.getElementById('sqSubTotal').textContent           = formatMoney(grossSubTotal);
         document.getElementById('sqLineDiscountAmount').textContent = formatMoney(lineDiscountTotal);
-        document.getElementById('sqDiscountAmount').textContent    = formatMoney(discAmount);
-        document.getElementById('sqTaxAmount').textContent         = formatMoney(taxAmount);
-        document.getElementById('sqGrandTotal').textContent        = formatMoney(grandTotal);
+        document.getElementById('sqDiscountAmount').textContent     = formatMoney(globalDiscAmount);
+        document.getElementById('sqGrandTotal').textContent         = formatMoney(grandTotal);
+
+        // KDV satirlarini render et — artan oran siralamasi
+        var kdvHost = document.getElementById('sqKdvRows');
+        kdvHost.innerHTML = '';
+        var bucketList = Object.values(taxBuckets).sort(function (a, b) { return a.rate - b.rate; });
+        if (bucketList.length === 0) {
+            kdvHost.innerHTML =
+                '<span class="sqe-total-label">KDV:</span>' +
+                '<span class="sqe-total-control"></span>' +
+                '<span class="sqe-total-value">0,00</span>';
+        } else {
+            bucketList.forEach(function (b) {
+                var ratePct = Number(b.rate).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                kdvHost.insertAdjacentHTML('beforeend',
+                    '<span class="sqe-total-label">KDV (%' + ratePct + '):</span>' +
+                    '<span class="sqe-total-control"></span>' +
+                    '<span class="sqe-total-value">' + formatMoney(b.amount) + '</span>'
+                );
+            });
+        }
     };
 
     // Zorunlu alanlara kirmizi cerceve + shake animasyonu ekle
@@ -1808,13 +2567,24 @@
         }
     }
 
-    window.sqSave = async function () {
-        // Ek alan (widget) zorunlu kontrolu — fetch'ten ONCE
+    window.sqSave = async function (opts) {
+        // opts.silent === true ise basari KITT animasyonu atlanir (satir-ici otomatik kayit icin).
+        var _silent = !!(opts && opts.silent);
+        // Ek alan (widget) zorunlu kontrolu — fetch'ten ONCE.
+        // Eksik alan varsa kullanici "Ek Alanlar" sekmesinde degilse otomatik o
+        // sekmeye yonlendirilir, sonra kirmizi titreme animasyonu calisir. Aksi
+        // halde shake tetiklenir ama kullanici hangi sekmede oldugundan haberi
+        // olmaz (display:none olan panede animasyon gorunmez).
         if (window._sqDynRenderer && window._sqDynRenderer.validate) {
             var dynValidation = window._sqDynRenderer.validate();
             if (!dynValidation.valid) {
                 var shakeIds = (dynValidation.errorIds || []).map(function(id) { return 'dyn_' + id; });
-                if (shakeIds.length) sqMarkInvalid(shakeIds);
+                // Once Ek Alanlar sekmesine gec — pane gorunur olsun.
+                sqActivateTab('widgets');
+                // Reflow sonrasi shake — pane display:block'a dondukten sonra animasyon gorunur
+                requestAnimationFrame(function () {
+                    if (shakeIds.length) sqMarkInvalid(shakeIds);
+                });
                 return;
             }
         }
@@ -1827,39 +2597,56 @@
         }
         var rowsFilled = rawLines.filter(function (r) { return r && (r.materialCode || r.materialName); });
 
-        // Kombinasyon takipli stoklarda combinationCode zorunlu — Kaydet oncesi kontrol et.
+        // Kombinasyon takipli stoklarda combinationId zorunlu — Kaydet oncesi kontrol et.
         // materials snapshot'undan trackCombinations bayragini okur (sayfa acilirken dolduruldu).
         var missingCombos = rowsFilled.filter(function (r) {
             var m = (materials || []).find(function (x) { return x.materialCode === r.materialCode; });
             var needs = m ? m.trackCombinations === true : r.trackCombinations === true;
-            return needs && !(r.combinationCode && String(r.combinationCode).trim());
+            var hasComboId = r.combinationId != null && r.combinationId !== '' && parseInt(r.combinationId, 10) > 0;
+            return needs && !hasComboId;
         });
         if (missingCombos.length > 0) {
             sqActivateTab('lines');
-            var names = missingCombos.map(function (r) { return r.materialCode || r.materialName; }).join(', ');
-            CalibraAlert.warning('Kombinasyon takipli olan su malzeme(ler) icin kombinasyon secilmeli: ' + names);
+            // Modal yerine kombinasyon butonlarini titret — kullanici hangi satir oldugunu
+            // dogrudan gorur, ekranda bilgilendirme mesaji cikmaz (içeriği itelmez).
+            requestAnimationFrame(function () {
+                document.querySelectorAll('[data-comb-btn][data-needs-combo="1"]').forEach(function (btn) {
+                    btn.classList.remove('cb-invalid-shake');
+                    void btn.offsetWidth; // reflow — animasyonu yeniden tetikle
+                    btn.classList.add('cb-invalid-shake');
+                    setTimeout(function () { btn.classList.remove('cb-invalid-shake'); }, 600);
+                });
+            });
             return;
         }
 
         var lines = rowsFilled
             .map(function (r) {
+                // ItemId DB'de source-of-truth; materialCode/materialName tabloda tutulmaz,
+                // server JOIN ile Item'dan turetir. unitId, combinationId ve locationId ayni sekilde.
+                // Id dolu gelirse UPSERT (UPDATE) — widget kayitlari orphanlanmaz.
                 return {
-                    itemId:             r.stockCardId != null && r.stockCardId !== '' ? parseInt(r.stockCardId, 10) : null,
+                    id:                 r.id != null && r.id !== '' && Number(r.id) > 0 ? Number(r.id) : null,
+                    itemId:             r.stockCardId != null && r.stockCardId !== '' ? parseInt(r.stockCardId, 10) : 0,
                     trackCombinations:  r.trackCombinations === true,
-                    materialCode:       r.materialCode || '',
-                    materialName:       r.materialName || '',
-                    unitName:           r.unitName || null,
+                    unitId:             r.unitId != null && r.unitId !== '' ? parseInt(r.unitId, 10) : null,
                     quantity:           Number(r.quantity) || 0,
                     unitPrice:          Number(r.unitPrice) || 0,
                     discountRate:       Number(r.discountRate) || 0,
-                    combinationCode:    r.combinationCode || null,
+                    combinationId:      r.combinationId != null && r.combinationId !== '' ? parseInt(r.combinationId, 10) : null,
+                    locationId:         r.locationId != null && r.locationId !== '' ? parseInt(r.locationId, 10) : null,
                     combinationDetails: Array.isArray(r.combinationDetails) ? r.combinationDetails : [],
-                    notes:              r.notes || null
+                    notes:              r.notes || null,
+                    notesPinned:        r.notesPinned === true,
+                    // Revize zinciri — yeni revize satirlarda dolu gelir, orijinal
+                    // satirlarda null. Server INSERT'te revised_from_id kolonuna yazilir.
+                    revisedFromId:      r.revisedFromId != null && Number(r.revisedFromId) > 0 ? Number(r.revisedFromId) : null
                 };
             });
         var custIdVal  = document.getElementById('sqCustomerId').value;
         var custCodeVal = (document.getElementById('sqCustomerDisplay').value || '').trim();
-        var custText   = (document.getElementById('sqCustomerName').value || '').trim() || null;
+        // Cari isim artik label (span) — save'e gonderilmiyor; server contact_id'den Contact.AccountTitle'i turetir.
+        var custText   = null;
 
         // Cari zorunlu kontrolu — ekran ortasi uyari yerine input'ta kirmizi shake
         if (!custIdVal && !custCodeVal && !custText) {
@@ -1878,7 +2665,16 @@
             salesRepId:      parseInt(document.getElementById('sqSalesRepId').value) || null,
             currency:        document.getElementById('sqCurrency').value,
             discountRate:    parseFloat(document.getElementById('sqDiscountRate').value || 0),
-            taxRate:         parseFloat(document.getElementById('sqTaxRate').value || 0),
+            // Satir bazli KDV hesaplandigi icin belge basligindaki TaxRate legacy —
+            // ilk satirin orani, yoksa 20 gonder (sunucu hala bu alani bekliyor).
+            taxRate:         (function () {
+                var ls = window.__SQ_LINES__ || [];
+                for (var i = 0; i < ls.length; i++) {
+                    var t = Number(ls[i].taxRate);
+                    if (isFinite(t)) return t;
+                }
+                return 20;
+            })(),
             paymentTerms:    document.getElementById('sqPaymentTerms').value || null,
             deliveryTerms:   document.getElementById('sqDeliveryTerms').value || null,
             deliveryAddress: document.getElementById('sqDeliveryAddress')?.value || null,
@@ -1892,8 +2688,68 @@
                 body: JSON.stringify(payload)
             });
             var data = await resp.json();
-            if (!data.success) { CalibraAlert.error(data.message || 'Bilinmeyen hata'); return; }
+            // invalidLineIds varsa: belge DB'de olustu/guncellendi ama satirlardan bazilarinda
+            // zorunlu widget eksik. ⚙ butonlari kirmizi yanip titresir, KITT tetiklenmez.
+            var invalidLineIds = Array.isArray(data.invalidLineIds) ? data.invalidLineIds : [];
+            if (!data.success) {
+                if (data.quote && data.quote.id) {
+                    currentQuoteId = data.quote.id;
+                    var sqNumEl = document.getElementById('sqQuoteNumber');
+                    if (sqNumEl && data.quote.documentNumber) sqNumEl.value = data.quote.documentNumber;
+                    var sqMetaErr = document.getElementById('sqMeta');
+                    if (sqMetaErr) sqMetaErr.innerHTML = '<strong>' + (data.quote.documentNumber || '') + '</strong>';
+                    // Satirlari yeniden cek ki line.id'ler gunce olsun + widget state yenilensin.
+                    try {
+                        var refreshResp = await fetch('/Sales/GetQuote?id=' + currentQuoteId);
+                        if (refreshResp.ok) {
+                            var refreshData = await refreshResp.json();
+                            var refreshedLines = (refreshData.lines || []).map(function (ln) {
+                                var m = (materials || []).find(function (x) { return x.id === ln.itemId });
+                                return Object.assign({}, ln, {
+                                    stockCardId:       ln.itemId,
+                                    trackCombinations: m ? m.trackCombinations === true : false,
+                                    taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
+                                });
+                            });
+                            if (window.CalibraHub && window.CalibraHub.salesLineGrid) {
+                                window.CalibraHub.salesLineGrid.setRows(refreshedLines);
+                            }
+                        }
+                    } catch (refreshErr) { /* ignore */ }
+                }
+                // Ekrani uyari modalı ile kesmeyelim — sadece gorsel feedback (⚙ kirmiziya dons+titre).
+                // Kullanici baska bir sekmedeyse once Kalemler sekmesine yonlendir. Tab gecis +
+                // titre tek rAF icinde — panel "genislemeden" once butonlar kirmizi+titre halinde
+                // gorunur, kullanici layout'un iki defa yerlesmesini hissetmez.
+                if (invalidLineIds.length > 0) {
+                    // Onceden ⚙ state'ini kirmiziya cevir ki tab acildiginda direk kirmizi gorunsunler.
+                    if (window.CalibraHub && window.CalibraHub.salesLineGrid
+                        && typeof window.CalibraHub.salesLineGrid.setInvalidLines === 'function') {
+                        window.CalibraHub.salesLineGrid.setInvalidLines(invalidLineIds);
+                    }
+                    // Tab'a gecis — sqActivateTab senkron, display:block atar.
+                    if (typeof sqActivateTab === 'function') sqActivateTab('lines');
+                    // Shake animasyonunu bir rAF sonra tetikle ki DOM gorunur hale geldikten sonra
+                    // calışsın. Panel-genisleme hissini azaltmak icin setTimeout(200) kullanmiyoruz.
+                    requestAnimationFrame(function () {
+                        if (window.CalibraHub && window.CalibraHub.salesLineGrid
+                            && typeof window.CalibraHub.salesLineGrid.flashInvalidLines === 'function') {
+                            window.CalibraHub.salesLineGrid.flashInvalidLines(invalidLineIds);
+                        }
+                    });
+                }
+                if (data.message && !invalidLineIds.length) {
+                    // Validation disi gercek bir hata — artik sessiz kalmamak icin konsola log yaz.
+                    console.warn('[SQ] save failed:', data.message);
+                }
+                return;
+            }
             currentQuoteId = data.quote.id;
+            // Basarili kayit sonrasi: eksik yok, grid'e temiz state sinyali ver.
+            if (window.CalibraHub && window.CalibraHub.salesLineGrid
+                && typeof window.CalibraHub.salesLineGrid.setInvalidLines === 'function') {
+                window.CalibraHub.salesLineGrid.setInvalidLines([]);
+            }
             document.getElementById('sqQuoteNumber').value = data.quote.documentNumber;
             document.getElementById('sqBtnDelete').disabled = false;
             document.getElementById('sqStatusSelect').style.display = '';
@@ -1904,35 +2760,608 @@
             var sqMetaEl2 = document.getElementById('sqMeta');
             if (sqMetaEl2) sqMetaEl2.innerHTML = '<strong>' + (data.quote.documentNumber || '') + '</strong>';
 
-            // ── Ek alanlari (WidgetMas/WidgetTra) kaydet ──
-            // RecordId = sales_quotes.Id (integer PK).
-            if (window._sqDynRenderer) {
+            // ── Satir ek alanlarini (SALES_QUOTE_LINES) senkronize et ──
+            // Kaydedilmemis satirda kullanici ⚙ modal'dan deger girmisse row.__extras
+            // icinde local tutuluyordu. Ana kayittan sonra satir id'leri DB'de olustu;
+            // /Sales/GetQuote ile taze listeyi cek, siraya gore __extras degerlerini
+            // widget API'siyle iliskilendir.
+            var localRowsForSync = rowsFilled; // SaveDocument'a gonderdigimiz ayni sira
+            var hasAnyPending = localRowsForSync.some(function (r) {
+                return r && r.__extras && Object.keys(r.__extras).length > 0;
+            });
+            if (hasAnyPending) {
                 try {
-                    var dynResult = await window._sqDynRenderer.save({ recordId: String(data.quote.id) });
-                    if (dynResult && dynResult.success === false) {
-                        console.warn('[SQ] widget save basarisiz:', dynResult.message);
+                    var refResp = await fetch('/Sales/GetQuote?id=' + currentQuoteId);
+                    if (refResp.ok) {
+                        var refData  = await refResp.json();
+                        var refLines = Array.isArray(refData.lines) ? refData.lines : [];
+                        // Index esleme: rowsFilled[i] → refLines[i] (server sirayi korur).
+                        // Ana POST'ta yeni satirlar icin id:null gonderildi; servertarafinda
+                        // UPSERT sonrasi tum satirlar bir id'ye sahip olarak geri doner.
+                        for (var i = 0; i < localRowsForSync.length && i < refLines.length; i++) {
+                            var lr = localRowsForSync[i];
+                            if (!lr.__extras || Object.keys(lr.__extras).length === 0) continue;
+                            var targetId = refLines[i].id;
+                            if (!(targetId > 0)) continue;
+                            try {
+                                await fetch('/api/widgets/forms/SALES_QUOTE_LINES/records/' + encodeURIComponent(String(targetId)), {
+                                    method: 'POST',
+                                    credentials: 'same-origin',
+                                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                    body: JSON.stringify({ values: lr.__extras, grids: null }),
+                                });
+                            } catch (extrasErr) {
+                                console.warn('[SQ] satir ek alan kaydi basarisiz (id=' + targetId + '):', extrasErr);
+                            }
+                        }
+                        // Grid'i refresh edilmis veriyle senkronize et (__extras temizlenir,
+                        // id'ler yerlesir, ⚙ butonlari kayitli duruma gecer).
+                        if (window.CalibraHub && window.CalibraHub.salesLineGrid) {
+                            var syncedLines = refLines.map(function (ln) {
+                                var m = (materials || []).find(function (x) { return x.id === ln.itemId; });
+                                return Object.assign({}, ln, {
+                                    stockCardId:       ln.itemId,
+                                    trackCombinations: m ? m.trackCombinations === true : false,
+                                    taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
+                                });
+                            });
+                            window.CalibraHub.salesLineGrid.setRows(syncedLines);
+                        }
                     }
-                } catch (dynErr) {
-                    console.warn('[SQ] widget save hatasi:', dynErr);
+                } catch (syncErr) {
+                    console.warn('[SQ] satir ek alan senkronizasyonu hatasi:', syncErr);
                 }
             }
 
-            sqFlashSaveSuccess();
+            // ── Ek alanlari (WidgetMas/WidgetTra) kaydet — belge basligi ──
+            // RecordId = sales_quotes.Id (integer PK). Renderer mount race'lerine karsi
+            // kisa bir polling ile hazir olmasini bekle; degerler verilerle birlikte
+            // gidebilsin. Ayrica sonucu kullaniciya gorunur toast olarak bildir.
+            await saveHeaderWidgets(data.quote.id);
+            // Kayit sonrasi widget'lari taze yukle — degerler formda reopen'a gerek
+            // kalmadan gorunur kalsin (save+reload dongusu kirilmasin).
+            sqReloadRenderer(String(data.quote.id));
+
+            if (!_silent) {
+                // Basari KITT sweep animasyonu — kullanici kaydin gectiğini gorur.
+                sqFlashSaveSuccess();
+                // Kayit sonrasi teklif kart listesine geri don. Flash animasyonu
+                // 1850ms; 1100ms'de nav edersek kullanici yesil sweep'i yakalar,
+                // sonra Documents sayfasina yumusakca dusur.
+                setTimeout(function () {
+                    window.location.href = '/Sales/Documents';
+                }, 1100);
+            }
         } catch (e) { CalibraAlert.error('Kayit hatasi: ' + e.message); }
     };
 
-    /* Kaydet onayi icin ust uyari yerine aksiyon seridinde yesil sweep. */
+    /* Renderer reload — React proxy.reload ic handleRef null iken sessizce
+       no-op oldugu icin cagriyi birkaç kez tekrar ederiz (idempotent).
+       Ilk basarili aramadan sonra sonraki tekrarlar cok ucuz (setState same).
+       Ek olarak renderer henuz mount olmadiysa polling ile onu da bekleriz. */
+    function sqReloadRenderer(recordId) {
+        var delays = [0, 80, 250, 600, 1200, 2500]; // ms
+        var mountAttempts = 0;
+        function fireReloadChain() {
+            delays.forEach(function (d) {
+                setTimeout(function () {
+                    if (!window._sqDynRenderer || !window._sqDynRenderer.reload) return;
+                    try { window._sqDynRenderer.reload({ recordId: recordId }); }
+                    catch (e) { console.warn('[SQ] reload fire hata:', e); }
+                }, d);
+            });
+            console.log('[SQ] sqReloadRenderer — recordId=' + recordId + ' (multi-fire)');
+        }
+        (function waitForMount() {
+            if (window._sqDynRenderer) return fireReloadChain();
+            if (++mountAttempts < 80) return setTimeout(waitForMount, 80);
+            console.warn('[SQ] sqReloadRenderer — renderer mount olmadi (80 deneme)');
+        })();
+    }
+
+    /* Belge basligi widget'larini kaydet — renderer hazir degilse 2 saniye bekle,
+       sonra POST. Basari/hata sonucunu kullaniciya toast ile bildir. */
+    async function saveHeaderWidgets(quoteId) {
+        // Renderer hazir olana kadar kisa bir polling
+        var waited = 0;
+        while (!window._sqDynRenderer && waited < 2000) {
+            await new Promise(function (r) { setTimeout(r, 80); });
+            waited += 80;
+        }
+        if (!window._sqDynRenderer) {
+            console.warn('[SQ] widget save atlandi — renderer hazir degil');
+            if (window.CalibraAlert && CalibraAlert.warn) {
+                CalibraAlert.warn('Ek alanlar kaydedilmedi — sayfayi yenileyip tekrar deneyin.');
+            }
+            return;
+        }
+        try {
+            var dynResult = await window._sqDynRenderer.save({ recordId: String(quoteId) });
+            if (dynResult && dynResult.success === false) {
+                console.warn('[SQ] widget save basarisiz:', dynResult.message);
+                if (window.CalibraAlert && CalibraAlert.error) {
+                    CalibraAlert.error('Ek alan kaydi basarisiz: ' + (dynResult.message || 'Bilinmeyen hata'));
+                }
+            } else {
+                console.log('[SQ] widget save OK recordId=' + quoteId);
+            }
+        } catch (dynErr) {
+            console.warn('[SQ] widget save hatasi:', dynErr);
+            if (window.CalibraAlert && CalibraAlert.error) {
+                CalibraAlert.error('Ek alan kaydi hatasi: ' + (dynErr && dynErr.message ? dynErr.message : dynErr));
+            }
+        }
+    }
+
+    /* Kaydet onayi icin K.I.T.T. on tarayici tarama efekti aksiyon seridinin altinda. */
     function sqFlashSaveSuccess() {
         var bar = document.querySelector('.sqe-action-bar');
         if (!bar) return;
         bar.classList.remove('is-save-flash');
         void bar.offsetWidth; // reflow — animasyonu yeniden tetikle
         bar.classList.add('is-save-flash');
-        setTimeout(function () { bar.classList.remove('is-save-flash'); }, 950);
+        setTimeout(function () { bar.classList.remove('is-save-flash'); }, 1850);
     }
 
+    // ── Islemler menusu (cark ikonu) — ac/kapa, disari tik kapa, Esc kapa ──
+    // Dropdown position:fixed kullaniyor cunku .sqe-action-bar'da overflow:hidden var
+    // (KITT save flash efekti icin). Viewport-relative koordinatlari her acilista
+    // butonun getBoundingClientRect'inden hesaplayip inline style olarak veririz;
+    // scroll/resize olaylarinda da yeniden hesapla.
+    function sqPositionActionsDropdown() {
+        var btn  = document.getElementById('sqActionsBtn');
+        var drop = document.getElementById('sqActionsDropdown');
+        if (!btn || !drop) return;
+        var r = btn.getBoundingClientRect();
+        var vw = window.innerWidth || document.documentElement.clientWidth;
+        var vh = window.innerHeight || document.documentElement.clientHeight;
+        // Dropdown genisligini oku (display:flex'iken minWidth en az 180px)
+        var dw = Math.max(drop.offsetWidth, 180);
+        var dh = drop.offsetHeight || 100;
+        // Sag kenara yaslan — right edge butonun sag kenari ile aynI hizada
+        var left = Math.max(8, Math.min(vw - dw - 8, r.right - dw));
+        // Asagi acilmasi yeterli yer varsa butonun altina, yoksa ustune
+        var top  = r.bottom + 6;
+        if (top + dh > vh - 8) top = Math.max(8, r.top - dh - 6);
+        drop.style.left = left + 'px';
+        drop.style.top  = top  + 'px';
+    }
+    window.sqToggleActionsMenu = function (ev) {
+        if (ev) ev.stopPropagation();
+        var menu = document.getElementById('sqActionsMenu');
+        var drop = document.getElementById('sqActionsDropdown');
+        var btn  = document.getElementById('sqActionsBtn');
+        if (!drop) return;
+        var willOpen = !drop.classList.contains('is-open');
+        drop.classList.toggle('is-open', willOpen);
+        if (menu) menu.classList.toggle('is-open', willOpen); // buton vurgusu icin
+        if (btn) btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        if (willOpen) {
+            // DOM'a eklendikten sonra pozisyon hesapla (display:flex gereklidir)
+            requestAnimationFrame(sqPositionActionsDropdown);
+        }
+    };
+    function sqCloseActionsMenu() {
+        var menu = document.getElementById('sqActionsMenu');
+        var drop = document.getElementById('sqActionsDropdown');
+        var btn  = document.getElementById('sqActionsBtn');
+        if (drop) drop.classList.remove('is-open');
+        if (menu) menu.classList.remove('is-open');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+    document.addEventListener('click', function (e) {
+        var drop = document.getElementById('sqActionsDropdown');
+        if (!drop || !drop.classList.contains('is-open')) return;
+        var menu = document.getElementById('sqActionsMenu');
+        if (menu && menu.contains(e.target)) return; // buton veya cevresi
+        if (drop.contains(e.target)) return;          // dropdown item'lari
+        sqCloseActionsMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') sqCloseActionsMenu();
+    });
+    // Scroll / resize'ta acik menunun pozisyonunu yeniden hesapla
+    window.addEventListener('scroll', function () {
+        var drop = document.getElementById('sqActionsDropdown');
+        if (drop && drop.classList.contains('is-open')) sqPositionActionsDropdown();
+    }, true);
+    window.addEventListener('resize', function () {
+        var drop = document.getElementById('sqActionsDropdown');
+        if (drop && drop.classList.contains('is-open')) sqPositionActionsDropdown();
+    });
+
+    // ── Islemler: Yazdir ──
+    // Belge turune tanimlanmis varsayilan FastReport sablonu ile cikti
+    // secenekleri (Baski onizle / PDF kaydet / Mail gonder) modalini acar.
+    window.sqActionPrint = async function (ev) {
+        if (ev) ev.stopPropagation();
+        sqCloseActionsMenu();
+
+        if (!currentQuoteId || Number(currentQuoteId) <= 0) {
+            if (window.CalibraAlert && CalibraAlert.warn) {
+                CalibraAlert.warn('Yazdirmak icin once teklifi kaydedin.');
+            } else {
+                alert('Yazdirmak icin once teklifi kaydedin.');
+            }
+            return;
+        }
+
+        try {
+            var resp = await fetch('/Document/DefaultTemplate?typeCode=satis_teklifi', { credentials: 'same-origin' });
+            var data = await resp.json();
+            if (!data.success || !data.id) {
+                var msg = data.message || 'Tanimlanmis sablon yok. Tasarim → Belge Sablonlari ekraninda ekleyin.';
+                if (window.CalibraAlert && CalibraAlert.warn) CalibraAlert.warn(msg); else alert(msg);
+                return;
+            }
+            // Sablonun kayitli cikti ayari varsa: modal acmadan direkt uygula
+            var savedOpts = null;
+            if (data.outputOptions) {
+                try { savedOpts = JSON.parse(data.outputOptions); } catch (_) { savedOpts = null; }
+            }
+            if (savedOpts && (savedOpts.preview || savedOpts.pdf || savedOpts.mail)) {
+                sqApplyOutputOptions(data.id, currentQuoteId, savedOpts);
+            } else {
+                sqOpenOutputOptionsModal(data.id, currentQuoteId);
+            }
+        } catch (e) {
+            console.warn('[SQ] yazdir hatasi:', e);
+            if (window.CalibraAlert && CalibraAlert.error) {
+                CalibraAlert.error('Yazdirma hatasi: ' + (e && e.message ? e.message : 'Bilinmeyen'));
+            } else {
+                alert('Yazdirma hatasi: ' + (e && e.message ? e.message : 'Bilinmeyen'));
+            }
+        }
+    };
+
+    // Kayitli cikti ayarlarini direkt uygular (modal acmaz).
+    // opts: { preview, pdf, mail, mailTo, mailSubject, mailBody }
+    async function sqApplyOutputOptions(templateId, recordId, opts) {
+        var baseUrl = '/Document/Preview/' + templateId + '/' + recordId;
+
+        if (opts.pdf) {
+            var a = document.createElement('a');
+            a.href = baseUrl + '?download=1';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function () { a.remove(); }, 200);
+        }
+
+        if (opts.preview && !opts.pdf) {
+            sqOpenPrintModal(baseUrl);
+        }
+
+        if (opts.mail) {
+            var subject = (opts.mailSubject || 'Satis Teklifi').trim();
+            var body    = (opts.mailBody || '').trim();
+            try {
+                var resp = await fetch('/Document/SendEmail', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        templateId: templateId,
+                        recordId:   recordId,
+                        toEmail:    null,
+                        subject:    subject,
+                        bodyText:   body,
+                        bodyHtml:   null
+                    })
+                });
+                var json = await resp.json();
+                if (json && json.success) {
+                    if (window.CalibraAlert && CalibraAlert.success) CalibraAlert.success('Mail gonderildi.'); else alert('Mail gonderildi.');
+                } else {
+                    var emsg = (json && json.message) || 'Mail gonderilemedi.';
+                    if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(emsg); else alert(emsg);
+                }
+            } catch (err) {
+                if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error('Mail hatasi: ' + (err && err.message ? err.message : 'Bilinmeyen')); else alert('Mail hatasi.');
+            }
+        }
+    }
+
+    // Cikti secenekleri modal'i:
+    //  - Baski onizle: iframe modali (sqOpenPrintModal)
+    //  - PDF olarak kaydet: /Document/Preview/{tid}/{rid}?download=1 ile indir
+    //  - Mail gonderim: alici/konu/mesaj alanlari acilir, /Document/SendEmail'e POST
+    //  PDF kaydet secildiginde Baski onizle anlamsiz oldugu icin pasiflesir.
+    function sqOpenOutputOptionsModal(templateId, recordId) {
+        var existing = document.getElementById('sqOutputOptionsOverlay');
+        if (existing) existing.remove();
+
+        if (!document.getElementById('sqOutputOptionsStyles')) {
+            var st = document.createElement('style');
+            st.id = 'sqOutputOptionsStyles';
+            st.textContent = [
+                '#sqOutputOptionsOverlay { position:fixed; inset:0; background:rgba(15,23,42,.62); z-index:9998; display:flex; align-items:center; justify-content:center; padding:24px; animation: sqOptFade .15s ease; }',
+                '#sqOutputOptionsOverlay .opt-modal { width:min(94vw,520px); background:#fff; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.4); overflow:hidden; display:flex; flex-direction:column; }',
+                '#sqOutputOptionsOverlay .opt-head { padding:14px 18px; background:#1f2937; color:#f8fafc; display:flex; align-items:center; justify-content:space-between; }',
+                '#sqOutputOptionsOverlay .opt-head h3 { margin:0; font-size:14px; font-weight:600; }',
+                '#sqOutputOptionsOverlay .opt-head .opt-x { background:transparent; border:none; color:#f8fafc; font-size:22px; cursor:pointer; line-height:1; padding:0 4px; }',
+                '#sqOutputOptionsOverlay .opt-body { padding:16px 18px; display:flex; flex-direction:column; gap:10px; }',
+                '#sqOutputOptionsOverlay .opt-row { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; cursor:pointer; transition:border-color .15s, background .15s; }',
+                '#sqOutputOptionsOverlay .opt-row:hover { border-color:#94a3b8; background:#f8fafc; }',
+                '#sqOutputOptionsOverlay .opt-row.is-checked { border-color:#2563eb; background:#eff6ff; }',
+                '#sqOutputOptionsOverlay .opt-row.is-disabled { opacity:.45; pointer-events:none; }',
+                '#sqOutputOptionsOverlay .opt-row input { margin-top:3px; cursor:pointer; }',
+                '#sqOutputOptionsOverlay .opt-row .opt-text { display:flex; flex-direction:column; gap:2px; }',
+                '#sqOutputOptionsOverlay .opt-row .opt-title { font-weight:600; font-size:13px; color:#0f172a; }',
+                '#sqOutputOptionsOverlay .opt-row .opt-desc { font-size:11.5px; color:#64748b; }',
+                '#sqOutputOptionsOverlay .opt-mail { display:none; flex-direction:column; gap:8px; padding:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-top:2px; }',
+                '#sqOutputOptionsOverlay .opt-mail.is-open { display:flex; }',
+                '#sqOutputOptionsOverlay .opt-mail label { font-size:11.5px; font-weight:600; color:#475569; }',
+                '#sqOutputOptionsOverlay .opt-mail input, #sqOutputOptionsOverlay .opt-mail textarea { width:100%; padding:7px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:12.5px; font-family:inherit; box-sizing:border-box; }',
+                '#sqOutputOptionsOverlay .opt-mail textarea { resize:vertical; min-height:70px; }',
+                '#sqOutputOptionsOverlay .opt-foot { padding:12px 18px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:8px; }',
+                '#sqOutputOptionsOverlay .opt-btn { padding:7px 14px; font-size:12.5px; font-weight:600; border-radius:7px; cursor:pointer; border:1px solid transparent; }',
+                '#sqOutputOptionsOverlay .opt-btn-secondary { background:#fff; color:#475569; border-color:#e2e8f0; }',
+                '#sqOutputOptionsOverlay .opt-btn-secondary:hover { background:#f1f5f9; }',
+                '#sqOutputOptionsOverlay .opt-btn-primary { background:#2563eb; color:#fff; border-color:#2563eb; }',
+                '#sqOutputOptionsOverlay .opt-btn-primary:hover { background:#1d4ed8; }',
+                '#sqOutputOptionsOverlay .opt-btn-primary:disabled { background:#93c5fd; border-color:#93c5fd; cursor:not-allowed; }',
+                '@@keyframes sqOptFade { from { opacity:0; } to { opacity:1; } }'
+            ].join('\n');
+            document.head.appendChild(st);
+        }
+
+        var overlay = document.createElement('div');
+        overlay.id = 'sqOutputOptionsOverlay';
+        overlay.innerHTML =
+            '<div class="opt-modal" role="dialog" aria-label="Cikti Secenekleri">' +
+                '<div class="opt-head">' +
+                    '<h3>Cikti Secenekleri</h3>' +
+                    '<button type="button" class="opt-x" aria-label="Kapat">&times;</button>' +
+                '</div>' +
+                '<div class="opt-body">' +
+                    '<label class="opt-row is-checked" data-opt="preview">' +
+                        '<input type="checkbox" id="sqOptPreview" checked />' +
+                        '<span class="opt-text">' +
+                            '<span class="opt-title">Baski onizle</span>' +
+                            '<span class="opt-desc">Belgeyi modal icinde PDF olarak goruntule.</span>' +
+                        '</span>' +
+                    '</label>' +
+                    '<label class="opt-row" data-opt="pdf">' +
+                        '<input type="checkbox" id="sqOptPdf" />' +
+                        '<span class="opt-text">' +
+                            '<span class="opt-title">PDF olarak kaydet</span>' +
+                            '<span class="opt-desc">Belgeyi PDF dosyasi olarak indir. Secilirse baski onizleme pasiflesir.</span>' +
+                        '</span>' +
+                    '</label>' +
+                    '<label class="opt-row" data-opt="mail">' +
+                        '<input type="checkbox" id="sqOptMail" />' +
+                        '<span class="opt-text">' +
+                            '<span class="opt-title">Mail gonderim</span>' +
+                            '<span class="opt-desc">PDF eki ile e-posta gonder.</span>' +
+                        '</span>' +
+                    '</label>' +
+                    '<div class="opt-mail" id="sqOptMailFields">' +
+                        '<div style="font-size:11.5px; color:#1d4ed8; padding:6px 10px; background:#eff6ff; border-left:3px solid #3b82f6; border-radius:4px;">' +
+                            'Alici e-postasi teklife ait <strong>cari kart</strong>tan otomatik alinir.' +
+                        '</div>' +
+                        '<div><label for="sqOptMailSubject">Konu</label>' +
+                        '<input type="text" id="sqOptMailSubject" placeholder="Satis Teklifi" /></div>' +
+                        '<div><label for="sqOptMailBody">Mesaj</label>' +
+                        '<textarea id="sqOptMailBody" placeholder="Ekte teklifimizi bulabilirsiniz..."></textarea></div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="opt-foot">' +
+                    '<button type="button" class="opt-btn opt-btn-secondary" id="sqOptCancel">Vazgec</button>' +
+                    '<button type="button" class="opt-btn opt-btn-primary" id="sqOptRun">Calistir</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        var optPreview  = overlay.querySelector('#sqOptPreview');
+        var optPdf      = overlay.querySelector('#sqOptPdf');
+        var optMail     = overlay.querySelector('#sqOptMail');
+        var rowPreview  = overlay.querySelector('[data-opt="preview"]');
+        var rowPdf      = overlay.querySelector('[data-opt="pdf"]');
+        var rowMail     = overlay.querySelector('[data-opt="mail"]');
+        var mailFields  = overlay.querySelector('#sqOptMailFields');
+        var runBtn      = overlay.querySelector('#sqOptRun');
+
+        function refresh() {
+            if (optPdf.checked) {
+                optPreview.checked = false;
+                rowPreview.classList.add('is-disabled');
+            } else {
+                rowPreview.classList.remove('is-disabled');
+            }
+            rowPreview.classList.toggle('is-checked', optPreview.checked);
+            rowPdf.classList.toggle('is-checked',     optPdf.checked);
+            rowMail.classList.toggle('is-checked',    optMail.checked);
+            mailFields.classList.toggle('is-open',    optMail.checked);
+            runBtn.disabled = !(optPreview.checked || optPdf.checked || optMail.checked);
+        }
+        [optPreview, optPdf, optMail].forEach(function (cb) {
+            cb.addEventListener('change', refresh);
+        });
+        refresh();
+
+        function close() {
+            overlay.remove();
+            document.removeEventListener('keydown', esc);
+        }
+        function esc(e) { if (e.key === 'Escape') close(); }
+        document.addEventListener('keydown', esc);
+        overlay.querySelector('.opt-x').onclick       = close;
+        overlay.querySelector('#sqOptCancel').onclick = close;
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+
+        runBtn.onclick = async function () {
+            var baseUrl = '/Document/Preview/' + templateId + '/' + recordId;
+
+            if (optPdf.checked) {
+                var a = document.createElement('a');
+                a.href = baseUrl + '?download=1';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function () { a.remove(); }, 200);
+            }
+
+            if (optPreview.checked && !optPdf.checked) {
+                sqOpenPrintModal(baseUrl);
+            }
+
+            if (optMail.checked) {
+                var subject = (overlay.querySelector('#sqOptMailSubject').value || '').trim();
+                var body    = (overlay.querySelector('#sqOptMailBody').value || '').trim();
+                if (!subject) subject = 'Satis Teklifi';
+                runBtn.disabled = true;
+                runBtn.textContent = 'Gonderiliyor...';
+                try {
+                    var resp = await fetch('/Document/SendEmail', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            templateId: templateId,
+                            recordId:   recordId,
+                            toEmail:    null,
+                            subject:    subject,
+                            bodyText:   body,
+                            bodyHtml:   null
+                        })
+                    });
+                    var json = await resp.json();
+                    if (json && json.success) {
+                        if (window.CalibraAlert && CalibraAlert.success) CalibraAlert.success('Mail gonderildi.'); else alert('Mail gonderildi.');
+                    } else {
+                        var emsg = (json && json.message) || 'Mail gonderilemedi.';
+                        if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(emsg); else alert(emsg);
+                    }
+                } catch (err) {
+                    if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error('Mail hatasi: ' + (err && err.message ? err.message : 'Bilinmeyen')); else alert('Mail hatasi.');
+                } finally {
+                    runBtn.disabled = false;
+                    runBtn.textContent = 'Calistir';
+                }
+            }
+
+            close();
+        };
+    }
+
+    // PDF onizleme modal'i: header yok, iframe arka alani tam doldurur.
+    // PDF viewer'in kendi alt toolbar'inda yazdir + indir butonlari oldugu icin
+    // tekrar buton koymuyoruz. Sadece sag-ust kosede absolute X kapatma butonu.
+    // ESC ve overlay tiklamasi ile de kapanir.
+    function sqOpenPrintModal(url) {
+        var existing = document.getElementById('sqPrintModalOverlay');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = 'sqPrintModalOverlay';
+        overlay.style.cssText =
+            'position:fixed; inset:0; background:rgba(15,23,42,.72); z-index:9999;' +
+            'display:flex; align-items:center; justify-content:center; padding:16px;' +
+            'animation: sqPrintFade .15s ease;';
+
+        var modal = document.createElement('div');
+        modal.style.cssText =
+            'position:relative; width:98vw; height:96vh; background:#525659;' +
+            'border-radius:8px; overflow:hidden;' +
+            'box-shadow:0 18px 50px rgba(0,0,0,.55);';
+
+        // Sag-ust kose: tek X kapatma. iframe'in uzerinde z-index ile garanti.
+        var closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.setAttribute('aria-label', 'Kapat');
+        closeBtn.title = 'Kapat (Esc)';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.style.cssText =
+            'position:absolute; top:10px; right:12px; z-index:10;' +
+            'width:36px; height:36px; border-radius:50%;' +
+            'background:rgba(15,23,42,.78); color:#fff;' +
+            'border:1px solid rgba(255,255,255,.22);' +
+            'font-size:22px; line-height:1; cursor:pointer;' +
+            'display:inline-flex; align-items:center; justify-content:center;' +
+            'box-shadow:0 4px 12px rgba(0,0,0,.35); transition:background .15s;';
+        closeBtn.onmouseenter = function () { closeBtn.style.background = 'rgba(220,38,38,.85)'; };
+        closeBtn.onmouseleave = function () { closeBtn.style.background = 'rgba(15,23,42,.78)'; };
+
+        var loader = document.createElement('div');
+        loader.id = 'sqPrintLoader';
+        loader.style.cssText =
+            'position:absolute; inset:0; background:rgba(82,86,89,.94); color:#fff;' +
+            'display:flex; align-items:center; justify-content:center;' +
+            'flex-direction:column; gap:14px; transition:opacity .25s; z-index:5;';
+        loader.innerHTML =
+            '<div style="width:38px; height:38px; border:3px solid rgba(255,255,255,.25);' +
+            'border-top-color:#60a5fa; border-radius:50%; animation: sqPrintSpin .85s linear infinite;"></div>' +
+            '<div style="font-size:12px; font-weight:500;">Onizleme yukleniyor...</div>';
+
+        var iframe = document.createElement('iframe');
+        iframe.id = 'sqPrintIframe';
+        iframe.src = url;
+        iframe.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; border:none; background:#525659; z-index:1;';
+        iframe.onload = function () {
+            loader.style.opacity = '0';
+            setTimeout(function () { loader.remove(); }, 280);
+        };
+
+        modal.appendChild(iframe);
+        modal.appendChild(loader);
+        modal.appendChild(closeBtn);
+        overlay.appendChild(modal);
+
+        // Animasyon stil tagi (idempotent)
+        if (!document.getElementById('sqPrintModalStyles')) {
+            var st = document.createElement('style');
+            st.id = 'sqPrintModalStyles';
+            st.textContent =
+                '@@keyframes sqPrintFade { from { opacity:0; } to { opacity:1; } }' +
+                '@@keyframes sqPrintSpin { to { transform: rotate(360deg); } }';
+            document.head.appendChild(st);
+        }
+
+        function closeModal() {
+            overlay.remove();
+            document.removeEventListener('keydown', escHandler);
+        }
+        function escHandler(e) { if (e.key === 'Escape') closeModal(); }
+        document.addEventListener('keydown', escHandler);
+        closeBtn.addEventListener('click', closeModal);
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) closeModal();
+        });
+
+        document.body.appendChild(overlay);
+    }
+
+    // ── Islemler: Tur Degistir ──
+    // Belge turunu (SalesQuote → Order/Proforma vb.) degistirmek icin stub.
+    // Backend donusturme endpoint'i henuz yoksa kullaniciya bilgi mesaji doner.
+    window.sqActionChangeType = function (ev) {
+        if (ev) ev.stopPropagation();
+        sqCloseActionsMenu();
+        if (!currentQuoteId) {
+            if (window.CalibraAlert && CalibraAlert.warn) {
+                CalibraAlert.warn('Tur degistirmek icin once teklifi kaydedin.');
+            } else {
+                alert('Tur degistirmek icin once teklifi kaydedin.');
+            }
+            return;
+        }
+        if (window.CalibraAlert && CalibraAlert.info) {
+            CalibraAlert.info('Belge turu donusumu yakinda aktiflestirilecek.');
+        } else {
+            alert('Belge turu donusumu yakinda aktiflestirilecek.');
+        }
+    };
+
     window.sqDelete = async function () {
-        if (!currentQuoteId || !confirm('Bu teklif silinecek. Devam?')) return;
+        if (!currentQuoteId) return;
+        var ok = await CalibraAlert.confirm('Bu teklif silinecek. Devam edilsin mi?', {
+            title: 'Teklifi Sil',
+            okText: 'Evet, Sil',
+            cancelText: 'Iptal',
+            danger: true
+        });
+        if (!ok) return;
         try {
             await fetch('/Sales/DeleteDocument', {
                 method: 'POST',
@@ -2055,20 +3484,279 @@
         _combModalRow = null;
     };
 
-    // DynamicWidgetRenderer mount — initial recordId bos, sqLoadQuote reload ile override eder
+    // DynamicWidgetRenderer mount — initial recordId bos, sqLoadQuote reload ile override eder.
+    // React bundle (bootstrapLineGrid tarafindan dinamik yuklenir) hazir olmadan mount
+    // denemesi sessizce basarisiz oluyordu — bu yuzden polling ile bekle.
     (function mountDynRenderer() {
         var el = document.getElementById('sqDynamicWidgets');
         if (!el) return;
-        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
-        try {
-            window._sqDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
-                formCode: el.getAttribute('data-form-code') || 'SALES_QUOTE_EDIT',
-                recordId: el.getAttribute('data-record-id') || '',
-                classPrefix: 'sqe'
-            });
-        } catch (e) {
-            console.warn('[SQ] mountDynamicWidgetRenderer hatasi:', e);
+        function tryMount() {
+            if (window._sqDynRenderer) return true; // zaten mounted
+            if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return false;
+            try {
+                window._sqDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                    formCode: el.getAttribute('data-form-code') || 'SALES_QUOTE_EDIT',
+                    recordId: el.getAttribute('data-record-id') || '',
+                    classPrefix: 'sqe'
+                });
+                console.log('[SQ] DynamicWidgetRenderer mounted');
+                // Yuklenmis bir quote varsa recordId'yi guncelle — handleRef
+                // hazir olunca reload eder.
+                if (typeof currentQuoteId !== 'undefined' && currentQuoteId) {
+                    sqReloadRenderer(String(currentQuoteId));
+                }
+                return true;
+            } catch (e) {
+                console.warn('[SQ] mountDynamicWidgetRenderer hatasi:', e);
+                return false;
+            }
         }
+        if (tryMount()) return;
+        // Bundle henuz hazir degil — bootstrapLineGrid async yukluyor — polling ile bekle.
+        var tries = 0;
+        var t = setInterval(function () {
+            if (tryMount() || ++tries > 100) clearInterval(t);
+        }, 50);
+    })();
+
+    // ── Widget API teshis probe'u ─────────────────────────────────
+    // Bazi durumlarda widget'lar admin'de tanimli olsa bile Ek Alanlar panesinde
+    // gorunmuyor (ornegin form DB'de yok, widget aktif degil, ya da farkli
+    // sirketin tanimi). Probe /api/widgets API'sini dogrudan cagirip yaniti
+    // konsola loglar ve bos durum mesajini duruma gore ozellestirir.
+    window.sqProbeWidgets = async function () {
+        var el = document.getElementById('sqDynamicWidgets');
+        var msgEl = document.getElementById('sqWidgetEmptyMsg');
+        var emptyEl = document.getElementById('sqWidgetEmpty');
+        if (!el) return;
+        var formCode = el.getAttribute('data-form-code') || 'SALES_QUOTE_EDIT';
+        var recordId = el.getAttribute('data-record-id') || '';
+        var probeUrl = '/api/widgets/forms/' + encodeURIComponent(formCode)
+            + '/records/' + encodeURIComponent(recordId || '-');
+        try {
+            var resp = await fetch(probeUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+            if (resp.status === 404) {
+                console.warn('[SQ probe] Form DB\'de bulunamadi — formCode=' + formCode);
+                if (msgEl) msgEl.innerHTML =
+                    '<div>"<strong>' + formCode + '</strong>" form kaydi veritabaninda bulunamadi.</div>'
+                    + '<div style="margin-top:6px;">Widget Kayit ekranindan once formu tanimlayip aktiflestirin.</div>'
+                    + '<div style="margin-top:10px;font-family:monospace;font-size:0.68rem;opacity:0.6;">API: GET ' + probeUrl + ' → 404</div>';
+                if (emptyEl) emptyEl.classList.remove('is-hidden');
+                return;
+            }
+            if (!resp.ok) {
+                console.warn('[SQ probe] HTTP ' + resp.status + ' ' + probeUrl);
+                if (msgEl) msgEl.innerHTML = 'API hatasi: HTTP ' + resp.status
+                    + '<div style="margin-top:6px;font-family:monospace;font-size:0.68rem;opacity:0.6;">' + probeUrl + '</div>';
+                if (emptyEl) emptyEl.classList.remove('is-hidden');
+                return;
+            }
+            var data = await resp.json();
+            var widgets = Array.isArray(data.widgets) ? data.widgets : [];
+            var groups  = widgets.filter(function (w) { return w.dataType === 'group'; });
+            var fields  = widgets.filter(function (w) { return w.dataType !== 'group'; });
+            console.info('[SQ probe] formCode=' + formCode + ' formId=' + data.formId
+                + ' widgets=' + widgets.length + ' groups=' + groups.length + ' fields=' + fields.length, widgets);
+
+            // Parent-child baglantisini teshis et — orphan field'lari isaretle
+            var groupIds = {};
+            groups.forEach(function (g) { groupIds[String(g.id)] = g; });
+            var orphans = fields.filter(function (f) {
+                return f.parentId != null && !groupIds[String(f.parentId)];
+            });
+
+            // Diagnostic ozet (her seferinde gosterilir — sub-tab gorundugunde empty zaten gizlenir)
+            var summary = '<div style="font-family:monospace;font-size:0.68rem;opacity:0.75;margin-top:10px;text-align:left;max-width:700px;margin-left:auto;margin-right:auto;">'
+                + '<div><strong>Teshis:</strong> formCode=<code>' + formCode + '</code> formId=<code>' + (data.formId || '?') + '</code></div>'
+                + '<div>Toplam widget: <code>' + widgets.length + '</code> — grup: <code>' + groups.length + '</code>, alan: <code>' + fields.length + '</code>'
+                + (orphans.length > 0 ? ', <span style="color:#fca5a5">orphan: ' + orphans.length + '</span>' : '')
+                + '</div>';
+            if (widgets.length > 0) {
+                summary += '<div style="margin-top:6px;opacity:0.8;"><strong>Linkage:</strong></div>';
+                summary += '<div style="margin-top:2px;opacity:0.7;">';
+                widgets.forEach(function (w) {
+                    var isGroup = w.dataType === 'group';
+                    var parentInfo = '';
+                    if (!isGroup) {
+                        if (w.parentId == null) parentInfo = ' parent=<code>null</code> (ungrouped)';
+                        else if (groupIds[String(w.parentId)]) parentInfo = ' parent=<code>' + w.parentId + '</code>→' + groupIds[String(w.parentId)].label;
+                        else parentInfo = ' <span style="color:#fca5a5">parent=<code>' + w.parentId + '</code> (ORPHAN — grup yok!)</span>';
+                    }
+                    summary += '<div>' + (isGroup ? '▼ GROUP' : '·') + ' id=<code>' + w.id + '</code> code=<code>' + w.widgetId + '</code> label="' + w.label + '" type=' + w.dataType + parentInfo + '</div>';
+                });
+                summary += '</div>';
+            }
+            // Renderer'in mevcut DOM durumu — loading / error / cards?
+            var rendererRoot = document.getElementById('sqDynamicWidgets');
+            summary += '<div style="margin-top:8px;opacity:0.8;"><strong>Renderer DOM:</strong></div>';
+            if (!rendererRoot) {
+                summary += '<div style="color:#fca5a5;">#sqDynamicWidgets bulunamadi</div>';
+            } else {
+                var errBlock = rendererRoot.querySelector('.sqe-rule-cycle, .sqe-dyn-error');
+                var loadingBlock = rendererRoot.querySelector('.sqe-dyn-loading');
+                var rootEl = rendererRoot.querySelector('[data-widget-renderer]');
+                var cardEls = rendererRoot.querySelectorAll('[data-dyn-group-id]');
+                summary += '<div style="font-size:0.66rem;opacity:0.75;">';
+                summary += '  children: <code>' + rendererRoot.children.length + '</code>';
+                summary += ', loading: <code>' + (loadingBlock ? 'yes' : 'no') + '</code>';
+                summary += ', rootEl: <code>' + (rootEl ? 'yes' : 'no') + '</code>';
+                summary += ', cards: <code>' + cardEls.length + '</code>';
+                summary += '</div>';
+                // React imperative handle'dan dogrudan state oku
+                if (window._sqDynRenderer) {
+                    var rh = window._sqDynRenderer;
+                    var hwGetter = (typeof rh.getHasWidgets === 'function') ? rh.getHasWidgets() : '?';
+                    var valCount = '?';
+                    try { valCount = Object.keys((rh.getValues && rh.getValues()) || {}).length; } catch (_) {}
+                    summary += '<div style="font-size:0.66rem;opacity:0.75;margin-top:2px;">';
+                    summary += '  React handle: getHasWidgets=<code>' + hwGetter + '</code>';
+                    summary += ', getValues.keys=<code>' + valCount + '</code>';
+                    summary += ', reloadFn=<code>' + (typeof rh.reload === 'function' ? 'yes' : 'no') + '</code>';
+                    summary += '</div>';
+                } else {
+                    // window._sqDynRenderer yok — ne kadar bundle hazir?
+                    var ch = window.CalibraHub;
+                    summary += '<div style="font-size:0.66rem;color:#fca5a5;margin-top:2px;">';
+                    summary += 'window._sqDynRenderer yok — ';
+                    summary += 'CalibraHub=<code>' + (typeof ch) + '</code>';
+                    if (ch) {
+                        summary += ', mountDynamicWidgetRenderer=<code>' + (typeof ch.mountDynamicWidgetRenderer) + '</code>';
+                        summary += ', mountLineItemsGrid=<code>' + (typeof ch.mountLineItemsGrid) + '</code>';
+                    }
+                    summary += '</div>';
+                    // Self-heal: bundle varsa hemen mount et
+                    if (ch && typeof ch.mountDynamicWidgetRenderer === 'function') {
+                        try {
+                            window._sqDynRenderer = ch.mountDynamicWidgetRenderer(rendererRoot, {
+                                formCode: rendererRoot.getAttribute('data-form-code') || 'SALES_QUOTE_EDIT',
+                                recordId: rendererRoot.getAttribute('data-record-id') || '',
+                                classPrefix: 'sqe'
+                            });
+                            summary += '<div style="font-size:0.66rem;color:#86efac;margin-top:2px;">Probe self-heal: mount tetiklendi — 500ms sonra tekrar yukle</div>';
+                            setTimeout(function () {
+                                if (typeof window.sqProbeWidgets === 'function') window.sqProbeWidgets();
+                            }, 500);
+                        } catch (mountErr) {
+                            summary += '<div style="font-size:0.66rem;color:#fca5a5;margin-top:2px;">Self-heal mount hatasi: '
+                                + (mountErr && mountErr.message ? mountErr.message : String(mountErr)) + '</div>';
+                        }
+                    }
+                }
+                if (errBlock) {
+                    summary += '<div style="margin-top:6px;color:#fca5a5;"><strong>Renderer hata:</strong> '
+                        + (errBlock.textContent || '').trim().substring(0, 400) + '</div>';
+                }
+                // Ilk 400 karakter renderer HTML'si — karti bulamadiysak React ne bastiysa goster
+                if (rendererRoot.children.length > 0 && cardEls.length === 0) {
+                    var htmlPreview = (rendererRoot.innerHTML || '').substring(0, 400);
+                    summary += '<div style="margin-top:4px;color:#fca5a5;font-size:0.62rem;white-space:pre-wrap;word-break:break-all;">'
+                        + 'HTML: ' + htmlPreview.replace(/</g, '&lt;') + '…</div>';
+                }
+            }
+            summary += '</div>';
+
+            if (widgets.length === 0) {
+                if (msgEl) msgEl.innerHTML =
+                    '<div>"<strong>' + formCode + '</strong>" formunda aktif widget bulunmuyor.</div>'
+                    + '<div style="margin-top:6px;">Widget Kayit ekranindan ekleyip aktiflestirin.</div>'
+                    + summary;
+                if (emptyEl) emptyEl.classList.remove('is-hidden');
+            } else if (fields.length === 0) {
+                if (msgEl) msgEl.innerHTML =
+                    '<div>"<strong>' + formCode + '</strong>" formunda sadece grup tanimlari var.</div>'
+                    + '<div style="margin-top:6px;">Her grubun altina en az bir field widget ekleyin.</div>'
+                    + summary;
+                if (emptyEl) emptyEl.classList.remove('is-hidden');
+            } else {
+                // Widget tanimi DB'de var — render edilmis mi kontrol et.
+                // Render oldu ise empty state'i tamamen gizle; olmadiysa "bekleniyor +
+                // teshis" goster (race: API dondu, React henuz basmadi).
+                var rendererEl2 = document.getElementById('sqDynamicWidgets');
+                var hasCards = rendererEl2 && rendererEl2.querySelectorAll('[data-dyn-group-id]').length > 0;
+                if (hasCards) {
+                    console.info('[SQ probe] ' + fields.length + ' field widget render edildi');
+                    if (emptyEl) emptyEl.classList.add('is-hidden');
+                } else {
+                    console.info('[SQ probe] ' + fields.length + ' field widget bekleniyor — renderer bassinca gorunecek');
+                    if (msgEl) msgEl.innerHTML =
+                        '<div>Widget tanimlari alindi, renderer hazirlaniyor…</div>'
+                        + summary;
+                    if (emptyEl) emptyEl.classList.remove('is-hidden');
+                    // Kisa suredur bir sonraki cycle'da kontrol et — React render edince gizlensin.
+                    setTimeout(function () {
+                        var cardsNow = rendererEl2 && rendererEl2.querySelectorAll('[data-dyn-group-id]').length;
+                        if (cardsNow > 0 && emptyEl) emptyEl.classList.add('is-hidden');
+                    }, 400);
+                }
+            }
+        } catch (err) {
+            console.warn('[SQ probe] hatasi:', err);
+            if (msgEl) msgEl.innerHTML = 'API cagrisi basarisiz: ' + (err && err.message ? err.message : err);
+            if (emptyEl) emptyEl.classList.remove('is-hidden');
+        }
+    };
+    // Probe'u mount sonrasi tetikle — renderer fetch'i paralel yapiyor zaten,
+    // bizim probe sadece teshis amacli.
+    setTimeout(window.sqProbeWidgets, 200);
+
+    // "Yeniden yukle" butonu: renderer'a reload sinyali + probe tekrar.
+    window.sqReloadWidgets = function () {
+        try {
+            if (window._sqDynRenderer && window._sqDynRenderer.reload) {
+                window._sqDynRenderer.reload({ recordId: currentQuoteId ? String(currentQuoteId) : '' });
+            }
+        } catch (e) { /* ignore */ }
+        setTimeout(window.sqProbeWidgets, 200);
+    };
+
+    /* ──────────────────────────────────────────────────────────────
+       Widget gruplarini "Ek Alanlar" panesinin icindeki yatay alt
+       sekmelere donustur. Statik "Ek Alanlar" ust sekmesi ayni yerde
+       kalir; secilince acilan panelde her widget grubu bir alt sekme
+       olur (ParentId=null olan field'lar __ungrouped -> "Ek Alanlar"
+       etiketli varsayilan alt sekmede gosterilir).
+       ────────────────────────────────────────────────────────────── */
+    // Grup basligindaki pill'e tiklandiginda hem aktif pill guncellenir hem
+    // ilgili grup kartinin yanina scroll yapilir. Gruplar artik dikey olarak
+    // Sub-tab pill bar kaldirildi — kullanici her grup basligi bir kez
+    // gorunsun istedi. Gruplar dikey alt alta stacked; her biri kendi
+    // <summary> section header'i ile basilir (sqe-widget-wrap CSS).
+    // sqShowOnlyWidgetGroup / sqInjectWidgetSubTabs artik no-op — eski
+    // scroll-to API'si kirilsin diye bos stub tutulur.
+    function sqShowOnlyWidgetGroup(gid) { /* no-op: pill bar kaldirildi */ }
+    function sqInjectWidgetSubTabs() {
+        var rendererEl = document.getElementById('sqDynamicWidgets');
+        var emptyEl = document.getElementById('sqWidgetEmpty');
+        if (!rendererEl) return false;
+        var cards = rendererEl.querySelectorAll('[data-dyn-group-id]');
+        if (cards.length > 0 && emptyEl) emptyEl.classList.add('is-hidden');
+        return cards.length > 0;
+    }
+
+    // Renderer mount + schema load asenkron — MutationObserver ile kartlari bekle.
+    (function observeRenderer() {
+        var rendererEl = document.getElementById('sqDynamicWidgets');
+        if (!rendererEl) return;
+        var done = false;
+        function tryInject() {
+            if (done) return;
+            if (sqInjectWidgetSubTabs()) { done = true; }
+        }
+        // Initial poll (cached schema hemen render olabilir)
+        var attempts = 0;
+        var timer = setInterval(function () {
+            if (done || ++attempts > 50) { clearInterval(timer); return; }
+            tryInject();
+        }, 150);
+        // MutationObserver — reload (recordId degisimi) sonrasi tekrar inject
+        var obs = new MutationObserver(function () {
+            var cards = rendererEl.querySelectorAll('[data-dyn-group-id]');
+            if (cards.length > 0) {
+                done = false;
+                tryInject();
+            }
+        });
+        obs.observe(rendererEl, { childList: true, subtree: true });
     })();
 })();
 </script>

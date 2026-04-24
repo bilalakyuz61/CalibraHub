@@ -1,4 +1,5 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,6 +10,7 @@ namespace CalibraHub.Worker;
 
 public sealed class ReminderNotificationWorker : BackgroundService
 {
+    private const string TaskCode = "REMINDER_NOTIFY";
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ReminderNotificationWorker> _logger;
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
@@ -23,11 +25,30 @@ public sealed class ReminderNotificationWorker : BackgroundService
     {
         _logger.LogInformation("ReminderNotificationWorker started.");
 
+        // Startup registration
+        try
+        {
+            using var regScope = _scopeFactory.CreateScope();
+            var repo = regScope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
+            await repo.UpsertRegistrationAsync(new ScheduledTask
+            {
+                Code                = TaskCode,
+                Name                = "Hatirlatici Bildirim",
+                Description         = "Not'lara bagli zamanlanmis hatirlaticilari kontrol edip suresi gelenleri gonderir.",
+                ScheduleDescription = "Her 60 saniyede",
+                IsEnabled           = true,
+            }, stoppingToken);
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "ScheduledTask register failed."); }
+
         while (!stoppingToken.IsCancellationRequested)
         {
+            int processed = 0;
+            int status = 0; string? msg = null;
             try
             {
-                await ProcessDueRemindersAsync(stoppingToken);
+                processed = await ProcessDueRemindersAsync(stoppingToken);
+                msg = processed == 0 ? "Bekleyen hatirlatici yok." : $"{processed} hatirlatici islendi.";
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -36,7 +57,16 @@ public sealed class ReminderNotificationWorker : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing due reminders.");
+                status = 1; msg = ex.Message;
             }
+
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var repo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
+                await repo.ReportRunAsync(TaskCode, status, msg, null, DateTime.UtcNow.Add(PollInterval), stoppingToken);
+            }
+            catch { /* swallow */ }
 
             try
             {
@@ -51,13 +81,16 @@ public sealed class ReminderNotificationWorker : BackgroundService
         _logger.LogInformation("ReminderNotificationWorker stopped.");
     }
 
-    private async Task ProcessDueRemindersAsync(CancellationToken cancellationToken)
+    private async Task<int> ProcessDueRemindersAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var noteRepository = scope.ServiceProvider.GetRequiredService<INoteRepository>();
+        var notificationRepo = scope.ServiceProvider.GetRequiredService<IUserNotificationRepository>();
+        var userRepo = scope.ServiceProvider.GetRequiredService<IUserProfileRepository>();
+        var emailSender = scope.ServiceProvider.GetRequiredService<IReminderEmailSender>();
 
         var dueReminders = await noteRepository.GetUnsentDueRemindersAsync(cancellationToken);
-        if (dueReminders.Count == 0) return;
+        if (dueReminders.Count == 0) return 0;
 
         _logger.LogInformation("Processing {Count} due reminder(s).", dueReminders.Count);
 
@@ -65,7 +98,55 @@ public sealed class ReminderNotificationWorker : BackgroundService
         {
             try
             {
+                // Hedef kullanici: TargetUserId varsa o, yoksa notun sahibi
+                var targetUserId = reminder.TargetUserId ?? note.UserId;
+                var channel = reminder.DeliveryChannel;
+
+                // InApp / Both: veritabanina bildirim kaydi yaz (Shell navbar bell dropdown okur)
+                if (channel == ReminderDeliveryChannel.InApp || channel == ReminderDeliveryChannel.Both)
+                {
+                    var notification = new UserNotification
+                    {
+                        CompanyId  = note.CompanyId,
+                        UserId     = targetUserId,
+                        Title      = "Hatirlatici: " + (string.IsNullOrWhiteSpace(note.Title) ? "Basliksiz Not" : note.Title),
+                        Body       = $"Bu notun hatirlaticisi {reminder.RemindAt:dd.MM.yyyy HH:mm} icin planlanmisti.",
+                        SourceType = "NoteReminder",
+                        SourceId   = note.Id,
+                        Link       = "/Notes?id=" + note.Id,
+                    };
+                    await notificationRepo.AddAsync(notification, cancellationToken);
+                }
+
+                // Email / Both: target user'in mail adresine gonder
+                if (channel == ReminderDeliveryChannel.Email || channel == ReminderDeliveryChannel.Both)
+                {
+                    var user = await userRepo.GetByIdAsync(targetUserId, cancellationToken);
+                    if (user is null)
+                    {
+                        _logger.LogWarning("Reminder {ReminderId} target user {UserId} bulunamadi — email atilmadi.",
+                            reminder.Id, targetUserId);
+                    }
+                    else
+                    {
+                        var subject = "Hatirlatici: " + (string.IsNullOrWhiteSpace(note.Title) ? "Basliksiz Not" : note.Title);
+                        var body = $"Merhaba {user.FullName},\n\n" +
+                                   $"Bu not icin bir hatirlatici zamanlamistiniz:\n\n" +
+                                   $"  Baslik: {note.Title}\n" +
+                                   $"  Zaman:  {reminder.RemindAt:dd.MM.yyyy HH:mm}\n\n" +
+                                   "CalibraHub uzerinden notu acabilirsiniz.";
+                        var result = await emailSender.SendAsync(note.CompanyId, user.Email, subject, body, cancellationToken);
+                        if (result.Status == ReminderEmailStatus.Sent)
+                            _logger.LogInformation("Reminder {ReminderId} email gonderildi ({Email}).", reminder.Id, user.Email);
+                        else
+                            _logger.LogWarning("Reminder {ReminderId} email {Status}: {Message}",
+                                reminder.Id, result.Status, result.Message ?? "(bos)");
+                    }
+                }
+
+                // Geri uyumluluk — log satiri (toast server tarafinda gosterilemez)
                 ShowWindowsToastNotification(note.Title, reminder.RemindAt);
+
                 await noteRepository.MarkReminderSentAsync(reminder.Id, DateTime.Now, cancellationToken);
 
                 if (reminder.RecurrenceType != ReminderRecurrenceType.None)
@@ -75,10 +156,12 @@ public sealed class ReminderNotificationWorker : BackgroundService
                     {
                         var nextReminder = new NoteReminder
                         {
-                            NoteId = reminder.NoteId,
-                            RemindAt = nextRemindAt.Value,
-                            RecurrenceType = reminder.RecurrenceType,
-                            RecurrenceData = reminder.RecurrenceData
+                            NoteId          = reminder.NoteId,
+                            RemindAt        = nextRemindAt.Value,
+                            RecurrenceType  = reminder.RecurrenceType,
+                            RecurrenceData  = reminder.RecurrenceData,
+                            DeliveryChannel = reminder.DeliveryChannel,
+                            TargetUserId    = reminder.TargetUserId,
                         };
                         await noteRepository.AddReminderAsync(nextReminder, cancellationToken);
                         _logger.LogInformation("Next occurrence scheduled for {RemindAt:dd.MM.yyyy HH:mm}.", nextRemindAt.Value);
@@ -92,6 +175,8 @@ public sealed class ReminderNotificationWorker : BackgroundService
                 _logger.LogError(ex, "Failed to process reminder {ReminderId}.", reminder.Id);
             }
         }
+
+        return dueReminders.Count;
     }
 
     private static DateTime? ComputeNextRemindAt(DateTime current, ReminderRecurrenceType type, string? data)

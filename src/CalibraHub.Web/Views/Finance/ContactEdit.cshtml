@@ -38,6 +38,7 @@
     padding: 8px 16px; flex-shrink: 0;
     background: rgba(15,15,26,0.85); border-bottom: 1px solid rgba(255,255,255,0.06);
     backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    position: relative; overflow: hidden;
 }
 body.app-theme-light .ca-action-bar {
     background: rgba(248,250,252,0.92); border-bottom-color: #e2e8f0;
@@ -50,14 +51,47 @@ body.app-theme-light .ca-action-bar .ca-meta { color: #94a3b8; }
 .ca-action-bar .ca-meta strong { color: rgba(255,255,255,0.7); font-weight: 700; }
 body.app-theme-light .ca-action-bar .ca-meta strong { color: #334155; }
 
-/* Success flash */
-.ca-action-bar.is-success { animation: caSuccessFlash 1.4s ease-out; }
-@@keyframes caSuccessFlash {
-    0% { border-color: rgba(255,255,255,0.1); box-shadow: 0 0 0 0 rgba(16,185,129,0); }
-    20% { border-color: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.25), 0 0 32px rgba(16,185,129,0.35); }
-    50% { border-color: #34d399; box-shadow: 0 0 0 6px rgba(16,185,129,0.15), 0 0 40px rgba(16,185,129,0.4); }
-    80% { border-color: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.1), 0 0 24px rgba(16,185,129,0.2); }
-    100% { border-color: rgba(255,255,255,0.1); box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+/* Success flash — K.I.T.T. yesil tarayici (aksiyon seridi alti) */
+.ca-action-bar::before {
+    content: ''; position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg,
+        rgba(0, 60, 20, 0) 0%,
+        rgba(10, 120, 40, .55) 50%,
+        rgba(0, 60, 20, 0) 100%);
+}
+.ca-action-bar::after {
+    content: ''; position: absolute;
+    left: 0; bottom: -1px;
+    width: 18%; height: 4px;
+    pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(34, 197, 94, .35) 18%,
+        rgba(74, 255, 140, 1) 50%,
+        rgba(34, 197, 94, .35) 82%,
+        transparent 100%);
+    box-shadow:
+        0 0 10px 2px rgba(34, 197, 94, .95),
+        0 0 22px 6px rgba(34, 197, 94, .55),
+        0 0 40px 12px rgba(34, 197, 94, .22);
+    border-radius: 50%;
+}
+.ca-action-bar.is-save-flash::before { animation: caKittBg   1800ms ease-out forwards; }
+.ca-action-bar.is-save-flash::after  { animation: caKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+@@keyframes caKittBg {
+    0%, 100% { opacity: 0; }
+    10%, 90% { opacity: 1; }
+}
+@@keyframes caKittScan {
+    0%   { opacity: 0; left: 0; }
+    8%   { opacity: 1; }
+    48%  { opacity: 1; left: 82%; }
+    52%  { opacity: 1; left: 82%; }
+    92%  { opacity: 1; left: 0; }
+    100% { opacity: 0; left: 0; }
 }
 
 /* ── Buttons ─────────────────────────────────────────────────── */
@@ -80,6 +114,77 @@ body.app-theme-light .ca-btn--secondary {
 }
 .ca-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,0.1); color: #fff; }
 body.app-theme-light .ca-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
+
+/* ── Danger button (Sil/Delete) ─────────────────────────────── */
+.ca-btn--danger {
+    background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: #fca5a5;
+}
+.ca-btn--danger:hover:not(:disabled) { background: #ef4444; color: #fff; border-color: #dc2626; }
+body.app-theme-light .ca-btn--danger { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+body.app-theme-light .ca-btn--danger:hover:not(:disabled) { background: #ef4444; color: #fff; border-color: #dc2626; }
+
+/* ── Teslim adres kartlari (tema uyumlu) ────────────────────── */
+.ca-addr-card {
+    padding: 12px 14px;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    display: flex; align-items: center; gap: 12px;
+    transition: background .12s, border-color .12s;
+}
+.ca-addr-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); }
+body.app-theme-light .ca-addr-card { background: #fff; border-color: #e2e8f0; }
+body.app-theme-light .ca-addr-card:hover { background: #f8fafc; border-color: #cbd5e1; }
+.ca-addr-card__main { flex: 1 1 auto; min-width: 0; }
+.ca-addr-card__name { font-weight: 700; font-size: .92rem; color: rgba(255,255,255,.92); display: flex; align-items: center; gap: 8px; }
+body.app-theme-light .ca-addr-card__name { color: #1e293b; }
+.ca-addr-card__name .ca-addr-default-tag {
+    font-size: .68rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: rgba(16,185,129,0.18); color: #34d399; border: 1px solid rgba(16,185,129,0.35);
+}
+body.app-theme-light .ca-addr-card__name .ca-addr-default-tag { background: #d1fae5; color: #047857; border-color: #6ee7b7; }
+.ca-addr-card__loc {
+    font-size: .78rem; color: rgba(255,255,255,.55); margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+body.app-theme-light .ca-addr-card__loc { color: #64748b; }
+.ca-addr-card__line { font-size: .82rem; color: rgba(255,255,255,.78); margin-top: 4px; }
+body.app-theme-light .ca-addr-card__line { color: #334155; }
+
+/* ── Verilen teklifler liste satirlari ───────────────────────── */
+.ca-quote-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1.2fr auto;
+    gap: 12px; align-items: center;
+    padding: 10px 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.03);
+    transition: background .12s, border-color .12s;
+    text-decoration: none;
+    color: inherit;
+}
+.ca-quote-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(99,102,241,0.4); }
+body.app-theme-light .ca-quote-row { background: #fff; border-color: #e2e8f0; }
+body.app-theme-light .ca-quote-row:hover { background: #f8fafc; border-color: #818cf8; }
+.ca-quote-no   { font-family: 'JetBrains Mono','Fira Code',monospace; font-size: .82rem; font-weight: 700; color: rgba(255,255,255,.92); }
+body.app-theme-light .ca-quote-no { color: #1e293b; }
+.ca-quote-date { font-size: .78rem; color: rgba(255,255,255,.6); font-variant-numeric: tabular-nums; }
+body.app-theme-light .ca-quote-date { color: #64748b; }
+.ca-quote-total { font-size: .86rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: #fbbf24; }
+body.app-theme-light .ca-quote-total { color: #b45309; }
+.ca-quote-status {
+    font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid; text-align: center; white-space: nowrap;
+}
+.ca-quote-status--Draft     { background: rgba(148,163,184,.18); color: #cbd5e1; border-color: rgba(148,163,184,.35); }
+.ca-quote-status--Sent      { background: rgba(59,130,246,.18); color: #93c5fd; border-color: rgba(59,130,246,.35); }
+.ca-quote-status--Approved  { background: rgba(16,185,129,.20); color: #34d399; border-color: rgba(16,185,129,.40); }
+.ca-quote-status--Rejected  { background: rgba(239,68,68,.20); color: #fca5a5; border-color: rgba(239,68,68,.40); }
+.ca-quote-status--Revised   { background: rgba(245,158,11,.20); color: #fcd34d; border-color: rgba(245,158,11,.40); }
+.ca-quote-status--Cancelled { background: rgba(120,113,108,.20); color: #d6d3d1; border-color: rgba(120,113,108,.40); }
+.ca-quote-arrow { color: rgba(255,255,255,.35); font-size: 16px; }
+body.app-theme-light .ca-quote-arrow { color: #94a3b8; }
 
 /* ── Two-column body ─────────────────────────────────────────── */
 .ca-body {
@@ -603,8 +708,8 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
 .ca-input.is-invalid, .ca-select.is-invalid {
     border-color: #ef4444 !important;
     background: rgba(239,68,68,.06) !important;
-    box-shadow: 0 0 0 3px rgba(239,68,68,.15) !important;
-    animation: caShake 0.4s cubic-bezier(0.36,0.07,0.19,0.97);
+    box-shadow: 0 0 0 3px rgba(239,68,68,.20) !important;
+    animation: caShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
 }
 @@keyframes caShake {
     10%, 90% { transform: translateX(-2px); }
@@ -655,9 +760,15 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
                 <span class="ca-nav-dot"></span>
                 İletişim
             </button>
-            <button type="button" class="ca-nav-btn" data-nav-key="status">
+            <button type="button" class="ca-nav-btn" data-nav-key="addresses" id="caNavAddresses">
                 <span class="ca-nav-dot"></span>
-                Durum
+                Teslim Adresleri
+                <span class="ca-nav-count" id="caAddressCount" style="display:none;">0</span>
+            </button>
+            <button type="button" class="ca-nav-btn" data-nav-key="movements" id="caNavMovements">
+                <span class="ca-nav-dot"></span>
+                Cari Hareket
+                <span class="ca-nav-count" id="caMovementsCount" style="display:none;">0</span>
             </button>
             <!-- Widget grup butonlari JS tarafindan dinamik olarak eklenir -->
         </nav>
@@ -713,6 +824,22 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
                                placeholder="11 haneli TCKN" maxlength="11"
                                value="@(existing?.IdentityNumber ?? "")" />
                     </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="salesRepresentativeId">Satış Temsilcisi</label>
+                        <select id="salesRepresentativeId" name="salesRepresentativeId" class="ca-select"
+                                data-selected="@(existing?.SalesRepresentativeId?.ToString() ?? "")">
+                            <option value="">— Seçiniz —</option>
+                        </select>
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="isActive">Durum</label>
+                        <label class="ca-toggle" for="isActive" style="margin:0;">
+                            <input type="checkbox" id="isActive" name="isActive"
+                                   @(existing is null || existing.IsActive ? "checked" : "") />
+                            <span class="ca-toggle-track"></span>
+                        </label>
+                        <span class="ca-toggle-label" style="margin-left:10px;">Cari hesap aktif</span>
+                    </div>
                 </div>
             </div>
 
@@ -721,49 +848,185 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
                 <div class="ca-card__title">İletişim</div>
                 <div class="ca-rows">
                     <div class="ca-row">
+                        <label class="ca-label" for="contactPerson">İlgili Kişi</label>
+                        <input id="contactPerson" name="contactPerson" type="text" class="ca-input"
+                               placeholder="Ahmet Yılmaz" maxlength="150"
+                               value="@(existing?.ContactPerson ?? "")" />
+                    </div>
+                    <div class="ca-row">
                         <label class="ca-label" for="phone">Telefon</label>
                         <input id="phone" name="phone" type="tel" class="ca-input"
-                               placeholder="0532 000 00 00" maxlength="30"
+                               placeholder="0212 000 00 00" maxlength="30"
                                value="@(existing?.Phone ?? "")" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="mobile">Cep Telefonu</label>
+                        <input id="mobile" name="mobile" type="tel" class="ca-input"
+                               placeholder="0532 000 00 00" maxlength="30"
+                               value="@(existing?.Mobile ?? "")" />
                     </div>
                     <div class="ca-row">
                         <label class="ca-label" for="email">E-Posta</label>
                         <input id="email" name="email" type="email" class="ca-input"
-                               placeholder="info@@firma.com" maxlength="150"
+                               placeholder="info@@firma.com" maxlength="200"
                                value="@(existing?.Email ?? "")" />
                     </div>
                     <div class="ca-row">
-                        <label class="ca-label" for="address">Adres</label>
-                        <input id="address" name="address" type="text" class="ca-input"
-                               placeholder="Açık adres" maxlength="300"
-                               value="@(existing?.Address ?? "")" />
+                        <label class="ca-label" for="website">Web Sitesi</label>
+                        <input id="website" name="website" type="url" class="ca-input"
+                               placeholder="https://www.firma.com" maxlength="200"
+                               value="@(existing?.Website ?? "")" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="countryCode">Ülke Kodu</label>
+                        <input id="countryCode" name="countryCode" type="text" class="ca-input"
+                               placeholder="TR" maxlength="2"
+                               style="text-transform:uppercase;max-width:120px;"
+                               list="countryCodeOptions"
+                               value="@(existing?.CountryCode ?? "")" />
+                        <datalist id="countryCodeOptions">
+                            <option value="TR">Türkiye</option>
+                            <option value="US">Amerika</option>
+                            <option value="DE">Almanya</option>
+                            <option value="GB">İngiltere</option>
+                            <option value="FR">Fransa</option>
+                            <option value="IT">İtalya</option>
+                            <option value="NL">Hollanda</option>
+                            <option value="RU">Rusya</option>
+                            <option value="CN">Çin</option>
+                            <option value="JP">Japonya</option>
+                            <option value="SA">Suudi Arabistan</option>
+                            <option value="AE">Birleşik Arap Emirlikleri</option>
+                            <option value="AZ">Azerbaycan</option>
+                            <option value="IR">İran</option>
+                            <option value="IQ">Irak</option>
+                            <option value="SY">Suriye</option>
+                            <option value="GR">Yunanistan</option>
+                            <option value="BG">Bulgaristan</option>
+                        </datalist>
                     </div>
                     <div class="ca-row">
                         <label class="ca-label" for="city">İl</label>
                         <input id="city" name="city" type="text" class="ca-input"
+                               list="cityList"
                                placeholder="İstanbul" maxlength="80"
                                value="@(existing?.City ?? "")" />
+                        <datalist id="cityList"></datalist>
                     </div>
                     <div class="ca-row">
                         <label class="ca-label" for="district">İlçe</label>
                         <input id="district" name="district" type="text" class="ca-input"
+                               list="districtList"
                                placeholder="Kadıköy" maxlength="100"
                                value="@(existing?.District ?? "")" />
+                        <datalist id="districtList"></datalist>
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="neighborhood">Mahalle</label>
+                        <input id="neighborhood" name="neighborhood" type="text" class="ca-input"
+                               list="neighborhoodList"
+                               placeholder="Caferağa" maxlength="150"
+                               value="@(existing?.Neighborhood ?? "")" />
+                        <datalist id="neighborhoodList"></datalist>
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="address">Adres</label>
+                        <input id="address" name="address" type="text" class="ca-input"
+                               placeholder="Sokak, bina no, daire" maxlength="300"
+                               value="@(existing?.Address ?? "")" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="postalCode">Posta Kodu</label>
+                        <input id="postalCode" name="postalCode" type="text" class="ca-input"
+                               placeholder="34000" maxlength="20" style="max-width:140px;"
+                               value="@(existing?.PostalCode ?? "")" />
                     </div>
                 </div>
             </div>
 
-            <!-- Durum -->
-            <div class="ca-card" id="caCardStatus" data-section="status" style="display:none;">
-                <div class="ca-card__title">Durum</div>
-                <div class="ca-toggle-row">
-                    <label class="ca-toggle" for="isActive">
-                        <input type="checkbox" id="isActive" name="isActive"
-                               @(existing is null || existing.IsActive ? "checked" : "") />
-                        <span class="ca-toggle-track"></span>
-                    </label>
-                    <span class="ca-toggle-label">Cari hesap aktif</span>
+            <!-- Teslim Adresleri -->
+            <div class="ca-card" id="caCardAddresses" data-section="addresses" style="display:none;">
+                <div class="ca-card__title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <span>Teslim Adresleri</span>
+                    <button type="button" class="ca-btn ca-btn--primary" id="caAddrAddBtn" style="font-size:.75rem;padding:6px 12px;">+ Yeni Adres</button>
                 </div>
+                <div id="caAddrEmpty" style="padding:20px;text-align:center;color:rgba(148,163,184,.7);font-size:.86rem;font-style:italic;">
+                    Henuz adres tanimlanmamis. "+ Yeni Adres" ile ekleyebilirsiniz.
+                </div>
+                <div id="caAddrList" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+                <!-- Ekleme/duzenleme form'u (gizli) -->
+                <div id="caAddrForm" style="display:none;margin-top:14px;padding:14px;border:1px solid rgba(148,163,184,.25);border-radius:10px;background:rgba(99,102,241,.04);">
+                    <input type="hidden" id="caAddrEditId" value="" />
+                    <div class="ca-row">
+                        <label class="ca-label" for="caAddrName">Adres İsmi <span style="color:#f87171">*</span></label>
+                        <input id="caAddrName" type="text" class="ca-input" placeholder="Merkez / Şube / Depo" maxlength="100" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="caAddrCountry">Ülke Kodu</label>
+                        <input id="caAddrCountry" type="text" class="ca-input" value="TR" maxlength="2" style="max-width:100px;text-transform:uppercase;" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="caAddrCity">İl</label>
+                        <input id="caAddrCity" type="text" class="ca-input" list="caAddrCityList" placeholder="İstanbul" maxlength="100" style="max-width:260px;" />
+                        <datalist id="caAddrCityList"></datalist>
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="caAddrDistrict">İlçe</label>
+                        <input id="caAddrDistrict" type="text" class="ca-input" list="caAddrDistrictList" placeholder="Kadıköy" maxlength="100" style="max-width:260px;" />
+                        <datalist id="caAddrDistrictList"></datalist>
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="caAddrNeighborhood">Mahalle</label>
+                        <input id="caAddrNeighborhood" type="text" class="ca-input" list="caAddrNgList" placeholder="Caferağa" maxlength="150" style="max-width:320px;" />
+                        <datalist id="caAddrNgList"></datalist>
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="caAddrPostal">Posta Kodu</label>
+                        <input id="caAddrPostal" type="text" class="ca-input" placeholder="34000" maxlength="10" style="max-width:140px;" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="caAddrLine">Açık Adres</label>
+                        <input id="caAddrLine" type="text" class="ca-input" placeholder="Sokak, bina no, daire, vs." maxlength="500" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-toggle" for="caAddrDefault">
+                            <input type="checkbox" id="caAddrDefault" />
+                            <span class="ca-toggle-track"></span>
+                        </label>
+                        <span class="ca-toggle-label">Varsayılan adres</span>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:10px;">
+                        <button type="button" class="ca-btn ca-btn--primary" id="caAddrSaveBtn">Kaydet</button>
+                        <button type="button" class="ca-btn" id="caAddrCancelBtn">İptal</button>
+                    </div>
+                </div>
+                <div id="caAddrNoData" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:#f59e0b;font-size:.78rem;">
+                    PTT posta kodu katalogu henuz yuklu degil — Ülke/İl/İlçe/Mahalle listeleri bos. Admin "Şirket Ayarları → Adres Kataloğu" bolumunden yukleyebilir.
+                </div>
+            </div>
+
+            <!-- Cari Hareket -->
+            <div class="ca-card" id="caCardMovements" data-section="movements" style="display:none;">
+                <div class="ca-card__title">Cari Hareket</div>
+
+                <!-- Filtre serisi -->
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);margin-bottom:14px;">
+                    <label style="font-size:.75rem;color:rgba(148,163,184,.85);">Belge Tipi</label>
+                    <select id="caMovDocType" class="ca-select" style="min-width:160px;max-width:220px;" onchange="caMovLoad()">
+                        <option value="">Tümü</option>
+                    </select>
+                    <label style="font-size:.75rem;color:rgba(148,163,184,.85);">Başlangıç</label>
+                    <input id="caMovFrom" type="date" class="ca-input" style="max-width:160px;" onchange="caMovLoad()" />
+                    <label style="font-size:.75rem;color:rgba(148,163,184,.85);">Bitiş</label>
+                    <input id="caMovTo" type="date" class="ca-input" style="max-width:160px;" onchange="caMovLoad()" />
+                    <button type="button" class="ca-btn" onclick="caMovClearFilters()" style="font-size:.74rem;padding:6px 12px;">Temizle</button>
+                </div>
+
+                <div id="caMovEmpty" style="padding:20px;text-align:center;color:rgba(148,163,184,.7);font-size:.86rem;font-style:italic;">
+                    Seçili kriterlere uygun hareket yok.
+                </div>
+                <div id="caMovList" style="display:flex;flex-direction:column;gap:8px;"></div>
             </div>
 
             @* Ek Alanlar — DynamicWidgetRenderer gruplari buraya render edilir. *@
@@ -791,20 +1054,33 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
 
     var saveBtn = document.getElementById('caSaveBtn');
 
+    // Bilgilendirme: ekranda yer kaplamayan, ortalanmis modal kullan.
+    // Basari durumunda zaten KITT yesil tarayici var, ek mesaj cikmasin.
     function showMsg(text, ok) {
+        if (ok) return; // basari mesajini bastir
+        if (window.CalibraAlert && CalibraAlert.error) {
+            CalibraAlert.error(text);
+            return;
+        }
+        // Fallback (CalibraAlert yuklenmemisse) — eski davranis
+        return showMsgLegacy(text, ok);
+    }
+    function showMsgLegacy(text, ok) {
         var m = document.getElementById('caMsg');
         m.textContent = text;
         m.className = 'ca-message ' + (ok ? 'ok' : 'err');
         setTimeout(function () { m.className = 'ca-message'; m.textContent = ''; }, 4000);
     }
 
+    // K.I.T.T. yesil tarayici (aksiyon seridi alti) — basariyla kayit edilince
     function flashSuccess() {
         var bar = document.getElementById('caActionBar');
         if (!bar) return;
-        bar.classList.remove('is-success');
+        bar.classList.remove('is-save-flash');
         void bar.offsetWidth;
-        bar.classList.add('is-success');
-        setTimeout(function () { bar.classList.remove('is-success'); }, 1500);
+        bar.classList.add('is-save-flash');
+        setTimeout(function () { bar.classList.remove('is-save-flash'); }, 1850);
+        try { if (window.CalibraDirty) window.CalibraDirty.clear(); } catch (e) {}
     }
 
     function markInvalid(ids) {
@@ -882,13 +1158,24 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
             taxNumber:      getVal('taxNumber')      || null,
             identityNumber: getVal('identityNumber') || null,
             taxOffice:      getVal('taxOffice')      || null,
+            contactPerson:  getVal('contactPerson')  || null,
             phone:          getVal('phone')          || null,
+            mobile:         getVal('mobile')         || null,
             email:          getVal('email')          || null,
+            website:        getVal('website')        || null,
             address:        getVal('address')        || null,
+            postalCode:     getVal('postalCode')     || null,
             city:           getVal('city')           || null,
             district:       getVal('district')       || null,
+            neighborhood:   getVal('neighborhood')   || null,
+            countryCode:    (getVal('countryCode') || '').toUpperCase() || null,
             isActive:       document.getElementById('isActive').checked,
-            priceGroupId:   null
+            priceGroupId:   null,
+            salesRepresentativeId: (function() {
+                var v = document.getElementById('salesRepresentativeId');
+                var n = v ? parseInt(v.value, 10) : 0;
+                return n > 0 ? n : null;
+            })()
         };
 
         saveBtn.classList.add('loading');
@@ -924,9 +1211,8 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
                 if (dynRes && dynRes.success === false) {
                     console.warn('[CA] widget save basarisiz:', dynRes.message);
                 }
+                // Sadece KITT yesil tarayici — text bildirim yok, otomatik redirect yok.
                 flashSuccess();
-                showMsg(existingId ? 'Cari hesap güncellendi.' : 'Cari hesap oluşturuldu.', true);
-                setTimeout(function () { window.location.href = LIST_URL; }, 1200);
             });
         })
         .catch(function (err) {
@@ -1093,6 +1379,405 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
             }
         }
     })();
+
+    // ══════════════════════════════════════════════════════════════
+    // İletişim sekmesi — ana adres alanlarinda PTT cascade dropdown
+    // ══════════════════════════════════════════════════════════════
+    (function () {
+        function gid(id) { return document.getElementById(id); }
+        var ctyEl  = gid('city');
+        var distEl = gid('district');
+        var ngEl   = gid('neighborhood');
+        var pkEl   = gid('postalCode');
+        var ccEl   = gid('countryCode');
+        if (!ctyEl) return;
+
+        var ngPostalCache = {};
+
+        async function loadCities() {
+            var country = ((ccEl && ccEl.value) || 'TR').toUpperCase();
+            try {
+                var r = await fetch('/Address/Cities?countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
+                var data = await r.json();
+                var dl = gid('cityList');
+                if (dl) dl.innerHTML = (data || []).map(function (c) { return '<option value="' + c + '">'; }).join('');
+            } catch (e) { /* sessizce gec */ }
+        }
+
+        async function loadDistricts() {
+            var city = (ctyEl.value || '').trim();
+            if (!city) { gid('districtList').innerHTML = ''; return; }
+            var country = ((ccEl && ccEl.value) || 'TR').toUpperCase();
+            try {
+                var r = await fetch('/Address/Districts?city=' + encodeURIComponent(city) + '&countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
+                var data = await r.json();
+                gid('districtList').innerHTML = (data || []).map(function (d) { return '<option value="' + d + '">'; }).join('');
+            } catch (e) { /* sessizce gec */ }
+        }
+
+        async function loadNeighborhoods() {
+            var city = (ctyEl.value || '').trim();
+            var dist = (distEl.value || '').trim();
+            if (!city || !dist) { gid('neighborhoodList').innerHTML = ''; return; }
+            var country = ((ccEl && ccEl.value) || 'TR').toUpperCase();
+            try {
+                var r = await fetch('/Address/Neighborhoods?city=' + encodeURIComponent(city) + '&district=' + encodeURIComponent(dist) + '&countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
+                var data = await r.json();
+                ngPostalCache = (data || []).reduce(function (acc, x) { acc[x.name] = x.postalCode; return acc; }, {});
+                gid('neighborhoodList').innerHTML = (data || []).map(function (n) {
+                    return '<option value="' + n.name + '">' + (n.postalCode ? '(' + n.postalCode + ')' : '') + '</option>';
+                }).join('');
+            } catch (e) { /* sessizce gec */ }
+        }
+
+        function autofillPostal() {
+            var ng = (ngEl.value || '').trim();
+            if (ng && ngPostalCache[ng] && !pkEl.value) pkEl.value = ngPostalCache[ng];
+        }
+
+        // Event'ler
+        if (ccEl) ccEl.addEventListener('change', function () {
+            ctyEl.value = ''; distEl.value = ''; ngEl.value = ''; pkEl.value = '';
+            loadCities();
+        });
+        ctyEl.addEventListener('change', function () {
+            distEl.value = ''; ngEl.value = ''; pkEl.value = '';
+            loadDistricts();
+        });
+        distEl.addEventListener('change', function () {
+            ngEl.value = ''; pkEl.value = '';
+            loadNeighborhoods();
+        });
+        ngEl.addEventListener('change', autofillPostal);
+
+        // Ilk yukleme — sehir listesi (ulke kodu varsa)
+        loadCities();
+        if (ctyEl.value) loadDistricts();
+        if (distEl.value) loadNeighborhoods();
+    })();
+
+    // ══════════════════════════════════════════════════════════════
+    // Cari Hareket — cariye ait tum belgeler (filtreli)
+    // ══════════════════════════════════════════════════════════════
+    (function () {
+        function gid(id) { return document.getElementById(id); }
+        var contactIdStr = gid('caId') ? gid('caId').value : '';
+        var contactId = parseInt(contactIdStr, 10) || 0;
+
+        var statusLabels = {
+            Draft: 'Taslak', Sent: 'Gönderildi', Approved: 'Onaylandı',
+            Rejected: 'Reddedildi', Revised: 'Revize', Cancelled: 'İptal'
+        };
+
+        function fmtMoney(n) {
+            return (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        function fmtDate(s) {
+            if (!s) return '';
+            try { return new Date(s).toLocaleDateString('tr-TR'); } catch (e) { return s; }
+        }
+        function escH(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+            });
+        }
+
+        async function loadDocTypes() {
+            try {
+                var r = await fetch('/Finance/GetDocumentTypes', { credentials: 'same-origin' });
+                var data = await r.json();
+                var sel = gid('caMovDocType');
+                if (!sel) return;
+                (data || []).forEach(function (t) {
+                    var opt = document.createElement('option');
+                    opt.value = String(t.id);
+                    opt.textContent = t.name;
+                    sel.appendChild(opt);
+                });
+            } catch (e) { console.warn('[CA] Belge tipleri yuklenemedi:', e); }
+        }
+
+        window.caMovClearFilters = function() {
+            var dt = gid('caMovDocType'); if (dt) dt.value = '';
+            var f = gid('caMovFrom'); if (f) f.value = '';
+            var t = gid('caMovTo'); if (t) t.value = '';
+            caMovLoad();
+        };
+
+        window.caMovLoad = async function () {
+            if (contactId <= 0) return;
+            try {
+                var docType = gid('caMovDocType') ? gid('caMovDocType').value : '';
+                var from = gid('caMovFrom') ? gid('caMovFrom').value : '';
+                var to   = gid('caMovTo') ? gid('caMovTo').value : '';
+                var url = '/Finance/GetContactMovements?contactId=' + contactId;
+                if (docType) url += '&documentTypeId=' + encodeURIComponent(docType);
+                if (from)    url += '&fromDate='       + encodeURIComponent(from);
+                if (to)      url += '&toDate='         + encodeURIComponent(to);
+                var r = await fetch(url, { credentials: 'same-origin' });
+                var rows = await r.json();
+                var host = gid('caMovList');
+                var empty = gid('caMovEmpty');
+                var cnt = gid('caMovementsCount');
+                host.innerHTML = '';
+                if (!rows || rows.length === 0) {
+                    empty.style.display = '';
+                    if (cnt) cnt.style.display = 'none';
+                    return;
+                }
+                empty.style.display = 'none';
+                if (cnt) { cnt.textContent = String(rows.length); cnt.style.display = ''; }
+                rows.forEach(function (q) {
+                    var a = document.createElement('a');
+                    a.href = '/Sales/DocumentEdit?id=' + q.id + (location.search.indexOf('workspace=1') !== -1 ? '&workspace=1' : '');
+                    a.className = 'ca-quote-row';
+                    var typeLbl = q.documentTypeName ? '<span class="ca-quote-date" style="color:#a5b4fc;font-weight:600;">' + escH(q.documentTypeName) + '</span>' : '';
+                    a.innerHTML =
+                        typeLbl
+                        + '<span class="ca-quote-no">' + escH(q.documentNumber) + '</span>'
+                        + '<span class="ca-quote-date">' + escH(fmtDate(q.documentDate)) + '</span>'
+                        + '<span class="ca-quote-date">' + (q.lineCount || 0) + ' kalem</span>'
+                        + '<span class="ca-quote-total">' + fmtMoney(q.grandTotal) + ' ' + escH(q.currency || 'TRY') + '</span>'
+                        + '<span class="ca-quote-status ca-quote-status--' + escH(q.status) + '">' + escH(statusLabels[q.status] || q.status) + '</span>';
+                    host.appendChild(a);
+                });
+            } catch (e) { console.warn('[CA] Cari hareket listesi yuklenemedi:', e); }
+        };
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDocTypes();
+            if (contactId > 0) caMovLoad();
+        });
+    })();
+
+    // ══════════════════════════════════════════════════════════════
+    // Satis Temsilcisi dropdown — Temel Bilgiler kartinda
+    // ══════════════════════════════════════════════════════════════
+    (function () {
+        var sel = document.getElementById('salesRepresentativeId');
+        if (!sel) return;
+        var preselect = sel.getAttribute('data-selected') || '';
+        fetch('/Finance/GetSalesRepsList', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                (data || []).forEach(function (rep) {
+                    var opt = document.createElement('option');
+                    opt.value = String(rep.id);
+                    opt.textContent = (rep.code ? rep.code + ' — ' : '') + rep.name;
+                    if (preselect && String(rep.id) === preselect) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+            })
+            .catch(function (e) { console.warn('[CA] Satis temsilcisi listesi yuklenemedi:', e); });
+    })();
+
+    // ══════════════════════════════════════════════════════════════
+    // Teslim Adresleri — cascade dropdown + CRUD
+    // ══════════════════════════════════════════════════════════════
+    var caAddrContactId = parseInt(document.getElementById('caId').value || '0', 10) || 0;
+    var caAddrCatalogEmpty = false;
+
+    function qs(id) { return document.getElementById(id); }
+
+    async function caAddrLoadCities() {
+        try {
+            var country = (qs('caAddrCountry').value || 'TR').toUpperCase();
+            var r = await fetch('/Address/Cities?countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
+            var data = await r.json();
+            var dl = qs('caAddrCityList');
+            dl.innerHTML = (data || []).map(function (c) { return '<option value="' + c + '">'; }).join('');
+            if (!data || data.length === 0) {
+                caAddrCatalogEmpty = true;
+                qs('caAddrNoData').style.display = '';
+            }
+        } catch (e) { console.warn('[CA] Sehir yuklenemedi:', e); }
+    }
+
+    async function caAddrLoadDistricts() {
+        var city = (qs('caAddrCity').value || '').trim();
+        if (!city) { qs('caAddrDistrictList').innerHTML = ''; return; }
+        var country = (qs('caAddrCountry').value || 'TR').toUpperCase();
+        try {
+            var r = await fetch('/Address/Districts?city=' + encodeURIComponent(city) + '&countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
+            var data = await r.json();
+            qs('caAddrDistrictList').innerHTML = (data || []).map(function (d) { return '<option value="' + d + '">'; }).join('');
+        } catch (e) { console.warn('[CA] Ilce yuklenemedi:', e); }
+    }
+
+    async function caAddrLoadNeighborhoods() {
+        var city = (qs('caAddrCity').value || '').trim();
+        var district = (qs('caAddrDistrict').value || '').trim();
+        if (!city || !district) { qs('caAddrNgList').innerHTML = ''; return; }
+        var country = (qs('caAddrCountry').value || 'TR').toUpperCase();
+        try {
+            var r = await fetch('/Address/Neighborhoods?city=' + encodeURIComponent(city) + '&district=' + encodeURIComponent(district) + '&countryCode=' + encodeURIComponent(country), { credentials: 'same-origin' });
+            var data = await r.json();
+            // Mahalle seciminde posta kodu otomatik dolsun diye cache'le
+            window.__caNgCache = (data || []).reduce(function (acc, x) { acc[x.name] = x.postalCode; return acc; }, {});
+            qs('caAddrNgList').innerHTML = (data || []).map(function (n) {
+                return '<option value="' + n.name + '">' + (n.postalCode ? '(' + n.postalCode + ')' : '') + '</option>';
+            }).join('');
+        } catch (e) { console.warn('[CA] Mahalle yuklenemedi:', e); }
+    }
+
+    function caAddrAutofillPostal() {
+        var ng = (qs('caAddrNeighborhood').value || '').trim();
+        if (ng && window.__caNgCache && window.__caNgCache[ng] && !qs('caAddrPostal').value) {
+            qs('caAddrPostal').value = window.__caNgCache[ng];
+        }
+    }
+
+    async function caAddrLoadList() {
+        if (caAddrContactId <= 0) { qs('caAddrList').innerHTML = ''; qs('caAddrEmpty').style.display = ''; return; }
+        try {
+            var r = await fetch('/Address/ByContact?contactId=' + caAddrContactId, { credentials: 'same-origin' });
+            var rows = await r.json();
+            var host = qs('caAddrList');
+            host.innerHTML = '';
+            if (!rows || rows.length === 0) {
+                qs('caAddrEmpty').style.display = '';
+                qs('caAddressCount').style.display = 'none';
+                return;
+            }
+            qs('caAddrEmpty').style.display = 'none';
+            qs('caAddressCount').textContent = String(rows.length);
+            qs('caAddressCount').style.display = '';
+            rows.forEach(function (a) {
+                var loc = [a.countryCode, a.cityName, a.districtName, a.neighborhoodName].filter(Boolean).join(' / ');
+                var card = document.createElement('div');
+                card.className = 'ca-addr-card';
+                card.innerHTML =
+                    '<div class="ca-addr-card__main">'
+                    + '<div class="ca-addr-card__name">' + escapeHtml(a.name) + (a.isDefault ? ' <span class="ca-addr-default-tag">★ Varsayılan</span>' : '') + '</div>'
+                    + '<div class="ca-addr-card__loc">' + escapeHtml(loc) + (a.postalCode ? ' · ' + escapeHtml(a.postalCode) : '') + '</div>'
+                    + (a.addressLine ? '<div class="ca-addr-card__line">' + escapeHtml(a.addressLine) + '</div>' : '')
+                    + '</div>'
+                    + '<button type="button" class="ca-btn ca-btn--secondary" data-edit="' + a.id + '" style="padding:6px 12px;font-size:.76rem;">Düzenle</button>'
+                    + '<button type="button" class="ca-btn ca-btn--danger" data-del="' + a.id + '" style="padding:6px 12px;font-size:.76rem;">Sil</button>';
+                host.appendChild(card);
+                card.querySelector('[data-edit]').addEventListener('click', function () { caAddrEdit(a); });
+                card.querySelector('[data-del]').addEventListener('click', function () { caAddrDelete(a.id); });
+            });
+        } catch (e) { console.warn('[CA] Adres listesi yuklenemedi:', e); }
+    }
+
+    function caAddrEdit(a) {
+        qs('caAddrEditId').value = a.id || '';
+        qs('caAddrName').value = a.name || '';
+        qs('caAddrCountry').value = a.countryCode || 'TR';
+        qs('caAddrCity').value = a.cityName || '';
+        qs('caAddrDistrict').value = a.districtName || '';
+        qs('caAddrNeighborhood').value = a.neighborhoodName || '';
+        qs('caAddrPostal').value = a.postalCode || '';
+        qs('caAddrLine').value = a.addressLine || '';
+        qs('caAddrDefault').checked = !!a.isDefault;
+        qs('caAddrForm').style.display = '';
+        caAddrLoadCities();
+        caAddrLoadDistricts();
+        caAddrLoadNeighborhoods();
+    }
+
+    function caAddrResetForm() {
+        qs('caAddrEditId').value = '';
+        qs('caAddrName').value = '';
+        qs('caAddrCountry').value = 'TR';
+        qs('caAddrCity').value = '';
+        qs('caAddrDistrict').value = '';
+        qs('caAddrNeighborhood').value = '';
+        qs('caAddrPostal').value = '';
+        qs('caAddrLine').value = '';
+        qs('caAddrDefault').checked = false;
+    }
+
+    async function caAddrSave() {
+        var name = (qs('caAddrName').value || '').trim();
+        if (!name) { if (window.CalibraAlert) CalibraAlert.warning('Adres ismi zorunludur.'); return; }
+        if (caAddrContactId <= 0) { if (window.CalibraAlert) CalibraAlert.warning('Önce cari kartı kaydediniz.'); return; }
+        var id = parseInt(qs('caAddrEditId').value || '0', 10) || 0;
+        var payload = {
+            id: id > 0 ? id : null,
+            contactId: caAddrContactId,
+            name: name,
+            countryCode: (qs('caAddrCountry').value || 'TR').toUpperCase(),
+            cityName: qs('caAddrCity').value || null,
+            districtName: qs('caAddrDistrict').value || null,
+            neighborhoodName: qs('caAddrNeighborhood').value || null,
+            postalCode: qs('caAddrPostal').value || null,
+            addressLine: qs('caAddrLine').value || null,
+            isDefault: qs('caAddrDefault').checked
+        };
+        try {
+            var r = await fetch('/Address/SaveAddress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+            });
+            var data = await r.json();
+            if (!data.success) { if (window.CalibraAlert) CalibraAlert.error(data.message || 'Kaydedilemedi'); return; }
+            qs('caAddrForm').style.display = 'none';
+            caAddrResetForm();
+            await caAddrLoadList();
+        } catch (e) { if (window.CalibraAlert) CalibraAlert.error('Kaydetme hatası: ' + e.message); }
+    }
+
+    async function caAddrDelete(id) {
+        if (window.CalibraAlert && CalibraAlert.confirm) {
+            var ok = await CalibraAlert.confirm('Bu adres silinsin mi?', { title: 'Adres Sil', okText: 'Evet, Sil', cancelText: 'İptal', danger: true });
+            if (!ok) return;
+        }
+        try {
+            var r = await fetch('/Address/DeleteAddress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ id: id })
+            });
+            var data = await r.json();
+            if (!data.success) { if (window.CalibraAlert) CalibraAlert.error(data.message || 'Silinemedi'); return; }
+            await caAddrLoadList();
+        } catch (e) { if (window.CalibraAlert) CalibraAlert.error('Silme hatası: ' + e.message); }
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+        });
+    }
+
+    // Baglama — DOM hazir oldugunda
+    document.addEventListener('DOMContentLoaded', function () {
+        var addBtn = qs('caAddrAddBtn');
+        var cancelBtn = qs('caAddrCancelBtn');
+        var saveBtn = qs('caAddrSaveBtn');
+        if (addBtn) addBtn.addEventListener('click', function () {
+            caAddrResetForm();
+            qs('caAddrForm').style.display = '';
+            caAddrLoadCities();
+        });
+        if (cancelBtn) cancelBtn.addEventListener('click', function () {
+            qs('caAddrForm').style.display = 'none';
+            caAddrResetForm();
+        });
+        if (saveBtn) saveBtn.addEventListener('click', caAddrSave);
+
+        // Cascade event'leri
+        var cityEl = qs('caAddrCity');
+        var distEl = qs('caAddrDistrict');
+        var ngEl   = qs('caAddrNeighborhood');
+        if (cityEl) cityEl.addEventListener('change', function () {
+            distEl.value = ''; ngEl.value = ''; qs('caAddrPostal').value = '';
+            caAddrLoadDistricts();
+        });
+        if (distEl) distEl.addEventListener('change', function () {
+            ngEl.value = ''; qs('caAddrPostal').value = '';
+            caAddrLoadNeighborhoods();
+        });
+        if (ngEl) ngEl.addEventListener('change', caAddrAutofillPostal);
+
+        // Ilk yuklemede (contact varsa) listeyi getir
+        if (caAddrContactId > 0) caAddrLoadList();
+    });
 })();
 </script>
 }

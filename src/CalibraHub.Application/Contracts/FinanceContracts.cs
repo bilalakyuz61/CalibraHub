@@ -15,7 +15,14 @@ public sealed record ContactDto(
     string? District,
     bool IsActive,
     int? PriceGroupId,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? CountryCode = null,
+    string? Mobile = null,
+    string? Website = null,
+    string? PostalCode = null,
+    string? ContactPerson = null,
+    string? Neighborhood = null,
+    int? SalesRepresentativeId = null);
 
 public sealed record SaveContactRequest(
     int? Id,
@@ -31,6 +38,13 @@ public sealed record SaveContactRequest(
     string? City,
     string? District,
     bool IsActive,
-    int? PriceGroupId);
+    int? PriceGroupId,
+    string? CountryCode = null,
+    string? Mobile = null,
+    string? Website = null,
+    string? PostalCode = null,
+    string? ContactPerson = null,
+    string? Neighborhood = null,
+    int? SalesRepresentativeId = null);
 
 public sealed record DeleteContactBody(int Id);

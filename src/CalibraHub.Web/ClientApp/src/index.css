@@ -7,6 +7,63 @@
   to   { transform: rotate(360deg); }
 }
 
+/* Widget tanimlama: zorunlu alan bos biraklinca Widget Ekle tiklandiginda
+   kirmizi kenarli kisa titresim (metin yerine sadece gorsel uyari). */
+@keyframes calibraShake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-5px); }
+  40%      { transform: translateX(5px); }
+  60%      { transform: translateX(-4px); }
+  80%      { transform: translateX(4px); }
+}
+.cbh-shake { animation: calibraShake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+
+/* Modern (floating/outline) label — widget label'i input cercevesini tam
+   ortalanmis sekilde "keser". Referans: Material Design Outlined Text Field.
+   Tema'ya gore arka plan rengi container ile ayni olur; boylece border cizgisi
+   label'in altindan "geciyormus" gibi gorunur. */
+html body {
+  --calibra-modern-label-bg:          rgba(15, 23, 42, 0.98);
+  --calibra-modern-label-color:       rgba(165, 180, 252, 0.95);
+  --calibra-modern-label-focus:       #a5b4fc;
+  --calibra-modern-label-placeholder: rgba(148, 163, 184, 0.55);
+}
+html:not(.dark) body,
+body.app-theme-light {
+  --calibra-modern-label-bg:          #ffffff;
+  --calibra-modern-label-color:       #475569;
+  --calibra-modern-label-focus:       #3730a3;
+  --calibra-modern-label-placeholder: #94a3b8;
+}
+
+.calibra-modern-wrap {
+  position: relative;
+  padding-top: 12px;
+}
+.calibra-modern-label {
+  /* ── Modern baslik: HER ZAMAN border'in ustune asili (floated).
+        Arka plan yok — label saf metin olarak border'in uzerinde durur.
+        Sola yaslandi (left:2) — input'un sol kenari ile hizalanir. */
+  position: absolute;
+  top: -2px;
+  left: 2px;
+  transform: translateY(0);
+  padding: 0 3px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--calibra-modern-label-color);
+  background: transparent;
+  pointer-events: none;
+  z-index: 1;
+  line-height: 1.35;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+.calibra-modern-wrap:focus-within .calibra-modern-label {
+  color: var(--calibra-modern-label-focus);
+}
+
 @layer base {
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -81,6 +138,15 @@
   width: 0;
 }
 
+/* Kaydedilmemis degisiklik (dirty) gostergesi — yanip sonen yesil nokta */
+@keyframes calibraDirtyPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(1.25); }
+}
+.calibra-dirty-dot {
+  animation: calibraDirtyPulse 1.3s ease-in-out infinite;
+}
+
 /* Mask-image: sadece scroll yapilabilen yonlerde solma efekti. JS
    tarafi can-left/can-right'a gore mask-both | mask-left | mask-right
    class'larini ekler. Boylece fade sadece overflow olan tarafta gorunur. */
@@ -153,6 +219,174 @@ html:not(.dark) .smartcard-chev:hover {
   color: #1e293b;
   border-color: rgba(99, 102, 241, 0.35);
 }
+
+/* ── Inline KITT aksiyon seridi ─────────────────────────────────
+   SmartCard'in ana satirinin altinda acilan dar form seritti.
+   Modal acmadan kucuk aksiyonlari (mail gonderme, hizli not) yerinde
+   cozer. Ust kenarda Knight Rider tarzi tarayici animasyonu (sweep) ile
+   "aktif" hissi verir. */
+.smartcard-kitt__row {
+  position: relative;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 10px 14px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.smartcard-kitt__row--dark {
+  background: linear-gradient(to right,
+    rgba(56, 189, 248, 0.06) 0%,
+    rgba(99, 102, 241, 0.08) 50%,
+    rgba(168, 85, 247, 0.06) 100%);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+.smartcard-kitt__row--light {
+  background: linear-gradient(to right,
+    rgba(56, 189, 248, 0.09) 0%,
+    rgba(99, 102, 241, 0.10) 50%,
+    rgba(168, 85, 247, 0.09) 100%);
+  border-top-color: rgba(15, 23, 42, 0.07);
+}
+
+/* KITT scanner — üst kenarda sweep eden isik cizgisi */
+.smartcard-kitt__scanner {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.smartcard-kitt__scanner::before {
+  content: '';
+  position: absolute; top: 0; height: 2px; width: 28%; left: -28%;
+  background: linear-gradient(to right,
+    transparent 0%,
+    rgba(56, 189, 248, 0.75) 35%,
+    rgba(99, 102, 241, 0.98) 50%,
+    rgba(56, 189, 248, 0.75) 65%,
+    transparent 100%);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.55);
+  animation: smartcard-kitt-sweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes smartcard-kitt-sweep {
+  0%   { left: -28%; }
+  50%  { left: 100%; }
+  100% { left: -28%; }
+}
+
+/* Sending → sweep hizli gitsin */
+.smartcard-kitt__row[data-status="sending"] .smartcard-kitt__scanner::before {
+  animation-duration: 0.8s;
+  background: linear-gradient(to right,
+    transparent 0%,
+    rgba(99, 102, 241, 0.95) 50%,
+    transparent 100%);
+}
+/* Success → zemin yesilimsi, scanner gizlensin */
+.smartcard-kitt__row[data-status="success"] {
+  background: linear-gradient(to right,
+    rgba(34, 197, 94, 0.10),
+    rgba(16, 185, 129, 0.14) 50%,
+    rgba(34, 197, 94, 0.10));
+  border-top-color: rgba(34, 197, 94, 0.35);
+}
+.smartcard-kitt__row[data-status="success"] .smartcard-kitt__scanner::before { display: none; }
+/* Error → zemin kirmizi */
+.smartcard-kitt__row[data-status="error"] {
+  background: linear-gradient(to right,
+    rgba(239, 68, 68, 0.08),
+    rgba(220, 38, 38, 0.12) 50%,
+    rgba(239, 68, 68, 0.08));
+  border-top-color: rgba(239, 68, 68, 0.35);
+}
+.smartcard-kitt__row[data-status="error"] .smartcard-kitt__scanner::before {
+  background: linear-gradient(to right, transparent, rgba(239,68,68,0.85), transparent);
+  animation-duration: 1.2s;
+}
+
+/* Form layout */
+.smartcard-kitt__form {
+  display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; width: 100%;
+}
+
+/* Input */
+.smartcard-kitt__input {
+  font: inherit; font-size: 12.5px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  outline: none;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: transparent;
+  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+}
+.smartcard-kitt__row--dark .smartcard-kitt__input {
+  background: rgba(10, 14, 24, 0.55);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.94);
+}
+.smartcard-kitt__row--dark .smartcard-kitt__input::placeholder { color: rgba(255,255,255,0.34); }
+.smartcard-kitt__row--light .smartcard-kitt__input {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #1e293b;
+}
+.smartcard-kitt__row--light .smartcard-kitt__input::placeholder { color: rgba(15, 23, 42, 0.36); }
+.smartcard-kitt__input:focus {
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+.smartcard-kitt__input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Button */
+.smartcard-kitt__btn {
+  font: inherit; font-size: 12px; font-weight: 700;
+  padding: 7px 14px; border-radius: 8px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent;
+  transition: transform 0.12s, filter 0.12s, box-shadow 0.12s, background 0.12s;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.smartcard-kitt__btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.smartcard-kitt__btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+.smartcard-kitt__btn--primary {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.28);
+}
+.smartcard-kitt__row[data-status="success"] .smartcard-kitt__btn--primary {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.32);
+  opacity: 1 !important;
+}
+.smartcard-kitt__btn--ghost {
+  background: transparent;
+  padding: 7px;
+}
+.smartcard-kitt__row--dark .smartcard-kitt__btn--ghost {
+  color: rgba(255, 255, 255, 0.72);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.smartcard-kitt__row--dark .smartcard-kitt__btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.smartcard-kitt__row--light .smartcard-kitt__btn--ghost {
+  color: rgba(15, 23, 42, 0.65);
+  border-color: rgba(15, 23, 42, 0.14);
+}
+.smartcard-kitt__row--light .smartcard-kitt__btn--ghost:hover {
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+}
+
+/* Error line */
+.smartcard-kitt__error {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600;
+  color: #dc2626;
+  padding-left: 2px;
+}
+.smartcard-kitt__row--dark .smartcard-kitt__error { color: #fca5a5; }
 
 /* ── Ambient mesh background (DARK) ─────────────── */
 .bg-mesh {
@@ -337,6 +571,16 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,0.2)
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dark .nw-note-card-title { color: rgba(255,255,255,.88); }
+.nw-note-card-icons {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+}
+.nw-note-reminder-badge {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px 5px; border-radius: 9px;
+  background: rgba(99,102,241,.12); color: #4f46e5;
+  font-size: .64rem; font-weight: 700; line-height: 1;
+}
+.dark .nw-note-reminder-badge { background: rgba(165,180,252,.16); color: #a5b4fc; }
 .nw-pin-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border: none; border-radius: 4px;
@@ -864,6 +1108,122 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,0.2)
 .nw-actions-sep { height: 1px; background: #f1f5f9; margin: 4px 0; }
 .dark .nw-actions-sep { background: rgba(255,255,255,.06); }
 
+/* ── Hatirlatici Popover ── */
+.nw-reminder-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  position: absolute; top: -2px; right: -2px;
+  min-width: 14px; height: 14px; padding: 0 4px;
+  font-size: .62rem; font-weight: 700;
+  color: #fff; background: #6366f1;
+  border-radius: 7px; border: 1.5px solid #fff;
+}
+.dark .nw-reminder-count { border-color: #0f172a; }
+.nw-actions-wrap { position: relative; }
+
+.nw-reminder-pop {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 100;
+  width: 340px; max-height: 440px; overflow: hidden;
+  display: flex; flex-direction: column;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(15,23,42,.12);
+  animation: nwMenuIn .12s ease-out;
+}
+.dark .nw-reminder-pop {
+  background: #1e293b; border-color: rgba(255,255,255,.1);
+  box-shadow: 0 8px 30px rgba(0,0,0,.4);
+}
+.nw-reminder-pop-head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 14px; border-bottom: 1px solid #f1f5f9;
+  font-size: .82rem; font-weight: 700; color: #1e293b;
+}
+.dark .nw-reminder-pop-head {
+  color: rgba(255,255,255,.9); border-bottom-color: rgba(255,255,255,.08);
+}
+.nw-reminder-pop-list {
+  padding: 4px 0; overflow-y: auto; max-height: 180px;
+}
+.nw-reminder-empty {
+  padding: 16px 14px; text-align: center;
+  font-size: .78rem; color: #94a3b8; font-style: italic;
+}
+.dark .nw-reminder-empty { color: rgba(255,255,255,.4); }
+
+.nw-reminder-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 14px; border-bottom: 1px solid #f8fafc;
+}
+.dark .nw-reminder-row { border-bottom-color: rgba(255,255,255,.04); }
+.nw-reminder-row:last-child { border-bottom: none; }
+.nw-reminder-row--sent { opacity: .6; }
+.nw-reminder-row-info { flex: 1; min-width: 0; }
+.nw-reminder-row-when {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .78rem; font-weight: 600; color: #334155;
+}
+.dark .nw-reminder-row-when { color: rgba(255,255,255,.85); }
+.nw-reminder-sent-tag {
+  font-size: .66rem; font-weight: 600;
+  padding: 1px 6px; border-radius: 3px;
+  background: rgba(148,163,184,.18); color: #64748b;
+}
+.dark .nw-reminder-sent-tag {
+  background: rgba(148,163,184,.22); color: rgba(255,255,255,.6);
+}
+.nw-reminder-row-rec {
+  font-size: .7rem; color: #94a3b8; margin-top: 2px; padding-left: 18px;
+}
+.dark .nw-reminder-row-rec { color: rgba(255,255,255,.45); }
+.nw-reminder-del {
+  width: 22px; height: 22px; border: none; border-radius: 5px; cursor: pointer;
+  background: transparent; color: #94a3b8;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all .12s; flex-shrink: 0;
+}
+.nw-reminder-del:hover {
+  background: rgba(239,68,68,.1); color: #ef4444;
+}
+.dark .nw-reminder-del { color: rgba(255,255,255,.45); }
+.dark .nw-reminder-del:hover { background: rgba(239,68,68,.15); color: #f87171; }
+
+.nw-reminder-pop-add {
+  padding: 10px 14px; border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+.dark .nw-reminder-pop-add {
+  border-top-color: rgba(255,255,255,.08); background: rgba(15,23,42,.5);
+}
+.nw-reminder-add-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 7px;
+}
+.nw-reminder-add-row label {
+  width: 64px; flex-shrink: 0;
+  font-size: .72rem; font-weight: 600; color: #64748b;
+}
+.dark .nw-reminder-add-row label { color: rgba(255,255,255,.6); }
+.nw-reminder-input {
+  flex: 1; padding: 5px 8px;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 5px;
+  font-size: .76rem; color: #1e293b; font-family: inherit;
+}
+.nw-reminder-input:focus {
+  outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.15);
+}
+.dark .nw-reminder-input {
+  background: #0f172a; border-color: rgba(255,255,255,.15); color: rgba(255,255,255,.9);
+}
+.dark .nw-reminder-input:focus {
+  border-color: #a5b4fc; box-shadow: 0 0 0 2px rgba(165,180,252,.2);
+}
+.nw-reminder-add-btn {
+  width: 100%; margin-top: 4px; padding: 7px 12px;
+  background: linear-gradient(135deg,#6366f1,#4f46e5);
+  color: #fff; border: none; border-radius: 6px; cursor: pointer;
+  font-size: .78rem; font-weight: 600;
+}
+.nw-reminder-add-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.nw-reminder-add-btn:disabled { opacity: .5; cursor: not-allowed; }
+
 /* ── Klasör Sağ-Tık Menüsü ── */
 .nw-ctx-menu {
   position: fixed; z-index: 9998;
@@ -1277,17 +1637,11 @@ html:not(.dark) .nw-modal-btn--ghost:hover { background: #e2e8f0; }
 /* Spin animation */
 .ffl-modal .spin { animation: spin 1s linear infinite; }
 
-/* Shake + flash — gecersiz kod girildiginde */
+/* Shake + flash — gecersiz alan / kod girildiginde (proje standardi) */
 .ffl-shake {
-  animation: fflShake .4s cubic-bezier(.36,.07,.19,.97) both;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.35) !important;
+  animation: cbInvalidShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.20) !important;
   border-color: #ef4444 !important;
-}
-@keyframes fflShake {
-  10%, 90% { transform: translateX(-1px); }
-  20%, 80% { transform: translateX(2px); }
-  30%, 50%, 70% { transform: translateX(-3px); }
-  40%, 60% { transform: translateX(3px); }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1508,3 +1862,25 @@ html:not(.dark) .nw-modal-btn--ghost:hover { background: #e2e8f0; }
 
 @keyframes fflFadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes nwMenuIn { from { opacity: 0; transform: scale(0.96) translateY(-6px) } to { opacity: 1; transform: scale(1) translateY(0) } }
+
+/* ── PROJE STANDARDI: gecersiz alan/kod uyari titreşimi ────────
+   Tüm shake animasyonlari (ffl-shake, lgc-invalid-shake, mceShake,
+   sqeShake, caShake) ayni keyframes/duration/easing kullanir. */
+@keyframes cbInvalidShake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(3px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+.cb-invalid-shake,
+.lgc-invalid-shake {
+  animation: cbInvalidShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.20) !important;
+}
+
+/* CalibraLineItemsGrid — satir-ici silme geri sayim cubugu (Gmail "Undo" patterni) */
+@keyframes lgDeleteCountdown {
+  from { width: 100%; }
+  to   { width: 0%; }
+}

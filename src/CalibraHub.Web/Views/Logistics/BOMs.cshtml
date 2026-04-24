@@ -23,6 +23,7 @@
         display:flex;align-items:center;gap:8px;padding:8px 16px;flex-shrink:0;
         background:rgba(15,15,26,0.85);border-bottom:1px solid rgba(255,255,255,0.06);
         backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+        position:relative;
     }
     body.app-theme-light .pte-action-bar {
         background:rgba(248,250,252,0.92);border-bottom-color:#e2e8f0;
@@ -55,7 +56,7 @@
     .pte-btn--sm { padding:5px 10px;font-size:0.72rem;border-radius:6px; }
 
     /* ── Body: sidenav + content ── */
-    .pte-body { flex:1 1 0;min-height:0;display:flex;flex-direction:row;overflow:hidden; }
+    .pte-body { flex:1 1 0;min-height:0;display:flex;flex-direction:row;overflow:hidden;position:relative; }
 
     /* ── Sidebar navigation ── */
     .pte-sidenav {
@@ -186,12 +187,46 @@
     }
     .pte-lookup-btn:hover { background:rgba(99,102,241,0.18); }
 
+    /* ── Bridge wrapper'i flex stretch — ffl-clear-btn input ile ayni yukseklikte ── */
+    .pte-lookup .ffl-wrapper {
+        display:flex;align-items:stretch;
+    }
+    /* ── Bridge clear (X) butonu — rehber (buyutec) butonu ile oranli ── */
+    .pte-lookup .ffl-clear-btn {
+        width:30px;height:auto;min-height:100%;
+        background:transparent;
+        border:1px solid rgba(255,255,255,0.1);
+        border-left:0;border-right:0;border-radius:0;
+        color:rgba(255,255,255,0.35);
+        display:flex;align-items:center;justify-content:center;
+        transition:all 0.12s;
+    }
+    .pte-lookup .ffl-clear-btn:hover {
+        background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);
+    }
+    body.app-theme-light .pte-lookup .ffl-clear-btn {
+        background:transparent;border-color:#e2e8f0;color:#94a3b8;
+    }
+    body.app-theme-light .pte-lookup .ffl-clear-btn:hover {
+        background:rgba(15,23,42,0.04);color:#475569;
+    }
+
+    /* ── Image tab — tam yukseklik ── */
+    #pteTab-gorsel {
+        height:100%;display:flex;flex-direction:column;
+    }
+    #pteTab-gorsel .pte-card {
+        flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0;
+    }
+    #pteTab-gorsel .pte-card-title { flex-shrink:0; }
+
     /* ── Image area ── */
     .pte-image-area {
         display:flex;align-items:stretch;gap:10px;
-        margin-top:16px;padding:14px;border-radius:12px;
+        margin-top:10px;padding:14px;border-radius:12px;
         background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
     }
+    #pteTab-gorsel .pte-image-area { flex:1;min-height:0;margin-top:10px; }
     body.app-theme-light .pte-image-area {
         background:#fafbfd;border-color:rgba(15,23,42,0.06);
     }
@@ -217,9 +252,32 @@
         display:flex;align-items:center;justify-content:center;flex-direction:column;
         background:rgba(255,255,255,0.02);
     }
+    #pteTab-gorsel .pte-img-preview { min-height:0; }
     body.app-theme-light .pte-img-preview {
         border-color:#cbd5e1;background:#f1f5f9;
     }
+
+    /* Bridge butonlari wireBridgeBtn tarafindan yonetilir — flash'i onle */
+    .pte-lookup .ffl-lookup-btn { display:none !important; }
+
+    /* ── Bilesen Ekle form — hizali grid ── */
+    .pte-card--compact { padding:12px 14px; }
+    .pte-bilesen-form {
+        display:grid;
+        grid-template-columns:100px 1fr;
+        row-gap:9px;column-gap:10px;
+        align-items:center;
+    }
+    .pte-bilesen-form .pte-label { text-align:right;white-space:nowrap; }
+    .pte-bilesen-form .pte-input { padding:5px 8px;min-width:0; }
+    .pte-bilesen-vals {
+        display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0;
+    }
+    .pte-bilesen-vals .pte-input { min-width:0; }
+    .pte-bilesen-actions {
+        grid-column:2 / -1;display:flex;gap:8px;margin-top:4px;
+    }
+    .pte-cfg-disabled { opacity:0.38;pointer-events:none; }
 
     /* ── Component grid (Bilesen tab) ── */
     .pte-comp-grid {
@@ -281,13 +339,14 @@
     .pte-icon-btn {
         background:transparent;border:none;cursor:pointer;padding:3px;
         border-radius:4px;transition:all 0.1s;color:rgba(255,255,255,0.45);
+        outline:none;box-shadow:none;
     }
     .pte-icon-btn:hover { background:rgba(255,255,255,0.08); }
     .pte-icon-btn--edit:hover { color:#6366f1; }
-    .pte-icon-btn--del:hover { color:#f87171; }
+    .pte-icon-btn--del:hover { color:#f87171; background:transparent; }
     body.app-theme-light .pte-icon-btn { color:#94a3b8; }
     body.app-theme-light .pte-icon-btn--edit:hover { color:#4f46e5; }
-    body.app-theme-light .pte-icon-btn--del:hover { color:#ef4444; }
+    body.app-theme-light .pte-icon-btn--del:hover { color:#ef4444; background:transparent; }
 
     /* ── Empty state ── */
     .pte-empty {
@@ -295,18 +354,30 @@
     }
     body.app-theme-light .pte-empty { color:rgba(71,85,105,0.5); }
 
-    /* ── Toast message ── */
+    /* ── Toast — body icinde, sadece sag panel uzerinde ── */
     .pte-message {
-        padding:0;margin:0 0 12px;border-radius:10px;font-size:0.82rem;font-weight:500;
-        overflow:hidden;max-height:0;opacity:0;transition:all 0.3s ease;
+        position:absolute;left:192px;right:0;top:0;z-index:1000;
+        padding:0;border-radius:0 0 10px 10px;
+        font-size:0.82rem;font-weight:500;white-space:nowrap;overflow:hidden;
+        max-height:0;opacity:0;pointer-events:none;
+        transition:max-height 0.22s ease,opacity 0.22s ease,padding 0.22s ease;
+        backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
     }
     .pte-message.ok {
-        max-height:60px;opacity:1;padding:10px 16px;
-        background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);color:#34d399;
+        max-height:44px;opacity:1;padding:9px 18px;
+        background:rgba(8,26,17,.88);border:1px solid rgba(16,185,129,.45);
+        border-top:none;color:#6ee7b7;
     }
     .pte-message.err {
-        max-height:60px;opacity:1;padding:10px 16px;
-        background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.22);color:#f87171;
+        max-height:44px;opacity:1;padding:9px 18px;
+        background:rgba(26,8,8,.88);border:1px solid rgba(239,68,68,.45);
+        border-top:none;color:#fca5a5;
+    }
+    body.app-theme-light .pte-message.ok {
+        background:rgba(235,253,245,.94);border-color:rgba(16,185,129,.4);color:#047857;
+    }
+    body.app-theme-light .pte-message.err {
+        background:rgba(255,241,241,.94);border-color:rgba(239,68,68,.4);color:#b91c1c;
     }
 
     /* ── Dropdown (glassmorphic) ── */
@@ -343,6 +414,44 @@
         background:rgba(99,102,241,0.15);color:#a5b4fc;margin-left:6px;
     }
     body.app-theme-light .pte-badge-cfg { background:rgba(99,102,241,0.1);color:#4f46e5; }
+
+    /* ── Mamul Rehberi (satis teklifi kalem rehberi tarzi) ── */
+    .pte-dd--lookup { min-width: 420px; max-width: 520px; border-radius: 8px; }
+    .pte-dd--lookup .pte-dd-search { padding: 10px 12px; }
+    .pte-dd--lookup .pte-dd-search .pte-input {
+        font-size: 0.82rem; padding: 8px 12px; border-radius: 6px;
+    }
+    .pte-dd--lookup .pte-dd-list { max-height: 320px; padding: 4px; }
+    .pte-dd-row {
+        display: flex; align-items: center; gap: 12px;
+        width: 100%; padding: 8px 12px;
+        background: transparent; border: 0; border-radius: 6px;
+        text-align: left; cursor: pointer; transition: background .12s;
+    }
+    .pte-dd-row:hover { background: rgba(99,102,241,0.12); }
+    body.app-theme-light .pte-dd-row:hover { background: #eef2ff; }
+    .pte-dd-row.is-active { background: rgba(99,102,241,0.18); }
+    body.app-theme-light .pte-dd-row.is-active { background: #e0e7ff; }
+    .pte-dd-code {
+        font-family: 'JetBrains Mono','Fira Code',monospace;
+        font-size: 0.76rem; color: #a5b4fc;
+        font-variant-numeric: tabular-nums;
+        min-width: 120px; flex-shrink: 0; font-weight: 600;
+    }
+    body.app-theme-light .pte-dd-code { color: #4f46e5; }
+    .pte-dd-name {
+        font-size: 0.82rem; color: rgba(255,255,255,0.78);
+        flex: 1 1 auto; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    body.app-theme-light .pte-dd-name { color: #334155; }
+    .pte-dd-tag {
+        flex-shrink: 0; padding: 2px 8px; border-radius: 999px;
+        font-size: 0.65rem; font-weight: 700; letter-spacing: 0.02em;
+        background: rgba(99,102,241,0.18); color: #a5b4fc;
+        border: 1px solid rgba(99,102,241,0.32);
+    }
+    body.app-theme-light .pte-dd-tag { background: #eef2ff; color: #4f46e5; border-color: #c7d2fe; }
     .pte-chip {
         display:inline-flex;align-items:center;gap:3px;
         background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);
@@ -386,6 +495,7 @@
 
     <!-- Body: sidenav + content -->
     <div class="pte-body">
+        <div class="pte-message" id="pteMsg"></div>
 
         <!-- Sidebar Navigation -->
         <nav class="pte-sidenav" id="pteSideNav">
@@ -398,11 +508,14 @@
                 Bilesen Bilgileri
                 <span class="pte-nav-count" id="ptCompCount">0</span>
             </button>
+            <button type="button" class="pte-nav-btn" data-tab="gorsel">
+                <span class="pte-nav-dot"></span>
+                Urun Gorseli
+            </button>
         </nav>
 
         <!-- Content Area -->
         <div class="pte-content" id="pteContent">
-            <div class="pte-message" id="pteMsg"></div>
 
             <!-- ── Genel Bilgiler ── -->
             <div id="pteTab-genel">
@@ -413,8 +526,8 @@
                         <!-- Mamul Kodu + Adi -->
                         <div class="pte-row">
                             <label class="pte-label pte-label--req" style="width:130px;">Mamul Kodu</label>
-                            <div class="pte-lookup" style="width:180px;flex-shrink:0;">
-                                <input type="text" id="ptParentCode" class="pte-input" style="width:130px;" placeholder="Kod..." autocomplete="off" readonly />
+                            <div class="pte-lookup" style="width:300px;flex-shrink:0;">
+                                <input type="text" id="ptParentCode" data-field-key="parentCode" data-cb-allow-typing="true" class="pte-input" style="flex:1 1 0;min-width:0;" placeholder="Kod..." autocomplete="off" />
                                 <button type="button" class="pte-lookup-btn" id="btnParentLookup" title="Malzeme Rehberi">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
                                 </button>
@@ -425,8 +538,8 @@
                         <!-- Kombinasyon Kodu -->
                         <div class="pte-row" style="display:none;" id="ptConfigRow">
                             <label class="pte-label pte-label--req" style="width:130px;color:#a5b4fc;">Kombinasyon Kodu</label>
-                            <div class="pte-lookup" style="width:180px;flex-shrink:0;">
-                                <input type="text" id="ptConfigCode" class="pte-input" style="width:130px;border-color:rgba(99,102,241,0.3);" placeholder="Kombinasyon secin..." readonly />
+                            <div class="pte-lookup" style="width:300px;flex-shrink:0;">
+                                <input type="text" id="ptConfigCode" data-field-key="combinationCode" data-cb-allow-typing="true" class="pte-input" style="flex:1 1 0;min-width:0;border-color:rgba(99,102,241,0.3);" placeholder="Kombinasyon secin veya yazin..." />
                                 <button type="button" class="pte-lookup-btn" id="btnConfigLookup" title="Kombinasyon Rehberi">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
                                 </button>
@@ -436,16 +549,18 @@
                             </div>
                         </div>
 
-                        <!-- Recete Aciklamasi -->
-                        <div class="pte-field" style="max-width:500px;">
-                            <label class="pte-label" for="ptRecipeNote">Recete Aciklamasi</label>
-                            <input type="text" id="ptRecipeNote" class="pte-input" placeholder="Istege bagli..." />
+                        <!-- Recete Aciklamasi — Mamul Kodu satiriyla ayni hizada (label + input) -->
+                        <div class="pte-row">
+                            <label class="pte-label" for="ptRecipeNote" style="width:130px;">Recete Aciklamasi</label>
+                            <input type="text" id="ptRecipeNote" class="pte-input" placeholder="Istege bagli..." style="flex:1 1 0;min-width:0;" />
                         </div>
 
                     </div>
                 </div>
+            </div><!-- /pteTab-genel -->
 
-                <!-- Gorsel Alani -->
+            <!-- ── Urun Gorseli — ayri tab ── -->
+            <div id="pteTab-gorsel" style="display:none;">
                 <div class="pte-card">
                     <p class="pte-card-title">Urun Gorseli</p>
                     <div class="pte-image-area" id="ptBottomPanel-genel">
@@ -474,19 +589,19 @@
                         <input type="hidden" id="ptImageFitMode" value="square" />
                     </div>
                 </div>
-            </div><!-- /pteTab-genel -->
+            </div><!-- /pteTab-gorsel -->
 
             <!-- ── Bilesen Bilgileri ── -->
             <div id="pteTab-bilesen" style="display:none;">
-                <div class="pte-card">
-                    <p class="pte-card-title">Bilesen Ekle</p>
-                    <div class="pte-grid">
+                <div class="pte-card pte-card--compact">
+                    <div class="pte-bilesen-form">
 
                         <!-- Bilesen Kodu + Adi -->
-                        <div class="pte-row">
-                            <label class="pte-label pte-label--req" style="width:130px;">Bilesen Kodu</label>
-                            <div class="pte-lookup" style="width:180px;flex-shrink:0;">
-                                <input type="text" id="cfCompCode" class="pte-input" style="width:130px;" placeholder="Kod..." autocomplete="off" readonly />
+                        <label class="pte-label pte-label--req">Bilesen Kodu</label>
+                        <div class="pte-bilesen-vals">
+                            <div class="pte-lookup" style="width:300px;flex-shrink:0;">
+                                <input type="text" id="cfCompCode" class="pte-input" style="flex:1 1 0;min-width:0;" placeholder="Kod..." autocomplete="off"
+                                       data-field-key="componentCode" data-cb-allow-typing="true" />
                                 <button type="button" class="pte-lookup-btn" id="btnCompLookup" title="Malzeme Rehberi">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
                                 </button>
@@ -494,31 +609,43 @@
                             <input type="text" id="cfCompName" class="pte-input" readonly placeholder="Bilesen adi..." style="flex:1 1 0;min-width:0;" />
                         </div>
 
-                        <!-- Miktar + Fire + Butonlar -->
-                        <div class="pte-row">
-                            <label class="pte-label pte-label--req" style="width:130px;">Miktar</label>
-                            <input type="number" id="cfCompQty" class="pte-input" value="1" min="0" step="any" style="width:100px;" />
-                            <label class="pte-label" style="margin-left:8px;">Fire Miktari</label>
-                            <input type="number" id="cfCompScrap" class="pte-input" value="0" min="0" step="any" style="width:100px;" />
-                            <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" id="ptCompFormSubmit" style="margin-left:8px;">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7h14"/></svg>
-                                Ekle
-                            </button>
-                            <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="ptCompFormCancel" style="display:none;">Iptal</button>
-                        </div>
-
-                        <!-- Bilesen Kombinasyonu -->
-                        <div class="pte-row" style="display:none;" id="cfCompCfgWrap">
-                            <label class="pte-label pte-label--req" style="width:130px;color:#a5b4fc;">Kombinasyon</label>
-                            <div class="pte-lookup" style="width:180px;flex-shrink:0;">
-                                <input type="text" id="cfCompCfgCode" class="pte-input" style="width:130px;border-color:rgba(99,102,241,0.3);" placeholder="Kombinasyon secin..." readonly />
+                        <!-- Bilesen Kombinasyonu (her zaman gorunur, konfig yoksa pasif) -->
+                        <label id="cfCompCfgLabel" class="pte-label pte-label--req pte-cfg-disabled" style="color:#a5b4fc;">Kombinasyon</label>
+                        <div id="cfCompCfgWrap" class="pte-bilesen-vals pte-cfg-disabled">
+                            <div class="pte-lookup" style="width:300px;flex-shrink:0;">
+                                <input type="text" id="cfCompCfgCode" class="pte-input" style="flex:1 1 0;min-width:0;border-color:rgba(99,102,241,0.3);" placeholder="Kombinasyon secin..." readonly />
                                 <button type="button" class="pte-lookup-btn" id="btnCompCfgLookup" title="Kombinasyon Rehberi">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
                                 </button>
                             </div>
-                            <div id="cfCompCfgDescWrap" style="display:none;flex:1 1 0;min-width:0;">
-                                <input type="text" id="cfCompCfgDesc" class="pte-input" readonly placeholder="Kombinasyon aciklamasi..." style="width:100%;" />
-                            </div>
+                            <input type="text" id="cfCompCfgDesc" class="pte-input" readonly placeholder="Kombinasyon aciklamasi..." style="flex:1 1 0;min-width:0;" />
+                        </div>
+
+                        <!-- Recete Miktari -->
+                        <label class="pte-label pte-label--req">Recete Miktari</label>
+                        <div class="pte-bilesen-vals">
+                            <input type="number" id="cfCompQty" class="pte-input" value="1" min="0" step="any" style="width:300px;" />
+                        </div>
+
+                        <!-- Fire Miktari -->
+                        <label class="pte-label">Fire Miktari</label>
+                        <div class="pte-bilesen-vals">
+                            <input type="number" id="cfCompScrap" class="pte-input" value="0" min="0" step="any" style="width:300px;" />
+                        </div>
+
+                        <!-- Bilesen Aciklamasi -->
+                        <label class="pte-label">Açıklama</label>
+                        <div class="pte-bilesen-vals">
+                            <input type="text" id="cfCompNote" class="pte-input" placeholder="Bileşen açıklaması..." style="flex:1 1 0;min-width:0;" />
+                        </div>
+
+                        <!-- Butonlar (tam satir, deger kolonu ile hizali) -->
+                        <div class="pte-bilesen-actions">
+                            <button type="button" class="pte-btn pte-btn--primary pte-btn--sm" id="ptCompFormSubmit">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7h14"/></svg>
+                                Ekle
+                            </button>
+                            <button type="button" class="pte-btn pte-btn--secondary pte-btn--sm" id="ptCompFormCancel" style="display:none;">Iptal</button>
                         </div>
 
                     </div>
@@ -565,6 +692,30 @@
 
 @section Scripts {
 <script>
+/* ===== REACT BUNDLE YUKLEYICI =====
+   BOMs sayfasi workspace iframe'inde calistiginda _Layout.cshtml bundle'i
+   yuklemez (shouldUseReactShell = false). Bu yuzden rehber ve kombinasyon
+   modali icin gereken window.CalibraHub.* fonksiyonlarini burada dinamik
+   yukluyoruz. Shell frame'inde zaten yuklenmis ise tekrar yuklenmez. */
+(function() {
+    if (window.CalibraHub && window.CalibraHub.openCombinationPicker) return;
+    if (document.querySelector('script[data-bom-react-bundle]')) return;
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    if (!document.querySelector('link[data-bom-react-bundle]')) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = CSS_URL;
+        link.setAttribute('data-bom-react-bundle', '1');
+        document.head.appendChild(link);
+    }
+    var script = document.createElement('script');
+    script.src = BUNDLE_URL;
+    script.setAttribute('data-bom-react-bundle', '1');
+    script.onerror = function() { console.error('[BOM] React bundle yuklenemedi'); };
+    document.head.appendChild(script);
+})();
+
 (function () {
 
     /* ===== TOAST ===== */
@@ -582,7 +733,6 @@
 
     /* ===== COMBINATION LOOKUP STATE ===== */
     let ptCurrentMaterialCode = null;
-    let ptCachedCombos = [];
 
     function ptProcessImageToCanvas() {
         if (!ptCurrentLoadedImg) return;
@@ -652,20 +802,36 @@
     };
 
     /* ===== TAB NAVIGATION ===== */
-    function ptShowTabWarning(msg) {
-        showMsg(msg, false);
+    // Uyari mesaji yerine alani kirmizi cerceve + titreme ile vurgula — ekrana
+    // ek panel/modal acmaz, formu kaydirmaz.
+    function ptShakeField(inputId) {
+        var el = document.getElementById(inputId);
+        if (!el) return;
+        el.classList.remove('cb-invalid-shake');
+        void el.offsetWidth; // reflow
+        el.classList.add('cb-invalid-shake');
+        var origBorder = el.style.borderColor;
+        var origShadow = el.style.boxShadow;
+        el.style.borderColor = '#ef4444';
+        el.style.boxShadow = '0 0 0 3px rgba(239,68,68,0.22)';
+        setTimeout(function () {
+            el.classList.remove('cb-invalid-shake');
+            el.style.borderColor = origBorder;
+            el.style.boxShadow = origShadow;
+        }, 650);
+        try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
     }
 
     function ptCanSwitchToBilesen() {
         var mamulKodu = document.getElementById('ptParentCode')?.value.trim();
         if (!mamulKodu) {
-            ptShowTabWarning('Once Mamul Kodu secilmelidir.');
+            ptShakeField('ptParentCode');
             return false;
         }
         var cfgRow  = document.getElementById('ptConfigRow');
         var cfgCode = document.getElementById('ptConfigCode')?.value.trim();
         if (cfgRow && cfgRow.style.display !== 'none' && !cfgCode) {
-            ptShowTabWarning('Kombinasyonlu mamul icin Kombinasyon Kodu secilmelidir.');
+            ptShakeField('ptConfigCode');
             return false;
         }
         return true;
@@ -674,7 +840,7 @@
     document.querySelectorAll('.pte-nav-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var tab = btn.dataset.tab;
-            if (tab === 'bilesen' && !ptCanSwitchToBilesen()) return;
+            if ((tab === 'bilesen' || tab === 'gorsel') && !ptCanSwitchToBilesen()) return;
 
             document.querySelectorAll('.pte-nav-btn').forEach(function(b) { b.classList.remove('is-active'); });
             btn.classList.add('is-active');
@@ -682,6 +848,8 @@
             // Tab panels
             document.getElementById('pteTab-genel').style.display = (tab === 'genel') ? '' : 'none';
             document.getElementById('pteTab-bilesen').style.display = (tab === 'bilesen') ? '' : 'none';
+            var gorselEl = document.getElementById('pteTab-gorsel');
+            if (gorselEl) gorselEl.style.display = (tab === 'gorsel') ? '' : 'none';
 
             if (tab === 'bilesen') renderGrid();
         });
@@ -714,47 +882,76 @@
     var nameInput = document.getElementById('ptParentName');
 
     var dd = document.createElement('div');
-    dd.className = 'pte-dd';
+    dd.className = 'pte-dd pte-dd--lookup';
     dd.style.display = 'none';
     dd.innerHTML = '<div class="pte-dd-search"><input type="text" id="ptStockSearch" class="pte-input" style="width:100%;" placeholder="Kod veya urun adi ile ara..." autocomplete="off" /></div><div class="pte-dd-list" id="ptStockList"></div>';
     document.body.appendChild(dd);
+
+    // Keyboard navigasyon — aktif satir indeksi
+    var ptLookupActiveIdx = -1;
+    var ptLookupItems = [];
 
     function showLoading() {
         var list = document.getElementById('ptStockList');
         if (list) list.innerHTML = '<div class="pte-dd-empty"><span style="opacity:.6;">Araniyor...</span></div>';
     }
 
+    function pickStock(s) {
+        codeInput.value = s.code;
+        nameInput.value = s.name || '';
+        var cfgRow = document.getElementById('ptConfigRow');
+        var cfgInput = document.getElementById('ptConfigCode');
+        var cfgDescEl = document.getElementById('ptConfigDesc');
+        var cfgDescRow = document.getElementById('ptConfigDescRow');
+        var isConfigurable = s.hasConfig === true || s.hasConfig === 'true';
+        if (cfgRow) cfgRow.style.display = isConfigurable ? 'flex' : 'none';
+        if (cfgInput) { cfgInput.value = ''; cfgInput.placeholder = isConfigurable ? 'Buyutec ile kombinasyon secin...' : ''; }
+        if (cfgDescEl) cfgDescEl.value = '';
+        if (cfgDescRow) cfgDescRow.style.display = 'none';
+        ptCurrentMaterialCode = isConfigurable ? s.code : null;
+        dd.style.display = 'none';
+        if (!isConfigurable) ptLoadExistingTree(s.code, null);
+    }
+
+    function setActiveLookupIdx(idx) {
+        var list = document.getElementById('ptStockList');
+        if (!list) return;
+        var rows = list.querySelectorAll('.pte-dd-row');
+        if (!rows.length) { ptLookupActiveIdx = -1; return; }
+        if (idx < 0) idx = rows.length - 1;
+        if (idx >= rows.length) idx = 0;
+        ptLookupActiveIdx = idx;
+        rows.forEach(function(r, i) { r.classList.toggle('is-active', i === idx); });
+        rows[idx].scrollIntoView({ block: 'nearest' });
+    }
+
     function renderStockList(items) {
         var list = document.getElementById('ptStockList');
         if (!list) return;
-        if (!items || !items.length) {
+        ptLookupItems = items || [];
+        ptLookupActiveIdx = -1;
+        if (!ptLookupItems.length) {
             list.innerHTML = '<div class="pte-dd-empty">Sonuc bulunamadi</div>';
             return;
         }
-        list.innerHTML = items.map(function(s) {
-            return '<div class="pte-dd-item" data-code="' + escHtml(s.code) + '" data-name="' + escHtml(s.name ?? '') + '" data-config="' + s.hasConfig + '">' +
-                '<strong>' + escHtml(s.code) + '</strong> ' +
-                '<span class="pte-dd-muted">' + escHtml(s.name ?? '') + '</span>' +
-                (s.hasConfig ? '<span class="pte-badge-cfg">Kombinasyonlu</span>' : '') +
-                '</div>';
+        list.innerHTML = ptLookupItems.map(function(s, i) {
+            return '<button type="button" class="pte-dd-row' + (i === 0 ? ' is-active' : '') + '" data-idx="' + i + '">' +
+                '<span class="pte-dd-code">' + escHtml(s.code) + '</span>' +
+                '<span class="pte-dd-name">' + escHtml(s.name ?? '') + '</span>' +
+                (s.hasConfig ? '<span class="pte-dd-tag">Kombinasyon</span>' : '') +
+                '</button>';
         }).join('');
-        list.querySelectorAll('.pte-dd-item').forEach(function(el) {
+        ptLookupActiveIdx = 0;
+        list.querySelectorAll('.pte-dd-row').forEach(function(el) {
+            el.addEventListener('mousedown', function(e) { e.preventDefault(); });
             el.addEventListener('click', function() {
-                codeInput.value = el.dataset.code;
-                nameInput.value = el.dataset.name;
-                var cfgRow = document.getElementById('ptConfigRow');
-                var cfgInput = document.getElementById('ptConfigCode');
-                var cfgDescEl = document.getElementById('ptConfigDesc');
-                var cfgDescRow = document.getElementById('ptConfigDescRow');
-                var isConfigurable = el.dataset.config === 'true';
-                if (cfgRow) cfgRow.style.display = isConfigurable ? 'flex' : 'none';
-                if (cfgInput) { cfgInput.value = ''; cfgInput.placeholder = isConfigurable ? 'Buyutec ile kombinasyon secin...' : ''; }
-                if (cfgDescEl) cfgDescEl.value = '';
-                if (cfgDescRow) cfgDescRow.style.display = 'none';
-                ptCurrentMaterialCode = isConfigurable ? el.dataset.code : null;
-                ptCachedCombos = [];
-                dd.style.display = 'none';
-                if (!isConfigurable) ptLoadExistingTree(el.dataset.code, null);
+                var idx = parseInt(el.dataset.idx, 10);
+                var s = ptLookupItems[idx];
+                if (s) pickStock(s);
+            });
+            el.addEventListener('mouseenter', function() {
+                var idx = parseInt(el.dataset.idx, 10);
+                setActiveLookupIdx(idx);
             });
         });
     }
@@ -792,6 +989,17 @@
         debounceTimer = setTimeout(function() { fetchStocks(self.value); }, 250);
     });
 
+    // Klavye navigasyonu (satis teklifi kalem rehberi gibi)
+    document.getElementById('ptStockSearch')?.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActiveLookupIdx(ptLookupActiveIdx + 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveLookupIdx(ptLookupActiveIdx - 1); }
+        else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (ptLookupActiveIdx >= 0 && ptLookupItems[ptLookupActiveIdx]) pickStock(ptLookupItems[ptLookupActiveIdx]);
+        }
+        else if (e.key === 'Escape') { dd.style.display = 'none'; }
+    });
+
     /* ===== BILESEN KODU LOOKUP ===== */
     var btnCompLookup = document.getElementById('btnCompLookup');
     var compCodeInput = document.getElementById('cfCompCode');
@@ -823,15 +1031,14 @@
                 compNameInput.value = el.dataset.name;
                 var isConfigurable = el.dataset.config === 'true';
                 var cfgWrap = document.getElementById('cfCompCfgWrap');
+                var cfgLabel = document.getElementById('cfCompCfgLabel');
                 var cfgCodeEl = document.getElementById('cfCompCfgCode');
                 var cfgDescEl = document.getElementById('cfCompCfgDesc');
-                var cfgDescWrap = document.getElementById('cfCompCfgDescWrap');
-                if (cfgWrap) cfgWrap.style.display = isConfigurable ? 'flex' : 'none';
-                if (cfgCodeEl) { cfgCodeEl.value = ''; cfgCodeEl.placeholder = isConfigurable ? 'Buyutec ile kombinasyon secin...' : ''; }
+                if (cfgWrap) cfgWrap.classList.toggle('pte-cfg-disabled', !isConfigurable);
+                if (cfgLabel) cfgLabel.classList.toggle('pte-cfg-disabled', !isConfigurable);
+                if (cfgCodeEl) { cfgCodeEl.value = ''; cfgCodeEl.placeholder = isConfigurable ? 'Kombinasyon secin...' : ''; }
                 if (cfgDescEl) cfgDescEl.value = '';
-                if (cfgDescWrap) cfgDescWrap.style.display = 'none';
                 ptCompMaterialCode = isConfigurable ? el.dataset.code : null;
-                ptCompCachedCombos = [];
                 compDd.style.display = 'none';
                 document.getElementById('cfCompQty')?.focus();
             });
@@ -852,7 +1059,23 @@
         }
     }
 
+    // Mamul kodu bos ise bilesen secimine izin verme — mamul input'u kirmizi titretir
+    function ptRequireParentOrShake() {
+        var parentEl = document.getElementById('ptParentCode');
+        var parentCode = parentEl ? parentEl.value.trim() : '';
+        if (parentCode) return true;
+        if (parentEl) {
+            parentEl.classList.remove('is-invalid');
+            void parentEl.offsetWidth;
+            parentEl.classList.add('is-invalid');
+            setTimeout(function() { parentEl.classList.remove('is-invalid'); }, 1400);
+            try { parentEl.focus(); } catch (e) { /* readonly / portal case */ }
+        }
+        return false;
+    }
+
     btnCompLookup?.addEventListener('click', function() {
+        if (!ptRequireParentOrShake()) return;
         var isOpen = compDd.style.display !== 'none';
         if (isOpen) { compDd.style.display = 'none'; return; }
         compDd.style.display = '';
@@ -861,6 +1084,14 @@
         if (searchInput) searchInput.value = '';
         fetchCompStocks('');
         setTimeout(function() { document.getElementById('ptCompSearch')?.focus(); }, 50);
+    });
+
+    // Bilesen kodu input'u readonly — yine de kullanici tikladiginda mamul yoksa ayni uyari
+    document.getElementById('cfCompCode')?.addEventListener('mousedown', function(e) {
+        if (!ptRequireParentOrShake()) { e.preventDefault(); }
+    });
+    document.getElementById('cfCompCode')?.addEventListener('focus', function() {
+        ptRequireParentOrShake();
     });
 
     window.addEventListener('scroll', function() { if (compDd.style.display !== 'none') positionDropdown(compDd, btnCompLookup); }, true);
@@ -872,169 +1103,162 @@
         compDebounceTimer = setTimeout(function() { fetchCompStocks(self.value); }, 250);
     });
 
-    /* ===== KOMBINASYON LOOKUP (Mamul) ===== */
+    /* ===== KOMBINASYON REHBER MODAL (Mamul + Bilesen) =====
+       React tarafindaki CombinationPickerModal'i (sol sidebar iki tab — Mevcut /
+       Yeni + deger bazinda aciklama) window.CalibraHub.openCombinationPicker
+       uzerinden aciyoruz. Bundle henuz yuklenmediyse butonlar sessizce devre
+       disi kalir. */
     var btnConfigLookup = document.getElementById('btnConfigLookup');
     var cfgCodeInput = document.getElementById('ptConfigCode');
+    var btnCompCfgLookup = document.getElementById('btnCompCfgLookup');
+    let ptCompMaterialCode = null;
 
-    var comboDd = document.createElement('div');
-    comboDd.className = 'pte-dd';
-    comboDd.style.display = 'none';
-    comboDd.innerHTML = '<div class="pte-dd-search"><input type="text" id="ptComboSearch" class="pte-input" style="width:100%;" placeholder="Kod, aciklama veya ozellik/deger ile ara..." autocomplete="off" /></div><div class="pte-dd-list" id="ptComboList"></div>';
-    document.body.appendChild(comboDd);
+    function ptBuildComboDesc(details) {
+        return (details || []).map(function(d) {
+            var label = d.featureName + ' (' + (d.valueName || d.valueCode || '') + ')';
+            return d.description ? (label + ' — ' + d.description) : label;
+        }).join(', ');
+    }
 
-    function renderComboList(items, query) {
-        var q = (query || '').toLowerCase();
-        var matchFeature = function(c) { return (c.features || []).some(function(fv) {
-            return (fv.feature || '').toLowerCase().includes(q) || (fv.value || '').toLowerCase().includes(q);
-        }); };
-        var filtered = q
-            ? items.filter(function(c) { return c.code.toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q) || matchFeature(c); })
-            : items;
-        var list = document.getElementById('ptComboList');
-        if (!list) return;
-        if (!filtered.length) {
-            list.innerHTML = '<div class="pte-dd-empty">Sonuc bulunamadi</div>';
+    function ptOpenComboPicker(materialCode, opts, retriesLeft) {
+        if (retriesLeft === undefined) retriesLeft = 10;
+        if (!window.CalibraHub || typeof CalibraHub.openCombinationPicker !== 'function') {
+            if (retriesLeft > 0) {
+                // Bundle yuklenmesi icin kisa bekleme — ilk click'te yari yarıya yuklenmis olabilir.
+                setTimeout(function() { ptOpenComboPicker(materialCode, opts, retriesLeft - 1); }, 200);
+                return true;
+            }
+            var diag = !window.CalibraHub
+                ? 'window.CalibraHub tanimsiz — React bundle hic yuklenmemis'
+                : 'window.CalibraHub.openCombinationPicker yok — bundle ESKI: tarayici cache siliniz veya Ctrl+Shift+R';
+            showMsg(diag, false);
+            console.error('[BOM]', diag, { CalibraHub: window.CalibraHub });
+            return false;
+        }
+        CalibraHub.openCombinationPicker(materialCode, opts);
+        return true;
+    }
+
+    btnConfigLookup?.addEventListener('click', function() {
+        // Mamul kodu DOM input'undan okuyoruz — bridge ya da elle yazim fark etmez.
+        var parentEl = document.getElementById('ptParentCode');
+        var materialCode = parentEl ? (parentEl.value || '').trim() : '';
+        if (!materialCode && window.ptCurrentMaterialCode) materialCode = window.ptCurrentMaterialCode;
+        if (!materialCode && ptCurrentMaterialCode) materialCode = ptCurrentMaterialCode;
+        if (!materialCode) {
+            showMsg('Once mamul kodu girin', false);
+            ptShakeField('ptParentCode');
             return;
         }
-        list.innerHTML = filtered.map(function(c) {
-            var chips = (c.features || []).map(function(fv) {
-                return '<span class="pte-chip"><span class="pte-chip-feat">' + escHtml(fv.feature) + '</span><span style="opacity:.4;">:</span><span class="pte-chip-val">' + escHtml(fv.value) + '</span></span>';
-            }).join('');
-            return '<div class="pte-dd-item" data-code="' + escHtml(c.code) + '" data-name="' + escHtml(c.name ?? '') + '" data-features="' + encodeURIComponent(JSON.stringify(c.features || [])) + '">' +
-                '<div><strong>' + escHtml(c.code) + '</strong>' +
-                (c.name && c.name !== c.code ? ' <span class="pte-dd-muted">' + escHtml(c.name) + '</span>' : '') +
-                '</div>' +
-                (chips ? '<div style="margin-top:4px;line-height:1.6;">' + chips + '</div>' : '') +
-                '</div>';
-        }).join('');
-        list.querySelectorAll('.pte-dd-item').forEach(function(el) {
-            el.addEventListener('click', function() {
-                if (cfgCodeInput) cfgCodeInput.value = el.dataset.code;
-                var features = JSON.parse(decodeURIComponent(el.dataset.features || '%5B%5D'));
-                var descText = features.length
-                    ? features.map(function(fv) { return fv.feature + ' (' + fv.value + ')'; }).join(', ')
-                    : (el.dataset.name || '');
+        ptOpenComboPicker(materialCode, {
+            materialName: (document.getElementById('ptParentName')?.value || '').trim(),
+            currentCode: cfgCodeInput ? cfgCodeInput.value : null,
+            onApply: function(configId, code, details) {
+                if (cfgCodeInput) cfgCodeInput.value = code;
+                var descText = ptBuildComboDesc(details);
                 var descEl = document.getElementById('ptConfigDesc');
                 var descRowEl = document.getElementById('ptConfigDescRow');
                 if (descEl) descEl.value = descText;
                 if (descRowEl) descRowEl.style.display = descText ? 'flex' : 'none';
-                comboDd.style.display = 'none';
-                ptLoadExistingTree(ptCurrentMaterialCode, el.dataset.code);
-            });
+                if (typeof ptLoadExistingTree === 'function') ptLoadExistingTree(materialCode, code);
+            }
         });
-    }
+    });
 
-    async function openComboDd() {
-        comboDd.style.display = '';
-        positionDropdown(comboDd, btnConfigLookup);
-        var searchEl = document.getElementById('ptComboSearch');
-        if (searchEl) { searchEl.value = ''; setTimeout(function() { searchEl.focus(); }, 50); }
-        if (!ptCurrentMaterialCode) {
-            var list = document.getElementById('ptComboList');
-            if (list) list.innerHTML = '<div class="pte-dd-empty" style="color:#fbbf24;">Lutfen once mamul kodu secin</div>';
+    btnCompCfgLookup?.addEventListener('click', function() {
+        var compCodeEl = document.getElementById('cfCompCode');
+        var materialCode = ptCompMaterialCode || (compCodeEl ? (compCodeEl.value || '').trim() : '');
+        if (!materialCode) {
+            showMsg('Once bilesen kodu girin', false);
+            ptShakeField('cfCompCode');
             return;
         }
-        if (!ptCachedCombos.length) {
-            var list = document.getElementById('ptComboList');
-            if (list) list.innerHTML = '<div class="pte-dd-empty"><span style="opacity:.6;">Yukleniyor...</span></div>';
-            try {
-                var resp = await fetch('/Logistics/CombinationLookup?materialCode=' + encodeURIComponent(ptCurrentMaterialCode));
-                ptCachedCombos = await resp.json();
-            } catch {
-                if (list) list.innerHTML = '<div class="pte-dd-empty" style="color:#f87171;">Yukleme hatasi</div>';
+        var cfCompCfgCode = document.getElementById('cfCompCfgCode');
+        ptOpenComboPicker(materialCode, {
+            materialName: (document.getElementById('cfCompName')?.value || '').trim(),
+            currentCode: cfCompCfgCode ? cfCompCfgCode.value : null,
+            onApply: function(configId, code, details) {
+                if (cfCompCfgCode) cfCompCfgCode.value = code;
+                var descText = ptBuildComboDesc(details);
+                var cfCompCfgDesc = document.getElementById('cfCompCfgDesc');
+                if (cfCompCfgDesc) cfCompCfgDesc.value = descText;
+            }
+        });
+    });
+
+    /* ===== ELLE GIRIS — BLUR DOGRULAMASI =====
+       Kullanici ptParentCode / ptConfigCode'a elle yazdiginda focus cikinca
+       kodu sunucuya sorup dogrular. Dogru ise isim/aciklama otomatik dolar;
+       yanlis ise input kirmizi titrer ve temizlenmez (kullanici duzeltebilir). */
+    var ptParentCodeEl = document.getElementById('ptParentCode');
+    var ptConfigCodeEl = document.getElementById('ptConfigCode');
+
+    async function ptValidateParentCode() {
+        if (!ptParentCodeEl) return;
+        var code = (ptParentCodeEl.value || '').trim();
+        if (!code) return;
+        try {
+            var resp = await fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code));
+            var list = await resp.json();
+            var match = (list || []).find(function(s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+            if (!match) {
+                showMsg('Gecersiz mamul kodu: ' + code, false);
+                ptShakeField('ptParentCode');
                 return;
             }
+            ptParentCodeEl.value = match.code; // normalize case
+            var nameEl = document.getElementById('ptParentName');
+            if (nameEl) nameEl.value = match.name || '';
+            var isCfg = match.hasConfig === true || match.hasConfig === 'true';
+            var cfgRow = document.getElementById('ptConfigRow');
+            var cfgInput = document.getElementById('ptConfigCode');
+            var cfgDescRow = document.getElementById('ptConfigDescRow');
+            if (cfgRow) cfgRow.style.display = isCfg ? 'flex' : 'none';
+            if (cfgInput && cfgInput.value && !isCfg) cfgInput.value = '';
+            if (cfgDescRow && !isCfg) cfgDescRow.style.display = 'none';
+            ptCurrentMaterialCode = isCfg ? match.code : null;
+            window.ptCurrentMaterialCode = ptCurrentMaterialCode;
+            if (!isCfg && typeof ptLoadExistingTree === 'function') ptLoadExistingTree(match.code, null);
+        } catch (err) {
+            showMsg('Mamul kodu dogrulanamadi', false);
         }
-        renderComboList(ptCachedCombos, '');
     }
 
-    btnConfigLookup?.addEventListener('click', function() {
-        if (comboDd.style.display !== 'none') { comboDd.style.display = 'none'; return; }
-        openComboDd();
-    });
-
-    window.addEventListener('scroll', function() { if (comboDd.style.display !== 'none') positionDropdown(comboDd, btnConfigLookup); }, true);
-    window.addEventListener('resize', function() { if (comboDd.style.display !== 'none') positionDropdown(comboDd, btnConfigLookup); });
-
-    document.getElementById('ptComboSearch')?.addEventListener('input', function() {
-        renderComboList(ptCachedCombos, this.value);
-    });
-
-    /* ===== BILESEN KOMBINASYON LOOKUP ===== */
-    var btnCompCfgLookup = document.getElementById('btnCompCfgLookup');
-    let ptCompMaterialCode = null;
-    let ptCompCachedCombos = [];
-
-    var cfCfgDd = document.createElement('div');
-    cfCfgDd.className = 'pte-dd';
-    cfCfgDd.style.display = 'none';
-    cfCfgDd.innerHTML = '<div class="pte-dd-search"><input type="text" id="cfCfgSearch" class="pte-input" style="width:100%;" placeholder="Kombinasyon ara..." autocomplete="off" /></div><div class="pte-dd-list" id="cfCfgList"></div>';
-    document.body.appendChild(cfCfgDd);
-
-    btnCompCfgLookup?.addEventListener('click', async function() {
-        if (cfCfgDd.style.display !== 'none') { cfCfgDd.style.display = 'none'; return; }
-        cfCfgDd.style.display = '';
-        positionDropdown(cfCfgDd, btnCompCfgLookup);
-        document.getElementById('cfCfgSearch').value = '';
-        document.getElementById('cfCfgSearch')?.focus();
-        await loadCfCfgList('');
-        requestAnimationFrame(function() { positionDropdown(cfCfgDd, btnCompCfgLookup); });
-    });
-
-    document.getElementById('cfCfgSearch')?.addEventListener('input', function() {
-        renderCfCfgList(ptCompCachedCombos, this.value);
-    });
-
-    async function loadCfCfgList(q) {
-        var listEl = document.getElementById('cfCfgList');
-        if (!listEl) return;
-        if (!ptCompMaterialCode) {
-            listEl.innerHTML = '<div class="pte-dd-empty" style="color:#fbbf24;">Lutfen once bilesen secin</div>';
+    async function ptValidateConfigCode() {
+        if (!ptConfigCodeEl || !ptParentCodeEl) return;
+        var code = (ptConfigCodeEl.value || '').trim();
+        if (!code) return;
+        var mat = (ptParentCodeEl.value || '').trim();
+        if (!mat) {
+            showMsg('Once mamul kodu girin', false);
+            ptShakeField('ptParentCode');
             return;
         }
-        if (!ptCompCachedCombos.length) {
-            listEl.innerHTML = '<div class="pte-dd-empty"><span style="opacity:.6;">Yukleniyor...</span></div>';
-            try {
-                var resp = await fetch('/Logistics/CombinationLookup?materialCode=' + encodeURIComponent(ptCompMaterialCode));
-                ptCompCachedCombos = await resp.json();
-            } catch {
-                listEl.innerHTML = '<div class="pte-dd-empty" style="color:#f87171;">Yukleme hatasi</div>';
+        try {
+            var resp = await fetch('/Sales/GetCombinations?materialCode=' + encodeURIComponent(mat));
+            var list = await resp.json();
+            var match = (list || []).find(function(c) { return (c.code || '').toLowerCase() === code.toLowerCase(); });
+            if (!match) {
+                showMsg('Gecersiz kombinasyon kodu: ' + code, false);
+                ptShakeField('ptConfigCode');
                 return;
             }
+            ptConfigCodeEl.value = match.code;
+            var descText = (match.features || []).map(function(fv) {
+                return fv.feature + ' (' + fv.value + ')';
+            }).join(', ');
+            var descEl = document.getElementById('ptConfigDesc');
+            var descRowEl = document.getElementById('ptConfigDescRow');
+            if (descEl) descEl.value = descText;
+            if (descRowEl) descRowEl.style.display = descText ? 'flex' : 'none';
+            if (typeof ptLoadExistingTree === 'function') ptLoadExistingTree(mat, match.code);
+        } catch (err) {
+            showMsg('Kombinasyon kodu dogrulanamadi', false);
         }
-        renderCfCfgList(ptCompCachedCombos, q);
     }
 
-    function renderCfCfgList(items, query) {
-        var q = (query || '').toLowerCase();
-        var filtered = q ? items.filter(function(c) {
-            return c.code.toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q) ||
-                (c.features || []).some(function(fv) { return (fv.feature + fv.value).toLowerCase().includes(q); });
-        }) : items;
-        var listEl = document.getElementById('cfCfgList');
-        if (!listEl) return;
-        if (!filtered.length) { listEl.innerHTML = '<div class="pte-dd-empty">Sonuc bulunamadi</div>'; return; }
-        listEl.innerHTML = filtered.map(function(c) {
-            var chips = (c.features || []).map(function(fv) {
-                return '<span class="pte-chip"><span class="pte-chip-feat">' + escHtml(fv.feature) + '</span><span style="opacity:.4;">:</span><span class="pte-chip-val">' + escHtml(fv.value) + '</span></span>';
-            }).join('');
-            return '<div class="pte-dd-item" data-code="' + escHtml(c.code) + '" data-name="' + escHtml(c.name ?? '') + '">' +
-                '<div><strong>' + escHtml(c.code) + '</strong>' +
-                (c.name && c.name !== c.code ? ' <span class="pte-dd-muted">' + escHtml(c.name) + '</span>' : '') +
-                '</div>' +
-                (chips ? '<div style="margin-top:3px;">' + chips + '</div>' : '') +
-                '</div>';
-        }).join('');
-        listEl.querySelectorAll('.pte-dd-item').forEach(function(item) {
-            item.addEventListener('click', function() {
-                document.getElementById('cfCompCfgCode').value = item.dataset.code;
-                var cfgName = item.dataset.name || '';
-                document.getElementById('cfCompCfgDesc').value = cfgName;
-                document.getElementById('cfCompCfgDescWrap').style.display = cfgName ? '' : 'none';
-                cfCfgDd.style.display = 'none';
-            });
-        });
-    }
+    ptParentCodeEl?.addEventListener('blur', ptValidateParentCode);
+    ptConfigCodeEl?.addEventListener('blur', ptValidateConfigCode);
 
     /* ===== BILESEN VERI MODELI ===== */
     let ptComponents = [];
@@ -1094,12 +1318,12 @@
             f('cfCompCode', c.code); f('cfCompName', c.name);
             f('cfCompQty', c.qty); f('cfCompScrap', c.scrap);
             f('cfCompCfgCode', c.cfgCode || ''); f('cfCompCfgDesc', c.cfgDesc || '');
+            f('cfCompNote', c.note || '');
             var cfgWrap = document.getElementById('cfCompCfgWrap');
-            var cfgDescWrap = document.getElementById('cfCompCfgDescWrap');
-            if (cfgWrap) cfgWrap.style.display = c.hasConfig ? 'flex' : 'none';
-            if (cfgDescWrap) cfgDescWrap.style.display = (c.hasConfig && c.cfgDesc) ? 'flex' : 'none';
+            var cfgLabel = document.getElementById('cfCompCfgLabel');
+            if (cfgWrap) cfgWrap.classList.toggle('pte-cfg-disabled', !c.hasConfig);
+            if (cfgLabel) cfgLabel.classList.toggle('pte-cfg-disabled', !c.hasConfig);
             ptCompMaterialCode = c.hasConfig ? c.code : null;
-            ptCompCachedCombos = [];
         } else {
             clearCompForm();
         }
@@ -1112,13 +1336,13 @@
         if (cancelBtn) cancelBtn.style.display = 'none';
         var f = function(id, val) { var el = document.getElementById(id); if (el) el.value = val; };
         f('cfCompCode', ''); f('cfCompName', ''); f('cfCompQty', '1'); f('cfCompScrap', '0');
-        f('cfCompCfgCode', ''); f('cfCompCfgDesc', '');
+        f('cfCompCfgCode', ''); f('cfCompCfgDesc', ''); f('cfCompNote', '');
         var cfgWrap = document.getElementById('cfCompCfgWrap');
-        var cfgDescWrap = document.getElementById('cfCompCfgDescWrap');
-        if (cfgWrap) cfgWrap.style.display = 'none';
-        if (cfgDescWrap) cfgDescWrap.style.display = 'none';
+        var cfgLabel = document.getElementById('cfCompCfgLabel');
+        if (cfgWrap) cfgWrap.classList.add('pte-cfg-disabled');
+        if (cfgLabel) cfgLabel.classList.add('pte-cfg-disabled');
         ptEditIndex = -1; ptSelIndex = -1;
-        ptCompMaterialCode = null; ptCompCachedCombos = [];
+        ptCompMaterialCode = null;
         document.querySelectorAll('#ptLinesBody tr').forEach(function(r) { r.classList.remove('selected'); });
         renderGrid();
     }
@@ -1132,9 +1356,11 @@
         var name = document.getElementById('cfCompName')?.value.trim() || '';
         var qty = parseFloat(document.getElementById('cfCompQty').value);
         var scrap = parseFloat(document.getElementById('cfCompScrap').value) || 0;
-        var hasConfig = document.getElementById('cfCompCfgWrap').style.display !== 'none';
+        var cfgWrapEl = document.getElementById('cfCompCfgWrap');
+        var hasConfig = cfgWrapEl && !cfgWrapEl.classList.contains('pte-cfg-disabled');
         var cfgCode = document.getElementById('cfCompCfgCode').value.trim();
         var cfgDesc = document.getElementById('cfCompCfgDesc').value.trim();
+        var note = document.getElementById('cfCompNote')?.value.trim() || '';
 
         if (!code) { codeEl.classList.add('is-invalid'); setTimeout(function() { codeEl.classList.remove('is-invalid'); }, 2000); return; }
         if (!qty || qty <= 0) {
@@ -1148,7 +1374,7 @@
             setTimeout(function() { cfgEl.classList.remove('is-invalid'); }, 2000); return;
         }
 
-        var component = { code: code, name: name, qty: qty, scrap: scrap, hasConfig: hasConfig, cfgCode: cfgCode, cfgDesc: cfgDesc };
+        var component = { code: code, name: name, qty: qty, scrap: scrap, hasConfig: hasConfig, cfgCode: cfgCode, cfgDesc: cfgDesc, note: note };
         if (ptEditIndex >= 0) { ptComponents[ptEditIndex] = component; }
         else { ptComponents.push(component); }
         clearCompForm();
@@ -1248,7 +1474,11 @@
     /* ===== SAVE ===== */
     document.getElementById('ptBtnSave')?.addEventListener('click', async function() {
         var parentCode = document.getElementById('ptParentCode')?.value?.trim();
-        if (!parentCode) { showMsg('Lutfen once mamul kodunu seciniz.', false); return; }
+        if (!parentCode) {
+            // Uyari mesaji yerine alani kirmizi cerceve + titreme ile isaretle.
+            ptShakeField('ptParentCode');
+            return;
+        }
         if (ptComponents.length === 0) { showMsg('Recetede en az bir bilesen olmalidir.', false); return; }
 
         var btn = document.getElementById('ptBtnSave');
@@ -1278,7 +1508,8 @@
                 componentMaterialCode: c.code,
                 componentConfigCode: c.cfgCode || null,
                 quantity: c.qty,
-                scrapRatio: c.scrap
+                scrapRatio: c.scrap,
+                note: c.note || null
             }; })
         };
 
@@ -1288,6 +1519,10 @@
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 body: JSON.stringify(payload)
             });
+            if (!resp.ok) {
+                showMsg('Sunucu hatasi (' + resp.status + '). Lutfen sayfayi yenileyin.', false);
+                return;
+            }
             var data = await resp.json();
             if (data.success) {
                 showMsg('Recete basariyla kaydedildi.', true);
@@ -1296,7 +1531,8 @@
                 showMsg('Kayit hatasi: ' + (data.message || 'Bilinmeyen hata'), false);
             }
         } catch (err) {
-            showMsg('Baglanti hatasi: ' + err.message, false);
+            showMsg('Islem tamamlanamadi. Baglanti veya sunucu hatasi.', false);
+            console.error('[BOM][save]', err);
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg> Kaydet';
@@ -1319,7 +1555,6 @@
             document.getElementById('ptParentCode').value = card.code;
             document.getElementById('ptParentName').value = card.name || '';
             ptCurrentMaterialCode = card.hasConfig ? card.code : null;
-            ptCachedCombos = [];
 
             var cfgRow = document.getElementById('ptConfigRow');
             var cfgInput = document.getElementById('ptConfigCode');
@@ -1343,12 +1578,138 @@
             dd.style.display = 'none';
         if (!compDd.contains(e.target) && e.target !== btnCompLookup && !btnCompLookup?.contains(e.target))
             compDd.style.display = 'none';
-        if (!comboDd.contains(e.target) && e.target !== btnConfigLookup && !btnConfigLookup?.contains(e.target))
-            comboDd.style.display = 'none';
-        if (!cfCfgDd.contains(e.target) && e.target !== btnCompCfgLookup && !btnCompCfgLookup?.contains(e.target))
-            cfCfgDd.style.display = 'none';
     }, true);
 
+})();
+
+/* ──────────────────────────────────────────────────────────────
+   Rehber ozellestirme — admin "Alan ve Widget Tanimlari" ekranindan
+   PRODUCT_TREES formunda parentCode alanina rehber baglandiysa
+   FixedFieldLookupBridge devreye girer. Binding yoksa varsayilan
+   btnParentLookup akisi korunur.
+   ────────────────────────────────────────────────────────────── */
+(function () {
+    function hasCustomBridge(inputId) {
+        var input = document.getElementById(inputId);
+        if (!input || !input.parentNode) return false;
+        return !!input.parentNode.querySelector('.ffl-lookup-btn');
+    }
+
+    function wireCustomLookups() {
+        if (!window.CalibraHub || typeof CalibraHub.mountFixedFieldLookups !== 'function') {
+            setTimeout(wireCustomLookups, 150);
+            return;
+        }
+        CalibraHub.mountFixedFieldLookups('PRODUCT_TREES').then(function () {
+            // Bridge mount edildiyse: bridge butonunu GIZLE, orijinal btnParentLookup
+            // bridge'i tetiklesin. Boylece kullanici tek (buyuk) rehber butonu gorur
+            // ama arkada bridge'in ozellestirilebilir modali acilir.
+            // React render async — butona polling ile beklenir.
+            var parentInput = document.getElementById('ptParentCode');
+            if (!parentInput) return;
+
+            function wireBridgeBtn(inputEl, oldBtnId, onBridgeReady, tries) {
+                tries = tries || 0;
+                var bridgeBtn = inputEl.parentNode
+                    ? inputEl.parentNode.querySelector('.ffl-lookup-btn')
+                    : null;
+                if (!bridgeBtn) {
+                    if (tries < 30) setTimeout(function () { wireBridgeBtn(inputEl, oldBtnId, onBridgeReady, tries + 1); }, 100);
+                    return;
+                }
+                bridgeBtn.style.display = 'none';
+                // Wrapper'i goster (ffl-clear-btn icin gerekli), sadece lookup btn gizli
+                if (bridgeBtn.parentNode) bridgeBtn.parentNode.style.display = '';
+                // Eski event listener'lari kaldirmak icin klonla, sonra sadece bridge trigger ekle
+                var oldBtn = document.getElementById(oldBtnId);
+                if (oldBtn) {
+                    var newBtn = oldBtn.cloneNode(true);
+                    oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+                    newBtn.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        if (typeof onBridgeReady === 'function' && !onBridgeReady()) return;
+                        bridgeBtn.click();
+                    });
+                }
+            }
+
+            // Mamul (parent) bridge
+            wireBridgeBtn(parentInput, 'btnParentLookup', null);
+            parentInput.addEventListener('change', function () {
+                var code = (parentInput.value || '').trim();
+                if (!code) return;
+                fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
+                    .then(function (r) { return r.json(); })
+                    .then(function (list) {
+                        var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+                        if (!match) return;
+                        var nameEl = document.getElementById('ptParentName');
+                        if (nameEl) nameEl.value = match.name || '';
+                        var cfgRow  = document.getElementById('ptConfigRow');
+                        var cfgInput = document.getElementById('ptConfigCode');
+                        var cfgDescRow = document.getElementById('ptConfigDescRow');
+                        var isCfg = match.hasConfig === true || match.hasConfig === 'true';
+                        if (cfgRow) cfgRow.style.display = isCfg ? 'flex' : 'none';
+                        if (cfgInput) cfgInput.value = '';
+                        if (cfgDescRow) cfgDescRow.style.display = 'none';
+                        window.ptCurrentMaterialCode = isCfg ? match.code : null;
+                        if (!isCfg && typeof ptLoadExistingTree === 'function') ptLoadExistingTree(match.code, null);
+                    })
+                    .catch(function () {});
+            });
+
+            // Bilesen (component) bridge — FldSet binding varsa devreye girer
+            var compInput = document.getElementById('cfCompCode');
+            if (compInput) {
+                wireBridgeBtn(compInput, 'btnCompLookup', function() {
+                    // Mamul kodu doluysa devam et, yoksa titret ve iptal
+                    var parentEl = document.getElementById('ptParentCode');
+                    var parentCode = parentEl ? parentEl.value.trim() : '';
+                    if (parentCode) return true;
+                    if (parentEl) {
+                        parentEl.classList.remove('is-invalid');
+                        void parentEl.offsetWidth;
+                        parentEl.classList.add('is-invalid');
+                        setTimeout(function() { parentEl.classList.remove('is-invalid'); }, 1400);
+                        try { parentEl.focus(); } catch (e) {}
+                    }
+                    return false;
+                });
+                compInput.addEventListener('change', function () {
+                    var code = (compInput.value || '').trim();
+                    var cfgWrap  = document.getElementById('cfCompCfgWrap');
+                    var cfgLabel = document.getElementById('cfCompCfgLabel');
+                    var cfgCodeEl = document.getElementById('cfCompCfgCode');
+                    var cfgDescEl = document.getElementById('cfCompCfgDesc');
+                    if (!code) {
+                        if (cfgWrap)  cfgWrap.classList.add('pte-cfg-disabled');
+                        if (cfgLabel) cfgLabel.classList.add('pte-cfg-disabled');
+                        return;
+                    }
+                    fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
+                        .then(function (r) { return r.json(); })
+                        .then(function (list) {
+                            var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+                            if (!match) return;
+                            var nameEl = document.getElementById('cfCompName');
+                            if (nameEl) nameEl.value = match.name || '';
+                            var isCfg = match.hasConfig === true || match.hasConfig === 'true';
+                            if (cfgWrap)  cfgWrap.classList.toggle('pte-cfg-disabled', !isCfg);
+                            if (cfgLabel) cfgLabel.classList.toggle('pte-cfg-disabled', !isCfg);
+                            if (cfgCodeEl) { cfgCodeEl.value = ''; }
+                            if (cfgDescEl) cfgDescEl.value = '';
+                            ptCompMaterialCode = isCfg ? match.code : null;
+                        })
+                        .catch(function () {});
+                });
+            }
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', wireCustomLookups);
+    } else {
+        wireCustomLookups();
+    }
 })();
 </script>
 }

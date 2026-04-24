@@ -66,7 +66,9 @@ body.app-theme-dark .sch-layout {
 .sch-detail-header { padding: 10px 16px; border-bottom: 1px solid var(--sch-border); background: var(--sch-panel-bg); display: flex; justify-content: space-between; align-items: center; }
 .sch-detail-title { font-family: 'Consolas', 'Monaco', monospace; font-size: 1rem; font-weight: 600; color: var(--sch-accent); }
 .sch-detail-meta { font-size: 0.74rem; color: var(--app-text-muted, #64748b); }
-.sch-table-summary { font-size: 0.82rem; color: inherit; line-height: 1.4; max-width: 760px; margin-bottom: 4px; padding: 6px 10px; background: var(--sch-enum-bg); border-left: 3px solid var(--sch-accent); border-radius: 3px; }
+.sch-table-summary { font-size: 0.82rem; color: var(--app-text, #1e293b); line-height: 1.4; max-width: 760px; margin-bottom: 4px; padding: 6px 10px; background: var(--sch-enum-bg); border-left: 3px solid var(--sch-accent); border-radius: 3px; }
+html.dark .sch-table-summary,
+body.app-theme-dark .sch-table-summary { color: rgba(255,255,255,0.88); }
 .sch-meta-line { font-size: 0.74rem; color: var(--app-text-muted, #64748b); }
 .sch-table-row.has-desc .sch-table-name::after { content: " •"; color: var(--sch-accent); opacity: 0.7; font-weight: 700; }
 .sch-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--sch-border); background: var(--sch-panel-bg); }

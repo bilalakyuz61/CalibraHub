@@ -36,8 +36,9 @@ public static class MenuDefinition
         {
             new("settings.company",           "Şirket Ayarları",        "Building2",   "/Admin/CompanySettings",    null),
             new("settings.integrationevents", "Entegrasyon Tanımları",  "Zap",         "/Admin/IntegrationEvents",  null),
-            new("settings.viewsettings",      "Ekran Tasarım Ayarları", "LayoutGrid",  "/Admin/ViewSettings",       null),
+            new("settings.viewsettings",      "Alan ve Widget Tanımları", "LayoutGrid",  "/Admin/ViewSettings",       null),
             new("settings.dbschema",          "Veritabanı Haritası",    "Database",    "/admin/db-schema",          null),
+            new("settings.scheduledtasks",    "Zamanlanmış Görevler",   "Clock",       "/Admin/ScheduledTasks",     null),
         };
         if (isSystemAdmin)
         {
@@ -71,6 +72,7 @@ public static class MenuDefinition
                 new("logistics.fixed", "Sabit Tanımlamalar", "Folder", null, new List<MenuNode>
                 {
                     new("logistics.materials", "Malzeme Kartları", "Boxes", "/Logistics/MaterialCards", null),
+                    new("logistics.configuration", "Özellik ve Kombinasyon", "Sliders", "/Logistics/ProductConfiguration", null),
                 }),
                 new("logistics.sales", "Satış", "TrendingUp", null, new List<MenuNode>
                 {

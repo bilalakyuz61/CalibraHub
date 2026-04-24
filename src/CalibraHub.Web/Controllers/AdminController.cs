@@ -1,3 +1,4 @@
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
@@ -24,6 +25,7 @@ public sealed class AdminController : Controller
     private readonly IDocumentImportService _documentImportService;
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IIntegrationEventService _integrationEventService;
+    private readonly IScheduledTaskRepository _scheduledTaskRepo;
     private static readonly JsonSerializerOptions ProjectRequestJsonOptions = new()
     {
         WriteIndented = true
@@ -36,7 +38,8 @@ public sealed class AdminController : Controller
         ILogisticsConfigurationService logisticsConfigurationService,
         IDocumentImportService documentImportService,
         IWebHostEnvironment webHostEnvironment,
-        IIntegrationEventService integrationEventService)
+        IIntegrationEventService integrationEventService,
+        IScheduledTaskRepository scheduledTaskRepo)
     {
         _adminReadService = adminReadService;
         _adminManagementService = adminManagementService;
@@ -45,6 +48,7 @@ public sealed class AdminController : Controller
         _documentImportService = documentImportService;
         _webHostEnvironment = webHostEnvironment;
         _integrationEventService = integrationEventService;
+        _scheduledTaskRepo = scheduledTaskRepo;
     }
 
     [HttpGet]
@@ -59,6 +63,133 @@ public sealed class AdminController : Controller
     public IActionResult Settings()
     {
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>
+    /// Zamanlanmis gorevler — Worker'daki hosted service'lerin kayit + calistirma durumu.
+    /// CalibraHub.Worker startup'ta her service kendi metadata'sini scheduled_tasks tablosuna
+    /// UPSERT eder; her turda LastRun/NextRun'i guncellenir. Bu ekran canli listeyi gosterir.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> ScheduledTasks(CancellationToken ct)
+    {
+        var tasks = await _scheduledTaskRepo.GetAllAsync(ct);
+        return View(tasks);
+    }
+
+    /// <summary>Canli durumu AJAX ile almak icin — auto-refresh yapmak isteyen JS.</summary>
+    [HttpGet("/Admin/ScheduledTasks/List")]
+    public async Task<IActionResult> ScheduledTasksList(CancellationToken ct)
+    {
+        var tasks = await _scheduledTaskRepo.GetAllAsync(ct);
+        return Json(tasks.Select(t => new
+        {
+            t.Id,
+            t.Code,
+            t.Name,
+            t.Description,
+            TaskType     = (int)t.TaskType,
+            TaskTypeName = t.TaskType.ToString(),
+            t.ParametersJson,
+            ScheduleType     = (int)t.ScheduleType,
+            ScheduleTypeName = t.ScheduleType.ToString(),
+            t.ScheduleExpression,
+            t.ScheduleDescription,
+            t.IsEnabled,
+            t.IsRunning,
+            LastRunAtLocal = t.LastRunAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
+            t.LastRunStatus,
+            t.LastRunMessage,
+            t.LastRunDurationMs,
+            NextRunAtLocal = t.NextRunAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
+        }));
+    }
+
+    /// <summary>Gorevi hemen calistir (MANUAL trigger).</summary>
+    [HttpPost("/Admin/ScheduledTasks/{code}/RunNow")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ScheduledTaskRunNow(string code,
+        [FromServices] CalibraHub.Application.Services.Scheduling.IScheduledTaskDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        var (ok, message) = await dispatcher.TriggerNowAsync(code, ct);
+        return Json(new { success = ok, message });
+    }
+
+    /// <summary>Gorevi etkinlestir/devre disi birak.</summary>
+    [HttpPost("/Admin/ScheduledTasks/{code}/Toggle")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ScheduledTaskToggle(string code, [FromForm] bool enabled, CancellationToken ct)
+    {
+        await _scheduledTaskRepo.SetEnabledAsync(code, enabled, ct);
+        return Json(new { success = true });
+    }
+
+    /// <summary>Gorevi sil (BUILTIN gorevler silinemez — Worker startup'ta tekrar register eder).</summary>
+    [HttpPost("/Admin/ScheduledTasks/{id:int}/Delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ScheduledTaskDelete(int id, CancellationToken ct)
+    {
+        var task = await _scheduledTaskRepo.GetByIdAsync(id, ct);
+        if (task is null) return Json(new { success = false, message = "Gorev bulunamadi." });
+        if (task.TaskType == CalibraHub.Domain.Enums.ScheduledTaskType.Builtin)
+            return Json(new { success = false, message = "BUILTIN gorevler silinemez — sadece devre disi birakilabilir." });
+        await _scheduledTaskRepo.DeleteAsync(id, ct);
+        return Json(new { success = true });
+    }
+
+    /// <summary>Yeni gorev ekle veya mevcut gorevi duzenle.</summary>
+    [HttpPost("/Admin/ScheduledTasks/Save")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ScheduledTaskSave([FromBody] ScheduledTaskSaveRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { success = false, message = "Kod ve isim zorunlu." });
+        if (!System.Text.RegularExpressions.Regex.IsMatch(req.Code, @"^[A-Za-z_][A-Za-z0-9_]*$"))
+            return Json(new { success = false, message = "Kod sadece harf, rakam ve alt cizgi olmali." });
+
+        var taskType = (CalibraHub.Domain.Enums.ScheduledTaskType)req.TaskType;
+        if (taskType == CalibraHub.Domain.Enums.ScheduledTaskType.Builtin)
+            return Json(new { success = false, message = "BUILTIN gorevler UI'dan eklenemez — Worker kodunda tanimlanir." });
+
+        var task = new CalibraHub.Domain.Entities.ScheduledTask
+        {
+            Id                  = req.Id,
+            Code                = req.Code.Trim(),
+            Name                = req.Name.Trim(),
+            Description         = req.Description,
+            TaskType            = taskType,
+            ParametersJson      = req.ParametersJson,
+            ScheduleType        = (CalibraHub.Domain.Enums.ScheduleType)req.ScheduleType,
+            ScheduleExpression  = req.ScheduleExpression,
+            ScheduleDescription = req.ScheduleDescription,
+            IsEnabled           = req.IsEnabled,
+        };
+        task.NextRunAt = CalibraHub.Application.Services.Scheduling.ScheduleEvaluator.ComputeNextRun(task, DateTime.UtcNow);
+        var id = await _scheduledTaskRepo.SaveAsync(task, ct);
+        return Json(new { success = true, id });
+    }
+
+    /// <summary>Bir gorevin son N calistirma gecmisini doner.</summary>
+    [HttpGet("/Admin/ScheduledTasks/{code}/History")]
+    public async Task<IActionResult> ScheduledTaskHistory(string code, int limit,
+        [FromServices] CalibraHub.Application.Abstractions.Persistence.IScheduledTaskRunRepository runRepo,
+        CancellationToken ct)
+    {
+        var takeLimit = limit > 0 && limit <= 200 ? limit : 20;
+        var runs = await runRepo.GetRecentByCodeAsync(code, takeLimit, ct);
+        return Json(runs.Select(r => new
+        {
+            r.Id,
+            r.TaskCode,
+            StartedAtLocal   = r.StartedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
+            CompletedAtLocal = r.CompletedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
+            r.Status,
+            r.Message,
+            r.DurationMs,
+            Trigger     = (int)r.Trigger,
+            TriggerName = r.Trigger.ToString(),
+        }));
     }
 
     /// <summary>
@@ -565,6 +696,11 @@ public sealed class AdminController : Controller
         Guid? fieldId,
         CancellationToken cancellationToken)
     {
+        // Iframe/tarayici cache Razor degisikligini yansitmiyor — no-cache set et.
+        Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+        Response.Headers["Expires"] = "0";
+
         SetActiveMenu("view-settings-screens");
         ViewData["OpenMaterialGroupModal"] = openGroupModal;
         var viewModel = await BuildScreenDesignSettingsPageViewModelAsync(
@@ -3325,6 +3461,20 @@ public sealed class AdminController : Controller
 public sealed class TestRestApiInput
 {
     public string? ApiConfigJson { get; set; }
+}
+
+public sealed class ScheduledTaskSaveRequest
+{
+    public int     Id                  { get; set; }
+    public string  Code                { get; set; } = string.Empty;
+    public string  Name                { get; set; } = string.Empty;
+    public string? Description         { get; set; }
+    public int     TaskType            { get; set; }
+    public string? ParametersJson      { get; set; }
+    public int     ScheduleType        { get; set; }
+    public string? ScheduleExpression  { get; set; }
+    public string? ScheduleDescription { get; set; }
+    public bool    IsEnabled           { get; set; } = true;
 }
 
 public sealed class IntegratorSettingsJsonInput

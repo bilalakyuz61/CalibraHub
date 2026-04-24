@@ -217,6 +217,14 @@
     }
     .pl-switch input:checked + .pl-switch-track { background: #6366f1; }
     .pl-switch input:checked + .pl-switch-track::after { transform: translateX(16px); }
+    /* Grup toggle (konfigurasyonlu stok basligi) — partial state */
+    .pl-switch--group input:indeterminate + .pl-switch-track {
+        background: linear-gradient(90deg, #6366f1 50%, rgba(255,255,255,.15) 50%);
+    }
+    body.app-theme-light .pl-switch--group input:indeterminate + .pl-switch-track {
+        background: linear-gradient(90deg, #6366f1 50%, #cbd5e1 50%);
+    }
+    .pl-switch--group input:indeterminate + .pl-switch-track::after { transform: translateX(8px); }
     .pl-stock-code { font-weight: 700; color: rgba(255,255,255,.85); min-width: 90px; font-size: .78rem; }
     body.app-theme-light .pl-stock-code { color: #1e293b; }
     .pl-stock-name { color: rgba(255,255,255,.5); font-size: .78rem; }
@@ -799,7 +807,23 @@
             var chk = selSet.has(stockKey);
             if (s.trackCombinations) {
                 var isOpen = expandedMats.has(s.materialCode);
-                html += '<div class="pl-stock-item pl-stock-item--tracked' + (isOpen ? ' is-open' : '') + '" onclick="plToggleExpand(\'' + esc(s.materialCode) + '\')">'
+                // Grup (ust seviye) toggle state'i — tum kombinasyonlar secili mi?
+                var combosForStock = combosByMat[s.materialCode];
+                var grpState = 'none'; // none | partial | all
+                if (Array.isArray(combosForStock) && combosForStock.length > 0) {
+                    var selectedCount = combosForStock.filter(function(c) {
+                        return selSet.has(String(s.id) + '|' + c.code);
+                    }).length;
+                    if (selectedCount === combosForStock.length) grpState = 'all';
+                    else if (selectedCount > 0) grpState = 'partial';
+                }
+                var grpChecked = grpState === 'all';
+                var grpIndet   = grpState === 'partial';
+                html += '<div class="pl-stock-item pl-stock-item--tracked' + (isOpen ? ' is-open' : '') + (grpChecked ? ' is-checked' : '') + '" onclick="plToggleExpand(\'' + esc(s.materialCode) + '\')">'
+                    +   '<label class="pl-switch pl-switch--group" title="Tum kombinasyonlari sec/kaldir" onclick="event.stopPropagation();plToggleStockAllCombos(' + s.id + ',\'' + esc(s.materialCode) + '\',\'' + esc(s.materialName) + '\')">'
+                    +     '<input type="checkbox"' + (grpChecked ? ' checked' : '') + (grpIndet ? ' data-indeterminate="1"' : '') + ' onclick="event.stopPropagation()" readonly />'
+                    +     '<span class="pl-switch-track"></span>'
+                    +   '</label>'
                     +   '<span class="pl-caret">' + (isOpen ? '▾' : '▸') + '</span>'
                     +   '<span class="pl-stock-code">' + esc(s.materialCode) + '</span>'
                     +   '<span class="pl-stock-name">' + esc(s.materialName) + '</span>'
@@ -843,6 +867,9 @@
             html += '<div class="pl-scroll-sentinel" id="plSentinel">' + (serverLoading ? 'Yükleniyor…' : '') + '</div>';
         }
         list.innerHTML = html;
+
+        // Indeterminate state — HTML attribute ile set edilemez, JS ile set et
+        list.querySelectorAll('input[data-indeterminate="1"]').forEach(function(inp) { inp.indeterminate = true; });
 
         // IntersectionObserver — infinite scroll
         var sentinel = document.getElementById('plSentinel');
@@ -901,21 +928,78 @@
             .catch(function() { combosByMat[matCode] = []; renderStockList(); });
     };
 
-    window.plSelectAllFiltered = function() {
+    // Bir tracked stok icin kombinasyonlari cek ve sec (zaten seciliyse atla).
+    function pushCombosToSelected(s, combos) {
         var selSet = new Set(selectedStocks.map(keyOf));
-        serverStocks.forEach(function(s) {
-            if (s.trackCombinations) return; // yapilandirmali olanlar manuel kombinasyon secimi ile
-            var k = String(s.id) + '|';
+        combos.forEach(function(c) {
+            var label = (c.featureValues || []).map(function(fv) { return fv.feature + ': ' + fv.value; }).join(' · ');
+            var k = String(s.id) + '|' + c.code;
             if (!selSet.has(k)) {
                 selectedStocks.push({
                     id: s.id, materialCode: s.materialCode, materialName: s.materialName,
-                    combinationCode: null, combinationName: null,
+                    combinationCode: c.code, combinationName: c.name || label || c.code,
                     buyingPrice: 0, sellingPrice: 0
                 });
             }
         });
-        renderStockList(); validateStep();
+    }
+
+    function ensureCombosLoaded(matCode) {
+        if (Array.isArray(combosByMat[matCode])) return Promise.resolve(combosByMat[matCode]);
+        return fetch(API('GetCombinations') + '?materialCode=' + encodeURIComponent(matCode))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                combosByMat[matCode] = Array.isArray(data) ? data : [];
+                return combosByMat[matCode];
+            })
+            .catch(function() { combosByMat[matCode] = []; return []; });
+    }
+
+    window.plSelectAllFiltered = function() {
+        var selSet = new Set(selectedStocks.map(keyOf));
+        var pending = [];
+        serverStocks.forEach(function(s) {
+            if (s.trackCombinations) {
+                // Yapilandirmali stok: tum kombinasyonlarini sec (lazy fetch)
+                pending.push(ensureCombosLoaded(s.materialCode).then(function(combos) {
+                    if (combos && combos.length > 0) pushCombosToSelected(s, combos);
+                }));
+            } else {
+                var k = String(s.id) + '|';
+                if (!selSet.has(k)) {
+                    selectedStocks.push({
+                        id: s.id, materialCode: s.materialCode, materialName: s.materialName,
+                        combinationCode: null, combinationName: null,
+                        buyingPrice: 0, sellingPrice: 0
+                    });
+                }
+            }
+        });
+        Promise.all(pending).then(function() {
+            renderStockList(); validateStep();
+        });
     };
+
+    window.plToggleStockAllCombos = function(stockId, matCode, matName) {
+        var s = serverStocks.find(function(x) { return x.id === stockId; })
+             || { id: stockId, materialCode: matCode, materialName: matName };
+        ensureCombosLoaded(s.materialCode).then(function(combos) {
+            if (!combos || combos.length === 0) { renderStockList(); return; }
+            var selSet = new Set(selectedStocks.map(keyOf));
+            var allSelected = combos.every(function(c) { return selSet.has(String(s.id) + '|' + c.code); });
+            if (allSelected) {
+                // Hepsini kaldir
+                var comboCodes = new Set(combos.map(function(c) { return c.code; }));
+                selectedStocks = selectedStocks.filter(function(row) {
+                    return !(row.id === s.id && row.combinationCode && comboCodes.has(row.combinationCode));
+                });
+            } else {
+                pushCombosToSelected(s, combos);
+            }
+            renderStockList(); validateStep();
+        });
+    };
+
     window.plClearSelection = function() { selectedStocks = []; renderStockList(); validateStep(); };
     window.plRemoveSelected = function(id) {
         selectedStocks = selectedStocks.filter(function(s) { return s.id !== id; });

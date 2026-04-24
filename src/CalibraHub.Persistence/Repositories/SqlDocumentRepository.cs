@@ -3,6 +3,7 @@ using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Persistence.Repositories;
@@ -10,19 +11,40 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlDocumentRepository : IDocumentRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly string _quoteTable;
     private readonly string _lineTable;
     private readonly string _detailTable;
     private readonly string _schema;
 
-    public SqlDocumentRepository(SqlServerConnectionFactory connectionFactory, CalibraDatabaseOptions options)
+    public SqlDocumentRepository(
+        SqlServerConnectionFactory connectionFactory,
+        CalibraDatabaseOptions options,
+        IHttpContextAccessor httpContextAccessor)
     {
         _connectionFactory = connectionFactory;
+        _httpContextAccessor = httpContextAccessor;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _schema = schema;
         _quoteTable = $"[{schema}].[Document]";
         _lineTable = $"[{schema}].[DocumentLine]";
         _detailTable = $"[{schema}].[sales_quote_line_details]";
+    }
+
+    /// <summary>
+    /// HTTP context'ten mevcut kullanicinin sirket kimligini ceker.
+    /// Claim yoksa 0 doner; caller fallback olarak DB default'una (1) guvenir.
+    /// </summary>
+    private int GetCurrentCompanyId()
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.User.Identity?.IsAuthenticated == true)
+        {
+            var raw = httpContext.User.FindFirst("company_id")?.Value;
+            if (!string.IsNullOrWhiteSpace(raw) && int.TryParse(raw, out var id))
+                return id;
+        }
+        return 0;
     }
 
     public async Task<IReadOnlyCollection<Document>> GetAllAsync(string? search, string? status, CancellationToken ct)
@@ -39,17 +61,21 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         }
         if (!string.IsNullOrWhiteSpace(search))
         {
-            where += " AND ([document_number] LIKE @Search OR [contact_name] COLLATE Turkish_CI_AI LIKE @Search)";
+            where += " AND ([document_number] LIKE @Search)";
             cmd.Parameters.Add(new SqlParameter("@Search", $"%{search.Trim()}%"));
         }
 
+        // Cari ismi Contact.AccountTitle'dan cekilir — contact_name kolonu Faz 2'de drop edildi.
         cmd.CommandText = $"""
-            SELECT q.[id],q.[document_number],q.[document_date],q.[valid_until],q.[contact_id],q.[contact_name],q.[contact_address],
+            SELECT q.[id],q.[company_id],q.[document_number],q.[document_date],q.[valid_until],q.[contact_id],
+                   ca.[AccountTitle] AS [contact_name],
+                   q.[contact_address],
                    q.[sales_rep_id],q.[currency],q.[sub_total],q.[discount_rate],q.[discount_amount],q.[tax_rate],q.[tax_amount],q.[grand_total],
                    q.[payment_terms],q.[delivery_terms],q.[delivery_address],q.[status],q.[revision_no],q.[parent_document_id],
                    q.[notes],q.[created_by],q.[created_at],q.[updated_at],q.[is_active],q.[document_type_id],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[document_id] = q.[id] AND l.[is_active] = 1) AS [line_count]
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[document_id] = q.[id]) AS [line_count]
             FROM {_quoteTable} q
+            LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[contact_id]
             {where.Replace("[", "q.[")}
             ORDER BY q.[created_at] DESC;
             """;
@@ -63,19 +89,17 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Cari ismi Contact.AccountTitle'dan gelir — contact_name kolonu Faz 2'de drop edildi.
         cmd.CommandText = $"""
-            SELECT q.[id],q.[document_number],q.[document_date],q.[valid_until],q.[contact_id],q.[contact_name],q.[contact_address],
+            SELECT q.[id],q.[company_id],q.[document_number],q.[document_date],q.[valid_until],q.[contact_id],
+                   ca.[AccountTitle] AS [contact_name],
+                   q.[contact_address],
                    q.[sales_rep_id],q.[currency],q.[sub_total],q.[discount_rate],q.[discount_amount],q.[tax_rate],q.[tax_amount],q.[grand_total],
                    q.[payment_terms],q.[delivery_terms],q.[delivery_address],q.[status],q.[revision_no],q.[parent_document_id],
                    q.[notes],q.[created_by],q.[created_at],q.[updated_at],q.[is_active],q.[document_type_id],
-                   COALESCE(ca_id.[AccountCode], ca_name.[AccountCode]) AS customer_code
+                   ca.[AccountCode] AS customer_code
             FROM {_quoteTable} q
-            LEFT JOIN [{_schema}].[Contact] ca_id
-                ON ca_id.[Id] = q.[contact_id]
-            LEFT JOIN [{_schema}].[Contact] ca_name
-                ON q.[contact_id] IS NULL
-                AND ca_name.[AccountTitle] COLLATE Turkish_CI_AI = q.[contact_name] COLLATE Turkish_CI_AI
-                AND ca_name.[IsActive] = 1
+            LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[contact_id]
             WHERE q.[id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
@@ -88,10 +112,23 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         var list = new List<DocumentLine>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // Material/Unit/Combination/Location display alanlari JOIN ile okunur — tabloda tutulmuyor.
         cmd.CommandText = $"""
-            SELECT [id],[document_id],[line_no],[item_id],[material_code],[material_name],[unit_name],
-                   [quantity],[unit_price],[discount_rate],[line_total],[combination_code],[notes],[is_active]
-            FROM {_lineTable} WHERE [document_id] = @DocumentId AND [is_active] = 1 ORDER BY [line_no];
+            SELECT l.[id],l.[document_id],l.[line_no],l.[item_id],l.[unit_id],
+                   l.[quantity],l.[unit_price],l.[discount_rate],l.[line_total],
+                   l.[combination_id],l.[location_id],l.[notes],ISNULL(l.[notes_pinned], 0) AS [notes_pinned],
+                   l.[revised_from_id],
+                   i.[code] AS [material_code], i.[name] AS [material_name],
+                   u.[UnitCode] AS [unit_code], u.[UnitName] AS [unit_name],
+                   pc.[RecordCode] AS [combination_code],
+                   loc.[LocationCode] AS [location_code], loc.[LocationName] AS [location_name]
+            FROM {_lineTable} l
+            LEFT JOIN [{_schema}].[Items] i ON i.[id] = l.[item_id]
+            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[unit_id]
+            LEFT JOIN [{_schema}].[ProductConfiguration] pc ON pc.[Id] = l.[combination_id]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = l.[location_id]
+            WHERE l.[document_id] = @DocumentId
+            ORDER BY l.[line_no];
             """;
         cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -115,7 +152,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 UPDATE {_quoteTable} SET
                     [document_type_id]=@DocumentTypeId,
                     [document_date]=@DocumentDate, [valid_until]=@ValidUntil,
-                    [contact_id]=@ContactId, [contact_name]=@ContactName, [contact_address]=@ContactAddress,
+                    [contact_id]=@ContactId, [contact_address]=@ContactAddress,
                     [sales_rep_id]=@SalesRepId,
                     [currency]=@Currency, [sub_total]=@SubTotal, [discount_rate]=@DiscountRate,
                     [discount_amount]=@DiscountAmount, [tax_rate]=@TaxRate, [tax_amount]=@TaxAmount,
@@ -132,17 +169,21 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         {
             cmd.CommandText = $"""
                 INSERT INTO {_quoteTable}
-                    ([document_number],[document_type_id],[document_date],[valid_until],[contact_id],[contact_name],[contact_address],
+                    ([company_id],[document_number],[document_type_id],[document_date],[valid_until],[contact_id],[contact_address],
                      [sales_rep_id],[currency],[sub_total],[discount_rate],[discount_amount],[tax_rate],[tax_amount],[grand_total],
                      [payment_terms],[delivery_terms],[delivery_address],[status],[revision_no],[parent_document_id],
                      [notes],[created_by],[created_at],[updated_at],[is_active])
                 VALUES
-                    (@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@ContactId,@ContactName,@ContactAddress,
+                    (@CompanyId,@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@ContactId,@ContactAddress,
                      @SalesRepId,@Currency,@SubTotal,@DiscountRate,@DiscountAmount,@TaxRate,@TaxAmount,@GrandTotal,
                      @PaymentTerms,@DeliveryTerms,@DeliveryAddress,@Status,@RevisionNo,@ParentDocumentId,
                      @Notes,@CreatedBy,@CreatedAt,@UpdatedAt,@IsActive);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
+            // Kayit anindaki oturum kullanicisinin sirketinden cek; claim yoksa 1 (default).
+            var effectiveCompanyId = q.CompanyId > 0 ? q.CompanyId
+                                    : (GetCurrentCompanyId() is int cid && cid > 0 ? cid : 1);
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", effectiveCompanyId));
         }
 
         cmd.Parameters.Add(new SqlParameter("@DocumentNumber", q.DocumentNumber));
@@ -150,7 +191,6 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.Parameters.Add(new SqlParameter("@DocumentDate", q.DocumentDate));
         cmd.Parameters.Add(new SqlParameter("@ValidUntil", (object?)q.ValidUntil ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@ContactId", (object?)q.ContactId ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@ContactName", (object?)q.ContactName ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@ContactAddress", (object?)q.ContactAddress ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SalesRepId", (object?)q.SalesRepId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Currency", q.Currency));
@@ -176,42 +216,95 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         return Convert.ToInt32(result);
     }
 
+    /// <summary>
+    /// UPSERT (DELETE degil). Mevcut satirlarin Id'leri korunur ki:
+    ///   1) Widget verileri (WidgetTra, RecordId = DocumentLine.Id) orphanlanmaz,
+    ///   2) Kombinasyon detaylari (sales_quote_line_details) yeniden yazilmaz.
+    /// Akis:
+    ///   - DB'deki mevcut satir Id'lerini cek
+    ///   - Request'teki her satir: Id>0 ve mevcut ise UPDATE, aksi halde INSERT
+    ///   - Request'te olmayan mevcut Id'leri DELETE et (CASCADE detaylari temizler)
+    /// </summary>
     public async Task SaveLinesAsync(int documentId, IReadOnlyCollection<DocumentLine> lines, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        // Mevcut satirlari sil (CASCADE ile detail'lar da silinir)
-        await using (var del = conn.CreateCommand())
+
+        // 1) Mevcut satir Id'lerini topla
+        var existingIds = new HashSet<int>();
+        await using (var getCmd = conn.CreateCommand())
         {
-            del.CommandText = $"DELETE FROM {_lineTable} WHERE [document_id] = @DocumentId;";
-            del.Parameters.Add(new SqlParameter("@DocumentId", documentId));
-            await del.ExecuteNonQueryAsync(ct);
+            getCmd.CommandText = $"SELECT [id] FROM {_lineTable} WHERE [document_id] = @DocumentId;";
+            getCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+            await using var r = await getCmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) existingIds.Add(r.GetInt32(0));
         }
-        // Yeni satirlari ekle — id IDENTITY tarafindan uretilir
+
+        var keptIds = new HashSet<int>();
+
+        // 2) Request satirlari — UPSERT
         foreach (var ln in lines)
         {
+            var isUpdate = ln.Id > 0 && existingIds.Contains(ln.Id);
+            if (isUpdate) keptIds.Add(ln.Id);
+
             await using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"""
-                INSERT INTO {_lineTable}
-                    ([document_id],[line_no],[item_id],[material_code],[material_name],[unit_name],
-                     [quantity],[unit_price],[discount_rate],[line_total],[combination_code],[notes],[is_active])
-                VALUES
-                    (@DocumentId,@LineNo,@ItemId,@MaterialCode,@MaterialName,@UnitName,
-                     @Quantity,@UnitPrice,@DiscountRate,@LineTotal,@CombinationCode,@Notes,@IsActive);
-                """;
+            if (isUpdate)
+            {
+                cmd.CommandText = $"""
+                    UPDATE {_lineTable} SET
+                        [line_no]         = @LineNo,
+                        [item_id]         = @ItemId,
+                        [unit_id]         = @UnitId,
+                        [quantity]        = @Quantity,
+                        [unit_price]      = @UnitPrice,
+                        [discount_rate]   = @DiscountRate,
+                        [line_total]      = @LineTotal,
+                        [combination_id]  = @CombinationId,
+                        [location_id]     = @LocationId,
+                        [notes]           = @Notes,
+                        [notes_pinned]    = @NotesPinned,
+                        [revised_from_id] = @RevisedFromId
+                    WHERE [id] = @Id AND [document_id] = @DocumentId;
+                    """;
+                cmd.Parameters.Add(new SqlParameter("@Id", ln.Id));
+            }
+            else
+            {
+                cmd.CommandText = $"""
+                    INSERT INTO {_lineTable}
+                        ([document_id],[line_no],[item_id],[unit_id],
+                         [quantity],[unit_price],[discount_rate],[line_total],
+                         [combination_id],[location_id],[notes],[notes_pinned],[revised_from_id])
+                    VALUES
+                        (@DocumentId,@LineNo,@ItemId,@UnitId,
+                         @Quantity,@UnitPrice,@DiscountRate,@LineTotal,
+                         @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId);
+                    """;
+            }
             cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
             cmd.Parameters.Add(new SqlParameter("@LineNo", ln.LineNo));
-            cmd.Parameters.Add(new SqlParameter("@ItemId", (object?)ln.ItemId ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@MaterialCode", ln.MaterialCode));
-            cmd.Parameters.Add(new SqlParameter("@MaterialName", ln.MaterialName));
-            cmd.Parameters.Add(new SqlParameter("@UnitName", (object?)ln.UnitName ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ItemId", ln.ItemId));
+            cmd.Parameters.Add(new SqlParameter("@UnitId", (object?)ln.UnitId ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@Quantity", ln.Quantity));
             cmd.Parameters.Add(new SqlParameter("@UnitPrice", ln.UnitPrice));
             cmd.Parameters.Add(new SqlParameter("@DiscountRate", ln.DiscountRate));
             cmd.Parameters.Add(new SqlParameter("@LineTotal", ln.LineTotal));
-            cmd.Parameters.Add(new SqlParameter("@CombinationCode", (object?)ln.CombinationCode ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@CombinationId", (object?)ln.CombinationId ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@LocationId", (object?)ln.LocationId ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@Notes", (object?)ln.Notes ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@IsActive", ln.IsActive));
+            cmd.Parameters.Add(new SqlParameter("@NotesPinned", ln.NotesPinned));
+            cmd.Parameters.Add(new SqlParameter("@RevisedFromId", (object?)ln.RevisedFromId ?? DBNull.Value));
             await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        // 3) Request'te olmayan mevcut Id'leri sil (CASCADE detaylari temizler)
+        var toDelete = existingIds.Except(keptIds).ToArray();
+        if (toDelete.Length > 0)
+        {
+            await using var delCmd = conn.CreateCommand();
+            delCmd.CommandText = $"DELETE FROM {_lineTable} WHERE [document_id] = @DocumentId AND [id] IN ({string.Join(",", toDelete)});";
+            delCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
+            await delCmd.ExecuteNonQueryAsync(ct);
         }
     }
 
@@ -223,6 +316,114 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Satir revizyonu — atomic SQL batch:
+    ///   1) Eski satirin notlari @Description ile UPDATE edilir (revize gerekcesi).
+    ///   2) Yeni satir INSERT edilir: eski satirin kolonlari aynen kopyalanir,
+    ///      revised_from_id = parentLineId, notes = eski satirin ORIJINAL notu.
+    ///   3) Kombinasyon detaylari (sales_quote_line_details) yeni satira kopyalanir.
+    /// Not: Siralama icin line_no = MAX(line_no)+1 atanir (belge genelinde).
+    /// Widget degerleri (WidgetTra vb.) bu method'a dahil DEGIL — WidgetService
+    /// tarafinda copy-forward yapilir (schema dinamik).
+    /// </summary>
+    public async Task<int?> ReviseLineAsync(int parentLineId, string? description, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var tx = (Microsoft.Data.SqlClient.SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            // 1) Eski satirin dokumentId + orijinal notes'unu al (copy icin, sonra UPDATE)
+            int documentId;
+            string? originalNotes;
+            await using (var selCmd = conn.CreateCommand())
+            {
+                selCmd.Transaction = tx;
+                selCmd.CommandText = $"SELECT [document_id], [notes] FROM {_lineTable} WHERE [id] = @Id;";
+                selCmd.Parameters.Add(new SqlParameter("@Id", parentLineId));
+                await using var r = await selCmd.ExecuteReaderAsync(ct);
+                if (!await r.ReadAsync(ct))
+                {
+                    await tx.RollbackAsync(ct);
+                    return null;
+                }
+                documentId = r.GetInt32(0);
+                originalNotes = r.IsDBNull(1) ? null : r.GetString(1);
+            }
+
+            // 2) Yeni line_no hesapla (belgenin max + 1)
+            int newLineNo;
+            await using (var maxCmd = conn.CreateCommand())
+            {
+                maxCmd.Transaction = tx;
+                maxCmd.CommandText = $"SELECT ISNULL(MAX([line_no]), 0) + 1 FROM {_lineTable} WHERE [document_id] = @DocId;";
+                maxCmd.Parameters.Add(new SqlParameter("@DocId", documentId));
+                var obj = await maxCmd.ExecuteScalarAsync(ct);
+                newLineNo = obj == null || obj == DBNull.Value ? 1 : Convert.ToInt32(obj);
+            }
+
+            // 3) Eski satirin notes'unu aciklama ile UPDATE et
+            await using (var upd = conn.CreateCommand())
+            {
+                upd.Transaction = tx;
+                upd.CommandText = $"UPDATE {_lineTable} SET [notes] = @Desc WHERE [id] = @Id;";
+                upd.Parameters.Add(new SqlParameter("@Id", parentLineId));
+                upd.Parameters.Add(new SqlParameter("@Desc",
+                    string.IsNullOrWhiteSpace(description) ? (object)DBNull.Value : description));
+                await upd.ExecuteNonQueryAsync(ct);
+            }
+
+            // 4) Yeni satir INSERT — SELECT ile eski satirin kolonlarini kopyala
+            //    notes = orijinal notes (eski haline sahip olsun), revised_from_id = parentId
+            int newLineId;
+            await using (var insCmd = conn.CreateCommand())
+            {
+                insCmd.Transaction = tx;
+                insCmd.CommandText = $"""
+                    INSERT INTO {_lineTable}
+                        ([document_id],[line_no],[item_id],[unit_id],[quantity],[unit_price],
+                         [discount_rate],[line_total],[combination_id],[location_id],[notes],
+                         [notes_pinned],[revised_from_id])
+                    SELECT
+                        [document_id], @NewLineNo, [item_id], [unit_id], [quantity], [unit_price],
+                        [discount_rate], [line_total], [combination_id], [location_id], @OrigNotes,
+                        [notes_pinned], @ParentId
+                    FROM {_lineTable}
+                    WHERE [id] = @ParentId;
+                    SELECT CAST(SCOPE_IDENTITY() AS INT);
+                    """;
+                insCmd.Parameters.Add(new SqlParameter("@NewLineNo", newLineNo));
+                insCmd.Parameters.Add(new SqlParameter("@ParentId", parentLineId));
+                insCmd.Parameters.Add(new SqlParameter("@OrigNotes", (object?)originalNotes ?? DBNull.Value));
+                var idObj = await insCmd.ExecuteScalarAsync(ct);
+                newLineId = Convert.ToInt32(idObj);
+            }
+
+            // 5) Kombinasyon detaylarini yeni satira kopyala
+            await using (var copyDetails = conn.CreateCommand())
+            {
+                copyDetails.Transaction = tx;
+                copyDetails.CommandText = $"""
+                    INSERT INTO {_detailTable}
+                        ([quote_line_id],[feature_name],[value_code],[value_name],[description],[line_order])
+                    SELECT @NewId, [feature_name], [value_code], [value_name], [description], [line_order]
+                    FROM {_detailTable}
+                    WHERE [quote_line_id] = @ParentId;
+                    """;
+                copyDetails.Parameters.Add(new SqlParameter("@NewId", newLineId));
+                copyDetails.Parameters.Add(new SqlParameter("@ParentId", parentLineId));
+                await copyDetails.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+            return newLineId;
+        }
+        catch
+        {
+            try { await tx.RollbackAsync(ct); } catch { }
+            throw;
+        }
     }
 
     public async Task<string> GetNextDocumentNumberAsync(CancellationToken ct)
@@ -250,6 +451,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     private static Document MapQuote(SqlDataReader r) => new()
     {
         Id = r.GetInt32(r.GetOrdinal("id")),
+        CompanyId = TryGetOrdinal(r, "company_id") is int cmpOrd && cmpOrd >= 0 && !r.IsDBNull(cmpOrd)
+            ? r.GetInt32(cmpOrd) : 0,
         DocumentNumber = r.GetString(r.GetOrdinal("document_number")),
         DocumentTypeId = TryGetOrdinal(r, "document_type_id") is int dtOrd && dtOrd >= 0 && !r.IsDBNull(dtOrd)
             ? r.GetInt32(dtOrd) : null,
@@ -284,23 +487,41 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 
     private static DocumentLine MapLine(SqlDataReader r)
     {
-        var combOrd = TryGetOrdinal(r, "combination_code");
+        var unitIdOrd  = TryGetOrdinal(r, "unit_id");
+        var unitCodeOrd = TryGetOrdinal(r, "unit_code");
+        var unitNameOrd = TryGetOrdinal(r, "unit_name");
+        var matCodeOrd = TryGetOrdinal(r, "material_code");
+        var matNameOrd = TryGetOrdinal(r, "material_name");
+        var combIdOrd  = TryGetOrdinal(r, "combination_id");
+        var combCodeOrd = TryGetOrdinal(r, "combination_code");
+        var locIdOrd   = TryGetOrdinal(r, "location_id");
+        var locCodeOrd = TryGetOrdinal(r, "location_code");
+        var locNameOrd = TryGetOrdinal(r, "location_name");
+        var notesPinnedOrd = TryGetOrdinal(r, "notes_pinned");
+        var revisedFromIdOrd = TryGetOrdinal(r, "revised_from_id");
         return new()
         {
             Id = r.GetInt32(r.GetOrdinal("id")),
             DocumentId = r.GetInt32(r.GetOrdinal("document_id")),
             LineNo = r.GetInt32(r.GetOrdinal("line_no")),
-            ItemId = r.IsDBNull(r.GetOrdinal("item_id")) ? null : r.GetInt32(r.GetOrdinal("item_id")),
-            MaterialCode = r.GetString(r.GetOrdinal("material_code")),
-            MaterialName = r.GetString(r.GetOrdinal("material_name")),
-            UnitName = r.IsDBNull(r.GetOrdinal("unit_name")) ? null : r.GetString(r.GetOrdinal("unit_name")),
+            ItemId = r.GetInt32(r.GetOrdinal("item_id")),
+            UnitId = unitIdOrd >= 0 && !r.IsDBNull(unitIdOrd) ? r.GetInt32(unitIdOrd) : null,
             Quantity = r.GetDecimal(r.GetOrdinal("quantity")),
             UnitPrice = r.GetDecimal(r.GetOrdinal("unit_price")),
             DiscountRate = r.GetDecimal(r.GetOrdinal("discount_rate")),
             LineTotal = r.GetDecimal(r.GetOrdinal("line_total")),
-            CombinationCode = combOrd >= 0 && !r.IsDBNull(combOrd) ? r.GetString(combOrd) : null,
+            CombinationId = combIdOrd >= 0 && !r.IsDBNull(combIdOrd) ? r.GetInt32(combIdOrd) : null,
+            LocationId = locIdOrd >= 0 && !r.IsDBNull(locIdOrd) ? r.GetInt32(locIdOrd) : null,
             Notes = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
-            IsActive = r.GetBoolean(r.GetOrdinal("is_active"))
+            NotesPinned = notesPinnedOrd >= 0 && !r.IsDBNull(notesPinnedOrd) && r.GetBoolean(notesPinnedOrd),
+            RevisedFromId = revisedFromIdOrd >= 0 && !r.IsDBNull(revisedFromIdOrd) ? r.GetInt32(revisedFromIdOrd) : null,
+            MaterialCode = matCodeOrd >= 0 && !r.IsDBNull(matCodeOrd) ? r.GetString(matCodeOrd) : null,
+            MaterialName = matNameOrd >= 0 && !r.IsDBNull(matNameOrd) ? r.GetString(matNameOrd) : null,
+            UnitCode = unitCodeOrd >= 0 && !r.IsDBNull(unitCodeOrd) ? r.GetString(unitCodeOrd) : null,
+            UnitName = unitNameOrd >= 0 && !r.IsDBNull(unitNameOrd) ? r.GetString(unitNameOrd) : null,
+            CombinationCode = combCodeOrd >= 0 && !r.IsDBNull(combCodeOrd) ? r.GetString(combCodeOrd) : null,
+            LocationCode = locCodeOrd >= 0 && !r.IsDBNull(locCodeOrd) ? r.GetString(locCodeOrd) : null,
+            LocationName = locNameOrd >= 0 && !r.IsDBNull(locNameOrd) ? r.GetString(locNameOrd) : null,
         };
     }
 

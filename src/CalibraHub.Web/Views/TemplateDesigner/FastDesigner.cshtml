@@ -1,0 +1,900 @@
+@{
+    ViewBag.Title = "FastReport — Untitled.fr3";
+    Layout       = "_Layout";
+
+    var dataFields = new (string Name, string Kind)[]
+    {
+        ("ISLEMTIPI",       "0"),
+        ("DOVIZTIPI",       "0"),
+        ("SIRA_NO",         "0"),
+        ("REFERANSNO",      "A"),
+        ("TARIH",           "A"),
+        ("HESAP_NO",        "A"),
+        ("IBANNO",          "A"),
+        ("NETHESKODU",      "A"),
+        ("ACIKLAMA",        "A"),
+        ("BANKAADI",        "A"),
+        ("SUBEADI",         "A"),
+        ("TUTAR",           "A"),
+        ("DOVIZ_TIPI",      "A"),
+        ("KDOVIZ_TIPI",     "A"),
+        ("CARI_KOD",        "A"),
+        ("CARI_ISIM",       "A"),
+        ("KARSIBANKAHESNO", "A"),
+        ("KARSIIBANNO",     "A"),
+        ("KARSIBANKAADI",   "A"),
+        ("KARSISUBEADI",    "A"),
+        ("TOPLAM",          "0"),
+        ("DEKONTNO",        "A"),
+        ("KARSIBANKAKODU",  "A"),
+        ("ACIKLAMA1",       "A"),
+        ("BASLIK_KP",       "A"),
+        ("KURPARITE",       "0")
+    };
+
+    var inspectorProps = new (string Key, string Value, bool Bold)[]
+    {
+        ("AllowMirror",         "False", false),
+        ("AllowSplit",          "False", false),
+        ("Child",               "",      false),
+        ("ColumnGap",           "0",     false),
+        ("Columns",             "0",     false),
+        ("ColumnWidth",         "0",     false),
+        ("DataSet",             "PLV_DZN_BANKA_001", false),
+        ("Description",         "",      false),
+        ("Fill",                "(SolidFill)", false),
+        ("FillGap",             "0; 0",  false),
+        ("FillType",            "ftBand", false),
+        ("Filter",              "",      false),
+        ("Font",                "(TFont)", false),
+        ("FooterAfterEach",     "False", false),
+        ("Frame",               "(TFrame)", false),
+        ("Height",              "0,60",  true),
+        ("IndexTag",            "0",     false),
+        ("KeepChild",           "False", false),
+        ("KeepFooter",          "False", false),
+        ("KeepHeader",          "False", false),
+        ("KeepTogether",        "False", false),
+        ("Left",                "0",     true),
+        ("Name",                "DetailData1", false),
+        ("OutlineText",         "",      false),
+        ("ParentFont",          "True",  false),
+        ("PrintChildIfInvisible", "False", false),
+        ("PrintIfDetailEmpty",  "False", false),
+        ("Restrictions",        "[]",    false),
+        ("RowCount",            "0",     false),
+        ("ShiftEngine",         "seAlways", false),
+        ("StartNewPage",        "False", false),
+        ("Stretched",           "False", false),
+        ("Tag",                 "0",     false),
+        ("Top",                 "1,70",  true),
+        ("Visible",             "True",  false),
+        ("Width",               "19,00", true)
+    };
+}
+
+@section Styles {
+<style>
+/* ============= FastReport-benzeri tasarim ekrani =============== */
+.frd-root {
+    --frd-bg:        #d6d3cd;
+    --frd-panel:     #ebeae4;
+    --frd-panel-2:   #f3f2ee;
+    --frd-border:    #b5b1a8;
+    --frd-border-soft:#cbc7be;
+    --frd-text:      #1a1a1a;
+    --frd-muted:     #5d5a52;
+    --frd-band:      linear-gradient(180deg,#e8a358 0%,#c8782a 100%);
+    --frd-band-text: #fff;
+    --frd-canvas:    #ffffff;
+    --frd-ruler:     #f0eee8;
+    --frd-ruler-text:#3b3b3b;
+    --frd-accent:    #1976d2;
+    --frd-icon:      #4a4a4a;
+
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--layout-header-height) - var(--layout-footer-height));
+    background: var(--frd-bg);
+    color: var(--frd-text);
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    font-size: 12px;
+    overflow: hidden;
+    user-select: none;
+    position: relative;
+}
+
+/* ----- Title bar ----- */
+.frd-title {
+    display: flex; align-items: center; gap: 8px;
+    height: 24px; padding: 0 8px;
+    background: linear-gradient(180deg,#3a6ea5 0%,#1f4e79 100%);
+    color: #fff; font-size: 12px; font-weight: 500;
+}
+.frd-title__icon {
+    width: 14px; height: 14px; border-radius: 2px;
+    background: linear-gradient(135deg,#fbbf24 0%,#dc2626 100%);
+    flex-shrink: 0;
+}
+.frd-title__win {
+    margin-left: auto; display: flex; gap: 0;
+}
+.frd-title__win span {
+    width: 32px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 11px;
+}
+.frd-title__win span:hover { background: rgba(255,255,255,.18); }
+.frd-title__win span.close:hover { background: #e81123; }
+
+/* ----- Menubar ----- */
+.frd-menubar {
+    display: flex; align-items: center;
+    height: 24px; padding: 0 4px;
+    background: var(--frd-panel);
+    border-bottom: 1px solid var(--frd-border);
+}
+.frd-menubar__item {
+    padding: 3px 10px; font-size: 12px; cursor: pointer;
+    border: 1px solid transparent;
+}
+.frd-menubar__item:hover { background: #fff; border-color: var(--frd-border-soft); }
+
+/* ----- Toolbars ----- */
+.frd-toolbars {
+    background: var(--frd-panel);
+    border-bottom: 1px solid var(--frd-border);
+    padding: 3px 4px;
+    display: flex; flex-direction: column; gap: 3px;
+}
+.frd-toolbar {
+    display: flex; align-items: center; gap: 1px; flex-wrap: wrap;
+}
+.frd-tbtn {
+    width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--frd-icon);
+    cursor: pointer; border: 1px solid transparent;
+    font-size: 12px; line-height: 1;
+}
+.frd-tbtn:hover { background: #fff; border-color: var(--frd-border-soft); }
+.frd-tbtn.is-active { background: #fff; border-color: var(--frd-border); }
+.frd-tbtn.disabled { opacity: 0.4; cursor: default; }
+.frd-tbtn-wide {
+    width: auto; padding: 0 6px; gap: 4px;
+}
+.frd-tbtn-color {
+    position: relative;
+}
+.frd-tbtn-color::after {
+    content: ""; position: absolute; left: 3px; right: 3px; bottom: 2px;
+    height: 3px; background: currentColor;
+}
+.frd-sep {
+    width: 1px; height: 18px; background: var(--frd-border-soft); margin: 0 3px;
+}
+.frd-combo {
+    height: 22px; padding: 0 6px; min-width: 90px;
+    background: #fff; border: 1px solid var(--frd-border-soft); font-size: 12px;
+    display: inline-flex; align-items: center; justify-content: space-between; gap: 4px;
+}
+.frd-combo small { color: var(--frd-muted); }
+.frd-combo.frd-combo-num { min-width: 56px; }
+.frd-combo.frd-combo-zoom { min-width: 64px; }
+
+/* ----- Tabs (Code | Data | Page1) ----- */
+.frd-tabs {
+    display: flex; align-items: flex-end;
+    background: var(--frd-panel);
+    padding: 2px 6px 0;
+    border-bottom: 1px solid var(--frd-border);
+    height: 22px;
+}
+.frd-tab {
+    padding: 2px 12px; font-size: 12px; cursor: pointer;
+    border: 1px solid var(--frd-border-soft); border-bottom: none;
+    background: var(--frd-panel-2); color: var(--frd-muted);
+    margin-right: 1px;
+    border-radius: 3px 3px 0 0;
+}
+.frd-tab.is-active {
+    background: #fff; color: var(--frd-text);
+    border-color: var(--frd-border);
+    position: relative; top: 1px;
+    padding-bottom: 3px;
+}
+
+/* ----- Body grid: left | left-tree | center | right ----- */
+.frd-body {
+    flex: 1 1 0; min-height: 0;
+    display: grid;
+    grid-template-columns: 28px 240px 1fr 230px;
+    overflow: hidden;
+}
+
+/* ----- Toolbox (sol kenar – dikey iconlar) ----- */
+.frd-toolbox {
+    background: var(--frd-panel);
+    border-right: 1px solid var(--frd-border);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 4px 0; gap: 1px;
+}
+.frd-toolbox .frd-tbtn { width: 24px; height: 24px; }
+.frd-toolbox .frd-sep { width: 18px; height: 1px; margin: 3px 0; }
+
+/* ----- Sol kompozit panel: Object Inspector + Report Tree ----- */
+.frd-leftpanel {
+    background: var(--frd-panel);
+    border-right: 1px solid var(--frd-border);
+    display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+}
+.frd-pan {
+    display: flex; flex-direction: column;
+    background: #fff;
+    border: 1px solid var(--frd-border);
+    margin: 4px;
+    min-height: 0; overflow: hidden;
+}
+.frd-pan + .frd-pan { margin-top: 0; }
+.frd-pan__head {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 22px; padding: 0 6px;
+    background: linear-gradient(180deg,#f3f2ee 0%,#dcd9d2 100%);
+    border-bottom: 1px solid var(--frd-border-soft);
+    font-size: 12px; font-weight: 500;
+}
+.frd-pan__head .frd-pan__close {
+    width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--frd-muted); cursor: pointer; font-size: 12px; line-height: 1;
+}
+.frd-pan__head .frd-pan__close:hover { color: #c00; }
+.frd-pan__body {
+    flex: 1 1 0; min-height: 0; overflow: auto;
+}
+
+/* Object Inspector */
+.frd-oi__selector {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--frd-border-soft);
+    background: var(--frd-panel-2);
+}
+.frd-oi__selector .frd-combo { flex: 1; }
+.frd-oi__list { font-size: 12px; }
+.frd-oi__row {
+    display: grid; grid-template-columns: 110px 1fr;
+    border-bottom: 1px solid #e4e2dc;
+    height: 19px; align-items: center;
+}
+.frd-oi__row:hover { background: #f3f8ff; }
+.frd-oi__row.is-bold .frd-oi__key { font-weight: 700; }
+.frd-oi__key {
+    padding: 0 6px;
+    color: var(--frd-text);
+    border-right: 1px solid #e4e2dc;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.frd-oi__val {
+    padding: 0 6px;
+    color: #1f3b66;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Report Tree */
+.frd-tree { padding: 4px 2px; font-size: 12px; }
+.frd-tree__node {
+    display: flex; align-items: center; gap: 4px;
+    padding: 1px 4px; cursor: default; line-height: 18px;
+}
+.frd-tree__node:hover { background: #f3f8ff; }
+.frd-tree__node.is-selected { background: #cfe3ff; }
+.frd-tree__caret {
+    width: 10px; display: inline-flex; justify-content: center; color: var(--frd-muted);
+    font-size: 9px;
+}
+.frd-tree__icon {
+    width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.frd-tree__icon.report { color: #b25612; }
+.frd-tree__icon.data   { color: #2563eb; }
+.frd-tree__icon.page   { color: #f59e0b; }
+.frd-tree__icon.band   { color: #c8782a; }
+.frd-tree__indent { display: inline-block; width: 0; }
+.frd-tree__node[data-level="1"] .frd-tree__indent { width: 12px; }
+.frd-tree__node[data-level="2"] .frd-tree__indent { width: 24px; }
+.frd-tree__node[data-level="3"] .frd-tree__indent { width: 36px; }
+
+/* ----- Center: ruler + canvas ----- */
+.frd-center {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    grid-template-rows: 22px 1fr;
+    background: var(--frd-bg);
+    min-width: 0; min-height: 0;
+    overflow: hidden;
+}
+.frd-corner {
+    background: var(--frd-ruler);
+    border-right: 1px solid var(--frd-border);
+    border-bottom: 1px solid var(--frd-border);
+}
+.frd-ruler-h, .frd-ruler-v {
+    background: var(--frd-ruler);
+    color: var(--frd-ruler-text);
+    font-size: 9px;
+    position: relative;
+    overflow: hidden;
+}
+.frd-ruler-h { border-bottom: 1px solid var(--frd-border); }
+.frd-ruler-v { border-right: 1px solid var(--frd-border); }
+.frd-ruler-h__inner {
+    height: 100%;
+    background-image:
+        linear-gradient(to right, #888 0 1px, transparent 1px 100%),
+        linear-gradient(to right, #aaa 0 1px, transparent 1px 100%);
+    background-size: 37.8px 100%, 7.56px 8px;
+    background-position: 22px 12px, 22px bottom;
+    background-repeat: repeat-x;
+    position: relative;
+}
+.frd-ruler-h__labels {
+    position: absolute; inset: 0;
+    display: flex; align-items: flex-end; padding-bottom: 1px;
+}
+.frd-ruler-h__label {
+    width: 37.8px; text-align: center; flex: 0 0 37.8px;
+}
+.frd-ruler-h__label:first-child { padding-left: 4px; text-align: left; }
+.frd-ruler-v__inner {
+    width: 100%; height: 100%;
+    background-image:
+        linear-gradient(to bottom, #888 0 1px, transparent 1px 100%),
+        linear-gradient(to bottom, #aaa 0 1px, transparent 1px 100%);
+    background-size: 100% 37.8px, 8px 7.56px;
+    background-position: left 0, right 0;
+    background-repeat: repeat-y;
+    position: relative;
+}
+.frd-ruler-v__labels {
+    position: absolute; inset: 0;
+}
+.frd-ruler-v__label {
+    height: 37.8px; width: 100%;
+    text-align: center; padding-top: 2px;
+    box-sizing: border-box;
+}
+
+/* Canvas zemini */
+.frd-canvas-wrap {
+    overflow: auto;
+    background: var(--frd-bg);
+    padding: 12px 16px 28px;
+    position: relative;
+}
+.frd-canvas {
+    --page-w: 794px;   /* A4: 21,00 cm × 37,8 px/cm */
+    --page-h: 1123px;  /* A4: 29,70 cm × 37,8 px/cm */
+    width: var(--page-w);
+    min-height: var(--page-h);
+    background: var(--frd-canvas);
+    box-shadow: 0 0 0 1px var(--frd-border), 3px 3px 10px rgba(0,0,0,.22);
+    margin: 0 auto;
+    position: relative;
+}
+.frd-canvas__pageLabel {
+    position: absolute;
+    top: -22px; right: 0;
+    font-size: 10px; color: var(--frd-muted);
+    background: rgba(255,255,255,.72);
+    padding: 1px 6px; border-radius: 2px;
+    border: 1px solid var(--frd-border-soft);
+    pointer-events: none;
+}
+
+/* ----- Loading overlay (spinner) ----- */
+.frd-loader {
+    position: absolute; inset: 0;
+    background: rgba(214,211,205,.95);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px;
+    z-index: 200;
+    transition: opacity .25s ease;
+}
+.frd-loader.is-hidden { opacity: 0; pointer-events: none; }
+.frd-loader__spinner {
+    width: 38px; height: 38px;
+    border: 3px solid #cbc7be;
+    border-top-color: #1f4e79;
+    border-radius: 50%;
+    animation: frd-spin .85s linear infinite;
+}
+.frd-loader__text {
+    font-size: 12px; color: #1f4e79; font-weight: 600;
+    letter-spacing: .2px;
+}
+@@keyframes frd-spin { to { transform: rotate(360deg); } }
+
+/* Bandlar */
+.frd-band {
+    position: relative;
+    border-bottom: 1px dashed #b8b4ab;
+}
+.frd-band__head {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 18px; padding: 0 8px;
+    background: var(--frd-band);
+    color: var(--frd-band-text);
+    font-size: 11px; font-weight: 600;
+    text-shadow: 0 1px 0 rgba(0,0,0,.18);
+}
+.frd-band__head small {
+    font-weight: 400; opacity: .9;
+}
+.frd-band__head .frd-band__ds {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(255,255,255,.18); padding: 1px 6px; border-radius: 3px;
+    font-weight: 500; font-size: 10px;
+}
+.frd-band__body {
+    position: relative;
+    background:
+        linear-gradient(#e6e3da 1px, transparent 1px) 0 0/100% 7.56px,
+        linear-gradient(90deg, #e6e3da 1px, transparent 1px) 0 0/7.56px 100%;
+}
+.frd-band--master .frd-band__body { height: 23px; }
+.frd-band--detail .frd-band__body { height: 23px; }
+
+/* Secili band — mavi handle'lar */
+.frd-band.is-selected .frd-band__body {
+    outline: 1px solid var(--frd-accent);
+    outline-offset: -1px;
+}
+.frd-handle {
+    position: absolute;
+    width: 5px; height: 5px;
+    background: var(--frd-accent);
+    border: 1px solid #fff;
+    box-sizing: content-box;
+}
+.frd-handle.tl { top: -3px; left: -3px; }
+.frd-handle.tm { top: -3px; left: calc(50% - 3px); }
+.frd-handle.tr { top: -3px; right: -3px; }
+.frd-handle.ml { top: calc(50% - 3px); left: -3px; }
+.frd-handle.mr { top: calc(50% - 3px); right: -3px; }
+.frd-handle.bl { bottom: -3px; left: -3px; }
+.frd-handle.bm { bottom: -3px; left: calc(50% - 3px); }
+.frd-handle.br { bottom: -3px; right: -3px; }
+
+/* ----- Sag panel: Data Tree ----- */
+.frd-rightpanel {
+    background: var(--frd-panel);
+    border-left: 1px solid var(--frd-border);
+    display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+}
+.frd-rt__tabs {
+    display: flex; gap: 0;
+    padding: 4px 6px 0;
+    border-bottom: 1px solid var(--frd-border-soft);
+    background: var(--frd-panel-2);
+}
+.frd-rt__tab {
+    padding: 3px 10px; font-size: 12px;
+    border: 1px solid var(--frd-border-soft); border-bottom: none;
+    background: var(--frd-panel); color: var(--frd-muted);
+    cursor: pointer; margin-right: 1px;
+    border-radius: 3px 3px 0 0;
+}
+.frd-rt__tab.is-active {
+    background: #fff; color: var(--frd-text);
+    position: relative; top: 1px; padding-bottom: 4px;
+}
+.frd-rt__toolbar {
+    display: flex; align-items: center; gap: 1px;
+    padding: 3px 4px;
+    background: var(--frd-panel);
+    border-bottom: 1px solid var(--frd-border-soft);
+}
+.frd-rt__search {
+    flex: 1; height: 20px; padding: 0 6px;
+    background: #fff; border: 1px solid var(--frd-border-soft);
+    font-size: 12px;
+    background-image: radial-gradient(circle 4px, transparent 3px, #888 3px 4px, transparent 4px);
+    background-position: right 4px center; background-repeat: no-repeat;
+    padding-right: 18px;
+}
+.frd-rt__body {
+    flex: 1 1 0; min-height: 0; overflow: auto;
+    background: #fff;
+    padding: 4px 0;
+    font-size: 12px;
+}
+.frd-rt__node {
+    display: flex; align-items: center; gap: 4px;
+    padding: 1px 6px; cursor: default; line-height: 18px;
+}
+.frd-rt__node:hover { background: #f3f8ff; }
+.frd-rt__node[data-level="1"] { padding-left: 16px; }
+.frd-rt__node[data-level="2"] { padding-left: 32px; }
+.frd-rt__caret {
+    width: 10px; display: inline-flex; justify-content: center; color: var(--frd-muted);
+    font-size: 9px;
+}
+.frd-rt__icon {
+    width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 11px;
+}
+.frd-rt__icon.kind-A {
+    background: #f3e8d4; color: #b25612; border: 1px solid #d8b87f;
+    font-weight: 700;
+}
+.frd-rt__icon.kind-0 {
+    background: #e8efff; color: #1f3b66; border: 1px solid #9bb6e6;
+    font-weight: 700;
+}
+.frd-rt__icon.folder { color: #b88a2c; }
+
+/* ----- Status bar ----- */
+.frd-statusbar {
+    display: flex; align-items: center; gap: 0;
+    height: 22px;
+    background: var(--frd-panel);
+    border-top: 1px solid var(--frd-border);
+    font-size: 11px; color: var(--frd-text);
+    padding: 0;
+}
+.frd-statusbar__item {
+    padding: 2px 10px;
+    border-right: 1px solid var(--frd-border-soft);
+    height: 100%;
+    display: inline-flex; align-items: center;
+    min-width: 100px;
+}
+.frd-statusbar__item:last-child { flex: 1; }
+
+/* Scrollbar lightening */
+.frd-pan__body::-webkit-scrollbar,
+.frd-rt__body::-webkit-scrollbar,
+.frd-canvas-wrap::-webkit-scrollbar { width: 14px; height: 14px; background: var(--frd-panel); }
+.frd-pan__body::-webkit-scrollbar-thumb,
+.frd-rt__body::-webkit-scrollbar-thumb,
+.frd-canvas-wrap::-webkit-scrollbar-thumb { background: #b9b6ad; border: 2px solid var(--frd-panel); }
+</style>
+}
+
+<div class="frd-root" id="frdRoot">
+
+    <!-- Title bar -->
+    <div class="frd-title">
+        <span class="frd-title__icon"></span>
+        <span>FastReport - Untitled.fr3</span>
+        <span class="frd-title__win">
+            <span title="Minimize">&#x2014;</span>
+            <span title="Maximize">&#x25A1;</span>
+            <span class="close" title="Close">&times;</span>
+        </span>
+    </div>
+
+    <!-- Menu bar -->
+    <div class="frd-menubar">
+        <div class="frd-menubar__item">File</div>
+        <div class="frd-menubar__item">Edit</div>
+        <div class="frd-menubar__item">Report</div>
+        <div class="frd-menubar__item">View</div>
+        <div class="frd-menubar__item">Help</div>
+    </div>
+
+    <!-- Toolbars -->
+    <div class="frd-toolbars">
+        <!-- Toolbar 1: dosya / temel islem -->
+        <div class="frd-toolbar">
+            <span class="frd-tbtn" title="New">&#128462;</span>
+            <span class="frd-tbtn" title="Open">&#128194;</span>
+            <span class="frd-tbtn" title="Save">&#128190;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Preview">&#128065;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Cut">&#9986;</span>
+            <span class="frd-tbtn" title="Copy">&#128203;</span>
+            <span class="frd-tbtn" title="Paste">&#128203;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Undo">&#8630;</span>
+            <span class="frd-tbtn" title="Redo">&#8631;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Group">&#9783;</span>
+            <span class="frd-tbtn" title="Ungroup">&#9784;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Bring to front">&#9633;</span>
+            <span class="frd-tbtn" title="Send to back">&#9634;</span>
+            <span class="frd-tbtn" title="Bring forward">&#9650;</span>
+            <span class="frd-tbtn" title="Send backward">&#9660;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Lock">&#128274;</span>
+            <span class="frd-sep"></span>
+            <div class="frd-combo frd-combo-zoom">
+                <span>100%</span><small>&#9662;</small>
+            </div>
+        </div>
+
+        <!-- Toolbar 2: stil + format -->
+        <div class="frd-toolbar">
+            <div class="frd-combo">
+                <span>Default</span><small>&#9662;</small>
+            </div>
+            <div class="frd-combo">
+                <span>Arial</span><small>&#9662;</small>
+            </div>
+            <div class="frd-combo frd-combo-num">
+                <span>10</span><small>&#9662;</small>
+            </div>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Bold"><b>B</b></span>
+            <span class="frd-tbtn" title="Italic"><i>I</i></span>
+            <span class="frd-tbtn" title="Underline"><u>U</u></span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn frd-tbtn-color" title="Font color" style="color:#c00">A</span>
+            <span class="frd-tbtn frd-tbtn-color" title="Highlight" style="color:#ff0">&#9608;</span>
+            <span class="frd-tbtn" title="Frame">&#9744;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn is-active" title="Align left">&#8676;</span>
+            <span class="frd-tbtn" title="Align center">&#8633;</span>
+            <span class="frd-tbtn" title="Align right">&#8677;</span>
+            <span class="frd-tbtn" title="Justify">&#8801;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Top">&#8607;</span>
+            <span class="frd-tbtn" title="Middle">&#8693;</span>
+            <span class="frd-tbtn" title="Bottom">&#8609;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Distribute H">&#9783;</span>
+            <span class="frd-tbtn" title="Distribute V">&#9784;</span>
+            <span class="frd-tbtn" title="Border">&#9744;</span>
+        </div>
+    </div>
+
+    <!-- Tabs (Code | Data | Page1) -->
+    <div class="frd-tabs">
+        <div class="frd-tab">Code</div>
+        <div class="frd-tab">Data</div>
+        <div class="frd-tab is-active">Page1</div>
+    </div>
+
+    <!-- Body: toolbox | left | center | right -->
+    <div class="frd-body">
+
+        <!-- Toolbox (sol kenar) -->
+        <div class="frd-toolbox">
+            <span class="frd-tbtn is-active" title="Select">&#11020;</span>
+            <span class="frd-tbtn" title="Hand">&#9995;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Text"><b>T</b></span>
+            <span class="frd-tbtn" title="Picture">&#128247;</span>
+            <span class="frd-tbtn" title="Line">&#9585;</span>
+            <span class="frd-tbtn" title="Rectangle">&#9633;</span>
+            <span class="frd-tbtn" title="Round rect">&#9635;</span>
+            <span class="frd-tbtn" title="Polygon">&#9670;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Subreport">&#128196;</span>
+            <span class="frd-tbtn" title="Chart">&#128200;</span>
+            <span class="frd-tbtn" title="Barcode">&#9783;</span>
+            <span class="frd-tbtn" title="RichText">&#128209;</span>
+            <span class="frd-tbtn" title="CheckBox">&#9745;</span>
+            <span class="frd-tbtn" title="Table">&#9636;</span>
+            <span class="frd-tbtn" title="Cellular">&#9638;</span>
+            <span class="frd-sep"></span>
+            <span class="frd-tbtn" title="Map">&#127757;</span>
+            <span class="frd-tbtn" title="Gauge">&#9201;</span>
+        </div>
+
+        <!-- Sol panel: Object Inspector + Report Tree -->
+        <div class="frd-leftpanel">
+
+            <div class="frd-pan" style="flex: 1 1 0;">
+                <div class="frd-pan__head">
+                    <span>Object I... <small style="color:var(--frd-muted)">&#10005;</small></span>
+                    <span style="display:inline-flex; gap:6px; color:var(--frd-muted);">
+                        <span style="cursor:pointer;">&#128280;</span>
+                        <span class="frd-pan__close">&times;</span>
+                    </span>
+                </div>
+                <div class="frd-oi__selector">
+                    <div class="frd-combo" style="flex:1;">
+                        <span>DetailData</span><small>&#9662;</small>
+                    </div>
+                </div>
+                <div class="frd-pan__body">
+                    <div class="frd-oi__list">
+                        @foreach (var prop in inspectorProps)
+                        {
+                            <div class="frd-oi__row @(prop.Bold ? "is-bold" : "")">
+                                <div class="frd-oi__key">@prop.Key</div>
+                                <div class="frd-oi__val">@prop.Value</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="frd-pan" style="flex: 0 0 200px;">
+                <div class="frd-pan__head">
+                    <span>Report Tree</span>
+                    <span class="frd-pan__close">&times;</span>
+                </div>
+                <div class="frd-pan__body">
+                    <div class="frd-tree">
+                        <div class="frd-tree__node" data-level="0">
+                            <span class="frd-tree__caret">&#9662;</span>
+                            <span class="frd-tree__icon report">&#128196;</span>
+                            <span>Report</span>
+                        </div>
+                        <div class="frd-tree__node" data-level="1">
+                            <span class="frd-tree__indent"></span>
+                            <span class="frd-tree__caret"></span>
+                            <span class="frd-tree__icon data">&#128202;</span>
+                            <span>Data</span>
+                        </div>
+                        <div class="frd-tree__node" data-level="1">
+                            <span class="frd-tree__indent"></span>
+                            <span class="frd-tree__caret">&#9662;</span>
+                            <span class="frd-tree__icon page">&#128462;</span>
+                            <span>Page1</span>
+                        </div>
+                        <div class="frd-tree__node" data-level="2">
+                            <span class="frd-tree__indent"></span>
+                            <span class="frd-tree__caret"></span>
+                            <span class="frd-tree__icon band">&#9783;</span>
+                            <span>MasterData1</span>
+                        </div>
+                        <div class="frd-tree__node is-selected" data-level="2">
+                            <span class="frd-tree__indent"></span>
+                            <span class="frd-tree__caret"></span>
+                            <span class="frd-tree__icon band">&#9783;</span>
+                            <span>DetailData1</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Center: ruler + canvas -->
+        <div class="frd-center">
+            <div class="frd-corner"></div>
+            <div class="frd-ruler-h">
+                <div class="frd-ruler-h__inner">
+                    <div class="frd-ruler-h__labels" id="frdRulerHLabels"></div>
+                </div>
+            </div>
+            <div class="frd-ruler-v">
+                <div class="frd-ruler-v__inner">
+                    <div class="frd-ruler-v__labels" id="frdRulerVLabels"></div>
+                </div>
+            </div>
+            <div class="frd-canvas-wrap">
+                <div class="frd-canvas">
+                    <span class="frd-canvas__pageLabel">A4 — 21,00 x 29,70 cm</span>
+                    <!-- MasterData -->
+                    <div class="frd-band frd-band--master">
+                        <div class="frd-band__head">
+                            <span>MasterData: <strong>MasterData1</strong></span>
+                            <span class="frd-band__ds">&#128202; PLV_DZN_BANKA_001</span>
+                        </div>
+                        <div class="frd-band__body"></div>
+                    </div>
+                    <!-- DetailData (secili) -->
+                    <div class="frd-band frd-band--detail is-selected">
+                        <div class="frd-band__head">
+                            <span>DetailData: <strong>DetailData1</strong></span>
+                            <span class="frd-band__ds">&#128202; PLV_DZN_BANKA_001</span>
+                        </div>
+                        <div class="frd-band__body">
+                            <span class="frd-handle tl"></span>
+                            <span class="frd-handle tm"></span>
+                            <span class="frd-handle tr"></span>
+                            <span class="frd-handle ml"></span>
+                            <span class="frd-handle mr"></span>
+                            <span class="frd-handle bl"></span>
+                            <span class="frd-handle bm"></span>
+                            <span class="frd-handle br"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sag panel: Data Tree -->
+        <div class="frd-rightpanel">
+            <div class="frd-rt__tabs">
+                <div class="frd-rt__tab is-active">Data</div>
+                <div class="frd-rt__tab">Variables</div>
+                <div class="frd-rt__tab">Functions</div>
+                <div class="frd-rt__tab">Classes</div>
+            </div>
+            <div class="frd-rt__toolbar">
+                <span class="frd-tbtn" title="Show types">&#9783;</span>
+                <span class="frd-tbtn" title="Sort">&#8597;</span>
+                <span class="frd-tbtn" title="Refresh">&#8635;</span>
+                <span class="frd-tbtn" title="Adapter">&#128279;</span>
+                <span class="frd-tbtn" title="Insert">&#128462;</span>
+                <span class="frd-sep"></span>
+                <input type="text" class="frd-rt__search" placeholder="" />
+            </div>
+            <div class="frd-rt__body">
+                <div class="frd-rt__node" data-level="0">
+                    <span class="frd-rt__caret">&#9662;</span>
+                    <span class="frd-rt__icon folder">&#128194;</span>
+                    <span>Data</span>
+                </div>
+                <div class="frd-rt__node" data-level="1">
+                    <span class="frd-rt__caret">&#9662;</span>
+                    <span class="frd-rt__icon folder">&#128194;</span>
+                    <span>PLV_DZN_BANKA_001</span>
+                </div>
+                @foreach (var fld in dataFields)
+                {
+                    <div class="frd-rt__node" data-level="2">
+                        <span class="frd-rt__caret"></span>
+                        <span class="frd-rt__icon kind-@fld.Kind">@fld.Kind</span>
+                        <span>@fld.Name</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Status bar -->
+    <div class="frd-statusbar">
+        <div class="frd-statusbar__item">Centimeters</div>
+        <div class="frd-statusbar__item">A4 — 21,00 x 29,70 cm</div>
+        <div class="frd-statusbar__item">0,00; 1,70</div>
+        <div class="frd-statusbar__item">19,00; 0,60</div>
+        <div class="frd-statusbar__item">DetailData1: PLV_DZN_BANKA_001</div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div class="frd-loader" id="frdLoader">
+        <div class="frd-loader__spinner"></div>
+        <div class="frd-loader__text">Designer yukleniyor...</div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    // Cetvel etiketleri (cm)
+    var hLabels = document.getElementById('frdRulerHLabels');
+    var vLabels = document.getElementById('frdRulerVLabels');
+    if (hLabels) {
+        var html = '';
+        for (var i = 0; i <= 28; i++) {
+            html += '<div class="frd-ruler-h__label">' + i + '</div>';
+        }
+        hLabels.innerHTML = html;
+    }
+    if (vLabels) {
+        var v = '';
+        for (var j = 0; j <= 30; j++) {
+            v += '<div class="frd-ruler-v__label">' + j + '</div>';
+        }
+        vLabels.innerHTML = v;
+    }
+
+    // Loader: tarayici sayfayi tamamen yukledikten kisa bir sure sonra gizle
+    function hideLoader() {
+        var loader = document.getElementById('frdLoader');
+        if (!loader) return;
+        loader.classList.add('is-hidden');
+        setTimeout(function () { loader.style.display = 'none'; }, 320);
+    }
+    if (document.readyState === 'complete') {
+        setTimeout(hideLoader, 350);
+    } else {
+        window.addEventListener('load', function () {
+            setTimeout(hideLoader, 350);
+        });
+    }
+})();
+</script>
+}

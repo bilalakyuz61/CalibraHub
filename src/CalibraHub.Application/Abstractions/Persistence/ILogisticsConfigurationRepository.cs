@@ -38,6 +38,13 @@ public interface ILogisticsConfigurationRepository
     Task DeleteUnitAsync(int id, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<StockUnitConversion>> GetStockUnitConversionsAsync(int stockCardId, CancellationToken cancellationToken);
     Task SaveStockUnitConversionsAsync(int stockCardId, IReadOnlyCollection<StockUnitConversion> conversions, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ItemLocation>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken);
+    Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<ItemLocation> locations, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<LocationType>> GetLocationTypesAsync(CancellationToken cancellationToken);
+    Task<int> UpsertLocationTypeAsync(LocationType type, CancellationToken cancellationToken);
+    Task DeleteLocationTypeAsync(int id, CancellationToken cancellationToken);
+    Task<int> CountLocationsOfTypeAsync(string code, CancellationToken cancellationToken);
+    Task<int> RenameLocationTypeCodeAsync(string oldCode, string newCode, CancellationToken cancellationToken);
     Task AddPropertyAsync(Feature property, CancellationToken cancellationToken);
     Task AddPropertyValueAsync(FeatureValue propertyValue, CancellationToken cancellationToken);
     Task AddStockPropertyMappingAsync(ItemPropertyMapping mapping, CancellationToken cancellationToken);
@@ -73,8 +80,9 @@ public interface ILogisticsConfigurationRepository
         int featureId,
         string[] stockCodes,
         CancellationToken cancellationToken);
-    /// <summary>Bir stok kartina bagli FEATURE_STOCK kayitlarini full replace eder.</summary>
-    Task ReplaceStockFeatureLinksAsync(string stockCode, int[] featureIds, CancellationToken cancellationToken);
+    /// <summary>Bir stok kartina bagli FEATURE_STOCK kayitlarini full replace eder.
+    /// items: (FeatureId, PrintDescriptionInDesign) — PrintDescription VisibleInDesign kolonunda saklanir.</summary>
+    Task ReplaceStockFeatureLinksAsync(string stockCode, (int FeatureId, bool PrintDescriptionInDesign)[] items, CancellationToken cancellationToken);
     Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, bool visibleInDesign, CancellationToken cancellationToken);
     Task DeleteProductFeatureAsync(int id, CancellationToken cancellationToken);
     Task DeleteProductValueAsync(int id, CancellationToken cancellationToken);

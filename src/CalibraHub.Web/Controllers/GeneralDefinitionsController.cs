@@ -307,21 +307,70 @@ public sealed class GeneralDefinitionsController : Controller
         var to = toDate ?? DateTime.Today;
         var rateRepo = HttpContext.RequestServices.GetRequiredService<Application.Abstractions.Persistence.IExchangeRateRepository>();
 
-        IReadOnlyCollection<Domain.Entities.ExchangeRate> rates;
+        // Karsilastirma mantigi icin aralik geriye dogru 30 gun genisletilir — hafta sonu / 15:30
+        // oncesi klonlarini atlayip gercekten farkli bir degere sahip onceki kuru bulabilmek icin.
+        var historyFrom = from.AddDays(-30);
+
+        IReadOnlyCollection<Domain.Entities.ExchangeRate> extendedRates;
         if (!string.IsNullOrWhiteSpace(filterCode))
-            rates = await rateRepo.GetRatesInRangeAsync(filterCode, from, to, ct);
+            extendedRates = await rateRepo.GetRatesInRangeAsync(filterCode, historyFrom, to, ct);
         else
-            rates = await rateRepo.GetAllRatesInRangeAsync(from, to, ct);
+            extendedRates = await rateRepo.GetAllRatesInRangeAsync(historyFrom, to, ct);
 
         var allCurrencies = await _currencyService.GetAllAsync(ct);
         var nameMap = allCurrencies.ToDictionary(c => c.Code, c => c.Name, StringComparer.OrdinalIgnoreCase);
 
-        return Json(rates.Select(r => new {
-            r.CurrencyCode,
-            currencyName = nameMap.TryGetValue(r.CurrencyCode, out var n) ? n : "",
-            rateDate = r.RateDate.ToString("yyyy-MM-dd"),
-            rateDateDisplay = r.RateDate.ToString("dd.MM.yyyy"),
-            r.BuyingRate, r.SellingRate, r.EffectiveBuyingRate, r.EffectiveSellingRate
+        // Yalnizca tanimlanmis dovizlerin kurlari — TCMB'den gelmis olsa bile tanimsiz kodlar gizlenir.
+        var known = extendedRates.Where(r => nameMap.ContainsKey(r.CurrencyCode)).ToList();
+
+        // Para birimi bazli ASC siralanmis tarihce. Klon satirlari (ayni degeri tasiyan
+        // ardisik kayitlar) atlanarak gercek anlamda farkli olan onceki kur bulunur.
+        var history = known
+            .GroupBy(r => r.CurrencyCode, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.RateDate).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var prevMap = new Dictionary<Domain.Entities.ExchangeRate, Domain.Entities.ExchangeRate?>();
+        foreach (var kv in history)
+        {
+            var asc = kv.Value;
+            for (var i = 0; i < asc.Count; i++)
+            {
+                Domain.Entities.ExchangeRate? prev = null;
+                for (var j = i - 1; j >= 0; j--)
+                {
+                    // Ayni degeri tasiyan klon satirlari atla (hafta sonu Cuma kuru, 15:30
+                    // oncesi dunku kur). Gercekten degismis bir degere rastlayinca dur.
+                    if (asc[j].BuyingRate > 0 && asc[j].BuyingRate != asc[i].BuyingRate)
+                    {
+                        prev = asc[j];
+                        break;
+                    }
+                }
+                prevMap[asc[i]] = prev;
+            }
+        }
+
+        // Kullaniciya sadece istenen [from, to] araliginda olan kurlari goster — tarihce kayitlari
+        // yalnizca karsilastirma icin kullanildi.
+        var displayed = known
+            .Where(r => r.RateDate.Date >= from.Date && r.RateDate.Date <= to.Date)
+            .ToList();
+
+        return Json(displayed.Select(r =>
+        {
+            var prev = prevMap.TryGetValue(r, out var p) ? p : null;
+            return new {
+                r.CurrencyCode,
+                currencyName = nameMap.TryGetValue(r.CurrencyCode, out var n) ? n : "",
+                rateDate = r.RateDate.ToString("yyyy-MM-dd"),
+                rateDateDisplay = r.RateDate.ToString("dd.MM.yyyy"),
+                r.BuyingRate, r.SellingRate, r.EffectiveBuyingRate, r.EffectiveSellingRate,
+                prevBuyingRate = prev?.BuyingRate,
+                prevSellingRate = prev?.SellingRate,
+                prevEffectiveBuyingRate = prev?.EffectiveBuyingRate,
+                prevEffectiveSellingRate = prev?.EffectiveSellingRate,
+                prevRateDateDisplay = prev?.RateDate.ToString("dd.MM.yyyy")
+            };
         }));
     }
 

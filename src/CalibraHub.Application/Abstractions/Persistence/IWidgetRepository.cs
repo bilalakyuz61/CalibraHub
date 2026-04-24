@@ -64,6 +64,18 @@ public interface IWidgetRepository
         CancellationToken ct,
         string? parentRecordId = null);
 
+    /// <summary>
+    /// Widget degerlerini bir RecordId'den digerine kopyalar (INSERT ... SELECT).
+    /// Kalem revizyonu gibi "birebir kopya" senaryolarinda kullanilir. Sadece
+    /// top-level (ParentRecordId IS NULL) degerleri kopyalanir — grid child
+    /// satirlari atlanir (yeni revize icin grid'i bastan olusturmak normal UX).
+    /// </summary>
+    Task CopyValuesAsync(
+        int formId,
+        string sourceRecordId,
+        string targetRecordId,
+        CancellationToken ct);
+
     // ── Master-Detail (Faz E — grid widget) ────────────
 
     /// <summary>

@@ -2,7 +2,7 @@ using System.ComponentModel;
 
 namespace CalibraHub.Domain.Entities;
 
-[Description("Document tablosundaki belgelerin satir detaylari (malzeme, adet, birim fiyat, iskonto, satir toplami). DocumentId FK ile basliga baglidir; ItemId FK ise stok kartina.")]
+[Description("Document tablosundaki belgelerin satir detaylari (stok, adet, birim fiyat, iskonto, satir toplami). DocumentId FK basliga baglidir; ItemId FK ise stok kartina. Malzeme kodu/adi Item tablosundan cozulur — DocumentLine tablosunda tutulmaz.")]
 public sealed class DocumentLine
 {
     [Description("Birincil anahtar. IDENTITY.")]
@@ -13,19 +13,37 @@ public sealed class DocumentLine
 
     public int LineNo { get; set; }
 
-    [Description("Stok karti referansi. FK -> Item.Id")]
-    public int? ItemId { get; set; }
+    [Description("Stok karti referansi. FK -> Item.Id. Malzeme kodu/adi ve diger bilgiler buradan JOIN ile okunur.")]
+    public int ItemId { get; set; }
 
-    public required string MaterialCode { get; set; }
-    public required string MaterialName { get; set; }
-    public string? UnitName { get; set; }
+    [Description("Birim referansi. FK -> Unit.Id. Birim kodu/adi buradan JOIN ile cozulur.")]
+    public int? UnitId { get; set; }
+
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal DiscountRate { get; set; }
     public decimal LineTotal { get; set; }
-    public string? CombinationCode { get; set; }
+
+    [Description("Secili kombinasyon. FK -> ProductConfiguration.Id (CONFIG kaydi). Kombinasyon kodu/adi buradan JOIN ile cozulur.")]
+    public int? CombinationId { get; set; }
+
+    [Description("Lokasyon referansi (depo/raf/goz). FK -> Location.Id. Malzeme kartindaki varsayilan lokasyondan turer — kullanici override edebilir.")]
+    public int? LocationId { get; set; }
+
     public string? Notes { get; set; }
 
-    [Description("Soft delete — listede gosterilir mi?")]
-    public bool IsActive { get; set; } = true;
+    [Description("Not panelinin satir acilislarinda otomatik acik gelmesi icin pinli mi?")]
+    public bool NotesPinned { get; set; }
+
+    [Description("Revize zinciri — bu satir hangi satirdan revize edildi? NULL ise orijinal satir. FK -> DocumentLine.Id (self-referencing). Zincir geriye dogru takip edilerek kac revize oldugu gorulebilir.")]
+    public int? RevisedFromId { get; set; }
+
+    // ── Transient display fields (Item + Unit + ProductConfiguration + Location JOIN ile okunur; tabloya yazilmaz) ──
+    public string? MaterialCode { get; set; }
+    public string? MaterialName { get; set; }
+    public string? UnitCode { get; set; }
+    public string? UnitName { get; set; }
+    public string? CombinationCode { get; set; }
+    public string? LocationCode { get; set; }
+    public string? LocationName { get; set; }
 }

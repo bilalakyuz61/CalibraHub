@@ -28,4 +28,4 @@ public sealed class CalibraHubClient
     }
 }
 
-public sealed record TemplateData(string Id, string Name, string? Type, string? FrxContent);
+public sealed record TemplateData(int Id, string Name, string? Type, string? FrxContent);

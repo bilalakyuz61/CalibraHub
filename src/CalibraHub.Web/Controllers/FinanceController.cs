@@ -1,3 +1,4 @@
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Models.Finance;
@@ -11,13 +12,83 @@ public sealed class FinanceController : Controller
 {
     private readonly IFinanceService _financeService;
     private readonly IWidgetService _widgetService;
+    private readonly IDocumentService _documentService;
+    private readonly IDocumentTypeRepository _docTypeRepo;
+    private readonly ISalesRepresentativeService _salesRepService;
 
     private const int DefaultPageSize = 50;
 
-    public FinanceController(IFinanceService financeService, IWidgetService widgetService)
+    public FinanceController(
+        IFinanceService financeService,
+        IWidgetService widgetService,
+        IDocumentService documentService,
+        IDocumentTypeRepository docTypeRepo,
+        ISalesRepresentativeService salesRepService)
     {
         _financeService = financeService;
         _widgetService = widgetService;
+        _documentService = documentService;
+        _docTypeRepo = docTypeRepo;
+        _salesRepService = salesRepService;
+    }
+
+    // GET /Finance/GetContactQuotes?contactId=X — cariye ait verilen teklifler
+    [HttpGet]
+    public async Task<IActionResult> GetContactQuotes(int contactId, CancellationToken ct)
+    {
+        if (contactId <= 0) return Json(System.Array.Empty<object>());
+        var quotes = await _documentService.GetQuotesByContactAsync(contactId, ct);
+        return Json(quotes.Select(q => new
+        {
+            id = q.Id,
+            documentNumber = q.DocumentNumber,
+            documentDate = q.DocumentDate,
+            validUntil = q.ValidUntil,
+            currency = q.Currency,
+            grandTotal = q.GrandTotal,
+            status = q.Status,
+            lineCount = q.LineCount
+        }));
+    }
+
+    // GET /Finance/GetContactMovements?contactId=X&documentTypeId=&fromDate=&toDate= — cariye ait hareketler
+    [HttpGet]
+    public async Task<IActionResult> GetContactMovements(int contactId, int? documentTypeId, DateTime? fromDate, DateTime? toDate, CancellationToken ct)
+    {
+        if (contactId <= 0) return Json(System.Array.Empty<object>());
+        var movements = await _documentService.GetMovementsByContactAsync(contactId, documentTypeId, fromDate, toDate, ct);
+        var docTypes = await _docTypeRepo.GetAllAsync(ct);
+        var typeMap = docTypes.ToDictionary(t => t.Id, t => new { t.Code, t.Name });
+        return Json(movements.Select(d => new
+        {
+            id = d.Id,
+            documentNumber = d.DocumentNumber,
+            documentDate = d.DocumentDate,
+            validUntil = d.ValidUntil,
+            currency = d.Currency,
+            grandTotal = d.GrandTotal,
+            status = d.Status,
+            lineCount = d.LineCount,
+            documentTypeId = d.DocumentTypeId,
+            documentTypeCode = d.DocumentTypeId.HasValue && typeMap.TryGetValue(d.DocumentTypeId.Value, out var t1) ? t1.Code : null,
+            documentTypeName = d.DocumentTypeId.HasValue && typeMap.TryGetValue(d.DocumentTypeId.Value, out var t2) ? t2.Name : null
+        }));
+    }
+
+    // GET /Finance/GetDocumentTypes — aktif belge tipleri (filtre dropdown icin)
+    [HttpGet]
+    public async Task<IActionResult> GetDocumentTypes(CancellationToken ct)
+    {
+        var types = await _docTypeRepo.GetAllAsync(ct);
+        return Json(types.Where(t => t.IsActive).Select(t => new { id = t.Id, code = t.Code, name = t.Name }));
+    }
+
+    // GET /Finance/GetSalesRepsList — satis temsilcileri dropdown icin
+    [HttpGet]
+    public async Task<IActionResult> GetSalesRepsList(CancellationToken ct)
+    {
+        var reps = await _salesRepService.GetAllAsync(ct);
+        return Json(reps.Where(r => r.IsActive).Select(r => new { id = r.Id, code = r.RepCode, name = r.RepName }));
     }
 
     // GET /Finance/Contacts — sayfa hemen render, veri AJAX ile gelir

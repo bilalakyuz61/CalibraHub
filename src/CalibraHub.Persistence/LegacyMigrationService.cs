@@ -309,8 +309,8 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         async Task<Dictionary<int, string>> GetMaterialCodes()
         {
             if (materialCodeById != null) return materialCodeById;
-            // Items tablosu snake_case: material_code
-            materialCodeById = await LoadBusinessKeysIntAsync(conn, "Items", "Id", "material_code", ct);
+            // Items tablosu snake_case: code
+            materialCodeById = await LoadBusinessKeysIntAsync(conn, "Items", "Id", "code", ct);
             return materialCodeById;
         }
         async Task<Dictionary<int, string>> GetAccountCodes()

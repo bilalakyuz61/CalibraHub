@@ -20,10 +20,15 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Trash2, Pencil, Hash, FileText, Ruler, Sigma, DollarSign,
-  Percent, Calculator, StickyNote, CircleDot, Lock,
+  Percent, Calculator, StickyNote, CircleDot, Lock, Pin, PinOff,
+  Settings, X as XIcon, GitBranch, History, AlertTriangle,
+  MoreHorizontal, ExternalLink,
 } from 'lucide-react'
+import { navigateInWorkspace } from '../../utils/workspaceNav'
 import LineGridCell, { CombinationLookupCell } from './LineGridCell'
 import { evaluate } from './formulaEvaluator'
+import { getTopBody } from '../../utils/topPortal'
+import DynamicWidgetRenderer from '../DynamicWidgetRenderer/DynamicWidgetRenderer'
 
 /* Lucide icon haritasi — C#'taki icon string'ini React bilesenine cevirir */
 var ICON_MAP = {
@@ -83,12 +88,160 @@ export default function CalibraLineItemsGrid(props) {
   var footer = config.footer || {}
   var onRowsChange = props.onRowsChange
 
-  // ── Silme onay modali ──
-  var [deleteTarget, setDeleteTarget] = useState(null)
+  // ── Silme: modal yerine satir-ici geri sayim (Gmail "Undo" patterni) ──
+  // pendingDelete[rowUid] = true ise satir 3 saniye icinde silinir; kullanici
+  // "İptal" tuşuna basarsa silme iptal edilir. Timeout ID'leri ref'te tutulur.
+  var DELETE_COUNTDOWN_MS = 3000
+  var [pendingDelete, setPendingDelete] = useState(function () { return {} })
+  var deleteTimeoutsRef = useRef({})
   // ── Duzeltme modu per satir (kilit/unlock mantigi icin altyapi) ──
   var [editingRowUid, setEditingRowUid] = useState(null)
   // ── "Not ekle" ile acilan satirlar (row-below kolonlarini gostermek icin) ──
   var [openNoteRows, setOpenNoteRows] = useState(function() { return {} })
+  // ── Satir-basi "Ek Alanlar" modali icin hedef satir ──
+  //   row.id > 0 olan (kayitli) satirlar icin SALES_QUOTE_LINES formundaki
+  //   dinamik alanlari DynamicWidgetRenderer ile gosterir.
+  var [extrasModalRow, setExtrasModalRow] = useState(null)
+  // ── Zorunlu widget eksik olan satir ID'leri — ⚙ butonu rengini belirler
+  //   (kirmizi = eksik, yesil = saved & OK, sky = unsaved).
+  var [invalidLineIds, setInvalidLineIds] = useState(function() { return [] })
+  var [shakeTick, setShakeTick] = useState(0)
+  var [extrasSaving, setExtrasSaving] = useState(false)
+  var [extrasToast, setExtrasToast] = useState(null) // { type: 'ok'|'err', text }
+  var extrasRendererRef = useRef(null)
+  // ── Revize modal — satir bazli revizyon surec destegi ──
+  //   Kullanici satir aksiyon seridindeki Revize butonuna bastiginda acilir.
+  //   2 sekme: "Revize Et" (yeni revize olustur) + "Gecmis Revizeler" (zincir).
+  //   Yeni revize "Revize Olustur" ile eklenir; orjinal satir degismez, yeni
+  //   satir revised_from_id = secili satirin id'si ile eklenir.
+  var [reviseModal, setReviseModal] = useState(null) // { row, tab: 'revise'|'history', draft:{...} }
+
+  // ── Satir kisayol menusu (•••) ───────────────────────────
+  //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
+  //   Suan tek item: "Stok Kartina Git". Ileride ek ozellikler (kart bilgisi,
+  //   fiyat gecmisi, barkod bas, vb.) bu listeye eklenir. Portal ile butonun
+  //   altinda konumlanir, dis click veya Esc ile kapanir.
+  //   State: null veya { row, pos:{top,left,width} }
+  var [shortcutsMenu, setShortcutsMenu] = useState(null)
+  // Split-pane: modal body icinde solda grup listesi, sagda secili grubun alanlari.
+  // DynamicWidgetRenderer her grup icin [data-dyn-group-id] karti render eder;
+  // MutationObserver ile bu kartlari yakalayip grup listesini olusturuyoruz.
+  // Not: Onceki tab-layout icin kullanilan extrasGroups / extrasActiveGroup
+  // state'leri kaldirildi. Artik butun gruplar dikey alt alta stacked olarak
+  // gorunuyor (sqe-widget-wrap CSS'i). Invalid alana tiklamada scroll-into-view
+  // kullaniyoruz, grup secimi yapmiyoruz.
+  var extrasBodyRef = useRef(null)
+
+  function closeExtrasModal() {
+    setExtrasModalRow(null)
+    setExtrasSaving(false)
+    setExtrasToast(null)
+  }
+
+  // Zorunlu ama bos alan tespit edildiginde kisa bir shake animasyonu oynatilir;
+  // renderer save() sonucunda .is-invalid class'i zaten input'a ekleniyor — biz
+  // ustune .cb-invalid-shake sinifini reflow ile yeniden uygulayip titreşimi
+  // tetikleriz (yeniden save'de tekrar tetiklenmesi icin her seferinde kaldir-ekle).
+  function shakeInvalidInputs() {
+    var host = extrasBodyRef.current
+    if (!host) return
+    var nodes = host.querySelectorAll('.is-invalid')
+    if (!nodes || nodes.length === 0) return
+    nodes.forEach(function(el) {
+      el.classList.remove('cb-invalid-shake')
+      // reflow — animasyonu yeniden baslat
+      void el.offsetWidth
+      el.classList.add('cb-invalid-shake')
+    })
+    setTimeout(function() {
+      nodes.forEach(function(el) { el.classList.remove('cb-invalid-shake') })
+    }, 500)
+  }
+
+  async function handleExtrasSave() {
+    if (!extrasModalRow || !extrasRendererRef.current) return
+    setExtrasSaving(true)
+    setExtrasToast(null)
+    try {
+      var savedLineId = extrasModalRow.id != null && Number(extrasModalRow.id) > 0 ? Number(extrasModalRow.id) : null
+      // Kaydedilmemis satirda backend'e gitmiyoruz — validate edip degerleri
+      // row.__extras'a local olarak yaziyoruz. Ana sqSave satirlari kaydedip
+      // id aldiktan sonra widget API'siyle senkron eder.
+      if (savedLineId == null) {
+        var v = extrasRendererRef.current.validate()
+        if (!v.valid) {
+          var firstLabel = (v.errors && v.errors[0]) || 'Zorunlu alan bos'
+          setExtrasToast({ type: 'err', text: 'Zorunlu alanlar bos: ' + (v.errors || []).join(', ') })
+          // Renderer.validate() saveAttemptErrors state'ini set etmiyor — save() ediyor.
+          // Gorsel shake icin save'i cagirip hata donmesini bekleyelim.
+          var forcedResult = await extrasRendererRef.current.save({ recordId: '__pending__' })
+          // recordId olsa da bizim local yol oldugu icin sonucun success'ini umursamiyoruz;
+          // save() en azindan is-invalid class'ini widget input'larina ekliyor.
+          void forcedResult
+          setTimeout(shakeInvalidInputs, 30)
+          // Alt alta stacked layout'ta grup tab'i yok — direkt hatali alana kaydir.
+          setTimeout(function() {
+            var host = extrasBodyRef.current
+            if (!host) return
+            var firstInvalid = host.querySelector('.is-invalid')
+            if (!firstInvalid) return
+            try { firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' }) }
+            catch (_) { firstInvalid.scrollIntoView() }
+          }, 40)
+          return
+        }
+        // Gecerli — degerleri row.__extras'a yaz, modali kapat.
+        var localValues = extrasRendererRef.current.getValues() || {}
+        setRows(function(prev) {
+          return prev.map(function(r) {
+            if (r._uid !== extrasModalRow._uid) return r
+            return Object.assign({}, r, { __extras: Object.assign({}, localValues) })
+          })
+        })
+        setExtrasToast({ type: 'ok', text: 'Ek alanlar hazir — satiri Kaydet ile kesinlestirin' })
+        setTimeout(function() { closeExtrasModal() }, 650)
+        return
+      }
+
+      // Kaydedilmis satir — mevcut backend save akisi.
+      var result = await extrasRendererRef.current.save({ recordId: String(savedLineId) })
+      if (result && result.success === false) {
+        setExtrasToast({ type: 'err', text: result.message || 'Kayit basarisiz.' })
+        // Eksik zorunlu alan varsa kirmizi shake — .is-invalid DOM'a islenene kadar
+        // minik bir gecikme; React render sonrasi class'lar yerinde olur.
+        if (result.requiredErrors && result.requiredErrors.length > 0) {
+          setTimeout(shakeInvalidInputs, 30)
+          // Alt alta stacked layout'ta grup tab'i yok — direkt hatali alana kaydir.
+          setTimeout(function() {
+            var host = extrasBodyRef.current
+            if (!host) return
+            var firstInvalid = host.querySelector('.is-invalid')
+            if (!firstInvalid) return
+            try { firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' }) }
+            catch (_) { firstInvalid.scrollIntoView() }
+          }, 40)
+        }
+      } else {
+        setExtrasToast({ type: 'ok', text: 'Kaydedildi' })
+        // Bu satirin widget'lari dolmus olabilir — invalid listesinden cikar (yesile dons).
+        setInvalidLineIds(function(prev) { return prev.filter(function(x) { return x !== savedLineId }) })
+        // __extras varsa temizle — artik backend source of truth
+        setRows(function(prev) {
+          return prev.map(function(r) {
+            if (r._uid !== extrasModalRow._uid || !r.__extras) return r
+            var copy = Object.assign({}, r)
+            delete copy.__extras
+            return copy
+          })
+        })
+        setTimeout(function() { closeExtrasModal() }, 650)
+      }
+    } catch (e) {
+      setExtrasToast({ type: 'err', text: 'Hata: ' + (e && e.message ? e.message : String(e)) })
+    } finally {
+      setExtrasSaving(false)
+    }
+  }
 
   // ── State: satirlar ──
   var [rows, setRows] = useState(function() {
@@ -111,22 +264,81 @@ export default function CalibraLineItemsGrid(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows])
 
+  // Extras modal acikken: DynamicWidgetRenderer'in render ettigi grup kartlarini
+  // (data-dyn-group-id) izle ve sol panele tab listesi olarak yansit. Kartlar
+  // shakeTick degistiginde invalidLineIds'deki satirlarin ⚙ butonlarina
+  // 'cb-invalid-shake' class'i ekle — 600ms sonra kaldir.
+  useEffect(function() {
+    if (shakeTick === 0) return
+    var selectors = invalidLineIds.map(function(id) { return '[data-extras-line-id="' + id + '"]' })
+    if (selectors.length === 0) return
+    var els = document.querySelectorAll(selectors.join(','))
+    els.forEach(function(el) {
+      el.classList.remove('cb-invalid-shake')
+      // reflow
+      void el.offsetWidth
+      el.classList.add('cb-invalid-shake')
+    })
+    var timer = setTimeout(function() {
+      els.forEach(function(el) { el.classList.remove('cb-invalid-shake') })
+    }, 650)
+    return function() { clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shakeTick])
+
   /* ── Imperative API (vanilla JS bridge) ──
-     window.CalibraHub.salesLineGrid.{setRows,getRows} */
+     window.CalibraHub.salesLineGrid.{setRows,getRows}
+     setRows ile yuklenen satirlar _locked:true isaretlenir — kullanici
+     Duzelt butonuna basmadan hucreler ve Sil butonu pasif kalir. */
   useEffect(function() {
     var api = {
       setRows: function(newRows) {
-        var next = (newRows || []).map(function(r) {
-          return applyComputed(Object.assign({ _uid: makeUid() }, r), allColumns)
+        // _uid korumasi: ayni satiri yeniden eslestirerek AnimatePresence'in exit+enter
+        // animasyonuyla gorunum karisikligina yol acmasini engelle. Siralama:
+        //   1) line.Id eslesmesi (UPDATE edilmis var olan satirlar)
+        //   2) Pozisyon (index) eslesmesi (sadece fresh INSERT sonrasi id gelsin diye)
+        //   Her iki yontem uymazsa yeni _uid uretilir (gercekten yeni satir).
+        setRows(function(prevRows) {
+          var prevById = {}
+          prevRows.forEach(function(pr) {
+            if (pr.id != null && pr.id !== '' && Number(pr.id) > 0) {
+              prevById[String(pr.id)] = pr
+            }
+          })
+          var usedUids = Object.create(null)
+          var nextArr = (newRows || []).map(function(r, idx) {
+            var idKey = r.id != null && r.id !== '' && Number(r.id) > 0 ? String(r.id) : null
+            var existing = idKey ? prevById[idKey] : null
+            // ID match yoksa pozisyona gore prev'i al (ayni index)
+            if (!existing && idx < prevRows.length) {
+              var posMatch = prevRows[idx]
+              if (posMatch && !usedUids[posMatch._uid]) existing = posMatch
+            }
+            var uid = existing ? existing._uid : makeUid()
+            usedUids[uid] = true
+            return applyComputed(Object.assign({ _uid: uid, _locked: true }, r), allColumns)
+          })
+          return nextArr
         })
-        setRows(next)
       },
       getRows: function() {
         return rows.map(function(r) {
           var copy = Object.assign({}, r)
           delete copy._uid
+          delete copy._locked
           return copy
         })
+      },
+      // Satirlardaki eksik zorunlu widget state'i — ⚙ rengini kirmizi yapar.
+      setInvalidLines: function(ids) {
+        var arr = Array.isArray(ids) ? ids.map(function(n) { return Number(n) }).filter(function(n) { return n > 0 }) : []
+        setInvalidLineIds(arr)
+      },
+      // Listeyi set et + kirmizilari titrett.
+      flashInvalidLines: function(ids) {
+        var arr = Array.isArray(ids) ? ids.map(function(n) { return Number(n) }).filter(function(n) { return n > 0 }) : []
+        setInvalidLineIds(arr)
+        setShakeTick(function(t) { return t + 1 })
       },
     }
     window.CalibraHub = window.CalibraHub || {}
@@ -154,9 +366,17 @@ export default function CalibraLineItemsGrid(props) {
   }, [allColumns])
 
   // ── Yeni satir ekle ──
+  // Guided workflow: satir eklendikten sonra stok rehberi otomatik acilir.
+  // Stok secilince, o malzeme kombinasyon takipli ise kombinasyon modal'i
+  // acilir; kombinasyon secilince (ya da malzeme combo izlemeyen ise)
+  // ek alanlar (SALES_QUOTE_LINES widget'lari) modal'i acilir. Chain global
+  // event "lineGrid:autoOpenStage" uzerinden yurur — dispatcherler:
+  // handleAddRow (material) → handlePick (combo/extras) → CombinationLookupCell
+  // onApply (extras) → grid useEffect (extras modal open).
   function handleAddRow() {
+    var newUid = makeUid()
     setRows(function(prev) {
-      var blank = { _uid: makeUid() }
+      var blank = { _uid: newUid }
       allColumns.forEach(function(c) {
         if (c.type === 'number' || c.type === 'currency' || c.type === 'percent') {
           blank[c.key] = 0
@@ -166,27 +386,105 @@ export default function CalibraLineItemsGrid(props) {
       })
       return prev.concat([applyComputed(blank, allColumns)])
     })
+    // React state commit + cell mount sonrasinda listener'lar hazir olsun diye kisa gecikme.
+    // requestAnimationFrame 1 frame bekler; bu surede useEffect(mount) tetiklenmis olur.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        try {
+          window.dispatchEvent(new CustomEvent('lineGrid:autoOpenStage', {
+            detail: { rowUid: newUid, stage: 'material' }
+          }))
+        } catch (_) { /* older browsers: no-op */ }
+      })
+    })
   }
 
-  // ── Satir sil ──
+  // ── Satir sil — geri sayim ile (modal yok) ──
   function handleDeleteRow(rowUid) {
-    setDeleteTarget(rowUid)
+    // Zaten beklemede ise tekrar baslatmaya gerek yok
+    if (pendingDelete[rowUid]) return
+    setPendingDelete(function (prev) {
+      var next = Object.assign({}, prev)
+      next[rowUid] = true
+      return next
+    })
+    // Sure dolunca gercek silmeyi yap
+    var tid = setTimeout(function () {
+      setRows(function (prev) { return prev.filter(function (r) { return r._uid !== rowUid }) })
+      setPendingDelete(function (prev) {
+        var next = Object.assign({}, prev)
+        delete next[rowUid]
+        return next
+      })
+      delete deleteTimeoutsRef.current[rowUid]
+    }, DELETE_COUNTDOWN_MS)
+    deleteTimeoutsRef.current[rowUid] = tid
   }
-  function confirmDelete() {
-    if (!deleteTarget) return
-    setRows(function(prev) { return prev.filter(function(r) { return r._uid !== deleteTarget }) })
-    setDeleteTarget(null)
+  function cancelPendingDelete(rowUid) {
+    if (deleteTimeoutsRef.current[rowUid]) {
+      clearTimeout(deleteTimeoutsRef.current[rowUid])
+      delete deleteTimeoutsRef.current[rowUid]
+    }
+    setPendingDelete(function (prev) {
+      var next = Object.assign({}, prev)
+      delete next[rowUid]
+      return next
+    })
   }
-  function cancelDelete() {
-    setDeleteTarget(null)
-  }
+  // Component unmount oldugunda tum bekleyen timer'lari temizle
+  useEffect(function () {
+    return function () {
+      Object.values(deleteTimeoutsRef.current).forEach(clearTimeout)
+      deleteTimeoutsRef.current = {}
+    }
+  }, [])
 
-  // ── Satir duzelt (kilit/unlock altyapisi) ──
-  // Su an icin: duzelt butonu satirin ilk editable input'una fokus verir.
-  // row.__canEdit === false ise buton pasif; ileride condition'a gore set edilir.
+  // Shortcuts menu — Esc kapatir, scroll pozisyondan ayrilma sorunu yasatmamak
+  // icin scroll'da da kapatilir (yeniden konumlamaktansa kapatmak daha tutarli).
+  useEffect(function () {
+    if (!shortcutsMenu) return undefined
+    function onKey(e) { if (e.key === 'Escape') setShortcutsMenu(null) }
+    function onScroll() { setShortcutsMenu(null) }
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', onScroll, true)
+    return function () {
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+  }, [shortcutsMenu])
+
+  // ── Auto-chain: guided new-line workflow ──
+  // handleAddRow -> 'material' lookup -> (trackCombinations ise) 'combo' ->
+  // 'extras' (⚙ ek alanlar modali). Material/combo asamalarini ilgili cell
+  // kendisi dinleyip acar; 'extras' asamasi GRID seviyesinde handle edilir
+  // cunku extrasModalRow state'i burada. Rows degistikce ref'i guncel tut.
+  var rowsRef = useRef(rows)
+  useEffect(function () { rowsRef.current = rows }, [rows])
+  useEffect(function () {
+    function onAutoOpen(e) {
+      var d = e.detail || {}
+      if (d.stage !== 'extras') return
+      var target = (rowsRef.current || []).find(function (r) { return r._uid === d.rowUid })
+      if (target) setExtrasModalRow(target)
+    }
+    window.addEventListener('lineGrid:autoOpenStage', onAutoOpen)
+    return function () { window.removeEventListener('lineGrid:autoOpenStage', onAutoOpen) }
+  }, [])
+
+
+  // ── Satir duzelt (kilit/unlock sistemi) ──
+  // setRows ile yuklenen satirlar _locked:true olarak gelir. Kullanici Duzelt
+  // butonuna basmadan hucreler + Sil + Kombinasyon + Not butonlari pasif.
+  // Buton click: _locked toggle; acildiginda ilk editable input'a focus.
   function handleEditRow(rowUid) {
-    setEditingRowUid(function(prev) { return prev === rowUid ? null : rowUid })
-    // İlk editable cell'e fokus (requestAnimationFrame ile DOM hazir olsun)
+    setRows(function (prev) {
+      return prev.map(function (r) {
+        if (r._uid !== rowUid) return r
+        return Object.assign({}, r, { _locked: !r._locked })
+      })
+    })
+    setEditingRowUid(function (prev) { return prev === rowUid ? null : rowUid })
+    // Unlock sonrasi ilk editable hucreye focus
     requestAnimationFrame(function() {
       var rowEl = document.querySelector('[data-row-uid="' + rowUid + '"]')
       if (!rowEl) return
@@ -195,12 +493,18 @@ export default function CalibraLineItemsGrid(props) {
     })
   }
 
-  // Row-level flag helpers — default: her ikisi de true
+  // Row-level flag helpers
+  // canEdit: Duzelt butonu her zaman aktif (kilit toggle icin)
+  // canDelete / canModify: _locked false olmali (ve server-side __canDelete engellemedigi surece)
   function canEdit(row) { return row.__canEdit !== false }
-  function canDelete(row) { return row.__canDelete !== false }
+  // Kilitleme gecici olarak devre disi — kalem ikonu kaldi, kilit etkisi yok.
+  function isRowLocked(row) { return false }
+  function canDelete(row) { return !isRowLocked(row) && row.__canDelete !== false }
+  function canModify(row) { return !isRowLocked(row) }
 
   // ── Not paneli toggle ──
-  // Panel acik: manuel acildi (openNoteRows[uid]) VEYA below kolonlardan en az birinin value'su dolu
+  // Panel acik: manuel acildi (openNoteRows[uid]) VEYA satir pinli (row.notesPinned)
+  // ONEMLI: Yalniz dolu olmak panele otomatik acilma saglamaz — kullanici not simgesiyle acar.
   function hasAnyBelowValue(row) {
     for (var i = 0; i < belowColumns.length; i++) {
       var v = row[belowColumns[i].key]
@@ -209,7 +513,7 @@ export default function CalibraLineItemsGrid(props) {
     return false
   }
   function isNoteOpen(row) {
-    return openNoteRows[row._uid] === true || hasAnyBelowValue(row)
+    return openNoteRows[row._uid] === true || row.notesPinned === true
   }
   function toggleNote(rowUid) {
     setOpenNoteRows(function(prev) {
@@ -224,6 +528,15 @@ export default function CalibraLineItemsGrid(props) {
       if (!rowEl) return
       var input = rowEl.querySelector('[data-below-cell] input, [data-below-cell] textarea')
       if (input && typeof input.focus === 'function') input.focus()
+    })
+  }
+  // Satir notu icin pin toggle — true ise belge acilislarinda otomatik acik gelir
+  function toggleNotePin(rowUid) {
+    setRows(function(prev) {
+      return prev.map(function(r) {
+        if (r._uid !== rowUid) return r
+        return Object.assign({}, r, { notesPinned: !r.notesPinned })
+      })
     })
   }
 
@@ -255,11 +568,86 @@ export default function CalibraLineItemsGrid(props) {
     return { width: col.width + 'px', flex: '0 0 ' + col.width + 'px' }
   }
 
+  // Keyboard navigasyonu:
+  //   Tab         → yatayda (browser default — mudahale yok)
+  //   Enter       → yatayda (Tab gibi) — bir sonraki odaklanabilir elemana gecer
+  //   Ctrl+Enter  → dikeyde — alt satirin ayni kolonuna git. Son satirda ise
+  //                 window.sqSave() tetikle (validation DocumentEdit tarafinda).
+  var gridRootRef = useRef(null)
+
+  function handleGridKeyDown(e) {
+    if (e.key !== 'Enter') return
+    var t = e.target
+    if (!t || t.tagName !== 'INPUT') return
+    // IME compose sirasinda Enter'i isleme
+    if (e.isComposing || e.keyCode === 229) return
+    if (t.type === 'checkbox' || t.type === 'radio') return
+
+    var isVerticalNav = e.ctrlKey || e.metaKey  // Ctrl (win/linux) veya Cmd (mac)
+
+    var cell = t.closest('[data-cell-key]')
+    var rowEl = t.closest('[data-row-uid]')
+    if (!cell || !rowEl) return
+
+    e.preventDefault()
+    t.blur()
+
+    if (isVerticalNav) {
+      // Ctrl+Enter: alt satirin ayni kolonuna git (veya son satirda save)
+      var colKey = cell.getAttribute('data-cell-key')
+      var currentUid = rowEl.getAttribute('data-row-uid')
+      var rowIdx = rows.findIndex(function (r) { return r._uid === currentUid })
+      if (rowIdx < 0) return
+
+      if (rowIdx < rows.length - 1) {
+        var nextUid = rows[rowIdx + 1]._uid
+        var root = gridRootRef.current || document
+        var nextInput = root.querySelector(
+          '[data-row-uid="' + nextUid + '"] [data-cell-key="' + colKey + '"] input, ' +
+          '[data-row-uid="' + nextUid + '"] [data-cell-key="' + colKey + '"] select, ' +
+          '[data-row-uid="' + nextUid + '"] [data-cell-key="' + colKey + '"] textarea'
+        )
+        if (nextInput) {
+          setTimeout(function () {
+            nextInput.focus()
+            if (typeof nextInput.select === 'function') nextInput.select()
+          }, 0)
+        }
+      } else {
+        if (typeof window.sqSave === 'function') {
+          setTimeout(function () { window.sqSave() }, 0)
+        }
+      }
+    } else {
+      // Plain Enter: Tab gibi — DOM sirasinda bir sonraki odaklanabilir elemana git
+      var root2 = gridRootRef.current || document
+      var focusables = Array.prototype.slice.call(root2.querySelectorAll(
+        'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])'
+      )).filter(function (el) {
+        // tabIndex -1 olanlari ve gozukmeyenleri atla
+        if (el.tabIndex < 0) return false
+        var rect = el.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      })
+      var idx = focusables.indexOf(t)
+      if (idx >= 0 && idx < focusables.length - 1) {
+        var next2 = focusables[idx + 1]
+        setTimeout(function () {
+          next2.focus()
+          if (typeof next2.select === 'function' && (next2.tagName === 'INPUT' || next2.tagName === 'TEXTAREA')) next2.select()
+        }, 0)
+      }
+    }
+  }
+
   return (
-    <div className="calibra-line-grid rounded-2xl overflow-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
+    <div
+      ref={gridRootRef}
+      onKeyDown={handleGridKeyDown}
+      className="calibra-line-grid rounded-2xl overflow-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
       {/* Header row */}
       <div className="flex items-center border-b border-slate-200 bg-slate-50/80 dark:bg-white/[0.03] dark:border-white/[0.08]">
-        <div className="w-[140px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
+        <div className="w-[200px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
           Islem
         </div>
         {columns.map(function(col) {
@@ -283,13 +671,41 @@ export default function CalibraLineItemsGrid(props) {
 
       {/* Data rows */}
       <div>
+        {/* ── Revize zinciri: superseded satirlari GIZLE ─────────────────
+            Bir satir X'i revize ederek yeni satir Y eklenince, X "kapanmis"
+            sayilir (Y.revisedFromId = X.id). Grid yalnizca zincirin en
+            sonundaki (henuz revize edilmemis) satirlari gosterir. Eski revizeler
+            DB'de silinmez — save akisinda hepsi korunur, sadece UI'da gizlenir.
+            Revize modal'i icinde "Gecmis Revizeler" sekmesinde tamami gorulur. */}
         {rows.length === 0 ? (
           <div className="px-6 py-10 text-center text-[12px] text-slate-400 dark:text-white/30">
             {labels.emptyText || 'Henuz kalem eklenmemis'}
           </div>
         ) : (
           <AnimatePresence initial={false}>
-            {rows.map(function(row) {
+            {(function () {
+              // supersededIds — revise edilmis (artik gorunmeyen) satir id'leri
+              var supersededIds = {}
+              rows.forEach(function (r) {
+                if (r.revisedFromId != null && Number(r.revisedFromId) > 0) {
+                  supersededIds[Number(r.revisedFromId)] = true
+                }
+              })
+              var visibleRows = rows.filter(function (r) {
+                // Id yoksa (yeni satir veya yeni revize — henuz kaydedilmemis) her zaman gorunur
+                if (r.id == null || Number(r.id) <= 0) return true
+                return !supersededIds[Number(r.id)]
+              })
+              if (visibleRows.length === 0) {
+                // Tum satirlar revize edilmis (edge case) — bos mesaji goster
+                return (
+                  <div className="px-6 py-6 text-center text-[12px] text-slate-400 dark:text-white/30">
+                    Gorunur satir yok (tumu revize edilmis)
+                  </div>
+                )
+              }
+              return visibleRows.map(function(row) {
+              var isPending = pendingDelete[row._uid] === true
               return (
                 <motion.div
                   key={row._uid}
@@ -299,70 +715,189 @@ export default function CalibraLineItemsGrid(props) {
                   exit={{ opacity: 0, y: -4, height: 0 }}
                   transition={{ duration: 0.18 }}
                   className="border-b border-slate-100 hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02] transition-colors"
+                  style={{ position: 'relative' }}
                 >
-                  <div className="flex items-stretch">
-                    <div className="w-[140px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                  <div className="flex items-stretch" style={{ position: 'relative' }}>
+                    {/* Aksiyon seridi: ••• kisayol menusu + Kombinasyon + Not + Ek Alanlar (⚙) + Revize + Sil.
+                        ••• butonu ileride daha fazla kisayol eklenecek (stok kartina git vb.). */}
+                    <div className="w-[200px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                      {/* Satir kisayol menusu — MoreHorizontal ikonu, tiklayinca liste acilir */}
                       <button
                         type="button"
-                        onClick={function() { if (canEdit(row)) handleEditRow(row._uid) }}
-                        disabled={!canEdit(row)}
-                        className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-                          !canEdit(row)
-                            ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-                            : (editingRowUid === row._uid
-                                ? 'text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-500/15'
-                                : 'text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10')
-                        )}
-                        title={canEdit(row) ? 'Duzelt' : 'Bu satir duzeltilemez'}
+                        onClick={function (e) {
+                          // Butonun ekrandaki pozisyonunu al, menuyu onun altina konumla.
+                          var rect = e.currentTarget.getBoundingClientRect()
+                          setShortcutsMenu({
+                            row: row,
+                            pos: { top: rect.bottom + 4, left: rect.left, width: 200 },
+                          })
+                        }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/30 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10"
+                        title="Kisayollar / satir islemleri"
+                        aria-label="Kisayol menusu"
+                        aria-haspopup="menu"
+                        aria-expanded={!!(shortcutsMenu && shortcutsMenu.row && shortcutsMenu.row._uid === row._uid)}
                       >
-                        {canEdit(row) ? <Pencil size={13} strokeWidth={1.8} /> : <Lock size={12} strokeWidth={1.8} />}
+                        <MoreHorizontal size={14} strokeWidth={2} />
                       </button>
                       {actionLookupColumns.map(function(col) {
+                        // Kilitli satirda Kombinasyon butonu da pasif — CombinationLookupCell'in
+                        // kendi iki hali var (secili/eksik), burada locked ozel durumu DOM'da
+                        // pointer-events: none ile disari kapatiyoruz.
                         return (
-                          <CombinationLookupCell
-                            key={col.key}
-                            compact={true}
-                            column={col}
-                            row={row}
-                            value={row[col.key]}
-                            onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
-                          />
+                          <div key={col.key} style={isRowLocked(row) ? { opacity: 0.45, pointerEvents: 'none' } : {}}>
+                            <CombinationLookupCell
+                              compact={true}
+                              column={col}
+                              row={row}
+                              value={row[col.key]}
+                              onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                            />
+                          </div>
                         )
                       })}
                       {belowColumns.length > 0 && (
                         <button
                           type="button"
-                          onClick={function() { toggleNote(row._uid) }}
-                          className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-                            isNoteOpen(row)
-                              ? 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'
-                              : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:text-white/30 dark:hover:text-amber-300 dark:hover:bg-amber-500/10'
+                          onClick={function() { if (canModify(row)) toggleNote(row._uid) }}
+                          disabled={!canModify(row)}
+                          className={'relative w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+                            !canModify(row)
+                              ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                              : (isNoteOpen(row)
+                                  ? 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'
+                                  : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:text-white/30 dark:hover:text-amber-300 dark:hover:bg-amber-500/10')
                           )}
-                          title={isNoteOpen(row) ? (hasAnyBelowValue(row) ? 'Not dolu — gizle' : 'Notu kapat') : 'Not ekle'}
+                          title={!canModify(row) ? 'Once kilidi acin' : (isNoteOpen(row) ? 'Notu gizle' : (hasAnyBelowValue(row) ? 'Not var — goster' : 'Not ekle'))}
                         >
                           <StickyNote size={13} strokeWidth={1.8} />
+                          {hasAnyBelowValue(row) && !isNoteOpen(row) && (
+                            <span
+                              className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400"
+                              style={{ boxShadow: '0 0 4px rgba(251,191,36,0.8)' }}
+                              aria-hidden="true"
+                            />
+                          )}
                         </button>
                       )}
+                      {/* Ek Alanlar (SALES_QUOTE_LINES widget'lari) — sadece kayitli satirlarda.
+                          Renk kuralı:
+                            - Satir kaydedilmemis → sky (notr)
+                            - Kaydedilmis + invalidLineIds'de → kirmizi (eksik zorunlu widget)
+                            - Kaydedilmis + invalidLineIds'de degil → yesil (OK) */}
+                      {(function() {
+                        var savedLineId = row.id != null && row.id !== '' && Number(row.id) > 0 ? Number(row.id) : null
+                        // Kayitli olmasa da ⚙ butonu aktif — kullanici ek alanlari
+                        // girip "Kaydet" deyince degerler row.__extras icinde local
+                        // tutulur; ana Kaydet'te satir DB'ye islendikten sonra
+                        // extras widget API'siyle satir id'sine senkron edilir.
+                        // Sadece kilitli satirda pasif (canModify=false).
+                        var disabled = !canModify(row)
+                        var hasPending = row.__extras && Object.keys(row.__extras).length > 0
+                        var isInvalid = savedLineId != null && invalidLineIds.indexOf(savedLineId) !== -1
+                        var colorClass
+                        if (disabled) {
+                          colorClass = 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                        } else if (isInvalid) {
+                          // Boyut sabit kalsin diye ring yok — sadece zemin + metin rengi.
+                          colorClass = 'text-white bg-rose-600 hover:bg-rose-500 dark:bg-rose-500/80 dark:hover:bg-rose-500'
+                        } else if (savedLineId == null && !hasPending) {
+                          // Kaydedilmemis + ek alan doldurulmamis → notr (sky)
+                          colorClass = 'text-sky-600 bg-sky-50 hover:bg-sky-100 dark:text-sky-300 dark:bg-sky-500/15 dark:hover:bg-sky-500/25'
+                        } else {
+                          // Kaydedilmis + gecerli, veya kaydedilmemis ama local __extras dolu → yesil
+                          colorClass = 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-500/15 dark:hover:bg-emerald-500/25'
+                        }
+                        return (
+                          <button
+                            type="button"
+                            data-extras-line-id={savedLineId || ''}
+                            onClick={function() {
+                              if (disabled) return
+                              setExtrasModalRow(row)
+                            }}
+                            disabled={disabled}
+                            className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + colorClass}
+                            title={disabled
+                              ? 'Once kilidi acin'
+                              : (isInvalid
+                                  ? 'Zorunlu ek alanlar eksik — doldurun'
+                                  : (savedLineId == null
+                                      ? (hasPending ? 'Ek alan girildi — satiri Kaydet ile kesinlestirin' : 'Bu satir icin ek alan gir (Kaydet ile kesinlesir)')
+                                      : 'Satira ait ek alanlari duzenle'))}
+                          >
+                            <Settings size={13} strokeWidth={1.8} />
+                          </button>
+                        )
+                      })()}
+                      {/* Revize butonu — satir hakkinda revizyon modal'ini acar.
+                          2 sekme: Revize Et (yeni revize olustur) + Gecmis Revizeler.
+                          Satir kilidine bagli DEGIL — kilitli satir da revize edilebilir.
+                          Kayitli olmayan (id yok) satir icin de acilir: chain bos goruntulenir.
+                          Revize edilmis satirlarda (revisedFromId dolu) zincir uzunlugu rozet olarak gosterilir. */}
+                      {(function () {
+                        var hasRevisionParent = row.revisedFromId != null && Number(row.revisedFromId) > 0
+                        return (
+                          <button
+                            type="button"
+                            onClick={function () {
+                              setReviseModal({
+                                row: row,
+                                tab: 'revise',
+                                // Sadelestirilmis revize akisi: kullanici sadece ACIKLAMA
+                                // girer (ESKI satira not olarak eklenir). Yeni satir
+                                // aynen kopyalanarak alta eklenir; degisiklikler gridde.
+                                draft: { notes: '' },
+                              })
+                            }}
+                            className={'relative w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
+                              hasRevisionParent
+                                ? 'text-violet-600 bg-violet-50 hover:bg-violet-100 dark:text-violet-300 dark:bg-violet-500/15 dark:hover:bg-violet-500/25'
+                                : 'text-slate-400 hover:text-violet-500 hover:bg-violet-50 dark:text-white/30 dark:hover:text-violet-300 dark:hover:bg-violet-500/10'
+                            )}
+                            title={hasRevisionParent ? 'Bu satir bir revize — gecmisi / yeni revize icin ac' : 'Revize et / gecmisi izle'}
+                          >
+                            <GitBranch size={13} strokeWidth={1.9} />
+                            {hasRevisionParent && (
+                              <span
+                                className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-violet-400"
+                                style={{ boxShadow: '0 0 4px rgba(167,139,250,0.85)' }}
+                                aria-hidden="true"
+                              />
+                            )}
+                          </button>
+                        )
+                      })()}
                       <button
                         type="button"
-                        onClick={function() { if (canDelete(row)) handleDeleteRow(row._uid) }}
-                        disabled={!canDelete(row)}
+                        onClick={function() {
+                          // Silme bekleme konumunda tekrar basarsa silme IPTAL
+                          if (isPending) { cancelPendingDelete(row._uid); return }
+                          if (canDelete(row)) handleDeleteRow(row._uid)
+                        }}
+                        disabled={!canDelete(row) && !isPending}
                         className={'w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-                          !canDelete(row)
+                          (!canDelete(row) && !isPending)
                             ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-                            : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:text-white/30 dark:hover:text-rose-400 dark:hover:bg-rose-500/10'
+                            : (isPending
+                                ? 'text-white bg-rose-600 ring-2 ring-rose-400 animate-pulse'
+                                : 'text-rose-500 hover:text-white hover:bg-rose-500 dark:text-rose-400 dark:hover:text-white dark:hover:bg-rose-500')
                         )}
-                        title={canDelete(row) ? 'Sil' : 'Bu satir silinemez'}
+                        title={isPending ? 'Silmeyi iptal et'
+                               : (isRowLocked(row) ? 'Once kilidi acin' : (row.__canDelete === false ? 'Bu satir silinemez' : 'Sil'))}
                       >
-                        {canDelete(row) ? <Trash2 size={13} strokeWidth={1.8} /> : <Lock size={12} strokeWidth={1.8} />}
+                        {canDelete(row) || isPending ? <Trash2 size={13} strokeWidth={2} /> : <Lock size={12} strokeWidth={1.8} />}
                       </button>
                     </div>
                     {columns.map(function(col) {
+                      // Kilitli satirda tum hucrelere pointer-events: none — sadece gorsel, tiklanmaz
+                      var lockedStyle = isRowLocked(row) ? { opacity: 0.75, pointerEvents: 'none' } : {}
                       return (
                         <div
                           key={col.key}
+                          data-cell-key={col.key}
                           className="flex items-center border-r border-slate-100 last:border-r-0 dark:border-white/[0.04]"
-                          style={widthCss(col)}
+                          style={Object.assign({}, widthCss(col), { position: 'relative' }, lockedStyle)}
                         >
                           <LineGridCell
                             column={col}
@@ -373,6 +908,28 @@ export default function CalibraLineItemsGrid(props) {
                         </div>
                       )
                     })}
+                    {/* Silme geri sayim cubugu — satir seviyesinde, kod kolonundan baslar,
+                        170px aksiyon alanini atlar, satirin sag ucuna kadar uzanir.
+                        Bar 3 saniyede 0'a kuculur (sagdan sola). */}
+                    {isPending && (
+                      <div
+                        style={{
+                          position: 'absolute', left: 200, right: 0, bottom: 0,
+                          height: 3, zIndex: 5, pointerEvents: 'none',
+                          background: 'rgba(239,68,68,.15)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: '100%',
+                            background: '#ef4444',
+                            animation: 'lgDeleteCountdown ' + DELETE_COUNTDOWN_MS + 'ms linear forwards',
+                            boxShadow: '0 0 8px rgba(239,68,68,.8)',
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Satir alti kolonlar (placement: row-below) — ornegin "Not".
@@ -387,7 +944,24 @@ export default function CalibraLineItemsGrid(props) {
                             data-below-cell
                             className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50/60 dark:border-white/[0.06] dark:bg-white/[0.02]"
                           >
-                            <div className="flex items-center gap-1.5 pl-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={function() { if (canModify(row)) toggleNotePin(row._uid) }}
+                              disabled={!canModify(row)}
+                              className={'ml-1.5 w-6 h-6 rounded-md flex items-center justify-center transition-colors flex-shrink-0 ' + (
+                                !canModify(row)
+                                  ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
+                                  : (row.notesPinned
+                                      ? 'text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-500/15'
+                                      : 'text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:text-white/40 dark:hover:text-indigo-300 dark:hover:bg-indigo-500/10')
+                              )}
+                              title={!canModify(row) ? 'Once kilidi acin' : (row.notesPinned ? 'Pini cikar — belge acilisinda not gizli gelir' : 'Pinle — belge acilisinda not otomatik acilir')}
+                            >
+                              {row.notesPinned
+                                ? <Pin size={12} strokeWidth={2} />
+                                : <PinOff size={12} strokeWidth={1.8} />}
+                            </button>
+                            <div className="flex items-center gap-1.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/50 flex-shrink-0">
                               <Icon size={11} strokeWidth={1.8} className="text-slate-400 dark:text-white/40 flex-shrink-0" />
                               <span>{col.label}</span>
                             </div>
@@ -406,22 +980,37 @@ export default function CalibraLineItemsGrid(props) {
                   )}
                 </motion.div>
               )
-            })}
+              })
+            })()}
           </AnimatePresence>
         )}
       </div>
 
       {/* Footer: Yeni kalem + toplam */}
       <div className="flex items-center justify-between px-3 py-2.5 border-t border-slate-200 bg-slate-50/60 dark:bg-white/[0.02] dark:border-white/[0.08]">
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.97 }}
-          onClick={handleAddRow}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30 dark:hover:bg-indigo-500/25 transition-colors"
-        >
-          <Plus size={13} strokeWidth={2.2} />
-          <span>{labels.addRow || 'Yeni Kalem'}</span>
-        </motion.button>
+        {(function() {
+          // Stok kodu bos olan satir var ise Yeni Kalem pasif — once mevcut bos satiri doldur.
+          var hasEmptyRow = rows.some(function(r) {
+            return !r.materialCode || String(r.materialCode).trim() === ''
+          })
+          return (
+            <motion.button
+              type="button"
+              whileTap={hasEmptyRow ? undefined : { scale: 0.97 }}
+              onClick={hasEmptyRow ? undefined : handleAddRow}
+              disabled={hasEmptyRow}
+              title={hasEmptyRow ? 'Once mevcut bos satira stok kodu girin' : ''}
+              className={'flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors ' + (
+                hasEmptyRow
+                  ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed dark:bg-white/[0.04] dark:text-white/30 dark:border-white/[0.08]'
+                  : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-300 dark:border-indigo-400/30 dark:hover:bg-indigo-500/25'
+              )}
+            >
+              <Plus size={13} strokeWidth={2.2} />
+              <span>{labels.addRow || 'Yeni Kalem'}</span>
+            </motion.button>
+          )
+        })()}
 
         {footer.showSubtotal && rows.length > 0 && (
           <div className="flex items-center gap-3 text-[12px]">
@@ -435,71 +1024,805 @@ export default function CalibraLineItemsGrid(props) {
         )}
       </div>
 
-      {/* Silme onay modali — portal ile document.body'e render edilir */}
-      <AnimatePresence>
-        {deleteTarget && createPortal(
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 9999,
-              background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-            }}
-            onClick={cancelDelete}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: -8 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: -8 }}
-              onClick={function(e) { e.stopPropagation() }}
-              className="rounded-2xl overflow-hidden text-center"
+      {/* Modal kaldirildi — silme artik satir-ici geri sayim ile yapiliyor.
+          Bkz. handleDeleteRow + pendingDelete state + row icindeki overlay. */}
+
+      {/* Satir-basi Ek Alanlar modali — SALES_QUOTE_LINES formunun widget'lari.
+          Sadece kayitli satirlarda (row.id > 0) acilir; recordId = line.id.
+          Portal: .sqe-tab-content icine absolute konumlanir — app shell (ust bar,
+          sol menu, alt panel) ve SQE sol tab navi gizlenmez, sadece icerik alani
+          ortulur. */}
+      {extrasModalRow && createPortal(
+        <div
+          onClick={function(e) { if (e.target === e.currentTarget && !extrasSaving) closeExtrasModal() }}
+          style={{
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(at 20% 10%, rgba(99,102,241,0.12) 0%, transparent 45%), radial-gradient(at 85% 85%, rgba(168,85,247,0.10) 0%, transparent 45%), rgba(3,6,15,0.72)',
+            backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 50, padding: 16,
+            animation: 'sqExtrasFade 160ms ease-out',
+          }}
+        >
+          <style>{
+            '@keyframes sqExtrasFade{from{opacity:0}to{opacity:1}}' +
+            '@keyframes sqExtrasPop{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}'
+          }</style>
+          <div style={{
+            width: '92%', maxWidth: 820, maxHeight: '88vh',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            borderRadius: 18,
+            background: 'linear-gradient(180deg, rgba(23,28,42,0.98) 0%, rgba(15,19,30,0.98) 100%)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 32px 96px rgba(0,0,0,0.65), 0 0 0 1px rgba(99,102,241,0.08)',
+            color: 'rgba(255,255,255,0.92)',
+            animation: 'sqExtrasPop 220ms cubic-bezier(.2,.8,.3,1)',
+          }}>
+            {/* Ust gradient serit */}
+            <div style={{
+              height: 3,
+              background: 'linear-gradient(90deg, #6366f1 0%, #a855f7 50%, #6366f1 100%)',
+              backgroundSize: '200% 100%',
+              animation: 'sqExtrasShimmer 3s linear infinite',
+            }} />
+            <style>{'@keyframes sqExtrasShimmer{0%{background-position:0% 0%}100%{background-position:200% 0%}}'}</style>
+
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 22px',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              flexShrink: 0,
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(168,85,247,0.20) 100%)',
+                border: '1px solid rgba(99,102,241,0.35)',
+                boxShadow: '0 4px 16px rgba(99,102,241,0.18)',
+                flexShrink: 0,
+              }}>
+                <Settings size={18} strokeWidth={1.8} style={{ color: '#a5b4fc' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.012em', color: '#fff' }}>
+                  Kalem Ek Alanları
+                </div>
+                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    fontFamily: "'JetBrains Mono','Consolas',monospace",
+                    fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em',
+                    padding: '2px 8px', borderRadius: 6,
+                    background: 'rgba(99,102,241,0.12)', color: '#a5b4fc',
+                    border: '1px solid rgba(99,102,241,0.22)',
+                  }}>
+                    {extrasModalRow.materialCode || '—'}
+                  </span>
+                  <span style={{ opacity: 0.55 }}>·</span>
+                  <span>Satır #{extrasModalRow.id || '—'}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={function() { if (!extrasSaving) closeExtrasModal() }}
+                disabled={extrasSaving}
+                style={{
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'rgba(255,255,255,0.7)', cursor: extrasSaving ? 'not-allowed' : 'pointer',
+                  width: 32, height: 32, borderRadius: 10,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all .12s',
+                  opacity: extrasSaving ? 0.4 : 1,
+                }}
+                onMouseEnter={function(e) { if (!extrasSaving) { e.currentTarget.style.background='rgba(239,68,68,0.12)'; e.currentTarget.style.color='#fca5a5'; e.currentTarget.style.borderColor='rgba(239,68,68,0.25)' } }}
+                onMouseLeave={function(e) { e.currentTarget.style.background='rgba(255,255,255,0.04)'; e.currentTarget.style.color='rgba(255,255,255,0.7)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)' }}
+                title="Kapat (Esc)"
+              >
+                <XIcon size={15} strokeWidth={2} />
+              </button>
+            </div>
+
+            {/* Body — ust bilgiler ek alanlari paneli gibi: sol tab yok,
+                butun gruplar dikey alt alta stacked, her grubun kendi
+                section basligi gorunur. sqe-widget-wrap class'i ile hedeflenen
+                CSS (DocumentEdit.cshtml) bu duzeni saglar. */}
+            <div
+              ref={extrasBodyRef}
+              className="sqe-widget-wrap"
               style={{
-                background: 'var(--lig-modal-bg, #1e293b)',
-                border: '1px solid rgba(255,255,255,.12)',
-                padding: '32px 28px', maxWidth: 380, width: '90vw',
-                boxShadow: '0 24px 64px rgba(0,0,0,.5)',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+                flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 24px',
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.008) 0%, transparent 40%)',
               }}
             >
-              <Trash2 size={26} style={{ color: '#ef4444' }} />
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>
-                Kalemi Sil
-              </h3>
-              <p style={{ fontSize: '.84rem', color: '#94a3b8', margin: 0 }}>
-                {labels.deleteConfirm || 'Bu kalem silinecek. Devam edilsin mi?'}
-              </p>
-              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <DynamicWidgetRenderer
+                ref={extrasRendererRef}
+                formCode="SALES_QUOTE_LINES"
+                /* Kaydedilmemis satirda recordId bos; renderer schema'yi yukler ama
+                   server'dan value getirmez. initialValues ile daha once bu satira
+                   girilmis local degerler pre-fill edilir (row.__extras). */
+                recordId={extrasModalRow.id != null && Number(extrasModalRow.id) > 0 ? String(extrasModalRow.id) : ''}
+                initialValues={extrasModalRow.__extras || null}
+                classPrefix="sqe"
+              />
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 12, padding: '14px 22px',
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+              background: 'rgba(0,0,0,0.18)',
+              flexShrink: 0,
+            }}>
+              <div style={{ fontSize: 11.5, minHeight: 18 }}>
+                {extrasToast && extrasToast.type === 'ok' && (
+                  <span style={{ color: '#86efac', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
+                    {extrasToast.text}
+                  </span>
+                )}
+                {extrasToast && extrasToast.type === 'err' && (
+                  <span style={{ color: '#fca5a5' }}>{extrasToast.text}</span>
+                )}
+                {!extrasToast && (
+                  <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    Değişiklikler kaydedildiğinde satıra işlenir
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   type="button"
-                  onClick={cancelDelete}
+                  onClick={function() { if (!extrasSaving) closeExtrasModal() }}
+                  disabled={extrasSaving}
                   style={{
-                    padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600,
-                    background: 'rgba(255,255,255,.07)', color: '#f1f5f9',
-                    border: '1px solid rgba(255,255,255,.1)', cursor: 'pointer',
+                    padding: '8px 16px', borderRadius: 10,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    color: 'rgba(255,255,255,0.8)',
+                    fontSize: 12.5, fontWeight: 600,
+                    cursor: extrasSaving ? 'not-allowed' : 'pointer',
+                    opacity: extrasSaving ? 0.5 : 1,
+                    transition: 'all .12s',
                   }}
+                  onMouseEnter={function(e) { if (!extrasSaving) e.currentTarget.style.background='rgba(255,255,255,0.08)' }}
+                  onMouseLeave={function(e) { e.currentTarget.style.background='rgba(255,255,255,0.04)' }}
                 >
                   İptal
                 </button>
                 <button
                   type="button"
-                  onClick={confirmDelete}
+                  onClick={handleExtrasSave}
+                  disabled={extrasSaving}
                   style={{
-                    padding: '8px 16px', borderRadius: 8, fontSize: '.84rem', fontWeight: 600,
-                    background: 'linear-gradient(135deg,#ef4444,#dc2626)', color: '#fff',
-                    border: 'none', cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    display: 'inline-flex', alignItems: 'center', gap: 7,
+                    padding: '8px 18px', borderRadius: 10,
+                    background: extrasSaving
+                      ? 'rgba(99,102,241,0.4)'
+                      : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    border: '1px solid rgba(99,102,241,0.55)',
+                    color: '#fff', fontSize: 12.5, fontWeight: 700,
+                    cursor: extrasSaving ? 'wait' : 'pointer',
+                    boxShadow: '0 4px 16px rgba(99,102,241,0.35)',
+                    transition: 'all .15s',
                   }}
+                  onMouseEnter={function(e) { if (!extrasSaving) e.currentTarget.style.transform='translateY(-1px)' }}
+                  onMouseLeave={function(e) { e.currentTarget.style.transform='translateY(0)' }}
                 >
-                  <Trash2 size={13} /> Evet, Sil
+                  {extrasSaving ? (
+                    <>
+                      <span style={{
+                        width: 12, height: 12, border: '2px solid rgba(255,255,255,0.35)',
+                        borderTopColor: '#fff', borderRadius: '50%',
+                        animation: 'sqExtrasSpin 0.7s linear infinite',
+                      }} />
+                      Kaydediliyor…
+                    </>
+                  ) : 'Kaydet'}
                 </button>
+                <style>{'@keyframes sqExtrasSpin{to{transform:rotate(360deg)}}'}</style>
               </div>
-            </motion.div>
-          </motion.div>,
-          document.body
-        )}
-      </AnimatePresence>
+            </div>
+          </div>
+        </div>,
+        // Portal: satis teklif formunun body'sine (.sqe-body) absolute konumlanir.
+        // .sqe-body zaten position:relative oldugu icin modal tam ortaya oturur.
+        // Boylece app shell (ust bar/sol menu/alt panel) ve SQE action bar
+        // modal tarafindan ortulmez, sadece sol tab navi + sag icerik ortulur.
+        (document.querySelector('.sqe-body') || document.body)
+      )}
+
+      {/* ── Kisayol menusu (••• butonu dropdown'i) ────────────────────
+          Butonun altinda absolute konumlanmis kucuk liste. Dis click veya
+          Esc kapatir. Her item kendi tiklamasinda menuyu kapatir (navigasyon
+          sonrasi state hizli temizlensin). Portal ile .sqe-body'ye cizilir
+          (action bar container'inin overflow'una takilmamasi icin). */}
+      {shortcutsMenu && createPortal(
+        (function () {
+          var srow = shortcutsMenu.row
+          var pos = shortcutsMenu.pos || { top: 0, left: 0, width: 200 }
+          var itemId = srow && (srow.stockCardId || srow.itemId)
+
+          function close() { setShortcutsMenu(null) }
+          function goToStockCard() {
+            close()
+            if (!itemId) {
+              alert('Bu satirda malzeme secilmedi — stok kartina gidilemedi.')
+              return
+            }
+            var targetUrl = '/Logistics/MaterialCardEdit?id=' + itemId
+            // Shell API — Satis Teklifi tab'ini kapatmadan yeni tab acar.
+            // matchPath: /Logistics/MaterialCard (hem Cards hem CardEdit URL'lerini
+            // yakalar) — ayni grubun acik tab'i varsa ayni tab icinde yuklenir.
+            try {
+              var top = window.top || window
+              if (top && top.CalibraHub && typeof top.CalibraHub.openWorkspaceTab === 'function') {
+                top.CalibraHub.openWorkspaceTab({
+                  url: targetUrl,
+                  title: 'Malzeme Kartlari',
+                  matchPath: '/Logistics/MaterialCard',
+                })
+                return
+              }
+            } catch (_) { /* cross-origin fallback asagida */ }
+            // Fallback: Shell API erisilemiyorsa mevcut navigation
+            navigateInWorkspace(targetUrl)
+          }
+
+          // Item tanimi — ileride yeni kisayollar buraya eklenir (fiyat gecmisi,
+          // barkod bas, stok hareketleri vb.)
+          var items = [
+            {
+              key: 'stock-card',
+              label: 'Stok Kartina Git',
+              icon: ExternalLink,
+              onClick: goToStockCard,
+              disabled: !itemId,
+              disabledTitle: 'Once malzeme seciniz',
+            },
+          ]
+
+          return (
+            <>
+              {/* Gorunmez overlay — dis click ile kapat */}
+              <div
+                onClick={close}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 9998,
+                  background: 'transparent',
+                }}
+              />
+              {/* Menu — butonun altina konumla */}
+              <div
+                role="menu"
+                aria-label="Satir kisayol menusu"
+                onKeyDown={function (e) { if (e.key === 'Escape') close() }}
+                style={{
+                  position: 'fixed',
+                  top: pos.top, left: pos.left,
+                  minWidth: pos.width,
+                  zIndex: 9999,
+                  borderRadius: 10,
+                  padding: 4,
+                  background: 'rgba(23,28,42,0.98)',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  boxShadow: '0 16px 44px rgba(0,0,0,0.55), 0 0 0 1px rgba(99,102,241,0.08)',
+                  backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                  display: 'flex', flexDirection: 'column', gap: 2,
+                  animation: 'sqShortcutsFade 120ms ease-out',
+                }}
+              >
+                <style>{'@keyframes sqShortcutsFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}'}</style>
+                {items.map(function (it) {
+                  var Icon = it.icon
+                  return (
+                    <button
+                      key={it.key}
+                      type="button"
+                      role="menuitem"
+                      disabled={!!it.disabled}
+                      onClick={it.onClick}
+                      title={it.disabled ? (it.disabledTitle || '') : (it.title || '')}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 11px',
+                        fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.005em',
+                        color: it.disabled ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.88)',
+                        background: 'transparent', border: 'none',
+                        borderRadius: 7,
+                        cursor: it.disabled ? 'not-allowed' : 'pointer',
+                        textAlign: 'left',
+                        transition: 'background .1s, color .1s',
+                      }}
+                      onMouseEnter={function (e) { if (!it.disabled) { e.currentTarget.style.background = 'rgba(99,102,241,0.15)'; e.currentTarget.style.color = '#fff' } }}
+                      onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = it.disabled ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.88)' }}
+                    >
+                      <Icon size={14} strokeWidth={1.9} style={{ flexShrink: 0, opacity: it.disabled ? 0.4 : 0.85 }} />
+                      <span style={{ flex: 1 }}>{it.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )
+        })(),
+        (document.querySelector('.sqe-body') || document.body)
+      )}
+
+      {/* ── Revize modal'i ─────────────────────────────────────────────
+          Satir aksiyon seridindeki Revize butonuna basildiginda acilir.
+          Iki sekme:
+            - Revize Et: miktar/birim fiyat/iskonto/not degisiklikleri icin form
+            - Gecmis Revizeler: revised_from_id zinciri geriye takip edilerek listelenir
+          Revize Olustur tiklaninca yeni bir satir eklenir — orijinal satir
+          degismez; yeni satirin revisedFromId alani secili satirin id'sine
+          set edilir (satir kayitsizsa uyari: once ana belgeyi kaydet). */}
+      {reviseModal && createPortal(
+        (function () {
+          var row = reviseModal.row
+          var activeTab = reviseModal.tab || 'revise'
+          var draft = reviseModal.draft || {}
+
+          // Revize zinciri — kok (orijinal) -> son revizelere dogru
+          var chain = []
+          var seen = {}
+          var cur = row
+          while (cur) {
+            if (seen[cur._uid] || seen['id:' + cur.id]) break
+            seen[cur._uid] = true
+            if (cur.id) seen['id:' + cur.id] = true
+            chain.push(cur)
+            if (!cur.revisedFromId) break
+            cur = rows.find(function (r) { return Number(r.id) === Number(cur.revisedFromId) })
+          }
+          chain.reverse() // orijinal en basta, bu satir en altta
+          var chainIndex = chain.length - 1 // bu satirin pozisyonu (0 = orijinal)
+          var hasRevisionParent = row.revisedFromId != null && Number(row.revisedFromId) > 0
+
+          // Tarih/para formatlamak icin kisa yardimci — satir icinde inline
+          var fmtNum = function (n) {
+            if (n == null || n === '') return '-'
+            var x = Number(n)
+            if (!isFinite(x)) return String(n)
+            return x.toLocaleString('tr-TR', { maximumFractionDigits: 4 })
+          }
+
+          function close() { setReviseModal(null) }
+          function setDraft(key, val) {
+            setReviseModal(function (m) {
+              if (!m) return m
+              var nd = Object.assign({}, m.draft); nd[key] = val
+              return Object.assign({}, m, { draft: nd })
+            })
+          }
+          // Cok alanli guncellemeler icin — CombinationLookupCell onChange
+          // (key, value, fill) imzasinda fill ile ek alanlar dolduruyor;
+          // setDraft ile ayri ayri yaparsak React batching sorunu olusabilir.
+          function mergeDraft(patch) {
+            setReviseModal(function (m) {
+              if (!m) return m
+              var nd = Object.assign({}, m.draft, patch || {})
+              return Object.assign({}, m, { draft: nd })
+            })
+          }
+          function setTab(tab) {
+            setReviseModal(function (m) { return m ? Object.assign({}, m, { tab: tab }) : m })
+          }
+          function createRevision() {
+            var parentId = Number(row.id)
+            if (!parentId || parentId <= 0) {
+              alert('Once ana belgeyi kaydedin — kayitli olmayan satir revize edilemez.')
+              return
+            }
+            // Server-side atomik revize — /Sales/ReviseLine tek transaction:
+            //   1) Eski satirin notes'unu @Description ile guncelle
+            //   2) Yeni satiri INSERT (eski'nin birebir kopyasi + revised_from_id)
+            //   3) Kombinasyon detaylari + widget/alan degerleri de kopyalanir
+            // Basari halinde grid sunucudan taze verilerle yeniden yuklenir.
+            var reviseNote = (draft.notes != null ? String(draft.notes) : '').trim()
+            setReviseModal(function (m) { return m ? Object.assign({}, m, { saving: true }) : m })
+
+            var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || ''
+            var headers = { 'Content-Type': 'application/json' }
+            if (token) headers['RequestVerificationToken'] = token
+
+            fetch('/Sales/ReviseLine', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: headers,
+              body: JSON.stringify({ parentLineId: parentId, description: reviseNote })
+            })
+              .then(function (resp) { return resp.json() })
+              .then(function (data) {
+                if (!data || data.success !== true) {
+                  alert('Revize basarisiz: ' + (data && data.message ? data.message : 'bilinmeyen hata'))
+                  setReviseModal(function (m) { return m ? Object.assign({}, m, { saving: false }) : m })
+                  return
+                }
+                close()
+                // Grid'i sunucudan yeniden yukle — sayfa helper'i varsa oradan, yoksa elle.
+                if (typeof window.sqReloadLinesFromServer === 'function') {
+                  window.sqReloadLinesFromServer()
+                  return
+                }
+                var docId = (rows.find(function (r) { return Number(r.documentId) > 0 }) || {}).documentId || null
+                if (!docId) return
+                fetch('/Sales/GetQuote?id=' + docId, { credentials: 'same-origin' })
+                  .then(function (r2) { return r2.json() })
+                  .then(function (q) {
+                    if (!q || !Array.isArray(q.lines)) return
+                    var mats = (typeof window !== 'undefined' && Array.isArray(window.__SQ_MATERIALS__)) ? window.__SQ_MATERIALS__ : []
+                    var synced = q.lines.map(function (ln) {
+                      var m = mats.find(function (x) { return x.id === ln.itemId })
+                      return Object.assign({}, ln, {
+                        stockCardId:       ln.itemId,
+                        trackCombinations: m ? m.trackCombinations === true : false,
+                        taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
+                      })
+                    })
+                    setRows(synced)
+                  })
+                  .catch(function () { /* swallow */ })
+              })
+              .catch(function (err) {
+                alert('Revize hatasi: ' + (err && err.message ? err.message : String(err)))
+                setReviseModal(function (m) { return m ? Object.assign({}, m, { saving: false }) : m })
+              })
+          }
+
+          return (
+            <div
+              onClick={function (e) { if (e.target === e.currentTarget) close() }}
+              style={{
+                position: 'absolute', inset: 0,
+                background: 'radial-gradient(at 20% 10%, rgba(139,92,246,0.12) 0%, transparent 45%), radial-gradient(at 85% 85%, rgba(99,102,241,0.10) 0%, transparent 45%), rgba(3,6,15,0.72)',
+                backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 55, padding: 16,
+                animation: 'sqExtrasFade 160ms ease-out',
+              }}
+            >
+              <div style={{
+                width: '92%', maxWidth: 720, maxHeight: '88vh',
+                display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                borderRadius: 18,
+                background: 'linear-gradient(180deg, rgba(23,28,42,0.98) 0%, rgba(15,19,30,0.98) 100%)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                boxShadow: '0 32px 96px rgba(0,0,0,0.65), 0 0 0 1px rgba(139,92,246,0.10)',
+                color: 'rgba(255,255,255,0.92)',
+                animation: 'sqExtrasPop 220ms cubic-bezier(.2,.8,.3,1)',
+              }}>
+                {/* Ust gradient serit — mor/indigo tonlari */}
+                <div style={{
+                  height: 3,
+                  background: 'linear-gradient(90deg, #8b5cf6 0%, #6366f1 50%, #8b5cf6 100%)',
+                  backgroundSize: '200% 100%',
+                  animation: 'sqExtrasShimmer 3s linear infinite',
+                }} />
+
+                {/* Header */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '16px 22px',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  flexShrink: 0,
+                }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'linear-gradient(135deg, rgba(139,92,246,0.25) 0%, rgba(99,102,241,0.20) 100%)',
+                    border: '1px solid rgba(139,92,246,0.35)',
+                    boxShadow: '0 4px 16px rgba(139,92,246,0.18)',
+                    flexShrink: 0,
+                  }}>
+                    <GitBranch size={18} strokeWidth={1.9} style={{ color: '#c4b5fd' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.012em', color: '#fff' }}>
+                      Satir Revizyonu
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{
+                        fontFamily: "'JetBrains Mono','Consolas',monospace",
+                        fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em',
+                        padding: '2px 8px', borderRadius: 6,
+                        background: 'rgba(139,92,246,0.14)', color: '#c4b5fd',
+                        border: '1px solid rgba(139,92,246,0.25)',
+                      }}>
+                        {row.materialCode || '—'}
+                      </span>
+                      <span style={{ opacity: 0.6 }}>·</span>
+                      <span>{row.materialName || '—'}</span>
+                      {hasRevisionParent && (
+                        <>
+                          <span style={{ opacity: 0.5 }}>·</span>
+                          <span style={{
+                            fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em',
+                            padding: '2px 7px', borderRadius: 6,
+                            background: 'rgba(99,102,241,0.15)', color: '#a5b4fc',
+                            border: '1px solid rgba(99,102,241,0.28)',
+                          }}>
+                            {chain.length - 1 > 0 ? (chain.length - 1) + '. Revize' : 'Orijinal'}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={close}
+                    style={{
+                      background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                      color: 'rgba(255,255,255,0.7)', cursor: 'pointer',
+                      width: 32, height: 32, borderRadius: 10,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all .12s',
+                    }}
+                    onMouseEnter={function (e) { e.currentTarget.style.background='rgba(239,68,68,0.12)'; e.currentTarget.style.color='#fca5a5'; e.currentTarget.style.borderColor='rgba(239,68,68,0.25)' }}
+                    onMouseLeave={function (e) { e.currentTarget.style.background='rgba(255,255,255,0.04)'; e.currentTarget.style.color='rgba(255,255,255,0.7)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)' }}
+                    title="Kapat (Esc)"
+                  >
+                    <XIcon size={15} strokeWidth={2} />
+                  </button>
+                </div>
+
+                {/* Tab bar */}
+                <div style={{
+                  display: 'flex', gap: 6,
+                  padding: '10px 22px 0',
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  flexShrink: 0,
+                }}>
+                  {[
+                    { k: 'revise', label: 'Revize Et', icon: GitBranch },
+                    { k: 'history', label: 'Gecmis Revizeler', icon: History, badge: chain.length > 1 ? chain.length : null },
+                  ].map(function (t) {
+                    var T = t.icon
+                    var active = activeTab === t.k
+                    return (
+                      <button
+                        key={t.k}
+                        type="button"
+                        onClick={function () { setTab(t.k) }}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 7,
+                          padding: '9px 14px',
+                          border: 'none',
+                          borderBottom: active ? '2px solid #c4b5fd' : '2px solid transparent',
+                          background: 'transparent',
+                          color: active ? '#fff' : 'rgba(255,255,255,0.55)',
+                          fontSize: 12.5, fontWeight: active ? 700 : 600,
+                          letterSpacing: '-0.005em',
+                          cursor: 'pointer',
+                          transition: 'color .15s, border-color .15s',
+                          marginBottom: -1,
+                        }}
+                      >
+                        <T size={13} strokeWidth={2} />
+                        {t.label}
+                        {t.badge && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700,
+                            padding: '1px 6px', borderRadius: 8,
+                            background: active ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.08)',
+                            color: active ? '#ddd6fe' : 'rgba(255,255,255,0.65)',
+                          }}>{t.badge}</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Body */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
+                  {activeTab === 'revise' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.55 }}>
+                        Yazacaginiz aciklama <strong style={{ color: '#c4b5fd' }}>bu (eski) satira</strong>
+                        not olarak eklenir — eski halinin niye revize edildigini anlatir.
+                        <strong style={{ color: '#c4b5fd' }}> Revize Et</strong> dediginizde mevcut kalem
+                        aynen kopyalanarak alta yeni bir satir olarak eklenir; miktar, fiyat, iskonto ve
+                        kombinasyon degisikliklerini <strong style={{ color: '#c4b5fd' }}>yeni satir uzerinde</strong>
+                        gridden yapabilirsiniz. Eski revize bilgileri "Gecmis Revizeler" sekmesinden
+                        goruntulenebilir.
+                      </div>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>
+                          Aciklama (eski kaleme ait)
+                        </span>
+                        <textarea
+                          rows={5}
+                          autoFocus
+                          value={draft.notes != null ? draft.notes : ''}
+                          onChange={function (e) { setDraft('notes', e.target.value) }}
+                          style={{
+                            font: 'inherit', fontSize: 13,
+                            padding: '10px 12px',
+                            borderRadius: 10, resize: 'vertical', minHeight: 120,
+                            border: '1px solid rgba(255,255,255,0.14)',
+                            background: 'rgba(10,14,24,0.55)',
+                            color: 'rgba(255,255,255,0.95)',
+                            outline: 'none', lineHeight: 1.55,
+                          }}
+                          onFocus={function (e) { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.65)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.18)' }}
+                          onBlur={function (e) { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'; e.currentTarget.style.boxShadow = 'none' }}
+                          placeholder="Ornek: Musteri ilk basta 10 adet istemisti, sonradan artirdi…"
+                        />
+                      </label>
+                      {/* Bu satirin ONCEKI notu varsa (ornegin daha onceki revizyondan kalan) bilgi olarak goster */}
+                      {row.notes && (
+                        <div style={{
+                          padding: '8px 12px', borderRadius: 9,
+                          background: 'rgba(255,255,255,0.025)',
+                          border: '1px dashed rgba(255,255,255,0.10)',
+                          fontSize: 11.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5,
+                        }}>
+                          <span style={{ fontWeight: 700, opacity: 0.75 }}>Mevcut not:</span>
+                          <span style={{ fontStyle: 'italic', marginLeft: 6 }}>"{row.notes}"</span>
+                          <span style={{ display: 'block', marginTop: 3, opacity: 0.55, fontSize: 10.5 }}>
+                            Revize et dediginizde bu metin yazdiklariniz ile degistirilecek.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === 'history' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {chain.length === 0 && (
+                        <div style={{ padding: 24, textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 12.5 }}>
+                          Bu satirin revizyon zinciri bulunamadi.
+                        </div>
+                      )}
+                      {chain.length > 0 && (
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 6 }}>
+                          Zincir uzunlugu: <strong style={{ color: '#c4b5fd' }}>{chain.length}</strong>
+                          {chain.length > 1 ? ' kayit (orijinal + ' + (chain.length - 1) + ' revize)' : ' kayit (orijinal)'}
+                        </div>
+                      )}
+                      {chain.map(function (item, idx) {
+                        var isCurrent = item._uid === row._uid
+                        var isOriginal = idx === 0
+                        var label = isOriginal ? 'Orijinal' : (idx + '. Revize')
+                        return (
+                          <div
+                            key={item._uid || ('chain-' + idx)}
+                            style={{
+                              display: 'flex', alignItems: 'stretch', gap: 12,
+                              padding: '12px 14px',
+                              borderRadius: 12,
+                              background: isCurrent
+                                ? 'linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.10))'
+                                : 'rgba(255,255,255,0.025)',
+                              border: '1px solid ' + (isCurrent ? 'rgba(139,92,246,0.35)' : 'rgba(255,255,255,0.06)'),
+                            }}
+                          >
+                            <div style={{
+                              width: 44, flexShrink: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 11, fontWeight: 700, letterSpacing: '.03em',
+                              padding: '4px 6px', borderRadius: 8,
+                              background: isOriginal ? 'rgba(34,197,94,0.14)' : 'rgba(139,92,246,0.14)',
+                              color: isOriginal ? '#86efac' : '#c4b5fd',
+                              border: '1px solid ' + (isOriginal ? 'rgba(34,197,94,0.28)' : 'rgba(139,92,246,0.28)'),
+                              textAlign: 'center',
+                            }}>
+                              {isOriginal ? 'ORJ' : '#' + idx}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#fff' }}>{label}</span>
+                                {isCurrent && (
+                                  <span style={{
+                                    fontSize: 10, fontWeight: 700,
+                                    padding: '1px 7px', borderRadius: 999,
+                                    background: 'rgba(139,92,246,0.28)', color: '#ddd6fe',
+                                  }}>bu satir</span>
+                                )}
+                                <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.4)', fontFamily: "'JetBrains Mono','Consolas',monospace" }}>
+                                  {item.id ? '#' + item.id : '(kayit bekliyor)'}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'rgba(255,255,255,0.75)', flexWrap: 'wrap' }}>
+                                <span><span style={{ opacity: 0.55 }}>Miktar:</span> <strong>{fmtNum(item.quantity)}</strong></span>
+                                <span><span style={{ opacity: 0.55 }}>B.Fiyat:</span> <strong>{fmtNum(item.unitPrice)}</strong></span>
+                                <span><span style={{ opacity: 0.55 }}>Isk%:</span> <strong>{fmtNum(item.discountRate)}</strong></span>
+                                {/* Kombinasyon — bir onceki revizyonla farkliysa "Degisti" rozeti ile vurgula.
+                                    Kullanici zincirde hangi adimda kombinasyonun degistigini tek bakista gorur. */}
+                                {item.combinationCode && (function () {
+                                  var prev = idx > 0 ? chain[idx - 1] : null
+                                  var changed = prev && prev.combinationCode && prev.combinationCode !== item.combinationCode
+                                  return (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                      <span style={{ opacity: 0.55 }}>Kombinasyon:</span>
+                                      <strong style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: 11.5 }}>
+                                        {item.combinationCode}
+                                      </strong>
+                                      {changed && (
+                                        <span style={{
+                                          fontSize: 9.5, fontWeight: 700,
+                                          padding: '1px 6px', borderRadius: 8,
+                                          background: 'rgba(234,179,8,0.20)', color: '#fde68a',
+                                          border: '1px solid rgba(234,179,8,0.40)',
+                                          letterSpacing: '.04em', textTransform: 'uppercase',
+                                        }} title={'Onceki: ' + prev.combinationCode}>
+                                          Degisti
+                                        </span>
+                                      )}
+                                    </span>
+                                  )
+                                })()}
+                                {item.notes && (
+                                  <span style={{ flexBasis: '100%', color: 'rgba(255,255,255,0.55)', fontStyle: 'italic', marginTop: 2 }}>
+                                    "{item.notes}"
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div style={{
+                  display: 'flex', justifyContent: 'flex-end', gap: 10,
+                  padding: '14px 22px',
+                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  flexShrink: 0,
+                }}>
+                  <button
+                    type="button"
+                    onClick={close}
+                    style={{
+                      padding: '9px 18px',
+                      borderRadius: 9,
+                      fontSize: 12.5, fontWeight: 700,
+                      color: 'rgba(255,255,255,0.82)',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      cursor: 'pointer',
+                      transition: 'all .12s',
+                    }}
+                    onMouseEnter={function (e) { e.currentTarget.style.background = 'rgba(255,255,255,0.09)'; e.currentTarget.style.color = '#fff' }}
+                    onMouseLeave={function (e) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'rgba(255,255,255,0.82)' }}
+                  >
+                    Iptal
+                  </button>
+                  {activeTab === 'revise' && (
+                    <button
+                      type="button"
+                      onClick={createRevision}
+                      disabled={!!reviseModal.saving}
+                      style={{
+                        padding: '9px 20px',
+                        borderRadius: 9,
+                        fontSize: 12.5, fontWeight: 700,
+                        color: '#fff',
+                        background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+                        border: 'none',
+                        cursor: reviseModal.saving ? 'not-allowed' : 'pointer',
+                        opacity: reviseModal.saving ? 0.7 : 1,
+                        boxShadow: '0 4px 14px rgba(139,92,246,0.32)',
+                        display: 'inline-flex', alignItems: 'center', gap: 7,
+                        transition: 'transform .1s, filter .12s, opacity .12s',
+                      }}
+                      onMouseEnter={function (e) { if (!reviseModal.saving) { e.currentTarget.style.filter = 'brightness(1.08)'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+                      onMouseLeave={function (e) { e.currentTarget.style.filter = 'none'; e.currentTarget.style.transform = 'none' }}
+                    >
+                      <GitBranch size={13} strokeWidth={2.2} />
+                      {reviseModal.saving ? 'Kaydediliyor…' : 'Revize Et'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })(),
+        (document.querySelector('.sqe-body') || document.body)
+      )}
     </div>
   )
 }

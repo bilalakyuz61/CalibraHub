@@ -28,6 +28,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     private readonly string _materialGroupsTableName;
     private readonly string _materialGroupMappingsTableName;
     private readonly string _stockUnitConversionsTableName;
+    private readonly string _itemLocationsTableName;
+    private readonly string _locationTypesTableName;
 
     public SqlLogisticsConfigurationRepository(
         SqlServerConnectionFactory connectionFactory,
@@ -35,7 +37,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     {
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _stockCardsTableName = $"[{_schema}].[Item]";
+        _stockCardsTableName = $"[{_schema}].[Items]";
         _materialCardFieldGroupsTableName = $"[{_schema}].[FieldGroup]";
         _materialCardFieldSettingsTableName = $"[{_schema}].[Field]";
         _materialCardFieldOptionsTableName = $"[{_schema}].[material_card_field_options]";
@@ -50,6 +52,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         _materialGroupsTableName    = $"[{_schema}].[MaterialGroups]";
         _materialGroupMappingsTableName = $"[{_schema}].[MaterialGroupMappings]";
         _stockUnitConversionsTableName = $"[{_schema}].[stock_unit_conversions]";
+        _itemLocationsTableName = $"[{_schema}].[item_locations]";
+        _locationTypesTableName = $"[{_schema}].[location_types]";
     }
 
     public async Task<IReadOnlyCollection<Item>> GetItemsAsync(CancellationToken cancellationToken)
@@ -61,9 +65,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
         command.CommandText = $"""
             SELECT [id],
-                   [material_code],
-                   [material_name],
-                   [material_description],
+                   [code],
+                   [name],
+                   [description],
                    [is_active],
                    [created_at],
                    [created_by_user_id],
@@ -73,9 +77,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [image_mime_type],
                    [track_combinations],
                    ISNULL([tax_rate], 20) AS [tax_rate],
-                   [material_type_id]
+                   [type_id]
             FROM {_stockCardsTableName}
-            ORDER BY [material_code];
+            ORDER BY [code];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -84,9 +88,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             var stockCard = new Item
             {
                 Id = reader.GetInt32(0),
-                MaterialCode = reader.GetString(1),
-                MaterialName = reader.GetString(2),
-                MaterialDescription = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
                 CreatedDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
                 CreatedByUserId = reader.IsDBNull(6) ? null : reader.GetInt32(6),
                 ModifiedDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
@@ -95,7 +99,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 ImageMimeType = reader.IsDBNull(10) ? null : reader.GetString(10),
                 TrackCombinations = !reader.IsDBNull(11) && reader.GetBoolean(11),
                 TaxRate = reader.IsDBNull(12) ? 20m : reader.GetDecimal(12),
-                MaterialTypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
+                TypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
             };
 
             if (!reader.GetBoolean(4))
@@ -119,17 +123,17 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
         var where = "WHERE [is_active] = 1";
         if (!string.IsNullOrWhiteSpace(search))
-            where += " AND ([material_code] LIKE @Search OR [material_name] LIKE @Search)";
+            where += " AND ([code] LIKE @Search OR [name] LIKE @Search)";
 
         cmd.CommandText = $"""
-            SELECT [id], [material_code], [material_name], [material_description],
+            SELECT [id], [code], [name], [description],
                    [is_active], [created_at], [created_by_user_id], [modified_at],
                    [modified_by_user_id], [image_data], [image_mime_type],
-                   [track_combinations], ISNULL([tax_rate], 20) AS [tax_rate], [material_type_id],
+                   [track_combinations], ISNULL([tax_rate], 20) AS [tax_rate], [type_id],
                    COUNT(*) OVER() AS [_TotalCount]
             FROM {_stockCardsTableName}
             {where}
-            ORDER BY [material_code]
+            ORDER BY [code]
             OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
             """;
 
@@ -144,9 +148,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             var card = new Item
             {
                 Id = reader.GetInt32(0),
-                MaterialCode = reader.GetString(1),
-                MaterialName = reader.GetString(2),
-                MaterialDescription = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
                 CreatedDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
                 CreatedByUserId = reader.IsDBNull(6) ? null : reader.GetInt32(6),
                 ModifiedDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
@@ -155,7 +159,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 ImageMimeType = reader.IsDBNull(10) ? null : reader.GetString(10),
                 TrackCombinations = !reader.IsDBNull(11) && reader.GetBoolean(11),
                 TaxRate = reader.IsDBNull(12) ? 20m : reader.GetDecimal(12),
-                MaterialTypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
+                TypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
             };
             if (!reader.GetBoolean(4)) card.Deactivate();
             items.Add(card);
@@ -972,7 +976,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     /// Bir stok kartina (MaterialCode) bagli FEATURE_STOCK kayitlarini tamamen replace eder.
     /// stockCode icin mevcut tum FEATURE_STOCK kayitlari silinir, sonra verilen featureIds icin yeni kayitlar eklenir.
     /// </summary>
-    public async Task ReplaceStockFeatureLinksAsync(string stockCode, int[] featureIds, CancellationToken cancellationToken)
+    public async Task ReplaceStockFeatureLinksAsync(string stockCode, (int FeatureId, bool PrintDescriptionInDesign)[] items, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(stockCode))
             throw new ArgumentException("Stok kodu zorunludur.", nameof(stockCode));
@@ -990,20 +994,23 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             """);
         command.Parameters.Add(new SqlParameter("@StockCode", normalizedCode));
 
-        var distinctIds = (featureIds ?? Array.Empty<int>())
-            .Where(id => id > 0)
-            .Distinct()
+        // (FeatureId, PrintDescriptionInDesign) — ayni featureId birden fazla kez gelirse son deger gecerli
+        var distinctItems = (items ?? Array.Empty<(int, bool)>())
+            .Where(x => x.FeatureId > 0)
+            .GroupBy(x => x.FeatureId)
+            .Select(g => (FeatureId: g.Key, PrintDescriptionInDesign: g.Last().PrintDescriptionInDesign))
             .ToArray();
 
-        for (var i = 0; i < distinctIds.Length; i++)
+        for (var i = 0; i < distinctItems.Length; i++)
         {
             sql.AppendLine($"""
                 INSERT INTO {_productConfigurationTableName}
-                    ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
+                    ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate], [VisibleInDesign])
                 VALUES
-                    (@FeatureId{i}, N'FEATURE_STOCK', @StockCode, @StockCode, NULL, @StockCode, 1, GETDATE());
+                    (@FeatureId{i}, N'FEATURE_STOCK', @StockCode, @StockCode, NULL, @StockCode, 1, GETDATE(), @PrintDesc{i});
                 """);
-            command.Parameters.Add(new SqlParameter($"@FeatureId{i}", distinctIds[i]));
+            command.Parameters.Add(new SqlParameter($"@FeatureId{i}", distinctItems[i].FeatureId));
+            command.Parameters.Add(new SqlParameter($"@PrintDesc{i}", distinctItems[i].PrintDescriptionInDesign));
         }
 
         sql.AppendLine("COMMIT TRANSACTION;");
@@ -1188,16 +1195,16 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockCardsTableName}
-                ([material_code], [material_name], [material_description], [material_type_id], [is_active], [created_at], [created_by_user_id], [image_data], [image_mime_type], [track_combinations], [tax_rate], [updated_at])
+                ([code], [name], [description], [type_id], [is_active], [created_at], [created_by_user_id], [image_data], [image_mime_type], [track_combinations], [tax_rate], [updated_at])
             VALUES
-                (@MaterialCode, @MaterialName, @MaterialDescription, @MaterialTypeId, @IsActive, @CreatedDate, @CreatedByUserId, @ImageData, @ImageMimeType, @TrackCombinations, @TaxRate, GETDATE());
+                (@Code, @Name, @Description, @TypeId, @IsActive, @CreatedDate, @CreatedByUserId, @ImageData, @ImageMimeType, @TrackCombinations, @TaxRate, GETDATE());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
-        command.Parameters.Add(new SqlParameter("@MaterialCode", stockCard.MaterialCode));
-        command.Parameters.Add(new SqlParameter("@MaterialName", stockCard.MaterialName));
-        command.Parameters.Add(new SqlParameter("@MaterialDescription", (object?)stockCard.MaterialDescription ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@MaterialTypeId", (object?)stockCard.MaterialTypeId ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@Code", stockCard.Code));
+        command.Parameters.Add(new SqlParameter("@Name", stockCard.Name));
+        command.Parameters.Add(new SqlParameter("@Description", (object?)stockCard.Description ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@TypeId", (object?)stockCard.TypeId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", stockCard.IsActive ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@CreatedDate", (object?)stockCard.CreatedDate ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@CreatedByUserId", (object?)stockCard.CreatedByUserId ?? DBNull.Value));
@@ -1218,10 +1225,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.CommandText = $"""
             UPDATE {_stockCardsTableName}
             SET
-                [material_code] = @MaterialCode,
-                [material_name] = @MaterialName,
-                [material_description] = @MaterialDescription,
-                [material_type_id] = @MaterialTypeId,
+                [code] = @Code,
+                [name] = @Name,
+                [description] = @Description,
+                [type_id] = @TypeId,
                 [modified_at] = @ModifiedDate,
                 [modified_by_user_id] = @ModifiedByUserId,
                 [track_combinations] = @TrackCombinations,
@@ -1233,10 +1240,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", stockCard.Id));
-        command.Parameters.Add(new SqlParameter("@MaterialCode", stockCard.MaterialCode));
-        command.Parameters.Add(new SqlParameter("@MaterialName", stockCard.MaterialName));
-        command.Parameters.Add(new SqlParameter("@MaterialDescription", (object?)stockCard.MaterialDescription ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@MaterialTypeId", (object?)stockCard.MaterialTypeId ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@Code", stockCard.Code));
+        command.Parameters.Add(new SqlParameter("@Name", stockCard.Name));
+        command.Parameters.Add(new SqlParameter("@Description", (object?)stockCard.Description ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@TypeId", (object?)stockCard.TypeId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@ModifiedDate", (object?)stockCard.ModifiedDate ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@ModifiedByUserId", (object?)stockCard.ModifiedByUserId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@UpdateImage", stockCard.ImageData != null ? 1 : 0));
@@ -1534,6 +1541,218 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         }
     }
 
+    // ── Item Locations (malzeme-lokasyon cok-cogu) ─────────────────────────
+
+    private async Task EnsureItemLocationsTableAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s = _schema.Replace("]", "]]");
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            IF OBJECT_ID(N'[{s}].[item_locations]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[item_locations]
+                (
+                    [id]          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [item_id]     INT NOT NULL,
+                    [location_id] INT NOT NULL,
+                    [is_default]  BIT NOT NULL DEFAULT(0),
+                    [sort_order]  INT NOT NULL DEFAULT(0)
+                );
+                CREATE UNIQUE INDEX [ux_item_locations_item_location]
+                    ON [{s}].[item_locations]([item_id], [location_id]);
+                CREATE UNIQUE INDEX [ux_item_locations_item_default]
+                    ON [{s}].[item_locations]([item_id])
+                    WHERE [is_default] = 1;
+                CREATE INDEX [ix_item_locations_location]
+                    ON [{s}].[item_locations]([location_id]);
+            END;
+            """;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyCollection<ItemLocation>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken)
+    {
+        var results = new List<ItemLocation>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [id],[item_id],[location_id],[is_default],[sort_order]
+            FROM {_itemLocationsTableName}
+            WHERE [item_id] = @ItemId
+            ORDER BY [sort_order], [id];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new ItemLocation
+            {
+                Id = reader.GetInt32(0),
+                ItemId = reader.GetInt32(1),
+                LocationId = reader.GetInt32(2),
+                IsDefault = reader.GetBoolean(3),
+                SortOrder = reader.GetInt32(4),
+            });
+        }
+        return results;
+    }
+
+    public async Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<ItemLocation> locations, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+
+        // Strateji: sil + yeniden ekle (kuctuk liste, <20 satir)
+        await using (var delCmd = connection.CreateCommand())
+        {
+            delCmd.CommandText = $"DELETE FROM {_itemLocationsTableName} WHERE [item_id] = @ItemId;";
+            delCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            await delCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // En fazla bir varsayilan olabilir — ilk true'yu esas al, digerlerini sil
+        var defaultSeen = false;
+        var sortOrder = 0;
+        foreach (var l in locations)
+        {
+            var isDefault = l.IsDefault && !defaultSeen;
+            if (isDefault) defaultSeen = true;
+
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"""
+                INSERT INTO {_itemLocationsTableName}
+                    ([item_id],[location_id],[is_default],[sort_order])
+                VALUES (@ItemId, @LocationId, @IsDefault, @SortOrder);
+                """;
+            cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            cmd.Parameters.Add(new SqlParameter("@LocationId", l.LocationId));
+            cmd.Parameters.Add(new SqlParameter("@IsDefault", isDefault));
+            cmd.Parameters.Add(new SqlParameter("@SortOrder", sortOrder++));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    // ── Location Types (dinamik tip sozlugu) ─────────────────────────
+
+    private async Task EnsureLocationTypesTableAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s = _schema.Replace("]", "]]");
+        await using var cmd = connection.CreateCommand();
+        // Sadece tabloyu yarat + ilk seed. Tablo zaten varsa seed re-insert yapilmaz
+        // (aksi halde silinen seed tipler her GetAll cagrisinda geri gelir).
+        cmd.CommandText = $"""
+            IF OBJECT_ID(N'[{s}].[location_types]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[location_types]
+                (
+                    [id]         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [code]       NVARCHAR(50)  NOT NULL,
+                    [name]       NVARCHAR(100) NOT NULL,
+                    [sort_order] INT           NOT NULL DEFAULT(0),
+                    [is_active]  BIT           NOT NULL DEFAULT(1)
+                );
+                CREATE UNIQUE INDEX [ux_location_types_code]
+                    ON [{s}].[location_types]([code]);
+
+                -- Seed yalnizca yeni tablo olusturuldugu anda eklenir
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'FACTORY', N'Fabrika', 10, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'SECTION', N'Bolum', 20, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'SHELF', N'Raf', 30, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'BIN', N'Hucre', 40, 1);
+            END;
+            """;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyCollection<LocationType>> GetLocationTypesAsync(CancellationToken cancellationToken)
+    {
+        var results = new List<LocationType>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureLocationTypesTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [id],[code],[name],[sort_order],[is_active]
+            FROM {_locationTypesTableName}
+            ORDER BY [sort_order], [name];
+            """;
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new LocationType
+            {
+                Id = reader.GetInt32(0),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                SortOrder = reader.GetInt32(3),
+                IsActive = reader.GetBoolean(4),
+            });
+        }
+        return results;
+    }
+
+    public async Task<int> UpsertLocationTypeAsync(LocationType type, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureLocationTypesTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        if (type.Id > 0)
+        {
+            cmd.CommandText = $"""
+                UPDATE {_locationTypesTableName}
+                SET [code] = @Code, [name] = @Name, [sort_order] = @SortOrder, [is_active] = @IsActive
+                WHERE [id] = @Id;
+                SELECT @Id;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@Id", type.Id));
+        }
+        else
+        {
+            cmd.CommandText = $"""
+                INSERT INTO {_locationTypesTableName}([code],[name],[sort_order],[is_active])
+                VALUES (@Code, @Name, @SortOrder, @IsActive);
+                SELECT CAST(SCOPE_IDENTITY() AS INT);
+                """;
+        }
+        cmd.Parameters.Add(new SqlParameter("@Code", type.Code));
+        cmd.Parameters.Add(new SqlParameter("@Name", type.Name));
+        cmd.Parameters.Add(new SqlParameter("@SortOrder", type.SortOrder));
+        cmd.Parameters.Add(new SqlParameter("@IsActive", type.IsActive));
+        var newId = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(newId);
+    }
+
+    public async Task DeleteLocationTypeAsync(int id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureLocationTypesTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"DELETE FROM {_locationTypesTableName} WHERE [id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id", id));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<int> CountLocationsOfTypeAsync(string code, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT(*) FROM {_warehouseLocationsTableName} WHERE [LocationTypeCode] = @Code;";
+        cmd.Parameters.Add(new SqlParameter("@Code", code));
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<int> RenameLocationTypeCodeAsync(string oldCode, string newCode, CancellationToken cancellationToken)
+    {
+        if (string.Equals(oldCode, newCode, StringComparison.OrdinalIgnoreCase)) return 0;
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"UPDATE {_warehouseLocationsTableName} SET [LocationTypeCode] = @NewCode WHERE [LocationTypeCode] = @OldCode;";
+        cmd.Parameters.Add(new SqlParameter("@OldCode", oldCode));
+        cmd.Parameters.Add(new SqlParameter("@NewCode", newCode));
+        return await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task AddPropertyAsync(Feature property, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
@@ -1743,13 +1962,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 t.[Id], t.[ParentMaterialCode], t.[ConfigurationCode], t.[Description],
                 t.[ImageData], t.[ImageMimeType], t.[ImageFitMode],
                 l.[ComponentMaterialCode],
-                ISNULL(m.[material_name], l.[ComponentMaterialCode]) AS [ComponentMaterialName],
+                ISNULL(m.[name], l.[ComponentMaterialCode]) AS [ComponentMaterialName],
                 l.[ComponentConfigCode],
                 l.[Quantity],
                 l.[ScrapRatio]
             FROM {_productTreesTableName} t
             LEFT JOIN {_productTreeLinesTableName} l  ON l.[BOMId] = t.[Id]
-            LEFT JOIN {_stockCardsTableName}        m ON m.[material_code]  = l.[ComponentMaterialCode]
+            LEFT JOIN {_stockCardsTableName}        m ON m.[code]  = l.[ComponentMaterialCode]
             WHERE t.[ParentMaterialCode] = @MaterialCode
               AND {configFilter}
               AND t.[Id] = (
@@ -1939,9 +2158,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using (var r1 = await cmd1.ExecuteReaderAsync(cancellationToken))
         {
             while (await r1.ReadAsync(cancellationToken))
-                combos[r1.GetInt32(0)] = new CombinationLookupRow(r1.GetString(1),
+            {
+                var configId = r1.GetInt32(0);
+                combos[configId] = new CombinationLookupRow(
+                    configId,
+                    r1.GetString(1),
                     r1.IsDBNull(2) ? r1.GetString(1) : r1.GetString(2),
                     new List<(string Feature, string Value)>());
+            }
         }
 
         if (combos.Count == 0) return Array.Empty<CombinationLookupRow>();

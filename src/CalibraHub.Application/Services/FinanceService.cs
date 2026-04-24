@@ -60,12 +60,19 @@ public sealed class FinanceService : IFinanceService
                 IdentityNumber = NullIfEmpty(request.IdentityNumber),
                 TaxOffice = NullIfEmpty(request.TaxOffice),
                 Phone = NullIfEmpty(request.Phone),
+                Mobile = NullIfEmpty(request.Mobile),
                 Email = NullIfEmpty(request.Email),
+                Website = NullIfEmpty(request.Website),
                 Address = NullIfEmpty(request.Address),
+                PostalCode = NullIfEmpty(request.PostalCode),
                 City = NullIfEmpty(request.City),
                 District = NullIfEmpty(request.District),
+                Neighborhood = NullIfEmpty(request.Neighborhood),
+                CountryCode = NullIfEmpty(request.CountryCode)?.ToUpperInvariant(),
+                ContactPerson = NullIfEmpty(request.ContactPerson),
                 IsActive = request.IsActive,
                 PriceGroupId = request.PriceGroupId > 0 ? request.PriceGroupId : null,
+                SalesRepresentativeId = request.SalesRepresentativeId > 0 ? request.SalesRepresentativeId : null,
                 CreatedAt = existing.CreatedAt
             };
             await _repo.UpdateContactAsync(updated, cancellationToken);
@@ -82,12 +89,19 @@ public sealed class FinanceService : IFinanceService
                 IdentityNumber = NullIfEmpty(request.IdentityNumber),
                 TaxOffice = NullIfEmpty(request.TaxOffice),
                 Phone = NullIfEmpty(request.Phone),
+                Mobile = NullIfEmpty(request.Mobile),
                 Email = NullIfEmpty(request.Email),
+                Website = NullIfEmpty(request.Website),
                 Address = NullIfEmpty(request.Address),
+                PostalCode = NullIfEmpty(request.PostalCode),
                 City = NullIfEmpty(request.City),
                 District = NullIfEmpty(request.District),
+                Neighborhood = NullIfEmpty(request.Neighborhood),
+                CountryCode = NullIfEmpty(request.CountryCode)?.ToUpperInvariant(),
+                ContactPerson = NullIfEmpty(request.ContactPerson),
                 IsActive = request.IsActive,
                 PriceGroupId = request.PriceGroupId > 0 ? request.PriceGroupId : null,
+                SalesRepresentativeId = request.SalesRepresentativeId > 0 ? request.SalesRepresentativeId : null,
                 CreatedAt = DateTime.Now
             };
             var newId = await _repo.AddContactAsync(entity, cancellationToken);
@@ -105,8 +119,15 @@ public sealed class FinanceService : IFinanceService
                 Address = entity.Address,
                 City = entity.City,
                 District = entity.District,
+                Neighborhood = entity.Neighborhood,
+                CountryCode = entity.CountryCode,
+                Mobile = entity.Mobile,
+                Website = entity.Website,
+                PostalCode = entity.PostalCode,
+                ContactPerson = entity.ContactPerson,
                 IsActive = entity.IsActive,
                 PriceGroupId = entity.PriceGroupId,
+                SalesRepresentativeId = entity.SalesRepresentativeId,
                 CreatedAt = entity.CreatedAt
             };
             return (true, null, ToDto(created));
@@ -126,7 +147,8 @@ public sealed class FinanceService : IFinanceService
     private static ContactDto ToDto(Contact a) => new(
         a.Id, (byte)a.AccountType, a.AccountCode, a.AccountTitle,
         a.TaxNumber, a.IdentityNumber, a.TaxOffice, a.Phone, a.Email, a.Address, a.City, a.District,
-        a.IsActive, a.PriceGroupId, a.CreatedAt);
+        a.IsActive, a.PriceGroupId, a.CreatedAt, a.CountryCode,
+        a.Mobile, a.Website, a.PostalCode, a.ContactPerson, a.Neighborhood, a.SalesRepresentativeId);
 
     private static string? NullIfEmpty(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();

@@ -31,6 +31,11 @@ public interface ILogisticsConfigurationService
     Task DeleteUnitAsync(int id, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<StockUnitConversionDto>> GetStockUnitConversionsAsync(int stockCardId, CancellationToken cancellationToken);
     Task SaveStockUnitConversionsAsync(int stockCardId, IReadOnlyCollection<SaveStockUnitConversionItem> items, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ItemLocationDto>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken);
+    Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<SaveItemLocationItem> items, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<LocationTypeDto>> GetLocationTypesAsync(CancellationToken cancellationToken);
+    Task<int> SaveLocationTypeAsync(SaveLocationTypeRequest request, CancellationToken cancellationToken);
+    Task<(bool Success, string? Error)> DeleteLocationTypeAsync(int id, CancellationToken cancellationToken);
     Task ConfigureItemAsync(ConfigureItemRequest request, CancellationToken cancellationToken);
     Task CreatePropertyAsync(CreateFeatureRequest request, CancellationToken cancellationToken);
     Task CreateStockPropertyLinkAsync(CreateItemPropertyLinkRequest request, CancellationToken cancellationToken);
@@ -56,7 +61,7 @@ public interface ILogisticsConfigurationService
     /// Bir malzeme kartina bagli ozellik (FEATURE) listesini tamamen yeniden yazar.
     /// Kombinasyon Takibi acik olan stok kartlarinin Ozellikler sekmesinde kullanilir.
     /// </summary>
-    Task SetFeaturesForItemAsync(string stockCode, IReadOnlyCollection<int> featureIds, CancellationToken cancellationToken);
+    Task SetFeaturesForItemAsync(string stockCode, IReadOnlyCollection<(int FeatureId, bool PrintDescriptionInDesign)> items, CancellationToken cancellationToken);
     Task UpdateProductConfigurationFeatureAsync(UpdateProductConfigurationFeatureRequest request, CancellationToken cancellationToken);
     Task DeleteProductConfigurationFeatureAsync(int id, CancellationToken cancellationToken);
     Task DeleteProductConfigurationValueAsync(int id, CancellationToken cancellationToken);

@@ -10,11 +10,20 @@ public sealed class DocumentService : IDocumentService
 {
     private readonly IDocumentRepository _repo;
     private readonly IFinanceService _financeService;
+    private readonly IDocumentTypeRepository _documentTypeRepo;
+    private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
 
-    public DocumentService(IDocumentRepository repo, IFinanceService financeService)
+    public DocumentService(IDocumentRepository repo, IFinanceService financeService, IDocumentTypeRepository documentTypeRepo)
     {
         _repo = repo;
         _financeService = financeService;
+        _documentTypeRepo = documentTypeRepo;
+    }
+
+    private async Task<int?> ResolveDefaultQuoteTypeIdAsync(CancellationToken ct)
+    {
+        var type = await _documentTypeRepo.GetByCodeAsync(DefaultSalesQuoteTypeCode, ct);
+        return type?.Id;
     }
 
     public async Task<IReadOnlyCollection<DocumentListItemDto>> GetQuotesAsync(string? search, string? status, CancellationToken ct)
@@ -23,8 +32,42 @@ public sealed class DocumentService : IDocumentService
         return quotes.Select(q => new DocumentListItemDto(
             q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
             q.ContactName, q.Currency, q.GrandTotal,
-            q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount
+            q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount,
+            q.ContactId
         )).ToArray();
+    }
+
+    /// <summary>Bir cariye ait tum tekliflerin ozet listesi (cari karti "Verilen Teklifler" sekmesi icin).</summary>
+    public async Task<IReadOnlyCollection<DocumentListItemDto>> GetQuotesByContactAsync(int contactId, CancellationToken ct)
+    {
+        var all = await _repo.GetAllAsync(null, null, ct);
+        return all.Where(q => q.ContactId == contactId)
+            .Select(q => new DocumentListItemDto(
+                q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
+                q.ContactName, q.Currency, q.GrandTotal,
+                q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount,
+                q.ContactId,
+                q.DocumentTypeId
+            )).ToArray();
+    }
+
+    /// <summary>Bir cariye ait tum hareketler (belge tipi + tarih aralgi filtresi).</summary>
+    public async Task<IReadOnlyCollection<DocumentListItemDto>> GetMovementsByContactAsync(
+        int contactId, int? documentTypeId, DateTime? fromDate, DateTime? toDate, CancellationToken ct)
+    {
+        var all = await _repo.GetAllAsync(null, null, ct);
+        var q = all.Where(d => d.ContactId == contactId);
+        if (documentTypeId is > 0) q = q.Where(d => d.DocumentTypeId == documentTypeId);
+        if (fromDate.HasValue)     q = q.Where(d => d.DocumentDate >= fromDate.Value.Date);
+        if (toDate.HasValue)       q = q.Where(d => d.DocumentDate <= toDate.Value.Date);
+        return q.OrderByDescending(d => d.DocumentDate).ThenByDescending(d => d.Id)
+            .Select(d => new DocumentListItemDto(
+                d.Id, d.DocumentNumber, d.DocumentDate, d.ValidUntil,
+                d.ContactName, d.Currency, d.GrandTotal,
+                d.Status.ToString(), d.RevisionNo, d.IsActive, d.LineCount,
+                d.ContactId,
+                d.DocumentTypeId
+            )).ToArray();
     }
 
     public async Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct)
@@ -53,11 +96,14 @@ public sealed class DocumentService : IDocumentService
         SaveDocumentRequest request, string? createdBy, CancellationToken ct)
     {
         // ── Cari cozumleme ─────────────────────────────────────
+        // contact_id otorite kaynaktir; client ContactName gondermiyor (label),
+        // ID cozumlendikten sonra Contact'tan live AccountTitle alinir (display/rapor icin).
         int? resolvedContactId = request.ContactId;
         string? resolvedContactName = request.ContactName;
 
         if (!resolvedContactId.HasValue && !string.IsNullOrWhiteSpace(request.ContactCode))
         {
+            // Koda gore tek satir cek (search param'i ile filtreli — tum cari listesini yuklemez)
             var code = request.ContactCode.Trim();
             var matches = await _financeService.GetContactsAsync(null, code, ct);
             var exact = matches.FirstOrDefault(a =>
@@ -65,9 +111,15 @@ public sealed class DocumentService : IDocumentService
             if (exact != null)
             {
                 resolvedContactId = exact.Id;
-                if (string.IsNullOrWhiteSpace(resolvedContactName))
-                    resolvedContactName = exact.AccountTitle;
+                resolvedContactName = exact.AccountTitle;
             }
+        }
+        else if (resolvedContactId.HasValue)
+        {
+            // ID set edilmisse tek satirlik PK sorgusu — full list yuklemekten cok daha hizli.
+            var live = await _financeService.GetContactByIdAsync(resolvedContactId.Value, ct);
+            if (live != null && live.IsActive)
+                resolvedContactName = live.AccountTitle;
         }
 
         if (!resolvedContactId.HasValue && string.IsNullOrWhiteSpace(resolvedContactName))
@@ -75,13 +127,12 @@ public sealed class DocumentService : IDocumentService
         if (request.Lines.Count == 0)
             return (false, "En az bir satir eklenmeli.", null);
 
-        // Kombinasyon takibi acik olan stok icin kombinasyon kodu zorunlu
+        // Kombinasyon takibi acik olan stok icin kombinasyon ID zorunlu
         foreach (var ln in request.Lines)
         {
-            if (ln.TrackCombinations && string.IsNullOrWhiteSpace(ln.CombinationCode))
+            if (ln.TrackCombinations && (!ln.CombinationId.HasValue || ln.CombinationId.Value <= 0))
             {
-                var label = string.IsNullOrWhiteSpace(ln.MaterialCode) ? "Secili satir" : $"'{ln.MaterialCode}'";
-                return (false, $"{label} stokunda kombinasyon takibi acik; kombinasyon secilmelidir.", null);
+                return (false, $"Secili satir (Item #{ln.ItemId}) stokunda kombinasyon takibi acik; kombinasyon secilmelidir.", null);
             }
         }
 
@@ -102,17 +153,21 @@ public sealed class DocumentService : IDocumentService
             subTotal += lineTotal;
             lineEntities.Add(new DocumentLine
             {
-                // DocumentId 0 — UpsertAsync sonrasi quote.Id ile set edecegiz
+                // DocumentId 0 — UpsertAsync sonrasi quote.Id ile set edecegiz.
+                // Id dolu gelirse repository UPDATE uygular; yoksa INSERT ederek yeni IDENTITY alir.
+                Id = ln.Id ?? 0,
                 LineNo = lineNo++,
                 ItemId = ln.ItemId,
-                MaterialCode = ln.MaterialCode,
-                MaterialName = ln.MaterialName,
-                UnitName = ln.UnitName,
+                UnitId = ln.UnitId,
                 Quantity = ln.Quantity,
                 UnitPrice = ln.UnitPrice,
                 DiscountRate = ln.DiscountRate,
                 LineTotal = Math.Round(lineTotal, 4),
-                CombinationCode = ln.CombinationCode
+                CombinationId = ln.CombinationId,
+                LocationId = ln.LocationId,
+                Notes = ln.Notes,
+                NotesPinned = ln.NotesPinned,
+                RevisedFromId = ln.RevisedFromId,
             });
         }
 
@@ -121,13 +176,16 @@ public sealed class DocumentService : IDocumentService
         var taxAmount = Math.Round(afterDiscount * (request.TaxRate / 100m), 4);
         var grandTotal = afterDiscount + taxAmount;
 
+        // DocumentTypeId null ise varsayilan 'satis_teklifi' turune bagla
+        var effectiveDocumentTypeId = request.DocumentTypeId ?? await ResolveDefaultQuoteTypeIdAsync(ct);
+
         Document quote;
         if (isNew)
         {
             quote = new Document
             {
                 DocumentNumber = quoteNumber,
-                DocumentTypeId = request.DocumentTypeId,
+                DocumentTypeId = effectiveDocumentTypeId,
                 DocumentDate = request.DocumentDate,
                 ValidUntil = request.ValidUntil,
                 ContactId = request.ContactId,
@@ -154,11 +212,11 @@ public sealed class DocumentService : IDocumentService
             var existing = await _repo.GetByIdAsync(request.Id!.Value, ct)
                     ?? throw new InvalidOperationException("Teklif bulunamadi.");
 
-            var existingLines = await _repo.GetLinesAsync(request.Id.Value, ct);
-            if (existingLines.Count > 0 && existing.ContactId != request.ContactId)
+            // GetByIdAsync zaten line_count'u tek sorguda getiriyor — tekrar lines cekmeye gerek yok.
+            if (existing.LineCount > 0 && existing.ContactId != request.ContactId)
                 return (false, "Kalem girilmis belgenin cari kodu degistirilemez.", null);
 
-            existing.DocumentTypeId = request.DocumentTypeId ?? existing.DocumentTypeId;
+            existing.DocumentTypeId = request.DocumentTypeId ?? existing.DocumentTypeId ?? effectiveDocumentTypeId;
             existing.DocumentDate = request.DocumentDate;
             existing.ValidUntil = request.ValidUntil;
             existing.ContactId = request.ContactId;
@@ -219,47 +277,57 @@ public sealed class DocumentService : IDocumentService
             };
         }
 
-        // Satirlari kaydet — DocumentId'yi yeni Id ile set et
+        // Satirlari kaydet — DocumentId'yi yeni Id ile set et.
+        // ÖNEMLI: Id'yi de kopyala — aksi halde UPSERT'te tum satirlar INSERT olarak
+        // algilanir, eski Id'ler silinir ve WidgetTra kayitlari orphan kalir.
         var finalLines = lineEntities.Select(ln => new DocumentLine
         {
+            Id = ln.Id,
             DocumentId = quote.Id,
             LineNo = ln.LineNo,
             ItemId = ln.ItemId,
-            MaterialCode = ln.MaterialCode,
-            MaterialName = ln.MaterialName,
-            UnitName = ln.UnitName,
+            UnitId = ln.UnitId,
             Quantity = ln.Quantity,
             UnitPrice = ln.UnitPrice,
             DiscountRate = ln.DiscountRate,
             LineTotal = ln.LineTotal,
-            CombinationCode = ln.CombinationCode,
-            Notes = ln.Notes
+            CombinationId = ln.CombinationId,
+            LocationId = ln.LocationId,
+            Notes = ln.Notes,
+            NotesPinned = ln.NotesPinned,
+            RevisedFromId = ln.RevisedFromId,
         }).ToArray();
 
         await _repo.SaveLinesAsync(quote.Id, finalLines, ct);
 
-        // Satir detaylarini (ozellik-deger-aciklama) kaydet
-        var savedLines = await _repo.GetLinesAsync(quote.Id, ct);
-        var byLineNo = savedLines.ToDictionary(l => l.LineNo);
-        for (int i = 0; i < lineRequests.Length; i++)
+        // Satir detaylarini (ozellik-deger-aciklama) kaydet — herhangi bir satirda
+        // detay varsa line ID'leri icin ek sorgu at. Cogu teklif detaysiz (no-op save)
+        // bu yol hic calismaz ve 1 RT + N RT kazanilir.
+        var hasAnyDetails = lineRequests.Any(r => r.CombinationDetails != null && r.CombinationDetails.Count > 0);
+        if (hasAnyDetails)
         {
-            var reqLine = lineRequests[i];
-            var lineNoForThis = i + 1;
-            if (!byLineNo.TryGetValue(lineNoForThis, out var savedLine)) continue;
+            var savedLines = await _repo.GetLinesAsync(quote.Id, ct);
+            var byLineNo = savedLines.ToDictionary(l => l.LineNo);
+            for (int i = 0; i < lineRequests.Length; i++)
+            {
+                var reqLine = lineRequests[i];
+                var lineNoForThis = i + 1;
+                if (!byLineNo.TryGetValue(lineNoForThis, out var savedLine)) continue;
 
-            var details = (reqLine.CombinationDetails ?? new List<SaveQuoteLineDetailItem>())
-                .Select((d, idx) => new DocumentLineDetail
-                {
-                    QuoteLineId = savedLine.Id,
-                    FeatureName = d.FeatureName,
-                    ValueCode = d.ValueCode,
-                    ValueName = d.ValueName,
-                    Description = d.Description,
-                    LineOrder = d.LineOrder > 0 ? d.LineOrder : (idx + 1),
-                })
-                .ToList();
+                var details = (reqLine.CombinationDetails ?? new List<SaveQuoteLineDetailItem>())
+                    .Select((d, idx) => new DocumentLineDetail
+                    {
+                        QuoteLineId = savedLine.Id,
+                        FeatureName = d.FeatureName,
+                        ValueCode = d.ValueCode,
+                        ValueName = d.ValueName,
+                        Description = d.Description,
+                        LineOrder = d.LineOrder > 0 ? d.LineOrder : (idx + 1),
+                    })
+                    .ToList();
 
-            await _repo.SaveLineDetailsAsync(savedLine.Id, details, ct);
+                await _repo.SaveLineDetailsAsync(savedLine.Id, details, ct);
+            }
         }
 
         return (true, null, MapDto(quote));
@@ -298,9 +366,22 @@ public sealed class DocumentService : IDocumentService
         q.ContactCode,
         q.DocumentTypeId);
 
+    /// <summary>
+    /// Satir revizyonu — repository katmanina delege eder. Widget degerlerinin
+    /// kopyalanmasi bu service sinifinda DEGIL (WidgetService farkli), controller
+    /// akisinda yapilir.
+    /// </summary>
+    public Task<int?> ReviseLineAsync(int parentLineId, string? description, CancellationToken ct)
+        => _repo.ReviseLineAsync(parentLineId, description, ct);
+
     private static DocumentLineDto MapLineDto(DocumentLine ln, IReadOnlyList<DocumentLineDetailDto>? details = null) => new(
         ln.Id, ln.DocumentId, ln.LineNo,
-        ln.ItemId, ln.MaterialCode, ln.MaterialName, ln.UnitName,
+        ln.ItemId, ln.MaterialCode, ln.MaterialName,
+        ln.UnitId, ln.UnitCode, ln.UnitName,
         ln.Quantity, ln.UnitPrice, ln.DiscountRate, ln.LineTotal,
-        ln.CombinationCode, ln.Notes, ln.IsActive, details);
+        ln.CombinationId, ln.CombinationCode,
+        ln.LocationId, ln.LocationCode, ln.LocationName,
+        ln.Notes, details,
+        NotesPinned: ln.NotesPinned,
+        RevisedFromId: ln.RevisedFromId);
 }

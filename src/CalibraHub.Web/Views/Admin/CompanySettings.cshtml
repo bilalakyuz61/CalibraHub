@@ -215,6 +215,7 @@
                 <button type="button" class="cs-tab-btn" data-cs-tab="apiprofile">Entegrasyon API</button>
                 <button type="button" class="cs-tab-btn" data-cs-tab="integrator">Entegrator Ayarlari</button>
                 <button type="button" class="cs-tab-btn" data-cs-tab="settings">Genel Parametreler</button>
+                <button type="button" class="cs-tab-btn" data-cs-tab="addresses">Adres Kataloğu</button>
             </div>
 
             <div class="cs-tab-content">
@@ -544,6 +545,92 @@
                             </button>
                             <span id="isrTestMsg"></span>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Adres Kataloğu (PTT) -->
+                <div class="cs-tab-pane" id="cs-pane-addresses">
+                    <div class="cs-section-title">PTT Posta Kodu Kataloğu</div>
+                    <p style="margin:6px 0 14px;font-size:.82rem;color:rgba(100,116,139,.9);">
+                        Cari kartlarındaki İl / İlçe / Mahalle dropdown'ları bu katalogdan beslenir. PTT verisini
+                        (JSON formatında) yükleyerek katalogu güncelleyebilirsiniz. Önerilen kaynak:
+                        <a href="https://postakodu.ptt.gov.tr/" target="_blank" rel="noopener">postakodu.ptt.gov.tr</a>
+                        veya topluluk dataset'leri (örn. GitHub <code>basakalagon/turkiye-il-ilce-mahalle</code>).
+                    </p>
+
+                    <div class="cs-line" style="align-items:center;">
+                        <label>Mevcut Satır</label>
+                        <span id="addrCatalogCount" style="font-weight:700;font-size:.9rem;">–</span>
+                        <span style="color:rgba(100,116,139,.7);font-size:.78rem;">satır DB'de mevcut</span>
+                    </div>
+
+                    <div style="border-top:1px dashed rgba(148,163,184,.3);margin:14px 0;"></div>
+
+                    <div class="cs-section-title" style="font-size:.86rem;margin-top:0;">1) URL'den İndir</div>
+                    <div class="cs-line" style="align-items:flex-start;">
+                        <label>URL(ler)</label>
+                        <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
+                            <textarea id="addrImportUrl" class="form-control form-control-sm" rows="5"
+                                      placeholder="https://kurum-icin-host/adres-data.json (her satıra bir URL)"
+                                      style="font-family:monospace;font-size:.78rem;"></textarea>
+                            <div style="font-size:.72rem;color:rgba(100,116,139,.85);line-height:1.5;">
+                                Her satıra bir URL — birden fazla olabilir, sunucu sırayla indirip tek transaction'da yükler.
+                                Lisanslı PTT verisini, NVI/UAVT'den alınan dosyayı veya kurum içi sunucuda host edilen JSON'u buraya yapıştırın.
+                                <br><br>
+                                <strong>Desteklenen JSON formatları:</strong>
+                                <ul style="margin:4px 0 0 18px;padding:0;">
+                                    <li><strong>Flat:</strong> <code>[{"cityName":"İstanbul","districtName":"Kadıköy","neighborhoodName":"Caferağa","postalCode":"34710"}, ...]</code></li>
+                                    <li><strong>Nested:</strong> <code>[{"il":"İstanbul","ilceler":[{"ilce":"Kadıköy","mahalleler":[{"mahalle":"Caferağa","postaKodu":"34710"}]}]}]</code></li>
+                                    <li><strong>Wrapper:</strong> <code>{"data":[...]}</code> veya <code>{"results":[...]}</code> — iç dizi otomatik bulunur</li>
+                                </ul>
+                                <strong>Kabul edilen key isimleri (TR/EN):</strong> il/cityName, ilce/districtName, mahalle/neighborhoodName, postaKodu/postalCode/zip, plaka/cityCode, ulke/countryCode
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cs-line">
+                        <label></label>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="addrPreviewBtn">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                                Önizle (DB'ye yazmaz)
+                            </button>
+                            <button type="button" class="btn btn-primary btn-sm" id="addrUrlImportBtn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                İndir & Yükle
+                            </button>
+                            <span id="addrImportMsg" style="font-size:.82rem;"></span>
+                        </div>
+                    </div>
+                    <div class="cs-line" id="addrPreviewBox" style="display:none;align-items:flex-start;">
+                        <label>Önizleme</label>
+                        <div style="flex:1;font-family:monospace;font-size:.74rem;background:rgba(0,0,0,.04);border:1px solid rgba(148,163,184,.25);border-radius:6px;padding:10px;max-height:260px;overflow:auto;white-space:pre;" id="addrPreviewContent"></div>
+                    </div>
+
+                    <div style="border-top:1px dashed rgba(148,163,184,.3);margin:18px 0 14px;"></div>
+
+                    <div class="cs-section-title" style="font-size:.86rem;margin-top:0;">2) Yerel JSON Dosyasından Yükle</div>
+                    <div class="cs-line" style="align-items:flex-start;">
+                        <label>JSON Dosyası</label>
+                        <div style="display:flex;flex-direction:column;gap:8px;flex:1;">
+                            <input type="file" id="addrJsonFile" accept=".json,application/json" class="form-control form-control-sm" style="max-width:420px;" />
+                            <div style="font-size:.72rem;color:rgba(100,116,139,.8);">
+                                Format: <code>[{ "cityName":"İstanbul","districtName":"Kadıköy","neighborhoodName":"Caferağa","postalCode":"34710" }, ...]</code>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cs-line">
+                        <label></label>
+                        <button type="button" class="btn btn-secondary btn-sm" id="addrImportBtn">
+                            Dosyadan Yükle
+                        </button>
+                    </div>
+
+                    <div class="cs-line" style="margin-top:14px;">
+                        <label></label>
+                        <label style="display:inline-flex;align-items:center;gap:8px;font-size:.82rem;">
+                            <input type="checkbox" id="addrClearExisting" checked />
+                            Yüklerken mevcut katalogu sıfırla (TRUNCATE)
+                        </label>
                     </div>
                 </div>
 
@@ -959,6 +1046,158 @@
 
     function isrSetVal(id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; }
     function isrEsc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+})();
+
+// ── PTT Adres Kataloğu import ─────────────────────────────────
+(function () {
+    function $id(id) { return document.getElementById(id); }
+
+    async function refreshCount() {
+        try {
+            var r = await fetch('/Address/Status', { credentials: 'same-origin' });
+            var d = await r.json();
+            $id('addrCatalogCount').textContent = (d.count || 0).toLocaleString('tr-TR');
+        } catch (e) { $id('addrCatalogCount').textContent = '?'; }
+    }
+
+    async function doImport() {
+        var fileInput = $id('addrJsonFile');
+        var msg = $id('addrImportMsg');
+        var btn = $id('addrImportBtn');
+        msg.textContent = '';
+        if (!fileInput.files || fileInput.files.length === 0) {
+            msg.textContent = 'Önce bir JSON dosyası seçiniz.';
+            msg.style.color = '#f59e0b';
+            return;
+        }
+        var file = fileInput.files[0];
+        msg.textContent = 'Dosya okunuyor...';
+        msg.style.color = '';
+        try {
+            var text = await file.text();
+            var arr = JSON.parse(text);
+            if (!Array.isArray(arr)) { throw new Error('JSON bir dizi olmalı (array).'); }
+            // Farkli key isimlerini normalize et
+            var rows = arr.map(function (x) {
+                return {
+                    countryCode:      x.countryCode || x.ulke || 'TR',
+                    cityCode:         x.cityCode || x.ilKodu || x.plaka || null,
+                    cityName:         x.cityName || x.il || x.city || '',
+                    districtName:     x.districtName || x.ilce || x.district || '',
+                    neighborhoodName: x.neighborhoodName || x.mahalle || x.neighborhood || x.koy || '',
+                    postalCode:       x.postalCode || x.postaKodu || x.pk || null
+                };
+            }).filter(function (r) { return r.cityName && r.districtName && r.neighborhoodName; });
+
+            if (rows.length === 0) { msg.textContent = 'Eşleşen satır yok. JSON yapısını kontrol ediniz.'; msg.style.color = '#f59e0b'; return; }
+
+            msg.textContent = rows.length.toLocaleString('tr-TR') + ' satır yükleniyor...';
+            btn.disabled = true;
+            var clearExisting = $id('addrClearExisting').checked;
+            var r = await fetch('/Address/ImportPtt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ clearExisting: clearExisting, rows: rows })
+            });
+            var data = await r.json();
+            if (!data.success) { msg.textContent = 'Hata: ' + (data.message || 'bilinmeyen'); msg.style.color = '#ef4444'; return; }
+            msg.textContent = '✓ ' + (data.inserted || 0).toLocaleString('tr-TR') + ' satır başarıyla yüklendi.';
+            msg.style.color = '#10b981';
+            await refreshCount();
+        } catch (e) {
+            msg.textContent = 'Hata: ' + e.message;
+            msg.style.color = '#ef4444';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function doUrlImport() {
+        var url = ($id('addrImportUrl').value || '').trim();
+        var msg = $id('addrImportMsg');
+        var btn = $id('addrUrlImportBtn');
+        msg.textContent = '';
+        if (!url) { msg.textContent = 'Önce bir URL giriniz.'; msg.style.color = '#f59e0b'; return; }
+        msg.textContent = 'İndiriliyor ve yükleniyor (büyük dosyalarda 30-60 sn sürebilir)...';
+        msg.style.color = '';
+        btn.disabled = true;
+        try {
+            var clearExisting = $id('addrClearExisting').checked;
+            var r = await fetch('/Address/ImportFromUrl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ url: url, clearExisting: clearExisting })
+            });
+            var data = await r.json();
+            if (!data.success) { msg.textContent = 'Hata: ' + (data.message || 'bilinmeyen'); msg.style.color = '#ef4444'; return; }
+            msg.textContent = '✓ ' + (data.inserted || 0).toLocaleString('tr-TR') + ' satır indirildi & yüklendi.';
+            msg.style.color = '#10b981';
+            await refreshCount();
+        } catch (e) {
+            msg.textContent = 'Hata: ' + e.message;
+            msg.style.color = '#ef4444';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function doPreview() {
+        var raw = ($id('addrImportUrl').value || '').trim();
+        var msg = $id('addrImportMsg');
+        var box = $id('addrPreviewBox');
+        var content = $id('addrPreviewContent');
+        msg.textContent = '';
+        // Ilk URL'i al (cok URL girilmisse)
+        var url = raw.split(/[\r\n]+/).map(function (s) { return s.trim(); }).filter(Boolean)[0];
+        if (!url) { msg.textContent = 'URL giriniz.'; msg.style.color = '#f59e0b'; return; }
+        msg.textContent = 'Önizleniyor...'; msg.style.color = '';
+        try {
+            var r = await fetch('/Address/PreviewUrl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ url: url })
+            });
+            var data = await r.json();
+            if (!data.success) {
+                msg.textContent = 'Hata: ' + (data.message || 'bilinmeyen');
+                msg.style.color = '#ef4444';
+                box.style.display = 'none';
+                return;
+            }
+            var sample = data.parsedSample || [];
+            var summary = '✓ Kök dizide ' + (data.rootArrayLength || 0).toLocaleString('tr-TR')
+                        + ' eleman, ilk ' + sample.length + ' satır parse edildi:\n\n';
+            content.textContent = summary + JSON.stringify(sample, null, 2);
+            box.style.display = '';
+            if (sample.length === 0) {
+                msg.textContent = '⚠ Hiç satır parse edilemedi — JSON yapısı tanınmıyor olabilir.';
+                msg.style.color = '#f59e0b';
+            } else {
+                msg.textContent = 'Önizleme tamam. JSON yapısı uygun, "İndir & Yükle" ile devam edebilirsin.';
+                msg.style.color = '#10b981';
+            }
+        } catch (e) {
+            msg.textContent = 'Hata: ' + e.message;
+            msg.style.color = '#ef4444';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var btn = $id('addrImportBtn');
+        if (btn) btn.addEventListener('click', doImport);
+        var urlBtn = $id('addrUrlImportBtn');
+        if (urlBtn) urlBtn.addEventListener('click', doUrlImport);
+        var prevBtn = $id('addrPreviewBtn');
+        if (prevBtn) prevBtn.addEventListener('click', doPreview);
+        // Sayi ilk tab acilisinda gorunsun
+        var tabBtn = document.querySelector('.cs-tab-btn[data-cs-tab="addresses"]');
+        if (tabBtn) tabBtn.addEventListener('click', refreshCount);
+        // Sayfayi acarken de fetch etsin (az trafik)
+        refreshCount();
+    });
 })();
     </script>
 }

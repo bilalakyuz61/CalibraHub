@@ -125,7 +125,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],
                    [MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],[SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],
-                   [ColorType],[ColorValue],[CreatedAt],[UpdatedAt]
+                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[CreatedAt],[UpdatedAt]
             FROM {_widgetMasTable}
             WHERE [FormId] = @FormId
               AND (@IncludeInactive = 1 OR [IsActive] = 1)
@@ -149,7 +149,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         cmd.CommandText = $"""
             SELECT TOP (1) [Id],[CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],
                    [MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],[SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],
-                   [ColorType],[ColorValue],[CreatedAt],[UpdatedAt]
+                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[CreatedAt],[UpdatedAt]
             FROM {_widgetMasTable}
             WHERE [Id] = @Id
               AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);
@@ -191,6 +191,8 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                     [IsActive]     = @IsActive,
                     [ColorType]    = @ColorType,
                     [ColorValue]   = @ColorValue,
+                    [ColSpan]      = @ColSpan,
+                    [LabelStyle]   = @LabelStyle,
                     [UpdatedAt]    = @UpdatedAt
                 WHERE [Id] = @Id
                   AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);
@@ -207,11 +209,11 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         ins.CommandText = $"""
             INSERT INTO {_widgetMasTable}
                 ([CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],[MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],
-                 [SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],[ColorType],[ColorValue],[CreatedAt],[UpdatedAt])
+                 [SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],[ColorType],[ColorValue],[ColSpan],[LabelStyle],[CreatedAt],[UpdatedAt])
             OUTPUT INSERTED.[Id]
             VALUES
                 (@CompanyId, @FormId, @ParentId, @WidgetCode, @Label, @DataType, @MaxLength, @MinLength, @ExpectedLength, @MinValue, @MaxValue,
-                 @SortOrder, @OptionsJson, @RulesJson, @IsPlainField, @IsRequired, @IsActive, @ColorType, @ColorValue, @CreatedAt, @UpdatedAt);
+                 @SortOrder, @OptionsJson, @RulesJson, @IsPlainField, @IsRequired, @IsActive, @ColorType, @ColorValue, @ColSpan, @LabelStyle, @CreatedAt, @UpdatedAt);
             """;
         BindWidgetParams(ins, widget);
         ins.Parameters.Add(new SqlParameter("@CompanyId", companyId));
@@ -400,6 +402,38 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         }
     }
 
+    /// <summary>
+    /// Widget degerlerini bir RecordId'den diger RecordId'ye kopyalar (atomic
+    /// INSERT ... SELECT). Kalem revizyonu gibi senaryolarda kullanilir —
+    /// kullanici "Revize Et" dediginde eski satirin ek alanlari yeni satira
+    /// oldugu gibi tasinir. Sadece top-level (ParentRecordId IS NULL) satirlar
+    /// kopyalanir; grid child satirlarini atlanir — yeni revize kendi grid
+    /// veri setiyle baslar.
+    /// </summary>
+    public async Task CopyValuesAsync(
+        int formId,
+        string sourceRecordId,
+        string targetRecordId,
+        CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            INSERT INTO {_widgetTraTable} ([WidgetId], [RecordId], [ParentRecordId], [Value], [CreatedAt], [UpdatedAt])
+            SELECT t.[WidgetId], @Target, NULL, t.[Value], @Now, @Now
+            FROM {_widgetTraTable} t
+            INNER JOIN {_widgetMasTable} m ON m.[Id] = t.[WidgetId]
+            WHERE m.[FormId] = @FormId
+              AND t.[RecordId] = @Source
+              AND t.[ParentRecordId] IS NULL;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@FormId", formId));
+        cmd.Parameters.Add(new SqlParameter("@Source", sourceRecordId));
+        cmd.Parameters.Add(new SqlParameter("@Target", targetRecordId));
+        cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     // ══════════════════════════════════════════════════════════
     // Master-Detail (Faz E — grid widget)
     // ══════════════════════════════════════════════════════════
@@ -499,6 +533,8 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
         ColorType  = r.IsDBNull(r.GetOrdinal("ColorType"))  ? 0    : r.GetInt32(r.GetOrdinal("ColorType")),
         ColorValue = r.IsDBNull(r.GetOrdinal("ColorValue")) ? null : r.GetString(r.GetOrdinal("ColorValue")),
+        ColSpan    = r.IsDBNull(r.GetOrdinal("ColSpan"))    ? 6    : r.GetInt32(r.GetOrdinal("ColSpan")),
+        LabelStyle = r.IsDBNull(r.GetOrdinal("LabelStyle")) ? "standard" : r.GetString(r.GetOrdinal("LabelStyle")),
         CreatedAt = r.GetDateTime(r.GetOrdinal("CreatedAt")),
         UpdatedAt = r.GetDateTime(r.GetOrdinal("UpdatedAt")),
     };
@@ -534,6 +570,12 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         cmd.Parameters.Add(new SqlParameter("@IsActive", w.IsActive));
         cmd.Parameters.Add(new SqlParameter("@ColorType",  w.ColorType));
         cmd.Parameters.Add(new SqlParameter("@ColorValue", (object?)w.ColorValue ?? DBNull.Value));
+        // ColSpan — 1-12 arasi clamp; disinda bir deger gelirse varsayilan 6.
+        var safeCol = (w.ColSpan >= 1 && w.ColSpan <= 12) ? w.ColSpan : 6;
+        cmd.Parameters.Add(new SqlParameter("@ColSpan", safeCol));
+        // LabelStyle — whitelist: sadece "standard" veya "modern"; digerleri standart kabul.
+        var safeStyle = (w.LabelStyle == "modern") ? "modern" : "standard";
+        cmd.Parameters.Add(new SqlParameter("@LabelStyle", safeStyle));
         cmd.Parameters.Add(new SqlParameter("@UpdatedAt", w.UpdatedAt));
     }
 

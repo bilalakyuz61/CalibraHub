@@ -4,6 +4,7 @@ namespace CalibraHub.Application.Contracts;
 
 /// <summary>Kombinasyon arama için zengin DTO — kod, açıklama ve özellik/değer çiftleri</summary>
 public sealed record CombinationLookupRow(
+    int ConfigId,
     string Code,
     string Name,
     IReadOnlyCollection<(string Feature, string Value)> FeatureValues);
@@ -38,10 +39,10 @@ public sealed record LogisticsConfigurationSnapshotDto(
 
 public sealed record ItemDto(
     int Id,
-    string MaterialCode,
-    string MaterialName,
-    string? MaterialDescription,
-    int? MaterialTypeId,
+    string Code,
+    string Name,
+    string? Description,
+    int? TypeId,
     bool IsActive,
     DateTime? CreatedDate,
     int? CreatedByUserId,
@@ -72,7 +73,7 @@ public sealed record FeatureValueDto(
 public sealed record ItemPropertyMappingDto(
     Guid Id,
     int ItemId,
-    string MaterialCode,
+    string ItemCode,
     Guid PropertyId,
     string PropertyCode,
     string PropertyName,
@@ -86,23 +87,25 @@ public sealed record ItemPropertyMappingDto(
     bool IsActive);
 
 public sealed record CreateItemRequest(
-    string MaterialCode,
-    string MaterialName,
-    string? MaterialDescription = null,
-    int? MaterialTypeId = null,
+    string Code,
+    string Name,
+    string? Description = null,
+    int? TypeId = null,
     int? CreatedByUserId = null,
     bool TrackCombinations = false,
+    decimal TaxRate = 20m,
     byte[]? ImageData = null,
     string? ImageMimeType = null);
 
 public sealed record UpdateItemRequest(
     int ItemId,
-    string MaterialCode,
-    string MaterialName,
-    string? MaterialDescription = null,
-    int? MaterialTypeId = null,
+    string Code,
+    string Name,
+    string? Description = null,
+    int? TypeId = null,
     int? ModifiedByUserId = null,
     bool TrackCombinations = false,
+    decimal TaxRate = 20m,
     byte[]? ImageData = null,
     string? ImageMimeType = null);
 
@@ -211,6 +214,34 @@ public sealed record StockUnitConversionDto(
 public sealed record SaveStockUnitConversionItem(
     string UnitCode,
     decimal Multiplier);
+
+public sealed record ItemLocationDto(
+    int Id,
+    int ItemId,
+    int LocationId,
+    string LocationCode,
+    string? LocationName,
+    string LocationTypeCode,
+    bool IsDefault,
+    int SortOrder);
+
+public sealed record SaveItemLocationItem(
+    int LocationId,
+    bool IsDefault);
+
+public sealed record LocationTypeDto(
+    int Id,
+    string Code,
+    string Name,
+    int SortOrder,
+    bool IsActive);
+
+public sealed record SaveLocationTypeRequest(
+    int? Id,
+    string Code,
+    string Name,
+    int SortOrder,
+    bool IsActive);
 
 public sealed record BOMDto(
     int Id,

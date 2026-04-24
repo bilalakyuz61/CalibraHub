@@ -18,7 +18,7 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         _table = $"[{schema}].[report_templates]";
     }
 
-    private const string Columns = "[id],[name],[document_type_id],[frx_file_path],[description],[is_default],[is_active],[created_at],[updated_at],[frx_content]";
+    private const string Columns = "[id],[name],[document_type_id],[frx_file_path],[description],[is_default],[is_active],[created_at],[updated_at],[frx_content],[sql_view_name],[key_column],[output_options_json],[order_column],[order_direction]";
 
     public async Task<IReadOnlyCollection<ReportTemplate>> GetAllAsync(CancellationToken cancellationToken)
     {
@@ -74,7 +74,10 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
             command.CommandText = $"""
                 UPDATE {_table}
                     SET [name]=@Name,[document_type_id]=@DocTypeId,[frx_file_path]=@FrxFilePath,[frx_content]=@FrxContent,
-                        [description]=@Description,[is_default]=@IsDefault,[is_active]=@IsActive,[updated_at]=GETDATE()
+                        [description]=@Description,[is_default]=@IsDefault,[is_active]=@IsActive,
+                        [sql_view_name]=@SqlViewName,[key_column]=@KeyColumn,[output_options_json]=@OutputOptionsJson,
+                        [order_column]=@OrderColumn,[order_direction]=@OrderDirection,
+                        [updated_at]=GETDATE()
                     WHERE [id]=@Id;
                 SELECT @Id;
                 """;
@@ -83,8 +86,8 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         else
         {
             command.CommandText = $"""
-                INSERT INTO {_table} ([name],[document_type_id],[frx_file_path],[frx_content],[description],[is_default],[is_active],[created_at],[updated_at])
-                VALUES (@Name,@DocTypeId,@FrxFilePath,@FrxContent,@Description,@IsDefault,@IsActive,GETDATE(),GETDATE());
+                INSERT INTO {_table} ([name],[document_type_id],[frx_file_path],[frx_content],[description],[is_default],[is_active],[sql_view_name],[key_column],[output_options_json],[order_column],[order_direction],[created_at],[updated_at])
+                VALUES (@Name,@DocTypeId,@FrxFilePath,@FrxContent,@Description,@IsDefault,@IsActive,@SqlViewName,@KeyColumn,@OutputOptionsJson,@OrderColumn,@OrderDirection,GETDATE(),GETDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
         }
@@ -99,6 +102,16 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         command.Parameters.Add(new SqlParameter("@Description", (object?)entity.Description ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsDefault", entity.IsDefault));
         command.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
+        command.Parameters.Add(new SqlParameter("@SqlViewName",
+            string.IsNullOrWhiteSpace(entity.SqlViewName) ? (object)DBNull.Value : entity.SqlViewName.Trim()));
+        command.Parameters.Add(new SqlParameter("@KeyColumn",
+            string.IsNullOrWhiteSpace(entity.KeyColumn) ? (object)DBNull.Value : entity.KeyColumn.Trim()));
+        command.Parameters.Add(new SqlParameter("@OutputOptionsJson",
+            string.IsNullOrWhiteSpace(entity.OutputOptionsJson) ? (object)DBNull.Value : entity.OutputOptionsJson));
+        command.Parameters.Add(new SqlParameter("@OrderColumn",
+            string.IsNullOrWhiteSpace(entity.OrderColumn) ? (object)DBNull.Value : entity.OrderColumn.Trim()));
+        command.Parameters.Add(new SqlParameter("@OrderDirection",
+            string.IsNullOrWhiteSpace(entity.OrderDirection) ? (object)DBNull.Value : entity.OrderDirection.Trim().ToUpperInvariant()));
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result);
     }
@@ -123,6 +136,11 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         IsActive       = r.GetBoolean(6),
         CreatedAt      = r.GetDateTime(7),
         UpdatedAt      = r.GetDateTime(8),
-        FrxContent     = r.IsDBNull(9) ? null : (byte[])r.GetValue(9),
+        FrxContent        = r.IsDBNull(9)  ? null : (byte[])r.GetValue(9),
+        SqlViewName       = r.IsDBNull(10) ? null : r.GetString(10),
+        KeyColumn         = r.IsDBNull(11) ? null : r.GetString(11),
+        OutputOptionsJson = r.IsDBNull(12) ? null : r.GetString(12),
+        OrderColumn       = r.IsDBNull(13) ? null : r.GetString(13),
+        OrderDirection    = r.IsDBNull(14) ? null : r.GetString(14),
     };
 }

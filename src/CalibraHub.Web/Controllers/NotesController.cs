@@ -513,6 +513,9 @@ public sealed class NotesController : Controller
         var notes = await _noteRepository.GetByUserAsync(companyId, userId, null, cancellationToken);
         var folders = await _noteRepository.GetFoldersAsync(companyId, userId, cancellationToken);
 
+        var noteIds = notes.Select(n => n.Id).ToArray();
+        var reminderCounts = await _noteRepository.GetActiveReminderCountsAsync(noteIds, cancellationToken);
+
         return Json(new
         {
             folders = folders.Select(f => new
@@ -531,6 +534,7 @@ public sealed class NotesController : Controller
                 isPinned = n.IsPinned,
                 isFullyEncrypted = n.IsFullyEncrypted,
                 encryptionHint = n.EncryptionHint,
+                reminderCount = reminderCounts.TryGetValue(n.Id, out var c) ? c : 0,
             }),
         });
     }
@@ -596,6 +600,131 @@ public sealed class NotesController : Controller
         var note = await _noteRepository.GetByIdAsync(input.Id, cancellationToken);
         if (IsOwner(note, companyId, userId))
             await _noteRepository.DeleteAsync(input.Id, cancellationToken);
+        return Json(new { success = true });
+    }
+
+    /// <summary>Belirtilen notun tum hatirlaticilarini doner — JSON.</summary>
+    [HttpGet]
+    public async Task<IActionResult> RemindersJson(Guid noteId, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
+        if (!IsOwner(note, companyId, userId))
+            return Json(new { success = false, message = "Erisim reddedildi.", reminders = Array.Empty<object>() });
+
+        var reminders = await _noteRepository.GetRemindersAsync(noteId, cancellationToken);
+
+        // Target user display ismini cekmek icin tek seferlik sirket user map'i
+        var userMap = new Dictionary<Guid, string>();
+        if (reminders.Any(r => r.TargetUserId.HasValue))
+        {
+            var users = await _userProfileRepository.GetAllAsync(cancellationToken);
+            foreach (var u in users)
+            {
+                if (u.CompanyId == companyId) userMap[u.Id] = u.FullName;
+            }
+        }
+
+        return Json(new
+        {
+            success   = true,
+            reminders = reminders
+                .OrderBy(r => r.RemindAt)
+                .Select(r => new
+                {
+                    id              = r.Id,
+                    remindAt        = r.RemindAt.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    isSent          = r.IsSent,
+                    sentAt          = r.SentAt?.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    recurrenceType  = (int)r.RecurrenceType,
+                    recurrenceData  = r.RecurrenceData,
+                    deliveryChannel = (int)r.DeliveryChannel,
+                    targetUserId    = r.TargetUserId,
+                    targetUserName  = r.TargetUserId.HasValue && userMap.TryGetValue(r.TargetUserId.Value, out var nm) ? nm : null,
+                })
+        });
+    }
+
+    /// <summary>Sirket icindeki aktif kullanicilarin listesi — hatirlatici hedef secimi icin.</summary>
+    [HttpGet]
+    public async Task<IActionResult> CompanyUsersJson(CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var users = await _userProfileRepository.GetAllAsync(cancellationToken);
+        return Json(users
+            .Where(u => u.CompanyId == companyId && u.IsActive)
+            .OrderBy(u => u.FullName)
+            .Select(u => new
+            {
+                id       = u.Id,
+                fullName = u.FullName,
+                email    = u.Email,
+                isSelf   = u.Id == userId,
+            }));
+    }
+
+    /// <summary>Nota hatirlatici ekle — JSON.</summary>
+    [HttpPost]
+    public async Task<IActionResult> AddReminderJson([FromBody] AddReminderInput input, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
+        if (!IsOwner(note, companyId, userId))
+            return Json(new { success = false, message = "Erisim reddedildi." });
+        if (input.RemindAt <= DateTime.Now)
+            return Json(new { success = false, message = "Hatirlatma zamani gelecekte olmali." });
+
+        // Hedef kullanici kontrolu — sirket icindeki aktif bir kullanici olmali
+        Guid? targetUserId = null;
+        string? targetUserName = null;
+        if (input.TargetUserId.HasValue && input.TargetUserId.Value != Guid.Empty)
+        {
+            var target = await _userProfileRepository.GetByIdAsync(input.TargetUserId.Value, cancellationToken);
+            if (target is null || target.CompanyId != companyId || !target.IsActive)
+                return Json(new { success = false, message = "Hedef kullanici gecersiz." });
+            targetUserId   = target.Id;
+            targetUserName = target.FullName;
+        }
+
+        var reminder = new NoteReminder
+        {
+            NoteId          = input.NoteId,
+            RemindAt        = input.RemindAt,
+            RecurrenceType  = input.RecurrenceType,
+            RecurrenceData  = string.IsNullOrWhiteSpace(input.RecurrenceData) ? null : input.RecurrenceData.Trim(),
+            DeliveryChannel = input.DeliveryChannel,
+            TargetUserId    = targetUserId,
+        };
+        await _noteRepository.AddReminderAsync(reminder, cancellationToken);
+
+        return Json(new
+        {
+            success  = true,
+            reminder = new
+            {
+                id              = reminder.Id,
+                remindAt        = reminder.RemindAt.ToString("yyyy-MM-ddTHH:mm:ss"),
+                isSent          = false,
+                sentAt          = (string?)null,
+                recurrenceType  = (int)reminder.RecurrenceType,
+                recurrenceData  = reminder.RecurrenceData,
+                deliveryChannel = (int)reminder.DeliveryChannel,
+                targetUserId    = reminder.TargetUserId,
+                targetUserName  = targetUserName,
+            }
+        });
+    }
+
+    /// <summary>Hatirlatici sil — JSON.</summary>
+    [HttpPost]
+    public async Task<IActionResult> DeleteReminderJson([FromBody] DeleteReminderJsonInput input, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
+        if (!IsOwner(note, companyId, userId))
+            return Json(new { success = false, message = "Erisim reddedildi." });
+
+        await _noteRepository.DeleteReminderAsync(input.ReminderId, cancellationToken);
         return Json(new { success = true });
     }
 

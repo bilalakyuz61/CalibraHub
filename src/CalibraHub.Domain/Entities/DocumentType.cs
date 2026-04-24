@@ -16,6 +16,18 @@ public sealed class DocumentType
     public required string Name { get; init; }
 
     public string? SqlViewName { get; init; }
+
+    /// <summary>
+    /// Bu belge tipinden basim yaparken URL'den gelen recordId'nin view'da
+    /// eslesecegi kolon adi. Sablon olustururken secilen view'in bu kolonu
+    /// icermesi ZORUNLUDUR; icermiyorsa kullanicinin sablon kaydetmesine
+    /// izin verilmez.
+    /// Ornekler:
+    ///   satis_teklifi/fatura/irsaliye → 'BelgeId' (Document.id)
+    ///   urun_barkodu/raf_etiketi      → 'id'     (Items.id / Location.id)
+    /// </summary>
+    public string? RequiredKeyColumn { get; init; }
+
     public string? Description { get; init; }
 
     [Description("Soft delete — listede gosterilir mi?")]

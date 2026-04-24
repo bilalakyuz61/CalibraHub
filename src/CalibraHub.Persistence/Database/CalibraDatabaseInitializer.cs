@@ -51,6 +51,300 @@ public sealed class CalibraDatabaseInitializer
         await EnsureGuideTablesAsync(connection, cancellationToken);
     }
 
+    /// <summary>
+    /// FastReport raporlari icin tek kapsamli belge view'i ve onu uretecek
+    /// stored proc'u (sp_Report_RebuildDocumentView) per-company DB'de kurar.
+    /// Proc INFORMATION_SCHEMA uzerinden v_Flat_SALES_QUOTE_EDIT ve
+    /// v_Flat_SALES_QUOTE_LINES'daki widget kolonlarini hw_* / lw_* prefix ile
+    /// re-aliaslayip vw_ReportDocument view'ini dinamik SQL ile olusturur.
+    ///
+    /// Idempotent: CREATE OR ALTER ile her startup'ta guvenle tekrar calisir.
+    /// Master DB'deki Company tablosuna 3-parcali isimle erisim icin
+    /// <paramref name="systemDatabaseName"/> cagirandan gecirilir.
+    /// </summary>
+    public async Task EnsureReportDocumentViewAsync(
+        string connectionString, string systemDatabaseName, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        if (string.IsNullOrWhiteSpace(systemDatabaseName))
+            systemDatabaseName = "master"; // guvenli fallback
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await CreateReportDocumentProcAsync(connection, systemDatabaseName, cancellationToken);
+        await RebuildReportDocumentViewAsync(connection, cancellationToken);
+    }
+
+    private static async Task CreateReportDocumentProcAsync(
+        SqlConnection connection, string systemDatabaseName, CancellationToken ct)
+    {
+        // Identifier dogrulama — SQL injection onle
+        if (systemDatabaseName.IndexOf(']') >= 0)
+            systemDatabaseName = systemDatabaseName.Replace("]", "]]");
+
+        // Stored proc govdesi. Icinde dinamik SQL ile view uretilir; widget
+        // kolonlari v_Flat_* view'larindan hw_<code> / lw_<code> prefix ile alinir.
+        // NOT: Bu string C#'ta raw literal — icerideki tek tirnakli SQL literal'leri
+        // TEK tirnaktir (C# katmani cift tirnakla ayirildigindan iclerine gerek yok).
+        var procSql = $@"
+CREATE OR ALTER PROCEDURE [dbo].[sp_Report_RebuildDocumentView]
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @DocCols TABLE (name SYSNAME PRIMARY KEY);
+    INSERT INTO @DocCols
+    SELECT c.[name]
+    FROM sys.columns c
+    INNER JOIN sys.objects o ON o.[object_id] = c.[object_id]
+    WHERE o.[name] = N'Document' AND o.[schema_id] = SCHEMA_ID(N'dbo');
+
+    DECLARE @LineCols TABLE (name SYSNAME PRIMARY KEY);
+    INSERT INTO @LineCols
+    SELECT c.[name]
+    FROM sys.columns c
+    INNER JOIN sys.objects o ON o.[object_id] = c.[object_id]
+    WHERE o.[name] = N'DocumentLine' AND o.[schema_id] = SCHEMA_ID(N'dbo');
+
+    DECLARE @HwColsSql NVARCHAR(MAX) = N'';
+    SELECT @HwColsSql = @HwColsSql + N',    hw.[' + REPLACE(c.[name], N']', N']]') + N']'
+                      + N' AS [UstAlan_' + REPLACE(c.[name], N']', N']]') + N']' + CHAR(13) + CHAR(10)
+    FROM sys.columns c
+    INNER JOIN sys.objects o ON o.[object_id] = c.[object_id]
+    WHERE o.[schema_id] = SCHEMA_ID(N'dbo')
+      AND o.[name]      = N'v_Flat_SALES_QUOTE_EDIT'
+      AND o.[type]      = N'V '
+      AND c.[name] NOT IN (SELECT name FROM @DocCols);
+
+    DECLARE @LwColsSql NVARCHAR(MAX) = N'';
+    SELECT @LwColsSql = @LwColsSql + N',    lw.[' + REPLACE(c.[name], N']', N']]') + N']'
+                      + N' AS [KalemAlan_' + REPLACE(c.[name], N']', N']]') + N']' + CHAR(13) + CHAR(10)
+    FROM sys.columns c
+    INNER JOIN sys.objects o ON o.[object_id] = c.[object_id]
+    WHERE o.[schema_id] = SCHEMA_ID(N'dbo')
+      AND o.[name]      = N'v_Flat_SALES_QUOTE_LINES'
+      AND o.[type]      = N'V '
+      AND c.[name] NOT IN (SELECT name FROM @LineCols);
+
+    DECLARE @HasHwView BIT = CASE WHEN OBJECT_ID(N'dbo.v_Flat_SALES_QUOTE_EDIT', N'V') IS NOT NULL THEN 1 ELSE 0 END;
+    DECLARE @HasLwView BIT = CASE WHEN OBJECT_ID(N'dbo.v_Flat_SALES_QUOTE_LINES', N'V') IS NOT NULL THEN 1 ELSE 0 END;
+
+    DECLARE @HwJoin NVARCHAR(MAX) = CASE WHEN @HasHwView = 1
+        THEN N'LEFT JOIN [dbo].[v_Flat_SALES_QUOTE_EDIT]  hw ON hw.[id] = d.[id]' + CHAR(13) + CHAR(10)
+        ELSE N'' END;
+    DECLARE @LwJoin NVARCHAR(MAX) = CASE WHEN @HasLwView = 1
+        THEN N'LEFT JOIN [dbo].[v_Flat_SALES_QUOTE_LINES] lw ON lw.[id] = dl.[id]' + CHAR(13) + CHAR(10)
+        ELSE N'' END;
+
+    IF @HasHwView = 0 SET @HwColsSql = N'';
+    IF @HasLwView = 0 SET @LwColsSql = N'';
+
+    DECLARE @Sql NVARCHAR(MAX) = N'
+CREATE OR ALTER VIEW [dbo].[vw_ReportDocument]
+AS
+SELECT
+    d.[id]                                 AS BelgeId,
+    d.[document_number]                    AS BelgeNo,
+    d.[document_type_id]                   AS BelgeTurId,
+    dt.[code]                              AS BelgeTurKodu,
+    dt.[name]                              AS BelgeTurAdi,
+    d.[company_id]                         AS BelgeSirketId,
+    d.[document_date]                      AS BelgeTarihi,
+    d.[valid_until]                        AS GecerlilikTarihi,
+    d.[currency]                           AS ParaBirimi,
+    d.[sub_total]                          AS AraToplam,
+    d.[discount_rate]                      AS IskontoOrani,
+    d.[discount_amount]                    AS IskontoTutari,
+    d.[tax_rate]                           AS KdvOrani,
+    d.[tax_amount]                         AS KdvTutari,
+    d.[grand_total]                        AS GenelToplam,
+    d.[payment_terms]                      AS OdemeKosullari,
+    d.[delivery_terms]                     AS TeslimKosullari,
+    d.[delivery_address]                   AS TeslimatAdresi,
+    d.[status]                             AS BelgeDurumu,
+    d.[revision_no]                        AS RevizyonNo,
+    d.[notes]                              AS BelgeNotu,
+    d.[created_at]                         AS OlusturulmaTarihi,
+    d.[updated_at]                         AS GuncellenmeTarihi,
+
+    d.[contact_id]                         AS CariId,
+    c.[AccountCode]                        AS CariKodu,
+    c.[AccountTitle]                       AS CariUnvani,
+    c.[TaxOffice]                          AS CariVergiDairesi,
+    c.[TaxNumber]                          AS CariVergiNo,
+    c.[Phone]                              AS CariTelefon,
+    c.[Mobile]                             AS CariCep,
+    c.[Email]                              AS CariEposta,
+    c.[Website]                            AS CariWebSitesi,
+    c.[Address]                            AS CariAdres,
+    c.[PostalCode]                         AS CariPostaKodu,
+    c.[City]                               AS CariSehir,
+    c.[District]                           AS CariIlce,
+
+    d.[sales_rep_id]                       AS TemsilciId,
+    sr.[rep_code]                          AS TemsilciKodu,
+    sr.[rep_name]                          AS TemsilciAdi,
+
+    comp.[name]                            AS SirketAdi,
+    comp.[title]                           AS SirketUnvani,
+    comp.[address]                         AS SirketAdresi,
+    comp.[city]                            AS SirketSehir,
+    comp.[district]                        AS SirketIlce,
+    comp.[postal_code]                     AS SirketPostaKodu,
+    comp.[tax_office]                      AS SirketVergiDairesi,
+    comp.[tax_number]                      AS SirketVergiNo,
+    comp.[is_e_document_approval_enabled]  AS SirketEBelgeAktif,
+    CONCAT(comp.[address],
+        CASE WHEN comp.[district]    IS NOT NULL THEN N'' / '' + comp.[district]    ELSE N'''' END,
+        CASE WHEN comp.[city]        IS NOT NULL THEN N'' / '' + comp.[city]        ELSE N'''' END,
+        CASE WHEN comp.[postal_code] IS NOT NULL THEN N'' ''   + comp.[postal_code] ELSE N'''' END
+    )                                      AS SirketTamAdres,
+    CONCAT(comp.[tax_office], N'' V.D. '', comp.[tax_number])
+                                           AS SirketVergiSatiri,
+
+    dl.[id]                                AS KalemId,
+    dl.[line_no]                           AS SiraNo,
+    dl.[quantity]                          AS Miktar,
+    dl.[unit_price]                        AS BirimFiyat,
+    dl.[discount_rate]                     AS KalemIskontoOrani,
+    dl.[line_total]                        AS SatirToplami,
+    dl.[combination_id]                    AS KombinasyonId,
+    dl.[notes]                             AS KalemNotu,
+    dl.[notes_pinned]                      AS KalemNotuSabitli,
+
+    dl.[item_id]                           AS MalzemeId,
+    i.[code]                               AS MalzemeKodu,
+    i.[name]                               AS MalzemeAdi,
+    i.[description]                        AS MalzemeAciklamasi,
+    i.[tax_rate]                           AS MalzemeKdvOrani,
+
+    dl.[unit_id]                           AS BirimId,
+    mu.[UnitCode]                          AS BirimKodu,
+    mu.[UnitName]                          AS BirimAdi,
+
+    dl.[location_id]                       AS LokasyonId,
+    loc.[LocationCode]                     AS LokasyonKodu,
+    loc.[LocationName]                     AS LokasyonAdi,
+
+    -- Kombinasyon detaylarini tek satirda birlestir — Designer Community Edition
+    -- Detail Data band desteklemedigi icin kullanisli. Ornek: Boy - 1200 / Renk - Kirmizi
+    STUFF((
+        SELECT N'' / '' + CONCAT(sqld.[feature_name], N'' - '', sqld.[value_name])
+        FROM [dbo].[sales_quote_line_details] sqld
+        WHERE sqld.[quote_line_id] = dl.[id]
+        ORDER BY sqld.[line_order]
+        FOR XML PATH(''''), TYPE
+    ).value(N''.'', N''nvarchar(max)''), 1, 3, N'''')       AS KombinasyonOzet,
+
+    -- Sadece deger kisimlari (virgulle ayrilmis) — etiketsiz, kisa gosterim
+    STUFF((
+        SELECT N'', '' + sqld.[value_name]
+        FROM [dbo].[sales_quote_line_details] sqld
+        WHERE sqld.[quote_line_id] = dl.[id]
+        ORDER BY sqld.[line_order]
+        FOR XML PATH(''''), TYPE
+    ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonDegerleri,
+
+    -- Belge ozelinde girilen aciklamalar (sales_quote_line_details.description)
+    -- Sadece NULL/bos olmayanlari virgulle birlestirir. Ornek: 4 kat koruma, ozel siparis
+    STUFF((
+        SELECT N'', '' + sqld.[description]
+        FROM [dbo].[sales_quote_line_details] sqld
+        WHERE sqld.[quote_line_id] = dl.[id]
+          AND sqld.[description] IS NOT NULL
+          AND LTRIM(RTRIM(sqld.[description])) <> N''''
+        ORDER BY sqld.[line_order]
+        FOR XML PATH(''''), TYPE
+    ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonAciklamalari,
+
+    -- Tam detay: Her ozellik ayri satirda (CR+LF ile). FastReport TextObject
+    -- WordWrap+CanGrow ile multi-line gosterir. Format:
+    --   - Boy - 1200 (4 kat koruma)
+    --   - Renk - Kirmizi
+    STUFF((
+        SELECT NCHAR(13) + NCHAR(10) + N''- '' + CONCAT(sqld.[feature_name], N'' - '', sqld.[value_name],
+            CASE WHEN sqld.[description] IS NOT NULL
+                  AND LTRIM(RTRIM(sqld.[description])) <> N''''
+                 THEN N'' ('' + sqld.[description] + N'')''
+                 ELSE N''''
+            END)
+        FROM [dbo].[sales_quote_line_details] sqld
+        WHERE sqld.[quote_line_id] = dl.[id]
+        ORDER BY sqld.[line_order]
+        FOR XML PATH(''''), TYPE
+    ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonDetay
+' + @HwColsSql + @LwColsSql + N'
+FROM [dbo].[Document] d
+LEFT JOIN [dbo].[DocumentLine]           dl   ON dl.[document_id]     = d.[id]
+LEFT JOIN [dbo].[Contact]                c    ON c.[Id]               = d.[contact_id]
+LEFT JOIN [dbo].[sales_representatives]  sr   ON sr.[id]              = d.[sales_rep_id]
+LEFT JOIN [dbo].[document_types]         dt   ON dt.[id]              = d.[document_type_id]
+LEFT JOIN [dbo].[Items]                  i    ON i.[id]               = dl.[item_id]
+LEFT JOIN [dbo].[Unit]                   mu   ON mu.[Id]              = dl.[unit_id]
+LEFT JOIN [dbo].[Location]               loc  ON loc.[Id]             = dl.[location_id]
+' + @HwJoin + @LwJoin + N'
+LEFT JOIN [{systemDatabaseName}].[dbo].[Company] comp ON comp.[id] = d.[company_id];';
+
+    EXEC sp_executesql @Sql;
+
+    -- ============================================================
+    -- vw_DocumentCombination — kalem bazinda kombinasyon detaylari
+    -- ============================================================
+    -- Her satir = bir kombinasyon ozelligi. 1 kalemde 3 ozellik varsa 3 satir doner.
+    -- BelgeId ile filtrelenerek bir belgenin tum kalemlerinin tum kombinasyon
+    -- detaylari alinir. KalemId ile gruplanabilir (master-detail kullanimi).
+    -- NOT: FastReport OpenSource DataBand.MasterData destekemedigi icin
+    -- tek view + GroupHeader yaklasimi kullaniliyor. Bu view artik DocumentLine
+    -- taban alir (LEFT JOIN sales_quote_line_details), kombinasyonu olmayan
+    -- kalemler bile 1 satir doner (kombinasyon kolonlari NULL). Kalem kolonlari
+    -- (Miktar, BirimFiyat, SatirToplami, BirimKodu) GroupHeader icin eklendi.
+    DECLARE @SqlCmb NVARCHAR(MAX) = N'
+CREATE OR ALTER VIEW [dbo].[vw_DocumentCombination]
+AS
+SELECT
+    d.[id]                       AS BelgeId,
+    d.[document_number]           AS BelgeNo,
+    dl.[id]                      AS KalemId,
+    dl.[line_no]                 AS KalemSiraNo,
+    i.[code]                     AS MalzemeKodu,
+    i.[name]                     AS MalzemeAdi,
+    dl.[quantity]                AS Miktar,
+    dl.[unit_price]              AS BirimFiyat,
+    dl.[line_total]              AS SatirToplami,
+    mu.[UnitCode]                AS BirimKodu,
+    sqld.[id]                    AS DetayId,
+    sqld.[line_order]            AS SiraNo,
+    sqld.[feature_name]          AS OzellikAdi,
+    sqld.[value_code]            AS DegerKodu,
+    sqld.[value_name]            AS DegerAdi,
+    sqld.[description]           AS Aciklama
+FROM [dbo].[DocumentLine] dl
+INNER JOIN [dbo].[Document]     d  ON d.[id]          = dl.[document_id]
+LEFT  JOIN [dbo].[sales_quote_line_details] sqld ON sqld.[quote_line_id] = dl.[id]
+LEFT  JOIN [dbo].[Items]        i  ON i.[id]          = dl.[item_id]
+LEFT  JOIN [dbo].[Unit]         mu ON mu.[Id]         = dl.[unit_id];';
+
+    EXEC sp_executesql @SqlCmb;
+END;";
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = procSql;
+        cmd.CommandTimeout = 60;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task RebuildReportDocumentViewAsync(
+        SqlConnection connection, CancellationToken ct)
+    {
+        // v_Flat_* view'lar yoksa proc null widget listesiyle calisir — sorun yok.
+        // Gerekli base tablolar yoksa (ornek Document henuz yaratilmadiysa) view
+        // olusturulamaz — try/catch Program.cs katmaninda yapilir.
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "EXEC [dbo].[sp_Report_RebuildDocumentView];";
+        cmd.CommandTimeout = 60;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         if (_autoCreateDatabaseOnStartup)
@@ -82,6 +376,7 @@ public sealed class CalibraDatabaseInitializer
             await EnsureBOMTablesAsync(connection, cancellationToken);
             await EnsureMaterialGroupTablesAsync(connection, cancellationToken);
             await EnsureFinanceTablesAsync(connection, cancellationToken);
+            await EnsureAddressTablesAsync(connection, cancellationToken);
             await EnsureDesignTemplatesTableAsync(connection, cancellationToken);
             await EnsureIntegrationEventTablesAsync(connection, cancellationToken);
             await MigrateIntegrationEventsTableAsync(connection, cancellationToken);
@@ -89,10 +384,14 @@ public sealed class CalibraDatabaseInitializer
             await EnsureDynamicFieldValuesTableAsync(connection, cancellationToken);
             await EnsureMaterialTaxRateColumnAsync(connection, cancellationToken);
             await EnsureDocumentTablesAsync(connection, cancellationToken);
+            await MigrateDocumentContactNameDropAsync(connection, cancellationToken);
             await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
             await EnsureDocumentTypesTableAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
+            await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
+            await EnsureScheduledTasksTableAsync(connection, cancellationToken);
             await SeedDocumentTypesAsync(connection, cancellationToken);
+            await BackfillDocumentTypeIdsAsync(connection, cancellationToken);
             await EnsureReportDataViewsAsync(connection, cancellationToken);
             await EnsureUserSettingsTableAsync(connection, cancellationToken);
             await EnsureSalesRepresentativeTableAsync(connection, cancellationToken);
@@ -924,7 +1223,8 @@ public sealed class CalibraDatabaseInitializer
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NULL
+            -- Legacy table rename: stock_cards -> Items
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NULL
                AND OBJECT_ID(N'[{schemaForSql}].[stock_cards]', N'U') IS NOT NULL
             BEGIN
                 EXEC(N'
@@ -932,16 +1232,25 @@ public sealed class CalibraDatabaseInitializer
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NULL
+            -- Legacy table rename: Item -> Items
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
             BEGIN
-                CREATE TABLE [{schemaForSql}].[Item]
+                EXEC(N'
+                    EXEC sp_rename ''[{schemaForSql}].[Item]'', ''Items'';
+                ');
+            END;
+
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{schemaForSql}].[Items]
                 (
                     [id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY,
-                    [material_code] NVARCHAR(50) NOT NULL,
-                    [material_name] NVARCHAR(160) NOT NULL,
-                    [material_description] NVARCHAR(500) NULL,
-                    [material_type_id] INT NULL,
-                    [material_unit] NVARCHAR(40) NULL,
+                    [code] NVARCHAR(50) NOT NULL,
+                    [name] NVARCHAR(160) NOT NULL,
+                    [description] NVARCHAR(500) NULL,
+                    [type_id] INT NULL,
+                    [unit] NVARCHAR(40) NULL,
                     [track_combinations] BIT NOT NULL DEFAULT(0),
                     [tax_rate] DECIMAL(5,2) NOT NULL DEFAULT(20),
                     [is_active] BIT NOT NULL CONSTRAINT [df_Items_is_active] DEFAULT(1),
@@ -957,462 +1266,418 @@ public sealed class CalibraDatabaseInitializer
                 );
 
                 EXEC(N'
-                    CREATE UNIQUE INDEX [ux_Items_material_code]
-                        ON [{schemaForSql}].[Item]([material_code]);
+                    CREATE UNIQUE INDEX [ux_Items_code]
+                        ON [{schemaForSql}].[Items]([code]);
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND 1 = 0
-            BEGIN
-                -- Legacy int->guid migration intentionally disabled.
-                -- Runtime compatibility is handled in repository layer.
-                SELECT 1 WHERE 1 = 0;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_code') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'code') IS NOT NULL
+            -- Legacy column renames: material_* -> short names
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'code') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'material_code') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    EXEC sp_rename ''[{schemaForSql}].[Item].[code]'', ''material_code'', ''COLUMN'';
+                    EXEC sp_rename ''[{schemaForSql}].[Items].[material_code]'', ''code'', ''COLUMN'';
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_name') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'name') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'name') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'material_name') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    EXEC sp_rename ''[{schemaForSql}].[Item].[name]'', ''material_name'', ''COLUMN'';
+                    EXEC sp_rename ''[{schemaForSql}].[Items].[material_name]'', ''name'', ''COLUMN'';
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_code') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'stock_code') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'description') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'material_description') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    EXEC sp_rename ''[{schemaForSql}].[Item].[stock_code]'', ''material_code'', ''COLUMN'';
+                    EXEC sp_rename ''[{schemaForSql}].[Items].[material_description]'', ''description'', ''COLUMN'';
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_name') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'stock_name') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'type_id') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'material_type_id') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    EXEC sp_rename ''[{schemaForSql}].[Item].[stock_name]'', ''material_name'', ''COLUMN'';
+                    EXEC sp_rename ''[{schemaForSql}].[Items].[material_type_id]'', ''type_id'', ''COLUMN'';
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_unit') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'unit_name') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'unit') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'material_unit') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    EXEC sp_rename ''[{schemaForSql}].[Item].[unit_name]'', ''material_unit'', ''COLUMN'';
+                    EXEC sp_rename ''[{schemaForSql}].[Items].[material_unit]'', ''unit'', ''COLUMN'';
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'is_active') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'active') IS NOT NULL
+            -- Legacy index rename: ux_Items_material_code -> ux_Items_code
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND EXISTS (
+                   SELECT 1 FROM sys.indexes
+                   WHERE [name] = N'ux_Items_material_code'
+                     AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]'))
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.indexes
+                   WHERE [name] = N'ux_Items_code'
+                     AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]'))
             BEGIN
                 EXEC(N'
-                    EXEC sp_rename ''[{schemaForSql}].[Item].[active]'', ''is_active'', ''COLUMN'';
+                    EXEC sp_rename ''[{schemaForSql}].[Items].[ux_Items_material_code]'', ''ux_Items_code'', ''INDEX'';
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_at') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_at') IS NOT NULL
+            -- Ensure required columns exist (backfill for partial legacy schemas)
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'code') IS NULL
             BEGIN
-                EXEC(N'
-                    EXEC sp_rename ''[{schemaForSql}].[Item].[created_at]'', ''created_at'', ''COLUMN'';
-                ');
+                ALTER TABLE [{schemaForSql}].[Items]
+                ADD [code] NVARCHAR(50) NULL;
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'updated_at') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'updated_at') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'name') IS NULL
             BEGIN
-                EXEC(N'
-                    EXEC sp_rename ''[{schemaForSql}].[Item].[updated_at]'', ''updated_at'', ''COLUMN'';
-                ');
+                ALTER TABLE [{schemaForSql}].[Items]
+                ADD [name] NVARCHAR(160) NULL;
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_code') IS NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'description') IS NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
-                ADD [material_code] NVARCHAR(50) NULL;
+                ALTER TABLE [{schemaForSql}].[Items]
+                ADD [description] NVARCHAR(500) NULL;
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_name') IS NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'type_id') IS NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
-                ADD [material_name] NVARCHAR(160) NULL;
+                ALTER TABLE [{schemaForSql}].[Items]
+                ADD [type_id] INT NULL;
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'is_active') IS NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'unit') IS NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
+                ALTER TABLE [{schemaForSql}].[Items]
+                ADD [unit] NVARCHAR(40) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'is_active') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Items]
                 ADD [is_active] BIT NULL;
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_at') IS NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'created_at') IS NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
+                ALTER TABLE [{schemaForSql}].[Items]
                 ADD [created_at] DATETIME2 NULL;
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'updated_at') IS NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'updated_at') IS NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
+                ALTER TABLE [{schemaForSql}].[Items]
                 ADD [updated_at] DATETIME2 NULL;
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_code') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'code') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'created_by') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Items]
+                ADD [created_by] NVARCHAR(100) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'updated_by') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Items]
+                ADD [updated_by] NVARCHAR(100) NULL;
+            END;
+
+            -- Backfill empty codes with a generated GUID-based value
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'code') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
-                    SET [material_code] = LEFT(CONVERT(NVARCHAR(50), [code]), 50)
-                    WHERE [material_code] IS NULL OR LTRIM(RTRIM([material_code])) = N'''';
+                    UPDATE [{schemaForSql}].[Items]
+                    SET [code] = LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), ''-'', N''''), 50)
+                    WHERE [code] IS NULL OR LTRIM(RTRIM([code])) = N'''';
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_code') IS NOT NULL
+            -- Backfill empty names with code value
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'name') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'code') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
-                    SET [material_code] = LEFT(REPLACE(CONVERT(NVARCHAR(36), NEWID()), ''-'', N''''), 50)
-                    WHERE [material_code] IS NULL OR LTRIM(RTRIM([material_code])) = N'''';
+                    UPDATE [{schemaForSql}].[Items]
+                    SET [name] = [code]
+                    WHERE [name] IS NULL OR LTRIM(RTRIM([name])) = N'''';
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_name') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'name') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'is_active') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
-                    SET [material_name] = LEFT(CONVERT(NVARCHAR(160), [name]), 160)
-                    WHERE [material_name] IS NULL OR LTRIM(RTRIM([material_name])) = N'''';
-                ');
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_name') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_code') IS NOT NULL
-            BEGIN
-                EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
-                    SET [material_name] = [material_code]
-                    WHERE [material_name] IS NULL OR LTRIM(RTRIM([material_name])) = N'''';
-                ');
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'is_active') IS NOT NULL
-            BEGIN
-                EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
+                    UPDATE [{schemaForSql}].[Items]
                     SET [is_active] = 1
                     WHERE [is_active] IS NULL;
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_at') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_at') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'created_at') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
-                    SET [created_at] = TRY_CONVERT(DATETIME2, [created_at])
-                    WHERE [created_at] IS NULL AND [created_at] IS NOT NULL;
-                ');
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_at') IS NOT NULL
-            BEGIN
-                EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
+                    UPDATE [{schemaForSql}].[Items]
                     SET [created_at] = GETDATE()
                     WHERE [created_at] IS NULL;
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'updated_at') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'updated_at') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'updated_at') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'created_at') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
-                    SET [updated_at] = TRY_CONVERT(DATETIME2, [updated_at])
-                    WHERE [updated_at] IS NULL AND [updated_at] IS NOT NULL;
-                ');
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'updated_at') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_at') IS NOT NULL
-            BEGIN
-                EXEC(N'
-                    UPDATE [{schemaForSql}].[Item]
+                    UPDATE [{schemaForSql}].[Items]
                     SET [updated_at] = [created_at]
                     WHERE [updated_at] IS NULL;
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_code') IS NOT NULL
+            -- Tighten NOT NULL constraints
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'code') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Item]
-                    ALTER COLUMN [material_code] NVARCHAR(50) NOT NULL;
+                    ALTER TABLE [{schemaForSql}].[Items]
+                    ALTER COLUMN [code] NVARCHAR(50) NOT NULL;
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_name') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'name') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Item]
-                    ALTER COLUMN [material_name] NVARCHAR(160) NOT NULL;
+                    ALTER TABLE [{schemaForSql}].[Items]
+                    ALTER COLUMN [name] NVARCHAR(160) NOT NULL;
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'is_active') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'is_active') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Item]
+                    ALTER TABLE [{schemaForSql}].[Items]
                     ALTER COLUMN [is_active] BIT NOT NULL;
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_at') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'created_at') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Item]
+                    ALTER TABLE [{schemaForSql}].[Items]
                     ALTER COLUMN [created_at] DATETIME2 NOT NULL;
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'updated_at') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'updated_at') IS NOT NULL
             BEGIN
                 EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Item]
+                    ALTER TABLE [{schemaForSql}].[Items]
                     ALTER COLUMN [updated_at] DATETIME2 NOT NULL;
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'is_active') IS NOT NULL
-               AND OBJECT_ID(N'[{schemaForSql}].[df_Items_is_active]', N'D') IS NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'is_active') IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM sys.default_constraints dc
                    JOIN sys.columns c ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
-                   WHERE dc.parent_object_id = OBJECT_ID(N'[{schemaForSql}].[Item]') AND c.name = N'is_active')
+                   WHERE dc.parent_object_id = OBJECT_ID(N'[{schemaForSql}].[Items]') AND c.name = N'is_active')
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
+                ALTER TABLE [{schemaForSql}].[Items]
                 ADD CONSTRAINT [df_Items_is_active] DEFAULT(1) FOR [is_active];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_code') IS NOT NULL
+            -- Unique index on code
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'code') IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1
                    FROM sys.indexes
-                   WHERE [name] = N'ux_Items_material_code'
-                     AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[Item]')
+                   WHERE [name] = N'ux_Items_code'
+                     AND [object_id] = OBJECT_ID(N'[{schemaForSql}].[Items]')
                )
             BEGIN
                 EXEC(N'
                     IF NOT EXISTS (
-                        SELECT 1 FROM [{schemaForSql}].[Item]
-                        GROUP BY [material_code] HAVING COUNT(*) > 1
+                        SELECT 1 FROM [{schemaForSql}].[Items]
+                        GROUP BY [code] HAVING COUNT(*) > 1
                     )
                     BEGIN
-                        CREATE UNIQUE INDEX [ux_Items_material_code]
-                            ON [{schemaForSql}].[Item]([material_code]);
+                        CREATE UNIQUE INDEX [ux_Items_code]
+                            ON [{schemaForSql}].[Items]([code]);
                     END
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_unit') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
-                ADD [material_unit] NVARCHAR(40) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'created_by') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
-                ADD [created_by] NVARCHAR(100) NULL;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'updated_by') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[Item]
-                ADD [updated_by] NVARCHAR(100) NULL;
-            END;
-
             -- Drop obsolete columns (idempotent)
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'is_configurable') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'is_configurable') IS NOT NULL
             BEGIN
                 EXEC(N'
                     DECLARE @dfName NVARCHAR(256);
                     SELECT @dfName = dc.[name]
                     FROM sys.default_constraints dc
                     INNER JOIN sys.columns c ON c.[default_object_id] = dc.[object_id]
-                    WHERE dc.[parent_object_id] = OBJECT_ID(N''[{schemaForSql}].[Item]'')
+                    WHERE dc.[parent_object_id] = OBJECT_ID(N''[{schemaForSql}].[Items]'')
                       AND c.[name] = N''is_configurable'';
                     IF @dfName IS NOT NULL
-                        EXEC(N''ALTER TABLE [{schemaForSql}].[Item] DROP CONSTRAINT ['' + @dfName + N'']'');
-                    ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [is_configurable];
+                        EXEC(N''ALTER TABLE [{schemaForSql}].[Items] DROP CONSTRAINT ['' + @dfName + N'']'');
+                    ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [is_configurable];
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'material_type') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'material_type') IS NOT NULL
             BEGIN
                 EXEC(N'
                     DECLARE @dfName NVARCHAR(256);
                     SELECT @dfName = dc.[name]
                     FROM sys.default_constraints dc
                     INNER JOIN sys.columns c ON c.[default_object_id] = dc.[object_id]
-                    WHERE dc.[parent_object_id] = OBJECT_ID(N''[{schemaForSql}].[Item]'')
+                    WHERE dc.[parent_object_id] = OBJECT_ID(N''[{schemaForSql}].[Items]'')
                       AND c.[name] = N''material_type'';
                     IF @dfName IS NOT NULL
-                        EXEC(N''ALTER TABLE [{schemaForSql}].[Item] DROP CONSTRAINT ['' + @dfName + N'']'');
-                    ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [material_type];
+                        EXEC(N''ALTER TABLE [{schemaForSql}].[Items] DROP CONSTRAINT ['' + @dfName + N'']'');
+                    ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [material_type];
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'sale_ok') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'sale_ok') IS NOT NULL
             BEGIN
                 EXEC(N'
                     DECLARE @dfName NVARCHAR(256);
                     SELECT @dfName = dc.[name]
                     FROM sys.default_constraints dc
                     INNER JOIN sys.columns c ON c.[default_object_id] = dc.[object_id]
-                    WHERE dc.[parent_object_id] = OBJECT_ID(N''[{schemaForSql}].[Item]'')
+                    WHERE dc.[parent_object_id] = OBJECT_ID(N''[{schemaForSql}].[Items]'')
                       AND c.[name] = N''sale_ok'';
                     IF @dfName IS NOT NULL
-                        EXEC(N''ALTER TABLE [{schemaForSql}].[Item] DROP CONSTRAINT ['' + @dfName + N'']'');
-                    ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [sale_ok];
+                        EXEC(N''ALTER TABLE [{schemaForSql}].[Items] DROP CONSTRAINT ['' + @dfName + N'']'');
+                    ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [sale_ok];
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'purchase_ok') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'purchase_ok') IS NOT NULL
             BEGIN
                 EXEC(N'
                     DECLARE @dfName NVARCHAR(256);
                     SELECT @dfName = dc.[name]
                     FROM sys.default_constraints dc
                     INNER JOIN sys.columns c ON c.[default_object_id] = dc.[object_id]
-                    WHERE dc.[parent_object_id] = OBJECT_ID(N''[{schemaForSql}].[Item]'')
+                    WHERE dc.[parent_object_id] = OBJECT_ID(N''[{schemaForSql}].[Items]'')
                       AND c.[name] = N''purchase_ok'';
                     IF @dfName IS NOT NULL
-                        EXEC(N''ALTER TABLE [{schemaForSql}].[Item] DROP CONSTRAINT ['' + @dfName + N'']'');
-                    ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [purchase_ok];
+                        EXEC(N''ALTER TABLE [{schemaForSql}].[Items] DROP CONSTRAINT ['' + @dfName + N'']'');
+                    ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [purchase_ok];
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'barcode') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'barcode') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [barcode];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [barcode];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'category_name') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'category_name') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [category_name];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [category_name];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'purchase_unit_name') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'purchase_unit_name') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [purchase_unit_name];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [purchase_unit_name];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'tracking_type') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'tracking_type') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [tracking_type];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [tracking_type];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'route_name') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'route_name') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [route_name];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [route_name];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'list_price') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'list_price') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [list_price];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [list_price];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'cost_price') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'cost_price') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [cost_price];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [cost_price];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'weight') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'weight') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [weight];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [weight];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'volume') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'volume') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [volume];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [volume];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'sales_description') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'sales_description') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [sales_description];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [sales_description];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'purchase_description') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'purchase_description') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [purchase_description];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [purchase_description];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'default_vendor') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'default_vendor') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [default_vendor];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [default_vendor];
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'dynamic_attributes_json') IS NOT NULL
+            IF OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'dynamic_attributes_json') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Item] DROP COLUMN [dynamic_attributes_json];
+                ALTER TABLE [{schemaForSql}].[Items] DROP COLUMN [dynamic_attributes_json];
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[FieldGroup]', N'U') IS NULL
@@ -1705,7 +1970,7 @@ public sealed class CalibraDatabaseInitializer
                     [created_at] DATETIME2 NOT NULL,
                     [updated_at] DATETIME2 NOT NULL,
                     CONSTRAINT [fk_stock_card_property_mappings_item_id]
-                        FOREIGN KEY ([item_id]) REFERENCES [{schemaForSql}].[Item]([id]),
+                        FOREIGN KEY ([item_id]) REFERENCES [{schemaForSql}].[Items]([id]),
                     CONSTRAINT [fk_stock_card_property_mappings_property_id]
                         FOREIGN KEY ([property_id]) REFERENCES [{schemaForSql}].[Feature]([id]),
                     CONSTRAINT [fk_stock_card_property_mappings_property_value_id]
@@ -1754,8 +2019,8 @@ public sealed class CalibraDatabaseInitializer
 
             IF OBJECT_ID(N'[{schemaForSql}].[stock_card_property_mappings]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.stock_card_property_mappings', N'item_id') IS NOT NULL
-               AND OBJECT_ID(N'[{schemaForSql}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Item]', N'id') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Items]', N'id') IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1
                    FROM sys.foreign_keys
@@ -1768,7 +2033,7 @@ public sealed class CalibraDatabaseInitializer
                         SELECT 1
                         FROM sys.columns sourceColumn
                         INNER JOIN sys.columns targetColumn
-                            ON targetColumn.[object_id] = OBJECT_ID(N''[{schemaForSql}].[Item]'')
+                            ON targetColumn.[object_id] = OBJECT_ID(N''[{schemaForSql}].[Items]'')
                            AND targetColumn.[name] = N''id''
                         WHERE sourceColumn.[object_id] = OBJECT_ID(N''[{schemaForSql}].[stock_card_property_mappings]'')
                           AND sourceColumn.[name] = N''item_id''
@@ -1777,14 +2042,14 @@ public sealed class CalibraDatabaseInitializer
                     AND NOT EXISTS (
                         SELECT 1
                         FROM [{schemaForSql}].[stock_card_property_mappings] mapping
-                        LEFT JOIN [{schemaForSql}].[Item] cards
+                        LEFT JOIN [{schemaForSql}].[Items] cards
                             ON cards.[id] = mapping.[item_id]
                         WHERE cards.[id] IS NULL
                     )
                     BEGIN
                         ALTER TABLE [{schemaForSql}].[stock_card_property_mappings]
                         ADD CONSTRAINT [fk_stock_card_property_mappings_item_id]
-                            FOREIGN KEY ([item_id]) REFERENCES [{schemaForSql}].[Item]([id]);
+                            FOREIGN KEY ([item_id]) REFERENCES [{schemaForSql}].[Items]([id]);
                     END;
                 ');
             END;
@@ -3861,6 +4126,30 @@ public sealed class CalibraDatabaseInitializer
                     ALTER TABLE [{s}].[note_reminders] ADD [recurrence_type] INT NOT NULL CONSTRAINT [df_note_reminders_recurrence_type] DEFAULT(0);
                 IF COL_LENGTH(N'{sl}.note_reminders', N'recurrence_data') IS NULL
                     ALTER TABLE [{s}].[note_reminders] ADD [recurrence_data] NVARCHAR(200) NULL;
+                IF COL_LENGTH(N'{sl}.note_reminders', N'delivery_channel') IS NULL
+                    ALTER TABLE [{s}].[note_reminders] ADD [delivery_channel] INT NOT NULL CONSTRAINT [df_note_reminders_delivery_channel] DEFAULT(0);
+                IF COL_LENGTH(N'{sl}.note_reminders', N'target_user_id') IS NULL
+                    ALTER TABLE [{s}].[note_reminders] ADD [target_user_id] UNIQUEIDENTIFIER NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[user_notifications]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[user_notifications]
+                (
+                    [id]          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                    [company_id]  INT NOT NULL,
+                    [user_id]     UNIQUEIDENTIFIER NOT NULL,
+                    [created_at]  DATETIME2 NOT NULL,
+                    [title]       NVARCHAR(300) NOT NULL,
+                    [body]        NVARCHAR(MAX) NULL,
+                    [source_type] NVARCHAR(60) NULL,
+                    [source_id]   UNIQUEIDENTIFIER NULL,
+                    [link]        NVARCHAR(500) NULL,
+                    [is_read]     BIT NOT NULL CONSTRAINT [df_user_notifications_is_read] DEFAULT(0),
+                    [read_at]     DATETIME2 NULL
+                );
+                CREATE INDEX [ix_user_notifications_user_unread]
+                    ON [{s}].[user_notifications]([user_id], [is_read], [created_at] DESC);
             END;
 
             IF OBJECT_ID(N'[{s}].[note_attachments]', N'U') IS NULL
@@ -4073,11 +4362,19 @@ public sealed class CalibraDatabaseInitializer
                     [IdentityNumber] NVARCHAR(11)   NULL,
                     [TaxOffice]      NVARCHAR(100)  NULL,
                     [Phone]          NVARCHAR(30)   NULL,
+                    [Mobile]         NVARCHAR(30)   NULL,
                     [Email]          NVARCHAR(200)  NULL,
+                    [Website]        NVARCHAR(200)  NULL,
                     [Address]        NVARCHAR(500)  NULL,
+                    [PostalCode]     NVARCHAR(20)   NULL,
                     [City]           NVARCHAR(100)  NULL,
+                    [District]       NVARCHAR(100)  NULL,
+                    [Neighborhood]   NVARCHAR(150)  NULL,
+                    [CountryCode]    NVARCHAR(2)    NULL,
+                    [ContactPerson]  NVARCHAR(150)  NULL,
                     [IsActive]       BIT            NOT NULL DEFAULT 1,
                     [PriceGroupId]   INT            NULL,
+                    [SalesRepresentativeId] INT     NULL,
                     [CreatedAt]      DATETIME2      NOT NULL,
                     CONSTRAINT [uq_contact_accounts_code] UNIQUE ([AccountCode])
                 );
@@ -4089,6 +4386,56 @@ public sealed class CalibraDatabaseInitializer
 
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // PostalLocality (PTT denormalize katalog) + ContactAddress tablolari
+    // ──────────────────────────────────────────────────────────────
+    private async Task EnsureAddressTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[PostalLocality]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[PostalLocality]
+                (
+                    [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_postal_locality] PRIMARY KEY,
+                    [CountryCode]      NVARCHAR(2)       NOT NULL DEFAULT(N'TR'),
+                    [CityCode]         NVARCHAR(10)      NULL,
+                    [CityName]         NVARCHAR(100)     NOT NULL,
+                    [DistrictName]     NVARCHAR(100)     NOT NULL,
+                    [NeighborhoodName] NVARCHAR(150)     NOT NULL,
+                    [PostalCode]       NVARCHAR(10)      NULL
+                );
+                CREATE INDEX [ix_postal_locality_cascade] ON [{s}].[PostalLocality]
+                    ([CountryCode],[CityName],[DistrictName],[NeighborhoodName]);
+                CREATE INDEX [ix_postal_locality_zip] ON [{s}].[PostalLocality]([PostalCode]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[ContactAddress]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ContactAddress]
+                (
+                    [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_contact_address] PRIMARY KEY,
+                    [ContactId]        INT              NOT NULL,
+                    [Name]             NVARCHAR(100)    NOT NULL,
+                    [CountryCode]      NVARCHAR(2)      NULL,
+                    [CityName]         NVARCHAR(100)    NULL,
+                    [DistrictName]     NVARCHAR(100)    NULL,
+                    [NeighborhoodName] NVARCHAR(150)    NULL,
+                    [PostalCode]       NVARCHAR(10)     NULL,
+                    [AddressLine]      NVARCHAR(500)    NULL,
+                    [IsDefault]        BIT              NOT NULL DEFAULT(0),
+                    [CreatedAt]        DATETIME2        NOT NULL DEFAULT(SYSDATETIME()),
+                    CONSTRAINT [fk_contact_address_contact] FOREIGN KEY ([ContactId])
+                        REFERENCES [{s}].[Contact]([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [ix_contact_address_contact] ON [{s}].[ContactAddress]([ContactId]);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -4410,12 +4757,12 @@ public sealed class CalibraDatabaseInitializer
                 CREATE TABLE [{s}].[Document]
                 (
                     [id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document] PRIMARY KEY,
+                    [company_id]        INT              NOT NULL CONSTRAINT [df_document_company_id] DEFAULT({DefaultCompanyId}),
                     [document_number]   NVARCHAR(15)     NOT NULL,
                     [document_type_id]  INT              NULL,
                     [document_date]     DATETIME2(0)     NOT NULL,
                     [valid_until]       DATETIME2(0)     NULL,
                     [contact_id]        INT              NULL,
-                    [contact_name]      NVARCHAR(200)    NULL,
                     [contact_address]   NVARCHAR(500)    NULL,
                     [sales_rep_id]      INT              NULL,
                     [currency]          NVARCHAR(5)      NOT NULL DEFAULT(N'TRY'),
@@ -4440,45 +4787,106 @@ public sealed class CalibraDatabaseInitializer
                 CREATE UNIQUE INDEX [ux_document_number] ON [{s}].[Document]([document_number]);
                 CREATE INDEX [ix_document_status] ON [{s}].[Document]([status]);
                 CREATE INDEX [ix_document_contact] ON [{s}].[Document]([contact_id]);
+                CREATE INDEX [ix_document_company] ON [{s}].[Document]([company_id]);
             END;
 
             -- sales_rep_id kolonu ekle (yoksa — eski DB icin)
             IF COL_LENGTH(N'[{s}].[Document]', N'sales_rep_id') IS NULL
                 ALTER TABLE [{s}].[Document] ADD [sales_rep_id] INT NULL;
 
-            -- document_type_id FK kolonu (Phase 2 konsolidasyon) + backfill
+            -- document_type_id FK kolonu (Phase 2 konsolidasyon). NULL satirlari
+            -- BackfillDocumentTypeIdsAsync tarafindan (document_types seed'inden sonra) doldurulur.
             IF COL_LENGTH(N'[{s}].[Document]', N'document_type_id') IS NULL
-            BEGIN
                 ALTER TABLE [{s}].[Document] ADD [document_type_id] INT NULL;
+
+            -- company_id FK kolonu — belgenin hangi sirkete ait oldugu.
+            -- Mevcut kayitlar DefaultCompanyId (1) ile backfill edilir.
+            IF COL_LENGTH(N'[{s}].[Document]', N'company_id') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[Document]
+                ADD [company_id] INT NOT NULL
+                    CONSTRAINT [df_document_company_id] DEFAULT({DefaultCompanyId});
                 EXEC(N'UPDATE [{s}].[Document]
-                       SET [document_type_id] = (SELECT TOP 1 [id] FROM [{s}].[document_types] WHERE [code] = N''QUOTE'')
-                       WHERE [document_type_id] IS NULL');
+                       SET [company_id] = {DefaultCompanyId}
+                       WHERE [company_id] = 0');
             END;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_document_company'
+                           AND object_id = OBJECT_ID(N'[{s}].[Document]'))
+                CREATE INDEX [ix_document_company] ON [{s}].[Document]([company_id]);
 
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NULL
             BEGIN
+                -- Satir tablosu — material/unit/combination/location display degerleri
+                -- tutulmaz; id FK'leri ile Item/Unit/ProductConfiguration/Location'dan okunur.
                 CREATE TABLE [{s}].[DocumentLine]
                 (
                     [id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document_line] PRIMARY KEY,
                     [document_id]     INT              NOT NULL,
                     [line_no]         INT              NOT NULL DEFAULT(0),
-                    [item_id]         INT              NULL,
-                    [material_code]   NVARCHAR(50)     NOT NULL,
-                    [material_name]   NVARCHAR(200)    NOT NULL,
-                    [unit_name]       NVARCHAR(40)     NULL,
+                    [item_id]         INT              NOT NULL,
+                    [unit_id]         INT              NULL,
                     [quantity]        DECIMAL(18,4)    NOT NULL DEFAULT(0),
                     [unit_price]      DECIMAL(18,4)    NOT NULL DEFAULT(0),
                     [discount_rate]   DECIMAL(5,2)     NOT NULL DEFAULT(0),
                     [line_total]      DECIMAL(18,4)    NOT NULL DEFAULT(0),
+                    [combination_id]  INT              NULL,
+                    [location_id]     INT              NULL,
                     [notes]           NVARCHAR(500)    NULL,
-                    [is_active]       BIT              NOT NULL DEFAULT(1),
+                    [notes_pinned]    BIT              NOT NULL DEFAULT(0),
+                    -- Revize zinciri: bu satir hangi DocumentLine'dan revize edildi?
+                    -- NULL => orijinal satir. Zincir geriye takip edilerek kac
+                    -- revize oldugu gorulebilir. Self-referencing FK.
+                    [revised_from_id] INT              NULL,
                     CONSTRAINT [fk_document_line_document] FOREIGN KEY ([document_id])
                         REFERENCES [{s}].[Document]([id])
                 );
                 CREATE INDEX [ix_document_line_document] ON [{s}].[DocumentLine]([document_id]);
+                -- Revize index dinamik EXEC — SQL Server batch derleme sirasinda
+                -- mevcut (eski) sema uzerinde kolon dogrulama yapiyor ve IF blogu
+                -- icinde de olsa "kolon yok" hatasi veriyor. Deferred parsing icin
+                -- EXEC(N'...') kullaniyoruz; runtime'da kolon olustugundan calisir.
+                EXEC(N'CREATE INDEX [ix_document_line_revised_from] ON [{s}].[DocumentLine]([revised_from_id]) WHERE [revised_from_id] IS NOT NULL;');
             END;
             """;
 
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // Faz 2 — Document.contact_name kolonunu kaldirma migration'i.
+    // Once contact_id NULL olan satirlarda contact_name = Contact.AccountTitle
+    // eslesmesi ile ID backfill edilir; sonra kolon drop edilir.
+    //
+    // NOT: SQL Server batch-level compile sirasinda kolon referanslari binding
+    // edilir — IF ile sarmak yeterli degil. Bu yuzden backfill ve drop komutlari
+    // EXEC ile dinamik calistirilir (deferred compile).
+    // Idempotent: kolon yoksa no-op.
+    private async Task MigrateDocumentContactNameDropAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s  = _schema.Replace("]", "]]");
+        var sl = _schema.Replace("'", "''");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[Document]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.[Document]', N'contact_name') IS NOT NULL
+            BEGIN
+                -- Backfill: contact_id NULL olan kayitlarda contact_name -> Contact eslesmesi
+                EXEC(N'
+                    UPDATE d
+                        SET d.[contact_id] = c.[Id]
+                    FROM [{s}].[Document] d
+                    JOIN [{s}].[Contact] c
+                      ON c.[AccountTitle] COLLATE Turkish_CI_AI = d.[contact_name] COLLATE Turkish_CI_AI
+                     AND c.[IsActive] = 1
+                    WHERE d.[contact_id] IS NULL
+                      AND d.[contact_name] IS NOT NULL
+                      AND LEN(LTRIM(RTRIM(d.[contact_name]))) > 0;
+                ');
+
+                -- Kolon kaldir — artik Contact join ile okunuyor
+                EXEC(N'ALTER TABLE [{s}].[Document] DROP COLUMN [contact_name];');
+            END;
+            """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -4489,9 +4897,9 @@ public sealed class CalibraDatabaseInitializer
         var s = _schema.Replace("]", "]]");
         var sl = _schema.Replace("'", "''");
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[Item]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{sl}.[Item]', N'tax_rate') IS NULL
-                ALTER TABLE [{s}].[Item] ADD [tax_rate] DECIMAL(5,2) NOT NULL DEFAULT(20);
+            IF OBJECT_ID(N'[{s}].[Items]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.[Items]', N'tax_rate') IS NULL
+                ALTER TABLE [{s}].[Items] ADD [tax_rate] DECIMAL(5,2) NOT NULL DEFAULT(20);
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;
@@ -4626,20 +5034,105 @@ public sealed class CalibraDatabaseInitializer
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    // ── Sales Quote Line Details + combination_code ────────────────────────────
+    // ── Sales Quote Line Details + combination_id ────────────────────────────
 
     private async Task EnsureDocumentLineDetailsTableAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
         var sl = _schema.Replace("'", "''");
 
-        // combination_code kolonu ekle
-        var addColSql = $"""
+        // DocumentLine schema migrasyonu: legacy kolonlari drop et (material_code,
+        // material_name, combination_code, is_active) + combination_id ekle + item_id
+        // NOT NULL'a cek. Tum adimlar idempotent — kolon yoksa no-op.
+        var migrateSql = $"""
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{sl}.[DocumentLine]', N'combination_code') IS NULL
-                ALTER TABLE [{s}].[DocumentLine] ADD [combination_code] NVARCHAR(100) NULL;
+            BEGIN
+                -- combination_id ekle (henuz yoksa)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'combination_id') IS NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD [combination_id] INT NULL;
+
+                -- unit_id ekle (henuz yoksa) — unit_name'den turemis degerlerle backfill
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'unit_id') IS NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD [unit_id] INT NULL;
+
+                -- location_id ekle (henuz yoksa)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'location_id') IS NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD [location_id] INT NULL;
+
+                -- notes_pinned ekle (satir notunun belge acilisinda acik gelmesi)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'notes_pinned') IS NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD [notes_pinned] BIT NOT NULL CONSTRAINT [df_document_line_notes_pinned] DEFAULT(0);
+
+                -- revised_from_id ekle (revize zinciri — satir hangi satirdan revize edildi?)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'revised_from_id') IS NULL
+                BEGIN
+                    ALTER TABLE [{s}].[DocumentLine] ADD [revised_from_id] INT NULL;
+                END;
+                -- Filtered index — revize edilmis satirlari hizli listelemek icin
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'ix_document_line_revised_from'
+                                AND [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                BEGIN
+                    EXEC(N'CREATE INDEX [ix_document_line_revised_from] ON [{s}].[DocumentLine]([revised_from_id]) WHERE [revised_from_id] IS NOT NULL;');
+                END;
+
+                -- Eski unit_name'den unit_id backfill (ayni schema'daki Unit tablosu)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'unit_name') IS NOT NULL
+                   AND COL_LENGTH(N'{sl}.[DocumentLine]', N'unit_id') IS NOT NULL
+                   AND OBJECT_ID(N'[{s}].[Unit]', N'U') IS NOT NULL
+                BEGIN
+                    EXEC(N'
+                        UPDATE l
+                           SET l.[unit_id] = u.[Id]
+                          FROM [{s}].[DocumentLine] l
+                          JOIN [{s}].[Unit] u
+                            ON u.[UnitCode] COLLATE Turkish_CI_AI = l.[unit_name] COLLATE Turkish_CI_AI
+                            OR u.[UnitName] COLLATE Turkish_CI_AI = l.[unit_name] COLLATE Turkish_CI_AI
+                         WHERE l.[unit_id] IS NULL AND l.[unit_name] IS NOT NULL;
+                    ');
+                END;
+
+                -- Legacy kolonlari drop et — batch-level kolon binding problemini
+                -- dinamik EXEC ile asiyoruz.
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'unit_name') IS NOT NULL
+                    EXEC(N'ALTER TABLE [{s}].[DocumentLine] DROP COLUMN [unit_name];');
+
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'material_code') IS NOT NULL
+                    EXEC(N'ALTER TABLE [{s}].[DocumentLine] DROP COLUMN [material_code];');
+
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'material_name') IS NOT NULL
+                    EXEC(N'ALTER TABLE [{s}].[DocumentLine] DROP COLUMN [material_name];');
+
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'combination_code') IS NOT NULL
+                    EXEC(N'ALTER TABLE [{s}].[DocumentLine] DROP COLUMN [combination_code];');
+
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'is_active') IS NOT NULL
+                BEGIN
+                    -- Default constraint'i once kaldir, sonra kolonu drop et
+                    DECLARE @dcName sysname;
+                    SELECT @dcName = dc.[name]
+                      FROM sys.default_constraints dc
+                      INNER JOIN sys.columns c
+                        ON c.[object_id] = dc.[parent_object_id]
+                       AND c.[column_id] = dc.[parent_column_id]
+                     WHERE dc.[parent_object_id] = OBJECT_ID(N'[{s}].[DocumentLine]')
+                       AND c.[name] = N'is_active';
+                    IF @dcName IS NOT NULL
+                        EXEC(N'ALTER TABLE [{s}].[DocumentLine] DROP CONSTRAINT [' + @dcName + N'];');
+                    EXEC(N'ALTER TABLE [{s}].[DocumentLine] DROP COLUMN [is_active];');
+                END;
+
+                -- item_id NOT NULL'a cek (null kayit yoksa — varsa temizle)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'item_id') IS NOT NULL
+                   AND EXISTS (SELECT 1 FROM sys.columns
+                                WHERE [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]')
+                                  AND [name] = N'item_id' AND [is_nullable] = 1)
+                BEGIN
+                    EXEC(N'DELETE FROM [{s}].[DocumentLine] WHERE [item_id] IS NULL;');
+                    EXEC(N'ALTER TABLE [{s}].[DocumentLine] ALTER COLUMN [item_id] INT NOT NULL;');
+                END;
+            END;
             """;
-        await using (var cmd1 = connection.CreateCommand()) { cmd1.CommandText = addColSql; await cmd1.ExecuteNonQueryAsync(cancellationToken); }
+        await using (var cmd1 = connection.CreateCommand()) { cmd1.CommandText = migrateSql; await cmd1.ExecuteNonQueryAsync(cancellationToken); }
 
         // Detay tablosu
         var createSql = $"""
@@ -4688,6 +5181,69 @@ public sealed class CalibraDatabaseInitializer
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    // ── Location Types (dinamik tip sozlugu) ──────────────────────────────────
+
+    private async Task EnsureLocationTypesTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        // Seed sadece yeni tablo olusturuldugunda eklenir. Aksi halde silinen seed
+        // satirlari her uygulama baslatmada geri gelir.
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[location_types]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[location_types]
+                (
+                    [id]         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [code]       NVARCHAR(50)  NOT NULL,
+                    [name]       NVARCHAR(100) NOT NULL,
+                    [sort_order] INT           NOT NULL DEFAULT(0),
+                    [is_active]  BIT           NOT NULL DEFAULT(1)
+                );
+                CREATE UNIQUE INDEX [ux_location_types_code]
+                    ON [{s}].[location_types]([code]);
+
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'FACTORY', N'Fabrika', 10, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'SECTION', N'Bolum', 20, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'SHELF', N'Raf', 30, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'BIN', N'Hucre', 40, 1);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // ── Item Locations (malzeme - lokasyon cok-cogu) ──────────────────────────
+
+    private async Task EnsureItemLocationsTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[item_locations]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[item_locations]
+                (
+                    [id]          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [item_id]     INT NOT NULL,
+                    [location_id] INT NOT NULL,
+                    [is_default]  BIT NOT NULL DEFAULT(0),
+                    [sort_order]  INT NOT NULL DEFAULT(0)
+                );
+                CREATE UNIQUE INDEX [ux_item_locations_item_location]
+                    ON [{s}].[item_locations]([item_id], [location_id]);
+                -- Her malzemenin en fazla bir varsayilan lokasyonu olabilir
+                CREATE UNIQUE INDEX [ux_item_locations_item_default]
+                    ON [{s}].[item_locations]([item_id])
+                    WHERE [is_default] = 1;
+                CREATE INDEX [ix_item_locations_location]
+                    ON [{s}].[item_locations]([location_id]);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     // ── Document Types & Report Templates ──────────────────────────────────────
 
     private async Task EnsureDocumentTypesTableAsync(SqlConnection connection, CancellationToken cancellationToken)
@@ -4698,16 +5254,24 @@ public sealed class CalibraDatabaseInitializer
             BEGIN
                 CREATE TABLE [{s}].[document_types]
                 (
-                    [id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document_types] PRIMARY KEY,
-                    [code]          NVARCHAR(50)     NOT NULL,
-                    [name]          NVARCHAR(200)    NOT NULL,
-                    [sql_view_name] NVARCHAR(128)    NULL,
-                    [description]   NVARCHAR(500)    NULL,
-                    [is_active]     BIT              NOT NULL DEFAULT(1),
-                    [created_at]    DATETIME2(0)     NOT NULL,
-                    [updated_at]    DATETIME2(0)     NOT NULL
+                    [id]                   INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document_types] PRIMARY KEY,
+                    [code]                 NVARCHAR(50)     NOT NULL,
+                    [name]                 NVARCHAR(200)    NOT NULL,
+                    [sql_view_name]        NVARCHAR(128)    NULL,
+                    [required_key_column]  NVARCHAR(100)    NULL,
+                    [description]          NVARCHAR(500)    NULL,
+                    [is_active]            BIT              NOT NULL DEFAULT(1),
+                    [created_at]           DATETIME2(0)     NOT NULL,
+                    [updated_at]           DATETIME2(0)     NOT NULL
                 );
                 CREATE UNIQUE INDEX [ux_document_types_code] ON [{s}].[document_types]([code]);
+            END;
+
+            -- Migration: mevcut DB'lere required_key_column kolonunu ekle
+            IF OBJECT_ID(N'[{s}].[document_types]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[document_types]', N'required_key_column') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[document_types] ADD [required_key_column] NVARCHAR(100) NULL;
             END;
             """;
         await using var cmd = connection.CreateCommand();
@@ -4729,6 +5293,8 @@ public sealed class CalibraDatabaseInitializer
                     [frx_file_path]    NVARCHAR(500)    NULL,
                     [frx_content]      VARBINARY(MAX)   NULL,
                     [description]      NVARCHAR(500)    NULL,
+                    [sql_view_name]    NVARCHAR(150)    NULL,
+                    [key_column]       NVARCHAR(100)    NULL,
                     [is_default]       BIT              NOT NULL DEFAULT(0),
                     [is_active]        BIT              NOT NULL DEFAULT(1),
                     [created_at]       DATETIME2(0)     NOT NULL,
@@ -4745,37 +5311,292 @@ public sealed class CalibraDatabaseInitializer
             BEGIN
                 ALTER TABLE [{s}].[report_templates] ADD [frx_content] VARBINARY(MAX) NULL;
             END;
+
+            -- Per-template SQL view override (opsiyonel; bos ise document_types.sql_view_name kullanilir)
+            IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_templates]', N'sql_view_name') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[report_templates] ADD [sql_view_name] NVARCHAR(150) NULL;
+            END;
+
+            -- Per-template key column override (recordId ile eslesecek view kolonu)
+            IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_templates]', N'key_column') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[report_templates] ADD [key_column] NVARCHAR(100) NULL;
+            END;
+
+            -- Cikti secenekleri (Baski onizle / PDF kaydet / Mail gonder + mail varsayilanlari) JSON
+            IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_templates]', N'output_options_json') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[report_templates] ADD [output_options_json] NVARCHAR(MAX) NULL;
+            END;
+
+            -- Default siralama: kolon adi + yon (ASC|DESC). Generation sirasinda
+            -- view sorgusuna ORDER BY [order_column] order_direction olarak eklenir.
+            IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_templates]', N'order_column') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[report_templates] ADD [order_column] NVARCHAR(150) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_templates]', N'order_direction') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[report_templates] ADD [order_direction] NVARCHAR(4) NULL;
+            END;
+
+            -- Jasper akisindan kalan kolonlari temizle (default constraint'i de oncesinde kaldir)
+            IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_templates]', N'engine') IS NOT NULL
+            BEGIN
+                DECLARE @cn_engine NVARCHAR(200);
+                SELECT @cn_engine = dc.[name]
+                FROM sys.default_constraints dc
+                JOIN sys.columns c ON c.[object_id] = dc.[parent_object_id] AND c.[column_id] = dc.[parent_column_id]
+                WHERE dc.[parent_object_id] = OBJECT_ID(N'[{s}].[report_templates]') AND c.[name] = N'engine';
+                IF @cn_engine IS NOT NULL EXEC(N'ALTER TABLE [{s}].[report_templates] DROP CONSTRAINT [' + @cn_engine + N']');
+                ALTER TABLE [{s}].[report_templates] DROP COLUMN [engine];
+            END;
+
+            IF OBJECT_ID(N'[{s}].[report_templates]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_templates]', N'jrxml_content') IS NOT NULL
+            BEGIN
+                ALTER TABLE [{s}].[report_templates] DROP COLUMN [jrxml_content];
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static readonly (string Code, string Name, string? SqlViewName, string? Description)[] DefaultDocumentTypes =
+    /// <summary>
+    /// Coklu SQL view destegi icin source tablosu. Bir sablonun birden fazla
+    /// data source'u olabilir (primary + detail + sibling). Frx'te her source
+    /// ayri bir node olarak gorunur: [Belge.X], [Kombinasyon.X], [Cari.X] vs.
+    /// Bos tablo + NULL sources = eski tek-source akis (geriye uyumlu).
+    /// </summary>
+    private async Task EnsureReportTemplateSourcesTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[report_template_sources]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[report_template_sources]
+                (
+                    [id]                  INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_report_template_sources] PRIMARY KEY,
+                    [template_id]         INT              NOT NULL,
+                    [source_name]         NVARCHAR(100)    NOT NULL,
+                    [view_name]           NVARCHAR(150)    NOT NULL,
+                    [key_column]          NVARCHAR(100)    NOT NULL,
+                    [parent_source_name]  NVARCHAR(100)    NULL,
+                    [parent_key_column]   NVARCHAR(100)    NULL,
+                    [is_primary]          BIT              NOT NULL DEFAULT(0),
+                    [display_order]       INT              NOT NULL DEFAULT(0),
+                    [created_at]          DATETIME2(0)     NOT NULL,
+                    CONSTRAINT [fk_rts_template]
+                        FOREIGN KEY ([template_id]) REFERENCES [{s}].[report_templates]([id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [ix_rts_template]
+                    ON [{s}].[report_template_sources]([template_id]);
+                CREATE UNIQUE INDEX [ux_rts_template_sourcename]
+                    ON [{s}].[report_template_sources]([template_id], [source_name]);
+                -- Her sablonda en fazla BIR primary source olmali
+                CREATE UNIQUE INDEX [ux_rts_primary]
+                    ON [{s}].[report_template_sources]([template_id])
+                    WHERE [is_primary] = 1;
+            END;
+
+            -- Per-source siralama (data source modal'inda view secildikten
+            -- sonra kullanici siralama kolonu + yon belirler)
+            IF OBJECT_ID(N'[{s}].[report_template_sources]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_template_sources]', N'sort_column') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[report_template_sources] ADD [sort_column] NVARCHAR(150) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[report_template_sources]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[report_template_sources]', N'sort_direction') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[report_template_sources] ADD [sort_direction] NVARCHAR(4) NULL;
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Zamanlanmis gorevler tablosu + run history — Scheduler (Worker) bu tabloyu
+    /// polling ile tarayip NextRunAt gelen gorevleri dispatch eder. TaskType,
+    /// ParametersJson, ScheduleType, ScheduleExpression ile extensibility saglanir.
+    /// </summary>
+    private async Task EnsureScheduledTasksTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[scheduled_tasks]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[scheduled_tasks]
+                (
+                    [id]                    INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_scheduled_tasks] PRIMARY KEY,
+                    [code]                  NVARCHAR(60)   NOT NULL,
+                    [name]                  NVARCHAR(200)  NOT NULL,
+                    [description]           NVARCHAR(500)  NULL,
+                    [task_type]             INT            NOT NULL DEFAULT(0),
+                    [parameters_json]       NVARCHAR(MAX)  NULL,
+                    [schedule_type]         INT            NOT NULL DEFAULT(0),
+                    [schedule_expression]   NVARCHAR(200)  NULL,
+                    [schedule_description]  NVARCHAR(200)  NULL,
+                    [is_enabled]            BIT            NOT NULL DEFAULT(1),
+                    [is_running]            BIT            NOT NULL DEFAULT(0),
+                    [last_run_at]           DATETIME2(0)   NULL,
+                    [last_run_status]       INT            NULL,
+                    [last_run_message]      NVARCHAR(1000) NULL,
+                    [last_run_duration_ms]  INT            NULL,
+                    [next_run_at]           DATETIME2(0)   NULL,
+                    [created_at]            DATETIME2(0)   NOT NULL,
+                    [updated_at]            DATETIME2(0)   NOT NULL
+                );
+                CREATE UNIQUE INDEX [ux_scheduled_tasks_code] ON [{s}].[scheduled_tasks]([code]);
+                CREATE INDEX [ix_scheduled_tasks_due]
+                    ON [{s}].[scheduled_tasks]([is_enabled],[next_run_at]);
+            END;
+
+            -- Migration: eski tabloya yeni kolonlari ekle (idempotent)
+            IF COL_LENGTH(N'[{s}].[scheduled_tasks]', N'task_type') IS NULL
+                ALTER TABLE [{s}].[scheduled_tasks] ADD [task_type] INT NOT NULL DEFAULT(0);
+            IF COL_LENGTH(N'[{s}].[scheduled_tasks]', N'parameters_json') IS NULL
+                ALTER TABLE [{s}].[scheduled_tasks] ADD [parameters_json] NVARCHAR(MAX) NULL;
+            IF COL_LENGTH(N'[{s}].[scheduled_tasks]', N'schedule_type') IS NULL
+                ALTER TABLE [{s}].[scheduled_tasks] ADD [schedule_type] INT NOT NULL DEFAULT(0);
+            IF COL_LENGTH(N'[{s}].[scheduled_tasks]', N'schedule_expression') IS NULL
+                ALTER TABLE [{s}].[scheduled_tasks] ADD [schedule_expression] NVARCHAR(200) NULL;
+            IF COL_LENGTH(N'[{s}].[scheduled_tasks]', N'is_running') IS NULL
+                ALTER TABLE [{s}].[scheduled_tasks] ADD [is_running] BIT NOT NULL DEFAULT(0);
+            IF COL_LENGTH(N'[{s}].[scheduled_tasks]', N'last_run_duration_ms') IS NULL
+                ALTER TABLE [{s}].[scheduled_tasks] ADD [last_run_duration_ms] INT NULL;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                WHERE object_id = OBJECT_ID(N'[{s}].[scheduled_tasks]')
+                  AND name = 'ix_scheduled_tasks_due')
+                CREATE INDEX [ix_scheduled_tasks_due]
+                    ON [{s}].[scheduled_tasks]([is_enabled],[next_run_at]);
+
+            -- Run history tablosu
+            IF OBJECT_ID(N'[{s}].[scheduled_task_runs]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[scheduled_task_runs]
+                (
+                    [id]           INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_scheduled_task_runs] PRIMARY KEY,
+                    [task_id]      INT            NOT NULL,
+                    [task_code]    NVARCHAR(60)   NOT NULL,
+                    [started_at]   DATETIME2(0)   NOT NULL,
+                    [completed_at] DATETIME2(0)   NULL,
+                    [status]       INT            NOT NULL DEFAULT(2),
+                    [message]      NVARCHAR(2000) NULL,
+                    [duration_ms]  INT            NULL,
+                    [trigger]      INT            NOT NULL DEFAULT(0),
+                    CONSTRAINT [fk_scheduled_task_runs_task]
+                        FOREIGN KEY ([task_id]) REFERENCES [{s}].[scheduled_tasks]([id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [ix_scheduled_task_runs_task]
+                    ON [{s}].[scheduled_task_runs]([task_id], [started_at] DESC);
+                CREATE INDEX [ix_scheduled_task_runs_code]
+                    ON [{s}].[scheduled_task_runs]([task_code], [started_at] DESC);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Document.document_type_id NULL olan tum satirlari 'satis_teklifi' belge turune
+    /// baglar. Document tablosu ve document_types seed'inden sonra calismali — bu
+    /// yuzden init akisinda SeedDocumentTypesAsync'ten hemen sonra cagirilir.
+    /// Idempotent: zaten bagli olan satirlari etkilemez.
+    /// </summary>
+    private async Task BackfillDocumentTypeIdsAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var commandText = $"""
+            IF OBJECT_ID(N'[{s}].[Document]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[document_types]', N'U') IS NOT NULL
+            BEGIN
+                DECLARE @QuoteTypeId INT =
+                    (SELECT TOP 1 [id] FROM [{s}].[document_types] WHERE [code] = N'satis_teklifi');
+                IF @QuoteTypeId IS NOT NULL
+                    UPDATE [{s}].[Document]
+                       SET [document_type_id] = @QuoteTypeId
+                     WHERE [document_type_id] IS NULL;
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // Her belge tipi icin: (Code, Name, SqlViewName, RequiredKeyColumn, Description)
+    // RequiredKeyColumn: basim sirasinda URL'den gelen recordId'nin view'da eslesecegi kolon adi.
+    //   Document context'li tipler (fatura/irsaliye/teklif) BelgeId bekler.
+    //   Entity context'li tipler (urun/raf) Items.id veya Location.id gibi 'id' bekler.
+    private static readonly (string Code, string Name, string? SqlViewName, string? RequiredKeyColumn, string? Description)[] DefaultDocumentTypes =
     [
-        ("fatura",        "Fatura",        "vw_Invoice",        "Satis faturasi sablonu"),
-        ("irsaliye",      "Irsaliye",      "vw_DeliveryNote",   "Sevk irsaliyesi sablonu"),
-        ("urun_barkodu",  "Urun Barkodu",  "vw_ProductBarcode", "Urun barkod etiketi"),
-        ("raf_etiketi",   "Raf Etiketi",   "vw_ShelfLabel",     "Depo raf etiketi"),
-        ("satis_teklifi", "Satis Teklifi", "vw_Document",       "Satis teklifi sablonu"),
+        ("fatura",        "Fatura",        "vw_Invoice",        "BelgeId", "Satis faturasi sablonu"),
+        ("irsaliye",      "Irsaliye",      "vw_DeliveryNote",   "BelgeId", "Sevk irsaliyesi sablonu"),
+        ("urun_barkodu",  "Urun Barkodu",  "vw_ProductBarcode", "id",      "Urun barkod etiketi"),
+        ("raf_etiketi",   "Raf Etiketi",   "vw_ShelfLabel",     "id",      "Depo raf etiketi"),
+        ("satis_teklifi", "Satis Teklifi", "vw_ReportDocument", "BelgeId", "Satis teklifi sablonu"),
     ];
 
     private async Task SeedDocumentTypesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
-        foreach (var (code, name, viewName, desc) in DefaultDocumentTypes)
+
+        // Migration: satis_teklifi eskiden vw_Document'a point ediyordu;
+        // yeni vw_ReportDocument turkce semayi + widget kolonlarini tasiyor.
+        await using (var migCmd = connection.CreateCommand())
+        {
+            migCmd.CommandText = $"""
+                UPDATE [{s}].[document_types]
+                   SET [sql_view_name] = 'vw_ReportDocument', [updated_at] = GETDATE()
+                 WHERE [code] = 'satis_teklifi' AND [sql_view_name] = 'vw_Document';
+                """;
+            await migCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // Migration: mevcut DB'lerde required_key_column bos olanlari default'a set et.
+        // Yeni kayitlar INSERT ile dogru deger alir; eski kayitlar burada heal edilir.
+        foreach (var (code, _, _, reqKey, _) in DefaultDocumentTypes)
+        {
+            if (string.IsNullOrWhiteSpace(reqKey)) continue;
+            await using var updCmd = connection.CreateCommand();
+            updCmd.CommandText = $"""
+                UPDATE [{s}].[document_types]
+                   SET [required_key_column] = @ReqKey, [updated_at] = GETDATE()
+                 WHERE [code] = @Code AND ([required_key_column] IS NULL OR [required_key_column] = N'');
+                """;
+            updCmd.Parameters.AddWithValue("@Code",   code);
+            updCmd.Parameters.AddWithValue("@ReqKey", reqKey);
+            await updCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (var (code, name, viewName, reqKey, desc) in DefaultDocumentTypes)
         {
             var commandText = $"""
                 IF NOT EXISTS (SELECT 1 FROM [{s}].[document_types] WHERE [code] = @Code)
-                    INSERT INTO [{s}].[document_types] ([code],[name],[sql_view_name],[description],[is_active],[created_at],[updated_at])
-                    VALUES (@Code, @Name, @ViewName, @Description, 1, GETDATE(), GETDATE());
+                    INSERT INTO [{s}].[document_types] ([code],[name],[sql_view_name],[required_key_column],[description],[is_active],[created_at],[updated_at])
+                    VALUES (@Code, @Name, @ViewName, @ReqKey, @Description, 1, GETDATE(), GETDATE());
                 """;
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = commandText;
-            cmd.Parameters.AddWithValue("@Code", code);
-            cmd.Parameters.AddWithValue("@Name", name);
-            cmd.Parameters.AddWithValue("@ViewName", (object?)viewName ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@Description", (object?)desc ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Code",        code);
+            cmd.Parameters.AddWithValue("@Name",        name);
+            cmd.Parameters.AddWithValue("@ViewName",    (object?)viewName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@ReqKey",      (object?)reqKey   ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@Description", (object?)desc     ?? DBNull.Value);
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
     }
@@ -4789,52 +5610,58 @@ public sealed class CalibraDatabaseInitializer
         {
             ("vw_Invoice", $"""
                 SELECT q.[id], q.[document_number] AS [DocumentNumber],
-                       q.[document_date] AS [DocumentDate], q.[contact_name] AS [CustomerName],
+                       q.[document_date] AS [DocumentDate], ca.[AccountTitle] AS [CustomerName],
                        q.[contact_address] AS [CustomerAddress], q.[currency],
                        q.[sub_total] AS [SubTotal], q.[discount_rate] AS [DiscountRate],
                        q.[discount_amount] AS [DiscountAmount], q.[tax_rate] AS [TaxRate],
                        q.[tax_amount] AS [TaxAmount], q.[grand_total] AS [GrandTotal],
                        q.[payment_terms] AS [PaymentTerms], q.[notes] AS [Notes],
-                       ql.[line_no] AS [LineNo], ql.[material_code] AS [MaterialCode],
-                       ql.[material_name] AS [MaterialName], ql.[unit_name] AS [UnitName],
+                       ql.[line_no] AS [LineNo], mi.[code] AS [MaterialCode],
+                       mi.[name] AS [MaterialName], mu.[UnitName] AS [UnitName],
                        ql.[quantity] AS [Quantity], ql.[unit_price] AS [UnitPrice],
                        ql.[discount_rate] AS [LineDiscountRate], ql.[line_total] AS [LineTotal]
                 FROM [{s}].[Document] q
-                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id] AND ql.[is_active] = 1
+                LEFT JOIN [{s}].[Contact] ca ON ca.[Id] = q.[contact_id]
+                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id]
+                LEFT JOIN [{s}].[Items] mi ON mi.[id] = ql.[item_id]
+                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[unit_id]
                 WHERE q.[is_active] = 1
                 """),
             ("vw_DeliveryNote", $"""
                 SELECT q.[id], q.[document_number] AS [DocumentNumber],
-                       q.[document_date] AS [DocumentDate], q.[contact_name] AS [CustomerName],
+                       q.[document_date] AS [DocumentDate], ca.[AccountTitle] AS [CustomerName],
                        q.[contact_address] AS [CustomerAddress], q.[delivery_address] AS [DeliveryAddress],
                        q.[delivery_terms] AS [DeliveryTerms],
-                       ql.[line_no] AS [LineNo], ql.[material_code] AS [MaterialCode],
-                       ql.[material_name] AS [MaterialName], ql.[unit_name] AS [UnitName],
+                       ql.[line_no] AS [LineNo], mi.[code] AS [MaterialCode],
+                       mi.[name] AS [MaterialName], mu.[UnitName] AS [UnitName],
                        ql.[quantity] AS [Quantity]
                 FROM [{s}].[Document] q
-                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id] AND ql.[is_active] = 1
+                LEFT JOIN [{s}].[Contact] ca ON ca.[Id] = q.[contact_id]
+                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id]
+                LEFT JOIN [{s}].[Items] mi ON mi.[id] = ql.[item_id]
+                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[unit_id]
                 WHERE q.[is_active] = 1
                 """),
             ("vw_ProductBarcode", $"""
-                SELECT m.[Id] AS [id], m.[MaterialCode] AS [ProductCode],
-                       m.[MaterialName] AS [ProductName],
-                       m.[MaterialCode] AS [BarcodeValue],
+                SELECT m.[id] AS [id], m.[code] AS [ProductCode],
+                       m.[name] AS [ProductName],
+                       m.[code] AS [BarcodeValue],
                        N'' AS [UnitName]
-                FROM [{s}].[Item] m
-                WHERE m.[isactive] = 1
+                FROM [{s}].[Items] m
+                WHERE m.[is_active] = 1
                 """),
             ("vw_ShelfLabel", $"""
-                SELECT m.[Id] AS [id], m.[MaterialCode] AS [ProductCode],
-                       m.[MaterialName] AS [ProductName],
-                       m.[MaterialCode] AS [BarcodeValue],
+                SELECT m.[id] AS [id], m.[code] AS [ProductCode],
+                       m.[name] AS [ProductName],
+                       m.[code] AS [BarcodeValue],
                        N'' AS [UnitName]
-                FROM [{s}].[Item] m
-                WHERE m.[isactive] = 1
+                FROM [{s}].[Items] m
+                WHERE m.[is_active] = 1
                 """),
             ("vw_Document", $"""
                 SELECT q.[id], q.[document_number] AS [DocumentNumber],
                        q.[document_date] AS [DocumentDate], q.[valid_until] AS [ValidUntil],
-                       q.[contact_name] AS [CustomerName], q.[contact_address] AS [CustomerAddress],
+                       ca.[AccountTitle] AS [CustomerName], q.[contact_address] AS [CustomerAddress],
                        q.[currency], q.[sub_total] AS [SubTotal],
                        q.[discount_rate] AS [DiscountRate], q.[discount_amount] AS [DiscountAmount],
                        q.[tax_rate] AS [TaxRate], q.[tax_amount] AS [TaxAmount],
@@ -4842,20 +5669,23 @@ public sealed class CalibraDatabaseInitializer
                        q.[payment_terms] AS [PaymentTerms], q.[delivery_terms] AS [DeliveryTerms],
                        q.[delivery_address] AS [DeliveryAddress], q.[notes] AS [Notes],
                        q.[status] AS [Status], q.[revision_no] AS [RevisionNo],
-                       ql.[line_no] AS [LineNo], ql.[material_code] AS [MaterialCode],
-                       ql.[material_name] AS [MaterialName], ql.[unit_name] AS [UnitName],
+                       ql.[line_no] AS [LineNo], mi.[code] AS [MaterialCode],
+                       mi.[name] AS [MaterialName], mu.[UnitName] AS [UnitName],
                        ql.[quantity] AS [Quantity], ql.[unit_price] AS [UnitPrice],
                        ql.[discount_rate] AS [LineDiscountRate], ql.[line_total] AS [LineTotal]
                 FROM [{s}].[Document] q
-                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id] AND ql.[is_active] = 1
+                LEFT JOIN [{s}].[Contact] ca ON ca.[Id] = q.[contact_id]
+                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id]
+                LEFT JOIN [{s}].[Items] mi ON mi.[id] = ql.[item_id]
+                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[unit_id]
                 WHERE q.[is_active] = 1
                 """),
             ("vw_MaterialCards", $"""
-                SELECT m.[Id], m.[MaterialCode], m.[MaterialName],
-                       ISNULL(m.[MaterialDescription], N'') AS [MaterialDescription],
-                       m.[isactive] AS [IsActive],
-                       m.[CreatedDate], m.[ModifiedDate]
-                FROM [{s}].[Item] m
+                SELECT m.[id] AS [Id], m.[code] AS [MaterialCode], m.[name] AS [MaterialName],
+                       ISNULL(m.[description], N'') AS [MaterialDescription],
+                       m.[is_active] AS [IsActive],
+                       m.[created_at] AS [CreatedDate], m.[modified_at] AS [ModifiedDate]
+                FROM [{s}].[Items] m
                 """),
         };
 
@@ -5012,11 +5842,12 @@ public sealed class CalibraDatabaseInitializer
                     OR [BaseTable] IN (N'dbo.ContactAccounts', N'dbo.Contacts'));
 
             UPDATE dbo.Forms
-               SET [BaseTable] = N'dbo.Item',
-                   [BaseRecordKey] = N'material_code'
+               SET [BaseTable] = N'dbo.Items',
+                   [BaseRecordKey] = N'code'
              WHERE [FormCode] = N'ITEMS'
                AND ([BaseTable] IS NULL OR [BaseTable] = N''
-                    OR [BaseTable] IN (N'dbo.Items', N'dbo.stock_cards'));
+                    OR [BaseTable] IN (N'dbo.Item', N'dbo.stock_cards')
+                    OR [BaseRecordKey] = N'material_code');
 
             UPDATE dbo.Forms
                SET [BaseTable] = N'dbo.Document',
@@ -5065,8 +5896,8 @@ public sealed class CalibraDatabaseInitializer
             // ── Satış ─────────────────────────────────────────────────────────
             ("SALES_QUOTE",         "Liste",                            "Satış",                "Satış Teklifi",            400),
             ("SALES_QUOTE_NEW",     "Yeni",                             "Satış",                "Satış Teklifi",            405),
-            ("SALES_QUOTE_EDIT",    "Düzenleme",                        "Satış",                "Satış Teklifi",            410),
-            ("SALES_QUOTE_LINES",   "Stok Satırları",                   "Satış",                "Satış Teklifi",            415),
+            ("SALES_QUOTE_EDIT",    "Üst Bilgi",                        "Satış",                "Satış Teklifi",            410),
+            ("SALES_QUOTE_LINES",   "Kalem Bilgisi",                    "Satış",                "Satış Teklifi",            415),
 
             // ── Üretim ───────────────────────────────────────────────────────
             ("PRODUCT_TREES",       "Ürün Ağacı",                       "Üretim",               null,                       500),
@@ -5165,6 +5996,8 @@ public sealed class CalibraDatabaseInitializer
                     [IsActive]     BIT            NOT NULL CONSTRAINT [df_WidgetMas_Active] DEFAULT(1),
                     [ColorType]    INT            NOT NULL CONSTRAINT [df_WidgetMas_ColorType] DEFAULT(0),
                     [ColorValue]   NVARCHAR(100)  NULL,
+                    [ColSpan]      INT            NOT NULL CONSTRAINT [df_WidgetMas_ColSpan] DEFAULT(6),
+                    [LabelStyle]   NVARCHAR(20)   NOT NULL CONSTRAINT [df_WidgetMas_LabelStyle] DEFAULT('standard'),
                     [CreatedAt]    DATETIME2(0)   NOT NULL CONSTRAINT [df_WidgetMas_Created] DEFAULT(SYSUTCDATETIME()),
                     [UpdatedAt]    DATETIME2(0)   NOT NULL CONSTRAINT [df_WidgetMas_Updated] DEFAULT(SYSUTCDATETIME()),
                     CONSTRAINT [fk_WidgetMas_Form]
@@ -5284,6 +6117,37 @@ public sealed class CalibraDatabaseInitializer
                AND COL_LENGTH(N'[{s}].[WidgetMas]', N'ColorValue') IS NULL
             BEGIN
                 ALTER TABLE [{s}].[WidgetMas] ADD [ColorValue] NVARCHAR(100) NULL;
+            END;
+
+            -- ColSpan kolonu — form uzerinde kaplayacagi 12-col grid span'i
+            -- (1-12). Varsayilan 6 (1/2 satir). Renderer CSS grid-column'a cevirir.
+            -- Data migration: kolon ilk eklendiginde mevcut plain field satirlarini
+            -- 12'ye (tam satir) cek — eski davranislari korunsun.
+            DECLARE @ColSpanJustAdded BIT = 0;
+            IF OBJECT_ID(N'[{s}].[WidgetMas]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[WidgetMas]', N'ColSpan') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[WidgetMas]
+                    ADD [ColSpan] INT NOT NULL CONSTRAINT [df_WidgetMas_ColSpan] DEFAULT(6);
+                SET @ColSpanJustAdded = 1;
+            END;
+            IF @ColSpanJustAdded = 1
+            BEGIN
+                -- Plain field satirlar eskiden tam genislik render ediliyordu.
+                -- ColSpan=12 ile ayni gorunum korunur.
+                UPDATE [{s}].[WidgetMas]
+                   SET [ColSpan] = 12
+                 WHERE [IsPlainField] = 1
+                   AND [ColSpan] = 6;
+            END;
+
+            -- LabelStyle kolonu — etiket gorunum stili: "standard" (default) veya "modern".
+            IF OBJECT_ID(N'[{s}].[WidgetMas]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[WidgetMas]', N'LabelStyle') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[WidgetMas]
+                    ADD [LabelStyle] NVARCHAR(20) NOT NULL
+                        CONSTRAINT [df_WidgetMas_LabelStyle] DEFAULT('standard');
             END;
 
             -- Unique index guncelle: eski (FormId, WidgetCode) → yeni (CompanyId, FormId, WidgetCode)
@@ -5406,11 +6270,11 @@ public sealed class CalibraDatabaseInitializer
         var v2 = $"""
             CREATE OR ALTER VIEW [{s}].[cbv_Guide_Items] AS
             SELECT
-                [id]                                          AS [Id],
-                CAST([material_code]        AS NVARCHAR(100)) AS [MaterialCode],
-                CAST([material_name]        AS NVARCHAR(300)) AS [MaterialName],
-                CAST([material_description] AS NVARCHAR(500)) AS [Description]
-            FROM [{s}].[Item]
+                [id]                             AS [Id],
+                CAST([code]        AS NVARCHAR(100)) AS [MaterialCode],
+                CAST([name]        AS NVARCHAR(300)) AS [MaterialName],
+                CAST([description] AS NVARCHAR(500)) AS [Description]
+            FROM [{s}].[Items]
             WHERE [is_active] = 1;
             """;
         await using (var cmd3 = connection.CreateCommand())
@@ -5420,16 +6284,18 @@ public sealed class CalibraDatabaseInitializer
         }
 
         // View 3: Satis Teklifi Rehberi (sales_quotes → snake_case → PascalCase alias)
+        // Cari ismi Contact.AccountTitle'dan cekilir — contact_name kolonu kaldirildi.
         var v3 = $"""
             CREATE OR ALTER VIEW [{s}].[cbv_Guide_Documents] AS
             SELECT
-                CAST([document_number]  AS NVARCHAR(100)) AS [DocumentNumber],
-                CAST([contact_name] AS NVARCHAR(300)) AS [CustomerName],
-                CAST([document_date]    AS DATE)          AS [DocumentDate],
-                CAST([grand_total]   AS DECIMAL(18,2)) AS [GrandTotal],
-                CAST([status]        AS NVARCHAR(30))  AS [Status]
-            FROM [{s}].[Document]
-            WHERE [is_active] = 1;
+                CAST(q.[document_number]  AS NVARCHAR(100)) AS [DocumentNumber],
+                CAST(ca.[AccountTitle]    AS NVARCHAR(300)) AS [CustomerName],
+                CAST(q.[document_date]    AS DATE)          AS [DocumentDate],
+                CAST(q.[grand_total]      AS DECIMAL(18,2)) AS [GrandTotal],
+                CAST(q.[status]           AS NVARCHAR(30))  AS [Status]
+            FROM [{s}].[Document] q
+            LEFT JOIN [{s}].[Contact] ca ON ca.[Id] = q.[contact_id]
+            WHERE q.[is_active] = 1;
             """;
         await using (var cmd4 = connection.CreateCommand())
         {
@@ -5458,9 +6324,24 @@ public sealed class CalibraDatabaseInitializer
                         N'MaterialCode');
             ELSE
                 UPDATE [{s}].[GuideMas]
-                SET [GridColumnsJson] = N'["Id","MaterialCode","MaterialName","Description"]'
-                WHERE [GuideCode] = N'ITEMS'
-                  AND [GridColumnsJson] NOT LIKE N'%"Id"%';
+                SET [ViewName] = N'cbv_Guide_Items',
+                    [GridColumnsJson] = N'["Id","MaterialCode","MaterialName","Description"]'
+                WHERE [GuideCode] = N'ITEMS';
+
+            -- Legacy view v_GuideItems varsa kolon adlari icin tazele (material_* → code/name/description)
+            IF OBJECT_ID(N'[{s}].[v_GuideItems]', N'V') IS NOT NULL
+            BEGIN
+                EXEC(N'
+                    CREATE OR ALTER VIEW [{s}].[v_GuideItems] AS
+                    SELECT
+                        [id]                              AS [Id],
+                        CAST([code]        AS NVARCHAR(100)) AS [MaterialCode],
+                        CAST([name]        AS NVARCHAR(300)) AS [MaterialName],
+                        CAST([description] AS NVARCHAR(500)) AS [Description]
+                    FROM [{s}].[Items]
+                    WHERE [is_active] = 1;
+                ');
+            END;
 
             IF NOT EXISTS (SELECT 1 FROM [{s}].[GuideMas] WHERE [GuideCode] = N'SALES_QUOTES')
                 INSERT INTO [{s}].[GuideMas] ([GuideCode],[GuideLabel],[ViewName],[ValueColumn],[DisplayColumn],[GridColumnsJson],[DefaultSortColumn])
@@ -5687,10 +6568,14 @@ public sealed class CalibraDatabaseInitializer
                 DROP TABLE [{s}].[MaterialGroupMappings];
 
             -- 4.5) Items tablosuna eksik kolonlari ekle (legacy kolon eklemeleri — rename sonrasi da calisacak sekilde COL_LENGTH guard ile)
-            IF OBJECT_ID(N'[{s}].[{li}]', N'U') IS NOT NULL AND COL_LENGTH(N'{sl}.{li}', N'material_description') IS NULL
-                ALTER TABLE [{s}].[{li}] ADD [material_description] NVARCHAR(500) NULL;
-            IF OBJECT_ID(N'[{s}].[{li}]', N'U') IS NOT NULL AND COL_LENGTH(N'{sl}.{li}', N'material_type_id') IS NULL
-                ALTER TABLE [{s}].[{li}] ADD [material_type_id] INT NULL;
+            IF OBJECT_ID(N'[{s}].[{li}]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.{li}', N'description') IS NULL
+               AND COL_LENGTH(N'{sl}.{li}', N'material_description') IS NULL
+                ALTER TABLE [{s}].[{li}] ADD [description] NVARCHAR(500) NULL;
+            IF OBJECT_ID(N'[{s}].[{li}]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{sl}.{li}', N'type_id') IS NULL
+               AND COL_LENGTH(N'{sl}.{li}', N'material_type_id') IS NULL
+                ALTER TABLE [{s}].[{li}] ADD [type_id] INT NULL;
             IF OBJECT_ID(N'[{s}].[{li}]', N'U') IS NOT NULL AND COL_LENGTH(N'{sl}.{li}', N'track_combinations') IS NULL
                 ALTER TABLE [{s}].[{li}] ADD [track_combinations] BIT NOT NULL DEFAULT(0);
             IF OBJECT_ID(N'[{s}].[{li}]', N'U') IS NOT NULL AND COL_LENGTH(N'{sl}.{li}', N'created_by_user_id') IS NULL
@@ -5769,9 +6654,9 @@ public sealed class CalibraDatabaseInitializer
         // Legacy tablo isimleri — SQL literal olarak tutulmaz, C# variable uzerinden sp_rename'e aktarilir.
         var legacyRenames = new (string OldName, string NewName)[]
         {
-            // stock_cards (legacy, eski Items'tan onceki) → Item  (once Items'a donusturulmus olabilir, ikinci blok onu da yakalar)
-            ("stock_cards",                 "Item"),
-            ("Items",                       "Item"),
+            // stock_cards (legacy) → Items; Item (tekil, eski) → Items (cogul, yeni hedef)
+            ("stock_cards",                 "Items"),
+            ("Item",                        "Items"),
             ("Contacts",             "Contact"),
             ("measure_unit_definitions",    "Unit"),
             ("configuration_properties",    "Feature"),
@@ -5837,34 +6722,36 @@ public sealed class CalibraDatabaseInitializer
             ("stock_card_property_mappings",  "stock_card_id", "item_id"),
             // FeatureValue (eski configuration_property_values)
             ("FeatureValue",  "property_id",    "feature_id"),
+            // BOMLine (eski ProductTreeLines) — FK kolon rename
+            ("BOMLine",       "ProductTreeId",  "BOMId"),
         };
 
-        var sb = new System.Text.StringBuilder();
-        foreach (var (table, oldCol, newCol) in columnRenames)
+        // Her kolon rename'i ayri batch'te calistir — bir tanesi patlarsa digerleri devam edebilsin.
+        var allRenames = new List<(string Table, string OldCol, string NewCol)>(columnRenames);
+        // PascalCase kolon rename: MaterialGroupMappings.StockCardId -> ItemId
+        allRenames.Add(("MaterialGroupMappings", "StockCardId", "ItemId"));
+
+        foreach (var (table, oldCol, newCol) in allRenames)
         {
-            sb.AppendLine($"""
+            var sql = $"""
                 IF OBJECT_ID(N'[{s}].[{table}]', N'U') IS NOT NULL
                    AND COL_LENGTH(N'[{s}].[{table}]', N'{oldCol}') IS NOT NULL
                    AND COL_LENGTH(N'[{s}].[{table}]', N'{newCol}') IS NULL
                 BEGIN
                     EXEC sp_rename N'[{s}].[{table}].[{oldCol}]', N'{newCol}', N'COLUMN';
                 END;
-                """);
+                """;
+            try
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = sql;
+                await cmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+            catch (Microsoft.Data.SqlClient.SqlException ex)
+            {
+                Console.Error.WriteLine($"[DB INIT WARN] Column rename atlandi: {table}.{oldCol} -> {newCol} — {ex.Message}");
+            }
         }
-
-        // PascalCase kolon rename: MaterialGroupMappings.StockCardId -> ItemId
-        sb.AppendLine($"""
-            IF OBJECT_ID(N'[{s}].[MaterialGroupMappings]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[MaterialGroupMappings]', N'StockCardId') IS NOT NULL
-               AND COL_LENGTH(N'[{s}].[MaterialGroupMappings]', N'ItemId') IS NULL
-            BEGIN
-                EXEC sp_rename N'[{s}].[MaterialGroupMappings].[StockCardId]', N'ItemId', N'COLUMN';
-            END;
-            """);
-
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = sb.ToString();
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -6018,6 +6905,62 @@ public sealed class CalibraDatabaseInitializer
             BEGIN
                 ALTER TABLE [{s}].[Contact] ADD [District] NVARCHAR(100) NULL;
             END;
+
+            IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[Contact]')
+                                 AND name = N'CountryCode')
+            BEGIN
+                ALTER TABLE [{s}].[Contact] ADD [CountryCode] NVARCHAR(2) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[Contact]')
+                                 AND name = N'Mobile')
+            BEGIN
+                ALTER TABLE [{s}].[Contact] ADD [Mobile] NVARCHAR(30) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[Contact]')
+                                 AND name = N'Website')
+            BEGIN
+                ALTER TABLE [{s}].[Contact] ADD [Website] NVARCHAR(200) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[Contact]')
+                                 AND name = N'PostalCode')
+            BEGIN
+                ALTER TABLE [{s}].[Contact] ADD [PostalCode] NVARCHAR(20) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[Contact]')
+                                 AND name = N'ContactPerson')
+            BEGIN
+                ALTER TABLE [{s}].[Contact] ADD [ContactPerson] NVARCHAR(150) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[Contact]')
+                                 AND name = N'Neighborhood')
+            BEGIN
+                ALTER TABLE [{s}].[Contact] ADD [Neighborhood] NVARCHAR(150) NULL;
+            END;
+
+            IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[Contact]')
+                                 AND name = N'SalesRepresentativeId')
+            BEGIN
+                ALTER TABLE [{s}].[Contact] ADD [SalesRepresentativeId] INT NULL;
+            END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
@@ -6144,6 +7087,58 @@ public sealed class CalibraDatabaseInitializer
                     UPDATE [{s}].[FldSet]
                     SET [FormatJson] = N'{itemsFmt}'
                     WHERE [FormId] = @FormId AND [FieldKey] = N'materialCode';
+            END;
+
+            -- PRODUCT_TREES: 'parentCode' (Mamul Kodu) -> ITEMS rehberi
+            SELECT @FormId = [Id] FROM dbo.Forms WHERE [FormCode] = N'PRODUCT_TREES';
+            IF @FormId IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM [{s}].[FldSet]
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'parentCode'
+                )
+                    INSERT INTO [{s}].[FldSet] ([FormId],[FieldKey],[FieldLabel],[GuideCode],[FormatJson],[IsActive],[SortOrder])
+                    VALUES (@FormId, N'parentCode', N'Mamul Kodu', N'ITEMS',
+                            N'{itemsFmt}', 1, 10);
+                ELSE IF EXISTS (
+                    SELECT 1 FROM [{s}].[FldSet]
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'parentCode' AND [GuideCode] IS NULL
+                )
+                    UPDATE [{s}].[FldSet]
+                    SET [GuideCode] = N'ITEMS',
+                        [FormatJson] = N'{itemsFmt}'
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'parentCode';
+                ELSE IF EXISTS (
+                    SELECT 1 FROM [{s}].[FldSet]
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'parentCode' AND [GuideCode] IS NOT NULL AND [FormatJson] IS NULL
+                )
+                    UPDATE [{s}].[FldSet]
+                    SET [FormatJson] = N'{itemsFmt}'
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'parentCode';
+
+                -- PRODUCT_TREES: 'componentCode' (Bilesen Kodu) -> ITEMS rehberi
+                IF NOT EXISTS (
+                    SELECT 1 FROM [{s}].[FldSet]
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'componentCode'
+                )
+                    INSERT INTO [{s}].[FldSet] ([FormId],[FieldKey],[FieldLabel],[GuideCode],[FormatJson],[IsActive],[SortOrder])
+                    VALUES (@FormId, N'componentCode', N'Bilesen Kodu', N'ITEMS',
+                            N'{itemsFmt}', 1, 20);
+                ELSE IF EXISTS (
+                    SELECT 1 FROM [{s}].[FldSet]
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'componentCode' AND [GuideCode] IS NULL
+                )
+                    UPDATE [{s}].[FldSet]
+                    SET [GuideCode] = N'ITEMS',
+                        [FormatJson] = N'{itemsFmt}'
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'componentCode';
+                ELSE IF EXISTS (
+                    SELECT 1 FROM [{s}].[FldSet]
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'componentCode' AND [GuideCode] IS NOT NULL AND [FormatJson] IS NULL
+                )
+                    UPDATE [{s}].[FldSet]
+                    SET [FormatJson] = N'{itemsFmt}'
+                    WHERE [FormId] = @FormId AND [FieldKey] = N'componentCode';
             END;
             """;
         await using var seedCmd = connection.CreateCommand();
@@ -6327,13 +7322,24 @@ public sealed class CalibraDatabaseInitializer
     {
         var s = _schema.Replace("]", "]]");
 
+        // Migration: SALES_QUOTE eskiden vw_Document'a point ediyordu; yeni vw_ReportDocument kullanilacak.
+        await using (var migCmd = connection.CreateCommand())
+        {
+            migCmd.CommandText = $"""
+                UPDATE [{s}].[RptView]
+                   SET [SqlObjectName] = 'vw_ReportDocument'
+                 WHERE [Code] = 'SALES_QUOTE' AND [SqlObjectName] = 'vw_Document';
+                """;
+            await migCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         var seedViews = new (string Code, string Name, string SqlObjectName, string Description)[]
         {
             ("INVOICE",       "Fatura",         "vw_Invoice",        "Satis faturasi VIEW'i"),
             ("DELIVERY_NOTE", "Irsaliye",       "vw_DeliveryNote",   "Sevk irsaliyesi VIEW'i"),
             ("PROD_BARCODE",  "Urun Barkodu",   "vw_ProductBarcode", "Urun barkod etiketi VIEW'i"),
             ("SHELF_LABEL",   "Raf Etiketi",    "vw_ShelfLabel",     "Depo raf etiketi VIEW'i"),
-            ("SALES_QUOTE",   "Satis Teklifi",  "vw_Document",     "Satis teklifi VIEW'i")
+            ("SALES_QUOTE",   "Satis Teklifi",  "vw_ReportDocument", "Satis teklifi VIEW'i")
         };
 
         foreach (var (code, name, sqlObj, desc) in seedViews)

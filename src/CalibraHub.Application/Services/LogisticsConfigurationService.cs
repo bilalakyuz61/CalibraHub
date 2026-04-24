@@ -26,14 +26,6 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         "Lot",
         "Serial"
     };
-    private static readonly HashSet<string> AllowedLocationTypeCodes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "FACTORY",
-        "SECTION",
-        "SHELF",
-        "BIN"
-    };
-
     private readonly ILogisticsConfigurationRepository _repository;
 
     public LogisticsConfigurationService(ILogisticsConfigurationRepository repository)
@@ -385,7 +377,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var propertyValues = await _repository.GetPropertyValuesAsync(cancellationToken);
         var mappings = await _repository.GetStockPropertyMappingsAsync(cancellationToken);
 
-        var stockLookup = stockCards.ToDictionary(x => x.Id, x => x.MaterialCode);
+        var stockLookup = stockCards.ToDictionary(x => x.Id, x => x.Code);
         var propertyLookup = properties.ToDictionary(x => x.Id);
         var valueLookup = propertyValues.ToDictionary(x => x.Id, x => x.Value);
 
@@ -393,10 +385,10 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             Items: stockCards
                 .Select(x => new ItemDto(
                     x.Id,
-                    x.MaterialCode,
-                    x.MaterialName,
-                    x.MaterialDescription,
-                    x.MaterialTypeId,
+                    x.Code,
+                    x.Name,
+                    x.Description,
+                    x.TypeId,
                     x.IsActive,
                     x.CreatedDate,
                     x.CreatedByUserId,
@@ -560,7 +552,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             .Where(x => x.ParentId.HasValue && !string.IsNullOrWhiteSpace(x.RelatedMaterialCode ?? x.RecordCode))
             .Select(x => new ProductConfigurationFeatureStockLinkDto(
                 x.ParentId!.Value,
-                (x.RelatedMaterialCode ?? x.RecordCode).Trim().ToUpperInvariant()))
+                (x.RelatedMaterialCode ?? x.RecordCode).Trim().ToUpperInvariant(),
+                x.VisibleInDesign))
             .Distinct()
             .ToArray();
 
@@ -644,7 +637,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         }
 
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
-        if (!stockCards.Any(x => string.Equals(x.MaterialCode, relatedMaterialCode, StringComparison.OrdinalIgnoreCase)))
+        if (!stockCards.Any(x => string.Equals(x.Code, relatedMaterialCode, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Secilen malzeme kodu bulunamadi.");
         }
@@ -692,7 +685,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         }
 
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
-        if (!stockCards.Any(x => string.Equals(x.MaterialCode, relatedMaterialCode, StringComparison.OrdinalIgnoreCase)))
+        if (!stockCards.Any(x => string.Equals(x.Code, relatedMaterialCode, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Secilen malzeme kodu bulunamadi.");
         }
@@ -734,7 +727,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
         var activeStockCodes = stockCards
             .Where(x => x.IsActive)
-            .Select(x => x.MaterialCode.Trim().ToUpperInvariant())
+            .Select(x => x.Code.Trim().ToUpperInvariant())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var invalidStockCode = normalizedStockCodes.FirstOrDefault(x => !activeStockCodes.Contains(x));
@@ -751,7 +744,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
     public async Task SetFeaturesForItemAsync(
         string stockCode,
-        IReadOnlyCollection<int> featureIds,
+        IReadOnlyCollection<(int FeatureId, bool PrintDescriptionInDesign)> items,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(stockCode))
@@ -762,7 +755,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         // Stok kartinin gerçekten var ve aktif oldugunu kontrol et
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
         var exists = stockCards.Any(x => x.IsActive &&
-            string.Equals(x.MaterialCode.Trim(), normalizedCode, StringComparison.OrdinalIgnoreCase));
+            string.Equals(x.Code.Trim(), normalizedCode, StringComparison.OrdinalIgnoreCase));
         if (!exists)
             throw new ArgumentException($"Stok kartı bulunamadı veya aktif değil: {normalizedCode}");
 
@@ -773,16 +766,17 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             .Select(r => r.Id)
             .ToHashSet();
 
-        var requestedIds = (featureIds ?? Array.Empty<int>())
-            .Where(id => id > 0)
-            .Distinct()
+        var requestedItems = (items ?? Array.Empty<(int, bool)>())
+            .Where(x => x.FeatureId > 0)
+            .GroupBy(x => x.FeatureId)
+            .Select(g => (FeatureId: g.Key, PrintDescriptionInDesign: g.Last().PrintDescriptionInDesign))
             .ToArray();
 
-        var invalid = requestedIds.FirstOrDefault(id => !validFeatureIds.Contains(id));
-        if (invalid != 0)
-            throw new ArgumentException($"Geçersiz özellik ID: {invalid}");
+        var invalid = requestedItems.FirstOrDefault(x => !validFeatureIds.Contains(x.FeatureId));
+        if (invalid.FeatureId != 0)
+            throw new ArgumentException($"Geçersiz özellik ID: {invalid.FeatureId}");
 
-        await _repository.ReplaceStockFeatureLinksAsync(normalizedCode, requestedIds, cancellationToken);
+        await _repository.ReplaceStockFeatureLinksAsync(normalizedCode, requestedItems, cancellationToken);
     }
 
     public async Task UpdateProductConfigurationFeatureAsync(
@@ -945,32 +939,33 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
     public async Task CreateItemAsync(CreateItemRequest request, CancellationToken cancellationToken)
     {
-        var materialCode = request.MaterialCode.Trim();
-        var materialName = request.MaterialName.Trim();
+        var code = request.Code.Trim();
+        var name = request.Name.Trim();
 
-        if (string.IsNullOrWhiteSpace(materialCode))
+        if (string.IsNullOrWhiteSpace(code))
         {
             throw new ArgumentException("Malzeme kodu zorunludur.");
         }
 
-        if (string.IsNullOrWhiteSpace(materialName))
+        if (string.IsNullOrWhiteSpace(name))
         {
             throw new ArgumentException("Malzeme adi zorunludur.");
         }
 
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
-        if (stockCards.Any(x => string.Equals(x.MaterialCode, materialCode, StringComparison.OrdinalIgnoreCase)))
+        if (stockCards.Any(x => string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Ayni malzeme kodu ile kayit zaten mevcut.");
         }
 
         var stockCard = new Item
         {
-            MaterialCode = materialCode,
-            MaterialName = materialName,
-            MaterialDescription = NormalizeOptionalField(request.MaterialDescription, 500),
-            MaterialTypeId = request.MaterialTypeId,
+            Code = code,
+            Name = name,
+            Description = NormalizeOptionalField(request.Description, 500),
+            TypeId = request.TypeId,
             TrackCombinations = request.TrackCombinations,
+            TaxRate = request.TaxRate,
             CreatedDate = DateTime.Now,
             CreatedByUserId = request.CreatedByUserId,
             ImageData = request.ImageData,
@@ -987,15 +982,15 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Guncellenecek malzeme karti secimi zorunludur.");
         }
 
-        var materialCode = request.MaterialCode.Trim();
-        var materialName = request.MaterialName.Trim();
+        var code = request.Code.Trim();
+        var name = request.Name.Trim();
 
-        if (string.IsNullOrWhiteSpace(materialCode))
+        if (string.IsNullOrWhiteSpace(code))
         {
             throw new ArgumentException("Malzeme kodu zorunludur.");
         }
 
-        if (string.IsNullOrWhiteSpace(materialName))
+        if (string.IsNullOrWhiteSpace(name))
         {
             throw new ArgumentException("Malzeme adi zorunludur.");
         }
@@ -1009,7 +1004,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
         if (stockCards.Any(x =>
                 x.Id != request.ItemId &&
-                string.Equals(x.MaterialCode, materialCode, StringComparison.OrdinalIgnoreCase)))
+                string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Ayni malzeme kodu ile baska bir kayit mevcut.");
         }
@@ -1017,11 +1012,12 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var updatedItem = new Item
         {
             Id = request.ItemId,
-            MaterialCode = materialCode,
-            MaterialName = materialName,
-            MaterialDescription = NormalizeOptionalField(request.MaterialDescription, 500),
-            MaterialTypeId = request.MaterialTypeId,
+            Code = code,
+            Name = name,
+            Description = NormalizeOptionalField(request.Description, 500),
+            TypeId = request.TypeId,
             TrackCombinations = request.TrackCombinations,
+            TaxRate = request.TaxRate,
             CreatedDate = existing.CreatedDate,
             CreatedByUserId = existing.CreatedByUserId,
             ModifiedDate = DateTime.Now,
@@ -1265,6 +1261,133 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             Multiplier = x.Multiplier,
         }).ToList();
         await _repository.SaveStockUnitConversionsAsync(stockCardId, conversions, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<ItemLocationDto>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken)
+    {
+        var links = await _repository.GetItemLocationsAsync(itemId, cancellationToken);
+        if (links.Count == 0) return Array.Empty<ItemLocationDto>();
+
+        // Lokasyon bilgilerini tek seferde cek (join yerine in-memory map)
+        var allLocations = await _repository.GetLocationsAsync(cancellationToken);
+        var locMap = allLocations.ToDictionary(l => l.Id);
+
+        return links.Select(l =>
+        {
+            locMap.TryGetValue(l.LocationId, out var loc);
+            return new ItemLocationDto(
+                l.Id, l.ItemId, l.LocationId,
+                loc?.LocationCode ?? "",
+                loc?.LocationName,
+                loc?.LocationTypeCode ?? "",
+                l.IsDefault, l.SortOrder);
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyCollection<LocationTypeDto>> GetLocationTypesAsync(CancellationToken cancellationToken)
+    {
+        var items = await _repository.GetLocationTypesAsync(cancellationToken);
+        return items.Select(x => new LocationTypeDto(x.Id, x.Code, x.Name, x.SortOrder, x.IsActive)).ToList();
+    }
+
+    public async Task<int> SaveLocationTypeAsync(SaveLocationTypeRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Code))
+            throw new ArgumentException("Tip kodu zorunludur.");
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw new ArgumentException("Tip adi zorunludur.");
+
+        var normalizedCode = request.Code.Trim().ToUpperInvariant();
+
+        var existing = await _repository.GetLocationTypesAsync(cancellationToken);
+        var clash = existing.FirstOrDefault(x =>
+            string.Equals(x.Code, normalizedCode, StringComparison.OrdinalIgnoreCase) &&
+            (!request.Id.HasValue || x.Id != request.Id.Value));
+        if (clash != null)
+            throw new ArgumentException($"'{normalizedCode}' kodu zaten kullaniliyor.");
+
+        // Guncelleme + kod degisimi -> Location.LocationTypeCode'u da cascade guncelle
+        string? oldCode = null;
+        if (request.Id.HasValue)
+        {
+            var current = existing.FirstOrDefault(x => x.Id == request.Id.Value);
+            if (current != null && !string.Equals(current.Code, normalizedCode, StringComparison.OrdinalIgnoreCase))
+                oldCode = current.Code;
+        }
+
+        var entity = new LocationType
+        {
+            Id = request.Id ?? 0,
+            Code = normalizedCode,
+            Name = request.Name.Trim(),
+            SortOrder = request.SortOrder,
+            IsActive = request.IsActive,
+        };
+        var savedId = await _repository.UpsertLocationTypeAsync(entity, cancellationToken);
+
+        if (oldCode != null)
+        {
+            await _repository.RenameLocationTypeCodeAsync(oldCode, normalizedCode, cancellationToken);
+        }
+
+        return savedId;
+    }
+
+    public async Task<(bool Success, string? Error)> DeleteLocationTypeAsync(int id, CancellationToken cancellationToken)
+    {
+        var types = await _repository.GetLocationTypesAsync(cancellationToken);
+        var target = types.FirstOrDefault(x => x.Id == id);
+        if (target == null) return (false, "Tip bulunamadi.");
+
+        var usageCount = await _repository.CountLocationsOfTypeAsync(target.Code, cancellationToken);
+        if (usageCount > 0)
+        {
+            // Engelleyen lokasyonlari bul ve ilk birkacini listele (kullaniciya ipucu)
+            var allLocations = await _repository.GetLocationsAsync(cancellationToken);
+            var blockers = allLocations
+                .Where(l => string.Equals(l.LocationTypeCode, target.Code, StringComparison.OrdinalIgnoreCase))
+                .Take(5)
+                .Select(l => string.IsNullOrWhiteSpace(l.LocationName) ? l.LocationCode : $"{l.LocationCode} - {l.LocationName}")
+                .ToList();
+
+            var sample = blockers.Count > 0 ? " Ornek: " + string.Join(", ", blockers) : "";
+            var suffix = usageCount > blockers.Count ? $" (+{usageCount - blockers.Count} daha)" : "";
+            return (false,
+                $"'{target.Name}' ({target.Code}) tipi {usageCount} lokasyonda kullaniliyor; " +
+                $"once bu lokasyonlari baska tipe tasiyin veya silin.{sample}{suffix}");
+        }
+
+        await _repository.DeleteLocationTypeAsync(id, cancellationToken);
+        return (true, null);
+    }
+
+    public async Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<SaveItemLocationItem> items, CancellationToken cancellationToken)
+    {
+        if (itemId <= 0) throw new ArgumentException("Malzeme karti secimi zorunludur.");
+        // Dublicate location_id temizle — ilk gordugumuzu koru
+        var seen = new HashSet<int>();
+        var deduped = new List<SaveItemLocationItem>();
+        foreach (var i in items)
+        {
+            if (i.LocationId <= 0) continue;
+            if (seen.Add(i.LocationId)) deduped.Add(i);
+        }
+
+        var links = deduped.Select(x => new ItemLocation
+        {
+            ItemId = itemId,
+            LocationId = x.LocationId,
+            IsDefault = x.IsDefault,
+        }).ToList();
+
+        // Hicbiri default degilse, ilk satiri varsayilan yap
+        if (links.Count > 0 && !links.Any(l => l.IsDefault))
+        {
+            var first = links[0];
+            links[0] = new ItemLocation { ItemId = first.ItemId, LocationId = first.LocationId, IsDefault = true };
+        }
+
+        await _repository.SaveItemLocationsAsync(itemId, links, cancellationToken);
     }
 
     public async Task ConfigureItemAsync(ConfigureItemRequest request, CancellationToken cancellationToken)
@@ -1575,7 +1698,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 throw new ArgumentException("Ozellik veri tipi desteklenmiyor.");
         }
 
-        var configurationCode = BuildConfigurationCode(stockCard.MaterialCode, property.Code, selectedValue.Value, property.DataType);
+        var configurationCode = BuildConfigurationCode(stockCard.Code, property.Code, selectedValue.Value, property.DataType);
         await _repository.UpdateStockPropertyMappingValueAsync(
             existingLink.Id,
             selectedValue.Id,
@@ -1632,17 +1755,14 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
     private static string NormalizeLocationTypeCode(string? locationTypeCode)
     {
+        // LocationTypes tablosu artik dinamik — kullanici kendi tip tanimlarini olusturabilir.
+        // Validation: bos olmasin, 20 karakterden uzun olmasin, upper case normalize et.
+        // AllowedLocationTypeCodes hardcode listesi kaldirildi.
         var normalizedTypeCode = NormalizeRequiredField(locationTypeCode, 20, "Lokasyon tipi");
         if (string.Equals(normalizedTypeCode, "AISLE", StringComparison.OrdinalIgnoreCase))
         {
             normalizedTypeCode = "SECTION";
         }
-
-        if (!AllowedLocationTypeCodes.Contains(normalizedTypeCode))
-        {
-            throw new ArgumentException("Lokasyon tipi gecersiz.");
-        }
-
         return normalizedTypeCode.ToUpperInvariant();
     }
 
@@ -2153,8 +2273,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     {
         var (cards, totalCount) = await _repository.GetItemsPagedAsync(search, offset, pageSize, cancellationToken);
         var dtos = cards.Select(x => new ItemDto(
-            x.Id, x.MaterialCode, x.MaterialName, x.MaterialDescription,
-            x.MaterialTypeId, x.IsActive, x.CreatedDate, x.CreatedByUserId,
+            x.Id, x.Code, x.Name, x.Description,
+            x.TypeId, x.IsActive, x.CreatedDate, x.CreatedByUserId,
             x.ModifiedDate, x.ModifiedByUserId, x.TrackCombinations, x.TaxRate,
             x.ImageData, x.ImageMimeType)).ToList();
         return (dtos, totalCount);
@@ -2165,12 +2285,12 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var cards = await _repository.GetItemsAsync(cancellationToken);
         return cards
             .Where(c => c.IsActive)
-            .OrderBy(c => c.MaterialCode)
+            .OrderBy(c => c.Code)
             .Select(c => new ItemDto(
                 c.Id,
-                c.MaterialCode,
-                c.MaterialName,
-                c.MaterialDescription,
+                c.Code,
+                c.Name,
+                c.Description,
                 null,
                 c.IsActive,
                 c.CreatedDate,
@@ -2283,7 +2403,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
         var activeCodes = stockCards
             .Where(x => x.IsActive)
-            .Select(x => x.MaterialCode.Trim().ToUpperInvariant())
+            .Select(x => x.Code.Trim().ToUpperInvariant())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (!activeCodes.Contains(parentCode.ToUpperInvariant()))

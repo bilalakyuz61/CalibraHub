@@ -37,7 +37,7 @@ import {
   Lock, Unlock,
   ImagePlus, Youtube as YoutubeIcon, RowsIcon, Columns3,
   ArrowUpFromLine, ArrowDownFromLine, ArrowLeftFromLine, ArrowRightFromLine,
-  Trash, TableProperties, Pin, ArrowUpDown
+  Trash, TableProperties, Pin, ArrowUpDown, Bell, BellRing, X
 } from 'lucide-react'
 import * as api from '../../services/notesService'
 
@@ -419,12 +419,215 @@ function ColorPicker(props) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   ReminderPopover — Bell button dropdown (list + add)
+   ══════════════════════════════════════════════════════════ */
+var RECURRENCE_LABELS = [
+  'Tek sefer',
+  'Her saat',
+  'Her gun',
+  'Her hafta',
+  'Hafta sonu',
+  'Her ay',
+  'Haftanin belirli gunleri',
+  'Ayin belirli gunleri'
+]
+var RECURRENCE_NEEDS_DATA = { 6: 'days_of_week', 7: 'days_of_month' }
+
+function pad2(n) { return String(n).padStart(2, '0') }
+
+function defaultReminderAtLocal() {
+  // Bir saat sonrasi, yyyy-MM-ddTHH:mm
+  var d = new Date(Date.now() + 60 * 60 * 1000)
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+    'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+}
+
+function formatReminderAt(iso) {
+  if (!iso) return ''
+  // iso = yyyy-MM-ddTHH:mm:ss (local wall-clock, timezone yok)
+  var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso)
+  if (!m) return iso
+  return m[3] + '.' + m[2] + '.' + m[1] + ' ' + m[4] + ':' + m[5]
+}
+
+function ReminderPopover(props) {
+  var reminders = props.reminders || []
+  var loading = !!props.loading
+  var onClose = props.onClose
+  var onAdd = props.onAdd
+  var onDelete = props.onDelete
+  var btnRef = props.btnRef
+
+  var [remindAt, setRemindAt] = useState(defaultReminderAtLocal)
+  var [recurrence, setRecurrence] = useState(0)
+  var [recurrenceData, setRecurrenceData] = useState('')
+  var [submitting, setSubmitting] = useState(false)
+  var [deliveryChannel, setDeliveryChannel] = useState(0) // 0=InApp, 1=Email, 2=Both
+  var [targetUserId, setTargetUserId] = useState('')      // '' = kendim
+  var [companyUsers, setCompanyUsers] = useState([])
+
+  useEffect(function () {
+    // Popover ilk acildiginda sirket kullanicilarini yukle
+    api.getCompanyUsers().then(function (users) {
+      setCompanyUsers(Array.isArray(users) ? users : [])
+    }).catch(function () { /* sessizce */ })
+  }, [])
+
+  useEffect(function () {
+    function handleClick(e) {
+      if (btnRef && btnRef.current && btnRef.current.contains(e.target)) return
+      onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return function () { document.removeEventListener('mousedown', handleClick) }
+  }, [onClose, btnRef])
+
+  function submit() {
+    if (!remindAt) return
+    var needsData = RECURRENCE_NEEDS_DATA[recurrence]
+    if (needsData && !recurrenceData.trim()) return
+    setSubmitting(true)
+    Promise.resolve(onAdd(
+      remindAt + ':00',
+      recurrence,
+      recurrenceData.trim() || null,
+      deliveryChannel,
+      targetUserId || null
+    ))
+      .finally(function () {
+        setSubmitting(false)
+        setRemindAt(defaultReminderAtLocal())
+        setRecurrence(0)
+        setRecurrenceData('')
+        // Delivery + target reset etmiyoruz — ard arda ayni ayarla ekleme pratik olur
+      })
+  }
+
+  var DELIVERY_LABELS = { 0: 'Bildirim', 1: 'E-posta', 2: 'Bildirim + E-posta' }
+
+  return (
+    <div className="nw-reminder-pop" onClick={function (e) { e.stopPropagation() }}>
+      <div className="nw-reminder-pop-head">
+        <Bell size={14} />
+        <span>Hatirlaticilar</span>
+      </div>
+
+      <div className="nw-reminder-pop-list">
+        {loading && <div className="nw-reminder-empty">Yukleniyor...</div>}
+        {!loading && reminders.length === 0 && (
+          <div className="nw-reminder-empty">Henuz hatirlatici yok.</div>
+        )}
+        {!loading && reminders.map(function (r) {
+          var isSent = r.isSent
+          var dChan = r.deliveryChannel || 0
+          var meta = DELIVERY_LABELS[dChan] || 'Bildirim'
+          if (r.targetUserName) meta += ' → ' + r.targetUserName
+          return (
+            <div key={r.id} className={'nw-reminder-row' + (isSent ? ' nw-reminder-row--sent' : '')}>
+              <div className="nw-reminder-row-info">
+                <div className="nw-reminder-row-when">
+                  {isSent ? <BellRing size={12} /> : <Bell size={12} />}
+                  <span>{formatReminderAt(r.remindAt)}</span>
+                  {isSent && <span className="nw-reminder-sent-tag">gonderildi</span>}
+                </div>
+                <div className="nw-reminder-row-rec">
+                  {meta}
+                  {r.recurrenceType > 0 ? ' · ' + (RECURRENCE_LABELS[r.recurrenceType] || '') : ''}
+                  {r.recurrenceData ? ' — ' + r.recurrenceData : ''}
+                </div>
+              </div>
+              <button
+                className="nw-reminder-del"
+                onClick={function () { onDelete(r.id) }}
+                title="Sil"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="nw-reminder-pop-add">
+        <div className="nw-reminder-add-row">
+          <label>Zaman</label>
+          <input
+            type="datetime-local"
+            className="nw-reminder-input"
+            value={remindAt}
+            onChange={function (e) { setRemindAt(e.target.value) }}
+          />
+        </div>
+        <div className="nw-reminder-add-row">
+          <label>Tekrar</label>
+          <select
+            className="nw-reminder-input"
+            value={recurrence}
+            onChange={function (e) { setRecurrence(parseInt(e.target.value, 10)) }}
+          >
+            {RECURRENCE_LABELS.map(function (label, idx) {
+              return <option key={idx} value={idx}>{label}</option>
+            })}
+          </select>
+        </div>
+        {RECURRENCE_NEEDS_DATA[recurrence] && (
+          <div className="nw-reminder-add-row">
+            <label>{recurrence === 6 ? 'Gunler (0=Paz..6=Cts)' : 'Ayin gunleri (1..31)'}</label>
+            <input
+              type="text"
+              className="nw-reminder-input"
+              placeholder={recurrence === 6 ? 'orn: 1,3,5' : 'orn: 1,15'}
+              value={recurrenceData}
+              onChange={function (e) { setRecurrenceData(e.target.value) }}
+            />
+          </div>
+        )}
+        <div className="nw-reminder-add-row">
+          <label>Kanal</label>
+          <select
+            className="nw-reminder-input"
+            value={deliveryChannel}
+            onChange={function (e) { setDeliveryChannel(parseInt(e.target.value, 10)) }}
+          >
+            <option value={0}>Bildirim</option>
+            <option value={1}>E-posta</option>
+            <option value={2}>Bildirim + E-posta</option>
+          </select>
+        </div>
+        <div className="nw-reminder-add-row">
+          <label>Kime</label>
+          <select
+            className="nw-reminder-input"
+            value={targetUserId}
+            onChange={function (e) { setTargetUserId(e.target.value) }}
+          >
+            <option value="">Kendim</option>
+            {companyUsers.filter(function (u) { return !u.isSelf }).map(function (u) {
+              return <option key={u.id} value={u.id}>{u.fullName}</option>
+            })}
+          </select>
+        </div>
+        <button
+          className="nw-reminder-add-btn"
+          onClick={submit}
+          disabled={submitting || !remindAt}
+        >
+          {submitting ? 'Ekleniyor...' : 'Hatirlatici Ekle'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════
    NoteActionsMenu — "..." dropdown (PDF export, delete etc.)
    ══════════════════════════════════════════════════════════ */
 function NoteActionsMenu(props) {
   var onClose = props.onClose
   var onExportPdf = props.onExportPdf
   var onDelete = props.onDelete
+  var onReminders = props.onReminders              // Hatirlaticilar popover'ini ac
+  var reminderCount = props.reminderCount || 0     // Aktif hatirlatici sayisi (badge icin)
   var onEncryptWhole = props.onEncryptWhole       // Mod 2: Tum notu sifrele
   var onLockWhole = props.onLockWhole             // Mod 2: Acikken kilitle
   var onRemoveEncryption = props.onRemoveEncryption // Mod 2: Sifrelemeyi kaldir
@@ -443,6 +646,11 @@ function NoteActionsMenu(props) {
 
   return (
     <div className="nw-actions-menu" onClick={function (e) { e.stopPropagation() }}>
+      <button className="nw-actions-item" onClick={onReminders}>
+        {reminderCount > 0 ? <BellRing size={15} /> : <Bell size={15} />}
+        <span>Hatirlatici{reminderCount > 0 ? ' (' + reminderCount + ')' : ''}</span>
+      </button>
+      <div className="nw-actions-sep" />
       <button className="nw-actions-item" onClick={onExportPdf}>
         <FileDown size={15} />
         <span>PDF olarak aktar</span>
@@ -503,6 +711,9 @@ export default function NotesWorkspace() {
   var actionsBtnRef = useRef(null)
   var [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   var [confirmModal, setConfirmModal] = useState(null)
+  var [remindersOpen, setRemindersOpen] = useState(false)
+  var [reminders, setReminders] = useState([])
+  var [remindersLoading, setRemindersLoading] = useState(false)
   // ── Sifreleme state'leri (Mod 1 + Mod 2) ──────────────────────────────
   // Mod 1: Secili bolumu sifrele modalı
   var [encryptSelectionOpen, setEncryptSelectionOpen] = useState(false)
@@ -651,6 +862,7 @@ export default function NotesWorkspace() {
             isPinned: !!n.isPinned,
             isFullyEncrypted: !!n.isFullyEncrypted,
             encryptionHint: n.encryptionHint || null,
+            reminderCount: n.reminderCount || 0,
           }
         })
         setFolders(flds)
@@ -910,6 +1122,70 @@ export default function NotesWorkspace() {
       onConfirm: doDeleteNote,
     })
   }, [selectedNoteId, notes, doDeleteNote])
+
+  /* ── Reminders (hatirlaticilar) ─────────────────────────────
+     Secilen notun hatirlaticilari ReminderNotificationWorker tarafindan
+     her 60 sn'de bir kontrol edilir; RemindAt <= now ise toast + (varsa)
+     recurrence'a gore sonraki occurrence'i olusturur. */
+  useEffect(function () {
+    if (!selectedNoteId) { setReminders([]); return }
+    var cancelled = false
+    setRemindersLoading(true)
+    api.getReminders(selectedNoteId)
+      .then(function (data) {
+        if (cancelled) return
+        setReminders((data && data.reminders) || [])
+      })
+      .catch(function () { if (!cancelled) setReminders([]) })
+      .finally(function () { if (!cancelled) setRemindersLoading(false) })
+    return function () { cancelled = true }
+  }, [selectedNoteId])
+
+  var handleAddReminder = useCallback(function (remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserId) {
+    if (!selectedNoteId) return Promise.resolve()
+    var nid = selectedNoteId
+    return api.addReminder(nid, remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserId)
+      .then(function (r) {
+        if (!r || !r.success) {
+          alert('Hatirlatici eklenemedi: ' + (r && r.message ? r.message : 'Bilinmeyen hata.'))
+          return
+        }
+        setReminders(function (prev) {
+          var next = prev.concat([r.reminder])
+          next.sort(function (a, b) { return (a.remindAt || '').localeCompare(b.remindAt || '') })
+          return next
+        })
+        // Not listesindeki rozet icin count'u guncelle — yeni eklenen is_sent=0 (aktif).
+        setNotes(function (prev) {
+          return prev.map(function (n) {
+            return n.id === nid ? { ...n, reminderCount: (n.reminderCount || 0) + 1 } : n
+          })
+        })
+      })
+      .catch(function (e) { alert('Hatirlatici eklenemedi: ' + e.message) })
+  }, [selectedNoteId])
+
+  var handleDeleteReminder = useCallback(function (reminderId) {
+    if (!selectedNoteId) return
+    var nid = selectedNoteId
+    // Aktif reminder'i (is_sent=0) silerken count da dussun. Gonderilmis olanin silinmesi
+    // count'u etkilemez cunku zaten aktif degil.
+    var wasActive = reminders.some(function (r) { return r.id === reminderId && !r.isSent })
+    api.deleteReminder(reminderId, nid)
+      .then(function (r) {
+        if (r && r.success) {
+          setReminders(function (prev) { return prev.filter(function (x) { return x.id !== reminderId }) })
+          if (wasActive) {
+            setNotes(function (prev) {
+              return prev.map(function (n) {
+                return n.id === nid ? { ...n, reminderCount: Math.max(0, (n.reminderCount || 0) - 1) } : n
+              })
+            })
+          }
+        }
+      })
+      .catch(function () { /* sessizce yutma */ })
+  }, [selectedNoteId, reminders])
 
   var handleExportPdf = useCallback(function () {
     if (!selectedNote || !editor) return
@@ -1323,13 +1599,24 @@ export default function NotesWorkspace() {
                   >
                     <div className="nw-note-card-top">
                       <h5 className="nw-note-card-title">{n.title || 'Başlıksız Not'}</h5>
-                      <button
-                        className={'nw-pin-btn' + (n.isPinned ? ' nw-pin-btn--active' : '')}
-                        onClick={function (e) { handleTogglePin(n.id, e) }}
-                        title={n.isPinned ? 'Sabitlemeyi kaldir' : 'Sabitle'}
-                      >
-                        <Pin size={12} />
-                      </button>
+                      <div className="nw-note-card-icons">
+                        {n.reminderCount > 0 && (
+                          <span
+                            className="nw-note-reminder-badge"
+                            title={n.reminderCount + ' aktif hatirlatici'}
+                          >
+                            <BellRing size={11} />
+                            {n.reminderCount > 1 && <span>{n.reminderCount}</span>}
+                          </span>
+                        )}
+                        <button
+                          className={'nw-pin-btn' + (n.isPinned ? ' nw-pin-btn--active' : '')}
+                          onClick={function (e) { handleTogglePin(n.id, e) }}
+                          title={n.isPinned ? 'Sabitlemeyi kaldir' : 'Sabitle'}
+                        >
+                          <Pin size={12} />
+                        </button>
+                      </div>
                     </div>
                     <div className="nw-note-card-date">{formatDate(n.updatedAt)}</div>
                     <div className="nw-note-card-snippet">{snippet(n.content, 120, n.isFullyEncrypted)}</div>
@@ -1359,11 +1646,23 @@ export default function NotesWorkspace() {
                     onClose={function () { setActionsMenuOpen(false) }}
                     onExportPdf={handleExportPdf}
                     onDelete={function () { setActionsMenuOpen(false); handleDeleteNote() }}
+                    onReminders={function () { setActionsMenuOpen(false); setRemindersOpen(true) }}
+                    reminderCount={reminders.length}
                     onEncryptWhole={handleOpenEncryptWholeNote}
                     onLockWhole={handleLockFullNote}
                     onRemoveEncryption={handleRemoveFullEncryption}
                     isEncrypted={!!selectedNote && !!selectedNote.isFullyEncrypted}
                     isUnlocked={!!selectedNote && unlockedNoteIds.has(selectedNote.id)}
+                    btnRef={actionsBtnRef}
+                  />
+                )}
+                {remindersOpen && (
+                  <ReminderPopover
+                    reminders={reminders}
+                    loading={remindersLoading}
+                    onClose={function () { setRemindersOpen(false) }}
+                    onAdd={handleAddReminder}
+                    onDelete={handleDeleteReminder}
                     btnRef={actionsBtnRef}
                   />
                 )}

@@ -29,7 +29,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
 
         cmd.CommandText = $"""
             SELECT [Id],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Email],[Address],[City],[District],[IsActive],[PriceGroupId],[CreatedAt]
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[CreatedAt]
             FROM {_tableName}
             {where}
             ORDER BY [AccountCode];
@@ -56,7 +56,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
 
         cmd.CommandText = $"""
             SELECT [Id],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Email],[Address],[City],[District],[IsActive],[PriceGroupId],[CreatedAt],
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[CreatedAt],
                    COUNT(*) OVER() AS [_TotalCount]
             FROM {_tableName}
             {where}
@@ -73,7 +73,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         {
             results.Add(MapRow(reader));
             if (totalCount == 0)
-                totalCount = reader.GetInt32(15); // _TotalCount
+                totalCount = reader.GetInt32(22); // _TotalCount — 22. sutun (21 veri kolonu + COUNT OVER)
         }
 
         // Hiç sonuç yoksa toplam sayıyı ayrı çek (OFFSET sonucu boş olabilir)
@@ -112,7 +112,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Email],[Address],[City],[District],[IsActive],[PriceGroupId],[CreatedAt]
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[CreatedAt]
             FROM {_tableName}
             WHERE [Id] = @Id;
             """;
@@ -141,9 +141,9 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_tableName}
-                ([AccountType],[AccountCode],[AccountTitle],[TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Email],[Address],[City],[District],[IsActive],[PriceGroupId],[CreatedAt])
+                ([AccountType],[AccountCode],[AccountTitle],[TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[CreatedAt])
             VALUES
-                (@AccountType,@AccountCode,@AccountTitle,@TaxNumber,@IdentityNumber,@TaxOffice,@Phone,@Email,@Address,@City,@District,@IsActive,@PriceGroupId,@CreatedAt);
+                (@AccountType,@AccountCode,@AccountTitle,@TaxNumber,@IdentityNumber,@TaxOffice,@Phone,@Mobile,@Email,@Website,@Address,@PostalCode,@City,@District,@Neighborhood,@CountryCode,@ContactPerson,@IsActive,@PriceGroupId,@SalesRepresentativeId,@CreatedAt);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         AddParams(cmd, account);
@@ -164,12 +164,19 @@ public sealed class SqlFinanceRepository : IFinanceRepository
                 [IdentityNumber] = @IdentityNumber,
                 [TaxOffice]      = @TaxOffice,
                 [Phone]          = @Phone,
+                [Mobile]         = @Mobile,
                 [Email]          = @Email,
+                [Website]        = @Website,
                 [Address]        = @Address,
+                [PostalCode]     = @PostalCode,
                 [City]           = @City,
                 [District]       = @District,
+                [Neighborhood]   = @Neighborhood,
+                [CountryCode]    = @CountryCode,
+                [ContactPerson]  = @ContactPerson,
                 [IsActive]       = @IsActive,
-                [PriceGroupId]   = @PriceGroupId
+                [PriceGroupId]   = @PriceGroupId,
+                [SalesRepresentativeId] = @SalesRepresentativeId
             WHERE [Id] = @Id;
             """;
         AddParams(cmd, account);
@@ -195,12 +202,19 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         cmd.Parameters.Add(new SqlParameter("@IdentityNumber", (object?)a.IdentityNumber ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@TaxOffice",      (object?)a.TaxOffice      ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Phone",          (object?)a.Phone          ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Mobile",         (object?)a.Mobile         ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Email",          (object?)a.Email          ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Website",        (object?)a.Website        ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Address",        (object?)a.Address        ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@PostalCode",     (object?)a.PostalCode     ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@City",           (object?)a.City           ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@District",       (object?)a.District       ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@Neighborhood",   (object?)a.Neighborhood   ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CountryCode",    (object?)a.CountryCode    ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@ContactPerson",  (object?)a.ContactPerson  ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@IsActive",       a.IsActive));
         cmd.Parameters.Add(new SqlParameter("@PriceGroupId",   (object?)a.PriceGroupId   ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@SalesRepresentativeId", (object?)a.SalesRepresentativeId ?? DBNull.Value));
     }
 
     private static Contact MapRow(SqlDataReader r) => new()
@@ -213,12 +227,19 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         IdentityNumber = r.IsDBNull(5)  ? null : r.GetString(5),
         TaxOffice      = r.IsDBNull(6)  ? null : r.GetString(6),
         Phone          = r.IsDBNull(7)  ? null : r.GetString(7),
-        Email          = r.IsDBNull(8)  ? null : r.GetString(8),
-        Address        = r.IsDBNull(9)  ? null : r.GetString(9),
-        City           = r.IsDBNull(10) ? null : r.GetString(10),
-        District       = r.IsDBNull(11) ? null : r.GetString(11),
-        IsActive       = r.GetBoolean(12),
-        PriceGroupId   = r.IsDBNull(13) ? null : r.GetInt32(13),
-        CreatedAt      = r.GetDateTime(14)
+        Mobile         = r.IsDBNull(8)  ? null : r.GetString(8),
+        Email          = r.IsDBNull(9)  ? null : r.GetString(9),
+        Website        = r.IsDBNull(10) ? null : r.GetString(10),
+        Address        = r.IsDBNull(11) ? null : r.GetString(11),
+        PostalCode     = r.IsDBNull(12) ? null : r.GetString(12),
+        City           = r.IsDBNull(13) ? null : r.GetString(13),
+        District       = r.IsDBNull(14) ? null : r.GetString(14),
+        Neighborhood   = r.IsDBNull(15) ? null : r.GetString(15),
+        CountryCode    = r.IsDBNull(16) ? null : r.GetString(16),
+        ContactPerson  = r.IsDBNull(17) ? null : r.GetString(17),
+        IsActive       = r.GetBoolean(18),
+        PriceGroupId   = r.IsDBNull(19) ? null : r.GetInt32(19),
+        SalesRepresentativeId = r.IsDBNull(20) ? null : r.GetInt32(20),
+        CreatedAt      = r.GetDateTime(21)
     };
 }

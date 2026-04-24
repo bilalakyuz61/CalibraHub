@@ -162,8 +162,8 @@ public sealed class PriceListController : Controller
         var results = items.Select(s => new
         {
             id                = s.Id,
-            materialCode      = s.MaterialCode,
-            materialName      = s.MaterialName ?? s.MaterialCode,
+            materialCode      = s.Code,
+            materialName      = s.Name ?? s.Code,
             trackCombinations = s.TrackCombinations
         }).ToArray();
 
@@ -186,6 +186,7 @@ public sealed class PriceListController : Controller
         var combos = await _logistics.GetCombinationsForLookupAsync(materialCode.Trim(), ct);
         return Json(combos.Select(c => new
         {
+            configId = c.ConfigId,
             code = c.Code,
             name = c.Name,
             featureValues = c.FeatureValues.Select(fv => new { feature = fv.Feature, value = fv.Value })
