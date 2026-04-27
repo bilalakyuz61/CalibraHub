@@ -17,9 +17,9 @@
     // Eski Razor SelectedScreenCode ITEMS, CONTACTS gibi FormMas kodlarina donusur.
     var legacyToFormCodeMap = new Dictionary<string, string>
     {
-        ["material_cards"]        = "ITEMS",
-        ["contact_accounts"]      = "CONTACTS",
-        ["sales_quotes"]          = "SALES_QUOTE_EDIT",
+        ["items"]        = "ITEMS",
+        ["contacts"]      = "CONTACTS",
+        ["documents"]          = "SALES_QUOTE_EDIT",
         ["product_configuration"] = "PRODUCT_CONFIG",
     };
     var initialFormCode = "ITEMS";
@@ -57,18 +57,43 @@
     .page-admin-view-settings .integrator-dashboard__grid { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; gap: 4px; min-height: 0; }
     .page-admin-view-settings .integrator-dashboard__group { flex: 0 0 auto !important; min-height: 0; overflow: visible; }
 
-    /* AdminWidgetRegistry React container: tum alani doldur */
+    /* AdminWidgetRegistry React container: tum alani doldur.
+       Borderradius 0: rounded kose koruyacak sekilde "şaffaf arka plan"
+       sizdigi icin kose-beyazi gorunumu olusuyordu; kenarlari flush yapiyoruz. */
     .page-admin-view-settings .admin-registry-mount-wrap {
         flex: 1 1 auto !important;
         display: flex !important;
         min-height: 600px;
         overflow: hidden;
-        border-radius: 12px;
+        border-radius: 0 !important;
+        background: transparent;
+    }
+    /* Light mode: React icinde bg-[#f8fafc] zaten var; dark mode'da React
+       bg-[#0a0d17] uyguluyor. Dis wrapper'in arka plani ise light tema
+       gradient'lerini gosteriyordu — panel kenarlarinda belirgin ton kopusu
+       olmasin diye ikisi de opak koyu verilir. */
+    body.app-theme-dark.page-admin-view-settings .admin-registry-mount-wrap,
+    body.app-theme-dark .page-admin-view-settings .admin-registry-mount-wrap {
+        background: #0a0d17 !important;
     }
     .page-admin-view-settings #reactAdminWidgetRegistry {
         flex: 1 1 auto;
         min-height: 0;
         overflow: hidden;
+        border-radius: 0;
+    }
+    body.app-theme-dark.page-admin-view-settings #reactAdminWidgetRegistry,
+    body.app-theme-dark .page-admin-view-settings #reactAdminWidgetRegistry {
+        background: #0a0d17;
+    }
+    /* Admin sayfasinin dis section/content container'larinin (integrator-card
+       benzeri) kenarlari da koyuyla hizalansin — radyal gradyan light renkler
+       sadece body'de kalsin, kartlarda beyaz halka yaratmasin. */
+    body.app-theme-dark.page-admin-view-settings .integrator-dashboard__group,
+    body.app-theme-dark .page-admin-view-settings .integrator-dashboard__group {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
     }
 
     /* ══════════════════════════════════════════════════════════════
@@ -83,11 +108,7 @@
     body.app-theme-dark.page-admin-view-settings,
     body.app-theme-dark .page-admin-view-settings {
         background-color: #0a0d17;
-        background-image:
-            radial-gradient(at 12% 8%, rgba(99,102,241,0.18) 0px, transparent 50%),
-            radial-gradient(at 88% 12%, rgba(14,165,233,0.12) 0px, transparent 50%),
-            radial-gradient(at 50% 100%, rgba(168,85,247,0.12) 0px, transparent 50%),
-            radial-gradient(at 95% 85%, rgba(20,184,166,0.08) 0px, transparent 50%);
+        background-image: none;  /* Koselerdeki renkli gradyan halelerini kaldir — duz koyu zemin */
     }
     body.app-theme-dark .page-admin-view-settings .integrator-card {
         background: rgba(255, 255, 255, 0.04) !important;

@@ -75,7 +75,7 @@ public interface IGuideRepository
     ///
     /// Heuristic:
     ///   - GuideCode: view adinin 'v_Guide' prefix'i cikarildiktan sonra uppercased
-    ///     (orn. 'v_GuideContactAccounts' → 'CONTACTACCOUNTS')
+    ///     (orn. 'v_GuideContacts' → 'CONTACTACCOUNTS')
     ///   - GuideLabel: view adindan cikarilip bosluklu hali
     ///   - ValueColumn: view'in 1. kolonu (ORDINAL_POSITION=1)
     ///   - DisplayColumn: view'in 2. kolonu varsa, yoksa 1. kolonla ayni

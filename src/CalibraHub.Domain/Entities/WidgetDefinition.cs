@@ -49,6 +49,17 @@ public sealed class WidgetDefinition
     /// Asla HEX kodu tutulmaz — sadece semantik token.
     /// </summary>
     public string? ColorValue { get; init; }
+    /// <summary>
+    /// Form uzerinde kaplayacagi 12-kolonlu grid span'i (1-12).
+    /// Varsayilan 6 = 1/2 satir. Renderer CSS grid-column'a cevirir.
+    /// </summary>
+    public int ColSpan { get; init; } = 6;
+    /// <summary>
+    /// Etiket gorunum stili: "standard" (label input ustunde) veya
+    /// "modern" (floating/outlined — label input cercevesi uzerinde).
+    /// Varsayilan "standard". Enum yerine string — genisletilebilir.
+    /// </summary>
+    public string LabelStyle { get; init; } = "standard";
     public DateTime CreatedAt { get; init; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

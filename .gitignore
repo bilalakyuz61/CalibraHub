@@ -31,3 +31,6 @@ tools/
 
 # App logs
 app.log
+
+# ASP.NET Core Data Protection keys (local, not safe to commit)
+.app-data-protection/

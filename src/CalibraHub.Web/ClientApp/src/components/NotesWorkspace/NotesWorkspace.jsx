@@ -21,6 +21,12 @@ import { CharacterCount } from '@tiptap/extension-character-count'
 import { Typography } from '@tiptap/extension-typography'
 import { Focus } from '@tiptap/extension-focus'
 import { common, createLowlight } from 'lowlight'
+import { EncryptedMark } from './EncryptedMark'
+import { EncryptPromptModal, DecryptPromptModal, FullNoteLockScreen } from './EncryptionModals'
+import {
+  encryptText, decryptText,
+  rememberPassword, recallPassword, payloadCacheKey
+} from './encryption'
 import {
   FolderOpen, FolderClosed, Plus, FileText, Bold, Italic, Underline as UnderlineIcon, List,
   Link as LinkIcon, Trash2, ChevronRight, ChevronDown, StickyNote, Heading1, Heading2,
@@ -28,9 +34,10 @@ import {
   PlusCircle, Search, MoreHorizontal, FileDown, Table as TableIcon, Loader2, Pencil,
   Type, Highlighter, Subscript as SubIcon, Superscript as SuperIcon,
   AlignLeft, AlignCenter, AlignRight, AlignJustify, Undo2, Redo2,
+  Lock, Unlock,
   ImagePlus, Youtube as YoutubeIcon, RowsIcon, Columns3,
   ArrowUpFromLine, ArrowDownFromLine, ArrowLeftFromLine, ArrowRightFromLine,
-  Trash, TableProperties
+  Trash, TableProperties, Pin, ArrowUpDown, Bell, BellRing, X
 } from 'lucide-react'
 import * as api from '../../services/notesService'
 
@@ -50,9 +57,13 @@ function formatTime(d) {
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
 }
 
-function snippet(text, maxLen) {
+function snippet(text, maxLen, isFullyEncrypted) {
+  // Mod 2: Tum not sifreli ise icerigi gostermeden kilit ikonu doner
+  if (isFullyEncrypted) return '🔒 Sifrelenmis not'
   if (!text) return ''
-  var clean = text.replace(/<table[\s\S]*?<\/table>/gi, '').replace(/<pre[\s\S]*?<\/pre>/gi, '')
+  // Mod 1: Sifreli bloklari mask ile degistir (icerik sizmasin)
+  var masked = text.replace(/<span[^>]*class="[^"]*nw-encrypted[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '🔒')
+  var clean = masked.replace(/<table[\s\S]*?<\/table>/gi, '').replace(/<pre[\s\S]*?<\/pre>/gi, '')
   var plain = clean.replace(/<[^>]*>/g, '')
   var decoded = plain.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"')
   decoded = decoded.replace(/\s+/g, ' ').trim()
@@ -77,6 +88,24 @@ function getDescendantIds(folders, parentId) {
     ids = ids.concat(getDescendantIds(folders, c.id))
   })
   return ids
+}
+
+function sortNotes(list, order) {
+  var sorted = list.slice()
+  sorted.sort(function (a, b) {
+    // pinned notes always first
+    if (a.isPinned && !b.isPinned) return -1
+    if (!a.isPinned && b.isPinned) return 1
+    // then sort by selected order
+    switch (order) {
+      case 'updatedAsc': return a.updatedAt - b.updatedAt
+      case 'titleAsc': return (a.title || '').localeCompare(b.title || '', 'tr')
+      case 'titleDesc': return (b.title || '').localeCompare(a.title || '', 'tr')
+      case 'createdDesc': return (b.createdAt || b.updatedAt) - (a.createdAt || a.updatedAt)
+      default: return b.updatedAt - a.updatedAt // updatedDesc
+    }
+  })
+  return sorted
 }
 
 var MAX_FOLDER_DEPTH = 5
@@ -390,12 +419,220 @@ function ColorPicker(props) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   ReminderPopover — Bell button dropdown (list + add)
+   ══════════════════════════════════════════════════════════ */
+var RECURRENCE_LABELS = [
+  'Tek sefer',
+  'Her saat',
+  'Her gun',
+  'Her hafta',
+  'Hafta sonu',
+  'Her ay',
+  'Haftanin belirli gunleri',
+  'Ayin belirli gunleri'
+]
+var RECURRENCE_NEEDS_DATA = { 6: 'days_of_week', 7: 'days_of_month' }
+
+function pad2(n) { return String(n).padStart(2, '0') }
+
+function defaultReminderAtLocal() {
+  // Bir saat sonrasi, yyyy-MM-ddTHH:mm
+  var d = new Date(Date.now() + 60 * 60 * 1000)
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+    'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+}
+
+function formatReminderAt(iso) {
+  if (!iso) return ''
+  // iso = yyyy-MM-ddTHH:mm:ss (local wall-clock, timezone yok)
+  var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso)
+  if (!m) return iso
+  return m[3] + '.' + m[2] + '.' + m[1] + ' ' + m[4] + ':' + m[5]
+}
+
+function ReminderPopover(props) {
+  var reminders = props.reminders || []
+  var loading = !!props.loading
+  var onClose = props.onClose
+  var onAdd = props.onAdd
+  var onDelete = props.onDelete
+  var btnRef = props.btnRef
+
+  var [remindAt, setRemindAt] = useState(defaultReminderAtLocal)
+  var [recurrence, setRecurrence] = useState(0)
+  var [recurrenceData, setRecurrenceData] = useState('')
+  var [submitting, setSubmitting] = useState(false)
+  var [deliveryChannel, setDeliveryChannel] = useState(0) // 0=InApp, 1=Email, 2=Both
+  var [targetUserId, setTargetUserId] = useState('')      // '' = kendim
+  var [companyUsers, setCompanyUsers] = useState([])
+
+  useEffect(function () {
+    // Popover ilk acildiginda sirket kullanicilarini yukle
+    api.getCompanyUsers().then(function (users) {
+      setCompanyUsers(Array.isArray(users) ? users : [])
+    }).catch(function () { /* sessizce */ })
+  }, [])
+
+  useEffect(function () {
+    function handleClick(e) {
+      if (btnRef && btnRef.current && btnRef.current.contains(e.target)) return
+      onClose()
+    }
+    document.addEventListener('mousedown', handleClick)
+    return function () { document.removeEventListener('mousedown', handleClick) }
+  }, [onClose, btnRef])
+
+  function submit() {
+    if (!remindAt) return
+    var needsData = RECURRENCE_NEEDS_DATA[recurrence]
+    if (needsData && !recurrenceData.trim()) return
+    setSubmitting(true)
+    Promise.resolve(onAdd(
+      remindAt + ':00',
+      recurrence,
+      recurrenceData.trim() || null,
+      deliveryChannel,
+      targetUserId || null
+    ))
+      .finally(function () {
+        setSubmitting(false)
+        setRemindAt(defaultReminderAtLocal())
+        setRecurrence(0)
+        setRecurrenceData('')
+        // Delivery + target reset etmiyoruz — ard arda ayni ayarla ekleme pratik olur
+      })
+  }
+
+  var DELIVERY_LABELS = { 0: 'Bildirim', 1: 'E-posta', 2: 'Bildirim + E-posta' }
+
+  return (
+    <div className="nw-reminder-pop" onClick={function (e) { e.stopPropagation() }}>
+      <div className="nw-reminder-pop-head">
+        <Bell size={14} />
+        <span>Hatirlaticilar</span>
+      </div>
+
+      <div className="nw-reminder-pop-list">
+        {loading && <div className="nw-reminder-empty">Yukleniyor...</div>}
+        {!loading && reminders.length === 0 && (
+          <div className="nw-reminder-empty">Henuz hatirlatici yok.</div>
+        )}
+        {!loading && reminders.map(function (r) {
+          var isSent = r.isSent
+          var dChan = r.deliveryChannel || 0
+          var meta = DELIVERY_LABELS[dChan] || 'Bildirim'
+          if (r.targetUserName) meta += ' → ' + r.targetUserName
+          return (
+            <div key={r.id} className={'nw-reminder-row' + (isSent ? ' nw-reminder-row--sent' : '')}>
+              <div className="nw-reminder-row-info">
+                <div className="nw-reminder-row-when">
+                  {isSent ? <BellRing size={12} /> : <Bell size={12} />}
+                  <span>{formatReminderAt(r.remindAt)}</span>
+                  {isSent && <span className="nw-reminder-sent-tag">gonderildi</span>}
+                </div>
+                <div className="nw-reminder-row-rec">
+                  {meta}
+                  {r.recurrenceType > 0 ? ' · ' + (RECURRENCE_LABELS[r.recurrenceType] || '') : ''}
+                  {r.recurrenceData ? ' — ' + r.recurrenceData : ''}
+                </div>
+              </div>
+              <button
+                className="nw-reminder-del"
+                onClick={function () { onDelete(r.id) }}
+                title="Sil"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="nw-reminder-pop-add">
+        <div className="nw-reminder-add-row">
+          <label>Zaman</label>
+          <input
+            type="datetime-local"
+            className="nw-reminder-input"
+            value={remindAt}
+            onChange={function (e) { setRemindAt(e.target.value) }}
+          />
+        </div>
+        <div className="nw-reminder-add-row">
+          <label>Tekrar</label>
+          <select
+            className="nw-reminder-input"
+            value={recurrence}
+            onChange={function (e) { setRecurrence(parseInt(e.target.value, 10)) }}
+          >
+            {RECURRENCE_LABELS.map(function (label, idx) {
+              return <option key={idx} value={idx}>{label}</option>
+            })}
+          </select>
+        </div>
+        {RECURRENCE_NEEDS_DATA[recurrence] && (
+          <div className="nw-reminder-add-row">
+            <label>{recurrence === 6 ? 'Gunler (0=Paz..6=Cts)' : 'Ayin gunleri (1..31)'}</label>
+            <input
+              type="text"
+              className="nw-reminder-input"
+              placeholder={recurrence === 6 ? 'orn: 1,3,5' : 'orn: 1,15'}
+              value={recurrenceData}
+              onChange={function (e) { setRecurrenceData(e.target.value) }}
+            />
+          </div>
+        )}
+        <div className="nw-reminder-add-row">
+          <label>Kanal</label>
+          <select
+            className="nw-reminder-input"
+            value={deliveryChannel}
+            onChange={function (e) { setDeliveryChannel(parseInt(e.target.value, 10)) }}
+          >
+            <option value={0}>Bildirim</option>
+            <option value={1}>E-posta</option>
+            <option value={2}>Bildirim + E-posta</option>
+          </select>
+        </div>
+        <div className="nw-reminder-add-row">
+          <label>Kime</label>
+          <select
+            className="nw-reminder-input"
+            value={targetUserId}
+            onChange={function (e) { setTargetUserId(e.target.value) }}
+          >
+            <option value="">Kendim</option>
+            {companyUsers.filter(function (u) { return !u.isSelf }).map(function (u) {
+              return <option key={u.id} value={u.id}>{u.fullName}</option>
+            })}
+          </select>
+        </div>
+        <button
+          className="nw-reminder-add-btn"
+          onClick={submit}
+          disabled={submitting || !remindAt}
+        >
+          {submitting ? 'Ekleniyor...' : 'Hatirlatici Ekle'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════
    NoteActionsMenu — "..." dropdown (PDF export, delete etc.)
    ══════════════════════════════════════════════════════════ */
 function NoteActionsMenu(props) {
   var onClose = props.onClose
   var onExportPdf = props.onExportPdf
   var onDelete = props.onDelete
+  var onReminders = props.onReminders              // Hatirlaticilar popover'ini ac
+  var reminderCount = props.reminderCount || 0     // Aktif hatirlatici sayisi (badge icin)
+  var onEncryptWhole = props.onEncryptWhole       // Mod 2: Tum notu sifrele
+  var onLockWhole = props.onLockWhole             // Mod 2: Acikken kilitle
+  var onRemoveEncryption = props.onRemoveEncryption // Mod 2: Sifrelemeyi kaldir
+  var isEncrypted = !!props.isEncrypted            // Not Mod 2 sifreli mi?
+  var isUnlocked = !!props.isUnlocked              // Mod 2 acikken true
   var btnRef = props.btnRef
 
   useEffect(function () {
@@ -409,10 +646,40 @@ function NoteActionsMenu(props) {
 
   return (
     <div className="nw-actions-menu" onClick={function (e) { e.stopPropagation() }}>
+      <button className="nw-actions-item" onClick={onReminders}>
+        {reminderCount > 0 ? <BellRing size={15} /> : <Bell size={15} />}
+        <span>Hatirlatici{reminderCount > 0 ? ' (' + reminderCount + ')' : ''}</span>
+      </button>
+      <div className="nw-actions-sep" />
       <button className="nw-actions-item" onClick={onExportPdf}>
         <FileDown size={15} />
         <span>PDF olarak aktar</span>
       </button>
+      <div className="nw-actions-sep" />
+      {!isEncrypted && (
+        <button className="nw-actions-item" onClick={onEncryptWhole}>
+          <Lock size={15} />
+          <span>Notu tamamen sifrele</span>
+        </button>
+      )}
+      {isEncrypted && isUnlocked && (
+        <>
+          <button className="nw-actions-item" onClick={onLockWhole}>
+            <Lock size={15} />
+            <span>Notu tekrar kilitle</span>
+          </button>
+          <button className="nw-actions-item" onClick={onRemoveEncryption}>
+            <Unlock size={15} />
+            <span>Sifrelemeyi kaldir</span>
+          </button>
+        </>
+      )}
+      {isEncrypted && !isUnlocked && (
+        <button className="nw-actions-item" disabled style={{ opacity: 0.55, cursor: 'not-allowed' }}>
+          <Lock size={15} />
+          <span>Not sifreli — ac, sonra ayar gorunur</span>
+        </button>
+      )}
       <div className="nw-actions-sep" />
       <button className="nw-actions-item nw-actions-item--danger" onClick={onDelete}>
         <Trash2 size={15} />
@@ -444,9 +711,23 @@ export default function NotesWorkspace() {
   var actionsBtnRef = useRef(null)
   var [actionsMenuOpen, setActionsMenuOpen] = useState(false)
   var [confirmModal, setConfirmModal] = useState(null)
+  var [remindersOpen, setRemindersOpen] = useState(false)
+  var [reminders, setReminders] = useState([])
+  var [remindersLoading, setRemindersLoading] = useState(false)
+  // ── Sifreleme state'leri (Mod 1 + Mod 2) ──────────────────────────────
+  // Mod 1: Secili bolumu sifrele modalı
+  var [encryptSelectionOpen, setEncryptSelectionOpen] = useState(false)
+  // Mod 1: Sifreli bloga tiklayinca acilan decrypt modali { ct, hint, range }
+  var [decryptBlockTarget, setDecryptBlockTarget] = useState(null)
+  // Mod 2: Tum notu sifrele modali (not icin)
+  var [encryptWholeNoteOpen, setEncryptWholeNoteOpen] = useState(false)
+  // Mod 2: Kilitli not acilinca cachelenen parola (cache ile beraber calisir)
+  var [unlockedNoteIds, setUnlockedNoteIds] = useState(new Set())
   var [folderCtxMenu, setFolderCtxMenu] = useState(null)
   var [tableCtxMenu, setTableCtxMenu] = useState(null) // { x, y }
+  var [sortOrder, setSortOrder] = useState('updatedDesc') // updatedDesc | updatedAsc | titleAsc | titleDesc | createdDesc
   var contentTimerRef = useRef(null)
+  var isSwitchingNoteRef = useRef(false)
   var selectedNoteIdRef = useRef(null)
   selectedNoteIdRef.current = selectedNoteId
 
@@ -485,6 +766,7 @@ export default function NotesWorkspace() {
       CharacterCount,
       Typography,
       Focus.configure({ className: 'has-focus', mode: 'deepest' }),
+      EncryptedMark,
     ],
     editorProps: {
       attributes: {
@@ -500,16 +782,60 @@ export default function NotesWorkspace() {
           }
           return false
         },
+        click: function (view, event) {
+          // Sifreli span'e tiklandiysa decrypt modalini ac
+          var target = event.target
+          var encSpan = target && target.closest ? target.closest('.nw-encrypted') : null
+          if (encSpan && encSpan.getAttribute('data-open') !== '1') {
+            event.preventDefault()
+            var ct = encSpan.getAttribute('data-ct') || ''
+            var hint = encSpan.getAttribute('data-hint') || ''
+            setDecryptBlockTarget({ element: encSpan, ct: ct, hint: hint })
+            return true
+          }
+          return false
+        },
       },
     },
     onUpdate: function (ctx) {
+      if (isSwitchingNoteRef.current) return
       if (contentTimerRef.current) clearTimeout(contentTimerRef.current)
-      contentTimerRef.current = setTimeout(function () {
+      contentTimerRef.current = setTimeout(async function () {
         var html = ctx.editor.getHTML()
         var noteId = selectedNoteIdRef.current
+        // Mod 2: Bu not sifreli ve aciksa, save oncesi tekrar sifrele.
+        // Cache'den parolayi al; yoksa save atla (kullanici oturum acmamis).
+        var notePrev = null
+        try {
+          notePrev = (function() {
+            var arr = []
+            setNotes(function(prev) { arr = prev; return prev })
+            return arr.find(function(n) { return n.id === noteId })
+          })()
+        } catch (e) { notePrev = null }
+        var finalContent = html
+        var isEnc = notePrev && notePrev.isFullyEncrypted
+        if (isEnc) {
+          // Guvenlik: Sifreli not + editor bos ise autosave ATLA.
+          // Kullanici sifreleme anindan hemen sonra editor temizlendiginde
+          // bu autosave tetiklenebilir ve gercek sifreli icerigi bos bir
+          // sifreli payload ile uzerine yazabilir.
+          var plainText = (html || '').replace(/<[^>]*>/g, '').trim()
+          if (!plainText) return
+          var pw = recallPassword('note-' + noteId)
+          if (!pw) {
+            // Cache expired or not unlocked; skip save (kullanici onceki parolayi girmeli)
+            return
+          }
+          try {
+            finalContent = await encryptText(html, pw)
+          } catch (e) {
+            console.error('Mod 2 auto-encrypt failed:', e); return
+          }
+        }
         setNotes(function (prev) {
           var updated = prev.map(function (n) {
-            return n.id === noteId ? { ...n, content: html, updatedAt: new Date() } : n
+            return n.id === noteId ? { ...n, content: finalContent, updatedAt: new Date() } : n
           })
           var note = updated.find(function (n) { return n.id === noteId })
           if (note) api.saveNote(note).catch(function (e) { console.error(e) })
@@ -533,6 +859,10 @@ export default function NotesWorkspace() {
             title: n.title || '',
             content: n.content || '',
             updatedAt: new Date(n.updatedAt),
+            isPinned: !!n.isPinned,
+            isFullyEncrypted: !!n.isFullyEncrypted,
+            encryptionHint: n.encryptionHint || null,
+            reminderCount: n.reminderCount || 0,
           }
         })
         setFolders(flds)
@@ -548,7 +878,7 @@ export default function NotesWorkspace() {
 
   /* Klasör değişince ilk notu otomatik seç */
   useEffect(function () {
-    var sorted = filteredNotes.slice().sort(function (a, b) { return b.updatedAt - a.updatedAt })
+    var sorted = sortNotes(filteredNotes, sortOrder)
     if (sorted.length > 0) {
       setSelectedNoteId(sorted[0].id)
     } else {
@@ -560,15 +890,49 @@ export default function NotesWorkspace() {
   /* Sync Tiptap editor when switching notes */
   useEffect(function () {
     if (editor && selectedNote) {
-      var currentContent = editor.getHTML()
-      if (currentContent !== selectedNote.content) {
-        editor.commands.setContent(selectedNote.content || '', false)
+      // Mod 2: Sifreli not ise editor'a ciphertext yukleme; LockScreen gosterilecek.
+      // Ama session'da zaten acilmissa (unlockedNoteIds) cache'den parola al ve decrypt et.
+      if (selectedNote.isFullyEncrypted) {
+        if (unlockedNoteIds.has(selectedNote.id)) {
+          var cachedPw = recallPassword('note-' + selectedNote.id)
+          if (cachedPw) {
+            isSwitchingNoteRef.current = true
+            decryptText(selectedNote.content, cachedPw)
+              .then(function(pt) {
+                if (editor && !editor.isDestroyed) {
+                  editor.commands.setContent(pt || '', false)
+                }
+              })
+              .catch(function() {
+                // Cache expired veya key rotate; unlocked'dan cikar
+                setUnlockedNoteIds(function(prev) { var n = new Set(prev); n.delete(selectedNote.id); return n })
+              })
+              .finally(function() { isSwitchingNoteRef.current = false })
+          } else {
+            // Cache yok artik; unlocked state'i kaldir (kilit ekrani gorunsun)
+            setUnlockedNoteIds(function(prev) { var n = new Set(prev); n.delete(selectedNote.id); return n })
+          }
+        } else {
+          // Editor'e dokunma — lock screen gorunecek
+          isSwitchingNoteRef.current = true
+          editor.commands.setContent('', false)
+          isSwitchingNoteRef.current = false
+        }
+      } else {
+        var currentContent = editor.getHTML()
+        if (currentContent !== selectedNote.content) {
+          isSwitchingNoteRef.current = true
+          editor.commands.setContent(selectedNote.content || '', false)
+          isSwitchingNoteRef.current = false
+        }
       }
     } else if (editor && !selectedNote) {
+      isSwitchingNoteRef.current = true
       editor.commands.setContent('', false)
+      isSwitchingNoteRef.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNoteId, editor])
+  }, [selectedNoteId, editor, unlockedNoteIds])
 
   /* ── Handlers ─────────────────────────────────────── */
   var handleSelectFolder = useCallback(function (fid) { setSelectedFolderId(fid) }, [])
@@ -680,7 +1044,25 @@ export default function NotesWorkspace() {
     return function () { document.removeEventListener('mousedown', close) }
   }, [tableCtxMenu])
 
-  var handleSelectNote = useCallback(function (nid) { setSelectedNoteId(nid) }, [])
+  var handleSelectNote = useCallback(function (nid) {
+    // Not degisirken pending autosave'i hemen iptal et —
+    // eski notun plaintext/sifreli icerigi yeni notun icerigi ile karismasin
+    if (contentTimerRef.current) { clearTimeout(contentTimerRef.current); contentTimerRef.current = null }
+    setSelectedNoteId(nid)
+  }, [])
+
+  var handleTogglePin = useCallback(function (nid, e) {
+    if (e) { e.stopPropagation(); e.preventDefault() }
+    api.togglePin(nid).then(function (res) {
+      if (res.success) {
+        setNotes(function (prev) {
+          return prev.map(function (n) {
+            return n.id === nid ? { ...n, isPinned: res.isPinned } : n
+          })
+        })
+      }
+    }).catch(function (err) { console.error('[NotesWorkspace] togglePin error:', err) })
+  }, [])
 
   var saveTitleTimerRef = useRef(null)
 
@@ -735,11 +1117,75 @@ export default function NotesWorkspace() {
     if (!selectedNoteId) return
     var note = notes.find(function (n) { return n.id === selectedNoteId })
     setConfirmModal({
-      title: 'Notu Sil',
-      text: '"' + (note ? note.title || 'Basliksiz Not' : 'Not') + '" kalici olarak silinecek. Devam edilsin mi?',
+      title: 'Çöp Kutusuna Taşı',
+      text: '"' + (note ? note.title || 'Başlıksız Not' : 'Not') + '" çöp kutusuna taşınacak. Devam edilsin mi?',
       onConfirm: doDeleteNote,
     })
   }, [selectedNoteId, notes, doDeleteNote])
+
+  /* ── Reminders (hatirlaticilar) ─────────────────────────────
+     Secilen notun hatirlaticilari ReminderNotificationWorker tarafindan
+     her 60 sn'de bir kontrol edilir; RemindAt <= now ise toast + (varsa)
+     recurrence'a gore sonraki occurrence'i olusturur. */
+  useEffect(function () {
+    if (!selectedNoteId) { setReminders([]); return }
+    var cancelled = false
+    setRemindersLoading(true)
+    api.getReminders(selectedNoteId)
+      .then(function (data) {
+        if (cancelled) return
+        setReminders((data && data.reminders) || [])
+      })
+      .catch(function () { if (!cancelled) setReminders([]) })
+      .finally(function () { if (!cancelled) setRemindersLoading(false) })
+    return function () { cancelled = true }
+  }, [selectedNoteId])
+
+  var handleAddReminder = useCallback(function (remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserId) {
+    if (!selectedNoteId) return Promise.resolve()
+    var nid = selectedNoteId
+    return api.addReminder(nid, remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserId)
+      .then(function (r) {
+        if (!r || !r.success) {
+          alert('Hatirlatici eklenemedi: ' + (r && r.message ? r.message : 'Bilinmeyen hata.'))
+          return
+        }
+        setReminders(function (prev) {
+          var next = prev.concat([r.reminder])
+          next.sort(function (a, b) { return (a.remindAt || '').localeCompare(b.remindAt || '') })
+          return next
+        })
+        // Not listesindeki rozet icin count'u guncelle — yeni eklenen is_sent=0 (aktif).
+        setNotes(function (prev) {
+          return prev.map(function (n) {
+            return n.id === nid ? { ...n, reminderCount: (n.reminderCount || 0) + 1 } : n
+          })
+        })
+      })
+      .catch(function (e) { alert('Hatirlatici eklenemedi: ' + e.message) })
+  }, [selectedNoteId])
+
+  var handleDeleteReminder = useCallback(function (reminderId) {
+    if (!selectedNoteId) return
+    var nid = selectedNoteId
+    // Aktif reminder'i (is_sent=0) silerken count da dussun. Gonderilmis olanin silinmesi
+    // count'u etkilemez cunku zaten aktif degil.
+    var wasActive = reminders.some(function (r) { return r.id === reminderId && !r.isSent })
+    api.deleteReminder(reminderId, nid)
+      .then(function (r) {
+        if (r && r.success) {
+          setReminders(function (prev) { return prev.filter(function (x) { return x.id !== reminderId }) })
+          if (wasActive) {
+            setNotes(function (prev) {
+              return prev.map(function (n) {
+                return n.id === nid ? { ...n, reminderCount: Math.max(0, (n.reminderCount || 0) - 1) } : n
+              })
+            })
+          }
+        }
+      })
+      .catch(function () { /* sessizce yutma */ })
+  }, [selectedNoteId, reminders])
 
   var handleExportPdf = useCallback(function () {
     if (!selectedNote || !editor) return
@@ -782,6 +1228,224 @@ export default function NotesWorkspace() {
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     }).from(container).save()
   }, [selectedNote, editor])
+
+  /* ══════════════════════════════════════════════════════════
+     ŞIFRELEME — Mod 1 (Secili bolum) + Mod 2 (Tum not)
+     ══════════════════════════════════════════════════════════ */
+
+  // Toolbar "🔒 Sifrele" butonu (akilli):
+  //   - Secim varsa  → Mod 1 (secili aralik)
+  //   - Secim yoksa → Mod 2 (tum not)
+  var handleOpenEncryptSelection = useCallback(function() {
+    if (!editor || !selectedNote) return
+    var sel = editor.state.selection
+    if (sel && !sel.empty) {
+      setEncryptSelectionOpen(true)
+    } else {
+      // Zaten sifreli ise tekrar sifreleme teklif etme
+      if (selectedNote.isFullyEncrypted) {
+        showMsg('Bu not zaten tamamen sifreli.', false)
+        return
+      }
+      setEncryptWholeNoteOpen(true)
+    }
+  }, [editor, selectedNote])
+
+  // Mod 1: EncryptPromptModal submit → secili aralik ciphertext'e cevrilir + EncryptedMark sar
+  var handleEncryptSelectionSubmit = useCallback(async function(password, hint) {
+    if (!editor) { setEncryptSelectionOpen(false); return }
+    var sel = editor.state.selection
+    if (!sel || sel.empty) { setEncryptSelectionOpen(false); return }
+    try {
+      // Secilen metnin plain text + HTML'ini al (HTML kullan — formatlama korunsun)
+      var selectedHtml = ''
+      try {
+        var slice = editor.state.doc.cut(sel.from, sel.to)
+        // DOMSerializer kullanacagiz; daha basit: editor.getJSON'dan getHTML
+        var tmp = document.createElement('div')
+        // Tiptap'in kendi serializer'i yerine textBetween yeterli cogu durumda
+        tmp.textContent = editor.state.doc.textBetween(sel.from, sel.to, '\n')
+        selectedHtml = tmp.textContent
+      } catch (e) {
+        selectedHtml = editor.state.doc.textBetween(sel.from, sel.to, '\n')
+      }
+      var payload = await encryptText(selectedHtml, password)
+      // Secili metni sil ve yerine "🔒 Sifreli" EncryptedMark'li bir span insert et
+      editor.chain().focus()
+        .deleteSelection()
+        .insertContent({
+          type: 'text',
+          text: '🔒 Sifreli bolum',
+          marks: [{ type: 'encrypted', attrs: { ct: payload, hint: hint || null } }]
+        })
+        .run()
+      setEncryptSelectionOpen(false)
+    } catch (e) {
+      showMsg('Sifreleme hatasi: ' + (e.message || e), false)
+    }
+  }, [editor])
+
+  // Mod 1: Sifreli bloga tiklayinca → decrypt
+  var handleDecryptBlockSubmit = useCallback(async function(password) {
+    var target = decryptBlockTarget
+    if (!target || !editor) return false
+    try {
+      var plaintext = await decryptText(target.ct, password)
+      // DOM span'i "acilmis" olarak isaretle (renderlama geri donerse yine kilit goster)
+      try { target.element.setAttribute('data-open', '1') } catch (e) {}
+      // Session cache
+      var ck = await payloadCacheKey(target.ct)
+      if (ck) rememberPassword(ck, password)
+      // Kullaniciya inline bir popup / alert ile goster
+      alert('🔓 Sifreli icerik:\n\n' + plaintext)
+      setDecryptBlockTarget(null)
+      return true
+    } catch (e) {
+      return false
+    }
+  }, [decryptBlockTarget, editor])
+
+  // Mod 2: Actions menu'den "Notu Tamamen Sifrele" tiklanir
+  var handleOpenEncryptWholeNote = useCallback(function() {
+    if (!selectedNote) return
+    setActionsMenuOpen(false)
+    setEncryptWholeNoteOpen(true)
+  }, [selectedNote])
+
+  // Mod 2: EncryptPromptModal submit → tum content encrypt + note flag'i set + save
+  var handleEncryptWholeNoteSubmit = useCallback(async function(password, hint) {
+    if (!selectedNote || !editor) { setEncryptWholeNoteOpen(false); return }
+    // Pending autosave timer'i iptal et
+    if (contentTimerRef.current) { clearTimeout(contentTimerRef.current); contentTimerRef.current = null }
+    try {
+      var html = editor.getHTML()
+      var payload = await encryptText(html, password)
+
+      // ROUND-TRIP DOGRULAMA — ayni parolayla hemen coz. Basarisizsa save ATLA.
+      // Bu, crypto katmanindaki olasi bug'lari veya serializasyon sorunlarini yakalar.
+      var verified = null
+      try { verified = await decryptText(payload, password) } catch (e) { verified = null }
+      if (verified !== html) {
+        console.error('[NW enc] Round-trip FAILED — sifreleme guvenilmez, iptal.')
+        console.error('  original len:', (html || '').length,
+                      ' verified len:', (verified || '').length)
+        alert('Sifreleme sirasinda dogrulama basarisiz oldu. Veri degistirilmedi. Lutfen tekrar deneyin.')
+        return
+      }
+
+      var noteId = selectedNote.id
+      // Session cache
+      rememberPassword('note-' + noteId, password)
+      // Editor'u temizle — onUpdate'i bastir
+      isSwitchingNoteRef.current = true
+      try { editor.commands.setContent('', false) } catch (e) {}
+      isSwitchingNoteRef.current = false
+      setUnlockedNoteIds(function(prev) { var n = new Set(prev); n.delete(noteId); return n })
+      // State + backend save
+      setNotes(function(prev) {
+        var updated = prev.map(function(n) {
+          if (n.id !== noteId) return n
+          return {
+            ...n,
+            content: payload,
+            isFullyEncrypted: true,
+            encryptionHint: hint || null,
+            updatedAt: new Date()
+          }
+        })
+        var note = updated.find(function(n) { return n.id === noteId })
+        if (note) {
+          console.log('[NW enc] saving encrypted note', noteId, ' payload len:', payload.length, ' preview:', payload.slice(0, 60))
+          api.saveNote(note).catch(function(e){ console.error('[NW enc] saveNote err', e) })
+        }
+        return updated
+      })
+      setEncryptWholeNoteOpen(false)
+    } catch (e) {
+      console.error('[NW enc] encrypt err', e)
+      alert('Sifreleme hatasi: ' + (e.message || e))
+    }
+  }, [selectedNote, editor])
+
+  // Mod 2: Lock screen submit → decrypt + editor'a yukle (sessiondan hatirlanacak)
+  var handleUnlockFullNote = useCallback(async function(password) {
+    if (!selectedNote) return false
+    // En guncel content'i notes state'inden cek (selectedNote stale olabilir)
+    var freshNote = null
+    setNotes(function(prev) {
+      freshNote = prev.find(function(n) { return n.id === selectedNote.id })
+      return prev
+    })
+    var ct = (freshNote ? freshNote.content : selectedNote.content) || ''
+    console.log('[NW dec] unlock note', selectedNote.id, ' payload len:', ct.length, ' preview:', ct.slice(0, 60))
+    try {
+      var plaintext = await decryptText(ct, password)
+      console.log('[NW dec] ok, plaintext len:', plaintext.length)
+      // Editor'e yukle
+      isSwitchingNoteRef.current = true
+      if (editor) editor.commands.setContent(plaintext, false)
+      isSwitchingNoteRef.current = false
+      // Session cache + unlocked set
+      rememberPassword('note-' + selectedNote.id, password)
+      setUnlockedNoteIds(function(prev) { var n = new Set(prev); n.add(selectedNote.id); return n })
+      return true
+    } catch (e) {
+      console.error('[NW dec] decrypt FAILED:', e && e.message)
+      // Payload gercekten parse edilebilen bir JSON mu?
+      try {
+        var parsed = JSON.parse(ct)
+        console.error('[NW dec] payload structure:', Object.keys(parsed), ' ct-len:', (parsed.ct || '').length)
+      } catch (p) {
+        console.error('[NW dec] payload JSON PARSE FAILED — icerik beklenen formatta degil.')
+      }
+      return false
+    }
+  }, [selectedNote, editor])
+
+  // Mod 2: Actions menu'den "Notu Tekrar Kilitle" (acikken)
+  var handleLockFullNote = useCallback(function() {
+    if (!selectedNote) return
+    setActionsMenuOpen(false)
+    // Pending autosave'i iptal et — bos content uzerine yazmasin
+    if (contentTimerRef.current) { clearTimeout(contentTimerRef.current); contentTimerRef.current = null }
+    // Editor'i temizle (onUpdate tetiklenmesin)
+    isSwitchingNoteRef.current = true
+    try { if (editor) editor.commands.setContent('', false) } catch (e) {}
+    isSwitchingNoteRef.current = false
+    setUnlockedNoteIds(function(prev) { var n = new Set(prev); n.delete(selectedNote.id); return n })
+  }, [selectedNote, editor])
+
+  // Mod 2: Actions menu'den "Sifrelemeyi Kaldir" (acikken)
+  var handleRemoveFullEncryption = useCallback(function() {
+    if (!selectedNote) return
+    setActionsMenuOpen(false)
+    if (!editor) return
+    // Pending autosave'i iptal et — yarisi kalmis state ile cakismasin
+    if (contentTimerRef.current) { clearTimeout(contentTimerRef.current); contentTimerRef.current = null }
+    var html = editor.getHTML()
+    var noteId = selectedNote.id
+    setNotes(function(prev) {
+      var updated = prev.map(function(n) {
+        if (n.id !== noteId) return n
+        return {
+          ...n, content: html, isFullyEncrypted: false, encryptionHint: null,
+          updatedAt: new Date()
+        }
+      })
+      var note = updated.find(function(n) { return n.id === noteId })
+      if (note) api.saveNote(note).catch(function(e){ console.error(e) })
+      return updated
+    })
+    // Unlocked set'ten de cikar, cache'i temizle
+    setUnlockedNoteIds(function(prev) { var n = new Set(prev); n.delete(noteId); return n })
+    showMsg('Sifreleme kaldirildi.', true)
+  }, [selectedNote, editor])
+
+  // Helper: mesaj bar (mevcut showMsg yoksa basit alert fallback)
+  function showMsg(msg, ok) {
+    // NotesWorkspace'te toast yoksa console'a düş; editor üstü minik toast ileride eklenebilir
+    console.log((ok ? '[OK] ' : '[ERR] ') + msg)
+  }
 
   /* ── Insert handler (Tiptap commands) ──────────────── */
   var handleInsert = useCallback(function (item) {
@@ -897,9 +1561,25 @@ export default function NotesWorkspace() {
               <span className="nw-list-count">({filteredNotes.length})</span>
             )}
           </h4>
-          <button className="nw-new-note-btn" onClick={handleNewNote}>
-            <Plus size={13} /> Yeni Not
-          </button>
+          <div className="nw-list-actions">
+            <div className="nw-sort-wrap">
+              <select
+                className="nw-sort-select"
+                value={sortOrder}
+                onChange={function (e) { setSortOrder(e.target.value) }}
+                title="Siralama"
+              >
+                <option value="updatedDesc">Son Düzenlenen</option>
+                <option value="updatedAsc">Eski Düzenlenen</option>
+                <option value="titleAsc">Başlık (A-Z)</option>
+                <option value="titleDesc">Başlık (Z-A)</option>
+                <option value="createdDesc">Oluşturma Tarihi</option>
+              </select>
+            </div>
+            <button className="nw-new-note-btn" onClick={handleNewNote}>
+              <Plus size={13} /> Yeni Not
+            </button>
+          </div>
         </div>
         <div className="nw-list-scroll">
           {filteredNotes.length === 0 ? (
@@ -908,19 +1588,38 @@ export default function NotesWorkspace() {
               <span>Bu klasorde not yok</span>
             </div>
           ) : (
-            filteredNotes
-              .slice().sort(function (a, b) { return b.updatedAt - a.updatedAt })
+            sortNotes(filteredNotes, sortOrder)
               .map(function (n) {
                 var active = n.id === selectedNoteId
                 return (
                   <div
                     key={n.id}
-                    className={'nw-note-card' + (active ? ' nw-note-card--active' : '')}
+                    className={'nw-note-card' + (active ? ' nw-note-card--active' : '') + (n.isPinned ? ' nw-note-card--pinned' : '')}
                     onClick={function () { handleSelectNote(n.id) }}
                   >
-                    <h5 className="nw-note-card-title">{n.title || 'Basliksiz Not'}</h5>
+                    <div className="nw-note-card-top">
+                      <h5 className="nw-note-card-title">{n.title || 'Başlıksız Not'}</h5>
+                      <div className="nw-note-card-icons">
+                        {n.reminderCount > 0 && (
+                          <span
+                            className="nw-note-reminder-badge"
+                            title={n.reminderCount + ' aktif hatirlatici'}
+                          >
+                            <BellRing size={11} />
+                            {n.reminderCount > 1 && <span>{n.reminderCount}</span>}
+                          </span>
+                        )}
+                        <button
+                          className={'nw-pin-btn' + (n.isPinned ? ' nw-pin-btn--active' : '')}
+                          onClick={function (e) { handleTogglePin(n.id, e) }}
+                          title={n.isPinned ? 'Sabitlemeyi kaldir' : 'Sabitle'}
+                        >
+                          <Pin size={12} />
+                        </button>
+                      </div>
+                    </div>
                     <div className="nw-note-card-date">{formatDate(n.updatedAt)}</div>
-                    <div className="nw-note-card-snippet">{snippet(n.content, 120)}</div>
+                    <div className="nw-note-card-snippet">{snippet(n.content, 120, n.isFullyEncrypted)}</div>
                   </div>
                 )
               })
@@ -947,6 +1646,23 @@ export default function NotesWorkspace() {
                     onClose={function () { setActionsMenuOpen(false) }}
                     onExportPdf={handleExportPdf}
                     onDelete={function () { setActionsMenuOpen(false); handleDeleteNote() }}
+                    onReminders={function () { setActionsMenuOpen(false); setRemindersOpen(true) }}
+                    reminderCount={reminders.length}
+                    onEncryptWhole={handleOpenEncryptWholeNote}
+                    onLockWhole={handleLockFullNote}
+                    onRemoveEncryption={handleRemoveFullEncryption}
+                    isEncrypted={!!selectedNote && !!selectedNote.isFullyEncrypted}
+                    isUnlocked={!!selectedNote && unlockedNoteIds.has(selectedNote.id)}
+                    btnRef={actionsBtnRef}
+                  />
+                )}
+                {remindersOpen && (
+                  <ReminderPopover
+                    reminders={reminders}
+                    loading={remindersLoading}
+                    onClose={function () { setRemindersOpen(false) }}
+                    onAdd={handleAddReminder}
+                    onDelete={handleDeleteReminder}
                     btnRef={actionsBtnRef}
                   />
                 )}
@@ -1062,10 +1778,30 @@ export default function NotesWorkspace() {
               <button className={tbClass(editor && editor.isActive({ textAlign: 'justify' }))} onClick={function () { editor && editor.chain().focus().setTextAlign('justify').run() }} title="Iki yana yasla">
                 <AlignJustify size={15} />
               </button>
+              <div className="nw-toolbar-sep" />
+              {/* Sifrele: secim varsa secili bolum, yoksa tum not */}
+              <button
+                className="nw-toolbar-btn nw-toolbar-btn--encrypt"
+                onClick={handleOpenEncryptSelection}
+                title={editor && editor.state.selection && !editor.state.selection.empty
+                  ? 'Secili metni sifrele'
+                  : 'Notu tamamen sifrele'}
+              >
+                <Lock size={15} />
+              </button>
             </div>
 
-            {/* Tiptap Editor Content */}
-            <EditorContent editor={editor} />
+            {/* Mod 2 Lock Screen VEYA Tiptap Editor */}
+            {selectedNote.isFullyEncrypted && !unlockedNoteIds.has(selectedNote.id) ? (
+              <FullNoteLockScreen
+                note={{ id: selectedNote.id, title: selectedNote.title, encryptionHint: selectedNote.encryptionHint }}
+                onUnlock={handleUnlockFullNote}
+              />
+            ) : (
+              <div className="nw-editor-scroll-wrap">
+                <EditorContent editor={editor} />
+              </div>
+            )}
 
             {/* Character count */}
             {editor && (
@@ -1137,6 +1873,27 @@ export default function NotesWorkspace() {
           </button>
         </div>
       )}
+
+      {/* ═══ Sifreleme Modallari (Mod 1 + Mod 2) ═══ */}
+      <EncryptPromptModal
+        open={encryptSelectionOpen}
+        title="Secili metni sifrele"
+        onCancel={function() { setEncryptSelectionOpen(false) }}
+        onSubmit={handleEncryptSelectionSubmit}
+      />
+      <EncryptPromptModal
+        open={encryptWholeNoteOpen}
+        title="Notu tamamen sifrele"
+        onCancel={function() { setEncryptWholeNoteOpen(false) }}
+        onSubmit={handleEncryptWholeNoteSubmit}
+      />
+      <DecryptPromptModal
+        open={!!decryptBlockTarget}
+        title="Sifreli bolumu ac"
+        hint={decryptBlockTarget ? decryptBlockTarget.hint : null}
+        onCancel={function() { setDecryptBlockTarget(null) }}
+        onSubmit={handleDecryptBlockSubmit}
+      />
 
       {/* ═══ Confirm Modal ═══ */}
       {confirmModal && (

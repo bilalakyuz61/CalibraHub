@@ -13,10 +13,11 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CircleDot, ChevronLeft, ChevronRight, X, AlertTriangle, Trash2 } from 'lucide-react'
+import { CircleDot, ChevronLeft, ChevronRight, X, AlertTriangle, Trash2, Check } from 'lucide-react'
 import SmartWidget from './SmartWidget'
 import { resolveColor, resolveIcon } from './DynamicWidgetFactory'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
+import { getTopBody } from '../../utils/topPortal'
 
 // Bir widget'ın kısıt ihlali varsa açıklama döndür, yoksa null.
 function getWidgetViolation(w) {
@@ -163,6 +164,41 @@ export default function SmartCard(props) {
   var [confirmMsg,  setConfirmMsg]    = useState('')
   var confirmCallbackRef = useRef(null)
 
+  // ── Inline KITT aksiyonu (modal yerine kart altinda acilan dar form seridi) ──
+  // Mail gonderme, hizli not, durum degistirme gibi "kucuk aksiyonlar" modal
+  // acmadan ayni kart icinde cozulur. State:
+  //   null                     → kapali
+  //   { action, values, status, message }
+  //     status: 'idle' | 'sending' | 'success' | 'error'
+  var [kitt, setKitt] = useState(null)
+
+  // Modal content — dangerouslySetInnerHTML <script> etiketlerini execute
+  // etmedigi icin node'a manuel inject ediyoruz. ref callback yerine stable
+  // ref + useEffect kullaniyoruz — aksi halde kart hover state degisiminde
+  // ref callback her render'da tetiklenip iframe'i yeniden mount ediyor
+  // (kullaniciya "fare gezdirdikce sayfa yenileniyor" gibi gorunur).
+  var modalContentRef = useRef(null)
+  useEffect(function () {
+    if (!modalOpen || modalLoading) return
+    var node = modalContentRef.current
+    if (!node) return
+    // Ayni HTML'i tekrar inject etmeyelim — mount bir kez yapilsin
+    if (node.getAttribute('data-sm-modal-html-hash') === String(modalHtml.length + ':' + modalHtml.slice(0, 32))) return
+    node.innerHTML = modalHtml
+    node.setAttribute('data-sm-modal-html-hash', String(modalHtml.length + ':' + modalHtml.slice(0, 32)))
+    // <script> tag'lerini yeni element ile replaceChild ederek browser execute eder
+    var scripts = node.querySelectorAll('script')
+    scripts.forEach(function (oldScript) {
+      var newScript = document.createElement('script')
+      for (var i = 0; i < oldScript.attributes.length; i++) {
+        var attr = oldScript.attributes[i]
+        newScript.setAttribute(attr.name, attr.value)
+      }
+      newScript.textContent = oldScript.textContent
+      oldScript.parentNode.replaceChild(newScript, oldScript)
+    })
+  }, [modalOpen, modalLoading, modalHtml])
+
   function showConfirm(message, callback) {
     setConfirmMsg(message)
     confirmCallbackRef.current = callback
@@ -299,9 +335,75 @@ export default function SmartCard(props) {
     )
   }
 
-  // handleExtraAction — fetch-modal, download, api-post, navigate
+  // ── Inline KITT handlers ──
+  // openKitt: aksiyonu kart altinda ac, fields icindeki defaultValue'lari al
+  function openKitt(action) {
+    var values = {}
+    var fields = Array.isArray(action.fields) ? action.fields : []
+    fields.forEach(function(f) {
+      values[f.name] = (f.defaultValue != null) ? String(f.defaultValue) : ''
+    })
+    setKitt({ action: action, values: values, status: 'idle', message: '' })
+  }
+  function closeKitt() { setKitt(null) }
+  function updateKittField(name, value) {
+    setKitt(function(k) {
+      if (!k) return k
+      var nv = Object.assign({}, k.values); nv[name] = value
+      return Object.assign({}, k, { values: nv })
+    })
+  }
+  function submitKitt(ev) {
+    if (ev && ev.preventDefault) ev.preventDefault()
+    if (!kitt) return
+    var action = kitt.action
+    var apiUrl = (action.apiUrl || '').replace('{id}', id)
+    // body = action.body (sabitler) + kullanici degerleri
+    var body = Object.assign({}, action.body || {}, kitt.values)
+    var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || ''
+    var fd = new FormData()
+    Object.keys(body).forEach(function(k) { fd.append(k, String(body[k] == null ? '' : body[k])) })
+    if (token) fd.append('__RequestVerificationToken', token)
+    setKitt(function(k) { return k ? Object.assign({}, k, { status: 'sending', message: '' }) : null })
+    fetch(apiUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(function(r) { return r.json() })
+      .then(function(d) {
+        if (d && d.success) {
+          setKitt(function(k) {
+            return k ? Object.assign({}, k, {
+              status: 'success',
+              message: d.message || action.successMessage || 'Tamamlandi'
+            }) : null
+          })
+          // Kullanici kisa bir onay flashi gorur, sonra serit otomatik kapanir.
+          setTimeout(function() { setKitt(null) }, 1100)
+        } else {
+          setKitt(function(k) {
+            return k ? Object.assign({}, k, {
+              status: 'error',
+              message: (d && d.message) || 'Hata'
+            }) : null
+          })
+        }
+      })
+      .catch(function(err) {
+        setKitt(function(k) {
+          return k ? Object.assign({}, k, { status: 'error', message: err.message || 'Hata' }) : null
+        })
+      })
+  }
+
+  // handleExtraAction — fetch-modal, download, api-post, navigate, inline-kitt
   function handleExtraAction(e, action) {
     e.stopPropagation()
+
+    // inline-kitt: kart altinda dar seritte form — modal acmaz.
+    if (action.type === 'inline-kitt') {
+      // Ayni aksiyona tekrar tiklandiysa kapat (toggle davranisi)
+      if (kitt && kitt.action === action) closeKitt()
+      else openKitt(action)
+      return
+    }
 
     if (action.type === 'fetch-modal') {
       var url = (action.fetchUrl || '').replace('{id}', id)
@@ -343,8 +445,11 @@ export default function SmartCard(props) {
   }
 
   // Action button renderer — colorHint uses hoverBgMap/hoverTextMap
+  // action.hideButton === true → aksiyon var ama sol seritte buton render
+  // edilmez (ornegin "Duzenle" — sadece kartin kimlik alanina tiklayinca
+  // devreye giren URL icin kullanilir).
   function renderActionButton(action, handlerOrKey, colorHint) {
-    if (!action) return null
+    if (!action || action.hideButton) return null
     var ActionIcon = resolveIcon(action.icon)
     var handler
     if (typeof handlerOrKey === 'function') {
@@ -413,30 +518,42 @@ export default function SmartCard(props) {
             </>
           )}
 
-          {/* Kimlik */}
+          {/* Kimlik — belge numarasi (subtitle) + cari ismi (title) tiklanabilir;
+              primaryAction (Duzenle) sayfasina gider. Hover'da hafif bg
+              vurgusu + title altinda indigo renk degisimi ile tiklanabilir
+              oldugu nettir. */}
           <div
-            className="flex items-center gap-3.5 px-5 py-3.5 flex-shrink-0 min-w-[260px] max-w-[320px] cursor-pointer group"
-            onClick={function() {
+            className="flex items-center gap-3.5 pl-3 pr-5 py-3.5 flex-shrink-0 w-[340px] cursor-pointer group transition-colors hover:bg-slate-100/70 dark:hover:bg-white/[0.04]"
+            role="button"
+            tabIndex={0}
+            title={primaryAction && primaryAction.label
+              ? (primaryAction.label + ' — ' + (title || ''))
+              : (title || '')}
+            onClick={function(e) {
+              e.preventDefault()
+              e.stopPropagation()
               if (primaryAction && primaryAction.url) navigateInFrame(primaryAction.url)
             }}
+            onKeyDown={function(e) {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                if (primaryAction && primaryAction.url) navigateInFrame(primaryAction.url)
+              }
+            }}
           >
-            {imageUrl ? (
+            {imageUrl && (
               <img
                 src={imageUrl}
                 alt={title}
                 className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-white/10 flex-shrink-0"
               />
-            ) : (
-              <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/8 flex items-center justify-center flex-shrink-0">
-                <CircleDot size={18} className="text-slate-400 dark:text-white/40" strokeWidth={1.5} />
-              </div>
             )}
 
             <div className="flex-1 min-w-0">
               {(subtitle || badgeElement || violations.length > 0) && (
                 <div className="flex items-center gap-2 mb-0.5">
                   {subtitle && (
-                    <span className="text-[10px] font-mono font-semibold tracking-wider text-slate-600 dark:text-white/75 uppercase truncate">
+                    <span className="text-[10px] font-mono font-semibold tracking-wider text-slate-600 dark:text-white/75 uppercase truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
                       {subtitle}
                     </span>
                   )}
@@ -453,7 +570,7 @@ export default function SmartCard(props) {
                   )}
                 </div>
               )}
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight leading-tight truncate transition-colors">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight leading-tight truncate transition-colors group-hover:text-indigo-600 dark:group-hover:text-indigo-300">
                 {title}
               </h3>
               {description && (
@@ -566,6 +683,72 @@ export default function SmartCard(props) {
 
 
         </div>
+
+        {/* ── Inline KITT aksiyon seridi — ana satirin altinda, ayni kart icinde.
+            Mail gonderme gibi "kucuk aksiyonlar" modal acmadan burada cozulur.
+            Basari durumunda animasyonla kapanir (1.1s sonra setKitt(null)). */}
+        <AnimatePresence>
+          {kitt && (
+            <motion.div
+              key="smartcard-kitt"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div
+                className={'smartcard-kitt__row ' + (isDark ? 'smartcard-kitt__row--dark' : 'smartcard-kitt__row--light')}
+                data-status={kitt.status}
+              >
+                <div className="smartcard-kitt__scanner" aria-hidden="true" />
+                <form onSubmit={submitKitt} className="smartcard-kitt__form">
+                  {(kitt.action.fields || []).map(function(f) {
+                    return (
+                      <input
+                        key={f.name}
+                        type={f.type || 'text'}
+                        name={f.name}
+                        placeholder={f.placeholder || ''}
+                        required={f.required ? true : undefined}
+                        value={kitt.values[f.name] || ''}
+                        onChange={function(ev) { updateKittField(f.name, ev.target.value) }}
+                        disabled={kitt.status === 'sending' || kitt.status === 'success'}
+                        className="smartcard-kitt__input"
+                        style={{ flex: f.flex || 1 }}
+                      />
+                    )
+                  })}
+                  <button
+                    type="submit"
+                    className="smartcard-kitt__btn smartcard-kitt__btn--primary"
+                    disabled={kitt.status === 'sending' || kitt.status === 'success'}
+                  >
+                    {kitt.status === 'sending'
+                      ? 'Gonderiliyor…'
+                      : kitt.status === 'success'
+                        ? (<><Check size={13} strokeWidth={2.6} style={{ marginRight: 4 }} />Gonderildi</>)
+                        : (kitt.action.submitLabel || 'Gonder')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeKitt}
+                    className="smartcard-kitt__btn smartcard-kitt__btn--ghost"
+                    aria-label="Kapat"
+                    title="Kapat"
+                  >
+                    <X size={14} strokeWidth={2.5} />
+                  </button>
+                </form>
+                {kitt.status === 'error' && (
+                  <div className="smartcard-kitt__error">
+                    <AlertTriangle size={12} /> {kitt.message}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Onay modali — portal ile tam ekran ortasında */}
@@ -593,7 +776,7 @@ export default function SmartCard(props) {
             </div>
           </div>
         </div>,
-        document.body
+        getTopBody()
       )}
 
       {modalOpen && (
@@ -618,7 +801,7 @@ export default function SmartCard(props) {
             <div className="flex-1 overflow-y-auto p-4">
               {modalLoading
                 ? <div className="flex items-center justify-center py-12 text-slate-400 text-sm">Yukleniyor…</div>
-                : <div dangerouslySetInnerHTML={{ __html: modalHtml }} />}
+                : <div ref={modalContentRef} data-sm-modal-content />}
             </div>
           </div>
         </div>

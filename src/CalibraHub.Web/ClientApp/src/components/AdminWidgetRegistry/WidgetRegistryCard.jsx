@@ -6,7 +6,7 @@
  *                  fieldKey · DataType   🔒 VIEW_KEY
  */
 import { motion } from 'framer-motion'
-import { Pencil, Trash2, Lock, LayoutList } from 'lucide-react'
+import { Pencil, Trash2, Lock } from 'lucide-react'
 import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
 import { DATA_TYPES } from './DataTypeDropdown'
 
@@ -69,22 +69,43 @@ export default function WidgetRegistryCard(props) {
         (isActive ? '' : ' opacity-60')
       }
     >
-      <div className="flex items-center gap-3 px-4 py-3">
+      <div className="flex items-center gap-3 px-4 py-2.5">
 
         {/* Icon kutusu */}
         <div
-          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+          className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{ background: palette.bg, border: '1px solid ' + palette.border }}
         >
-          <Icon size={18} style={{ color: palette.icon }} strokeWidth={1.8} />
+          <Icon size={16} style={{ color: palette.icon }} strokeWidth={1.8} />
         </div>
 
-        {/* Orta: Label + meta */}
+        {/* Orta: Tek satirda label + tip + rozetler — daha kompakt gorunum.
+            widgetCode kaldirildi (kullanici istegi: widget gosterimi daraltildi). */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <h4 className="text-sm font-bold text-slate-800 dark:text-white/90 truncate">
+          <div className="flex items-center gap-2 min-w-0">
+            <h4 className="text-[13px] font-bold text-slate-800 dark:text-white/90 truncate">
               {field.label || field.fieldLabel || field.widgetCode || field.fieldKey}
             </h4>
+            <span className="text-slate-400 dark:text-white/30">·</span>
+            <span style={{ color: palette.text }} className="text-[11px] font-semibold whitespace-nowrap">
+              {type.label}
+            </span>
+            {field.minLength > 0 && (
+              <>
+                <span className="text-slate-400 dark:text-white/30">·</span>
+                <span className="font-mono text-[10px] text-slate-500 dark:text-white/50 whitespace-nowrap" title={'Minimum ' + field.minLength + ' karakter'}>
+                  {'≥' + field.minLength + 'k'}
+                </span>
+              </>
+            )}
+            {field.expectedLength > 0 && (
+              <>
+                <span className="text-slate-400 dark:text-white/30">·</span>
+                <span className="font-mono text-[10px] text-slate-500 dark:text-white/50 whitespace-nowrap" title={'Tam ' + field.expectedLength + ' karakter olmalı'}>
+                  {'=' + field.expectedLength + 'k'}
+                </span>
+              </>
+            )}
             {isSystem && (
               <span
                 className="text-[9px] font-bold px-1.5 py-px rounded-full uppercase tracking-wider flex-shrink-0"
@@ -110,19 +131,6 @@ export default function WidgetRegistryCard(props) {
                 Pasif
               </span>
             )}
-            {isPlainField && (
-              <span
-                className="text-[9px] font-bold px-1.5 py-px rounded-full uppercase tracking-wider flex-shrink-0"
-                style={{
-                  background: 'rgba(71, 85, 105, 0.15)',
-                  border: '1px solid rgba(71, 85, 105, 0.35)',
-                  color: '#94a3b8',
-                }}
-                title="Sadece alan olarak gösterilir (grup kutusu yok)"
-              >
-                Düz
-              </span>
-            )}
             {isRequired && (
               <span
                 className="text-[9px] font-bold px-1.5 py-px rounded-full uppercase tracking-wider flex-shrink-0"
@@ -135,31 +143,6 @@ export default function WidgetRegistryCard(props) {
               >
                 Zorunlu
               </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="font-mono text-slate-500 dark:text-white/50 truncate">
-              {field.widgetCode || field.fieldKey}
-            </span>
-            <span className="text-slate-400 dark:text-white/40">·</span>
-            <span style={{ color: palette.text }} className="font-semibold">
-              {type.label}
-            </span>
-            {field.minLength > 0 && (
-              <>
-                <span className="text-slate-400 dark:text-white/40">·</span>
-                <span className="font-mono text-slate-500 dark:text-white/50" title={'Minimum ' + field.minLength + ' karakter'}>
-                  {'≥' + field.minLength + 'k'}
-                </span>
-              </>
-            )}
-            {field.expectedLength > 0 && (
-              <>
-                <span className="text-slate-400 dark:text-white/40">·</span>
-                <span className="font-mono text-slate-500 dark:text-white/50" title={'Tam ' + field.expectedLength + ' karakter olmalı'}>
-                  {'=' + field.expectedLength + 'k'}
-                </span>
-              </>
             )}
             {field.maxLength > 0 && (
               <>
@@ -212,31 +195,8 @@ export default function WidgetRegistryCard(props) {
             />
           </button>
 
-          {/* Plain field toggle — group tipi haric */}
-          {String(field.dataType || '').toLowerCase() !== 'group' && (
-            <button
-              type="button"
-              disabled={isSaving}
-              onClick={function() { if (onPlainFieldToggle) onPlainFieldToggle(field) }}
-              className={
-                'p-2 rounded-xl transition-colors group disabled:opacity-50 ' +
-                (isPlainField
-                  ? 'bg-slate-200/60 dark:bg-white/10 hover:bg-slate-300/60 dark:hover:bg-white/15'
-                  : 'hover:bg-slate-100 dark:hover:bg-white/5')
-              }
-              title={isPlainField ? 'Düz alan modu aktif — tıkla gruplu moda geç' : 'Gruplu modda — tıkla düz alan moduna geç'}
-            >
-              <LayoutList
-                size={14}
-                className={
-                  'transition-colors ' +
-                  (isPlainField
-                    ? 'text-slate-600 dark:text-white/60'
-                    : 'text-slate-400 dark:text-white/45 group-hover:text-slate-600 dark:group-hover:text-white/50')
-                }
-              />
-            </button>
-          )}
+          {/* Plain field toggle kaldirildi — Baslik Stili (Standart/Modern)
+              seceneği ayni amaca hizmet ediyor; widget formu icinde secilir. */}
 
           {/* Edit */}
           <button

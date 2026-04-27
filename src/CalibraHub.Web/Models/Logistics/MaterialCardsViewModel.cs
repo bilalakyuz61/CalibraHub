@@ -54,58 +54,59 @@ public sealed class MaterialCardListStateViewModel : GridListStateViewModel
 
 public static class MaterialCardListSortOptions
 {
-    public const string MaterialCode = "materialCode";
-    public const string MaterialName = "materialName";
+    public const string Code = "code";
+    public const string Name = "name";
 }
 
 public sealed class MaterialCardRowViewModel
 {
     public int Id { get; init; }
-    public string MaterialCode { get; init; } = string.Empty;
-    public string MaterialName { get; init; } = string.Empty;
-    public string? MaterialDescription { get; init; }
-    public int? MaterialTypeId { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public int? TypeId { get; init; }
     public bool IsActive { get; init; }
 }
 
 public sealed class MaterialCardLookupViewModel
 {
     public int Id { get; init; }
-    public string MaterialCode { get; init; } = string.Empty;
+    public string Code { get; init; } = string.Empty;
     public string EditUrl { get; init; } = string.Empty;
 }
 
 public sealed class MaterialCardCreateInput
 {
-    public int? StockCardId { get; set; }
+    public int? ItemId { get; set; }
 
     [Required(ErrorMessage = "Malzeme kodu zorunludur.")]
     [MaxLength(50, ErrorMessage = "Malzeme kodu en fazla 50 karakter olabilir.")]
-    public string MaterialCode { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Malzeme adi zorunludur.")]
     [MaxLength(255, ErrorMessage = "Malzeme adi en fazla 255 karakter olabilir.")]
-    public string MaterialName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
 
     [MaxLength(500, ErrorMessage = "Aciklama en fazla 500 karakter olabilir.")]
-    public string? MaterialDescription { get; set; }
+    public string? Description { get; set; }
 
-    public int? MaterialTypeId { get; set; }
-    
+    public int? TypeId { get; set; }
+
     public string? ExistingImageUrl { get; set; }
-    
+
     public string? ProductImageBase64 { get; set; }
-    
+
     public bool TrackCombinations { get; set; }
 }
 
 public sealed class SaveMaterialCardJsonInput
 {
-    public int? StockCardId { get; set; }
-    public string MaterialCode { get; set; } = string.Empty;
-    public string MaterialName { get; set; } = string.Empty;
-    public string? MaterialDescription { get; set; }
-    public int? MaterialTypeId { get; set; }
+    public int? ItemId { get; set; }
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int? TypeId { get; set; }
     public bool TrackCombinations { get; set; }
+    public decimal TaxRate { get; set; } = 20m;
     public string? ProductImageBase64 { get; set; }
 }

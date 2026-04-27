@@ -4,27 +4,27 @@ namespace CalibraHub.Application.Ui;
 
 public static class ScreenDesignCatalog
 {
-    public const string MaterialCardsScreenCode = "material_cards";
+    public const string MaterialCardsScreenCode = "items";
     public const string ProductConfigScreenCode = "product_configuration";
-    public const string WarehouseLocationsScreenCode = "warehouse_locations";
-    public const string MeasureUnitDefinitionsScreenCode = "measure_unit_definitions";
-    public const string ContactAccountsScreenCode = "contact_accounts";
+    public const string LocationsScreenCode = "locations";
+    public const string UnitsScreenCode = "units";
+    public const string ContactsScreenCode = "contacts";
     public const string DocumentApprovalScreenCode = "document_approval";
     public const string MaterialGroupsScreenCode = "material_groups";
-    public const string SalesQuotesScreenCode = "sales_quotes";
+    public const string DocumentsScreenCode = "documents";
 
     private static readonly ScreenDesignScreenDto[] Screens =
     [
         // Lojistik
         new(MaterialCardsScreenCode,          "Malzeme Kartlari",          "Lojistik", true),
         new(ProductConfigScreenCode,          "Urun Konfigurasyonu",       "Lojistik", true),
-        new(WarehouseLocationsScreenCode,     "Lokasyon Tanimlamalari",    "Lojistik", false),
-        new(MeasureUnitDefinitionsScreenCode, "Olcu Birimi Tanimlamalari", "Lojistik", false),
+        new(LocationsScreenCode,     "Lokasyon Tanimlamalari",    "Lojistik", false),
+        new(UnitsScreenCode, "Ölçü Birimleri", "Lojistik", false),
         new(MaterialGroupsScreenCode,         "Malzeme Gruplari",          "Lojistik", false),
         // Satis
-        new(SalesQuotesScreenCode,            "Satis Teklifleri",          "Satis",    true),
+        new(DocumentsScreenCode,            "Satis Teklifleri",          "Satis",    true),
         // Finans
-        new(ContactAccountsScreenCode,        "Cari Hesaplar",             "Finans",   true),
+        new(ContactsScreenCode,        "Cari Hesaplar",             "Finans",   true),
         // Onay Surecleri
         new(DocumentApprovalScreenCode,       "Belge Onay",                "Onay Surecleri", false),
     ];
@@ -32,7 +32,7 @@ public static class ScreenDesignCatalog
     private static readonly IReadOnlyDictionary<string, ScreenDesignFieldDefinitionDto[]> StandardFieldDefinitions =
         new Dictionary<string, ScreenDesignFieldDefinitionDto[]>(StringComparer.OrdinalIgnoreCase)
         {
-            [WarehouseLocationsScreenCode] =
+            [LocationsScreenCode] =
             [
                 new("location_type_code", "Lokasyon Tipi", 1, true),
                 new("parent_id", "Ust Kirilim", 1, false),
@@ -43,7 +43,7 @@ public static class ScreenDesignCatalog
                 new("volume_capacity", "Hacim Kapasitesi", 1, false),
                 new("is_active", "Aktif", 1, false)
             ],
-            [MeasureUnitDefinitionsScreenCode] =
+            [UnitsScreenCode] =
             [
                 new("unit_code", "Olcu Birimi Kodu", 1, true),
                 new("unit_name", "Olcu Birimi Adi", 1, true),
@@ -106,12 +106,12 @@ public static class ScreenDesignCatalog
 
         var tabs = normalizedScreenCode switch
         {
-            WarehouseLocationsScreenCode =>
+            LocationsScreenCode =>
             [
                 new ScreenDesignTabDto("general", "Genel Bilgiler", 10, true),
                 new ScreenDesignTabDto("capacity", "Kapasite", 20, true)
             ],
-            MeasureUnitDefinitionsScreenCode =>
+            UnitsScreenCode =>
             [
                 new ScreenDesignTabDto("general", "Genel Bilgiler", 10, true)
             ],
@@ -120,7 +120,7 @@ public static class ScreenDesignCatalog
 
         var items = normalizedScreenCode switch
         {
-            WarehouseLocationsScreenCode =>
+            LocationsScreenCode =>
             [
                 new ScreenDesignItemDto("location_type_code", "Lokasyon Tipi", "general", 10, 1, true, true),
                 new ScreenDesignItemDto("parent_id", "Ust Kirilim", "general", 20, 1, true, false),
@@ -131,7 +131,7 @@ public static class ScreenDesignCatalog
                 new ScreenDesignItemDto("max_weight_capacity", "Maksimum Agirlik", "capacity", 10, 1, true, false),
                 new ScreenDesignItemDto("volume_capacity", "Hacim Kapasitesi", "capacity", 20, 1, true, false)
             ],
-            MeasureUnitDefinitionsScreenCode =>
+            UnitsScreenCode =>
             [
                 new ScreenDesignItemDto("unit_code", "Olcu Birimi Kodu", "general", 10, 1, true, true),
                 new ScreenDesignItemDto("unit_name", "Olcu Birimi Adi", "general", 20, 1, true, true),

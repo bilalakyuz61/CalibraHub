@@ -30,13 +30,13 @@ import AdminMiniModal from './AdminMiniModal'
  * runtime'da kullanicinin girdigi deger ile yer degistirilir.
  */
 var LINK_TEMPLATES = [
-  { label: 'Cari Hesap Karti (kod ile)',    value: '/Finance/ContactAccountEdit?code={value}' },
-  { label: 'Cari Hesap Karti (id ile)',     value: '/Finance/ContactAccountEdit?id={value}' },
-  { label: 'Cari Hesap Ekstresi',           value: '/Finance/ContactAccountStatement?code={value}' },
+  { label: 'Cari Hesap Karti (kod ile)',    value: '/Finance/ContactEdit?code={value}' },
+  { label: 'Cari Hesap Karti (id ile)',     value: '/Finance/ContactEdit?id={value}' },
+  { label: 'Cari Hesap Ekstresi',           value: '/Finance/ContactStatement?code={value}' },
   { label: 'Malzeme Karti (kod ile)',       value: '/Logistics/MaterialCardEdit?code={value}' },
   { label: 'Malzeme Karti (id ile)',        value: '/Logistics/MaterialCardEdit?id={value}' },
-  { label: 'Urun Agaci / Recete',           value: '/Logistics/ProductTrees?materialCode={value}' },
-  { label: 'Satis Teklifi (duzenleme)',     value: '/Sales/SalesQuoteEdit?id={value}' },
+  { label: 'Urun Agaci / Recete',           value: '/Logistics/BOMs?materialCode={value}' },
+  { label: 'Satis Teklifi (duzenleme)',     value: '/Sales/DocumentEdit?id={value}' },
 ]
 
 /**

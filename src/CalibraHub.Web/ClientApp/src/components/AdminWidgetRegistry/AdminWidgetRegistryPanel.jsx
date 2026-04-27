@@ -30,6 +30,16 @@ import {
   deleteWidget as deleteWidgetApi,
 } from './adminRegistryService'
 
+// Form hiyerarsisi — bir form tanimi yapilirken hangi ust formlarin widget'lari
+// kullanilabilir? Ornek: Satis Teklifi Kalem Bilgisi (lines) icinde hem kendi
+// alanlarini hem de Ust Bilgi (header) alanlarini rule/formul'de kullanabiliriz.
+// Ust bilgide ise sadece kendi alanlari gorunur (alt alanlar henuz yok).
+// Scope: parent → child tek yon (child, parent alanlarini gorebilir).
+var FORM_PARENTS = {
+  SALES_QUOTE_LINES: ['SALES_QUOTE_EDIT'],
+  // Ileride: INVOICE_LINES → INVOICE_EDIT, PO_LINES → PO_EDIT, ...
+}
+
 export default function AdminWidgetRegistryPanel(props) {
   var initialFormCode = props.initialFormCode || props.screenCode || 'ITEMS'
 
@@ -38,6 +48,7 @@ export default function AdminWidgetRegistryPanel(props) {
   var [currentFormId, setCurrentFormId] = useState(null)
   var [currentFormCode, setCurrentFormCode] = useState(initialFormCode)
   var [widgets, setWidgets]             = useState([])      // tum widget'lar (group + field karma)
+  var [parentFormWidgets, setParentFormWidgets] = useState([])  // ust form widget'lari (rule/formul icin)
   var [editingField, setEditingField]   = useState(null)
   var [savingGlobal, setSavingGlobal]   = useState(false)
   var [savingId, setSavingId]           = useState(null)
@@ -87,9 +98,44 @@ export default function AdminWidgetRegistryPanel(props) {
       var schema = await getSchemaApi(formCode)
       if (cancelledFlag) return
       setCurrentFormId(schema.formId)
-      setCurrentFormCode(schema.formCode)
+      // Kullanicinin sectigi formCode'u state'e yazariz; schema response'undan
+      // gelen alan farkli case/null olursa form beklenmedik sekilde degismesin.
+      // Boylece widget kaydi sonrasinda kullanici ayni ekranda kalir (kayit
+      // yapilinca ITEMS'a donme hatasini engeller).
+      setCurrentFormCode(formCode || schema.formCode)
       setWidgets(Array.isArray(schema.widgets) ? schema.widgets : [])
       setEditingField(null)
+
+      // Ust form widget'larini da cek — rule/formula modalinde kullanicinin
+      // gorebilmesi icin. Sadece alt form'da (child) calisiyoruz; header'da
+      // FORM_PARENTS[formCode] bos olacagi icin bu blok atlaniyor.
+      var parentCodes = FORM_PARENTS[formCode] || []
+      if (parentCodes.length === 0) {
+        setParentFormWidgets([])
+      } else {
+        var parentWidgetsAccum = []
+        for (var i = 0; i < parentCodes.length; i++) {
+          var pCode = parentCodes[i]
+          try {
+            var pSchema = await getSchemaApi(pCode)
+            if (cancelledFlag) return
+            var parentFormLabel = pSchema.formLabel || pSchema.formCode || pCode
+            ;(pSchema.widgets || []).forEach(function(w) {
+              // Group tipini dahil etme — rule'da kullanilamaz
+              if (String(w.dataType || '').toLowerCase() === 'group') return
+              parentWidgetsAccum.push(Object.assign({}, w, {
+                _sourceFormCode:  pSchema.formCode || pCode,
+                _sourceFormLabel: parentFormLabel,
+              }))
+            })
+          } catch (e) {
+            // Ust form yuklenemezse devam et — rule UI daha az opsiyonla calisir
+            /* eslint-disable-next-line no-console */
+            console.warn('[AdminRegistry] Parent schema load failed:', pCode, e)
+          }
+        }
+        setParentFormWidgets(parentWidgetsAccum)
+      }
     } catch (e) {
       showToast('error', 'Schema yuklenemedi: ' + e.message)
     } finally {
@@ -126,12 +172,18 @@ export default function AdminWidgetRegistryPanel(props) {
         expectedLength: payload.expectedLength != null ? payload.expectedLength : null,
         minValue:       payload.minValue       != null ? payload.minValue       : null,
         maxValue:       payload.maxValue       != null ? payload.maxValue       : null,
-        sortOrder: payload.id ? (payload.sortOrder != null ? payload.sortOrder : 0) : (maxSort + 10),
+        sortOrder: payload.sortOrder != null ? payload.sortOrder : (payload.id ? 0 : (maxSort + 10)),
         options: payload.options || null,
         isActive: payload.isActive !== false,
         isPlainField: payload.isPlainField || false,
         isRequired: payload.isRequired === true,
         rules: payload.rules || null,     // Faz G — kural & formul JSON objesi
+        // Form uzerinde kaplayacagi 12-col grid span degeri (1-12). Backend
+        // tanımadıgı surece metadata'da saklanabilir; runtime renderer okur.
+        colSpan: (typeof payload.colSpan === 'number' && payload.colSpan >= 1 && payload.colSpan <= 12)
+          ? payload.colSpan : null,
+        // Etiket gorunum stili — 'standard' (default) veya 'modern' (floating).
+        labelStyle: payload.labelStyle === 'modern' ? 'modern' : 'standard',
       }
 
       var result = await upsertWidgetApi(apiPayload)
@@ -331,6 +383,42 @@ export default function AdminWidgetRegistryPanel(props) {
 
   var editingId = editingField ? editingField.id : null
 
+  /* ── Reorder — iki widget'in sortOrder'ini takas et ──── */
+  var handleReorder = useCallback(async function(fieldA, fieldB) {
+    if (!fieldA || !fieldB || !currentFormId) return
+    var sortA = fieldA.sortOrder != null ? fieldA.sortOrder : 0
+    var sortB = fieldB.sortOrder != null ? fieldB.sortOrder : 0
+    // Ayni sortOrder ise birini 1 artir
+    if (sortA === sortB) sortB = sortA + 1
+
+    // Optimistic UI update
+    setWidgets(function(prev) {
+      return prev.map(function(w) {
+        if (w.id === fieldA.id) return Object.assign({}, w, { sortOrder: sortB })
+        if (w.id === fieldB.id) return Object.assign({}, w, { sortOrder: sortA })
+        return w
+      })
+    })
+
+    // Backend'e her iki widget'i da kaydet
+    try {
+      await Promise.all([
+        upsertWidgetApi(Object.assign({}, fieldA, { formId: currentFormId, sortOrder: sortB })),
+        upsertWidgetApi(Object.assign({}, fieldB, { formId: currentFormId, sortOrder: sortA })),
+      ])
+    } catch (e) {
+      console.error('[Reorder] error:', e)
+      // Hata olursa geri al
+      setWidgets(function(prev) {
+        return prev.map(function(w) {
+          if (w.id === fieldA.id) return Object.assign({}, w, { sortOrder: sortA })
+          if (w.id === fieldB.id) return Object.assign({}, w, { sortOrder: sortB })
+          return w
+        })
+      })
+    }
+  }, [currentFormId])
+
   // ── Widgets'i group + field olarak bucket'la ──
   // WidgetRegistryList ve GroupSelector icin derived state:
   //   groups: widgets.filter(dataType='group')  → { id, groupKey, groupLabel, sortOrder }
@@ -422,6 +510,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 saving={savingGlobal}
                 groups={derivedGroups}
                 existingFields={derivedFields}
+                parentFormWidgets={parentFormWidgets}
                 activeLayer={null}
                 activeLayerLabel={null}
               />
@@ -437,6 +526,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 onDelete={handleDelete}
                 onPlainFieldToggle={handlePlainFieldToggle}
                 onListableToggle={handleListableToggle}
+                onReorder={handleReorder}
                 editingId={editingId}
                 savingId={savingId}
                 searchQuery={searchQuery}

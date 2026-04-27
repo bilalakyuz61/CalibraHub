@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
+[Description("Sirket ici departman tanimlari. CompanyId FK, ParentDepartmentId ile hiyerarsi (alt departman). Kullanicilar bu tabloya baglanir.")]
 public sealed class Department : Entity
 {
     public int CompanyId { get; init; }

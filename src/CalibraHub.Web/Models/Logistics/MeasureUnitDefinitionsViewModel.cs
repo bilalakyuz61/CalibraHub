@@ -3,15 +3,15 @@ using CalibraHub.Web.Models.Shared;
 
 namespace CalibraHub.Web.Models.Logistics;
 
-public sealed class MeasureUnitDefinitionsViewModel
+public sealed class UnitsViewModel
 {
-    public required IReadOnlyCollection<MeasureUnitDefinitionRowViewModel> Definitions { get; init; }
+    public required IReadOnlyCollection<UnitRowViewModel> Definitions { get; init; }
     public required IReadOnlyCollection<ScreenLayoutTabViewModel> LayoutTabs { get; init; }
     public required GridListStateViewModel ListState { get; init; }
-    public MeasureUnitDefinitionInput Input { get; init; } = new();
+    public UnitInput Input { get; init; } = new();
 }
 
-public sealed class MeasureUnitDefinitionRowViewModel
+public sealed class UnitRowViewModel
 {
     public int Id { get; init; }
     public string UnitCode { get; init; } = string.Empty;
@@ -20,7 +20,7 @@ public sealed class MeasureUnitDefinitionRowViewModel
     public bool IsActive { get; init; }
 }
 
-public sealed class MeasureUnitDefinitionInput
+public sealed class UnitInput
 {
     public int? Id { get; set; }
 

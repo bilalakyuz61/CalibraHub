@@ -1,0 +1,820 @@
+@{
+    ViewData["Title"] = "Lokasyon Tanimlamalari";
+    ViewData["FormCode"] = "LOCATIONS";
+    ViewData["BodyClass"] = "page-locations-edit";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>warehouse_locations</td><td style='padding:6px 8px;'>Lokasyon tanimlari (tip, kod, ad, ust kirilim, sira, agirlik kapasitesi, hacim, durum). Hiyerarsik yapi ParentId ile saglanir.</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    /* Page full-height layout */
+    .page-locations-edit .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-locations-edit .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important; margin: 0 !important;
+        overflow: hidden !important;
+    }
+    .workspace-frame-body.page-locations-edit .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-locations-edit .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+    .wl-root { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+
+    .wl-layout { display: flex; flex-direction: column; gap: 0; height: 100%; overflow: hidden; }
+    .wl-form-panel {
+        flex: 1 1 50%; max-height: 50%;
+        background: #fff; color: #1e293b;
+        display: flex; flex-direction: column; overflow-y: auto;
+        padding: 10px 14px; border-bottom: 1px solid #e2e8f0;
+    }
+    .wl-grid-panel { flex: 1 1 50%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .wl-grid-panel .wl-table-wrap { flex: 1 1 auto; overflow: auto; }
+
+    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
+    .cs-line:last-child { border-bottom: none; }
+    .cs-line > label:first-child { width: 58px; flex-shrink: 0; font-size: 0.76rem; font-weight: 600; color: #64748b; text-align: right; }
+
+    .wl-toolbar { padding: 5px 10px; border-bottom: 1px solid #e2e8f0; }
+    .wl-grid { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .wl-grid thead th { text-align: left; padding: 3px 8px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+    .wl-grid tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; cursor: pointer; color: #1e293b; }
+    .wl-grid tbody tr:hover { background: #f8fafc; }
+    .wl-grid tbody tr.is-sel { background: #eff6ff; }
+    .wl-grid tbody tr.wl-group { background: rgba(99,102,241,.04); }
+    .wl-grid tbody tr.wl-group:hover { background: rgba(99,102,241,.10); }
+    body.app-theme-dark .wl-grid tbody tr.wl-group { background: rgba(129,140,248,.05); }
+    body.app-theme-dark .wl-grid tbody tr.wl-group:hover { background: rgba(129,140,248,.12); }
+    .wl-grid td { padding: 2px 8px; vertical-align: middle; }
+    .wl-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
+
+    .act-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 22px; height: 22px; padding: 0; border-radius: 4px;
+        background: #fff; border: 1px solid #e2e8f0; color: #64748b;
+        cursor: pointer; margin-right: 3px; transition: all .12s;
+    }
+    .act-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+    body.app-theme-dark .act-btn {
+        background: rgba(255,255,255,0.05);
+        border-color: rgba(255,255,255,0.1);
+        color: rgba(255,255,255,0.6);
+    }
+    body.app-theme-dark .act-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
+
+    .act-btn--edit { border-color: #bfdbfe; color: #2563eb; background: #fff; }
+    .act-btn--edit:hover { background: #eff6ff; border-color: #93c5fd; }
+    body.app-theme-dark .act-btn--edit {
+        background: rgba(59,130,246,0.12);
+        border-color: rgba(59,130,246,0.35);
+        color: #93c5fd;
+    }
+    body.app-theme-dark .act-btn--edit:hover { background: #3b82f6; color: #fff; border-color: #2563eb; }
+
+    .act-btn--delete { border-color: #fecaca; color: #dc2626; background: #fff; }
+    .act-btn--delete:hover { background: #fef2f2; border-color: #f87171; }
+    body.app-theme-dark .act-btn--delete {
+        background: rgba(239,68,68,0.12);
+        border-color: rgba(239,68,68,0.35);
+        color: #fca5a5;
+    }
+    body.app-theme-dark .act-btn--delete:hover { background: #ef4444; color: #fff; border-color: #dc2626; }
+
+    .wl-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
+    .wl-msg.ok  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .wl-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+    /* ── Iki-tab layout: sol sidenav + sag icerik ─────────────────── */
+    .wl-shell { display: flex; height: 100%; min-height: 0; overflow: hidden; }
+    .wl-sidenav {
+        width: 200px; flex-shrink: 0;
+        border-right: 1px solid #e2e8f0;
+        background: #f8fafc;
+        display: flex; flex-direction: column;
+        padding: 10px 8px; gap: 4px; overflow-y: auto;
+    }
+    body.app-theme-dark .wl-sidenav { background: rgba(255,255,255,0.02); border-right-color: rgba(255,255,255,0.07); }
+    .wl-nav-btn {
+        display: flex; align-items: center; gap: 8px;
+        width: 100%; padding: 8px 12px;
+        background: #f1f5f9; border: 1px solid #e2e8f0;
+        border-radius: 8px; color: #64748b;
+        font-size: 0.76rem; font-weight: 500; text-align: left;
+        cursor: pointer; transition: all 0.15s; line-height: 1.35;
+    }
+    body.app-theme-dark .wl-nav-btn { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+    .wl-nav-btn:hover { background: #e2e8f0; color: #1e293b; border-color: #cbd5e1; }
+    body.app-theme-dark .wl-nav-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
+    .wl-nav-btn.is-active {
+        background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3);
+        color: #059669; font-weight: 600;
+    }
+    body.app-theme-dark .wl-nav-btn.is-active {
+        background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.35); color: #34d399;
+    }
+    .wl-nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; opacity: 0.5; }
+    .wl-nav-btn.is-active .wl-nav-dot { opacity: 1; }
+    .wl-panel { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    .wl-panel.is-hidden { display: none; }
+
+    /* Tipler tabi */
+    .wl-types-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+    .wl-types-form-panel {
+        flex: 0 0 auto; background: #fff; color: #1e293b;
+        padding: 10px 14px; border-bottom: 1px solid #e2e8f0;
+    }
+    body.app-theme-dark .wl-types-form-panel {
+        background: rgba(15, 15, 26, 0.6);
+        color: rgba(255, 255, 255, 0.9);
+        border-bottom-color: rgba(255,255,255,0.08);
+    }
+    .wl-types-grid { flex: 1 1 auto; overflow: auto; padding: 8px 12px; }
+
+    /* Kaydet KITT tarayici — ust toolbar alti */
+    #wlTopToolbar { position: relative; overflow: hidden; }
+    #wlTopToolbar::before {
+        content: ''; position: absolute;
+        left: 0; right: 0; bottom: 0;
+        height: 2px;
+        pointer-events: none; opacity: 0;
+        background: linear-gradient(90deg,
+            rgba(0, 60, 20, 0) 0%,
+            rgba(10, 120, 40, .55) 50%,
+            rgba(0, 60, 20, 0) 100%);
+    }
+    #wlTopToolbar::after {
+        content: ''; position: absolute;
+        left: 0; bottom: -1px;
+        width: 18%; height: 4px;
+        pointer-events: none; opacity: 0;
+        background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(34, 197, 94, .35) 18%,
+            rgba(74, 255, 140, 1) 50%,
+            rgba(34, 197, 94, .35) 82%,
+            transparent 100%);
+        box-shadow:
+            0 0 10px 2px rgba(34, 197, 94, .95),
+            0 0 22px 6px rgba(34, 197, 94, .55),
+            0 0 40px 12px rgba(34, 197, 94, .22);
+        border-radius: 50%;
+    }
+    #wlTopToolbar.is-save-flash::before { animation: wlKittBg   1800ms ease-out forwards; }
+    #wlTopToolbar.is-save-flash::after  { animation: wlKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+    @@keyframes wlKittBg {
+        0%, 100% { opacity: 0; }
+        10%, 90% { opacity: 1; }
+    }
+    @@keyframes wlKittScan {
+        0%   { opacity: 0; left: 0; }
+        8%   { opacity: 1; }
+        48%  { opacity: 1; left: 82%; }
+        52%  { opacity: 1; left: 82%; }
+        92%  { opacity: 1; left: 0; }
+        100% { opacity: 0; left: 0; }
+    }
+    .wl-types-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .wl-types-table thead th {
+        text-align: left; padding: 6px 10px; font-weight: 600; color: #64748b;
+        font-size: 0.72rem; text-transform: uppercase; letter-spacing: .03em;
+        border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap;
+    }
+    body.app-theme-dark .wl-types-table thead th { color: rgba(165,180,252,.85); background: rgba(255,255,255,0.03); border-bottom-color: rgba(255,255,255,0.1); }
+    .wl-types-table tbody tr { border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+    body.app-theme-dark .wl-types-table tbody tr { border-bottom-color: rgba(255,255,255,0.05); }
+    .wl-types-table tbody tr:hover { background: #f8fafc; }
+    body.app-theme-dark .wl-types-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+    .wl-types-table tbody tr.is-sel { background: #eff6ff; }
+    body.app-theme-dark .wl-types-table tbody tr.is-sel { background: rgba(99,102,241,0.2); color: #fff; }
+    .wl-types-table td { padding: 6px 10px; color: #1e293b; }
+    body.app-theme-dark .wl-types-table td { color: rgba(255,255,255,0.85); }
+
+    /* Zorunlu alan bos — kirmizi cerceve + titresim */
+    .wl-form-panel .form-control.is-invalid,
+    .wl-form-panel .form-select.is-invalid {
+        border-color: #ef4444 !important;
+        background: rgba(239, 68, 68, 0.06) !important;
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.20) !important;
+        animation: wlShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+    }
+    @@keyframes wlShake {
+        10%, 90% { transform: translateX(-2px); }
+        20%, 80% { transform: translateX(3px); }
+        30%, 50%, 70% { transform: translateX(-4px); }
+        40%, 60% { transform: translateX(4px); }
+    }
+    body.app-theme-dark .wl-form-panel .form-control.is-invalid,
+    body.app-theme-dark .wl-form-panel .form-select.is-invalid {
+        background: rgba(239, 68, 68, 0.12) !important;
+        border-color: #f87171 !important;
+        box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.25) !important;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       DARK THEME
+       ══════════════════════════════════════════════════════════════ */
+    body.app-theme-dark .wl-form-panel {
+        background: rgba(15, 15, 26, 0.6);
+        color: rgba(255, 255, 255, 0.9);
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+    }
+    body.app-theme-dark .cs-line { border-bottom-color: rgba(255, 255, 255, 0.05); }
+    body.app-theme-dark .cs-line > label:first-child { color: rgba(255, 255, 255, 0.55); }
+
+    body.app-theme-dark .wl-form-panel .form-control,
+    body.app-theme-dark .wl-form-panel .form-select {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.92);
+    }
+    body.app-theme-dark .wl-form-panel .form-control:hover,
+    body.app-theme-dark .wl-form-panel .form-select:hover {
+        background: rgba(255, 255, 255, 0.09);
+        border-color: rgba(255, 255, 255, 0.18);
+    }
+    body.app-theme-dark .wl-form-panel .form-control:focus,
+    body.app-theme-dark .wl-form-panel .form-select:focus {
+        background: rgba(99, 102, 241, 0.08);
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+        outline: none;
+    }
+
+    body.app-theme-dark .wl-toolbar { border-bottom-color: rgba(255, 255, 255, 0.08); }
+
+    body.app-theme-dark .wl-grid thead th {
+        color: rgba(165, 180, 252, 0.85);
+        background: rgba(255, 255, 255, 0.03);
+        border-bottom-color: rgba(255, 255, 255, 0.10);
+    }
+    body.app-theme-dark .wl-grid tbody tr {
+        color: rgba(255, 255, 255, 0.88);
+        border-bottom-color: rgba(255, 255, 255, 0.04);
+    }
+    body.app-theme-dark .wl-grid tbody tr:hover  { background: rgba(255, 255, 255, 0.04); }
+    body.app-theme-dark .wl-grid tbody tr.is-sel { background: rgba(99, 102, 241, 0.20); color: #fff; }
+    body.app-theme-dark .wl-empty { color: rgba(255, 255, 255, 0.35); }
+
+    body.app-theme-dark .act-btn {
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.30);
+        color: #fca5a5;
+    }
+    body.app-theme-dark .act-btn:hover { background: #ef4444; color: #fff; border-color: #dc2626; }
+
+    body.app-theme-dark .wl-msg.ok {
+        background: rgba(16, 185, 129, 0.15); color: #34d399;
+        border-color: rgba(16, 185, 129, 0.35);
+    }
+    body.app-theme-dark .wl-msg.err {
+        background: rgba(239, 68, 68, 0.15); color: #fca5a5;
+        border-color: rgba(239, 68, 68, 0.35);
+    }
+</style>
+}
+
+<div class="wl-root">
+  <!-- Global aksiyon seridi — hem Tipler hem Lokasyonlar tabinda kullanilir -->
+  <div class="entity-form-toolbar" data-no-proxy="1" id="wlTopToolbar">
+    <button type="button" class="btn btn-primary integrator-btn-primary" onclick="wlActiveSave()" title="Kaydet">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+        <polyline points="17 21 17 13 7 13 7 21"/>
+        <polyline points="7 3 7 8 15 8"/>
+      </svg>Kaydet
+    </button>
+    <button type="button" class="btn btn-secondary integrator-btn-secondary" onclick="wlActiveNew()" title="Yeni">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>Yeni
+    </button>
+    <button type="button" class="btn btn-outline-danger integrator-btn-tertiary" id="wlTopBtnDelete" disabled onclick="wlActiveDelete()" title="Sil">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        <line x1="10" y1="11" x2="10" y2="17"/>
+        <line x1="14" y1="11" x2="14" y2="17"/>
+      </svg>Sil
+    </button>
+  </div>
+
+  <div class="wl-shell">
+    <!-- Sol navigasyon -->
+    <nav class="wl-sidenav" aria-label="Sekmeler">
+        <button type="button" class="wl-nav-btn" id="wlNavTypes" onclick="wlSwitchTab('types')">
+            <span class="wl-nav-dot"></span> Bölüm Tipleri
+        </button>
+        <button type="button" class="wl-nav-btn is-active" id="wlNavLocations" onclick="wlSwitchTab('locations')">
+            <span class="wl-nav-dot"></span> Lokasyonlar
+        </button>
+    </nav>
+
+    <!-- TIPLER paneli -->
+    <div class="wl-panel is-hidden" id="wlPanelTypes">
+        <div class="wl-types-wrap">
+            <div class="wl-types-form-panel">
+                <input type="hidden" id="wltId" value="" />
+                <div class="cs-line"><label>Kod *</label>
+                    <input id="wltCode" class="form-control form-control-sm" maxlength="50" style="max-width:180px;text-transform:uppercase;" placeholder="FACTORY" />
+                </div>
+                <div class="cs-line"><label>Ad *</label>
+                    <input id="wltName" class="form-control form-control-sm" maxlength="100" style="max-width:280px;" placeholder="Fabrika" />
+                </div>
+                <div class="cs-line"><label>Sıra</label>
+                    <input id="wltSortOrder" type="number" class="form-control form-control-sm" style="max-width:90px;" value="0" />
+                </div>
+                <div class="cs-line"><label>Durum</label>
+                    <div class="form-check form-switch" style="margin:0;">
+                        <input id="wltIsActive" class="form-check-input" type="checkbox" role="switch" checked />
+                    </div>
+                </div>
+                <div id="wltMsg"></div>
+            </div>
+            <div class="wl-types-grid">
+                <table class="wl-types-table">
+                    <thead><tr>
+                        <th style="width:70px;"></th>
+                        <th style="width:160px;">Kod</th>
+                        <th>Ad</th>
+                        <th style="width:80px;">Sıra</th>
+                        <th style="width:100px;">Durum</th>
+                    </tr></thead>
+                    <tbody id="wltBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOKASYONLAR paneli (orijinal) -->
+    <div class="wl-panel" id="wlPanelLocations">
+        <div class="wl-layout">
+            <div class="wl-form-panel">
+                <input type="hidden" id="wlId" value="" />
+                <div class="cs-line"><label>Tip *</label>
+                    <select id="wlTypeCode" class="form-select form-select-sm">
+                        <!-- Dinamik olarak JS ile doldurulur -->
+                    </select>
+                </div>
+                <div class="cs-line"><label>Ust</label>
+                    <select id="wlParentId" class="form-select form-select-sm">
+                        <option value="">Ust kirilim yok</option>
+                    </select>
+                </div>
+                <div class="cs-line"><label>Kod *</label><input id="wlCode" class="form-control form-control-sm" maxlength="50" style="max-width:120px;" /></div>
+                <div class="cs-line"><label>Ad *</label><input id="wlName" class="form-control form-control-sm" maxlength="100" /></div>
+                <div class="cs-line"><label>Sira</label><input id="wlSortOrder" class="form-control form-control-sm" type="number" min="0" style="max-width:80px;" value="0" /></div>
+                <div class="cs-line"><label>Agirlik</label><input id="wlWeight" class="form-control form-control-sm" type="number" min="0" step="0.01" style="max-width:100px;" /></div>
+                <div class="cs-line"><label>Hacim</label><input id="wlVolume" class="form-control form-control-sm" type="number" min="0" step="0.01" style="max-width:100px;" /></div>
+                <div class="cs-line"><label>Durum</label><div class="form-check form-switch" style="margin:0;"><input id="wlIsActive" class="form-check-input" type="checkbox" role="switch" checked /></div></div>
+                <div id="wlMsg"></div>
+            </div>
+            <div class="wl-grid-panel">
+                <div class="wl-toolbar">
+                    <input type="text" id="wlSearch" class="form-control form-control-sm" placeholder="Tip, kod, ad veya ust kirilima gore ara..." oninput="wlLoad()" style="max-width:280px;" />
+                </div>
+                <div class="wl-table-wrap">
+                    <table class="wl-grid"><thead><tr>
+                        <th style="width:70px;"></th><th>Tip</th><th>Kod</th><th>Ad</th><th>Ust Kirilim</th><th>Sira</th><th>Agirlik</th><th>Hacim</th><th>Durum</th>
+                    </tr></thead><tbody id="wlBody"></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var API = function(a) { return '/Logistics/' + a; };
+    var selId = 0;
+    var allLocations = [];
+
+    // Duz listeyi agac sirasinda (parent once, children indented) dizer
+    function wlBuildTreeOrder(data) {
+        var byId = {};
+        data.forEach(function(d) { byId[d.id] = d; d._children = []; });
+        var roots = [];
+        data.forEach(function(d) {
+            if (d.parentId != null && byId[d.parentId]) byId[d.parentId]._children.push(d);
+            else roots.push(d);
+        });
+        function sortFn(a, b) {
+            if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+            return (a.locationCode || '').localeCompare(b.locationCode || '', 'tr');
+        }
+        roots.sort(sortFn);
+        var out = [];
+        function walk(node, depth, isLastSibling, parentPrefix) {
+            node._depth = depth;
+            node._isLast = isLastSibling;
+            node._parentPrefix = parentPrefix;
+            node._hasChildren = node._children.length > 0;
+            out.push(node);
+            var childPrefix = parentPrefix + (isLastSibling ? '   ' : '│  ');
+            var children = node._children.slice().sort(sortFn);
+            children.forEach(function(c, i) {
+                walk(c, depth + 1, i === children.length - 1, childPrefix);
+            });
+        }
+        roots.forEach(function(r, i) { walk(r, 0, i === roots.length - 1, ''); });
+        return out;
+    }
+
+    window.wlLoad = function() {
+        var s = document.getElementById('wlSearch').value;
+        fetch(API('GetAllLocations') + '?search=' + encodeURIComponent(s))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                allLocations = data;
+                wlBuildParentOptions();
+                var body = document.getElementById('wlBody');
+                if (data.length === 0) { body.innerHTML = '<tr><td colspan="9" class="wl-empty">Kayit bulunamadi.</td></tr>'; return; }
+
+                // Arama yoksa agac gosterimi; varsa duz liste (arama sonucu hiyerarsiyi bozmasin diye)
+                var ordered = s ? data : wlBuildTreeOrder(data);
+                body.innerHTML = ordered.map(function(d) {
+                    var w = d.maxWeightCapacity != null ? d.maxWeightCapacity.toFixed(2).replace(/\.?0+$/, '') : '-';
+                    var v = d.volumeCapacity != null ? d.volumeCapacity.toFixed(2).replace(/\.?0+$/, '') : '-';
+                    // Agac prefix'i — depth > 0 ise
+                    var indent = '';
+                    if (!s && d._depth > 0) {
+                        var connector = d._isLast ? '└─ ' : '├─ ';
+                        indent = '<span style="color:#94a3b8;font-family:monospace;white-space:pre;">' + d._parentPrefix + connector + '</span>';
+                    }
+                    // Yaprak olmayan (child'i olan) satirlari hafifce vurgula — gruplama/raporlama icin
+                    var isGroup = !s && d._hasChildren;
+                    var codeStyle = 'font-weight:' + (isGroup ? '700' : '600') + ';' +
+                        (isGroup ? 'color:#6366f1;' : '');
+                    var rowAttr = 'class="' + (d.id === selId ? 'is-sel' : '') + (isGroup ? ' wl-group' : '') + '"';
+                    var editBtn = '<button type="button" class="act-btn act-btn--edit" title="Düzenle" onclick="wlSelect(' + d.id + ')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>';
+                    var delBtn = '<button type="button" class="act-btn act-btn--delete" title="Sil" onclick="wlDeleteRow(' + d.id + ')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+                    return '<tr ' + rowAttr + ' onclick="wlSelect(' + d.id + ')">' +
+                        '<td onclick="event.stopPropagation()" style="white-space:nowrap;">' + editBtn + delBtn + '</td>' +
+                        '<td>' + d.locationTypeDisplayName + '</td>' +
+                        '<td style="' + codeStyle + '">' + indent + d.locationCode + '</td>' +
+                        '<td>' + (d.locationName || '-') + '</td>' +
+                        '<td>' + d.parentDisplayName + '</td>' +
+                        '<td>' + d.sortOrder + '</td>' +
+                        '<td>' + w + '</td>' +
+                        '<td>' + v + '</td>' +
+                        '<td style="font-size:0.72rem;color:' + (d.isActive ? '#15803d' : '#dc2626') + ';">' + (d.isActive ? 'Aktif' : 'Pasif') + '</td></tr>';
+                }).join('');
+            });
+    };
+
+    function wlBuildParentOptions() {
+        var sel = document.getElementById('wlParentId');
+        var curVal = sel.value;
+        sel.innerHTML = '<option value="">Ust kirilim yok</option>';
+        allLocations.forEach(function(d) {
+            if (d.id === selId) return;
+            var label = d.locationName ? d.locationCode + ' - ' + d.locationName : d.locationCode;
+            var opt = document.createElement('option');
+            opt.value = d.id;
+            opt.textContent = label;
+            if (String(d.id) === curVal) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    window.wlSelect = function(id) {
+        selId = id;
+        fetch(API('GetLocation') + '?id=' + id)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                document.getElementById('wlId').value = d.id;
+                document.getElementById('wlTypeCode').value = d.locationTypeCode;
+                document.getElementById('wlCode').value = d.locationCode;
+                document.getElementById('wlName').value = d.locationName;
+                document.getElementById('wlSortOrder').value = d.sortOrder;
+                document.getElementById('wlWeight').value = d.maxWeightCapacity != null ? d.maxWeightCapacity : '';
+                document.getElementById('wlVolume').value = d.volumeCapacity != null ? d.volumeCapacity : '';
+                document.getElementById('wlIsActive').checked = d.isActive;
+                wlSyncTopDeleteState();
+                wlBuildParentOptions();
+                document.getElementById('wlParentId').value = d.parentId != null ? d.parentId : '';
+                wlLoad();
+            });
+    };
+
+    window.wlNew = function() {
+        selId = 0;
+        document.getElementById('wlId').value = '';
+        document.getElementById('wlTypeCode').value = 'SECTION';
+        document.getElementById('wlParentId').value = '';
+        document.getElementById('wlCode').value = '';
+        document.getElementById('wlName').value = '';
+        document.getElementById('wlSortOrder').value = '0';
+        document.getElementById('wlWeight').value = '';
+        document.getElementById('wlVolume').value = '';
+        document.getElementById('wlIsActive').checked = true;
+        wlSyncTopDeleteState();
+        wlMsg('');
+        wlLoad();
+    };
+
+    function wlShakeInvalid(el) {
+        if (!el) return;
+        el.classList.remove('is-invalid');
+        void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function() { el.classList.remove('is-invalid'); }, 1400);
+    }
+    // Kullanici yazmaya baslarsa hata sinifini temizle
+    ['wlTypeCode','wlCode','wlName'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { el.classList.remove('is-invalid'); });
+        if (el) el.addEventListener('change', function() { el.classList.remove('is-invalid'); });
+    });
+
+    window.wlSave = function() {
+        var typeEl = document.getElementById('wlTypeCode');
+        var codeEl = document.getElementById('wlCode');
+        var nameEl = document.getElementById('wlName');
+        var typeVal = typeEl.value.trim();
+        var codeVal = codeEl.value.trim();
+        var nameVal = nameEl.value.trim();
+        var invalid = false;
+        if (!typeVal) { wlShakeInvalid(typeEl); invalid = true; }
+        if (!codeVal) { wlShakeInvalid(codeEl); invalid = true; }
+        if (!nameVal) { wlShakeInvalid(nameEl); invalid = true; }
+        if (invalid) return;
+
+        var wVal = document.getElementById('wlWeight').value;
+        var vVal = document.getElementById('wlVolume').value;
+        var pVal = document.getElementById('wlParentId').value;
+        var payload = {
+            id: parseInt(document.getElementById('wlId').value) || null,
+            locationTypeCode: typeVal,
+            parentId: pVal ? parseInt(pVal) : null,
+            locationCode: codeVal,
+            locationName: nameVal,
+            sortOrder: parseInt(document.getElementById('wlSortOrder').value) || 0,
+            maxWeightCapacity: wVal !== '' ? parseFloat(wVal) : null,
+            volumeCapacity: vVal !== '' ? parseFloat(vVal) : null,
+            isActive: document.getElementById('wlIsActive').checked
+        };
+        fetch(API('SaveLocationJson'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { wlFlashKitt(); wlNew(); }
+                else wlMsg(d.message || 'Hata', false);
+            });
+    };
+
+    function wlHasChildren(id) {
+        return allLocations.some(function(x) { return x.parentId === id; });
+    }
+
+    function wlConfirmDialog(message, opts) {
+        if (window.CalibraAlert && typeof window.CalibraAlert.confirm === 'function') {
+            return window.CalibraAlert.confirm(message, opts || {});
+        }
+        return Promise.resolve(window.confirm(message));
+    }
+    function wlAlert(message, opts) {
+        if (window.CalibraAlert && typeof window.CalibraAlert.warning === 'function') {
+            return window.CalibraAlert.warning(message, opts || {});
+        }
+        window.alert(message);
+    }
+
+    function wlDoDelete(id, onSuccess) {
+        // Sunucu tarafi da blokluyorsa hata mesajini goster
+        fetch(API('DeleteLocationJson') + '?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) { if (onSuccess) onSuccess(); }
+                else {
+                    wlAlert(d.message || 'Lokasyon silinemedi.', { title: 'Silme Basarisiz' });
+                }
+            })
+            .catch(function() { wlAlert('Baglanti hatasi. Lutfen tekrar deneyin.', { title: 'Hata' }); });
+    }
+
+    function wlAttemptDelete(id, onSuccess) {
+        if (!id) return;
+        var loc = allLocations.find(function(x) { return x.id === id; });
+        if (loc && wlHasChildren(id)) {
+            var label = loc.locationCode + (loc.locationName ? ' — ' + loc.locationName : '');
+            wlAlert(
+                '"' + label + '" lokasyonu altinda bir veya daha fazla lokasyon bulundugu icin silinemez. Silmeden once once alt kirilimlarini kaldirin veya baska bir gruba tasiyin.',
+                { title: 'Silinemez — Alt Kirilim Var' }
+            );
+            return;
+        }
+        var title = loc
+            ? 'Sil: ' + loc.locationCode + (loc.locationName ? ' — ' + loc.locationName : '')
+            : 'Lokasyon Silinsin Mi?';
+        wlConfirmDialog('Bu lokasyonu silmek istediginize emin misiniz?', {
+            title: title, okText: 'Evet, Sil', danger: true
+        }).then(function(ok) {
+            if (!ok) return;
+            wlDoDelete(id, onSuccess);
+        });
+    }
+
+    window.wlDelete = function() {
+        var id = parseInt(document.getElementById('wlId').value);
+        wlAttemptDelete(id, function() { wlMsg('Silindi.', true); wlNew(); });
+    };
+
+    window.wlDeleteRow = function(id) {
+        wlAttemptDelete(id, function() { wlLoad(); });
+    };
+
+    function wlMsg(msg, ok) {
+        var el = document.getElementById('wlMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="wl-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TAB yonetimi + global toolbar dispatcher
+    // ═══════════════════════════════════════════════════════════════
+    var _wlActiveTab = 'locations';
+
+    window.wlSwitchTab = function(key) {
+        _wlActiveTab = key;
+        var panels = { types: 'wlPanelTypes', locations: 'wlPanelLocations' };
+        var navs = { types: 'wlNavTypes', locations: 'wlNavLocations' };
+        Object.keys(panels).forEach(function(k) {
+            var p = document.getElementById(panels[k]); if (p) p.classList.toggle('is-hidden', k !== key);
+            var n = document.getElementById(navs[k]); if (n) n.classList.toggle('is-active', k === key);
+        });
+        if (key === 'types') wltLoad();
+        else wlPopulateTypeDropdown().then(function() { wlLoad(); });
+        wlSyncTopDeleteState();
+    };
+
+    // Global Sil butonunun disabled durumunu aktif tab'a gore guncelle
+    window.wlSyncTopDeleteState = function() {
+        var btn = document.getElementById('wlTopBtnDelete');
+        if (!btn) return;
+        if (_wlActiveTab === 'types') {
+            var tid = parseInt(document.getElementById('wltId').value) || 0;
+            btn.disabled = tid <= 0;
+        } else {
+            var lid = parseInt(document.getElementById('wlId').value) || 0;
+            btn.disabled = lid <= 0;
+        }
+    };
+
+    // Global toolbar -> aktif tab'in fonksiyonuna yonlendirici
+    window.wlActiveSave   = function() { (_wlActiveTab === 'types') ? wltSave()          : wlSave();   };
+    window.wlActiveNew    = function() { (_wlActiveTab === 'types') ? wltNew()           : wlNew();    };
+    window.wlActiveDelete = function() { (_wlActiveTab === 'types') ? wltDeleteCurrent() : wlDelete(); };
+
+    // ═══════════════════════════════════════════════════════════════
+    // Bolum Tipleri — CRUD
+    // ═══════════════════════════════════════════════════════════════
+    var wltAll = [];
+
+    function wltMsg(msg, ok) {
+        var el = document.getElementById('wltMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="wl-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 2500);
+    }
+    function wltEsc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+    function wltLoad() {
+        return fetch(API('GetLocationTypes')).then(function(r) { return r.json(); })
+            .then(function(data) {
+                wltAll = data || [];
+                var body = document.getElementById('wltBody');
+                if (wltAll.length === 0) {
+                    body.innerHTML = '<tr><td colspan="5" class="wl-empty">Tip tanimi bulunamadi.</td></tr>';
+                    return;
+                }
+                body.innerHTML = wltAll.map(function(t) {
+                    var status = t.isActive
+                        ? '<span style="color:#15803d;font-size:.72rem;">Aktif</span>'
+                        : '<span style="color:#dc2626;font-size:.72rem;">Pasif</span>';
+                    var edit = '<button type="button" class="act-btn act-btn--edit" title="Düzenle" onclick="wltSelect(' + t.id + ')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>';
+                    return '<tr onclick="wltSelect(' + t.id + ')">' +
+                        '<td onclick="event.stopPropagation()" style="white-space:nowrap;">' + edit + '</td>' +
+                        '<td style="font-weight:600;font-family:monospace;color:#6366f1;">' + wltEsc(t.code) + '</td>' +
+                        '<td>' + wltEsc(t.name) + '</td>' +
+                        '<td>' + t.sortOrder + '</td>' +
+                        '<td>' + status + '</td></tr>';
+                }).join('');
+            });
+    }
+
+    window.wltSelect = function(id) {
+        var t = wltAll.find(function(x) { return x.id === id; });
+        if (!t) return;
+        document.getElementById('wltId').value = t.id;
+        document.getElementById('wltCode').value = t.code;
+        document.getElementById('wltName').value = t.name;
+        document.getElementById('wltSortOrder').value = t.sortOrder;
+        document.getElementById('wltIsActive').checked = t.isActive;
+        wlSyncTopDeleteState();
+        wltMsg('');
+    };
+
+    window.wltNew = function() {
+        document.getElementById('wltId').value = '';
+        document.getElementById('wltCode').value = '';
+        document.getElementById('wltName').value = '';
+        document.getElementById('wltSortOrder').value = '0';
+        document.getElementById('wltIsActive').checked = true;
+        wlSyncTopDeleteState();
+        wltMsg('');
+    };
+
+    function wlFlashKitt() {
+        var bar = document.getElementById('wlTopToolbar');
+        if (!bar) return;
+        bar.classList.remove('is-save-flash');
+        void bar.offsetWidth;
+        bar.classList.add('is-save-flash');
+        setTimeout(function() { bar.classList.remove('is-save-flash'); }, 1850);
+    }
+    var wltFlashKitt = wlFlashKitt;
+
+    window.wltSave = function() {
+        var codeEl = document.getElementById('wltCode');
+        var nameEl = document.getElementById('wltName');
+        var code = codeEl.value.trim().toUpperCase();
+        var name = nameEl.value.trim();
+        var invalid = false;
+        if (!code) { wlShakeInvalid(codeEl); invalid = true; }
+        if (!name) { wlShakeInvalid(nameEl); invalid = true; }
+        if (invalid) return;
+
+        var payload = {
+            id: parseInt(document.getElementById('wltId').value) || null,
+            code: code, name: name,
+            sortOrder: parseInt(document.getElementById('wltSortOrder').value) || 0,
+            isActive: document.getElementById('wltIsActive').checked
+        };
+        fetch(API('SaveLocationType'), {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) { wltFlashKitt(); wltNew(); wltLoad(); wlPopulateTypeDropdown(); }
+            else wltMsg(d.message || 'Hata', false);
+        });
+    };
+
+    // Toolbar'daki Sil butonu — formdaki secili tipi siler
+    window.wltDeleteCurrent = function() {
+        var id = parseInt(document.getElementById('wltId').value);
+        if (!id) { wltMsg('Silmek icin bir tip secin.', false); return; }
+        var name = document.getElementById('wltName').value || 'Secili tip';
+        wlConfirmDialog('"' + name + '" tipini silmek istediginize emin misiniz?', {
+            title: 'Tip Silinsin Mi?', okText: 'Evet, Sil', danger: true
+        }).then(function(ok) {
+            if (!ok) return;
+            fetch(API('DeleteLocationType') + '?id=' + id, { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d && d.success) {
+                        wltNew();
+                        wltLoad();
+                        wlPopulateTypeDropdown();
+                    } else {
+                        wlAlert((d && d.message) || 'Silinemedi.', { title: 'Silme Basarisiz' });
+                    }
+                })
+                .catch(function(e) { wlAlert('Baglanti hatasi: ' + e.message, { title: 'Hata' }); });
+        });
+    };
+
+    // wlTypeCode dropdown'unu DB'den doldur
+    function wlPopulateTypeDropdown() {
+        return fetch(API('GetLocationTypes')).then(function(r) { return r.json(); })
+            .then(function(types) {
+                var sel = document.getElementById('wlTypeCode');
+                if (!sel) return;
+                var curVal = sel.value;
+                var active = (types || []).filter(function(t) { return t.isActive; });
+                sel.innerHTML = active.map(function(t) {
+                    return '<option value="' + wltEsc(t.code) + '">' + wltEsc(t.name) + '</option>';
+                }).join('');
+                if (curVal && active.some(function(t) { return t.code === curVal; })) sel.value = curVal;
+                else if (active.length > 0) sel.value = active[0].code;
+            });
+    }
+
+    // Init — tum window.xxx fonksiyonlari tanimlandiktan sonra ilk yukleme
+    wlPopulateTypeDropdown().then(function() { wlLoad(); });
+})();
+</script>
+}

@@ -24,7 +24,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[sql_view_name],[description],[is_active],[created_at],[updated_at]
+            SELECT [id],[code],[name],[sql_view_name],[required_key_column],[description],[is_active],[created_at],[updated_at]
             FROM {_table}
             ORDER BY [name];
             """;
@@ -34,12 +34,12 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         return list;
     }
 
-    public async Task<DocumentType?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<DocumentType?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[sql_view_name],[description],[is_active],[created_at],[updated_at]
+            SELECT [id],[code],[name],[sql_view_name],[required_key_column],[description],[is_active],[created_at],[updated_at]
             FROM {_table}
             WHERE [id] = @Id;
             """;
@@ -53,7 +53,7 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id],[code],[name],[sql_view_name],[description],[is_active],[created_at],[updated_at]
+            SELECT [id],[code],[name],[sql_view_name],[required_key_column],[description],[is_active],[created_at],[updated_at]
             FROM {_table}
             WHERE [code] = @Code;
             """;
@@ -62,30 +62,41 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
         return await reader.ReadAsync(cancellationToken) ? Map(reader) : null;
     }
 
-    public async Task SaveAsync(DocumentType entity, CancellationToken cancellationToken)
+    public async Task<int> SaveAsync(DocumentType entity, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            MERGE {_table} AS tgt
-            USING (SELECT @Id AS [id]) AS src ON tgt.[id] = src.[id]
-            WHEN MATCHED THEN
-                UPDATE SET [code]=@Code,[name]=@Name,[sql_view_name]=@SqlViewName,
-                           [description]=@Description,[is_active]=@IsActive,[updated_at]=GETDATE()
-            WHEN NOT MATCHED THEN
-                INSERT ([id],[code],[name],[sql_view_name],[description],[is_active],[created_at],[updated_at])
-                VALUES (@Id,@Code,@Name,@SqlViewName,@Description,@IsActive,GETDATE(),GETDATE());
-            """;
-        command.Parameters.Add(new SqlParameter("@Id", entity.Id));
+        if (entity.Id > 0)
+        {
+            command.CommandText = $"""
+                UPDATE {_table}
+                    SET [code]=@Code,[name]=@Name,[sql_view_name]=@SqlViewName,
+                        [required_key_column]=@ReqKey,
+                        [description]=@Description,[is_active]=@IsActive,[updated_at]=GETDATE()
+                    WHERE [id]=@Id;
+                SELECT @Id;
+                """;
+            command.Parameters.Add(new SqlParameter("@Id", entity.Id));
+        }
+        else
+        {
+            command.CommandText = $"""
+                INSERT INTO {_table} ([code],[name],[sql_view_name],[required_key_column],[description],[is_active],[created_at],[updated_at])
+                VALUES (@Code,@Name,@SqlViewName,@ReqKey,@Description,@IsActive,GETDATE(),GETDATE());
+                SELECT CAST(SCOPE_IDENTITY() AS INT);
+                """;
+        }
         command.Parameters.Add(new SqlParameter("@Code", entity.Code));
         command.Parameters.Add(new SqlParameter("@Name", entity.Name));
         command.Parameters.Add(new SqlParameter("@SqlViewName", (object?)entity.SqlViewName ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@ReqKey", (object?)entity.RequiredKeyColumn ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@Description", (object?)entity.Description ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", entity.IsActive));
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
+    public async Task DeleteAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -96,13 +107,14 @@ public sealed class SqlDocumentTypeRepository : IDocumentTypeRepository
 
     private static DocumentType Map(SqlDataReader r) => new()
     {
-        Id           = r.GetGuid(0),
-        Code         = r.GetString(1),
-        Name         = r.GetString(2),
-        SqlViewName  = r.IsDBNull(3) ? null : r.GetString(3),
-        Description  = r.IsDBNull(4) ? null : r.GetString(4),
-        IsActive     = r.GetBoolean(5),
-        CreatedAt    = r.GetDateTime(6),
-        UpdatedAt    = r.GetDateTime(7),
+        Id                = r.GetInt32(0),
+        Code              = r.GetString(1),
+        Name              = r.GetString(2),
+        SqlViewName       = r.IsDBNull(3) ? null : r.GetString(3),
+        RequiredKeyColumn = r.IsDBNull(4) ? null : r.GetString(4),
+        Description       = r.IsDBNull(5) ? null : r.GetString(5),
+        IsActive          = r.GetBoolean(6),
+        CreatedAt         = r.GetDateTime(7),
+        UpdatedAt         = r.GetDateTime(8),
     };
 }

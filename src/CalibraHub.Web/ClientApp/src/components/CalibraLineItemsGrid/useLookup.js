@@ -9,8 +9,9 @@
  */
 import { useState, useEffect } from 'react'
 
-var cache = {}
+var cache = {}       // { url: { data, ts } }
 var inflight = {}
+var CACHE_TTL_MS = 15000  // 15 saniye — sekmeler arasi veri tazeligi icin makul esik
 
 function resolveUrl(template, row) {
   if (!template) return ''
@@ -21,15 +22,18 @@ function resolveUrl(template, row) {
 }
 
 function fetchOnce(url) {
-  if (cache[url]) return Promise.resolve(cache[url])
+  var now = Date.now()
+  var entry = cache[url]
+  if (entry && (now - entry.ts) < CACHE_TTL_MS) return Promise.resolve(entry.data)
   if (inflight[url]) return inflight[url]
 
   var p = fetch(url, { credentials: 'same-origin' })
     .then(function(r) { return r.ok ? r.json() : [] })
     .then(function(data) {
-      cache[url] = Array.isArray(data) ? data : []
+      var arr = Array.isArray(data) ? data : []
+      cache[url] = { data: arr, ts: Date.now() }
       delete inflight[url]
-      return cache[url]
+      return arr
     })
     .catch(function(e) {
       console.error('[useLookup] fetch error:', url, e)
@@ -54,7 +58,9 @@ export function useLookup(urlTemplate, row) {
 
   useEffect(function() {
     if (!url) { setOptions([]); return }
-    if (cache[url]) { setOptions(cache[url]); return }
+    var now = Date.now()
+    var entry = cache[url]
+    if (entry && (now - entry.ts) < CACHE_TTL_MS) { setOptions(entry.data); return }
 
     setLoading(true)
     var cancelled = false

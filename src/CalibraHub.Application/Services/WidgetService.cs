@@ -70,7 +70,9 @@ public sealed class WidgetService : IWidgetService
                 MinValue: w.MinValue,
                 MaxValue: w.MaxValue,
                 ColorType: w.ColorType,
-                ColorValue: w.ColorValue))
+                ColorValue: w.ColorValue,
+                ColSpan: w.ColSpan,
+                LabelStyle: w.LabelStyle ?? "standard"))
             .ToArray();
 
         return new WidgetFormSchemaDto(
@@ -244,7 +246,9 @@ public sealed class WidgetService : IWidgetService
                 MinValue: w.MinValue,
                 MaxValue: w.MaxValue,
                 ColorType: w.ColorType,
-                ColorValue: w.ColorValue));
+                ColorValue: w.ColorValue,
+                ColSpan: w.ColSpan,
+                LabelStyle: w.LabelStyle ?? "standard"));
         }
         return result;
     }
@@ -326,7 +330,7 @@ public sealed class WidgetService : IWidgetService
                 .FirstOrDefault();
             if (string.IsNullOrWhiteSpace(tpl))
             {
-                throw new ArgumentException("Baglanti (link) tipi icin hedef URL sablonu zorunludur. Orn: /Finance/ContactAccountEdit?code={value}");
+                throw new ArgumentException("Baglanti (link) tipi icin hedef URL sablonu zorunludur. Orn: /Finance/ContactEdit?code={value}");
             }
             optionsJson = JsonSerializer.Serialize(new[] { tpl });
         }
@@ -460,6 +464,10 @@ public sealed class WidgetService : IWidgetService
             IsActive = request.IsActive,
             ColorType  = request.ColorType,
             ColorValue = string.IsNullOrWhiteSpace(request.ColorValue) ? null : request.ColorValue.Trim(),
+            // ColSpan — 1-12 arasi clamp; null/sifir gelirse varsayilan 6 (1/2 satir).
+            ColSpan = (request.ColSpan is int cs && cs >= 1 && cs <= 12) ? cs : 6,
+            // LabelStyle — whitelist: "standard" (varsayilan) veya "modern" (floating/outline).
+            LabelStyle = (request.LabelStyle == "modern") ? "modern" : "standard",
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -504,6 +512,43 @@ public sealed class WidgetService : IWidgetService
         return result;
     }
 
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<(string WidgetCode, string Label)>>>
+        ValidateRequiredAsync(string formCode, IReadOnlyCollection<string> recordIds, CancellationToken ct)
+    {
+        var empty = new Dictionary<string, IReadOnlyList<(string, string)>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(formCode) || recordIds.Count == 0) return empty;
+
+        var form = await _repository.GetFormByCodeAsync(formCode, ct);
+        if (form == null) return empty;
+
+        var widgets = await _repository.GetWidgetsByFormAsync(form.Id, ct);
+        var required = widgets
+            .Where(w => w.IsActive && w.IsRequired
+                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (required.Length == 0) return empty;
+
+        var valuesByRecord = await _repository.GetValuesBatchAsync(form.Id, recordIds, ct);
+        var result = new Dictionary<string, IReadOnlyList<(string, string)>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var rid in recordIds)
+        {
+            // valuesByRecord ILookup — bulunmayan anahtar bos enumerable doner.
+            var valuesByWidgetId = valuesByRecord[rid].ToDictionary(v => v.WidgetId, v => v.Value);
+            var missing = new List<(string, string)>();
+            foreach (var w in required)
+            {
+                valuesByWidgetId.TryGetValue(w.Id, out var raw);
+                if (string.IsNullOrWhiteSpace(raw))
+                    missing.Add((w.WidgetCode, w.Label ?? w.WidgetCode));
+            }
+            if (missing.Count > 0) result[rid] = missing;
+        }
+
+        return result;
+    }
+
     public async Task ToggleIsPlainFieldAsync(int widgetId, bool isPlainField, CancellationToken ct)
     {
         var widget = await _repository.GetWidgetByIdAsync(widgetId, ct)
@@ -530,6 +575,8 @@ public sealed class WidgetService : IWidgetService
             IsActive       = widget.IsActive,
             ColorType      = widget.ColorType,
             ColorValue     = widget.ColorValue,
+            ColSpan        = widget.ColSpan,
+            LabelStyle     = widget.LabelStyle ?? "standard",
             CreatedAt      = widget.CreatedAt,
             UpdatedAt      = DateTime.Now,
         };

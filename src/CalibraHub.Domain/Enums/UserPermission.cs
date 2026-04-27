@@ -10,5 +10,8 @@ public enum UserPermission
     RejectDocuments = 6,
     ExportReports = 7,
     ViewAuditLogs = 8,
-    ManageCompanySettings = 9
+    ManageCompanySettings = 9,
+    ViewReports = 10,
+    DesignReports = 11,
+    ManageReports = 12
 }

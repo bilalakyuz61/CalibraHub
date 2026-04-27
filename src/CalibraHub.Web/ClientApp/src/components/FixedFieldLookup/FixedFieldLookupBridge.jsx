@@ -56,10 +56,14 @@ export default function FixedFieldLookupBridge(props) {
   settingsColumnRef.current = { key: fieldKey, label: fieldKey, formCode: formCode, guideCode: guideCode, filterJson: filterJson, formatJson: formatJson }
 
   // ── Sayfa yuklendiginde mevcut degeri resolve et ──
+  // Caller (ornek sqLoadQuote) data-display'i onceden set etmisse, onun istegine
+  // saygi gosteririz — input degerini ezmiyoruz. Ornek Cari Kod: kod gostermek
+  // isteniyor, isim degil.
   useEffect(function () {
     if (!inputEl || !guideCode) return
     var currentVal = inputEl.value
     if (!currentVal) return
+    if (inputEl.getAttribute('data-display')) return
     var alive = true
     guideResolve(guideCode, currentVal)
       .then(function (result) {
@@ -191,16 +195,23 @@ export default function FixedFieldLookupBridge(props) {
       inputEl.dispatchEvent(new Event('input', { bubbles: true }))
       inputEl.dispatchEvent(new Event('change', { bubbles: true }))
     }
-    // fillMap: secim sonrasi diger alanlara deger doldur
+    // fillMap: secim sonrasi diger alanlara deger doldur.
+    // Input/textarea/select icin .value; span/div icin .textContent yazar.
     var fillMap = props.fillMap
     if (fillMap && row.cells) {
       Object.keys(fillMap).forEach(function(selector) {
         var colName = fillMap[selector]
         var target = document.querySelector(selector)
         if (target && row.cells[colName] != null) {
-          target.value = String(row.cells[colName])
-          target.dispatchEvent(new Event('input', { bubbles: true }))
-          target.dispatchEvent(new Event('change', { bubbles: true }))
+          var val = String(row.cells[colName])
+          var tag = (target.tagName || '').toUpperCase()
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+            target.value = val
+            target.dispatchEvent(new Event('input', { bubbles: true }))
+            target.dispatchEvent(new Event('change', { bubbles: true }))
+          } else {
+            target.textContent = val
+          }
         }
       })
     }

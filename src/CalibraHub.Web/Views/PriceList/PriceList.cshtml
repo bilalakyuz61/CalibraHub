@@ -92,9 +92,16 @@
     .pl-step__line.is-done { background: #16a34a; }
 
     /* ── Content area ── */
-    .pl-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 24px; }
-    .pl-pane { display: none; }
+    .pl-content {
+        flex: 1 1 auto; min-height: 0; padding: 20px 24px;
+        display: flex; flex-direction: column; overflow: hidden;
+    }
+    .pl-pane { display: none; flex: 1; min-height: 0; overflow-y: auto; }
     .pl-pane.is-active { display: flex; flex-direction: column; gap: 16px; }
+    /* Step 2 — stok seçimi: kart ve liste tüm alanı doldursun */
+    #plStep2 { overflow: hidden; }
+    #plStep2.is-active > .pl-card { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    #plStep2 .pl-stock-list { flex: 1; min-height: 0; max-height: none; }
 
     /* ── Card ── */
     .pl-card {
@@ -195,7 +202,29 @@
     body.app-theme-light .pl-stock-item:hover { background: #f8fafc; }
     .pl-stock-item.is-checked { background: rgba(99,102,241,.1); }
     body.app-theme-light .pl-stock-item.is-checked { background: #eff6ff; }
-    .pl-stock-item input[type=checkbox] { flex-shrink: 0; accent-color: #6366f1; width: 14px; height: 14px; cursor: pointer; }
+    /* ── Switch toggle (stok seçimi) ── */
+    .pl-switch { position: relative; display: inline-block; width: 34px; height: 18px; flex-shrink: 0; cursor: pointer; }
+    .pl-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .pl-switch-track {
+        position: absolute; inset: 0; background: rgba(255,255,255,.15);
+        border-radius: 10px; transition: background .18s; cursor: pointer;
+    }
+    body.app-theme-light .pl-switch-track { background: #cbd5e1; }
+    .pl-switch-track::after {
+        content: ''; position: absolute; left: 2px; top: 2px;
+        width: 14px; height: 14px; background: #fff; border-radius: 50%;
+        box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .18s;
+    }
+    .pl-switch input:checked + .pl-switch-track { background: #6366f1; }
+    .pl-switch input:checked + .pl-switch-track::after { transform: translateX(16px); }
+    /* Grup toggle (konfigurasyonlu stok basligi) — partial state */
+    .pl-switch--group input:indeterminate + .pl-switch-track {
+        background: linear-gradient(90deg, #6366f1 50%, rgba(255,255,255,.15) 50%);
+    }
+    body.app-theme-light .pl-switch--group input:indeterminate + .pl-switch-track {
+        background: linear-gradient(90deg, #6366f1 50%, #cbd5e1 50%);
+    }
+    .pl-switch--group input:indeterminate + .pl-switch-track::after { transform: translateX(8px); }
     .pl-stock-code { font-weight: 700; color: rgba(255,255,255,.85); min-width: 90px; font-size: .78rem; }
     body.app-theme-light .pl-stock-code { color: #1e293b; }
     .pl-stock-name { color: rgba(255,255,255,.5); font-size: .78rem; }
@@ -212,6 +241,84 @@
     .pl-badge-x { cursor: pointer; color: rgba(255,255,255,.35); font-size: .8rem; line-height: 1; }
     .pl-badge-x:hover { color: #f87171; }
     body.app-theme-light .pl-badge-x { color: #94a3b8; }
+
+    /* ── Yapılandırmalı stok & kombinasyon satırları (step 2) ── */
+    .pl-stock-item--tracked { cursor: pointer; }
+    .pl-caret {
+        display: inline-flex; width: 14px; justify-content: center;
+        font-size: .78rem; color: #a5b4fc; flex-shrink: 0;
+    }
+    body.app-theme-light .pl-caret { color: #6366f1; }
+    .pl-config-badge {
+        margin-left: auto; font-size: .72rem; color: #fbbf24;
+        padding: 2px 6px; border-radius: 4px; background: rgba(251,191,36,.1);
+        border: 1px solid rgba(251,191,36,.25);
+    }
+    body.app-theme-light .pl-config-badge { color: #d97706; background: #fef3c7; border-color: #fde68a; }
+
+    .pl-combo-row {
+        display: flex; align-items: center; gap: 10px;
+        padding: 5px 12px 5px 36px;
+        border-bottom: 1px solid rgba(255,255,255,.03);
+        font-size: .75rem; cursor: pointer; user-select: none;
+        background: rgba(99,102,241,.04);
+    }
+    body.app-theme-light .pl-combo-row { background: #f8fafc; border-bottom-color: #f1f5f9; }
+    .pl-combo-row:hover { background: rgba(99,102,241,.08); }
+    .pl-combo-row.is-checked { background: rgba(99,102,241,.14); }
+    body.app-theme-light .pl-combo-row.is-checked { background: #eef2ff; }
+    .pl-combo-code {
+        font-family: ui-monospace, monospace; font-weight: 700; color: #c7d2fe; min-width: 100px;
+    }
+    body.app-theme-light .pl-combo-code { color: #4338ca; }
+    .pl-combo-desc { color: rgba(255,255,255,.55); font-size: .72rem; }
+    body.app-theme-light .pl-combo-desc { color: #64748b; }
+    .pl-combo-loading, .pl-combo-empty {
+        padding: 8px 12px 8px 36px; font-size: .72rem; color: rgba(255,255,255,.4);
+        background: rgba(99,102,241,.04);
+    }
+    body.app-theme-light .pl-combo-loading, body.app-theme-light .pl-combo-empty {
+        color: #94a3b8; background: #f8fafc;
+    }
+
+    .pl-scroll-sentinel {
+        padding: 10px 12px; text-align: center;
+        font-size: .72rem; color: rgba(255,255,255,.4);
+    }
+    body.app-theme-light .pl-scroll-sentinel { color: #94a3b8; }
+
+    /* ── Kombinasyon chip (step 3 tablo & mevcut kayıtlar) ── */
+    .pl-combo-chip {
+        display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-family: ui-monospace, monospace; font-size: .7rem; font-weight: 700;
+        background: rgba(99,102,241,.14); color: #a5b4fc;
+        border: 1px solid rgba(99,102,241,.25);
+    }
+    body.app-theme-light .pl-combo-chip { background: #eff6ff; color: #3b82f6; border-color: #bfdbfe; }
+    .pl-combo-chip--none { background: transparent; color: rgba(255,255,255,.25); border-color: transparent; }
+    body.app-theme-light .pl-combo-chip--none { color: #cbd5e1; }
+
+    /* ── Önceki fiyat hücresi ── */
+    .pl-prev { color: rgba(255,255,255,.45); font-size: .78rem; }
+    body.app-theme-light .pl-prev { color: #64748b; }
+    .pl-prev-empty { color: rgba(255,255,255,.2); }
+    body.app-theme-light .pl-prev-empty { color: #cbd5e1; }
+
+    /* ── Durum chip ── */
+    .pl-status {
+        display: inline-block; padding: 3px 9px; border-radius: 12px;
+        font-size: .68rem; font-weight: 700; white-space: nowrap;
+    }
+    .pl-status--new {
+        background: rgba(34,197,94,.14); color: #4ade80;
+        border: 1px solid rgba(34,197,94,.3);
+    }
+    body.app-theme-light .pl-status--new { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+    .pl-status--update {
+        background: rgba(251,191,36,.14); color: #fbbf24;
+        border: 1px solid rgba(251,191,36,.3);
+    }
+    body.app-theme-light .pl-status--update { background: #fef3c7; color: #b45309; border-color: #fde68a; }
 
     /* ── Price table (step 3) ── */
     .pl-price-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255,255,255,.08); }
@@ -429,6 +536,7 @@
                             <tr>
                                 <th>Malzeme Kodu</th>
                                 <th>Malzeme Adı</th>
+                                <th>Kombinasyon</th>
                                 <th>Döviz</th>
                                 <th class="num">Alış</th>
                                 <th class="num">Satış</th>
@@ -456,7 +564,6 @@
                 <div class="pl-stock-list" id="plStockList">
                     <div class="pl-empty">Yükleniyor…</div>
                 </div>
-                <div class="pl-badges" id="plSelectedBadges" style="margin-top:10px;"></div>
             </div>
         </div>
 
@@ -515,11 +622,26 @@
     var STEPS = 3;
     var step = 1;
     var groupId = parseInt(new URLSearchParams(window.location.search).get('groupId')) || 0;
-    var allStocks = [];
+    // Sunucu tarafli sayfalama state
+    var serverStocks = [];        // yuklenmis stok listesi (page by page)
+    var serverTotal = 0;          // toplam kayit sayisi (backend'den)
+    var serverOffset = 0;         // sonraki sayfa offset
+    var serverHasMore = false;    // daha fazla sayfa var mi
+    var serverLoading = false;    // aktif yukleme var mi
+    var currentSearch = '';       // aktif arama terimi
+    var PAGE_SIZE = 50;
+    var combosByMat = {};         // { materialCode: [{ code, name, featureValues }] }
+    var expandedMats = new Set(); // genisletilmis material code'lar
+
+    // selectedStocks — her satir: { id:stockCardId, materialCode, materialName, combinationCode, combinationName, buyingPrice, sellingPrice, existingBuying?, existingSelling?, isUpdate? }
     var selectedStocks = [];
-    var filteredIds = new Set();
     var pendingDeleteId = null;
     var priceType = 'buy'; // 'buy' | 'sell' | 'both'
+
+    // Selected key: stok+kombinasyon (kombinasyon yoksa sadece stok)
+    function keyOf(s) {
+        return String(s.id || s.stockCardId || '') + '|' + (s.combinationCode || '');
+    }
 
     function esc(s) {
         return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -622,61 +744,262 @@
     document.getElementById('plCurrency').addEventListener('change', validateStep);
     document.getElementById('plValidFrom').addEventListener('change', validateStep);
 
-    // ── Step 2: stock selection ──
+    // ── Step 2: stok seçimi (sunucu tarafli pagination + kombinasyon) ──
     var stockTimer;
     document.getElementById('plStockSearch').addEventListener('input', function() {
         clearTimeout(stockTimer);
-        stockTimer = setTimeout(renderStockList, 200);
+        stockTimer = setTimeout(function() {
+            currentSearch = (document.getElementById('plStockSearch').value || '').trim();
+            resetAndLoad();
+        }, 300);
     });
 
+    // Step 2'ye ilk giriste tetiklenir
     function loadStocks() {
-        if (allStocks.length) { renderStockList(); return; }
-        fetch(API('SearchStocks'))
+        if (serverStocks.length === 0) resetAndLoad();
+        else renderStockList();
+    }
+
+    function resetAndLoad() {
+        serverStocks = [];
+        serverOffset = 0;
+        serverTotal = 0;
+        serverHasMore = false;
+        renderStockList(); // loading skeleton
+        loadNextPage();
+    }
+
+    function loadNextPage() {
+        if (serverLoading || (serverOffset > 0 && !serverHasMore)) return;
+        serverLoading = true;
+        var qParam = currentSearch ? '&q=' + encodeURIComponent(currentSearch) : '';
+        fetch(API('SearchStocks') + '?offset=' + serverOffset + '&pageSize=' + PAGE_SIZE + qParam)
             .then(function(r) { return r.json(); })
-            .then(function(data) { allStocks = data; renderStockList(); });
+            .then(function(data) {
+                serverLoading = false;
+                serverStocks  = serverStocks.concat(data.items || []);
+                serverTotal   = data.totalCount || 0;
+                serverHasMore = !!data.hasMore;
+                serverOffset  = (data.offset || 0) + (data.items || []).length;
+                renderStockList();
+            })
+            .catch(function() {
+                serverLoading = false;
+                renderStockList();
+            });
     }
 
     function renderStockList() {
-        var q = (document.getElementById('plStockSearch').value || '').trim().toLowerCase();
         var list = document.getElementById('plStockList');
-        var filtered = allStocks.filter(function(s) {
-            return !q || s.materialCode.toLowerCase().indexOf(q) >= 0 || (s.materialName || '').toLowerCase().indexOf(q) >= 0;
-        });
-        filteredIds = new Set(filtered.map(function(s) { return s.id; }));
-
-        if (filtered.length === 0) {
+        if (serverStocks.length === 0 && !serverLoading) {
             list.innerHTML = '<div class="pl-empty">Sonuç bulunamadı.</div>';
             updateSelectionUI(); return;
         }
-        var selSet = new Set(selectedStocks.map(function(s) { return s.id; }));
-        list.innerHTML = filtered.map(function(s) {
-            var chk = selSet.has(s.id);
-            return '<div class="pl-stock-item' + (chk ? ' is-checked' : '') + '" onclick="plToggleStock(' + s.id + ')">'
-                + '<input type="checkbox"' + (chk ? ' checked' : '') + ' onclick="event.stopPropagation();plToggleStock(' + s.id + ')" />'
-                + '<span class="pl-stock-code">' + esc(s.materialCode) + '</span>'
-                + '<span class="pl-stock-name">' + esc(s.materialName) + '</span>'
-                + '</div>';
-        }).join('');
+        if (serverStocks.length === 0 && serverLoading) {
+            list.innerHTML = '<div class="pl-empty">Yükleniyor…</div>';
+            updateSelectionUI(); return;
+        }
+
+        var selSet = new Set(selectedStocks.map(keyOf));
+        var html = '';
+        serverStocks.forEach(function(s) {
+            var stockKey = String(s.id) + '|';
+            var chk = selSet.has(stockKey);
+            if (s.trackCombinations) {
+                var isOpen = expandedMats.has(s.materialCode);
+                // Grup (ust seviye) toggle state'i — tum kombinasyonlar secili mi?
+                var combosForStock = combosByMat[s.materialCode];
+                var grpState = 'none'; // none | partial | all
+                if (Array.isArray(combosForStock) && combosForStock.length > 0) {
+                    var selectedCount = combosForStock.filter(function(c) {
+                        return selSet.has(String(s.id) + '|' + c.code);
+                    }).length;
+                    if (selectedCount === combosForStock.length) grpState = 'all';
+                    else if (selectedCount > 0) grpState = 'partial';
+                }
+                var grpChecked = grpState === 'all';
+                var grpIndet   = grpState === 'partial';
+                html += '<div class="pl-stock-item pl-stock-item--tracked' + (isOpen ? ' is-open' : '') + (grpChecked ? ' is-checked' : '') + '" onclick="plToggleExpand(\'' + esc(s.materialCode) + '\')">'
+                    +   '<label class="pl-switch pl-switch--group" title="Tum kombinasyonlari sec/kaldir" onclick="event.stopPropagation();plToggleStockAllCombos(' + s.id + ',\'' + esc(s.materialCode) + '\',\'' + esc(s.materialName) + '\')">'
+                    +     '<input type="checkbox"' + (grpChecked ? ' checked' : '') + (grpIndet ? ' data-indeterminate="1"' : '') + ' onclick="event.stopPropagation()" readonly />'
+                    +     '<span class="pl-switch-track"></span>'
+                    +   '</label>'
+                    +   '<span class="pl-caret">' + (isOpen ? '▾' : '▸') + '</span>'
+                    +   '<span class="pl-stock-code">' + esc(s.materialCode) + '</span>'
+                    +   '<span class="pl-stock-name">' + esc(s.materialName) + '</span>'
+                    +   '<span class="pl-config-badge" title="Yapılandırmalı stok">⚙</span>'
+                    + '</div>';
+                if (isOpen) {
+                    var combos = combosByMat[s.materialCode];
+                    if (!combos) {
+                        html += '<div class="pl-combo-row pl-combo-loading">Kombinasyonlar yükleniyor…</div>';
+                    } else if (combos.length === 0) {
+                        html += '<div class="pl-combo-row pl-combo-empty">Tanımlı kombinasyon yok.</div>';
+                    } else {
+                        combos.forEach(function(c) {
+                            var cKey = String(s.id) + '|' + c.code;
+                            var cChk = selSet.has(cKey);
+                            var label = (c.featureValues || []).map(function(fv) { return fv.feature + ': ' + fv.value; }).join(' · ');
+                            html += '<div class="pl-combo-row' + (cChk ? ' is-checked' : '') + '" onclick="plToggleCombo(' + s.id + ',\'' + esc(s.materialCode) + '\',\'' + esc(s.materialName) + '\',\'' + esc(c.code) + '\',\'' + esc(c.name || label) + '\')">'
+                                +   '<label class="pl-switch" onclick="event.stopPropagation();plToggleCombo(' + s.id + ',\'' + esc(s.materialCode) + '\',\'' + esc(s.materialName) + '\',\'' + esc(c.code) + '\',\'' + esc(c.name || label) + '\')">'
+                                +     '<input type="checkbox"' + (cChk ? ' checked' : '') + ' onclick="event.stopPropagation()" readonly />'
+                                +     '<span class="pl-switch-track"></span>'
+                                +   '</label>'
+                                +   '<span class="pl-combo-code">' + esc(c.code) + '</span>'
+                                +   '<span class="pl-combo-desc">' + esc(label || c.name || '') + '</span>'
+                                + '</div>';
+                        });
+                    }
+                }
+            } else {
+                html += '<div class="pl-stock-item' + (chk ? ' is-checked' : '') + '" onclick="plToggleStock(' + s.id + ')">'
+                    +   '<label class="pl-switch" onclick="event.stopPropagation();plToggleStock(' + s.id + ')">'
+                    +     '<input type="checkbox"' + (chk ? ' checked' : '') + ' onclick="event.stopPropagation()" readonly />'
+                    +     '<span class="pl-switch-track"></span>'
+                    +   '</label>'
+                    +   '<span class="pl-stock-code">' + esc(s.materialCode) + '</span>'
+                    +   '<span class="pl-stock-name">' + esc(s.materialName) + '</span>'
+                    + '</div>';
+            }
+        });
+
+        if (serverHasMore || serverLoading) {
+            html += '<div class="pl-scroll-sentinel" id="plSentinel">' + (serverLoading ? 'Yükleniyor…' : '') + '</div>';
+        }
+        list.innerHTML = html;
+
+        // Indeterminate state — HTML attribute ile set edilemez, JS ile set et
+        list.querySelectorAll('input[data-indeterminate="1"]').forEach(function(inp) { inp.indeterminate = true; });
+
+        // IntersectionObserver — infinite scroll
+        var sentinel = document.getElementById('plSentinel');
+        if (sentinel && serverHasMore && !serverLoading) {
+            var io = new IntersectionObserver(function(entries) {
+                entries.forEach(function(ent) {
+                    if (ent.isIntersecting) { io.disconnect(); loadNextPage(); }
+                });
+            }, { root: list, threshold: 0.1 });
+            io.observe(sentinel);
+        }
+
         updateSelectionUI();
     }
 
     window.plToggleStock = function(id) {
-        var idx = selectedStocks.findIndex(function(s) { return s.id === id; });
+        var stockKey = String(id) + '|';
+        var idx = selectedStocks.findIndex(function(s) { return keyOf(s) === stockKey; });
         if (idx >= 0) selectedStocks.splice(idx, 1);
         else {
-            var s = allStocks.find(function(x) { return x.id === id; });
-            if (s) selectedStocks.push({ id: s.id, materialCode: s.materialCode, materialName: s.materialName, buyingPrice: 0, sellingPrice: 0 });
+            var s = serverStocks.find(function(x) { return x.id === id; });
+            if (s) selectedStocks.push({
+                id: s.id, materialCode: s.materialCode, materialName: s.materialName,
+                combinationCode: null, combinationName: null,
+                buyingPrice: 0, sellingPrice: 0
+            });
         }
         renderStockList(); validateStep();
     };
-    window.plSelectAllFiltered = function() {
-        var selSet = new Set(selectedStocks.map(function(s) { return s.id; }));
-        allStocks.forEach(function(s) {
-            if (filteredIds.has(s.id) && !selSet.has(s.id))
-                selectedStocks.push({ id: s.id, materialCode: s.materialCode, materialName: s.materialName, buyingPrice: 0, sellingPrice: 0 });
+
+    window.plToggleCombo = function(stockId, matCode, matName, comboCode, comboName) {
+        var k = String(stockId) + '|' + comboCode;
+        var idx = selectedStocks.findIndex(function(s) { return keyOf(s) === k; });
+        if (idx >= 0) selectedStocks.splice(idx, 1);
+        else selectedStocks.push({
+            id: stockId, materialCode: matCode, materialName: matName,
+            combinationCode: comboCode, combinationName: comboName,
+            buyingPrice: 0, sellingPrice: 0
         });
         renderStockList(); validateStep();
     };
+
+    window.plToggleExpand = function(matCode) {
+        if (expandedMats.has(matCode)) {
+            expandedMats.delete(matCode);
+            renderStockList();
+            return;
+        }
+        expandedMats.add(matCode);
+        if (combosByMat[matCode]) { renderStockList(); return; }
+        // Kombinasyonlari lazy-fetch et
+        renderStockList();
+        fetch(API('GetCombinations') + '?materialCode=' + encodeURIComponent(matCode))
+            .then(function(r) { return r.json(); })
+            .then(function(data) { combosByMat[matCode] = Array.isArray(data) ? data : []; renderStockList(); })
+            .catch(function() { combosByMat[matCode] = []; renderStockList(); });
+    };
+
+    // Bir tracked stok icin kombinasyonlari cek ve sec (zaten seciliyse atla).
+    function pushCombosToSelected(s, combos) {
+        var selSet = new Set(selectedStocks.map(keyOf));
+        combos.forEach(function(c) {
+            var label = (c.featureValues || []).map(function(fv) { return fv.feature + ': ' + fv.value; }).join(' · ');
+            var k = String(s.id) + '|' + c.code;
+            if (!selSet.has(k)) {
+                selectedStocks.push({
+                    id: s.id, materialCode: s.materialCode, materialName: s.materialName,
+                    combinationCode: c.code, combinationName: c.name || label || c.code,
+                    buyingPrice: 0, sellingPrice: 0
+                });
+            }
+        });
+    }
+
+    function ensureCombosLoaded(matCode) {
+        if (Array.isArray(combosByMat[matCode])) return Promise.resolve(combosByMat[matCode]);
+        return fetch(API('GetCombinations') + '?materialCode=' + encodeURIComponent(matCode))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                combosByMat[matCode] = Array.isArray(data) ? data : [];
+                return combosByMat[matCode];
+            })
+            .catch(function() { combosByMat[matCode] = []; return []; });
+    }
+
+    window.plSelectAllFiltered = function() {
+        var selSet = new Set(selectedStocks.map(keyOf));
+        var pending = [];
+        serverStocks.forEach(function(s) {
+            if (s.trackCombinations) {
+                // Yapilandirmali stok: tum kombinasyonlarini sec (lazy fetch)
+                pending.push(ensureCombosLoaded(s.materialCode).then(function(combos) {
+                    if (combos && combos.length > 0) pushCombosToSelected(s, combos);
+                }));
+            } else {
+                var k = String(s.id) + '|';
+                if (!selSet.has(k)) {
+                    selectedStocks.push({
+                        id: s.id, materialCode: s.materialCode, materialName: s.materialName,
+                        combinationCode: null, combinationName: null,
+                        buyingPrice: 0, sellingPrice: 0
+                    });
+                }
+            }
+        });
+        Promise.all(pending).then(function() {
+            renderStockList(); validateStep();
+        });
+    };
+
+    window.plToggleStockAllCombos = function(stockId, matCode, matName) {
+        var s = serverStocks.find(function(x) { return x.id === stockId; })
+             || { id: stockId, materialCode: matCode, materialName: matName };
+        ensureCombosLoaded(s.materialCode).then(function(combos) {
+            if (!combos || combos.length === 0) { renderStockList(); return; }
+            var selSet = new Set(selectedStocks.map(keyOf));
+            var allSelected = combos.every(function(c) { return selSet.has(String(s.id) + '|' + c.code); });
+            if (allSelected) {
+                // Hepsini kaldir
+                var comboCodes = new Set(combos.map(function(c) { return c.code; }));
+                selectedStocks = selectedStocks.filter(function(row) {
+                    return !(row.id === s.id && row.combinationCode && comboCodes.has(row.combinationCode));
+                });
+            } else {
+                pushCombosToSelected(s, combos);
+            }
+            renderStockList(); validateStep();
+        });
+    };
+
     window.plClearSelection = function() { selectedStocks = []; renderStockList(); validateStep(); };
     window.plRemoveSelected = function(id) {
         selectedStocks = selectedStocks.filter(function(s) { return s.id !== id; });
@@ -685,43 +1008,113 @@
 
     function updateSelectionUI() {
         var cnt = document.getElementById('plSelCount');
-        var badges = document.getElementById('plSelectedBadges');
         cnt.className = 'pl-sel-count' + (selectedStocks.length ? ' has-sel' : '');
-        cnt.textContent = selectedStocks.length ? selectedStocks.length + ' stok seçildi' : '';
-        badges.innerHTML = selectedStocks.map(function(s) {
-            return '<span class="pl-badge">' + esc(s.materialCode)
-                + '<span class="pl-badge-x" onclick="plRemoveSelected(' + s.id + ')">&times;</span></span>';
-        }).join('');
+        var totalTxt = serverTotal > 0 ? ' · ' + serverTotal + ' toplam stok' : '';
+        cnt.textContent = (selectedStocks.length ? selectedStocks.length + ' seçildi' : '') + totalTxt;
     }
 
-    // ── Step 3: price entry ──
+    // ── Step 3: fiyat girisi + onceki fiyat + durum ──
     function renderPriceTable() {
         var showBuy  = priceType === 'buy'  || priceType === 'both';
         var showSell = priceType === 'sell' || priceType === 'both';
 
-        // Kolon başlıklarını göster/gizle
-        var thBuy  = document.getElementById('plThBuy');
-        var thSell = document.getElementById('plThSell');
-        if (thBuy)  thBuy.style.display  = showBuy  ? '' : 'none';
-        if (thSell) thSell.style.display = showSell ? '' : 'none';
+        // Tablo head'u dinamik — kombinasyon/önceki/durum kolonlarıyla
+        var theadEl = document.getElementById('plPriceHead');
+        if (theadEl) {
+            theadEl.innerHTML =
+                '<tr>'
+                + '<th style="width:32px;">#</th>'
+                + '<th>Malzeme Kodu</th>'
+                + '<th>Malzeme Adı</th>'
+                + '<th>Kombinasyon</th>'
+                + (showBuy  ? '<th class="num">Önceki Alış</th>'  : '')
+                + (showSell ? '<th class="num">Önceki Satış</th>' : '')
+                + (showBuy  ? '<th class="num">Alış Fiyatı</th>'  : '')
+                + (showSell ? '<th class="num">Satış Fiyatı</th>' : '')
+                + '<th style="width:110px;">Durum</th>'
+                + '<th style="width:40px;"></th>'
+                + '</tr>';
+        }
 
         // Kart başlığı
         var title = priceType === 'buy' ? 'Alış Fiyatı Girişi' : priceType === 'sell' ? 'Satış Fiyatı Girişi' : 'Alış &amp; Satış Fiyatı Girişi';
         var titleEl = document.getElementById('plStep3Title');
         if (titleEl) titleEl.innerHTML = title;
 
+        // Önce mevcut fiyatlari yukle, sonra render et
+        loadExistingForSelection().finally(function() { renderPriceRows(showBuy, showSell); });
+    }
+
+    function loadExistingForSelection() {
+        if (!selectedStocks.length) return Promise.resolve();
+        var payload = {
+            priceGroupId: groupId,
+            currency: document.getElementById('plCurrency').value,
+            validFrom: document.getElementById('plValidFrom').value,
+            keys: selectedStocks.map(function(s) {
+                return { stockCardId: s.id, materialCode: s.materialCode, combinationCode: s.combinationCode || null };
+            })
+        };
+        return fetch(API('GetExistingPrices'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            // Mevcut fiyatlari selectedStocks'e iliskilendir
+            var map = {};
+            (data || []).forEach(function(row) {
+                var k = String(row.stockCardId || '') + '|' + (row.combinationCode || '');
+                map[k] = row;
+            });
+            selectedStocks.forEach(function(s) {
+                var k = String(s.id) + '|' + (s.combinationCode || '');
+                var ex = map[k];
+                if (ex) {
+                    s.existingBuying  = ex.buyingPrice;
+                    s.existingSelling = ex.sellingPrice;
+                    s.isUpdate = true;
+                    // Ilk giriste onceki fiyatla prefill (kullanici uzerine yazar)
+                    if (!s.buyingPrice)  s.buyingPrice  = ex.buyingPrice;
+                    if (!s.sellingPrice) s.sellingPrice = ex.sellingPrice;
+                } else {
+                    s.existingBuying = null;
+                    s.existingSelling = null;
+                    s.isUpdate = false;
+                }
+            });
+        })
+        .catch(function() { /* sessiz — mevcut fiyatlar bos gider */ });
+    }
+
+    function renderPriceRows(showBuy, showSell) {
         document.getElementById('plPriceBody').innerHTML = selectedStocks.map(function(s, i) {
+            var comboCell = s.combinationCode
+                ? '<td><span class="pl-combo-chip" title="' + esc(s.combinationName || '') + '">' + esc(s.combinationCode) + '</span></td>'
+                : '<td><span class="pl-combo-chip pl-combo-chip--none">—</span></td>';
+
+            var prevBuyCell  = showBuy  ? '<td class="num pl-prev">' + (s.existingBuying  != null ? fmt(s.existingBuying)  : '<span class="pl-prev-empty">—</span>') + '</td>' : '';
+            var prevSellCell = showSell ? '<td class="num pl-prev">' + (s.existingSelling != null ? fmt(s.existingSelling) : '<span class="pl-prev-empty">—</span>') + '</td>' : '';
+
             var buyCel  = showBuy
                 ? '<td class="num"><input type="number" class="pl-input" step="0.01" min="0" value="' + (s.buyingPrice || 0) + '" oninput="plUpdatePrice(' + i + ',\'buy\',this.value)" /></td>'
                 : '';
             var sellCel = showSell
                 ? '<td class="num"><input type="number" class="pl-input" step="0.01" min="0" value="' + (s.sellingPrice || 0) + '" oninput="plUpdatePrice(' + i + ',\'sell\',this.value)" /></td>'
                 : '';
+
+            var statusCell = s.isUpdate
+                ? '<td><span class="pl-status pl-status--update">🔄 Güncelleme</span></td>'
+                : '<td><span class="pl-status pl-status--new">🆕 Yeni</span></td>';
+
             return '<tr>'
                 + '<td class="pl-row-num">' + (i + 1) + '</td>'
                 + '<td class="pl-code-cell">' + esc(s.materialCode) + '</td>'
                 + '<td class="pl-name-cell">' + esc(s.materialName) + '</td>'
+                + comboCell
+                + prevBuyCell + prevSellCell
                 + buyCel + sellCel
+                + statusCell
                 + '<td><button type="button" class="pl-btn pl-btn--danger-ghost" onclick="plRemoveFromTable(' + i + ')" title="Çıkar">'
                 + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
                 + '</button></td>'
@@ -747,7 +1140,15 @@
             validFrom: document.getElementById('plValidFrom').value,
             validTo:   document.getElementById('plValidTo').value || null,
             lines: selectedStocks.map(function(s) {
-                return { stockCardId: s.id, materialCode: s.materialCode, materialName: s.materialName, buyingPrice: s.buyingPrice || 0, sellingPrice: s.sellingPrice || 0 };
+                return {
+                    stockCardId:     s.id,
+                    materialCode:    s.materialCode,
+                    materialName:    s.materialName,
+                    combinationCode: s.combinationCode || null,
+                    combinationName: s.combinationName || null,
+                    buyingPrice:     s.buyingPrice  || 0,
+                    sellingPrice:    s.sellingPrice || 0
+                };
             })
         };
         var nb = document.getElementById('plBtnNext');
@@ -785,9 +1186,13 @@
                 sec.style.display = '';
                 cnt.textContent = data.length;
                 body.innerHTML = data.map(function(e) {
+                    var comboTd = e.combinationCode
+                        ? '<td><span class="pl-combo-chip" title="' + esc(e.combinationName || '') + '">' + esc(e.combinationCode) + '</span></td>'
+                        : '<td><span class="pl-combo-chip pl-combo-chip--none">—</span></td>';
                     return '<tr id="plRow' + e.id + '">'
                         + '<td class="pl-entry-code">' + esc(e.materialCode) + '</td>'
                         + '<td class="pl-entry-name">' + esc(e.materialName) + '</td>'
+                        + comboTd
                         + '<td><span class="pl-entry-cur">' + esc(e.currency) + '</span></td>'
                         + '<td class="num" id="plBuyDisp' + e.id + '">' + fmt(e.buyingPrice) + '</td>'
                         + '<td class="num" id="plSellDisp' + e.id + '">' + fmt(e.sellingPrice) + '</td>'
@@ -851,7 +1256,7 @@
         var btn = document.querySelector('#plRowBtns' + id + ' .pl-save-inline');
         if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
-        fetch(API('UpdatePriceListEntryJson'), {
+        fetch(API('UpdatePriceListJson'), {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: id, buyingPrice: buy, sellingPrice: sell })
         })
@@ -886,7 +1291,7 @@
         if (!pendingDeleteId) return;
         var btn = document.getElementById('plDeleteConfirmBtn');
         btn.disabled = true; btn.textContent = 'Siliniyor…';
-        fetch(API('DeletePriceListEntryJson') + '?id=' + pendingDeleteId, { method: 'POST' })
+        fetch(API('DeletePriceListJson') + '?id=' + pendingDeleteId, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 document.getElementById('plDeleteModal').classList.remove('is-open');

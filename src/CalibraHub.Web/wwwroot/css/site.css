@@ -2689,6 +2689,95 @@ html:has(body.setup-page) {
   color: #94a3b8 !important;
 }
 
+/* ─── Modern floating label (baslik stili) — form-floating customizasyonu ─── */
+.login-card .login-field.form-floating {
+  position: relative;
+}
+.login-card .login-field > .form-control,
+.login-card .login-field > .form-select {
+  height: 54px;
+  padding: 18px 14px 6px;
+  border-radius: 10px;
+  border: 1px solid #d7dee8;
+  background: #f8fafc !important;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: #1e293b !important;
+  transition: border-color .18s, background .18s, box-shadow .18s;
+}
+.login-card .login-field > .form-control:hover,
+.login-card .login-field > .form-select:hover {
+  border-color: #a9b5c6;
+  background: #ffffff !important;
+}
+.login-card .login-field > .form-control:focus,
+.login-card .login-field > .form-select:focus {
+  background: #ffffff !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.14) !important;
+}
+.login-card .login-field > label {
+  color: #94a3b8 !important;
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  padding: 16px 14px !important;
+  opacity: 1 !important;
+  transition: color .18s, transform .18s, opacity .18s;
+  transform-origin: top left;
+}
+/* Bootstrap floating label — focus veya dolu iken kucul + yukari cik */
+.login-card .login-field > .form-control:focus ~ label,
+.login-card .login-field > .form-control:not(:placeholder-shown) ~ label,
+.login-card .login-field > .form-select ~ label {
+  color: #4f46e5 !important;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.7rem !important;
+  opacity: 0.9 !important;
+  transform: scale(1) translateY(-8px) !important;
+}
+.login-card .login-field > .form-select {
+  /* Select her zaman "dolu" sayilir; label ustte kalsin */
+  padding-top: 20px;
+}
+/* Placeholder'ini siradan boyu ile koru */
+.login-card .login-field > .form-control::placeholder {
+  color: transparent !important;
+}
+
+/* ─── Dark tema — login floating-label overrides (yuksek specificity) ─── */
+body.app-theme-dark .login-card .login-field > .form-control,
+body.app-theme-dark .login-card .login-field > .form-select {
+  background: rgba(17, 24, 39, 0.55) !important;
+  border-color: rgba(148, 163, 184, 0.20) !important;
+  color: #e5e7eb !important;
+}
+body.app-theme-dark .login-card .login-field > .form-control:hover,
+body.app-theme-dark .login-card .login-field > .form-select:hover {
+  background: rgba(30, 41, 59, 0.68) !important;
+  border-color: rgba(148, 163, 184, 0.35) !important;
+}
+body.app-theme-dark .login-card .login-field > .form-control:focus,
+body.app-theme-dark .login-card .login-field > .form-select:focus {
+  background: rgba(30, 41, 59, 0.78) !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.22) !important;
+}
+body.app-theme-dark .login-card .login-field > label {
+  color: rgba(148, 163, 184, 0.85) !important;
+}
+body.app-theme-dark .login-card .login-field > .form-control:focus ~ label,
+body.app-theme-dark .login-card .login-field > .form-control:not(:placeholder-shown) ~ label,
+body.app-theme-dark .login-card .login-field > .form-select ~ label {
+  color: #a5b4fc !important;
+}
+body.app-theme-dark .login-card .login-field > .form-select option {
+  background: #0c0f1a !important;
+  color: #e5e7eb !important;
+}
+
 .login-card .form-check-label {
   color: #475569;
 }
@@ -5528,6 +5617,14 @@ body.app-theme-light {
   --app-surface: #ffffff;
   --app-content-bg: #f8fafc;
   --app-muted-surface: #f1f5f9;
+  color-scheme: light;
+}
+
+/* Native <select>/option paneli ve scrollbar OS-level render edilir — body'de
+   color-scheme: dark olmazsa koyu tema aktif olsa bile dropdown'lar beyaz gelir. */
+body.app-theme-dark,
+body.app-theme-graphite {
+  color-scheme: dark;
 }
 
 body.app-theme-graphite {
@@ -5793,6 +5890,14 @@ body.app-theme-light {
   --app-surface: #ffffff;
   --app-content-bg: #f8fafc;
   --app-muted-surface: #f1f5f9;
+  color-scheme: light;
+}
+
+/* Native <select>/option paneli ve scrollbar OS-level render edilir — body'de
+   color-scheme: dark olmazsa koyu tema aktif olsa bile dropdown'lar beyaz gelir. */
+body.app-theme-dark,
+body.app-theme-graphite {
+  color-scheme: dark;
 }
 
 body.app-theme-graphite {
@@ -9631,4 +9736,21 @@ body.app-theme-light .admin-nav::-webkit-scrollbar-thumb {
   -moz-user-select: text !important;
   -ms-user-select: text !important;
   user-select: text !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PROJE STANDARDI — Gecersiz alan/zorunlu eksik uyari titreşimi
+   Tüm formlarda ayni hiz/easing/border/glow kullanilir.
+   Yeni kod: <input class="cb-invalid-shake"> veya JS ile class ekle.
+   ══════════════════════════════════════════════════════════════ */
+@keyframes cbInvalidShake {
+    10%, 90% { transform: translateX(-2px); }
+    20%, 80% { transform: translateX(3px); }
+    30%, 50%, 70% { transform: translateX(-4px); }
+    40%, 60% { transform: translateX(4px); }
+}
+.cb-invalid-shake {
+    animation: cbInvalidShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 3px rgba(239,68,68,.20) !important;
 }

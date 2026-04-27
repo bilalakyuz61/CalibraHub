@@ -67,6 +67,9 @@ public sealed class SaveNoteInput
     public Guid? FolderId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+    // Mod 2 (E2E) — tum not sifreli ise true, Content alani JSON-wrap'li ciphertext
+    public bool? IsFullyEncrypted { get; set; }
+    public string? EncryptionHint { get; set; }
 }
 
 public sealed class AddReminderInput
@@ -75,12 +78,20 @@ public sealed class AddReminderInput
     public DateTime RemindAt { get; set; }
     public ReminderRecurrenceType RecurrenceType { get; set; } = ReminderRecurrenceType.None;
     public string? RecurrenceData { get; set; }
+    public ReminderDeliveryChannel DeliveryChannel { get; set; } = ReminderDeliveryChannel.InApp;
+    public Guid? TargetUserId { get; set; }
 }
 
 public sealed class AddShareInput
 {
     public Guid NoteId { get; set; }
     public Guid SharedWithUserId { get; set; }
+}
+
+public sealed class DeleteReminderJsonInput
+{
+    public Guid ReminderId { get; set; }
+    public Guid NoteId { get; set; }
 }
 
 public sealed class SaveFolderInput

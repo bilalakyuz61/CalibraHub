@@ -10,7 +10,7 @@ public sealed class AdminReadService : IAdminReadService
     private readonly IIntegratorSettingsRepository _integratorSettingsRepository;
     private readonly ISmtpProfileRepository _smtpProfileRepository;
     private readonly IErpConnectionSettingsRepository _erpConnectionSettingsRepository;
-    private readonly ICompanyDefinitionRepository _companyDefinitionRepository;
+    private readonly ICompanyRepository _companyDefinitionRepository;
     private readonly IDepartmentRepository _departmentRepository;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IIntegratorImportLogRepository _integratorImportLogRepository;
@@ -19,7 +19,7 @@ public sealed class AdminReadService : IAdminReadService
         IIntegratorSettingsRepository integratorSettingsRepository,
         ISmtpProfileRepository smtpProfileRepository,
         IErpConnectionSettingsRepository erpConnectionSettingsRepository,
-        ICompanyDefinitionRepository companyDefinitionRepository,
+        ICompanyRepository companyDefinitionRepository,
         IDepartmentRepository departmentRepository,
         IUserProfileRepository userProfileRepository,
         IIntegratorImportLogRepository integratorImportLogRepository)
@@ -48,7 +48,7 @@ public sealed class AdminReadService : IAdminReadService
 
         return new AdminSnapshotDto(
             Companies: companies
-                .Select(x => new CompanyDefinitionDto(
+                .Select(x => new CompanyDto(
                     x.Id,
                     x.Name,
                     x.Title,

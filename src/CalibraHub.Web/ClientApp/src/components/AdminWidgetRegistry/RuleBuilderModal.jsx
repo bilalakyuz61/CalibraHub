@@ -18,7 +18,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus, Trash2, Eye, Lock, Calculator, Wrench, ChevronDown, Check, Palette } from 'lucide-react'
+import { X, Plus, Trash2, Eye, Lock, Calculator, Wrench, ChevronDown, Check, Palette, Sparkles } from 'lucide-react'
 
 // ─── Operatör listesi ────────────────────────────────────────────────
 var OPERATORS = [
@@ -134,7 +134,82 @@ function emptyCondition() {
   }
 }
 
+// ─── Aritmetik operatorler (formul icin) ─────────────────────────────
+var ARITH_OPS = [
+  { value: '+', label: '+', hint: 'Topla' },
+  { value: '-', label: '−', hint: 'Çıkar' },
+  { value: '*', label: '×', hint: 'Çarp'  },
+  { value: '/', label: '÷', hint: 'Böl'   },
+]
+
+// ─── Formul segmenti olustur ─────────────────────────────────────────
+function newSegmentId() {
+  return String(Date.now()) + '_' + String(Math.random()).slice(2, 7)
+}
+
+function operandToSegment(token, op) {
+  if (/^w_/.test(token)) {
+    return { id: newSegmentId(), op: op, kind: 'field',   field: token.slice(2), value: '' }
+  }
+  return   { id: newSegmentId(), op: op, kind: 'literal', field: '',             value: token }
+}
+
+function emptyFormulaSegment(op) {
+  return { id: newSegmentId(), op: op == null ? null : op, kind: 'field', field: '', value: '' }
+}
+
+// ─── Formul string → segment dizisi (basit aritmetik icin) ───────────
+// Desteklenen: w_field * w_field, sayi, +, -, *, /
+// Desteklenmeyen (fallback textarea): (, ), %, !, ==, !=, >, <, &&, ||, ?:, fn(..)
+function parseFormulaSegments(str) {
+  if (!str || !str.trim()) return { segments: [], complex: false }
+  var s = str.trim()
+  if (/[()%!=<>?&|'"`]/.test(s)) return { segments: [], complex: true, raw: str }
+  if (/[a-zA-Z_][a-zA-Z0-9_]*\s*\(/.test(s)) return { segments: [], complex: true, raw: str }
+
+  var operandRe = /^(w_[a-zA-Z0-9_]+|-?\d+(?:\.\d+)?)/
+  var stepRe    = /^([+\-*/])\s*(w_[a-zA-Z0-9_]+|-?\d+(?:\.\d+)?)/
+
+  var m = s.match(operandRe)
+  if (!m) return { segments: [], complex: true, raw: str }
+  var segments = [operandToSegment(m[1], null)]
+  s = s.slice(m[0].length).replace(/^\s+/, '')
+  while (s.length > 0) {
+    var m2 = s.match(stepRe)
+    if (!m2) return { segments: [], complex: true, raw: str }
+    segments.push(operandToSegment(m2[2], m2[1]))
+    s = s.slice(m2[0].length).replace(/^\s+/, '')
+  }
+  return { segments: segments, complex: false }
+}
+
+// ─── Segment dizisi → formul string ──────────────────────────────────
+function formulaSegmentsToString(segments) {
+  var parts = []
+  for (var i = 0; i < segments.length; i++) {
+    var s = segments[i]
+    var operand
+    if (s.kind === 'field') {
+      if (!s.field) continue
+      operand = 'w_' + s.field
+    } else {
+      if (s.value === '' || s.value == null) continue
+      operand = String(s.value)
+    }
+    if (parts.length === 0 || s.op == null) {
+      parts.push(operand)
+    } else {
+      parts.push(s.op)
+      parts.push(operand)
+    }
+  }
+  return parts.join(' ')
+}
+
 // ─── Alan Dropdown ────────────────────────────────────────────────────
+// Combobox'ta dogrudan etiket adlari listelenir (ornegin "Urun Adi").
+// widgetCode (w_urun_adi) alt metin olarak kucuk gosterilir; kayit hala
+// widgetCode uzerinden yapilir (backend formul/kosul formati degismez).
 function FieldDropdown(props) {
   var value = props.value || ''
   var onChange = props.onChange
@@ -165,9 +240,8 @@ function FieldDropdown(props) {
           background: 'rgba(255,255,255,0.05)',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '8px',
-          color: selected ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.3)',
-          fontSize: '11px',
-          fontFamily: 'monospace',
+          color: selected ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)',
+          fontSize: '12px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -176,8 +250,33 @@ function FieldDropdown(props) {
           transition: 'border-color 0.15s',
         }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {selected ? ('w_' + selected.widgetCode) : 'Alan seç...'}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          {selected ? (
+            <>
+              <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {selected.label || selected.widgetCode}
+              </span>
+              {selected._sourceFormLabel && (
+                <span
+                  style={{
+                    fontSize: '9px',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    background: 'rgba(99,102,241,0.15)',
+                    border: '1px solid rgba(99,102,241,0.3)',
+                    color: '#a5b4fc',
+                    fontWeight: 600,
+                    flexShrink: 0,
+                  }}
+                >
+                  {selected._sourceFormLabel}
+                </span>
+              )}
+              <span style={{ fontFamily: 'monospace', fontSize: '10px', opacity: 0.4, flexShrink: 0 }}>
+                w_{selected.widgetCode}
+              </span>
+            </>
+          ) : 'Alan seç...'}
         </span>
         <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.5 }} />
       </button>
@@ -193,7 +292,7 @@ function FieldDropdown(props) {
           borderRadius: '10px',
           boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
           overflow: 'hidden',
-          maxHeight: '200px',
+          maxHeight: '240px',
           overflowY: 'auto',
         }}>
           {widgets.length === 0 && (
@@ -202,19 +301,19 @@ function FieldDropdown(props) {
             </div>
           )}
           {widgets.map(function(w) {
+            var isSel = value === w.widgetCode
             return (
               <button
-                key={w.widgetCode}
+                key={(w._sourceFormCode || '_own') + '::' + w.widgetCode}
                 type="button"
                 onClick={function() { onChange(w.widgetCode, w.dataType); setOpen(false) }}
                 style={{
                   width: '100%',
                   padding: '8px 12px',
-                  background: value === w.widgetCode ? 'rgba(245,158,11,0.12)' : 'transparent',
+                  background: isSel ? 'rgba(245,158,11,0.12)' : 'transparent',
                   border: 'none',
-                  color: value === w.widgetCode ? '#fbbf24' : 'rgba(255,255,255,0.75)',
-                  fontSize: '11px',
-                  fontFamily: 'monospace',
+                  color: isSel ? '#fbbf24' : 'rgba(255,255,255,0.85)',
+                  fontSize: '12px',
                   textAlign: 'left',
                   cursor: 'pointer',
                   display: 'flex',
@@ -222,10 +321,29 @@ function FieldDropdown(props) {
                   gap: '8px',
                 }}
               >
-                {value === w.widgetCode && <Check size={10} />}
-                <span style={{ flex: 1 }}>w_{w.widgetCode}</span>
-                <span style={{ fontSize: '9px', opacity: 0.4, fontFamily: 'sans-serif' }}>
-                  {w.label}
+                {isSel && <Check size={10} style={{ flexShrink: 0 }} />}
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                  {w.label || w.widgetCode}
+                </span>
+                {w._sourceFormLabel && (
+                  <span
+                    title={'Üst form: ' + w._sourceFormLabel}
+                    style={{
+                      fontSize: '9px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: 'rgba(99,102,241,0.15)',
+                      border: '1px solid rgba(99,102,241,0.3)',
+                      color: '#a5b4fc',
+                      fontWeight: 600,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {w._sourceFormLabel}
+                  </span>
+                )}
+                <span style={{ fontSize: '10px', opacity: 0.45, fontFamily: 'monospace', flexShrink: 0 }}>
+                  w_{w.widgetCode}
                 </span>
               </button>
             )
@@ -313,6 +431,92 @@ function OperatorDropdown(props) {
               >
                 {value === op.value && <Check size={10} />}
                 {op.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Aritmetik Operator Dropdown (formul icin, +,-,*,/) ──────────────
+function ArithmeticOperatorDropdown(props) {
+  var value = props.value || '+'
+  var onChange = props.onChange
+  var [open, setOpen] = useState(false)
+  var ref = useRef(null)
+
+  useEffect(function() {
+    if (!open) return undefined
+    function handle(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return function() { document.removeEventListener('mousedown', handle) }
+  }, [open])
+
+  var selected = ARITH_OPS.find(function(o) { return o.value === value }) || ARITH_OPS[0]
+
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '52px', flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={function() { setOpen(function(v) { return !v }) }}
+        title={selected.hint}
+        style={{
+          width: '100%',
+          height: '34px',
+          background: 'rgba(245,158,11,0.08)',
+          border: '1px solid rgba(245,158,11,0.25)',
+          borderRadius: '8px',
+          color: '#fbbf24',
+          fontSize: '16px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {selected.label}
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '38px',
+          left: 0,
+          zIndex: 9999,
+          background: 'rgba(10,14,26,0.97)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '10px',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+          overflow: 'hidden',
+          minWidth: '130px',
+        }}>
+          {ARITH_OPS.map(function(op) {
+            var act = value === op.value
+            return (
+              <button
+                key={op.value}
+                type="button"
+                onClick={function() { onChange(op.value); setOpen(false) }}
+                style={{
+                  width: '100%',
+                  padding: '7px 12px',
+                  background: act ? 'rgba(245,158,11,0.12)' : 'transparent',
+                  border: 'none',
+                  color: act ? '#fbbf24' : 'rgba(255,255,255,0.75)',
+                  fontSize: '12px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                }}
+              >
+                <span style={{ width: 16, textAlign: 'center', fontWeight: 700, fontSize: 14 }}>{op.label}</span>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>{op.hint}</span>
               </button>
             )
           })}
@@ -557,127 +761,37 @@ function QueryBuilder(props) {
   )
 }
 
-// ─── Formül Editörü ──────────────────────────────────────────────────
-function FormulaEditor(props) {
-  var formula = props.formula
-  var onFormulaChange = props.onFormulaChange
+// ─── Formul Builder (satir bazli: Alan/Sayi + operator kombo) ─────────
+// Gorunurluk/Aktiflik paneli ile ayni kombo mantigi — her satir bir
+// operand (Alan secimi veya Sayi literal) + (ilk satir haric) operator.
+// Karmasik formuller (parantez, fonksiyon, mantik) textarea fallback ile.
+function FormulaBuilder(props) {
+  var segments = props.segments || []
+  var onSegmentsChange = props.onSegmentsChange
   var availableWidgets = props.availableWidgets || []
-  var textareaRef = useRef(null)
+  var preview = props.preview || ''
+  var rawFallback = props.rawFallback
+  var onRawFallbackChange = props.onRawFallbackChange
+  var onClearFallback = props.onClearFallback
 
-  function insertAtCursor(text) {
-    var el = textareaRef.current
-    if (!el) {
-      onFormulaChange(formula + text)
-      return
-    }
-    var start = el.selectionStart
-    var end = el.selectionEnd
-    var newVal = formula.slice(0, start) + text + formula.slice(end)
-    onFormulaChange(newVal)
-    // cursor'ı insert sonrasına taşı
-    setTimeout(function() {
-      el.focus()
-      el.setSelectionRange(start + text.length, start + text.length)
-    }, 0)
-  }
-
-  var quickOps = ['+', '-', '*', '/', '(', ')']
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {/* Kullanılabilir alanlar */}
-      <div>
+  // Fallback (karmasik formul): metin alani
+  if (rawFallback != null) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <div style={{
-          fontSize: '10px',
-          fontWeight: '700',
-          textTransform: 'uppercase',
-          letterSpacing: '0.07em',
-          color: 'rgba(255,255,255,0.3)',
-          marginBottom: '8px',
+          padding: '10px 12px',
+          background: 'rgba(239,68,68,0.08)',
+          border: '1px solid rgba(239,68,68,0.22)',
+          borderRadius: '8px',
+          color: '#fca5a5',
+          fontSize: '11px',
+          lineHeight: 1.5,
         }}>
-          Kullanılabilir Alanlar
-        </div>
-        {availableWidgets.length === 0 ? (
-          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.2)' }}>
-            Formdaki diğer widget'lar burada listelenir.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {availableWidgets.map(function(w) {
-              return (
-                <button
-                  key={w.widgetCode}
-                  type="button"
-                  onClick={function() { insertAtCursor('w_' + w.widgetCode) }}
-                  title={w.label + ' (' + (w.dataType || 'text') + ')'}
-                  style={{
-                    padding: '4px 10px',
-                    background: 'rgba(245,158,11,0.1)',
-                    border: '1px solid rgba(245,158,11,0.25)',
-                    borderRadius: '6px',
-                    color: '#fbbf24',
-                    fontSize: '11px',
-                    fontFamily: 'monospace',
-                    cursor: 'pointer',
-                    transition: 'background 0.15s',
-                  }}
-                >
-                  w_{w.widgetCode}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Hızlı Operatörler */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-          Hızlı:
-        </span>
-        {quickOps.map(function(op) {
-          return (
-            <button
-              key={op}
-              type="button"
-              onClick={function() { insertAtCursor(' ' + op + ' ') }}
-              style={{
-                width: '32px',
-                height: '28px',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '6px',
-                color: 'rgba(255,255,255,0.7)',
-                fontSize: '14px',
-                fontFamily: 'monospace',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {op}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Formül textarea */}
-      <div>
-        <div style={{
-          fontSize: '10px',
-          fontWeight: '700',
-          textTransform: 'uppercase',
-          letterSpacing: '0.07em',
-          color: 'rgba(255,255,255,0.3)',
-          marginBottom: '6px',
-        }}>
-          Formül
+          Karmaşık formül (parantez veya işlev içeriyor) — satır bazlı sihirbazla düzenlenemiyor. Metin alanında devam edebilirsiniz.
         </div>
         <textarea
-          ref={textareaRef}
-          value={formula}
-          onChange={function(e) { onFormulaChange(e.target.value) }}
+          value={rawFallback}
+          onChange={function(e) { onRawFallbackChange(e.target.value) }}
           placeholder="w_price * w_qty * 1.18"
           rows={3}
           style={{
@@ -695,14 +809,217 @@ function FormulaEditor(props) {
             lineHeight: '1.5',
           }}
         />
-      </div>
-
-      {/* Temizle */}
-      {formula && (
         <div>
           <button
             type="button"
-            onClick={function() { onFormulaChange('') }}
+            onClick={onClearFallback}
+            style={{
+              padding: '6px 12px',
+              background: 'rgba(245,158,11,0.08)',
+              border: '1px solid rgba(245,158,11,0.25)',
+              borderRadius: '8px',
+              color: '#fbbf24',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Temizle ve sihirbazdan başla
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function addSegment() {
+    var op = segments.length === 0 ? null : '*'
+    onSegmentsChange(segments.concat([emptyFormulaSegment(op)]))
+  }
+
+  function removeSegment(id) {
+    var filtered = segments.filter(function(s) { return s.id !== id })
+    // Ilk segment silindiyse yeni ilkin operatorunu null yap (sozdizimi bozulmasin).
+    if (filtered.length > 0 && filtered[0].op != null) {
+      filtered = filtered.slice()
+      filtered[0] = Object.assign({}, filtered[0], { op: null })
+    }
+    onSegmentsChange(filtered)
+  }
+
+  function updateSegment(id, patch) {
+    onSegmentsChange(segments.map(function(s) {
+      if (s.id !== id) return s
+      return Object.assign({}, s, patch)
+    }))
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {segments.length === 0 && (
+        <div style={{
+          padding: '24px 16px',
+          textAlign: 'center',
+          color: 'rgba(255,255,255,0.25)',
+          fontSize: '12px',
+          border: '1px dashed rgba(255,255,255,0.1)',
+          borderRadius: '10px',
+        }}>
+          Henüz alan eklenmedi. "Alan Ekle" ile başlayın.
+        </div>
+      )}
+
+      {segments.map(function(seg, idx) {
+        return (
+          <div key={seg.id} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 12px',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '10px',
+          }}>
+            {/* Operator (ilk satir: placeholder, sonrasi: dropdown) */}
+            {idx === 0 ? (
+              <span style={{
+                width: '52px',
+                height: '34px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '10px',
+                color: 'rgba(255,255,255,0.3)',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.07em',
+                flexShrink: 0,
+              }}>
+                İlk
+              </span>
+            ) : (
+              <ArithmeticOperatorDropdown
+                value={seg.op || '+'}
+                onChange={function(op) { updateSegment(seg.id, { op: op }) }}
+              />
+            )}
+
+            {/* Alan / Sayi secici */}
+            <div style={{
+              display: 'flex',
+              gap: '2px',
+              padding: '2px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '7px',
+              flexShrink: 0,
+            }}>
+              {[{ k: 'field', label: 'Alan' }, { k: 'literal', label: 'Sayı' }].map(function(t) {
+                var act = seg.kind === t.k
+                return (
+                  <button
+                    key={t.k}
+                    type="button"
+                    onClick={function() { updateSegment(seg.id, { kind: t.k, field: '', value: '' }) }}
+                    style={{
+                      height: '28px',
+                      padding: '0 10px',
+                      background: act ? 'rgba(245,158,11,0.15)' : 'transparent',
+                      border: 'none',
+                      borderRadius: '5px',
+                      color: act ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Operand */}
+            {seg.kind === 'field' ? (
+              <FieldDropdown
+                value={seg.field}
+                widgets={availableWidgets}
+                onChange={function(code) { updateSegment(seg.id, { field: code }) }}
+              />
+            ) : (
+              <input
+                type="number"
+                step="any"
+                value={seg.value}
+                onChange={function(e) { updateSegment(seg.id, { value: e.target.value }) }}
+                placeholder="örn. 1.18"
+                style={{
+                  flex: 1,
+                  height: '34px',
+                  padding: '0 10px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: 'rgba(255,255,255,0.85)',
+                  fontSize: '12px',
+                  outline: 'none',
+                  minWidth: '80px',
+                }}
+              />
+            )}
+
+            {/* Sil */}
+            <button
+              type="button"
+              onClick={function() { removeSegment(seg.id) }}
+              title="Alanı sil"
+              style={{
+                width: '34px',
+                height: '34px',
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: '8px',
+                color: 'rgba(239,68,68,0.7)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Trash2 size={13} strokeWidth={2} />
+            </button>
+          </div>
+        )
+      })}
+
+      {/* Alan Ekle + Temizle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={addSegment}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 14px',
+            background: 'rgba(245,158,11,0.1)',
+            border: '1px solid rgba(245,158,11,0.25)',
+            borderRadius: '8px',
+            color: '#fbbf24',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          <Plus size={13} strokeWidth={2.5} />
+          Alan Ekle
+        </button>
+        {segments.length > 0 && (
+          <button
+            type="button"
+            onClick={function() { onSegmentsChange([]) }}
             style={{
               padding: '6px 12px',
               background: 'transparent',
@@ -715,10 +1032,10 @@ function FormulaEditor(props) {
           >
             Temizle
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Önizleme */}
+      {/* Onizleme */}
       <div style={{
         padding: '10px 12px',
         background: 'rgba(0,0,0,0.2)',
@@ -731,10 +1048,11 @@ function FormulaEditor(props) {
         <div style={{
           fontFamily: 'monospace',
           fontSize: '12px',
-          color: formula ? '#fbbf24' : 'rgba(255,255,255,0.2)',
+          color: preview ? '#fbbf24' : 'rgba(255,255,255,0.2)',
           wordBreak: 'break-all',
+          lineHeight: '1.5',
         }}>
-          {formula || '(boş — formül yok)'}
+          {preview || '(boş — formül yok)'}
         </div>
       </div>
     </div>
@@ -759,6 +1077,8 @@ export default function RuleBuilderModal(props) {
   var onSave           = props.onSave  || function() {}
   var initialValues    = props.initialValues || {}
   var availableWidgets = Array.isArray(props.availableWidgets) ? props.availableWidgets : []
+  // Widget'in dataType'i — Varsayilan Deger sekmesindeki sabit girdi tipini belirler.
+  var dataType         = String(props.dataType || 'text').toLowerCase()
 
   // Sekme: 'visible' | 'disabled' | 'formula' | 'color'
   var [activeTab, setActiveTab] = useState('visible')
@@ -771,8 +1091,18 @@ export default function RuleBuilderModal(props) {
   var [disabledConditions, setDisabledConditions] = useState([])
   var [disabledJunction, setDisabledJunction]     = useState('AND')
 
-  // formula
+  // formula — string olarak saklanir (backend kontrati).
+  // Builder icin segments ve karmasik durumlar icin rawFallback state'leri.
   var [formula, setFormula] = useState('')
+  var [formulaSegments, setFormulaSegments] = useState([])
+  var [formulaFallback, setFormulaFallback] = useState(null)  // null = builder modu; string = textarea modu
+
+  // Varsayilan deger — Sabit (literal) ya da Formul modunda. Formda yeni kayit
+  // olusurken atanir; kullanici uzerine yazabilir (readonly degildir).
+  var [defaultValueKind,     setDefaultValueKind]     = useState('static')  // 'static' | 'formula'
+  var [defaultValueStatic,   setDefaultValueStatic]   = useState('')
+  var [defaultValueSegments, setDefaultValueSegments] = useState([])
+  var [defaultValueFallback, setDefaultValueFallback] = useState(null)
 
   // Semantik renk: 0=Statik, 1=Dinamik
   var [colorType,  setColorType]  = useState(0)
@@ -789,9 +1119,39 @@ export default function RuleBuilderModal(props) {
     setDisabledConditions(diParsed.conditions)
     setDisabledJunction(diParsed.junction)
 
-    setFormula(initialValues.formula || '')
+    var rawFormula = initialValues.formula || ''
+    setFormula(rawFormula)
+    var parsedF = parseFormulaSegments(rawFormula)
+    if (parsedF.complex) {
+      setFormulaSegments([])
+      setFormulaFallback(parsedF.raw != null ? parsedF.raw : rawFormula)
+    } else {
+      setFormulaSegments(parsedF.segments)
+      setFormulaFallback(null)
+    }
     setColorType(initialValues.colorType != null ? initialValues.colorType : 0)
     setColorValue(initialValues.colorValue || '')
+
+    // Varsayilan deger hydration
+    var dvKind = initialValues.defaultValueKind || 'static'
+    setDefaultValueKind(dvKind)
+    var dvVal = initialValues.defaultValue != null ? String(initialValues.defaultValue) : ''
+    if (dvKind === 'formula') {
+      setDefaultValueStatic('')
+      var parsedDv = parseFormulaSegments(dvVal)
+      if (parsedDv.complex) {
+        setDefaultValueSegments([])
+        setDefaultValueFallback(parsedDv.raw != null ? parsedDv.raw : dvVal)
+      } else {
+        setDefaultValueSegments(parsedDv.segments)
+        setDefaultValueFallback(null)
+      }
+    } else {
+      setDefaultValueStatic(dvVal)
+      setDefaultValueSegments([])
+      setDefaultValueFallback(null)
+    }
+
     setActiveTab('visible')
   }, [isOpen])
 
@@ -808,6 +1168,15 @@ export default function RuleBuilderModal(props) {
   var visiblePreview  = conditionsToString(visibleConditions, visibleJunction)
   var disabledPreview = conditionsToString(disabledConditions, disabledJunction)
 
+  // Varsayilan deger — save edilecek string. Formul modunda segment/fallback'ten
+  // serialize; static modda dogrudan literal.
+  var dvSaved = defaultValueKind === 'formula'
+    ? (defaultValueFallback != null ? defaultValueFallback : formulaSegmentsToString(defaultValueSegments))
+    : defaultValueStatic
+  var dvHasValue = defaultValueKind === 'formula'
+    ? (defaultValueSegments.length > 0 || (defaultValueFallback != null && defaultValueFallback.trim() !== ''))
+    : (defaultValueStatic !== '' && String(defaultValueStatic).trim() !== '')
+
   function handleSave() {
     onSave({
       visibleIf:  visiblePreview  || '',
@@ -815,6 +1184,8 @@ export default function RuleBuilderModal(props) {
       formula:    formula.trim()  || '',
       colorType:  colorType,
       colorValue: colorValue.trim() || null,
+      defaultValue:     dvHasValue ? String(dvSaved).trim() : '',
+      defaultValueKind: defaultValueKind,
     })
   }
 
@@ -832,6 +1203,13 @@ export default function RuleBuilderModal(props) {
       sublabel: 'disabledIf',
       Icon: Lock,
       hasValue: disabledConditions.length > 0,
+    },
+    {
+      key: 'default',
+      label: 'Varsayılan',
+      sublabel: 'defaultValue',
+      Icon: Sparkles,
+      hasValue: dvHasValue,
     },
     {
       key: 'formula',
@@ -884,7 +1262,7 @@ export default function RuleBuilderModal(props) {
               transition={{ type: 'spring', stiffness: 340, damping: 28 }}
               style={{
                 width: '100%',
-                maxWidth: '680px',
+                maxWidth: '820px',
                 maxHeight: '88vh',
                 display: 'flex',
                 flexDirection: 'column',
@@ -943,63 +1321,72 @@ export default function RuleBuilderModal(props) {
                 </button>
               </div>
 
-              {/* Tab Bar */}
-              <div style={{
-                display: 'flex',
-                gap: '4px',
-                padding: '10px 20px 0',
-                borderBottom: '1px solid rgba(255,255,255,0.07)',
-                flexShrink: 0,
-              }}>
-                {TABS.map(function(tab) {
-                  var isActive = activeTab === tab.key
-                  var TabIcon = tab.Icon
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={function() { setActiveTab(tab.key) }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '7px',
-                        padding: '8px 16px',
-                        background: isActive ? 'rgba(245,158,11,0.1)' : 'transparent',
-                        border: 'none',
-                        borderBottom: isActive ? '2px solid #f59e0b' : '2px solid transparent',
-                        borderRadius: '8px 8px 0 0',
-                        color: isActive ? '#fbbf24' : 'rgba(255,255,255,0.45)',
-                        fontSize: '12px',
-                        fontWeight: isActive ? '700' : '500',
-                        cursor: 'pointer',
-                        transition: 'color 0.15s, background 0.15s',
-                        marginBottom: '-1px',
-                        position: 'relative',
-                      }}
-                    >
-                      <TabIcon size={13} strokeWidth={2} />
-                      {tab.label}
-                      {tab.hasValue && (
-                        <span style={{
-                          width: '6px', height: '6px',
-                          background: '#f59e0b',
-                          borderRadius: '50%',
-                          position: 'absolute',
-                          top: '6px', right: '6px',
-                        }} />
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Body — scrollable */}
+              {/* Body — sol dikey sekme paneli + sag scrollable icerik */}
               <div style={{
                 flex: 1,
-                overflowY: 'auto',
+                display: 'flex',
                 minHeight: 0,
-                padding: '20px',
+                overflow: 'hidden',
               }}>
+                {/* Sol: dikey tab sidebar */}
+                <div style={{
+                  width: '170px',
+                  flexShrink: 0,
+                  borderRight: '1px solid rgba(255,255,255,0.07)',
+                  padding: '14px 10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  overflowY: 'auto',
+                  background: 'rgba(255,255,255,0.015)',
+                }}>
+                  {TABS.map(function(tab) {
+                    var isActive = activeTab === tab.key
+                    var TabIcon = tab.Icon
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={function() { setActiveTab(tab.key) }}
+                        style={{
+                          position: 'relative',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '10px 12px',
+                          background: isActive ? 'rgba(245,158,11,0.12)' : 'transparent',
+                          border: '1px solid ' + (isActive ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.04)'),
+                          borderRadius: '8px',
+                          color: isActive ? '#fbbf24' : 'rgba(255,255,255,0.55)',
+                          fontSize: '12px',
+                          fontWeight: isActive ? 700 : 500,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <TabIcon size={14} strokeWidth={2} style={{ flexShrink: 0 }} />
+                        <span style={{ flex: 1 }}>{tab.label}</span>
+                        {tab.hasValue && (
+                          <span style={{
+                            width: '6px', height: '6px',
+                            background: '#f59e0b',
+                            borderRadius: '50%',
+                            flexShrink: 0,
+                          }} />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Sag: scrollable icerik */}
+                <div style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  minHeight: 0,
+                  padding: '20px',
+                }}>
                 {activeTab === 'visible' && (
                   <div>
                     <div style={{
@@ -1044,6 +1431,232 @@ export default function RuleBuilderModal(props) {
                   </div>
                 )}
 
+                {activeTab === 'default' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', lineHeight: '1.5' }}>
+                      Yeni bir kayıt oluşturulduğunda widget'a atanacak değer. Kullanıcı isterse üzerine yazabilir (readonly değildir).
+                    </div>
+
+                    {/* Mode toggle: Sabit / Formul */}
+                    <div>
+                      <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
+                        Değer Tipi
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {[{ v: 'static',  label: 'Sabit',  hint: 'Literal değer'    },
+                          { v: 'formula', label: 'Formül', hint: 'Hesaplanan ifade' }].map(function(opt) {
+                          var act = defaultValueKind === opt.v
+                          return (
+                            <button
+                              key={opt.v}
+                              type="button"
+                              onClick={function() { setDefaultValueKind(opt.v) }}
+                              style={{
+                                flex: 1,
+                                padding: '10px 14px',
+                                borderRadius: '10px',
+                                border: act ? '1px solid rgba(245,158,11,0.45)' : '1px solid rgba(255,255,255,0.08)',
+                                background: act ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)',
+                                color: act ? '#fbbf24' : 'rgba(255,255,255,0.4)',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              <div style={{ fontSize: '12px', fontWeight: 700 }}>{opt.label}</div>
+                              <div style={{ fontSize: '10px', opacity: 0.6, marginTop: '2px' }}>{opt.hint}</div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Sabit mod: dataType'a gore ozellesmis girdi */}
+                    {defaultValueKind === 'static' && (
+                      <div>
+                        <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
+                          {dataType === 'numeric' ? 'Sayısal Değer' :
+                           dataType === 'date'    ? 'Tarih Değeri'   :
+                           dataType === 'boolean' ? 'Boolean Değer'  :
+                                                    'Metin Değeri'}
+                        </div>
+
+                        {/* Metin (ve fallback) */}
+                        {(dataType === 'text' || dataType === 'dropdown' || dataType === 'link' || dataType === 'lookup' || dataType === 'multi-select') && (
+                          <input
+                            type="text"
+                            value={defaultValueStatic}
+                            onChange={function(e) { setDefaultValueStatic(e.target.value) }}
+                            placeholder={dataType === 'dropdown' ? 'örn. Aktif (seçenek etiketi)' : 'örn. Varsayılan metin'}
+                            style={{
+                              width: '100%',
+                              height: '36px',
+                              padding: '0 12px',
+                              background: 'rgba(255,255,255,0.05)',
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              borderRadius: '8px',
+                              color: 'rgba(255,255,255,0.85)',
+                              fontSize: '12px',
+                              boxSizing: 'border-box',
+                              outline: 'none',
+                            }}
+                          />
+                        )}
+
+                        {/* Sayisal */}
+                        {dataType === 'numeric' && (
+                          <input
+                            type="number"
+                            step="any"
+                            value={defaultValueStatic}
+                            onChange={function(e) { setDefaultValueStatic(e.target.value) }}
+                            placeholder="örn. 0"
+                            style={{
+                              width: '100%',
+                              height: '36px',
+                              padding: '0 12px',
+                              background: 'rgba(255,255,255,0.05)',
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              borderRadius: '8px',
+                              color: 'rgba(255,255,255,0.85)',
+                              fontSize: '12px',
+                              boxSizing: 'border-box',
+                              outline: 'none',
+                              // Spinner butonlarini gizle
+                              appearance: 'textfield',
+                              MozAppearance: 'textfield',
+                            }}
+                          />
+                        )}
+
+                        {/* Tarih — input + hizli onset butonlari */}
+                        {dataType === 'date' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <input
+                              type="date"
+                              value={/^TODAY(\(\))?$|^YESTERDAY(\(\))?$|^TOMORROW(\(\))?$/i.test(defaultValueStatic) ? '' : defaultValueStatic}
+                              onChange={function(e) { setDefaultValueStatic(e.target.value) }}
+                              style={{
+                                width: '100%',
+                                height: '36px',
+                                padding: '0 12px',
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.12)',
+                                borderRadius: '8px',
+                                color: 'rgba(255,255,255,0.85)',
+                                fontSize: '12px',
+                                boxSizing: 'border-box',
+                                outline: 'none',
+                              }}
+                            />
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {[{ v: 'TODAY',     label: 'Bugün'   },
+                                { v: 'YESTERDAY', label: 'Dün'     },
+                                { v: 'TOMORROW',  label: 'Yarın'   }].map(function(p) {
+                                var act = String(defaultValueStatic).toUpperCase().replace('()', '') === p.v
+                                return (
+                                  <button
+                                    key={p.v}
+                                    type="button"
+                                    onClick={function() { setDefaultValueStatic(p.v + '()') }}
+                                    title={'Runtime\'da ' + p.label.toLowerCase() + ' tarihi olarak çözülür (' + p.v + '())'}
+                                    style={{
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      border: act ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                                      background: act ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.04)',
+                                      color: act ? '#fbbf24' : 'rgba(255,255,255,0.55)',
+                                      fontSize: '11px',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'baseline',
+                                      gap: '5px',
+                                    }}
+                                  >
+                                    <span style={{ fontWeight: 600 }}>{p.label}</span>
+                                    <span style={{ fontFamily: 'monospace', fontSize: '10px', opacity: 0.55 }}>{p.v}()</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Boolean toggle */}
+                        {dataType === 'boolean' && (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {[{ v: 'true', label: 'Evet' }, { v: 'false', label: 'Hayır' }, { v: '', label: 'Belirsiz' }].map(function(b) {
+                              var act = String(defaultValueStatic) === b.v
+                              return (
+                                <button
+                                  key={b.v || '__empty'}
+                                  type="button"
+                                  onClick={function() { setDefaultValueStatic(b.v) }}
+                                  style={{
+                                    flex: 1,
+                                    padding: '10px 14px',
+                                    borderRadius: '10px',
+                                    border: act ? '1px solid rgba(245,158,11,0.45)' : '1px solid rgba(255,255,255,0.08)',
+                                    background: act ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)',
+                                    color: act ? '#fbbf24' : 'rgba(255,255,255,0.4)',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {b.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        {/* Bilinmeyen / grid / group → gri bilgi */}
+                        {(dataType === 'group' || dataType === 'grid') && (
+                          <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>
+                            Bu tip için varsayılan değer desteklenmiyor.
+                          </div>
+                        )}
+
+                        {defaultValueStatic !== '' && (
+                          <button
+                            type="button"
+                            onClick={function() { setDefaultValueStatic('') }}
+                            style={{
+                              marginTop: '8px',
+                              padding: '6px 12px',
+                              background: 'transparent',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              borderRadius: '8px',
+                              color: 'rgba(255,255,255,0.35)',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Temizle
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Formul mod: FormulaBuilder reuse */}
+                    {defaultValueKind === 'formula' && (
+                      <FormulaBuilder
+                        segments={defaultValueSegments}
+                        onSegmentsChange={setDefaultValueSegments}
+                        availableWidgets={availableWidgets}
+                        preview={defaultValueFallback != null ? defaultValueFallback : formulaSegmentsToString(defaultValueSegments)}
+                        rawFallback={defaultValueFallback}
+                        onRawFallbackChange={setDefaultValueFallback}
+                        onClearFallback={function() {
+                          setDefaultValueFallback(null)
+                          setDefaultValueSegments([])
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+
                 {activeTab === 'formula' && (
                   <div>
                     <div style={{
@@ -1055,10 +1668,24 @@ export default function RuleBuilderModal(props) {
                       Formül tanımlandığında widget'ın değeri bu ifadeden <strong style={{ color: 'rgba(255,255,255,0.7)' }}>otomatik hesaplanır</strong> ve salt okunur olur.
                       Operatörler: <code style={{ color: '#fbbf24', fontSize: '11px' }}>+ - * / % == != &gt; &lt; &amp;&amp; || ! ?:</code>
                     </div>
-                    <FormulaEditor
-                      formula={formula}
-                      onFormulaChange={setFormula}
+                    <FormulaBuilder
+                      segments={formulaSegments}
+                      onSegmentsChange={function(newSegs) {
+                        setFormulaSegments(newSegs)
+                        setFormula(formulaSegmentsToString(newSegs))
+                      }}
                       availableWidgets={availableWidgets}
+                      preview={formula}
+                      rawFallback={formulaFallback}
+                      onRawFallbackChange={function(raw) {
+                        setFormulaFallback(raw)
+                        setFormula(raw)
+                      }}
+                      onClearFallback={function() {
+                        setFormulaFallback(null)
+                        setFormulaSegments([])
+                        setFormula('')
+                      }}
                     />
                   </div>
                 )}
@@ -1165,24 +1792,46 @@ export default function RuleBuilderModal(props) {
                         {availableWidgets.length > 0 && (
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
                             {availableWidgets.map(function(w) {
+                              var act = colorValue === w.widgetCode
                               return (
                                 <button
-                                  key={w.widgetCode}
+                                  key={(w._sourceFormCode || '_own') + '::' + w.widgetCode}
                                   type="button"
                                   onClick={function() { setColorValue(w.widgetCode) }}
+                                  title={'w_' + w.widgetCode + (w._sourceFormLabel ? ' [' + w._sourceFormLabel + ']' : '')}
                                   style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
                                     padding: '4px 10px',
                                     borderRadius: '6px',
-                                    border: colorValue === w.widgetCode ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                                    background: colorValue === w.widgetCode ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.04)',
-                                    color: colorValue === w.widgetCode ? '#fbbf24' : 'rgba(255,255,255,0.55)',
+                                    border: act ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                                    background: act ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.04)',
+                                    color: act ? '#fbbf24' : 'rgba(255,255,255,0.55)',
                                     fontSize: '11px',
-                                    fontFamily: 'monospace',
                                     cursor: 'pointer',
                                     transition: 'all 0.15s',
                                   }}
                                 >
-                                  w_{w.widgetCode}
+                                  <span style={{ fontWeight: 600 }}>{w.label || w.widgetCode}</span>
+                                  {w._sourceFormLabel && (
+                                    <span
+                                      style={{
+                                        fontSize: '9px',
+                                        padding: '1px 5px',
+                                        borderRadius: '4px',
+                                        background: 'rgba(99,102,241,0.18)',
+                                        border: '1px solid rgba(99,102,241,0.32)',
+                                        color: '#a5b4fc',
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {w._sourceFormLabel}
+                                    </span>
+                                  )}
+                                  <span style={{ fontFamily: 'monospace', fontSize: '10px', opacity: 0.55 }}>
+                                    w_{w.widgetCode}
+                                  </span>
                                 </button>
                               )
                             })}
@@ -1210,6 +1859,7 @@ export default function RuleBuilderModal(props) {
                     )}
                   </div>
                 )}
+                </div>
               </div>
 
               {/* Footer */}

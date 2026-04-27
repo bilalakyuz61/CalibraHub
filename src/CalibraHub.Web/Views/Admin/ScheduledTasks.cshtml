@@ -1,0 +1,1095 @@
+@model IReadOnlyList<CalibraHub.Domain.Entities.ScheduledTask>
+@{
+    ViewData["Title"] = "Zamanlanmış Görevler";
+    ViewData["FormCode"] = "SCHEDULED_TASKS";
+}
+
+@section Styles {
+<style>
+    /* ── Genel sayfa ────────────────────────────────────────────── */
+    .st-wrap { padding: 18px 22px; height: 100%; display: flex; flex-direction: column; gap: 14px; }
+    .st-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .st-head h2 { margin: 0; font-size: 1.1rem; font-weight: 700; color: #1e293b; }
+    body.app-theme-dark .st-head h2 { color: rgba(255,255,255,.92); }
+    .st-head .st-sub { color: #64748b; font-size: .82rem; }
+    body.app-theme-dark .st-head .st-sub { color: rgba(255,255,255,.55); }
+    .st-head .st-btn {
+        background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.28);
+        color: #4f46e5; cursor: pointer;
+        padding: 6px 12px; font-size: .8rem; border-radius: 7px;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    body.app-theme-dark .st-head .st-btn { color: #a5b4fc; background: rgba(99,102,241,.18); }
+    .st-head .st-btn:hover { opacity: .85; }
+    .st-head .st-btn--primary {
+        background: linear-gradient(135deg,#6366f1,#4f46e5); color: #fff; border-color: transparent;
+    }
+    .st-head .st-btn--primary:hover { filter: brightness(1.1); }
+
+    .st-grid-card {
+        background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+        flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+    }
+    body.app-theme-dark .st-grid-card { background: rgba(21,24,43,.7); border-color: #2a2f47; }
+
+    .st-grid { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .st-grid thead th {
+        position: sticky; top: 0; background: #f8fafc; z-index: 1;
+        text-align: left; padding: 10px 12px; font-weight: 700;
+        color: #475569; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+    }
+    body.app-theme-dark .st-grid thead th {
+        background: rgba(15,17,30,.9); color: rgba(255,255,255,.75);
+        border-bottom-color: #2a2f47;
+    }
+    .st-grid tbody td {
+        padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top;
+        color: #1e293b;
+    }
+    body.app-theme-dark .st-grid tbody td {
+        color: rgba(255,255,255,.85); border-bottom-color: rgba(255,255,255,.06);
+    }
+    .st-grid tbody tr:hover { background: rgba(99,102,241,.04); }
+    body.app-theme-dark .st-grid tbody tr:hover { background: rgba(99,102,241,.1); }
+
+    .st-name { font-weight: 600; }
+    .st-desc { color: #64748b; font-size: .78rem; margin-top: 2px; }
+    body.app-theme-dark .st-desc { color: rgba(255,255,255,.55); }
+    .st-code-badge, .st-type-badge, .st-sched-badge {
+        display: inline-block; font-size: .72rem; padding: 2px 7px; border-radius: 4px;
+        font-family: ui-monospace, Consolas, monospace;
+    }
+    .st-code-badge { background: rgba(148,163,184,.12); color: #64748b; }
+    body.app-theme-dark .st-code-badge { background: rgba(148,163,184,.18); color: rgba(255,255,255,.65); }
+    .st-type-badge { background: rgba(139,92,246,.12); color: #6d28d9; border: 1px solid rgba(139,92,246,.25); }
+    body.app-theme-dark .st-type-badge { color: #c4b5fd; background: rgba(139,92,246,.18); }
+    .st-sched-badge { background: rgba(6,182,212,.12); color: #0e7490; border: 1px solid rgba(6,182,212,.25); }
+    body.app-theme-dark .st-sched-badge { color: #67e8f9; background: rgba(6,182,212,.18); }
+    .st-status { display: inline-flex; align-items: center; gap: 6px; font-size: .76rem; font-weight: 600; }
+    .st-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .st-dot--ok { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.6); }
+    .st-dot--err { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,.6); }
+    .st-dot--run { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,.6); animation: st-pulse 1s infinite; }
+    .st-dot--none { background: #94a3b8; }
+    @@keyframes st-pulse { 50% { opacity: .45; } }
+
+    .st-msg-cell { max-width: 280px; font-size: .76rem; color: #475569; }
+    body.app-theme-dark .st-msg-cell { color: rgba(255,255,255,.65); }
+
+    .st-empty { padding: 40px 20px; text-align: center; color: #94a3b8; font-style: italic; }
+    body.app-theme-dark .st-empty { color: rgba(255,255,255,.45); }
+
+    .st-actions { display: inline-flex; gap: 4px; }
+    .st-action-btn {
+        width: 28px; height: 28px; border-radius: 5px; border: none; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: background .12s;
+    }
+    .st-action-btn[disabled] { opacity: .35; cursor: not-allowed; }
+    .st-action-btn--run { background: rgba(34,197,94,.12); color: #16a34a; }
+    .st-action-btn--run:hover { background: rgba(34,197,94,.22); }
+    .st-action-btn--toggle { background: rgba(99,102,241,.12); color: #4f46e5; }
+    .st-action-btn--toggle:hover { background: rgba(99,102,241,.22); }
+    .st-action-btn--toggle.is-off { background: rgba(245,158,11,.12); color: #b45309; }
+    .st-action-btn--hist { background: rgba(148,163,184,.12); color: #475569; }
+    .st-action-btn--hist:hover { background: rgba(148,163,184,.22); }
+    .st-action-btn--edit { background: rgba(6,182,212,.12); color: #0e7490; }
+    .st-action-btn--edit:hover { background: rgba(6,182,212,.22); }
+    .st-action-btn--del { background: rgba(239,68,68,.12); color: #dc2626; }
+    .st-action-btn--del:hover { background: rgba(239,68,68,.22); }
+
+    /* ── Modal — tema uyumlu ─────────────────────────────────── */
+    .st-modal-bd {
+        position: fixed; inset: 0; background: rgba(0,0,0,.7);
+        backdrop-filter: blur(6px);
+        z-index: 9999;
+        display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .st-modal-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 0;
+        max-width: 780px; width: 100%;
+        max-height: 92vh; overflow: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,.35);
+        color: #1e293b;
+    }
+    body.app-theme-dark .st-modal-card {
+        background: linear-gradient(135deg,#15182b 0%,#1a1e35 100%);
+        border-color: #2a2f47;
+        color: rgba(255,255,255,.9);
+    }
+    .st-modal-head {
+        display: flex; align-items: center; gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    body.app-theme-dark .st-modal-head { border-bottom-color: #2a2f47; }
+    .st-modal-title { margin: 0; font-size: 1.05rem; font-weight: 700; flex: 1; }
+    .st-modal-icon {
+        width: 36px; height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.15));
+        color: #6366f1;
+        display: flex; align-items: center; justify-content: center;
+    }
+    body.app-theme-dark .st-modal-icon { color: #a5b4fc; }
+    .st-modal-body { padding: 18px 20px; }
+    .st-modal-foot {
+        display: flex; justify-content: flex-end; gap: 8px;
+        padding: 14px 20px;
+        border-top: 1px solid #e2e8f0;
+        background: rgba(148,163,184,.04);
+        border-radius: 0 0 14px 14px;
+    }
+    body.app-theme-dark .st-modal-foot { border-top-color: #2a2f47; background: rgba(0,0,0,.15); }
+
+    .st-section {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 14px;
+        margin-bottom: 14px;
+        background: rgba(248,250,252,.5);
+    }
+    body.app-theme-dark .st-section {
+        border-color: #2a2f47;
+        background: rgba(0,0,0,.15);
+    }
+    .st-section-title {
+        font-size: .78rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .5px;
+        color: #64748b;
+        margin: 0 0 10px 0;
+        display: flex; align-items: center; gap: 6px;
+    }
+    body.app-theme-dark .st-section-title { color: rgba(255,255,255,.6); }
+    .st-section-title svg { width: 14px; height: 14px; }
+
+    .st-field { margin-bottom: 10px; }
+    .st-field label { display: block; font-size: .76rem; font-weight: 600; color: #475569; margin-bottom: 4px; }
+    body.app-theme-dark .st-field label { color: rgba(255,255,255,.72); }
+    .st-field small { display: block; font-size: .7rem; color: #94a3b8; margin-top: 3px; }
+    body.app-theme-dark .st-field small { color: rgba(255,255,255,.45); }
+
+    .st-input, .st-select, .st-textarea {
+        width: 100%;
+        padding: 8px 11px;
+        background: #fff;
+        border: 1px solid #cbd5e1;
+        border-radius: 7px;
+        color: #1e293b;
+        font-size: .86rem;
+        font-family: inherit;
+        transition: border-color .12s, box-shadow .12s;
+    }
+    .st-input:focus, .st-select:focus, .st-textarea:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+    }
+    body.app-theme-dark .st-input, body.app-theme-dark .st-select, body.app-theme-dark .st-textarea {
+        background: #0f1120; border-color: #2a2f47; color: rgba(255,255,255,.9);
+    }
+    body.app-theme-dark .st-input:focus, body.app-theme-dark .st-select:focus, body.app-theme-dark .st-textarea:focus {
+        border-color: #a5b4fc; box-shadow: 0 0 0 3px rgba(165,180,252,.15);
+    }
+    .st-textarea { font-family: ui-monospace, Consolas, monospace; resize: vertical; }
+
+    .st-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .st-row-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+
+    .st-kv-list { display: flex; flex-direction: column; gap: 6px; }
+    .st-kv-row {
+        display: grid; grid-template-columns: 1fr 2fr auto;
+        gap: 6px; align-items: center;
+    }
+    .st-kv-row .st-kv-remove {
+        width: 28px; height: 28px; border-radius: 5px; border: none; cursor: pointer;
+        background: rgba(239,68,68,.12); color: #dc2626;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .st-kv-add {
+        margin-top: 8px;
+        background: rgba(99,102,241,.1); border: 1px dashed rgba(99,102,241,.35);
+        color: #4f46e5; cursor: pointer;
+        padding: 7px 12px; font-size: .78rem; border-radius: 6px; font-weight: 600;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    body.app-theme-dark .st-kv-add { color: #a5b4fc; background: rgba(99,102,241,.18); }
+    .st-kv-add:hover { opacity: .85; }
+
+    .st-schedule-grid { display: flex; flex-direction: column; gap: 8px; }
+    .st-schedule-opt {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid #e2e8f0; border-radius: 8px;
+        cursor: pointer; transition: border-color .12s, background .12s;
+    }
+    body.app-theme-dark .st-schedule-opt { border-color: #2a2f47; }
+    .st-schedule-opt:hover { border-color: #cbd5e1; background: rgba(148,163,184,.06); }
+    body.app-theme-dark .st-schedule-opt:hover { border-color: #3a3f5a; background: rgba(148,163,184,.1); }
+    .st-schedule-opt.is-active {
+        border-color: #6366f1; background: rgba(99,102,241,.08);
+    }
+    .st-schedule-opt input[type=radio] { margin: 0; cursor: pointer; }
+    .st-schedule-opt .st-schedule-label { flex: 1; font-size: .85rem; font-weight: 600; }
+    .st-schedule-opt .st-schedule-hint { font-size: .72rem; color: #94a3b8; font-weight: 400; margin-left: 4px; }
+    body.app-theme-dark .st-schedule-opt .st-schedule-hint { color: rgba(255,255,255,.45); }
+    .st-schedule-body { padding-top: 4px; padding-left: 30px; display: none; }
+    .st-schedule-opt.is-active ~ .st-schedule-body { display: block; }
+    .st-schedule-opt.is-active .st-schedule-body { display: block; }
+    .st-schedule-inline { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+
+    /* Preset selector */
+    .st-preset-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .st-preset {
+        padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px;
+        cursor: pointer; transition: border-color .12s, background .12s, transform .12s;
+        background: #fff;
+    }
+    body.app-theme-dark .st-preset { border-color: #2a2f47; background: rgba(21,24,43,.6); }
+    .st-preset:hover { border-color: #6366f1; background: rgba(99,102,241,.04); transform: translateY(-1px); }
+    body.app-theme-dark .st-preset:hover { background: rgba(99,102,241,.12); }
+    .st-preset-name {
+        font-size: .86rem; font-weight: 700; margin-bottom: 4px;
+        display: flex; align-items: center; gap: 6px;
+    }
+    .st-preset-desc { font-size: .72rem; color: #64748b; line-height: 1.4; }
+    body.app-theme-dark .st-preset-desc { color: rgba(255,255,255,.55); }
+    .st-preset-badge {
+        display: inline-block; font-size: .68rem; font-weight: 600;
+        padding: 1px 6px; border-radius: 3px; margin-left: auto;
+    }
+    .st-preset-badge--sql  { background: rgba(34,197,94,.15);  color: #16a34a; }
+    .st-preset-badge--http { background: rgba(6,182,212,.15);  color: #0e7490; }
+
+    .st-check {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 0; font-size: .86rem; font-weight: 600;
+        cursor: pointer;
+    }
+    .st-check input { cursor: pointer; }
+
+    .st-foot-btn {
+        padding: 8px 18px; border-radius: 7px; border: none; cursor: pointer;
+        font-size: .85rem; font-weight: 600;
+    }
+    .st-foot-btn--cancel {
+        background: transparent; border: 1px solid #cbd5e1; color: #475569;
+    }
+    body.app-theme-dark .st-foot-btn--cancel { border-color: #2a2f47; color: rgba(255,255,255,.72); }
+    .st-foot-btn--cancel:hover { background: rgba(148,163,184,.1); }
+    .st-foot-btn--save {
+        background: linear-gradient(135deg,#6366f1,#4f46e5); color: #fff;
+    }
+    .st-foot-btn--save:hover { filter: brightness(1.1); }
+    .st-foot-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+    .st-back-link {
+        background: transparent; border: none; cursor: pointer;
+        color: #6366f1; font-size: .78rem; font-weight: 600;
+        padding: 4px 8px; border-radius: 5px;
+        display: inline-flex; align-items: center; gap: 4px;
+    }
+    body.app-theme-dark .st-back-link { color: #a5b4fc; }
+    .st-back-link:hover { background: rgba(99,102,241,.08); }
+</style>
+}
+
+<div class="st-wrap">
+    <div class="st-head">
+        <div>
+            <h2>Zamanlanmış Görevler</h2>
+            <div class="st-sub">CalibraHub.Worker tarafından çalıştırılan arka plan işleri — SQL prosedürleri, HTTP API çağrıları, entegrasyon görevleri</div>
+        </div>
+        <button type="button" class="st-btn st-btn--primary" onclick="stOpenEdit(null)" title="Yeni gorev ekle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Yeni Görev
+        </button>
+        <button type="button" class="st-btn" onclick="stRefresh()" title="Listeyi yenile">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>
+            Yenile
+        </button>
+    </div>
+
+    <div class="st-grid-card">
+        <table class="st-grid">
+            <thead>
+                <tr>
+                    <th style="width:40px">#</th>
+                    <th>Görev</th>
+                    <th style="width:130px">Kod</th>
+                    <th style="width:110px">Tip</th>
+                    <th style="width:140px">Zamanlama</th>
+                    <th style="width:155px">Son Çalıştırma</th>
+                    <th style="width:95px">Durum</th>
+                    <th>Mesaj</th>
+                    <th style="width:155px">Sonraki Çalıştırma</th>
+                    <th style="width:160px">İşlemler</th>
+                </tr>
+            </thead>
+            <tbody id="stBody">
+                <tr><td colspan="10" class="st-empty">Yükleniyor...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Edit / New Task Modal -->
+<div id="stEditModal" class="st-modal-bd" style="display:none;">
+    <div class="st-modal-card">
+        <div class="st-modal-head">
+            <div class="st-modal-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <h3 id="stEditTitle" class="st-modal-title">Yeni Görev</h3>
+            <button type="button" class="st-action-btn st-action-btn--del" onclick="stCloseEdit()" aria-label="Kapat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="st-modal-body">
+            <!-- STEP 1: Preset chooser -->
+            <div id="stStepPreset">
+                <div class="st-section-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    Görev Tipi Seçin
+                </div>
+                <div class="st-preset-grid" id="stPresetGrid"></div>
+            </div>
+
+            <!-- STEP 2: Task form -->
+            <div id="stStepForm" style="display:none;">
+                <button type="button" class="st-back-link" onclick="stShowStep('preset')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                    Hazır Şablonlara Dön
+                </button>
+
+                <!-- Temel bilgiler -->
+                <div class="st-section" style="margin-top:10px;">
+                    <div class="st-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                        Temel Bilgiler
+                    </div>
+                    <div class="st-row">
+                        <div class="st-field">
+                            <label>İsim *</label>
+                            <input type="text" class="st-input" id="stfName" placeholder="Ornegin: Gecelik Satis Raporu"/>
+                        </div>
+                        <div class="st-field">
+                            <label>Kod (unique) *</label>
+                            <input type="text" class="st-input" id="stfCode" placeholder="NIGHTLY_SALES_REPORT" pattern="^[A-Za-z_][A-Za-z0-9_]*$"/>
+                            <small>Isimden otomatik olusturulur, istersen degistirebilirsin.</small>
+                        </div>
+                    </div>
+                    <div class="st-field">
+                        <label>Aciklama</label>
+                        <textarea class="st-input" id="stfDescription" rows="2" placeholder="Bu gorev ne yapar? (opsiyonel)"></textarea>
+                    </div>
+                </div>
+
+                <!-- Gorev tipine ozel alanlar -->
+                <div class="st-section">
+                    <div class="st-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        <span id="stTypeSectionTitle">Gorev Ayarlari</span>
+                    </div>
+
+                    <!-- SQL Procedure form -->
+                    <div id="stFormSql" style="display:none;">
+                        <div class="st-row-3">
+                            <div class="st-field">
+                                <label>Prosedür Adı *</label>
+                                <input type="text" class="st-input" id="stfSqlProcName" placeholder="sp_Nightly_Analytics"/>
+                                <small>Schema.name veya sadece isim. Sadece harf/rakam/alt çizgi.</small>
+                            </div>
+                            <div class="st-field">
+                                <label>Timeout (sn)</label>
+                                <input type="number" class="st-input" id="stfSqlTimeout" value="300" min="1"/>
+                            </div>
+                            <div class="st-field"></div>
+                        </div>
+                        <div class="st-field">
+                            <label>Parametreler</label>
+                            <div class="st-kv-list" id="stfSqlParams"></div>
+                            <button type="button" class="st-kv-add" onclick="stAddKv('stfSqlParams','stfSqlParamRow')">+ Parametre Ekle</button>
+                            <small>Prosedürün aldığı parametreler. @@ öneki eklenmek zorunda değil.</small>
+                        </div>
+                    </div>
+
+                    <!-- HTTP API form -->
+                    <div id="stFormHttp" style="display:none;">
+                        <div class="st-row-3">
+                            <div class="st-field" style="grid-column:span 2;">
+                                <label>URL *</label>
+                                <input type="url" class="st-input" id="stfHttpUrl" placeholder="https://api.ornek.com/endpoint"/>
+                            </div>
+                            <div class="st-field">
+                                <label>Method</label>
+                                <select class="st-select" id="stfHttpMethod">
+                                    <option>GET</option><option>POST</option><option>PUT</option>
+                                    <option>DELETE</option><option>PATCH</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="st-field">
+                            <label>Header'lar</label>
+                            <div class="st-kv-list" id="stfHttpHeaders"></div>
+                            <button type="button" class="st-kv-add" onclick="stAddKv('stfHttpHeaders','stfHttpHeaderRow')">+ Header Ekle</button>
+                            <small>Ornegin: Authorization = Bearer eyJhbGc...</small>
+                        </div>
+                        <div class="st-row-3">
+                            <div class="st-field" style="grid-column:span 2;">
+                                <label>Content-Type</label>
+                                <input type="text" class="st-input" id="stfHttpContentType" placeholder="application/json" value="application/json"/>
+                            </div>
+                            <div class="st-field">
+                                <label>Timeout (sn)</label>
+                                <input type="number" class="st-input" id="stfHttpTimeout" value="60" min="1"/>
+                            </div>
+                        </div>
+                        <div class="st-field">
+                            <label>Request Body (GET/DELETE hariç)</label>
+                            <textarea class="st-textarea" id="stfHttpBody" rows="5" placeholder='{"key":"value"}'></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Currency refresh — parametresiz info panel -->
+                    <div id="stFormCurrency" style="display:none;">
+                        <div style="padding:12px;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.22);border-radius:8px;font-size:.82rem;color:#0e7490;line-height:1.5;">
+                            Bu görev TCMB'den doğrudan kur çekip <code>exchange_rates</code> tablosuna yazar.
+                            Hafta sonu / resmi tatil günleri için en yakın iş gününün kurları bugünün tarihi altına stamp edilir (TCMB <code>today.xml</code> ~15:30 öncesi önceki günün kurunu dönebilir).
+                            <br/><br/>
+                            Ek parametreye ihtiyaç yoktur — yalnızca zamanlamayı ayarlayın.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zamanlama -->
+                <div class="st-section">
+                    <div class="st-section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Zamanlama — Ne Zaman Çalışsın?
+                    </div>
+                    <div class="st-schedule-grid">
+                        <!-- Interval -->
+                        <label class="st-schedule-opt" data-sch="0" onclick="stSelectSchedule(0)">
+                            <input type="radio" name="stSchedType" value="0"/>
+                            <span class="st-schedule-label">
+                                Belirli aralıklarla çalışsın
+                                <span class="st-schedule-hint">(her N saniye/dakika/saatte bir)</span>
+                            </span>
+                        </label>
+                        <div class="st-schedule-body" id="stSchBody0">
+                            <div class="st-schedule-inline">
+                                <span>Her</span>
+                                <input type="number" class="st-input" id="stfIntervalValue" value="60" min="1" style="width:90px;"/>
+                                <select class="st-select" id="stfIntervalUnit" style="width:140px;">
+                                    <option value="seconds">saniyede</option>
+                                    <option value="minutes">dakikada</option>
+                                    <option value="hours">saatte</option>
+                                </select>
+                                <span>bir çalışsın</span>
+                            </div>
+                        </div>
+
+                        <!-- DailyAt -->
+                        <label class="st-schedule-opt" data-sch="2" onclick="stSelectSchedule(2)">
+                            <input type="radio" name="stSchedType" value="2"/>
+                            <span class="st-schedule-label">
+                                Her gün belirli saatte çalışsın
+                                <span class="st-schedule-hint">(saat : dakika)</span>
+                            </span>
+                        </label>
+                        <div class="st-schedule-body" id="stSchBody2">
+                            <div class="st-schedule-inline">
+                                <span>Her gün saat</span>
+                                <input type="time" class="st-input" id="stfDailyTime" value="09:00" style="width:130px;"/>
+                                <span>çalışsın</span>
+                            </div>
+                        </div>
+
+                        <!-- Once -->
+                        <label class="st-schedule-opt" data-sch="3" onclick="stSelectSchedule(3)">
+                            <input type="radio" name="stSchedType" value="3"/>
+                            <span class="st-schedule-label">
+                                Sadece bir kere çalışsın
+                                <span class="st-schedule-hint">(belirli bir tarihte)</span>
+                            </span>
+                        </label>
+                        <div class="st-schedule-body" id="stSchBody3">
+                            <div class="st-schedule-inline">
+                                <span>Tarih / Saat:</span>
+                                <input type="datetime-local" class="st-input" id="stfOnceDateTime" style="width:220px;"/>
+                            </div>
+                        </div>
+
+                        <!-- Cron -->
+                        <label class="st-schedule-opt" data-sch="1" onclick="stSelectSchedule(1)">
+                            <input type="radio" name="stSchedType" value="1"/>
+                            <span class="st-schedule-label">
+                                Cron ifadesi ile
+                                <span class="st-schedule-hint">(ileri seviye, 5 alan: dk sa gun ay hafta)</span>
+                            </span>
+                        </label>
+                        <div class="st-schedule-body" id="stSchBody1">
+                            <input type="text" class="st-input" id="stfCronExpr" placeholder="0 9 * * *"/>
+                            <small style="color:#94a3b8;font-size:.7rem;margin-top:4px;">Örn: <code>0 9 * * *</code> = her gün 09:00, <code>*/15 * * * *</code> = her 15 dk.</small>
+                        </div>
+
+                        <!-- Manual -->
+                        <label class="st-schedule-opt" data-sch="4" onclick="stSelectSchedule(4)">
+                            <input type="radio" name="stSchedType" value="4"/>
+                            <span class="st-schedule-label">
+                                Sadece elle çalıştırılsın
+                                <span class="st-schedule-hint">(Şimdi Çalıştır butonu ile)</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <label class="st-check">
+                    <input type="checkbox" id="stfIsEnabled" checked/>
+                    <span>Aktif — bu görev zamanlamasına göre çalışsın</span>
+                </label>
+            </div>
+        </div>
+        <div class="st-modal-foot">
+            <button type="button" class="st-foot-btn st-foot-btn--cancel" onclick="stCloseEdit()">İptal</button>
+            <button type="button" class="st-foot-btn st-foot-btn--save" id="stSaveBtn" onclick="stSubmitEdit()" style="display:none;">Kaydet</button>
+        </div>
+    </div>
+</div>
+
+<!-- History Modal -->
+<div id="stHistoryModal" class="st-modal-bd" style="display:none;">
+    <div class="st-modal-card" style="max-width:860px;display:flex;flex-direction:column;">
+        <div class="st-modal-head">
+            <div class="st-modal-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 20v-6h6"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>
+            </div>
+            <h3 id="stHistoryTitle" class="st-modal-title">Çalıştırma Geçmişi</h3>
+            <button type="button" class="st-action-btn st-action-btn--del" onclick="stCloseHistory()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="st-modal-body" id="stHistoryBody" style="min-height:200px;max-height:60vh;overflow:auto;">Yükleniyor...</div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    (function () {
+        function esc(s) { return (s === null || s === undefined) ? '' : String(s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+        function csrfToken() { return document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''; }
+
+        // ── Hazir gorev sablonlari ────────────────────────────────
+        // Kullanici bu kutulardan birine tiklayarak formu doldurur;
+        // yeni tip eklemek icin buraya bir nesne daha koy yeterli.
+        var PRESETS = [
+            {
+                id: 'exchange_rates',
+                badge: 'KUR',
+                badgeCls: 'st-preset-badge--http',
+                title: 'Doviz Kurlarini Guncelle',
+                desc: 'TCMB\'den guncel doviz kurlarini ceker; hafta sonu/tatillerde en yakin is gununu kullanir.',
+                apply: function(s){
+                    s.name               = 'Doviz Kurlarini Guncelle';
+                    s.code               = 'EXCHANGE_RATES_REFRESH';
+                    s.description        = 'TCMB\'den kurlari cekip exchange_rates tablosuna yazar. Hafta sonu/tatil icin en yakin is gununu kullanir.';
+                    s.taskType           = 4;
+                    s.scheduleType       = 2;
+                    s.dailyTime          = '09:00';
+                }
+            },
+            {
+                id: 'efatura_portal',
+                badge: 'HTTP',
+                badgeCls: 'st-preset-badge--http',
+                title: 'Portaldan E-Faturalari Oku',
+                desc: 'E-fatura portalindan bekleyen gelen faturalari ceker.',
+                apply: function(s){
+                    s.name               = 'Portaldan E-Faturalari Oku';
+                    s.code               = 'EINVOICE_PORTAL_FETCH';
+                    s.description        = 'E-fatura portalindan gelen faturalari ceker.';
+                    s.taskType           = 2;
+                    s.httpUrl            = 'https://portal.ornek.com/api/efatura/gelen';
+                    s.httpMethod         = 'GET';
+                    s.httpHeaders        = [{k:'Authorization', v:'Bearer YOUR_TOKEN'}];
+                    s.httpTimeout        = 120;
+                    s.scheduleType       = 0;
+                    s.intervalValue      = 1;
+                    s.intervalUnit       = 'hours';
+                }
+            },
+            {
+                id: 'rebuild_report_view',
+                badge: 'SQL',
+                badgeCls: 'st-preset-badge--sql',
+                title: 'Rapor View\'ini Yeniden Olustur',
+                desc: 'vw_ReportDocument view\'ini guncel widget kolonlariyla rebuild eder.',
+                apply: function(s){
+                    s.name               = 'Rapor View Rebuild';
+                    s.code               = 'REBUILD_REPORT_VIEW';
+                    s.description        = 'Widget kolonlari degistiginde vw_ReportDocument\'i yeniden olusturur.';
+                    s.taskType           = 1;
+                    s.sqlProcName        = 'sp_Report_RebuildDocumentView';
+                    s.sqlTimeout         = 60;
+                    s.scheduleType       = 2;
+                    s.dailyTime          = '03:00';
+                }
+            },
+            {
+                id: 'cleanup_old_logs',
+                badge: 'SQL',
+                badgeCls: 'st-preset-badge--sql',
+                title: 'Eski Log Kayitlarini Temizle',
+                desc: 'Belirli gun sayisindan eski loglari siler.',
+                apply: function(s){
+                    s.name               = 'Log Temizligi';
+                    s.code               = 'CLEANUP_LOGS';
+                    s.description        = '90 gunden eski log kayitlarini siler.';
+                    s.taskType           = 1;
+                    s.sqlProcName        = 'sp_Cleanup_OldLogs';
+                    s.sqlParams          = [{k:'daysToKeep', v:'90'}];
+                    s.sqlTimeout         = 300;
+                    s.scheduleType       = 2;
+                    s.dailyTime          = '04:00';
+                }
+            },
+            {
+                id: 'erp_sync',
+                badge: 'HTTP',
+                badgeCls: 'st-preset-badge--http',
+                title: 'ERP Senkronizasyonu',
+                desc: 'ERP sistemi ile veri senkronizasyonu yapar (sablon).',
+                apply: function(s){
+                    s.name               = 'ERP Sync';
+                    s.code               = 'ERP_SYNC';
+                    s.description        = 'ERP API\'sine istek gonderir.';
+                    s.taskType           = 2;
+                    s.httpUrl            = 'https://erp.ornek.com/api/sync';
+                    s.httpMethod         = 'POST';
+                    s.httpHeaders        = [{k:'Authorization', v:'Bearer ...'}, {k:'X-Company-Id', v:'1'}];
+                    s.httpTimeout        = 180;
+                    s.scheduleType       = 0;
+                    s.intervalValue      = 15;
+                    s.intervalUnit       = 'minutes';
+                }
+            },
+            {
+                id: 'custom',
+                badge: 'OZEL',
+                badgeCls: 'st-preset-badge--sql',
+                title: 'Özel (Boş Başlayın)',
+                desc: 'Sıfırdan, hiç bir şey doldurmadan yeni görev oluşturun.',
+                apply: function(s){
+                    s.taskType = 1;
+                    s.scheduleType = 0;
+                    s.intervalValue = 60;
+                    s.intervalUnit = 'seconds';
+                }
+            },
+        ];
+
+        function renderPresets() {
+            var grid = document.getElementById('stPresetGrid');
+            grid.innerHTML = PRESETS.map(function(p){
+                return '<div class="st-preset" data-id="' + p.id + '">' +
+                    '<div class="st-preset-name">' + esc(p.title) +
+                        '<span class="st-preset-badge ' + p.badgeCls + '">' + p.badge + '</span>' +
+                    '</div>' +
+                    '<div class="st-preset-desc">' + esc(p.desc) + '</div>' +
+                '</div>';
+            }).join('');
+            grid.querySelectorAll('.st-preset').forEach(function(el){
+                el.addEventListener('click', function(){
+                    var preset = PRESETS.find(x => x.id === el.dataset.id);
+                    var state = {
+                        // defaults
+                        taskType: 1, scheduleType: 0,
+                        intervalValue: 60, intervalUnit: 'seconds',
+                        dailyTime: '09:00',
+                        httpMethod: 'GET', httpTimeout: 60, httpContentType: 'application/json', httpHeaders: [],
+                        sqlTimeout: 300, sqlParams: [],
+                    };
+                    if (preset) preset.apply(state);
+                    applyStateToForm(state);
+                    stShowStep('form');
+                });
+            });
+        }
+
+        function applyStateToForm(s) {
+            document.getElementById('stfName').value        = s.name || '';
+            document.getElementById('stfCode').value        = s.code || '';
+            document.getElementById('stfDescription').value = s.description || '';
+            document.getElementById('stfIsEnabled').checked = s.isEnabled !== false;
+
+            // Task type
+            var tt = s.taskType || 1;
+            stShowTypeForm(tt);
+
+            if (tt === 1) {
+                document.getElementById('stfSqlProcName').value = s.sqlProcName || '';
+                document.getElementById('stfSqlTimeout').value  = s.sqlTimeout || 300;
+                resetKvList('stfSqlParams', s.sqlParams || [], 'stfSqlParamRow');
+            } else if (tt === 2) {
+                document.getElementById('stfHttpUrl').value         = s.httpUrl || '';
+                document.getElementById('stfHttpMethod').value      = s.httpMethod || 'GET';
+                document.getElementById('stfHttpTimeout').value     = s.httpTimeout || 60;
+                document.getElementById('stfHttpContentType').value = s.httpContentType || 'application/json';
+                document.getElementById('stfHttpBody').value        = s.httpBody || '';
+                resetKvList('stfHttpHeaders', s.httpHeaders || [], 'stfHttpHeaderRow');
+            }
+
+            // Schedule
+            stSelectSchedule(s.scheduleType != null ? s.scheduleType : 0);
+            document.getElementById('stfIntervalValue').value = s.intervalValue || 60;
+            document.getElementById('stfIntervalUnit').value  = s.intervalUnit || 'seconds';
+            document.getElementById('stfDailyTime').value     = s.dailyTime || '09:00';
+            document.getElementById('stfCronExpr').value      = s.cronExpr || '';
+            if (s.onceDateTime) document.getElementById('stfOnceDateTime').value = s.onceDateTime;
+
+            // Code'u isimden otomatik turet (kullanici bos birakirsa)
+            var nameEl = document.getElementById('stfName'), codeEl = document.getElementById('stfCode');
+            var codeTouched = codeEl.value.length > 0;
+            nameEl.oninput = function(){
+                if (!codeTouched) codeEl.value = (nameEl.value || '')
+                    .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '');
+            };
+            codeEl.oninput = function(){ codeTouched = true; };
+        }
+
+        function stShowStep(step) {
+            document.getElementById('stStepPreset').style.display = (step === 'preset' ? '' : 'none');
+            document.getElementById('stStepForm').style.display   = (step === 'form'   ? '' : 'none');
+            document.getElementById('stSaveBtn').style.display    = (step === 'form'   ? '' : 'none');
+        }
+        window.stShowStep = stShowStep;
+
+        function stShowTypeForm(tt) {
+            document.getElementById('stFormSql').style.display      = (tt === 1 ? '' : 'none');
+            document.getElementById('stFormHttp').style.display     = (tt === 2 ? '' : 'none');
+            document.getElementById('stFormCurrency').style.display = (tt === 4 ? '' : 'none');
+            window._stCurrentTaskType = tt;
+            document.getElementById('stTypeSectionTitle').textContent =
+                tt === 1 ? 'SQL Prosedür Ayarları' :
+                tt === 2 ? 'HTTP API Ayarları' :
+                tt === 4 ? 'Döviz Kuru Yenileme' :
+                'Görev Ayarları';
+        }
+
+        function stSelectSchedule(st) {
+            document.querySelectorAll('.st-schedule-opt').forEach(function(el){
+                var active = parseInt(el.dataset.sch, 10) === st;
+                el.classList.toggle('is-active', active);
+                var radio = el.querySelector('input[type=radio]');
+                if (radio) radio.checked = active;
+            });
+        }
+        window.stSelectSchedule = stSelectSchedule;
+
+        // ── Key-Value list helpers ────────────────────────────────
+        function resetKvList(containerId, items, rowFnName) {
+            var c = document.getElementById(containerId);
+            c.innerHTML = '';
+            (items || []).forEach(function(it){ addKvRow(c, it.k, it.v); });
+            if (!items || items.length === 0) addKvRow(c, '', '');
+        }
+        function addKvRow(container, k, v) {
+            var row = document.createElement('div');
+            row.className = 'st-kv-row';
+            row.innerHTML =
+                '<input type="text" class="st-input" placeholder="ad" value="' + esc(k || '') + '"/>' +
+                '<input type="text" class="st-input" placeholder="deger" value="' + esc(v || '') + '"/>' +
+                '<button type="button" class="st-kv-remove" aria-label="Sil">' +
+                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                '</button>';
+            row.querySelector('.st-kv-remove').onclick = function(){ row.remove(); };
+            container.appendChild(row);
+        }
+        window.stAddKv = function(containerId){ addKvRow(document.getElementById(containerId), '', ''); };
+        function readKvList(containerId) {
+            var map = {};
+            document.querySelectorAll('#' + containerId + ' .st-kv-row').forEach(function(row){
+                var k = row.children[0].value.trim(), v = row.children[1].value.trim();
+                if (k) map[k] = v;
+            });
+            return map;
+        }
+
+        // ── Grid render ───────────────────────────────────────────
+        function statusCell(status, isRunning) {
+            if (isRunning) return '<span class="st-status"><span class="st-dot st-dot--run"></span>Calisiyor</span>';
+            if (status === 0)  return '<span class="st-status"><span class="st-dot st-dot--ok"></span>Basarili</span>';
+            if (status === 1)  return '<span class="st-status"><span class="st-dot st-dot--err"></span>Hata</span>';
+            return '<span class="st-status"><span class="st-dot st-dot--none"></span>—</span>';
+        }
+        function renderRow(t, i) {
+            var isBuiltin = t.taskTypeName === 'Builtin';
+            var canDelete = !isBuiltin;
+            var canRun    = !isBuiltin && t.isEnabled && !t.isRunning;
+            var canEdit   = !isBuiltin;
+            return '<tr>' +
+                '<td>' + (i+1) + '</td>' +
+                '<td><div class="st-name">' + esc(t.name) + '</div>' + (t.description ? '<div class="st-desc">' + esc(t.description) + '</div>' : '') + '</td>' +
+                '<td><span class="st-code-badge">' + esc(t.code) + '</span></td>' +
+                '<td><span class="st-type-badge">' + esc(t.taskTypeName) + '</span></td>' +
+                '<td>' + (t.scheduleDescription ? '<span class="st-sched-badge">' + esc(t.scheduleDescription) + '</span>' : '—') + '</td>' +
+                '<td>' + (t.lastRunAtLocal || '—') + (t.lastRunDurationMs ? ' <span style="color:#94a3b8;font-size:.72rem;">('+t.lastRunDurationMs+'ms)</span>' : '') + '</td>' +
+                '<td>' + statusCell(t.lastRunStatus, t.isRunning) + '</td>' +
+                '<td class="st-msg-cell">' + (t.lastRunMessage ? esc(t.lastRunMessage) : '—') + '</td>' +
+                '<td>' + (t.nextRunAtLocal || '—') + '</td>' +
+                '<td><div class="st-actions">' +
+                  '<button class="st-action-btn st-action-btn--run"'+ (canRun?'':' disabled') + ' title="Simdi Calistir" onclick="stRunNow(\'' + esc(t.code) + '\')"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>' +
+                  '<button class="st-action-btn st-action-btn--toggle '+(t.isEnabled?'':'is-off')+'" title="' + (t.isEnabled?'Pasiflestir':'Etkinlestir') + '" onclick="stToggle(\'' + esc(t.code) + '\',' + (!t.isEnabled) + ')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="' + (t.isEnabled ? 'M18 6L6 18 M6 6l12 12' : 'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11') + '"/></svg></button>' +
+                  '<button class="st-action-btn st-action-btn--hist" title="Gecmis" onclick="stOpenHistory(\'' + esc(t.code) + '\',\'' + esc(t.name) + '\')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>' +
+                  '<button class="st-action-btn st-action-btn--edit"'+(canEdit?'':' disabled')+' title="Duzenle" onclick="stOpenEdit('+t.id+')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
+                  '<button class="st-action-btn st-action-btn--del"'+(canDelete?'':' disabled')+' title="Sil" onclick="stDelete('+t.id+',\'' + esc(t.name) + '\')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
+                '</div></td>' +
+            '</tr>';
+        }
+
+        window.stRefresh = async function () {
+            try {
+                var r = await fetch('/Admin/ScheduledTasks/List', { credentials: 'same-origin' });
+                var list = await r.json() || [];
+                var body = document.getElementById('stBody');
+                if (!list.length) {
+                    body.innerHTML = '<tr><td colspan="10" class="st-empty">Henuz kayitli zamanlanmis gorev yok. <strong>Yeni Gorev</strong> ile ekleyebilirsiniz.</td></tr>';
+                    return;
+                }
+                body.innerHTML = list.map(renderRow).join('');
+                window._stCache = list;
+            } catch (e) { /* silent */ }
+        };
+
+        window.stRunNow = async function (code) {
+            try {
+                var fd = new FormData(); fd.append('__RequestVerificationToken', csrfToken());
+                var r  = await fetch('/Admin/ScheduledTasks/' + encodeURIComponent(code) + '/RunNow', { method:'POST', body: fd, credentials:'same-origin' });
+                var d  = await r.json();
+                alert((d && d.success ? '✓ ' : '✗ ') + (d && d.message || (d.success ? 'Tamamlandi' : 'Calistirilamadi')));
+                stRefresh();
+            } catch (e) { alert('Hata: ' + e.message); }
+        };
+        window.stToggle = async function (code, enabled) {
+            try {
+                var fd = new FormData(); fd.append('enabled', enabled); fd.append('__RequestVerificationToken', csrfToken());
+                await fetch('/Admin/ScheduledTasks/' + encodeURIComponent(code) + '/Toggle', { method:'POST', body: fd, credentials:'same-origin' });
+                stRefresh();
+            } catch (e) { alert('Hata: ' + e.message); }
+        };
+        window.stDelete = async function (id, name) {
+            if (!confirm('Gorev silinecek: "' + name + '"\n\nEmin misiniz?')) return;
+            try {
+                var fd = new FormData(); fd.append('__RequestVerificationToken', csrfToken());
+                var r  = await fetch('/Admin/ScheduledTasks/' + id + '/Delete', { method:'POST', body: fd, credentials:'same-origin' });
+                var d  = await r.json();
+                if (!d.success) alert('Silinemedi: ' + (d.message || ''));
+                stRefresh();
+            } catch (e) { alert('Hata: ' + e.message); }
+        };
+
+        // Task type radio in sections — re-bind to switch forms
+        function bindTaskTypeRadioFromLoad() {
+            // Tip secimi normalde preset ile belirlenir; ama edit sirasinda direkt gormek isteyebiliriz.
+            // Su an modal UI task type secimini dolayli yapiyor (preset + yuklenen kayit). Yeterli.
+        }
+
+        // ── Edit modal ────────────────────────────────────────────
+        var editModal = document.getElementById('stEditModal');
+
+        window.stOpenEdit = function (id) {
+            if (id && window._stCache) {
+                var t = window._stCache.find(x => x.id === id);
+                if (t) {
+                    document.getElementById('stEditTitle').textContent = 'Görev Düzenle';
+                    // Hidden ID'yi sakla
+                    window._stEditingId = t.id;
+                    // Mevcut kaydi state'e cevir ve forma doldur
+                    var state = stateFromTask(t);
+                    applyStateToForm(state);
+                    stShowStep('form');
+                    editModal.style.display = 'flex';
+                    return;
+                }
+            }
+            // Yeni kayit — preset secimini goster
+            document.getElementById('stEditTitle').textContent = 'Yeni Görev';
+            window._stEditingId = 0;
+            stShowStep('preset');
+            editModal.style.display = 'flex';
+        };
+        window.stCloseEdit = function () { editModal.style.display = 'none'; };
+
+        function stateFromTask(t) {
+            var s = {
+                name: t.name, code: t.code, description: t.description || '',
+                taskType: t.taskType, scheduleType: t.scheduleType, isEnabled: t.isEnabled,
+            };
+            var params = t.parametersJson ? safeParse(t.parametersJson) : {};
+            if (t.taskType === 1) {
+                s.sqlProcName = params.procedureName || '';
+                s.sqlTimeout  = params.timeoutSeconds || 300;
+                s.sqlParams   = mapToKvArray(params.parameters);
+            } else if (t.taskType === 2) {
+                s.httpUrl         = params.url || '';
+                s.httpMethod      = params.method || 'GET';
+                s.httpTimeout     = params.timeoutSeconds || 60;
+                s.httpContentType = params.contentType || 'application/json';
+                s.httpBody        = params.body || '';
+                s.httpHeaders     = mapToKvArray(params.headers);
+            }
+            // Schedule expression'i parcalara ayir
+            var expr = t.scheduleExpression || '';
+            if (t.scheduleType === 0) {
+                var n = parseInt(expr, 10);
+                if (!isNaN(n)) {
+                    if (n % 3600 === 0) { s.intervalValue = n / 3600; s.intervalUnit = 'hours'; }
+                    else if (n % 60 === 0) { s.intervalValue = n / 60; s.intervalUnit = 'minutes'; }
+                    else { s.intervalValue = n; s.intervalUnit = 'seconds'; }
+                }
+            } else if (t.scheduleType === 2) {
+                s.dailyTime = expr || '09:00';
+            } else if (t.scheduleType === 3) {
+                s.onceDateTime = expr;
+            } else if (t.scheduleType === 1) {
+                s.cronExpr = expr;
+            }
+            return s;
+        }
+        function safeParse(j){ try { return JSON.parse(j); } catch { return {}; } }
+        function mapToKvArray(obj){
+            if (!obj) return [];
+            return Object.keys(obj).map(function(k){ return { k: k, v: typeof obj[k] === 'object' ? JSON.stringify(obj[k]) : String(obj[k]) }; });
+        }
+
+        // Task type selector — preset form icindeyken sag ustte gosterilmeli (kullanici degistirebilsin)
+        // Su an preset zaten task type'i belirliyor; manuel switch icin SQL/HTTP segcili buton ekleyelim
+        // preset'ten "custom" secince de tip secebilsin diye. (Not: Simdilik preset ile kisitliyoruz.)
+
+        window.stSubmitEdit = async function () {
+            var name = document.getElementById('stfName').value.trim();
+            var code = document.getElementById('stfCode').value.trim();
+            if (!name || !code) { alert('Isim ve kod zorunlu.'); return; }
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(code)) { alert('Kod sadece harf, rakam ve alt cizgi olmali (ilk karakter harf/underscore).'); return; }
+
+            // Hangi task type secili — preset/load sirasinda window._stCurrentTaskType'e yazilir.
+            var taskType = window._stCurrentTaskType || 1;
+
+            // ParametersJson insa et (CurrencyRefresh vb. icin bos kalir)
+            var paramsObj = {};
+            if (taskType === 1) {
+                var procName = document.getElementById('stfSqlProcName').value.trim();
+                if (!procName) { alert('Prosedur adi zorunlu.'); return; }
+                paramsObj.procedureName  = procName;
+                paramsObj.timeoutSeconds = parseInt(document.getElementById('stfSqlTimeout').value, 10) || 300;
+                var sqlParams = readKvList('stfSqlParams');
+                if (Object.keys(sqlParams).length > 0) paramsObj.parameters = sqlParams;
+            } else if (taskType === 2) {
+                var url = document.getElementById('stfHttpUrl').value.trim();
+                if (!url) { alert('URL zorunlu.'); return; }
+                paramsObj.url            = url;
+                paramsObj.method         = document.getElementById('stfHttpMethod').value;
+                paramsObj.timeoutSeconds = parseInt(document.getElementById('stfHttpTimeout').value, 10) || 60;
+                paramsObj.contentType    = document.getElementById('stfHttpContentType').value || 'application/json';
+                var body                  = document.getElementById('stfHttpBody').value;
+                if (body) paramsObj.body = body;
+                var headers = readKvList('stfHttpHeaders');
+                if (Object.keys(headers).length > 0) paramsObj.headers = headers;
+            }
+
+            // Schedule expression insa et
+            var st = document.querySelector('input[name=stSchedType]:checked');
+            var scheduleType = st ? parseInt(st.value, 10) : 0;
+            var scheduleExpr = '';
+            var scheduleDesc = '';
+            if (scheduleType === 0) {
+                var n = parseInt(document.getElementById('stfIntervalValue').value, 10) || 60;
+                var u = document.getElementById('stfIntervalUnit').value;
+                var secs = n * (u === 'hours' ? 3600 : u === 'minutes' ? 60 : 1);
+                scheduleExpr = String(secs);
+                scheduleDesc = 'Her ' + n + ' ' + (u === 'hours' ? 'saatte' : u === 'minutes' ? 'dakikada' : 'saniyede') + ' bir';
+            } else if (scheduleType === 2) {
+                scheduleExpr = document.getElementById('stfDailyTime').value || '09:00';
+                scheduleDesc = 'Her gun ' + scheduleExpr;
+            } else if (scheduleType === 3) {
+                scheduleExpr = document.getElementById('stfOnceDateTime').value;
+                if (!scheduleExpr) { alert('Tarih/saat secilmeli.'); return; }
+                scheduleDesc = 'Bir kez: ' + scheduleExpr.replace('T', ' ');
+            } else if (scheduleType === 1) {
+                scheduleExpr = document.getElementById('stfCronExpr').value.trim();
+                if (!scheduleExpr) { alert('Cron ifadesi zorunlu.'); return; }
+                scheduleDesc = 'Cron: ' + scheduleExpr;
+            } else if (scheduleType === 4) {
+                scheduleExpr = '';
+                scheduleDesc = 'Manuel';
+            }
+
+            var payload = {
+                id:                  window._stEditingId || 0,
+                code:                code,
+                name:                name,
+                description:         document.getElementById('stfDescription').value.trim() || null,
+                taskType:            taskType,
+                parametersJson:      JSON.stringify(paramsObj),
+                scheduleType:        scheduleType,
+                scheduleExpression:  scheduleExpr || null,
+                scheduleDescription: scheduleDesc || null,
+                isEnabled:           document.getElementById('stfIsEnabled').checked,
+            };
+            try {
+                var r = await fetch('/Admin/ScheduledTasks/Save', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken() },
+                    body: JSON.stringify(payload)
+                });
+                var d = await r.json();
+                if (!d.success) { alert('Kaydedilemedi: ' + (d.message || '')); return; }
+                stCloseEdit();
+                stRefresh();
+            } catch (e) { alert('Hata: ' + e.message); }
+        };
+
+        // ── History modal ─────────────────────────────────────────
+        var histModal = document.getElementById('stHistoryModal');
+        window.stOpenHistory = async function (code, name) {
+            document.getElementById('stHistoryTitle').textContent = 'Calistirma Gecmisi — ' + name;
+            document.getElementById('stHistoryBody').innerHTML = 'Yukleniyor...';
+            histModal.style.display = 'flex';
+            try {
+                var r = await fetch('/Admin/ScheduledTasks/' + encodeURIComponent(code) + '/History?limit=50', { credentials:'same-origin' });
+                var list = await r.json() || [];
+                if (!list.length) {
+                    document.getElementById('stHistoryBody').innerHTML = '<div class="st-empty">Henuz calistirma kaydi yok.</div>';
+                    return;
+                }
+                var rows = list.map(function (h) {
+                    return '<tr>' +
+                        '<td style="font-size:.8rem;">' + esc(h.startedAtLocal) + '</td>' +
+                        '<td style="font-size:.8rem;">' + (h.completedAtLocal || '<em style="color:#f59e0b;">devam ediyor</em>') + '</td>' +
+                        '<td>' + statusCell(h.status, false) + '</td>' +
+                        '<td style="font-size:.78rem;color:#64748b;">' + (h.durationMs != null ? h.durationMs + ' ms' : '—') + '</td>' +
+                        '<td><span class="st-code-badge">' + esc(h.triggerName) + '</span></td>' +
+                        '<td class="st-msg-cell">' + (h.message ? esc(h.message) : '—') + '</td>' +
+                        '</tr>';
+                }).join('');
+                document.getElementById('stHistoryBody').innerHTML =
+                    '<table class="st-grid"><thead><tr>' +
+                    '<th>Baslangic</th><th>Bitis</th><th>Durum</th><th>Sure</th><th>Tetik.</th><th>Mesaj</th>' +
+                    '</tr></thead><tbody>' + rows + '</tbody></table>';
+            } catch (e) { document.getElementById('stHistoryBody').innerHTML = '<div class="st-empty">Yuklenemedi: ' + esc(e.message) + '</div>'; }
+        };
+        window.stCloseHistory = function () { histModal.style.display = 'none'; };
+
+        // Initial
+        renderPresets();
+        stRefresh();
+        setInterval(stRefresh, 10000);
+    })();
+</script>
+<form style="display:none;">@Html.AntiForgeryToken()</form>
+}

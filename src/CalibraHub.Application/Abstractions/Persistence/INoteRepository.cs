@@ -8,10 +8,14 @@ public interface INoteRepository
     Task<Note?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task SaveAsync(Note note, CancellationToken cancellationToken);
     Task DeleteAsync(Guid id, CancellationToken cancellationToken);
+    Task TogglePinAsync(Guid id, Guid userId, CancellationToken cancellationToken);
 
     Task<IReadOnlyCollection<NoteReminder>> GetRemindersAsync(Guid noteId, CancellationToken cancellationToken);
     Task AddReminderAsync(NoteReminder reminder, CancellationToken cancellationToken);
     Task DeleteReminderAsync(Guid reminderId, CancellationToken cancellationToken);
+
+    /// <summary>Verilen not ID'leri icin gonderilmemis (is_sent=0) hatirlatici sayilarini tek query ile doner.</summary>
+    Task<IReadOnlyDictionary<Guid, int>> GetActiveReminderCountsAsync(IReadOnlyCollection<Guid> noteIds, CancellationToken cancellationToken);
 
     Task<IReadOnlyCollection<NoteShare>> GetSharesAsync(Guid noteId, CancellationToken cancellationToken);
     Task AddShareAsync(NoteShare share, CancellationToken cancellationToken);

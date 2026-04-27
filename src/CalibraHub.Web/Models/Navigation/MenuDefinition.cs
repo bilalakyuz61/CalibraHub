@@ -35,13 +35,15 @@ public static class MenuDefinition
         var settingsChildren = new List<MenuNode>
         {
             new("settings.company",           "Şirket Ayarları",        "Building2",   "/Admin/CompanySettings",    null),
-            new("settings.integrationevents", "Entegrasyon Tanimlari",  "Zap",         "/Admin/IntegrationEvents",  null),
-            new("settings.viewsettings",      "Ekran Tasarim Ayarlari", "LayoutGrid",  "/Admin/ViewSettings",       null),
+            new("settings.integrationevents", "Entegrasyon Tanımları",  "Zap",         "/Admin/IntegrationEvents",  null),
+            new("settings.viewsettings",      "Alan ve Widget Tanımları", "LayoutGrid",  "/Admin/ViewSettings",       null),
+            new("settings.dbschema",          "Veritabanı Haritası",    "Database",    "/admin/db-schema",          null),
+            new("settings.scheduledtasks",    "Zamanlanmış Görevler",   "Clock",       "/Admin/ScheduledTasks",     null),
         };
         if (isSystemAdmin)
         {
             settingsChildren.Add(
-                new("settings.setupdefinitions", "Sirket ve Kullanici Tanimlari", "UserCog", "/Setup/Definitions", null));
+                new("settings.setupdefinitions", "Şirket ve Kullanıcı Tanımları", "UserCog", "/Setup/Definitions", null));
         }
 
         return new List<MenuNode>
@@ -50,70 +52,70 @@ public static class MenuDefinition
             new("general", "Genel", "LayoutList", null, new List<MenuNode>
             {
                 new("general.notes", "Notlar", "FileText", "/Notes", null),
-                new("general.orgchart", "Organizasyon Semasi", "Network", "/OrgChart", null),
+                new("general.orgchart", "Organizasyon Şeması", "Network", "/OrgChart", null),
             }),
 
             // ────────────── 2. Onay Islemleri ──────────────
-            new("approval", "Onay Islemleri", "CheckCircle2", null, new List<MenuNode>
+            new("approval", "Onay İşlemleri", "CheckCircle2", null, new List<MenuNode>
             {
                 new("approval.documents", "Elektronik Belgeler", "Files", null, new List<MenuNode>
                 {
                     new("approval.einvoice",  "e-Fatura",   "FileText", "/Approval/EInvoice",  null),
-                    new("approval.earchive",  "e-Arsiv",    "Archive",  "/Approval/EArchive",  null),
-                    new("approval.edispatch", "e-Irsaliye", "Truck",    "/Approval/EDispatch", null),
+                    new("approval.earchive",  "e-Arşiv",    "Archive",  "/Approval/EArchive",  null),
+                    new("approval.edispatch", "e-İrsaliye", "Truck",    "/Approval/EDispatch", null),
                 }),
             }),
 
             // ────────────── 3. Lojistik ──────────────
             new("logistics", "Lojistik", "Package", null, new List<MenuNode>
             {
-                new("logistics.fixed", "Sabit Tanimlamalar", "Folder", null, new List<MenuNode>
+                new("logistics.fixed", "Sabit Tanımlamalar", "Folder", null, new List<MenuNode>
                 {
-                    new("logistics.materials",     "Malzeme Kartlari",      "Boxes",   "/Logistics/MaterialCards",        null),
-                    new("logistics.configuration", "Urun Ozellik Listesi",  "Sliders", "/Logistics/ProductConfiguration", null),
+                    new("logistics.materials", "Malzeme Kartları", "Boxes", "/Logistics/MaterialCards", null),
+                    new("logistics.configuration", "Özellik ve Kombinasyon", "Sliders", "/Logistics/ProductConfiguration", null),
                 }),
-                new("logistics.sales", "Satis", "TrendingUp", null, new List<MenuNode>
+                new("logistics.sales", "Satış", "TrendingUp", null, new List<MenuNode>
                 {
-                    new("logistics.salesquotes", "Satis Teklifi", "FileText", "/Sales/SalesQuotes", null),
+                    new("logistics.salesquotes", "Satış Teklifi", "FileText", "/Sales/Documents", null),
                 }),
             }),
 
             // ────────────── 4. Uretim ──────────────
-            new("production", "Uretim", "Factory", null, new List<MenuNode>
+            new("production", "Üretim", "Factory", null, new List<MenuNode>
             {
-                new("production.tree", "Urun Agaci", "Network", "/Logistics/ProductTrees", null),
+                new("production.tree", "Ürün Ağacı", "Network", "/Logistics/BOMs", null),
             }),
 
             // ────────────── 5. Finans ──────────────
             new("finance", "Finans", "Coins", null, new List<MenuNode>
             {
-                new("finance.definitions", "Tanimlamalar", "Folder", null, new List<MenuNode>
+                new("finance.definitions", "Tanımlamalar", "Folder", null, new List<MenuNode>
                 {
-                    new("finance.accounts", "Cari Hesaplar", "Users", "/Finance/ContactAccounts", null),
+                    new("finance.accounts", "Cari Hesaplar", "Users", "/Finance/Contacts", null),
                 }),
             }),
 
             // ────────────── 6. Genel Tanimlamalar ──────────────
-            new("generaldefs", "Genel Tanimlamalar", "Settings2", null, new List<MenuNode>
+            new("generaldefs", "Genel Tanımlamalar", "Settings2", null, new List<MenuNode>
             {
-                new("gendef.salesreps",   "Satis Temsilcileri",         "UserCircle",  "/GeneralDefinitions/SalesRepresentatives", null),
-                new("gendef.currencies",  "Doviz Tanimlamalari",        "DollarSign",  "/GeneralDefinitions/Currencies",           null),
-                new("gendef.warehouses",  "Lokasyon Tanimlamalari",     "MapPin",      "/Logistics/WarehouseLocations",            null),
-                new("gendef.measureunit", "Olcu Birimi Tanimlamalari",  "Ruler",       "/Logistics/MeasureUnitDefinitions",        null),
-                new("gendef.cardgroups",  "Grup Tanimlamalari",         "Layers",      "/Definitions/CardGroups",                  null),
+                new("gendef.salesreps",   "Satış Temsilcileri",         "UserCircle",  "/GeneralDefinitions/SalesRepresentatives", null),
+                new("gendef.currencies",  "Döviz Tanımlamaları",        "DollarSign",  "/GeneralDefinitions/Currencies",           null),
+                new("gendef.warehouses",  "Lokasyon Tanımlamaları",     "MapPin",      "/Logistics/Locations",            null),
+                new("gendef.measureunit", "Ölçü Birimleri",  "Ruler",       "/Logistics/Units",        null),
+                new("gendef.cardgroups",  "Grup Tanımlamaları",         "Layers",      "/Definitions/CardGroups",                  null),
                 new("gendef.pricelist",   "Fiyat Listesi",              "Tag",         "/PriceList/PriceGroups",                   null),
             }),
 
             // ────────────── 7. Tasarim ──────────────
-            new("design", "Tasarim", "LayoutGrid", null, new List<MenuNode>
+            new("design", "Tasarım", "LayoutGrid", null, new List<MenuNode>
             {
-                new("design.documents",       "Belge Sablonlari",     "FileText",   "/Document",              null),
-                new("design.guides",          "Rehber Yonetimi",      "BookOpen",   "/Admin/GuideManagement", null),
-                new("design.formmanagement",  "Form Tasarim Ayarlari","LayoutList", "/Admin/FormManagement",  null),
+                new("design.documents",       "Belge Şablonları",      "FileText",   "/Document",              null),
+                new("design.guides",          "Rehber Yönetimi",       "BookOpen",   "/Admin/GuideManagement", null),
+                new("design.formmanagement",  "Form Tasarım Ayarları", "LayoutList", "/Admin/FormManagement",  null),
             }),
 
             // ────────────── 8. Ayarlar ──────────────
-            new("settings", "Ayarlar", "Settings", null, settingsChildren),
+            new("settings", "Ayarlar",  "Settings", null, settingsChildren),
         };
     }
 }

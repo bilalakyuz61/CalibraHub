@@ -4,7 +4,7 @@ namespace CalibraHub.Application.Abstractions.Services;
 
 public interface IAdminManagementService
 {
-    Task<int> SaveCompanyDefinitionAsync(SaveCompanyDefinitionRequest request, CancellationToken cancellationToken);
+    Task<int> SaveCompanyAsync(SaveCompanyRequest request, CancellationToken cancellationToken);
     Task<int> SaveIntegratorSettingsAsync(SaveIntegratorSettingsRequest request, CancellationToken cancellationToken);
     Task<IntegratorConnectionTestResult> TestIntegratorConnectionAsync(
         TestIntegratorConnectionRequest request,

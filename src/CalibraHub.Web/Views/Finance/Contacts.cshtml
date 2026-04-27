@@ -1,0 +1,221 @@
+@model CalibraHub.Web.Models.Finance.ContactsViewModel
+@{
+    ViewData["Title"] = "Cari Hesaplar";
+    ViewData["FormCode"] = "CONTACTS";
+    ViewData["BodyClass"] = "page-contact-accounts";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>contact_accounts</td><td style='padding:6px 8px;'>Cari hesap tanimlari (kod, unvan, vergi no, adres, telefon, e-posta, tip, durum)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    .page-contact-accounts .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-contact-accounts .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-contact-accounts .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-contact-accounts .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+
+    /* ── Calibra loading overlay ── */
+    .ca-loading-overlay {
+        position: absolute; inset: 0; z-index: 50;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 18px;
+        background: rgba(12,15,26,.85);
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        transition: opacity .4s ease;
+    }
+    body.app-theme-light .ca-loading-overlay { background: rgba(248,250,252,.85); }
+    .ca-loading-overlay.is-hidden { opacity: 0; pointer-events: none; }
+
+    .ca-calibra-ring {
+        width: 56px; height: 56px; position: relative;
+    }
+    .ca-calibra-ring svg {
+        width: 100%; height: 100%;
+        animation: caRingSpin 1.8s linear infinite;
+    }
+    @@keyframes caRingSpin { to { transform: rotate(360deg); } }
+
+    .ca-calibra-icon {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .ca-calibra-icon svg {
+        width: 22px; height: 22px; color: #818cf8;
+        animation: caPulse 1.8s ease-in-out infinite;
+    }
+    body.app-theme-light .ca-calibra-icon svg { color: #6366f1; }
+    @@keyframes caPulse {
+        0%, 100% { transform: scale(1); opacity: .7; }
+        50% { transform: scale(1.15); opacity: 1; }
+    }
+
+    .ca-loading-text {
+        font-size: .78rem; font-weight: 600; letter-spacing: .04em;
+        color: rgba(255,255,255,.4);
+    }
+    body.app-theme-light .ca-loading-text { color: #94a3b8; }
+    .ca-loading-dots::after {
+        content: ''; display: inline-block; width: 1.2em; text-align: left;
+        animation: caDots 1.4s steps(4,end) infinite;
+    }
+    @@keyframes caDots {
+        0% { content: ''; }
+        25% { content: '.'; }
+        50% { content: '..'; }
+        75% { content: '...'; }
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content" style="position:relative;">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+
+    <!-- Loading overlay — SmartBoard mount oldugunda gizlenir -->
+    <div class="ca-loading-overlay" id="caLoadingOverlay">
+        <div class="ca-calibra-ring">
+            <!-- Donen halka -->
+            <svg viewBox="0 0 56 56" fill="none">
+                <circle cx="28" cy="28" r="24" stroke="rgba(99,102,241,.12)" stroke-width="3" />
+                <path d="M28 4 A24 24 0 0 1 52 28" stroke="url(#caGrad)" stroke-width="3" stroke-linecap="round" />
+                <defs>
+                    <linearGradient id="caGrad" x1="28" y1="4" x2="52" y2="28" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#6366f1" />
+                        <stop offset="1" stop-color="#818cf8" stop-opacity=".3" />
+                    </linearGradient>
+                </defs>
+            </svg>
+            <!-- Merkez ikon — kalibrasyon/crosshair -->
+            <div class="ca-calibra-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                </svg>
+            </div>
+        </div>
+        <span class="ca-loading-text">Yukleniyor<span class="ca-loading-dots"></span></span>
+    </div>
+</section>
+
+@section Scripts {
+<script>
+(function () {
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var CONFIG_URL = '/Finance/GetContactsBoardConfig';
+    var el         = document.getElementById('reactSmartBoard');
+
+    if (!el) { console.error('[CA] Mount element yok'); return; }
+
+    function showError(msg) {
+        hideLoading();
+        el.innerHTML =
+            '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+            'height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">' +
+            '<div>' + msg + '</div>' +
+            '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;' +
+            'border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">' +
+            'Sayfayi Yenile</button></div>';
+    }
+
+    function hideLoading() {
+        var overlay = document.getElementById('caLoadingOverlay');
+        if (overlay) {
+            overlay.classList.add('is-hidden');
+            setTimeout(function () { overlay.remove(); }, 500);
+        }
+    }
+
+    function doMount(config) {
+        if (!config) { showError('Board config bulunamadi'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadi');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, config);
+            hideLoading();
+        } catch (ex) {
+            console.error('[CA] Mount exception:', ex);
+            showError('Mount hatasi: ' + (ex.message || ex));
+        }
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-ca-smartboard]')) return;
+        var link = document.createElement('link');
+        link.rel  = 'stylesheet';
+        link.href = CSS_URL;
+        link.setAttribute('data-ca-smartboard', '1');
+        document.head.appendChild(link);
+    }
+
+    function ensureBundle(cb) {
+        if (window.CalibraHub && window.CalibraHub.mountSmartBoard) { cb(); return; }
+        if (document.querySelector('script[data-ca-smartboard]')) {
+            // Bundle yukleniyor, bekle
+            var t = setInterval(function () {
+                if (window.CalibraHub && window.CalibraHub.mountSmartBoard) { clearInterval(t); cb(); }
+            }, 50);
+            return;
+        }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-ca-smartboard', '1');
+        script.onload  = function () { setTimeout(cb, 0); };
+        script.onerror = function () { showError('Bundle yuklenemedi'); };
+        document.head.appendChild(script);
+    }
+
+    // Paralel: bundle + veri ayni anda yukle
+    loadCss();
+
+    var _config = null;
+    var _bundleReady = false;
+
+    function tryMount() {
+        if (_config && _bundleReady) doMount(_config);
+    }
+
+    // 1) Bundle yukle
+    ensureBundle(function () {
+        _bundleReady = true;
+        tryMount();
+    });
+
+    // 2) BoardConfig'i AJAX ile cek (sayfa hemen render oldu, animasyon gorunuyor)
+    fetch(CONFIG_URL, { credentials: 'same-origin' })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (data) {
+            _config = data;
+            tryMount();
+        })
+        .catch(function (e) {
+            console.error('[CA] Config fetch error:', e);
+            showError('Veri yuklenemedi: ' + e.message);
+        });
+
+    window.addEventListener('pageshow', function (e) {
+        if (e.persisted) location.reload();
+    });
+})();
+</script>
+}

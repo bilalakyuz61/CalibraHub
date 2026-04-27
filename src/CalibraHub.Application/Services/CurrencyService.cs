@@ -110,26 +110,63 @@ public sealed class CurrencyService : ICurrencyService
 
     public async Task<(bool Success, string? Error, int Count)> UpdateRatesFromTcmbAsync(DateTime date, CancellationToken ct)
     {
-        // Hafta sonu ise onceki cumaya dusur
-        var tryDate = date;
-        for (var attempt = 0; attempt < 3; attempt++)
+        // Kurlari her zaman istenen tarih altinda kaydet. Iki sebep:
+        //   1) Istenen tarih hafta sonu/tatil ise en yakin is gununun kurunu o tarih altina yazariz.
+        //   2) TCMB today.xml ~15:30 oncesi genellikle onceki is gununun kurlarini doner; bu
+        //      durumda da istenen tarih (bugun) altinda kaydederiz, tablo bos kalmasin.
+        var tryDate = date.Date;
+        for (var attempt = 0; attempt < 7; attempt++)
         {
-            try
+            if (tryDate.DayOfWeek != DayOfWeek.Saturday && tryDate.DayOfWeek != DayOfWeek.Sunday)
             {
-                var rates = await _tcmbClient.GetRatesForDateAsync(tryDate, ct);
-                if (rates.Count > 0)
+                try
                 {
-                    await _rateRepo.SaveRatesAsync(rates, ct);
-                    await UpdateCurrencyNamesFromRatesAsync(rates, ct);
-                    var suffix = tryDate != date ? $" (kaynak tarih: {tryDate:dd.MM.yyyy})" : "";
-                    return (true, null, rates.Count);
+                    var rates = await _tcmbClient.GetRatesForDateAsync(tryDate, ct);
+                    if (rates.Count > 0)
+                    {
+                        var toSave = rates.Select(r => CloneWithDate(r, date.Date)).ToList();
+                        await _rateRepo.SaveRatesAsync(toSave, ct);
+                        await UpdateCurrencyNamesFromRatesAsync(rates, ct);
+                        return (true, null, toSave.Count);
+                    }
                 }
+                catch { /* sonraki gunu dene */ }
             }
-            catch { /* sonraki gunu dene */ }
-            tryDate = tryDate.AddDays(-1); // bir gun geri git
+            tryDate = tryDate.AddDays(-1);
         }
         return (false, $"TCMB'den {date:dd.MM.yyyy} ve oncesi icin kur bilgisi alinamadi.", 0);
     }
+
+    private async Task<IReadOnlyCollection<ExchangeRate>?> FetchPreviousBusinessDayRatesAsync(DateTime weekendDate, CancellationToken ct)
+    {
+        var probe = weekendDate.Date.AddDays(-1);
+        for (var attempt = 0; attempt < 7; attempt++)
+        {
+            if (probe.DayOfWeek != DayOfWeek.Saturday && probe.DayOfWeek != DayOfWeek.Sunday)
+            {
+                try
+                {
+                    var r = await _tcmbClient.GetRatesForDateAsync(probe, ct);
+                    if (r.Count > 0) return r;
+                }
+                catch { /* geri git */ }
+            }
+            probe = probe.AddDays(-1);
+        }
+        return null;
+    }
+
+    private static ExchangeRate CloneWithDate(ExchangeRate r, DateTime newDate) => new()
+    {
+        CurrencyCode = r.CurrencyCode,
+        RateDate = newDate,
+        BuyingRate = r.BuyingRate,
+        SellingRate = r.SellingRate,
+        EffectiveBuyingRate = r.EffectiveBuyingRate,
+        EffectiveSellingRate = r.EffectiveSellingRate,
+        Source = r.Source,
+        CurrencyName = r.CurrencyName
+    };
 
     public async Task<(bool Success, string? Error, int TotalCount)> UpdateRatesFromTcmbBulkAsync(DateTime from, DateTime to, CancellationToken ct)
     {
@@ -139,8 +176,10 @@ public sealed class CurrencyService : ICurrencyService
         var totalCount = 0;
         var fetchedDays = 0;
         var skippedDays = new List<string>();
-        var current = from;
-        while (current <= to)
+        IReadOnlyCollection<ExchangeRate>? lastBusinessRates = null;
+        var current = from.Date;
+        var endDate = to.Date;
+        while (current <= endDate)
         {
             if (current.DayOfWeek != DayOfWeek.Saturday && current.DayOfWeek != DayOfWeek.Sunday)
             {
@@ -149,9 +188,13 @@ public sealed class CurrencyService : ICurrencyService
                     var rates = await _tcmbClient.GetRatesForDateAsync(current, ct);
                     if (rates.Count > 0)
                     {
-                        await _rateRepo.SaveRatesAsync(rates, ct);
-                        totalCount += rates.Count;
+                        // Kurlari istenen gun altinda kaydet — TCMB today.xml ~15:30 oncesi
+                        // onceki gunun verisini donebilir; stamping ile bu gunun sutunu bos kalmaz.
+                        var stamped = rates.Select(r => CloneWithDate(r, current)).ToList();
+                        await _rateRepo.SaveRatesAsync(stamped, ct);
+                        totalCount += stamped.Count;
                         fetchedDays++;
+                        lastBusinessRates = stamped;
                     }
                     else
                     {
@@ -159,6 +202,23 @@ public sealed class CurrencyService : ICurrencyService
                     }
                 }
                 catch
+                {
+                    skippedDays.Add(current.ToString("dd.MM.yyyy"));
+                }
+            }
+            else
+            {
+                // Hafta sonu: son is gununun kurlarini bu tarihe kopyala
+                var source = lastBusinessRates ?? await FetchPreviousBusinessDayRatesAsync(current, ct);
+                if (source is not null && source.Count > 0)
+                {
+                    var cloned = source.Select(r => CloneWithDate(r, current)).ToList();
+                    await _rateRepo.SaveRatesAsync(cloned, ct);
+                    totalCount += cloned.Count;
+                    fetchedDays++;
+                    lastBusinessRates ??= source;
+                }
+                else
                 {
                     skippedDays.Add(current.ToString("dd.MM.yyyy"));
                 }

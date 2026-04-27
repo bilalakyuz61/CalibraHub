@@ -16,12 +16,12 @@ public sealed class InMemoryDataStore
     private const int IntegratorId = 1;
     private static readonly Guid NetsisErpId = Guid.Parse("5f01964e-9071-4dbc-9f3b-48fb9eae4665");
 
-    public ConcurrentDictionary<int, CompanyDefinition> Companies { get; } = new(
+    public ConcurrentDictionary<int, Company> Companies { get; } = new(
         new[]
         {
-            new KeyValuePair<int, CompanyDefinition>(
+            new KeyValuePair<int, Company>(
                 DefaultCompanyId,
-                new CompanyDefinition
+                new Company
                 {
                     Id = DefaultCompanyId,
                     Name = "Calibra Merkez",

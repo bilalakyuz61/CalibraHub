@@ -243,11 +243,9 @@ public sealed class DesignerSession : IDisposable
           <Dictionary/>
           <ReportPage Name="Page1" Landscape="false" PaperWidth="210" PaperHeight="297" MarginLeft="10" MarginRight="10" MarginTop="10" MarginBottom="10">
             <ReportTitleBand Name="ReportTitle1" Top="0" Width="718.2" Height="37.8">
-              <TextObject Name="Text1" Left="0" Top="0" Width="718.2" Height="37.8" Text="{reportName}" Font="Arial, 18pt, style=Bold"/>
+              <TextObject Name="Text1" Left="0" Top="0" Width="718.2" Height="37.8" Text="{reportName}" Font="Arial, 18pt, style=Bold" HorzAlign="Center"/>
             </ReportTitleBand>
-            <DataBand Name="Data1" Top="41.8" Width="718.2" Height="30">
-              <TextObject Name="Text2" Left="0" Top="0" Width="718.2" Height="30" Text="[Data.ProductCode]" Font="Arial, 10pt"/>
-            </DataBand>
+            <DataBand Name="Data1" Top="41.8" Width="718.2" Height="30" DataSource="Belge"/>
             <PageFooterBand Name="PageFooter1" Top="75.8" Width="718.2" Height="18.9">
               <TextObject Name="Text3" Left="0" Top="0" Width="718.2" Height="18.9" Text="Sayfa [PageN] / [TotalPages]" HorzAlign="Right" Font="Arial, 8pt"/>
             </PageFooterBand>

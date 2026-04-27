@@ -17,6 +17,18 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- appsettings.json build output'a kopyalansin — AppContext.BaseDirectory (bin/Debug/...)
+       uzerinden Host.CreateDefaultBuilder bu dosyayi okur. Olmazsa ConnectionString bos
+       gelir ve DB init basarisiz olur. -->
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\CalibraHub.Application\CalibraHub.Application.csproj" />
     <ProjectReference Include="..\CalibraHub.Persistence\CalibraHub.Persistence.csproj" />

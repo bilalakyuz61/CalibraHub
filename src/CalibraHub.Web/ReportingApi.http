@@ -1,0 +1,96 @@
+@host = https://localhost:5103
+
+### 1) Cookie login (oturum ac — sonraki istekler Cookies header'i otomatik kullanir)
+POST {{host}}/Account/Login
+Content-Type: application/x-www-form-urlencoded
+
+email=admin@calibra.local&password=12345678
+
+### 2) Metadata: mevcut VIEW'lari listele
+GET {{host}}/api/reporting/views
+
+### 3) VIEW detay (kolonlar + roller)
+GET {{host}}/api/reporting/views/1
+
+### 4) INFORMATION_SCHEMA kesif — RptViewCol'a eklenmemis kolonlari gosterir
+GET {{host}}/api/reporting/views/1/discover-columns
+
+### 5) Ad-hoc execute — duz tablo
+POST {{host}}/api/reporting/execute
+Content-Type: application/json
+
+{
+  "viewId": 1,
+  "adHocConfigJson": "{\"category\":1,\"columns\":[{\"colName\":\"id\"},{\"colName\":\"doc_no\"},{\"colName\":\"doc_date\"}],\"orderBy\":[{\"colName\":\"doc_date\",\"descending\":true}],\"topN\":50,\"injectContext\":false}",
+  "page": 1,
+  "pageSize": 50
+}
+
+### 6) Ad-hoc execute — grupli chart (ornek)
+POST {{host}}/api/reporting/execute
+Content-Type: application/json
+
+{
+  "viewId": 1,
+  "adHocConfigJson": "{\"category\":2,\"groupBy\":[{\"colName\":\"doc_date\"}],\"aggregates\":[{\"colName\":\"grand_total\",\"fn\":3,\"alias\":\"Toplam\"}],\"chart\":{\"type\":\"bar\",\"xColumn\":\"doc_date\",\"yColumns\":[\"Toplam\"]},\"orderBy\":[{\"colName\":\"doc_date\",\"descending\":false}],\"injectContext\":false}",
+  "page": 1,
+  "pageSize": 100
+}
+
+### 7) CSV export (ExportReports izni gerekir)
+POST {{host}}/api/reporting/execute/csv
+Content-Type: application/json
+
+{
+  "viewId": 1,
+  "adHocConfigJson": "{\"category\":1,\"columns\":[{\"colName\":\"id\"},{\"colName\":\"doc_no\"}],\"topN\":500,\"injectContext\":false}"
+}
+
+### 8) Negatif: olmayan kolon — 400 dondurmeli
+POST {{host}}/api/reporting/execute
+Content-Type: application/json
+
+{
+  "viewId": 1,
+  "adHocConfigJson": "{\"category\":1,\"columns\":[{\"colName\":\"1=1; DROP TABLE RptDef --\"}]}"
+}
+
+### 9) Negatif: gecersiz operator — 400 dondurmeli
+POST {{host}}/api/reporting/execute
+Content-Type: application/json
+
+{
+  "viewId": 1,
+  "adHocConfigJson": "{\"category\":1,\"columns\":[{\"colName\":\"id\"}],\"filters\":[{\"colName\":\"id\",\"op\":999,\"values\":[1]}]}"
+}
+
+### 10) Admin: VIEW upsert (ManageReports izni gerekir)
+PUT {{host}}/api/reporting/admin/views
+Content-Type: application/json
+
+{
+  "id": 0,
+  "code": "DEMO_SALES",
+  "name": "Demo Satis",
+  "sqlObjectName": "vw_DemoSales",
+  "description": "Ornek",
+  "isActive": true
+}
+
+### 11) Rapor tanimi listele
+GET {{host}}/api/reporting/definitions
+
+### 12) Rapor tanimi kaydet (DesignReports izni gerekir)
+PUT {{host}}/api/reporting/definitions
+Content-Type: application/json
+
+{
+  "id": 0,
+  "code": "SALES_TREND",
+  "name": "Aylik Ciro Trendi",
+  "viewId": 1,
+  "category": 2,
+  "configJson": "{\"category\":2,\"groupBy\":[{\"colName\":\"doc_date\"}],\"aggregates\":[{\"colName\":\"grand_total\",\"fn\":3,\"alias\":\"Toplam\"}],\"chart\":{\"type\":\"line\",\"xColumn\":\"doc_date\",\"yColumns\":[\"Toplam\"]},\"injectContext\":false}",
+  "isShared": false,
+  "roles": []
+}

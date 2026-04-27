@@ -10,5 +10,6 @@ public sealed class ProductConfigurationRecord
     public string? DataType { get; init; }
     public string? RelatedMaterialCode { get; init; }
     public bool IsActive { get; init; }
+    public bool VisibleInDesign { get; init; } = true;
     public DateTime CreatedDate { get; init; }
 }

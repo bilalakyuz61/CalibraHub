@@ -1,3 +1,4 @@
+using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Application.Abstractions.Persistence;
@@ -12,10 +13,19 @@ public interface IPriceListRepository
     Task DeleteGroupAsync(int id, CancellationToken ct);
 
     // Fiyat Kalemleri
-    Task<IReadOnlyCollection<PriceListEntry>> GetEntriesByGroupAsync(int groupId, CancellationToken ct);
-    Task<PriceListEntry?> GetEntryByIdAsync(int id, CancellationToken ct);
-    Task<int> AddEntryAsync(PriceListEntry entry, CancellationToken ct);
-    Task AddBulkEntriesAsync(IReadOnlyCollection<PriceListEntry> entries, CancellationToken ct);
-    Task UpdateEntryAsync(PriceListEntry entry, CancellationToken ct);
+    Task<IReadOnlyCollection<PriceList>> GetEntriesByGroupAsync(int groupId, CancellationToken ct);
+    Task<PriceList?> GetEntryByIdAsync(int id, CancellationToken ct);
+    Task<int> AddEntryAsync(PriceList entry, CancellationToken ct);
+    Task AddBulkEntriesAsync(IReadOnlyCollection<PriceList> entries, CancellationToken ct);
+    Task UpdateEntryAsync(PriceList entry, CancellationToken ct);
     Task DeleteEntryAsync(int id, CancellationToken ct);
+
+    // Upsert (bulk) — Ayni grup+stok+kombinasyon+tarih varsa guncelle, yoksa ekle
+    Task<BulkUpsertResult> UpsertBulkEntriesAsync(
+        IReadOnlyCollection<PriceList> entries, CancellationToken ct);
+
+    // Mevcut fiyat sorgusu — toplu anahtarla
+    Task<IReadOnlyCollection<ExistingPriceRow>> GetExistingPricesAsync(
+        int priceGroupId, string currency, DateTime validFrom,
+        IReadOnlyCollection<PriceEntryKey> keys, CancellationToken ct);
 }

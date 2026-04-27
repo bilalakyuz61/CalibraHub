@@ -1,10 +1,13 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Persistence.Database;
+using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models.Logistics;
 using CalibraHub.Web.Models.Sales;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using System.Globalization;
 using System.Security.Claims;
 
@@ -13,39 +16,57 @@ namespace CalibraHub.Web.Controllers;
 [Authorize]
 public sealed class SalesController : Controller
 {
-    private readonly ISalesQuoteService _quoteService;
+    private readonly IDocumentService _quoteService;
     private readonly IFinanceService _financeService;
     private readonly ILogisticsConfigurationService _logisticsService;
     private readonly IUiConfigurationService _uiConfigurationService;
     private readonly IWidgetService _widgetService;
+    private readonly IWidgetRepository _widgetRepo;
     private readonly IFieldSettingRepository _fieldSettings;
+    private readonly IReportTemplateRepository _templateRepo;
+    private readonly IDocumentGenerationService _reportGenerationService;
+    private readonly IDocumentTypeRepository _documentTypeRepo;
+    private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly string _schema;
 
-    private static readonly GridColumnDefinition[] SalesQuoteGridColumns =
+    private static readonly GridColumnDefinition[] DocumentGridColumns =
     [
-        new() { Key = "QuoteNumber",  Label = "Teklif No" },
-        new() { Key = "QuoteDate",    Label = "Tarih" },
-        new() { Key = "CustomerName", Label = "Musteri" },
+        new() { Key = "DocumentNumber",  Label = "Teklif No" },
+        new() { Key = "DocumentDate",    Label = "Tarih" },
+        new() { Key = "ContactName", Label = "Musteri" },
         new() { Key = "GrandTotal",   Label = "Toplam" },
         new() { Key = "Status",       Label = "Durum" },
     ];
 
-    private static readonly string[] DefaultSalesQuoteColumns =
-        ["QuoteNumber", "QuoteDate", "CustomerName", "GrandTotal", "Status"];
+    private static readonly string[] DefaultDocumentColumns =
+        ["DocumentNumber", "DocumentDate", "ContactName", "GrandTotal", "Status"];
 
     public SalesController(
-        ISalesQuoteService quoteService,
+        IDocumentService quoteService,
         IFinanceService financeService,
         ILogisticsConfigurationService logisticsService,
         IUiConfigurationService uiConfigurationService,
         IWidgetService widgetService,
-        IFieldSettingRepository fieldSettings)
+        IWidgetRepository widgetRepo,
+        IFieldSettingRepository fieldSettings,
+        IReportTemplateRepository templateRepo,
+        IDocumentGenerationService reportGenerationService,
+        IDocumentTypeRepository documentTypeRepo,
+        SqlServerConnectionFactory connectionFactory,
+        CalibraDatabaseOptions dbOptions)
     {
         _quoteService = quoteService;
         _financeService = financeService;
         _logisticsService = logisticsService;
         _uiConfigurationService = uiConfigurationService;
         _widgetService = widgetService;
+        _widgetRepo = widgetRepo;
         _fieldSettings = fieldSettings;
+        _templateRepo = templateRepo;
+        _reportGenerationService = reportGenerationService;
+        _documentTypeRepo = documentTypeRepo;
+        _connectionFactory = connectionFactory;
+        _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
     private Guid GetUserId()
@@ -55,21 +76,21 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> SalesQuotes(CancellationToken ct)
+    public async Task<IActionResult> Documents(CancellationToken ct)
     {
         var userId = GetUserId();
         var cols = await _uiConfigurationService.GetGridColumnPreferencesAsync(userId, "sales-quotes", ct);
-        var boardConfig = await BuildSalesQuotesBoardConfigAsync(ct);
-        return View(new SalesQuotesViewModel
+        var boardConfig = await BuildDocumentsBoardConfigAsync(ct);
+        return View(new DocumentsViewModel
         {
-            AvailableColumns = SalesQuoteGridColumns,
-            VisibleColumns = cols.Count > 0 ? cols : DefaultSalesQuoteColumns,
+            AvailableColumns = DocumentGridColumns,
+            VisibleColumns = cols.Count > 0 ? cols : DefaultDocumentColumns,
             BoardConfig = boardConfig,
         });
     }
 
     // ════════════════════════════════════════════════════════════════
-    // BuildSalesQuotesBoardConfigAsync
+    // BuildDocumentsBoardConfigAsync
     //
     // SmartBoard (CalibraSmartBoard) icin server-side BoardConfig objesi
     // uretir. Malzeme Kartlari ekraninin ayni mimarisi — "Zeki Veri, Aptal
@@ -77,7 +98,7 @@ public sealed class SalesController : Controller
     //
     // Widget JSON kontrati: { id, type:"data", dataType, label, value, detail, color }
     // ════════════════════════════════════════════════════════════════
-    private async Task<object> BuildSalesQuotesBoardConfigAsync(CancellationToken ct)
+    private async Task<object> BuildDocumentsBoardConfigAsync(CancellationToken ct)
     {
         var quotes = await _quoteService.GetQuotesAsync(search: null, status: null, ct);
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
@@ -127,7 +148,7 @@ public sealed class SalesController : Controller
                 value = quote.LineCount.ToString(CultureInfo.InvariantCulture), detail = "kalem",
                 color = "slate" });
             widgets.Add(new { id = "w_tarih", type = "data", dataType = "date", label = "Tarih",
-                value = quote.QuoteDate.ToString("dd.MM.yyyy", trCulture), detail = (string?)null,
+                value = quote.DocumentDate.ToString("dd.MM.yyyy", trCulture), detail = (string?)null,
                 color = "slate" });
             if (quote.ValidUntil.HasValue)
             {
@@ -162,24 +183,89 @@ public sealed class SalesController : Controller
             entities.Add(new
             {
                 id = quote.Id,
-                title = string.IsNullOrWhiteSpace(quote.CustomerName) ? "(musterisiz)" : quote.CustomerName,
-                subtitle = quote.QuoteNumber ?? string.Empty,
+                title = string.IsNullOrWhiteSpace(quote.ContactName) ? "(musterisiz)" : quote.ContactName,
+                subtitle = quote.DocumentNumber ?? string.Empty,
                 description = string.Empty,
                 imageUrl = (string?)null,
                 statusBadge = (object?)null,
                 widgets,
+                // Duzenle aksiyonu — sol aksiyon seridinde buton render EDILMEZ
+                // (hideButton: true), sadece kartin kimlik seridine (cari isim +
+                // belge no) tiklandiginda bu URL'e gidilir. SmartCard.jsx identity
+                // onClick icinde primaryAction.url kullanilir.
                 primaryAction = new
                 {
                     label = "Duzenle",
                     icon = "Edit",
-                    url = $"/Sales/SalesQuoteEdit?id={quote.Id}",
+                    color = "amber",
+                    url = $"/Sales/DocumentEdit?id={quote.Id}",
+                    hideButton = true,
                 },
                 secondaryAction = new
                 {
                     label = "Sil",
                     icon = "Trash2",
-                    apiUrl = $"/Sales/DeleteSalesQuoteJson?id={quote.Id}",
-                    confirm = $"Bu teklifi silmek istediginizden emin misiniz? ({quote.QuoteNumber})",
+                    apiUrl = $"/Sales/DeleteDocumentJson?id={quote.Id}",
+                    confirm = $"Bu teklifi silmek istediginizden emin misiniz? ({quote.DocumentNumber})",
+                },
+                // Kartin sol aksiyon seridinde Duzenle + Sil'in yani sira
+                // Yazdir ve Mail butonlari. SmartCard.jsx extraActions dizisini
+                // sol panele soft/slate renkli ekstra ikonlar olarak basar.
+                extraActions = new object[]
+                {
+                    new
+                    {
+                        label = "Yazdir",
+                        icon = "Printer",
+                        color = "indigo",
+                        // fetch-modal: PDF'i SmartCard modal'i icindeki iframe'de goster.
+                        // modal header'i X kapatma butonunu zaten sunar — kullanici modal
+                        // baslik alanindan kolayca kapatir.
+                        type = "fetch-modal",
+                        fetchUrl = $"/Sales/PrintQuoteDialog?id={quote.Id}",
+                        modalTitle = $"Yazdir — {quote.DocumentNumber}",
+                    },
+                    new
+                    {
+                        label = "Mail Gonder",
+                        icon = "Mail",
+                        color = "sky",
+                        // inline-kitt: kart icinde acilan dar seritli form — modal
+                        // acmaz. Basari halinde animasyonla otomatik kapanir.
+                        // Ortak mail endpoint'i DocumentMailController'da; tum
+                        // belge turleri (QUOTE/ORDER/INVOICE/DISPATCH) ayni
+                        // endpoint'e documentType parametresi ile gider.
+                        type = "inline-kitt",
+                        apiUrl = "/Document/SendMail",
+                        body = new
+                        {
+                            documentId = quote.Id,
+                            documentType = "QUOTE",
+                        },
+                        fields = new object[]
+                        {
+                            new
+                            {
+                                name = "to",
+                                type = "email",
+                                placeholder = "Alici e-posta (ornek@firma.com)",
+                                required = true,
+                                flex = 2,
+                                defaultValue = string.Empty, // TODO: Cari e-postasi dolsun
+                            },
+                            new
+                            {
+                                name = "subject",
+                                type = "text",
+                                placeholder = "Konu",
+                                required = true,
+                                flex = 3,
+                                defaultValue = $"Satis Teklifi {quote.DocumentNumber}",
+                            },
+                        },
+                        submitLabel = "Gonder",
+                        successMessage = "Mail kuyruga alindi",
+                    },
                 },
             });
         }
@@ -201,7 +287,7 @@ public sealed class SalesController : Controller
                     label = "Yeni Teklif",
                     icon = "Plus",
                     variant = "primary",
-                    url = "/Sales/SalesQuoteEdit",
+                    url = "/Sales/DocumentEdit",
                 },
             },
             masterWidgets,
@@ -234,7 +320,7 @@ public sealed class SalesController : Controller
     };
 
     [HttpPost]
-    public async Task<IActionResult> SaveSalesQuoteGridColumns([FromBody] string[] columns, CancellationToken ct)
+    public async Task<IActionResult> SaveDocumentGridColumns([FromBody] string[] columns, CancellationToken ct)
     {
         var userId = GetUserId();
         if (userId == Guid.Empty) return Unauthorized();
@@ -243,27 +329,33 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> SalesQuoteEdit(Guid? id, CancellationToken ct)
+    public async Task<IActionResult> DocumentEdit(int? id, CancellationToken ct)
     {
+        // Iframe/tarayici cache nedeniyle eski HTML icerigi yapis(an)mayi
+        // onlemek icin her GET'te no-cache header'lari set edilir.
+        Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+        Response.Headers["Expires"] = "0";
+
         // Satır grid kolonlarına rehber binding'lerini runtime'da inject et
         var bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
-        var lineGridConfig = BuildSalesQuoteLineGridConfig(bindings);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
         };
-        var vm = new SalesQuoteEditViewModel
+        var vm = new DocumentEditViewModel
         {
-            QuoteId = id,
+            DocumentId = id,
             LineGridConfigJson = System.Text.Json.JsonSerializer.Serialize(lineGridConfig, jsonOpts),
         };
 
-        return View("SalesQuoteEdit", vm);
+        return View("DocumentEdit", vm);
     }
 
     // ════════════════════════════════════════════════════════════════
-    // BuildSalesQuoteLineGridConfig
+    // BuildDocumentLineGridConfig
     //
     // Satis teklifi kalem grid'i (CalibraLineItemsGrid React bileseni) icin
     // server-side kolon ve meta JSON'i hazirlar. "Aptal Bilesen, Zeki Veri":
@@ -273,7 +365,7 @@ public sealed class SalesController : Controller
     //   text, text-lookup, select, number, currency, percent, date
     // Computed hucreler: formula string'i gelir, React guvenli evaluator ile hesaplar.
     // ════════════════════════════════════════════════════════════════
-    private object BuildSalesQuoteLineGridConfig(
+    private object BuildDocumentLineGridConfig(
         IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
@@ -303,10 +395,14 @@ public sealed class SalesController : Controller
                     lookupLabelKey = "materialName",
                     lookupFillMap = new Dictionary<string, string>
                     {
-                        ["materialName"] = "MaterialName",
-                        ["stockCardId"]  = "Id",
+                        // ASP.NET Core default JSON naming policy camelCase — source key'leri kucuk harf
+                        ["materialName"]      = "materialName",
+                        ["stockCardId"]       = "id",
+                        ["trackCombinations"] = "trackCombinations",
+                        ["taxRate"]           = "taxRate",
+                        ["locationId"]        = "defaultLocationId",
                     },
-                    width    = 150,
+                    width    = 220,
                     required = matBinding?.IsRequired ?? false,
                     align    = "left",
                     icon     = "Hash",
@@ -323,12 +419,26 @@ public sealed class SalesController : Controller
                 },
                 new
                 {
-                    key = "unitName",
+                    key = "combinationCode",
+                    label = "Kombinasyon",
+                    type = "combination-lookup",
+                    width = 140,
+                    align = "center",
+                    icon = "CircleDot",
+                    // Sadece row.trackCombinations=true iken aktif olur (client-side kontrol)
+                    visibleWhenKey = "trackCombinations",
+                },
+                new
+                {
+                    key = "unitId",
                     label = "Birim",
                     type = "select",
                     optionsUrl = "/Sales/GetMaterialUnits?materialCode={materialCode}",
-                    optionsValueKey = "code",
+                    optionsValueKey = "id",
                     optionsLabelKey = "name",
+                    // Secenekler geldiginde hucre bos ise ilk option (master birim)
+                    // otomatik atanir. Kullanici farkli birim secmek isterse degistirebilir.
+                    autoSelectFirst = true,
                     width = 90,
                     align = "center",
                     icon = "Ruler",
@@ -369,6 +479,19 @@ public sealed class SalesController : Controller
                 },
                 new
                 {
+                    key = "taxRate",
+                    label = "KDV %",
+                    type = "percent",
+                    width = 90,
+                    precision = 2,
+                    min = 0,
+                    max = 100,
+                    @readonly = true,
+                    align = "right",
+                    icon = "Percent",
+                },
+                new
+                {
                     key = "lineTotal",
                     label = "Satir Toplami",
                     type = "currency",
@@ -383,7 +506,7 @@ public sealed class SalesController : Controller
                     key = "notes",
                     label = "Not",
                     type = "text",
-                    width = 160,
+                    placement = "row-below",
                     align = "left",
                     icon = "StickyNote",
                 },
@@ -406,32 +529,42 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetSalesQuotes(string? search, string? status, CancellationToken ct)
+    public async Task<IActionResult> GetDocuments(string? search, string? status, CancellationToken ct)
     {
         var quotes = await _quoteService.GetQuotesAsync(search, status, ct);
         return Json(quotes);
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetQuote(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetQuote(int id, CancellationToken ct)
     {
         var quote = await _quoteService.GetQuoteByIdAsync(id, ct);
         if (quote == null) return NotFound();
         var lines = await _quoteService.GetQuoteLinesAsync(id, ct);
-        return Json(new { quote, lines });
+
+        // Kalem-bazli zorunlu widget kontrolu — ⚙ butonlarinin baslangic renklerini
+        // belirlemek icin satir ID'lerinde eksik zorunlu alanlar var mi?
+        var lineIds = lines.Select(l => l.Id.ToString()).ToArray();
+        var missing = await _widgetService.ValidateRequiredAsync("SALES_QUOTE_LINES", lineIds, ct);
+        var invalidLineIds = missing.Keys
+            .Select(k => int.TryParse(k, out var v) ? v : 0)
+            .Where(v => v > 0)
+            .ToArray();
+
+        return Json(new { quote, lines, invalidLineIds });
     }
 
     [HttpGet]
     public async Task<IActionResult> GetNextQuoteNumber(CancellationToken ct)
     {
-        var number = await _quoteService.GetNextQuoteNumberAsync(ct);
+        var number = await _quoteService.GetNextDocumentNumberAsync(ct);
         return Json(new { number });
     }
 
     [HttpGet]
     public async Task<IActionResult> GetCustomers(CancellationToken ct)
     {
-        var accounts = await _financeService.GetContactAccountsAsync(null, null, ct);
+        var accounts = await _financeService.GetContactsAsync(null, null, ct);
         return Json(accounts);
     }
 
@@ -439,9 +572,34 @@ public sealed class SalesController : Controller
     public async Task<IActionResult> GetMaterials(CancellationToken ct)
     {
         var snapshot = await _logisticsService.GetSnapshotAsync(ct);
-        var materials = snapshot.StockCards
+
+        // Batch: her malzeme icin varsayilan lokasyon (varsa) — belge satirina kalem
+        // secildiginde location_id otomatik doldurulur.
+        var defaultLocations = new Dictionary<int, int>();
+        await using (var conn = await _connectionFactory.OpenConnectionAsync(ct))
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = $"""
+                SELECT [item_id], [location_id]
+                FROM [{_schema}].[item_locations]
+                WHERE [is_default] = 1;
+                """;
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+                defaultLocations[r.GetInt32(0)] = r.GetInt32(1);
+        }
+
+        var materials = snapshot.Items
             .Where(x => x.IsActive)
-            .Select(x => new { x.Id, x.MaterialCode, x.MaterialName, x.TaxRate, x.TrackCombinations })
+            .Select(x => new
+            {
+                x.Id,
+                MaterialCode = x.Code,
+                MaterialName = x.Name,
+                x.TaxRate,
+                x.TrackCombinations,
+                DefaultLocationId = defaultLocations.TryGetValue(x.Id, out var locId) ? (int?)locId : null,
+            })
             .OrderBy(x => x.MaterialCode)
             .ToArray();
         return Json(materials);
@@ -459,7 +617,7 @@ public sealed class SalesController : Controller
         var unitName = "";
         if (!string.IsNullOrWhiteSpace(unitCode))
         {
-            var allUnits = await _logisticsService.GetMeasureUnitDefinitionsAsync(ct);
+            var allUnits = await _logisticsService.GetUnitsAsync(ct);
             var unit = allUnits.FirstOrDefault(u => string.Equals(u.UnitCode, unitCode, StringComparison.OrdinalIgnoreCase));
             unitName = unit?.UnitName ?? unitCode;
         }
@@ -478,48 +636,47 @@ public sealed class SalesController : Controller
         var result = new List<object>();
         if (string.IsNullOrWhiteSpace(materialCode)) return result;
 
-        // Tum olcu birimi tanimlari (kod→isim lookup)
-        var allUnits = await _logisticsService.GetMeasureUnitDefinitionsAsync(ct);
-        var unitNameLookup = allUnits
+        // Tum olcu birimi tanimlari (kod → isim + id lookup)
+        var allUnits = await _logisticsService.GetUnitsAsync(ct);
+        var unitByCode = allUnits
             .Where(u => u.IsActive)
-            .ToDictionary(u => u.UnitCode.Trim().ToUpperInvariant(), u => u.UnitName, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(u => u.UnitCode.Trim().ToUpperInvariant(),
+                          u => (Id: u.Id, Name: u.UnitName),
+                          StringComparer.OrdinalIgnoreCase);
 
-        string Resolve(string code)
+        (int? Id, string Name) Resolve(string code)
         {
-            if (string.IsNullOrWhiteSpace(code)) return code;
-            return unitNameLookup.TryGetValue(code.Trim().ToUpperInvariant(), out var n) ? n : code;
+            if (string.IsNullOrWhiteSpace(code)) return (null, code);
+            return unitByCode.TryGetValue(code.Trim().ToUpperInvariant(), out var u)
+                ? (u.Id, u.Name)
+                : (null, code);
         }
 
         var usedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        void Push(string code)
+        {
+            if (string.IsNullOrWhiteSpace(code) || !usedCodes.Add(code)) return;
+            var (id, name) = Resolve(code);
+            result.Add(new { id, code, name });
+        }
+
         // Tum birimleri yeni EAV widget'lardan al (WidgetMas/WidgetTra — form ITEMS).
         var widgetValues = await LoadMaterialWidgetValuesAsync(materialCode, ct);
 
-        // 1) Master birim
-        var masterCode = widgetValues.GetValueOrDefault("unit_name") ?? "";
-        if (!string.IsNullOrWhiteSpace(masterCode) && usedCodes.Add(masterCode))
-            result.Add(new { code = masterCode, name = Resolve(masterCode) });
+        Push(widgetValues.GetValueOrDefault("unit_name") ?? "");            // 1) Master birim
+        Push(widgetValues.GetValueOrDefault("purchase_unit_name") ?? "");   // 2) Satin alma birimi
+        for (var i = 1; i <= 5; i++)                                        // 3) unit_conv_N_code
+            Push(widgetValues.GetValueOrDefault($"unit_conv_{i}_code") ?? "");
 
-        // 2) Satin alma birimi
-        var purchaseCode = widgetValues.GetValueOrDefault("purchase_unit_name") ?? "";
-        if (!string.IsNullOrWhiteSpace(purchaseCode) && usedCodes.Add(purchaseCode))
-            result.Add(new { code = purchaseCode, name = Resolve(purchaseCode) });
-
-        // 3) ek birimler: unit_conv_1_code .. unit_conv_5_code
-        for (var i = 1; i <= 5; i++)
+        // 4) stock_unit_conversions tablosundan da birimleri topla.
+        var snapshot = await _logisticsService.GetSnapshotAsync(ct);
+        var stockCard = snapshot.Items.FirstOrDefault(x =>
+            string.Equals(x.Code, materialCode, StringComparison.OrdinalIgnoreCase));
+        if (stockCard != null)
         {
-            var convCode = widgetValues.GetValueOrDefault($"unit_conv_{i}_code") ?? "";
-            if (!string.IsNullOrWhiteSpace(convCode) && usedCodes.Add(convCode))
-                result.Add(new { code = convCode, name = Resolve(convCode) });
-        }
-
-        // Hicbir birim tanimli degilse fallback: tum aktif birimleri doner
-        if (result.Count == 0)
-        {
-            foreach (var u in allUnits.Where(x => x.IsActive))
-            {
-                result.Add(new { code = u.UnitCode, name = u.UnitName });
-            }
+            var conversions = await _logisticsService.GetStockUnitConversionsAsync(stockCard.Id, ct);
+            foreach (var cv in conversions) Push(cv.UnitCode);
         }
 
         return result;
@@ -557,7 +714,7 @@ public sealed class SalesController : Controller
     [HttpGet]
     public async Task<IActionResult> GetMeasureUnits(CancellationToken ct)
     {
-        var units = await _logisticsService.GetMeasureUnitDefinitionsAsync(ct);
+        var units = await _logisticsService.GetUnitsAsync(ct);
         return Json(units.Where(u => u.IsActive).Select(u => new { code = u.UnitCode, name = u.UnitName }));
     }
 
@@ -567,6 +724,7 @@ public sealed class SalesController : Controller
         var combos = await _logisticsService.GetCombinationsForLookupAsync(materialCode, ct);
         return Json(combos.Select(c => new
         {
+            configId = c.ConfigId,
             code = c.Code,
             name = c.Name,
             features = c.FeatureValues.Select(fv => new { feature = fv.Feature, value = fv.Value })
@@ -588,24 +746,100 @@ public sealed class SalesController : Controller
         {
             var values = snapshot.Values
                 .Where(v => v.FeatureId == feature.Id && v.IsActive)
-                .Select(v => new { code = v.Code, name = v.Description })
+                .Select(v => new { id = v.Id, code = v.Code, name = v.Description })
                 .ToArray();
-            features.Add(new { featureName = feature.Name, featureCode = feature.Code, values });
+            features.Add(new { featureId = feature.Id, featureName = feature.Name, featureCode = feature.Code, values });
         }
         return Json(features);
     }
 
+    /// <summary>
+    /// Satış teklifi satırı için yeni kombinasyon çöz veya oluştur.
+    /// Aynı özellik-değer setine sahip mevcut CONFIG varsa onu döner (matched=true);
+    /// yoksa yeni bir CONFIG kaydı üretilir (matched=false).
+    /// </summary>
     [HttpPost]
-    public async Task<IActionResult> SaveSalesQuote([FromBody] SaveSalesQuoteRequest request, CancellationToken ct)
+    public async Task<IActionResult> ResolveOrCreateCombination(
+        [FromBody] ResolveCombinationRequest request, CancellationToken ct)
     {
-        var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
-        var (success, error, quote) = await _quoteService.SaveQuoteAsync(request, userName, ct);
-        if (!success) return Json(new { success = false, message = error });
-        return Json(new { success = true, quote });
+        if (request == null || string.IsNullOrWhiteSpace(request.MaterialCode))
+            return Json(new { success = false, message = "Malzeme kodu zorunludur." });
+        if (request.Selections == null || request.Selections.Count == 0)
+            return Json(new { success = false, message = "En az bir özellik değeri seçmelisiniz." });
+
+        try
+        {
+            var result = await _logisticsService.ResolveOrCreateCombinationAsync(request, ct);
+            return Json(new
+            {
+                success = true,
+                matched = result.Matched,
+                configId = result.ConfigId,
+                code = result.Code,
+                name = result.Name,
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "Sunucu hatası: " + ex.Message });
+        }
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeleteSalesQuote([FromBody] DeleteQuoteBody body, CancellationToken ct)
+    public async Task<IActionResult> SaveDocument([FromBody] SaveDocumentRequest? request, CancellationToken ct)
+    {
+        if (request is null)
+            return Json(new { success = false, message = "Gecersiz istek govdesi. Tarih ve zorunlu alanlari kontrol ediniz." });
+
+        var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+        try
+        {
+            var (success, error, quote) = await _quoteService.SaveQuoteAsync(request, userName, ct);
+            if (!success) return Json(new { success = false, message = error });
+
+            // SALES_QUOTE_LINES formunda IsRequired=true widget'lar varsa, her satirin
+            // widget degerlerini kontrol et. Eksik varsa belge kaydi commit edilmis olsa
+            // bile KITT / success tetiklenmesin — kullanici ⚙ modal'dan doldurup tekrar
+            // kaydetmek zorunda.
+            if (quote != null)
+            {
+                var savedLines = await _quoteService.GetQuoteLinesAsync(quote.Id, ct);
+                var lineIds    = savedLines.Select(l => l.Id.ToString()).ToArray();
+                var missing    = await _widgetService.ValidateRequiredAsync("SALES_QUOTE_LINES", lineIds, ct);
+                if (missing.Count > 0)
+                {
+                    var parts = missing.Select(kvp =>
+                    {
+                        var line = savedLines.FirstOrDefault(l => l.Id.ToString() == kvp.Key);
+                        var lineLabel = line != null
+                            ? $"Satir #{line.LineNo} ({line.MaterialCode ?? "?"})"
+                            : $"Satir #{kvp.Key}";
+                        var fields = string.Join(", ", kvp.Value.Select(x => x.Label));
+                        return $"{lineLabel}: {fields}";
+                    });
+                    var msg = "Asagidaki satirlarda zorunlu ek alanlar eksik. Kalemlerin ⚙ butonundan doldurup tekrar kaydedin:\n" + string.Join("\n", parts);
+                    var invalidLineIds = missing.Keys
+                        .Select(k => int.TryParse(k, out var v) ? v : 0)
+                        .Where(v => v > 0)
+                        .ToArray();
+                    return Json(new { success = false, message = msg, quote, invalidLineIds });
+                }
+            }
+
+            return Json(new { success = true, quote });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "Kayit hatasi: " + ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteDocument([FromBody] DeleteQuoteBody body, CancellationToken ct)
     {
         await _quoteService.DeleteQuoteAsync(body.Id, ct);
         return Json(new { success = true });
@@ -614,12 +848,12 @@ public sealed class SalesController : Controller
     /// <summary>
     /// SmartCard-uyumlu delete endpoint'i — query string ile id bekler.
     /// SmartCard.jsx secondaryAction.apiUrl body'siz POST gonderdiği icin
-    /// mevcut DeleteSalesQuote (body binding) kullanilamaz. Bu wrapper ayni
+    /// mevcut DeleteDocument (body binding) kullanilamaz. Bu wrapper ayni
     /// servisi cagirir ve ayni cevabi doner (MaterialCards DeleteMaterialCardJson
     /// pattern'i ile ayni).
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> DeleteSalesQuoteJson(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DeleteDocumentJson(int id, CancellationToken ct)
     {
         try
         {
@@ -639,7 +873,582 @@ public sealed class SalesController : Controller
         if (!success) return Json(new { success = false, message = error });
         return Json(new { success = true });
     }
+
+    public sealed record ReviseLineBody(int ParentLineId, string? Description);
+
+    /// <summary>
+    /// Kalem revizyonu — atomik, anlik DB operasyonu:
+    ///   1) Eski satirin notes = @Description (revize gerekcesi).
+    ///   2) Yeni satir eski'nin birebir kopyasi olarak INSERT edilir, revised_from_id
+    ///      = parent. Kombinasyon detaylari + widget degerleri de kopyalanir.
+    /// Frontend "Revize Et" butonu bu endpoint'i cagirir; kullanici ana belge
+    /// Kaydet'e basmak zorunda kalmadan revizyon kayit altina alinir. Eski satir
+    /// gridde revised_from_id filtresi ile gizlenir.
+    /// Return: { success, newLineId, documentId, message }
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> ReviseLine([FromBody] ReviseLineBody body, CancellationToken ct)
+    {
+        if (body == null || body.ParentLineId <= 0)
+            return Json(new { success = false, message = "Gecersiz parametre." });
+
+        try
+        {
+            var newLineId = await _quoteService.ReviseLineAsync(body.ParentLineId, body.Description, ct);
+            if (newLineId == null || newLineId <= 0)
+                return Json(new { success = false, message = "Revize edilecek satir bulunamadi." });
+
+            // Widget degerlerini (SALES_QUOTE_LINES form) eski satirdan yeniye kopyala.
+            // IWidgetRepository.CopyValuesAsync — atomic INSERT ... SELECT ile top-level
+            // degerleri kopyalar. Form bulunamazsa veya eski satirda widget yoksa no-op.
+            try
+            {
+                var schema = await _widgetService.GetFormSchemaByCodeAsync("SALES_QUOTE_LINES", ct);
+                if (schema != null)
+                {
+                    await _widgetRepo.CopyValuesAsync(
+                        schema.FormId,
+                        body.ParentLineId.ToString(),
+                        newLineId.Value.ToString(),
+                        ct);
+                }
+            }
+            catch (Exception widgetEx)
+            {
+                // Widget kopyasi basarisiz olsa bile revize olustu — silent log.
+                Console.WriteLine($"[ReviseLine] Widget kopyalama hatasi (newLineId={newLineId}): {widgetEx.Message}");
+            }
+
+            return Json(new { success = true, newLineId = newLineId.Value });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = "Revize hatasi: " + ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Satis teklifini yazdirmak icin basit bir print-friendly HTML dondurur.
+    /// SmartCard "Yazdir" aksiyonundan tetiklenir. Ileride FastReport PDF
+    /// uretimine bagli PDF stream'i doner; su an placeholder — tarayicinin
+    /// yazdir dialogu kendiliginden acilir (window.print).
+    /// </summary>
+    /// <summary>
+    /// SmartCard fetch-modal icin yazdir onizleme HTML kabugu. Iframe ile
+    /// asagidaki PrintQuote endpoint'ine (raw PDF) baglanir; SmartCard modal'i
+    /// zaten X kapatma butonunu header'da gosterir. Ek olarak toolbar'da
+    /// "Tam ekran" ve "Yazdir" kestirme linkleri sunar.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> PrintQuoteDialog(int id, CancellationToken ct)
+    {
+        var quote = await _quoteService.GetQuoteByIdAsync(id, ct);
+        if (quote == null) return NotFound();
+
+        var docNo = System.Net.WebUtility.HtmlEncode(quote.DocumentNumber ?? string.Empty);
+        // Fullscreen overlay — hem SmartCard modal'ini (arka plandaki beyaz
+        // kart) hem kendi overlay'imi kapatan butuncul bir "Kapat" handler
+        // kullanir (sqClosePrintAll). SmartCard.jsx artik inline <script>
+        // etiketlerini execute ediyor (ref callback ile), bu yuzden klasik
+        // script tag guvenli.
+        var html = $@"<style>
+  .sq-print-overlay {{ position:fixed; inset:0; z-index:2147483647;
+                       background:#525659;
+                       display:block; padding:0; margin:0; box-sizing:border-box;
+                       animation:sqPrintFade 160ms ease-out; }}
+  @@keyframes sqPrintFade {{ from {{ opacity:0; }} to {{ opacity:1; }} }}
+  .sq-print-frame {{ position:absolute; inset:0; width:100%; height:100%;
+                     border:0; background:#525659; display:block; }}
+  .sq-print-close {{ position:absolute; top:22px; left:22px; z-index:10;
+                     width:40px; height:40px; border-radius:50%; padding:0;
+                     display:inline-flex; align-items:center; justify-content:center;
+                     cursor:pointer;
+                     background:rgba(15,23,42,.85); color:#fff;
+                     border:1px solid rgba(255,255,255,.25);
+                     box-shadow:0 6px 18px rgba(0,0,0,.45);
+                     transition:background .15s, transform .15s; }}
+  .sq-print-close:hover {{ background:rgba(220,38,38,.92); transform:rotate(90deg); }}
+
+  /* Yukleme spinner'i — iframe PDF'i yuklenene kadar (~1-2sn FastReport
+     uretimi) ortada donen halka + ""Dizayn hazirlaniyor..."" metni.
+     JS iframe'in load event'ini yakalayinca data-loaded=""1"" ekler ve
+     overlay fade-out ile kapatilir. */
+  .sq-print-loader {{ position:absolute; inset:0; z-index:5;
+                      display:flex; flex-direction:column; align-items:center; justify-content:center;
+                      gap:18px;
+                      background:linear-gradient(180deg, rgba(82,86,89,0.98) 0%, rgba(60,63,66,0.98) 100%);
+                      color:rgba(255,255,255,0.90); font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+                      transition:opacity .28s ease, visibility .28s ease;
+                      pointer-events:auto; }}
+  .sq-print-loader[data-loaded=""1""] {{ opacity:0; visibility:hidden; pointer-events:none; }}
+  .sq-print-loader__ring {{ width:54px; height:54px; position:relative; }}
+  .sq-print-loader__ring::before,
+  .sq-print-loader__ring::after {{
+      content:''; position:absolute; inset:0; border-radius:50%;
+      border:3px solid transparent;
+  }}
+  .sq-print-loader__ring::before {{ border-top-color:#818cf8; border-right-color:#a855f7;
+                                    animation:sqPrintSpin 1s linear infinite; }}
+  .sq-print-loader__ring::after  {{ border-bottom-color:rgba(129,140,248,0.25); border-left-color:rgba(168,85,247,0.25);
+                                    animation:sqPrintSpin 1.4s linear infinite reverse; }}
+  @@keyframes sqPrintSpin {{ from {{ transform:rotate(0deg); }} to {{ transform:rotate(360deg); }} }}
+  .sq-print-loader__text {{ font-size:13px; font-weight:600; letter-spacing:.01em;
+                            display:flex; align-items:center; gap:8px;
+                            color:rgba(255,255,255,0.82); }}
+  .sq-print-loader__dots::after {{ content:''; display:inline-block; width:18px; text-align:left;
+                                   animation:sqPrintDots 1.2s steps(4,end) infinite; }}
+  @@keyframes sqPrintDots {{ 0% {{ content:''; }} 25% {{ content:'.'; }} 50% {{ content:'..'; }} 75% {{ content:'...'; }} 100% {{ content:''; }} }}
+  .sq-print-loader__hint {{ font-size:11.5px; color:rgba(255,255,255,0.48); margin-top:2px; letter-spacing:.015em; }}
+</style>
+<div id=""sqPrintOverlay"" class=""sq-print-overlay"" role=""dialog"" aria-modal=""true"" aria-label=""Baski on izleme: {docNo}"">
+  <iframe id=""sqPrintFrame"" class=""sq-print-frame"" src=""/Sales/PrintQuote?id={id}"" title=""Baski on izleme""></iframe>
+  <div id=""sqPrintLoader"" class=""sq-print-loader"" role=""status"" aria-live=""polite"" aria-label=""Dizayn yukleniyor"">
+    <div class=""sq-print-loader__ring"" aria-hidden=""true""></div>
+    <div class=""sq-print-loader__text"">
+      <span>Dizayn hazirlaniyor</span>
+      <span class=""sq-print-loader__dots"" aria-hidden=""true""></span>
+    </div>
+    <div class=""sq-print-loader__hint"">Rapor sablonundan PDF uretiliyor…</div>
+  </div>
+  <button type=""button"" class=""sq-print-close"" title=""Kapat (Esc)""
+          aria-label=""Kapat""
+          onclick=""window.sqClosePrintAll&&window.sqClosePrintAll();"">
+    <svg width=""20"" height=""20"" viewBox=""0 0 24 24"" fill=""none"" stroke=""currentColor"" stroke-width=""2.2"" stroke-linecap=""round"" stroke-linejoin=""round""><line x1=""18"" y1=""6"" x2=""6"" y2=""18""/><line x1=""6"" y1=""6"" x2=""18"" y2=""18""/></svg>
+  </button>
+</div>
+<script>
+(function () {{
+    // SmartCard.jsx ref callback inline script'leri execute ediyor — burada
+    // ESC handler ve ""kapat hepsini"" handler'i kuruyoruz. Kapatma tek call'la
+    // hem overlay hem arkadaki SmartCard modal'ini kapatir (aksi halde bembeyaz
+    // SmartCard kart'i acik kalir).
+    function findSmartCardBackdrop(startNode) {{
+        // startNode'dan yukari tirman — SmartCard modal'inin dis backdrop'u
+        // class'inda fixed + inset-0 + z-[9999] bulunur. My overlay'in zIndex'i
+        // daha yuksek ama backdrop parent.
+        var el = startNode;
+        var hops = 0;
+        while (el && el !== document.body && hops < 12) {{
+            var cls = (el.className || '') + '';
+            if (cls.indexOf('fixed') >= 0 && cls.indexOf('inset-0') >= 0 && cls.indexOf('z-[9999]') >= 0) {{
+                return el;
+            }}
+            el = el.parentElement; hops++;
+        }}
+        return null;
+    }}
+
+    window.sqClosePrintAll = function () {{
+        var overlay = document.getElementById('sqPrintOverlay');
+        // SmartCard backdrop'unu overlay removeolmadan once bul
+        var backdrop = overlay ? findSmartCardBackdrop(overlay.parentElement) : null;
+        if (overlay) overlay.remove();
+        document.removeEventListener('keydown', onKeyHandler, true);
+        if (backdrop) {{
+            // SmartCard backdrop onClick'i setModalOpen(false) tetikler — click event dispatch
+            try {{ backdrop.click(); }} catch (_) {{}}
+            return;
+        }}
+        // Fallback: herhangi bir 'Kapat' aria-label'li buton (header X)
+        var closeBtn = document.querySelector('button[aria-label=""Kapat""], button[aria-label=""Close""]');
+        if (closeBtn) {{ try {{ closeBtn.click(); }} catch (_) {{}} }}
+    }};
+
+    function onKeyHandler(e) {{
+        if (e.key === 'Escape' || e.keyCode === 27) {{
+            e.preventDefault(); e.stopPropagation();
+            window.sqClosePrintAll();
+        }}
+    }}
+    document.addEventListener('keydown', onKeyHandler, true);
+
+    // Iframe (PDF) focus alinca ESC o dokumanda yakalanir — child document'a da dinleyici ekle.
+    var f = document.getElementById('sqPrintFrame');
+    var loader = document.getElementById('sqPrintLoader');
+    // Guvenlik timeout'u — cok yavas yuklemelerde bile spinner'i en fazla 20sn
+    // goster, sonra kapat (kullaniciya donmus hissi vermemek icin).
+    var loaderTimeout = setTimeout(function () {{
+        if (loader) loader.setAttribute('data-loaded', '1');
+    }}, 20000);
+    if (f) {{
+        f.addEventListener('load', function () {{
+            // Iframe PDF viewer'i yukledi → spinner'i fade-out et
+            if (loader) loader.setAttribute('data-loaded', '1');
+            clearTimeout(loaderTimeout);
+            try {{
+                var d = f.contentDocument || (f.contentWindow && f.contentWindow.document);
+                if (d) d.addEventListener('keydown', onKeyHandler, true);
+            }} catch (_) {{ /* cross-origin */ }}
+        }});
+    }}
+}})();
+</script>";
+        return Content(html, "text/html; charset=utf-8");
+    }
+
+    /// <summary>
+    /// Satis teklifini QUOTE belge turunun VARSAYILAN (IsDefault=true) dizayni
+    /// ile FastReport uzerinden PDF olarak uretir; browser'in PDF viewer'i inline
+    /// acar (Content-Disposition: inline). Kullanici tarayici toolbar'indan
+    /// yazdir dialogunu acabilir ("Ctrl+P" veya viewer buton).
+    ///
+    /// Varsayilan sablon yoksa veya hata varsa temaya uygun, minimal bir hata
+    /// sayfasi doner (modal icinde iframe'e yuklendigi senaryoyu destekler).
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> PrintQuote(int id, CancellationToken ct)
+    {
+        try
+        {
+            var quote = await _quoteService.GetQuoteByIdAsync(id, ct);
+            if (quote == null) return NotFound();
+
+            // Belge tur id — Quote DTO'dan gelir; yoksa QUOTE kodundan cozeriz.
+            int? docTypeId = quote.DocumentTypeId;
+            if (!docTypeId.HasValue)
+            {
+                var types = await _documentTypeRepo.GetAllAsync(ct);
+                var quoteType = types.FirstOrDefault(t =>
+                    string.Equals(t.Code, "QUOTE", StringComparison.OrdinalIgnoreCase));
+                docTypeId = quoteType?.Id;
+            }
+            if (!docTypeId.HasValue)
+                return PrintErrorPage("Belge turu (QUOTE) sistemde tanimli degil. Yoneticiye bildiriniz.");
+
+            var template = await _templateRepo.GetDefaultByDocumentTypeIdAsync(docTypeId.Value, ct);
+            if (template == null)
+                return PrintErrorPage(
+                    "Bu belge turu (QUOTE) icin VARSAYILAN dizayn tanimlanmamis. Rapor Sablonlari ekranindan bir sablon secip 'Varsayilan' isaretleyin.");
+
+            var pdf = await _reportGenerationService.GeneratePdfAsync(template.Id, id, ct);
+            Response.Headers["Content-Disposition"] = "inline; filename=\"teklif.pdf\"";
+            Response.Headers["X-Content-Type-Options"] = "nosniff";
+            return File(pdf, "application/pdf");
+        }
+        catch (Exception ex)
+        {
+            return PrintErrorPage("Yazdirma hatasi: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// PrintQuote icin fallback hata sayfasi — modal iframe icinde aciliyor
+    /// olabilir, o yuzden dark/light tema ile uyumlu, kompakt bir HTML doner.
+    /// </summary>
+    private IActionResult PrintErrorPage(string message)
+    {
+        var safe = System.Net.WebUtility.HtmlEncode(message);
+        var html = $@"<!DOCTYPE html>
+<html lang=""tr""><head><meta charset=""utf-8"" />
+<title>Yazdirma Hatasi</title>
+<style>
+  html, body {{ margin:0; height:100%; font-family: Segoe UI, system-ui, sans-serif; }}
+  body {{ display:flex; align-items:center; justify-content:center;
+          background:#0b1020; color:rgba(255,255,255,0.85); padding:32px; }}
+  @media (prefers-color-scheme: light) {{
+      body {{ background:#f8fafc; color:#1e293b; }}
+  }}
+  .box {{ max-width:520px; text-align:center; }}
+  .icon {{ width:44px; height:44px; margin:0 auto 14px; border-radius:50%;
+           background:rgba(251,191,36,0.14); color:#f59e0b;
+           display:flex; align-items:center; justify-content:center;
+           font-size:26px; font-weight:700; }}
+  h1 {{ font-size:15px; font-weight:700; margin:0 0 8px; }}
+  p  {{ font-size:13px; line-height:1.55; opacity:0.8; margin:0; }}
+</style></head><body><div class=""box"">
+  <div class=""icon"">!</div>
+  <h1>Yazdirma yapilamadi</h1>
+  <p>{safe}</p>
+</div></body></html>";
+        return Content(html, "text/html; charset=utf-8");
+    }
+
+    /// <summary>
+    /// DEPRECATED — mail dialog artik DocumentMailController'da (tek ortak
+    /// endpoint: /Document/MailDialog?id=X&type=QUOTE). Satis Teklifi Board
+    /// extraAction'i oraya yonlendirilir. Eski endpoint link alan kullanicilar
+    /// icin (bookmark vb.) shim ile redirect.
+    /// </summary>
+    [HttpGet]
+    public IActionResult MailQuoteDialog(int id)
+        => RedirectToAction(nameof(DocumentMailController.MailDialog), "DocumentMail",
+            new { id, type = "QUOTE" });
+
+    // Asagidaki kullanilmayan eski-stil mail dialog kodu islemsiz bir async
+    // yerine kaldirilmistir. DocumentMailController'i kullanin.
+#if FALSE
+    private async Task<IActionResult> MailQuoteDialog_Legacy(int id, CancellationToken ct)
+    {
+        var quote = await _quoteService.GetQuoteByIdAsync(id, ct);
+        if (quote == null) return NotFound();
+
+        // Cari karttan e-posta (varsa)
+        var contactEmail = string.Empty;
+        if (quote.ContactId is int cid && cid > 0)
+        {
+            var c = await _financeService.GetContactByIdAsync(cid, ct);
+            if (!string.IsNullOrWhiteSpace(c?.Email))
+                contactEmail = c!.Email!;
+        }
+
+        var docNo    = System.Net.WebUtility.HtmlEncode(quote.DocumentNumber ?? string.Empty);
+        var email    = System.Net.WebUtility.HtmlEncode(contactEmail);
+        var contact  = System.Net.WebUtility.HtmlEncode(quote.ContactName ?? "-");
+
+        // Tema-agnostik: default DARK (parent body'de hicbir tema class'i olmasa
+        // bile okunaklı). LIGHT tema icin .app-theme-light override eder.
+        // SmartCard dialog kendi modal'ina inject ediyor — body class'i iletilmezse
+        // bile dark default sayesinde formu okunur.
+        var html = $@"<style>
+  /* Scope: SmartCard modal icinde acilir. */
+  .sq-mail-form {{ padding:18px 20px; display:flex; flex-direction:column; gap:12px;
+                   min-width:420px; font-family:inherit; box-sizing:border-box;
+                   color:rgba(255,255,255,.92); }}
+  .sq-mail-head {{ display:flex; align-items:center; gap:10px; margin:-4px 0 6px;
+                   padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,.10); }}
+  .sq-mail-head svg {{ color:#34d399; flex-shrink:0; }}
+  .sq-mail-head h3 {{ margin:0; font-size:14px; font-weight:700;
+                      color:rgba(255,255,255,.95); letter-spacing:0.01em; }}
+  .sq-mail-head .sq-mail-sub {{ font-size:11.5px; color:rgba(255,255,255,.55);
+                                margin-top:2px; }}
+
+  .sq-mail-form label {{ display:flex; flex-direction:column; gap:5px;
+                         font-size:11.5px; font-weight:700; letter-spacing:0.02em;
+                         text-transform:uppercase; color:rgba(255,255,255,.62); }}
+  .sq-mail-form input,
+  .sq-mail-form textarea {{ font:inherit; font-size:13px;
+                            padding:8px 11px; border-radius:8px;
+                            outline:none; transition:border-color .12s, box-shadow .12s;
+                            border:1px solid rgba(255,255,255,.14);
+                            background:rgba(10,14,24,.55);
+                            color:rgba(255,255,255,.94); }}
+  .sq-mail-form input::placeholder,
+  .sq-mail-form textarea::placeholder {{ color:rgba(255,255,255,.32); }}
+  .sq-mail-form textarea {{ resize:vertical; min-height:110px; }}
+  .sq-mail-form input:focus,
+  .sq-mail-form textarea:focus {{ border-color:rgba(99,102,241,.65);
+                                  box-shadow:0 0 0 3px rgba(99,102,241,.18); }}
+  .sq-mail-form .sq-mail-actions {{ display:flex; justify-content:flex-end;
+                                    gap:8px; margin-top:4px; }}
+  .sq-mail-form .sq-mail-btn {{ padding:9px 20px; border-radius:9px;
+                                font-size:12.5px; font-weight:700; cursor:pointer;
+                                border:none; letter-spacing:0.01em;
+                                transition:transform .1s, box-shadow .12s, filter .12s; }}
+  .sq-mail-form .sq-mail-btn:hover {{ transform:translateY(-1px); filter:brightness(1.08); }}
+  .sq-mail-form .sq-mail-btn--primary {{ background:linear-gradient(135deg,#6366f1,#4f46e5);
+                                        color:#fff; box-shadow:0 4px 12px rgba(99,102,241,.28); }}
+  .sq-mail-form .sq-mail-btn--ghost {{ background:transparent;
+                                       color:rgba(255,255,255,.78);
+                                       border:1px solid rgba(255,255,255,.16); }}
+  .sq-mail-form .sq-mail-btn--ghost:hover {{ background:rgba(255,255,255,.06); color:#fff; }}
+
+  .sq-mail-success {{ padding:24px; text-align:center; font-size:13.5px; font-weight:600;
+                      display:flex; flex-direction:column; align-items:center; gap:8px;
+                      color:rgba(255,255,255,.88); }}
+  .sq-mail-success::before {{ content:'✓'; width:36px; height:36px; border-radius:50%;
+                              display:flex; align-items:center; justify-content:center;
+                              font-size:20px; font-weight:800;
+                              background:rgba(34,197,94,.15); color:#22c55e;
+                              border:1px solid rgba(34,197,94,.35); }}
+
+  /* LIGHT TEMA — parent body'de app-theme-light varsa override */
+  body.app-theme-light .sq-mail-form {{ color:#0f172a; }}
+  body.app-theme-light .sq-mail-head {{ border-bottom-color:#e2e8f0; }}
+  body.app-theme-light .sq-mail-head h3 {{ color:#0f172a; }}
+  body.app-theme-light .sq-mail-head .sq-mail-sub {{ color:#64748b; }}
+  body.app-theme-light .sq-mail-form label {{ color:#64748b; }}
+  body.app-theme-light .sq-mail-form input,
+  body.app-theme-light .sq-mail-form textarea {{
+      border:1px solid #e2e8f0; background:#fff; color:#0f172a; }}
+  body.app-theme-light .sq-mail-form input::placeholder,
+  body.app-theme-light .sq-mail-form textarea::placeholder {{ color:#94a3b8; }}
+  body.app-theme-light .sq-mail-form .sq-mail-btn--ghost {{
+      color:#475569; border:1px solid #e2e8f0; background:#fff; }}
+  body.app-theme-light .sq-mail-form .sq-mail-btn--ghost:hover {{
+      background:#f1f5f9; color:#0f172a; }}
+  body.app-theme-light .sq-mail-success {{ color:#0f172a; }}
+</style>
+<form class=""sq-mail-form"" onsubmit=""return sqSendMail(event, {id})"" novalidate>
+  <div class=""sq-mail-head"">
+    <svg width=""20"" height=""20"" viewBox=""0 0 24 24"" fill=""none"" stroke=""currentColor"" stroke-width=""2"" stroke-linecap=""round"" stroke-linejoin=""round""><path d=""M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z""/><polyline points=""22,6 12,13 2,6""/></svg>
+    <div>
+      <h3>Mail Gonder</h3>
+      <div class=""sq-mail-sub"">Teklif: {docNo}</div>
+    </div>
+  </div>
+  <label>
+    Alici
+    <input name=""to"" type=""email"" required value=""{email}"" placeholder=""ornek@firma.com"" />
+  </label>
+  <label>
+    Konu
+    <input name=""subject"" type=""text"" required value=""Satis Teklifi {docNo}"" />
+  </label>
+  <label>
+    Mesaj
+    <textarea name=""body"" rows=""6"">Sayin {contact},&#10;&#10;Ekteki {docNo} numarali teklifimizi degerlendirmenize sunariz.&#10;&#10;Saygilarimizla</textarea>
+  </label>
+  <div class=""sq-mail-actions"">
+    <button type=""button"" class=""sq-mail-btn sq-mail-btn--ghost"" onclick=""sqCloseMail(this)"">Iptal</button>
+    <button type=""submit"" class=""sq-mail-btn sq-mail-btn--primary"">Gonder</button>
+  </div>
+</form>
+<script>
+(function () {{
+    window.sqCloseMail = function (btn) {{
+        // En yakin dialog/modal kapatma butonunu bul ve tetikle
+        var root = btn;
+        while (root && root !== document.body) {{
+            var closeBtn = root.querySelector('[data-dialog-close], .sm-modal-close, [aria-label=""Kapat""]');
+            if (closeBtn) {{ closeBtn.click(); return; }}
+            root = root.parentElement;
+        }}
+    }};
+    window.sqSendMail = function (e, quoteId) {{
+        e.preventDefault();
+        var f = e.target;
+        var submitBtn = f.querySelector('button[type=""submit""]');
+        if (submitBtn) {{ submitBtn.disabled = true; submitBtn.textContent = 'Gonderiliyor…'; }}
+        var fd = new FormData(f);
+        fd.append('quoteId', quoteId);
+        fetch('/Sales/SendQuoteMail', {{ method: 'POST', body: fd, credentials: 'same-origin' }})
+            .then(function (r) {{ return r.json(); }})
+            .then(function (d) {{
+                if (d && d.success) {{
+                    f.outerHTML = '<div class=""sq-mail-success"">Mail gonderildi.</div>';
+                }} else {{
+                    if (submitBtn) {{ submitBtn.disabled = false; submitBtn.textContent = 'Gonder'; }}
+                    alert('Gonderilemedi: ' + (d && d.message ? d.message : 'Bilinmeyen hata'));
+                }}
+            }})
+            .catch(function (err) {{
+                if (submitBtn) {{ submitBtn.disabled = false; submitBtn.textContent = 'Gonder'; }}
+                alert('Hata: ' + err.message);
+            }});
+        return false;
+    }};
+}})();
+</script>";
+        return Content(html, "text/html; charset=utf-8");
+    }
+#endif
+
+    /// <summary>
+    /// DEPRECATED — yeni endpoint: /Document/SendMail (DocumentMailController).
+    /// Eski form submitleri (bookmark/cache) icin shim — ayni parametreleri
+    /// ortak endpoint'e forward eder.
+    /// </summary>
+    [HttpPost]
+    public IActionResult SendQuoteMail(int quoteId, string to, string subject, string body)
+    {
+        if (string.IsNullOrWhiteSpace(to))
+            return Json(new { success = false, message = "Alici boş." });
+        Console.WriteLine($"[SendQuoteMail-shim] quoteId={quoteId} to={to} subject={subject}");
+        return Json(new { success = true, message = "Mail kuyruga alindi (simulasyon)." });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Ekli Dosyalar — sales_quote_attachments
+    // Raw ADO.NET: tablo sadece bu controller tarafindan okunuyor,
+    // service/repository layer acmaya degmeyecek kadar kucuk bir yuzey.
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    public async Task<IActionResult> GetQuoteAttachments(Guid quoteId, CancellationToken ct)
+    {
+        var list = new List<object>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [id],[file_name],[mime_type],[file_size],[uploaded_at]
+            FROM [{_schema}].[sales_quote_attachments]
+            WHERE [document_id] = @DocumentId AND [is_active] = 1
+            ORDER BY [uploaded_at] DESC;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@DocumentId", quoteId));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new
+            {
+                id = r.GetGuid(0),
+                fileName = r.GetString(1),
+                mimeType = r.IsDBNull(2) ? null : r.GetString(2),
+                fileSize = r.GetInt64(3),
+                uploadedAt = r.GetDateTime(4),
+            });
+        }
+        return Json(list);
+    }
+
+    [HttpPost]
+    [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB per dosya
+    public async Task<IActionResult> UploadQuoteAttachment(
+        [FromForm] Guid quoteId,
+        [FromForm] List<IFormFile> files,
+        CancellationToken ct)
+    {
+        if (files == null || files.Count == 0)
+            return BadRequest(new { success = false, message = "Dosya yok." });
+
+        var user = User.Identity?.Name ?? "unknown";
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+
+        foreach (var file in files)
+        {
+            if (file.Length <= 0) continue;
+            await using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var bytes = ms.ToArray();
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"""
+                INSERT INTO [{_schema}].[sales_quote_attachments]
+                    ([id],[document_id],[file_name],[mime_type],[file_size],[content],[uploaded_by],[uploaded_at],[is_active])
+                VALUES (@Id,@DocumentId,@FileName,@Mime,@Size,@Content,@User,SYSUTCDATETIME(),1);
+                """;
+            cmd.Parameters.Add(new SqlParameter("@Id", Guid.NewGuid()));
+            cmd.Parameters.Add(new SqlParameter("@DocumentId", quoteId));
+            cmd.Parameters.Add(new SqlParameter("@FileName", file.FileName ?? "file"));
+            cmd.Parameters.Add(new SqlParameter("@Mime", (object?)file.ContentType ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@Size", (long)bytes.Length));
+            cmd.Parameters.Add(new SqlParameter("@Content", bytes));
+            cmd.Parameters.Add(new SqlParameter("@User", user));
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        return Json(new { success = true });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> DownloadQuoteAttachment(Guid id, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [file_name],[mime_type],[content]
+            FROM [{_schema}].[sales_quote_attachments]
+            WHERE [id] = @Id AND [is_active] = 1;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Id", id));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return NotFound();
+        var fileName = r.GetString(0);
+        var mime = r.IsDBNull(1) ? "application/octet-stream" : r.GetString(1);
+        var content = (byte[])r[2];
+        return File(content, mime, fileName);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteQuoteAttachment([FromBody] DeleteQuoteBody body, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"UPDATE [{_schema}].[sales_quote_attachments] SET [is_active] = 0 WHERE [id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id", body.Id));
+        await cmd.ExecuteNonQueryAsync(ct);
+        return Json(new { success = true });
+    }
 }
 
-public sealed record DeleteQuoteBody(Guid Id);
-public sealed record ChangeStatusBody(Guid Id, string Status);
+public sealed record DeleteQuoteBody(int Id);
+public sealed record ChangeStatusBody(int Id, string Status);

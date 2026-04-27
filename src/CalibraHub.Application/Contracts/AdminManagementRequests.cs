@@ -2,7 +2,7 @@ using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Application.Contracts;
 
-public sealed record SaveCompanyDefinitionRequest(
+public sealed record SaveCompanyRequest(
     int? Id,
     string Name,
     string Title,

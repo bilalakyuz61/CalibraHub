@@ -182,7 +182,11 @@ public sealed class SqlGuideRepository : IGuideRepository
             for (var t = 0; t < searchTerms.Length; t++)
             {
                 var paramName = $"@Search{t}";
-                var likes = columns.Select(c => $"[{c}] LIKE {paramName} ESCAPE '^'").ToArray();
+                // CAST AS NVARCHAR: INT/DECIMAL/DATETIME gibi string olmayan kolonlarda da
+                // LIKE + COLLATE Turkish_CI_AI guvenli calisir.
+                var likes = columns.Select(c =>
+                    $"CAST([{c}] AS NVARCHAR(400)) COLLATE Turkish_CI_AI LIKE {paramName} ESCAPE '^'"
+                ).ToArray();
                 whereParts.Add("(" + string.Join(" OR ", likes) + ")");
             }
         }
@@ -234,7 +238,7 @@ public sealed class SqlGuideRepository : IGuideRepository
                     case "like":
                         var likeVal = c.Value.Trim()
                             .Replace("^", "^^").Replace("%", "^%").Replace("_", "^_").Replace("[", "^[");
-                        sqlFragment = $"[{safeField}] LIKE @cp{pIdx} ESCAPE '^'";
+                        sqlFragment = $"[{safeField}] COLLATE Turkish_CI_AI LIKE @cp{pIdx} ESCAPE '^'";
                         constraintParams.Add(($"@cp{pIdx}", "%" + likeVal + "%"));
                         pIdx++;
                         break;
@@ -679,7 +683,7 @@ public sealed class SqlGuideRepository : IGuideRepository
             }
 
             // Heuristic: GuideCode = view_adi - 'cbv_Guide_' prefix + uppercase
-            // cbv_Guide_ContactAccounts → CONTACTACCOUNTS
+            // cbv_Guide_Contacts → CONTACTACCOUNTS
             var bareName = viewName;
             if (bareName.StartsWith("cbv_Guide_", StringComparison.OrdinalIgnoreCase))
                 bareName = bareName.Substring("cbv_Guide_".Length);
@@ -777,7 +781,7 @@ public sealed class SqlGuideRepository : IGuideRepository
     }
 
     /// <summary>
-    /// "ContactAccounts" → "Contact Accounts"
+    /// "Contacts" → "Contact Accounts"
     /// "CurrencyRates" → "Currency Rates"
     /// CamelCase'i bosluklara boler. Admin UI'da guide label olarak kullanilir.
     /// </summary>

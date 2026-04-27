@@ -28,6 +28,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     private readonly string _materialGroupsTableName;
     private readonly string _materialGroupMappingsTableName;
     private readonly string _stockUnitConversionsTableName;
+    private readonly string _itemLocationsTableName;
+    private readonly string _locationTypesTableName;
 
     public SqlLogisticsConfigurationRepository(
         SqlServerConnectionFactory connectionFactory,
@@ -36,34 +38,36 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _stockCardsTableName = $"[{_schema}].[Items]";
-        _materialCardFieldGroupsTableName = $"[{_schema}].[material_card_field_groups]";
-        _materialCardFieldSettingsTableName = $"[{_schema}].[material_card_field_settings]";
+        _materialCardFieldGroupsTableName = $"[{_schema}].[FieldGroup]";
+        _materialCardFieldSettingsTableName = $"[{_schema}].[Field]";
         _materialCardFieldOptionsTableName = $"[{_schema}].[material_card_field_options]";
-        _propertiesTableName = $"[{_schema}].[configuration_properties]";
-        _propertyValuesTableName = $"[{_schema}].[configuration_property_values]";
+        _propertiesTableName = $"[{_schema}].[Feature]";
+        _propertyValuesTableName = $"[{_schema}].[FeatureValue]";
         _stockPropertyMappingsTableName = $"[{_schema}].[stock_card_property_mappings]";
         _productConfigurationTableName = $"[{_schema}].[ProductConfiguration]";
-        _warehouseLocationsTableName = $"[{_schema}].[WarehouseLocations]";
-        _measureUnitDefinitionsTableName = $"[{_schema}].[measure_unit_definitions]";
-        _productTreesTableName = $"[{_schema}].[ProductTrees]";
-        _productTreeLinesTableName = $"[{_schema}].[ProductTreeLines]";
+        _warehouseLocationsTableName = $"[{_schema}].[Location]";
+        _measureUnitDefinitionsTableName = $"[{_schema}].[Unit]";
+        _productTreesTableName = $"[{_schema}].[BOM]";
+        _productTreeLinesTableName = $"[{_schema}].[BOMLine]";
         _materialGroupsTableName    = $"[{_schema}].[MaterialGroups]";
         _materialGroupMappingsTableName = $"[{_schema}].[MaterialGroupMappings]";
         _stockUnitConversionsTableName = $"[{_schema}].[stock_unit_conversions]";
+        _itemLocationsTableName = $"[{_schema}].[item_locations]";
+        _locationTypesTableName = $"[{_schema}].[location_types]";
     }
 
-    public async Task<IReadOnlyCollection<StockCard>> GetStockCardsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<Item>> GetItemsAsync(CancellationToken cancellationToken)
     {
-        var stockCards = new List<StockCard>();
+        var stockCards = new List<Item>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
 
         command.CommandText = $"""
             SELECT [id],
-                   [material_code],
-                   [material_name],
-                   [material_description],
+                   [code],
+                   [name],
+                   [description],
                    [is_active],
                    [created_at],
                    [created_by_user_id],
@@ -73,20 +77,20 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [image_mime_type],
                    [track_combinations],
                    ISNULL([tax_rate], 20) AS [tax_rate],
-                   [material_type_id]
+                   [type_id]
             FROM {_stockCardsTableName}
-            ORDER BY [material_code];
+            ORDER BY [code];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var stockCard = new StockCard
+            var stockCard = new Item
             {
                 Id = reader.GetInt32(0),
-                MaterialCode = reader.GetString(1),
-                MaterialName = reader.GetString(2),
-                MaterialDescription = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
                 CreatedDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
                 CreatedByUserId = reader.IsDBNull(6) ? null : reader.GetInt32(6),
                 ModifiedDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
@@ -95,7 +99,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 ImageMimeType = reader.IsDBNull(10) ? null : reader.GetString(10),
                 TrackCombinations = !reader.IsDBNull(11) && reader.GetBoolean(11),
                 TaxRate = reader.IsDBNull(12) ? 20m : reader.GetDecimal(12),
-                MaterialTypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
+                TypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
             };
 
             if (!reader.GetBoolean(4))
@@ -109,10 +113,75 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return stockCards;
     }
 
-    public async Task<IReadOnlyCollection<MaterialCardFieldGroup>> GetMaterialCardFieldGroupsAsync(
+    public async Task<(IReadOnlyCollection<Item> Items, int TotalCount)> GetItemsPagedAsync(
+        string? search, int offset, int pageSize, CancellationToken cancellationToken)
+    {
+        var items = new List<Item>();
+        var totalCount = 0;
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+
+        var where = "WHERE [is_active] = 1";
+        if (!string.IsNullOrWhiteSpace(search))
+            where += " AND ([code] LIKE @Search OR [name] LIKE @Search)";
+
+        cmd.CommandText = $"""
+            SELECT [id], [code], [name], [description],
+                   [is_active], [created_at], [created_by_user_id], [modified_at],
+                   [modified_by_user_id], [image_data], [image_mime_type],
+                   [track_combinations], ISNULL([tax_rate], 20) AS [tax_rate], [type_id],
+                   COUNT(*) OVER() AS [_TotalCount]
+            FROM {_stockCardsTableName}
+            {where}
+            ORDER BY [code]
+            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+            """;
+
+        if (!string.IsNullOrWhiteSpace(search))
+            cmd.Parameters.Add(new SqlParameter("@Search", $"%{search}%"));
+        cmd.Parameters.Add(new SqlParameter("@Offset", offset));
+        cmd.Parameters.Add(new SqlParameter("@PageSize", pageSize));
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var card = new Item
+            {
+                Id = reader.GetInt32(0),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
+                CreatedDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                CreatedByUserId = reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                ModifiedDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                ModifiedByUserId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                ImageData = reader.IsDBNull(9) ? null : (byte[])reader.GetValue(9),
+                ImageMimeType = reader.IsDBNull(10) ? null : reader.GetString(10),
+                TrackCombinations = !reader.IsDBNull(11) && reader.GetBoolean(11),
+                TaxRate = reader.IsDBNull(12) ? 20m : reader.GetDecimal(12),
+                TypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
+            };
+            if (!reader.GetBoolean(4)) card.Deactivate();
+            items.Add(card);
+            if (totalCount == 0) totalCount = reader.GetInt32(14);
+        }
+
+        if (items.Count == 0)
+        {
+            await using var countCmd = connection.CreateCommand();
+            countCmd.CommandText = $"SELECT COUNT(*) FROM {_stockCardsTableName} {where};";
+            if (!string.IsNullOrWhiteSpace(search))
+                countCmd.Parameters.Add(new SqlParameter("@Search", $"%{search}%"));
+            totalCount = (int)(await countCmd.ExecuteScalarAsync(cancellationToken))!;
+        }
+
+        return (items, totalCount);
+    }
+
+    public async Task<IReadOnlyCollection<FieldGroup>> GetFieldGroupsAsync(
         CancellationToken cancellationToken)
     {
-        var groups = new List<MaterialCardFieldGroup>();
+        var groups = new List<FieldGroup>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -125,7 +194,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var group = new MaterialCardFieldGroup
+            var group = new FieldGroup
             {
                 Id = reader.GetGuid(0),
                 GroupKey = reader.GetString(1),
@@ -244,7 +313,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return options;
     }
 
-    public async Task UpsertMaterialCardFieldGroupAsync(MaterialCardFieldGroup group, CancellationToken cancellationToken)
+    public async Task UpsertFieldGroupAsync(FieldGroup group, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -385,10 +454,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<MaterialCardFieldSetting>> GetMaterialCardFieldSettingsAsync(
+    public async Task<IReadOnlyCollection<Field>> GetFieldsAsync(
         CancellationToken cancellationToken)
     {
-        var settings = new List<MaterialCardFieldSetting>();
+        var settings = new List<Field>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -401,7 +470,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            settings.Add(new MaterialCardFieldSetting
+            settings.Add(new Field
             {
                 Id = reader.GetGuid(0),
                 FieldKey = reader.GetString(1),
@@ -417,8 +486,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return settings;
     }
 
-    public async Task UpsertMaterialCardFieldSettingsAsync(
-        IReadOnlyCollection<MaterialCardFieldSetting> settings,
+    public async Task UpsertFieldsAsync(
+        IReadOnlyCollection<Field> settings,
         CancellationToken cancellationToken)
     {
         if (settings.Count == 0)
@@ -469,9 +538,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<ConfigurationProperty>> GetPropertiesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<Feature>> GetPropertiesAsync(CancellationToken cancellationToken)
     {
-        var properties = new List<ConfigurationProperty>();
+        var properties = new List<Feature>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -491,7 +560,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 dataType = ConfigurationFieldDataType.Text;
             }
 
-            var property = new ConfigurationProperty
+            var property = new Feature
             {
                 Id = reader.GetGuid(0),
                 Code = reader.GetString(1),
@@ -511,22 +580,22 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return properties;
     }
 
-    public async Task<IReadOnlyCollection<ConfigurationPropertyValue>> GetPropertyValuesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<FeatureValue>> GetPropertyValuesAsync(CancellationToken cancellationToken)
     {
-        var values = new List<ConfigurationPropertyValue>();
+        var values = new List<FeatureValue>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [property_id], [code], [description], [value], [sort_order], [is_active], [created_at]
+            SELECT [id], [feature_id], [code], [description], [value], [sort_order], [is_active], [created_at]
             FROM {_propertyValuesTableName}
-            ORDER BY [property_id], [sort_order], [code];
+            ORDER BY [feature_id], [sort_order], [code];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var value = new ConfigurationPropertyValue
+            var value = new FeatureValue
             {
                 Id = reader.GetGuid(0),
                 PropertyId = reader.GetGuid(1),
@@ -548,14 +617,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return values;
     }
 
-    public async Task<IReadOnlyCollection<StockCardPropertyMapping>> GetStockPropertyMappingsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<ItemPropertyMapping>> GetStockPropertyMappingsAsync(CancellationToken cancellationToken)
     {
-        var mappings = new List<StockCardPropertyMapping>();
+        var mappings = new List<ItemPropertyMapping>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [stock_card_id], [property_id], [property_value_id], [configuration_code], [text_value], [numeric_value], [date_value], [is_active], [created_at]
+            SELECT [id], [item_id], [property_id], [property_value_id], [configuration_code], [text_value], [numeric_value], [date_value], [is_active], [created_at]
             FROM {_stockPropertyMappingsTableName}
             ORDER BY [created_at] DESC;
             """;
@@ -563,10 +632,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var mapping = new StockCardPropertyMapping
+            var mapping = new ItemPropertyMapping
             {
                 Id = reader.GetGuid(0),
-                StockCardId = reader.GetInt32(1),
+                ItemId = reader.GetInt32(1),
                 PropertyId = reader.GetGuid(2),
                 PropertyValueId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
                 ConfigurationCode = reader.IsDBNull(4) ? null : reader.GetString(4),
@@ -595,7 +664,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [Id], [ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]
+            SELECT [Id], [ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate], [VisibleInDesign]
             FROM {_productConfigurationTableName}
             ORDER BY [RecordType], [ParentId], [RecordCode], [Id];
             """;
@@ -613,59 +682,61 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 DataType = reader.IsDBNull(5) ? null : reader.GetString(5),
                 RelatedMaterialCode = reader.IsDBNull(6) ? null : reader.GetString(6),
                 IsActive = reader.GetBoolean(7),
-                CreatedDate = reader.GetDateTime(8)
+                CreatedDate = reader.GetDateTime(8),
+                VisibleInDesign = reader.GetBoolean(9)
             });
         }
 
         return records;
     }
 
-    public async Task<IReadOnlyCollection<MeasureUnitDefinition>> GetMeasureUnitDefinitionsAsync(
+    public async Task<IReadOnlyCollection<Unit>> GetUnitsAsync(
         CancellationToken cancellationToken)
     {
-        var definitions = new List<MeasureUnitDefinition>();
+        var definitions = new List<Unit>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // IntlCode kolonu varsa dahil et
+        var useIntlCode = true;
         command.CommandText = $"""
-            SELECT [Id], [UnitCode], [UnitName], [SortOrder], [IsActive],
-                   CASE WHEN COL_LENGTH('{_schema}.measure_unit_definitions','IntlCode') IS NOT NULL THEN NULL ELSE NULL END
+            SELECT [Id], [UnitCode], [UnitName], [SortOrder], [IsActive], [IntlCode]
             FROM {_measureUnitDefinitionsTableName}
             ORDER BY [SortOrder], [UnitCode];
             """;
 
-        // IntlCode kolonunu güvenli oku (eski DB'lerde olmayabilir)
-        var hasIntlCode = false;
+        SqlDataReader reader;
         try
         {
-            await using var schemaCmd = connection.CreateCommand();
-            schemaCmd.CommandText = $"SELECT COL_LENGTH('{_schema}.measure_unit_definitions','IntlCode')";
-            var result = await schemaCmd.ExecuteScalarAsync(cancellationToken);
-            hasIntlCode = result != null && result != DBNull.Value;
+            reader = await command.ExecuteReaderAsync(cancellationToken);
         }
-        catch { /* ignore */ }
-
-        if (hasIntlCode)
+        catch (SqlException)
         {
-            command.CommandText = $"""
-                SELECT [Id], [UnitCode], [UnitName], [SortOrder], [IsActive], [IntlCode]
+            // IntlCode kolonu henuz yoksa fallback
+            useIntlCode = false;
+            await using var cmd2 = connection.CreateCommand();
+            cmd2.CommandText = $"""
+                SELECT [Id], [UnitCode], [UnitName], [SortOrder], [IsActive]
                 FROM {_measureUnitDefinitionsTableName}
                 ORDER BY [SortOrder], [UnitCode];
                 """;
+            reader = await cmd2.ExecuteReaderAsync(cancellationToken);
         }
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        await using (reader)
         {
-            definitions.Add(new MeasureUnitDefinition
+            while (await reader.ReadAsync(cancellationToken))
             {
-                Id = reader.GetInt32(0),
-                UnitCode = reader.GetString(1),
-                UnitName = reader.GetString(2),
-                SortOrder = reader.GetInt32(3),
-                IsActive = reader.GetBoolean(4),
-                IntlCode = hasIntlCode && !reader.IsDBNull(5) ? reader.GetString(5) : null,
-            });
+                definitions.Add(new Unit
+                {
+                    Id = reader.GetInt32(0),
+                    UnitCode = reader.GetString(1),
+                    UnitName = reader.GetString(2),
+                    SortOrder = reader.GetInt32(3),
+                    IsActive = reader.GetBoolean(4),
+                    IntlCode = useIntlCode && !reader.IsDBNull(5) ? reader.GetString(5) : null,
+                });
+            }
         }
 
         return definitions;
@@ -676,6 +747,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         string dataType,
         bool isActive,
         string? unitOfMeasure,
+        bool visibleInDesign,
         CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
@@ -695,9 +767,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET @GeneratedCode = N'OZ' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
             INSERT INTO {_productConfigurationTableName}
-                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
+                ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [VisibleInDesign], [CreatedDate])
             VALUES
-                (NULL, N'FEATURE', @GeneratedCode, @RecordName, @DataType, @UnitOfMeasure, @IsActive, GETDATE());
+                (NULL, N'FEATURE', @GeneratedCode, @RecordName, @DataType, @UnitOfMeasure, @IsActive, @VisibleInDesign, GETDATE());
 
             SELECT CAST(SCOPE_IDENTITY() AS INT) AS [Id], @GeneratedCode AS [Code];
 
@@ -708,6 +780,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@DataType", dataType));
         command.Parameters.Add(new SqlParameter("@IsActive", isActive));
         command.Parameters.Add(new SqlParameter("@UnitOfMeasure", (object?)unitOfMeasure ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@VisibleInDesign", visibleInDesign));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -828,8 +901,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         sql.AppendLine("BEGIN TRANSACTION;");
         sql.AppendLine("DECLARE @NextNo INT;");
         sql.AppendLine("DECLARE @GeneratedCode NVARCHAR(100);");
-        sql.AppendLine($"SELECT @NextNo = ISNULL(MAX(TRY_CAST(RIGHT([RecordCode], 3) AS INT)), 0) + 1 FROM {_productConfigurationTableName} WITH (UPDLOCK, HOLDLOCK) WHERE [RecordType] = N'CONFIG' AND [RelatedMaterialCode] = @RelatedMaterialCode AND LEFT([RecordCode], LEN(@RelatedMaterialCode) + 1) = @RelatedMaterialCode + N'-';");
-        sql.AppendLine("SET @GeneratedCode = @RelatedMaterialCode + N'-' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);");
+        // Global sayac: CMB + 12 haneli sifir-dolgulu sira no (toplam 15 karakter)
+        sql.AppendLine($"SELECT @NextNo = ISNULL(MAX(TRY_CAST(SUBSTRING([RecordCode], 4, 12) AS INT)), 0) + 1 FROM {_productConfigurationTableName} WITH (UPDLOCK, HOLDLOCK) WHERE [RecordType] = N'CONFIG' AND LEFT([RecordCode], 3) = N'CMB' AND LEN([RecordCode]) = 15;");
+        sql.AppendLine("SET @GeneratedCode = N'CMB' + RIGHT(REPLICATE(N'0', 12) + CAST(@NextNo AS NVARCHAR(12)), 12);");
         sql.AppendLine($"INSERT INTO {_productConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]) VALUES (NULL, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());");
         sql.AppendLine("DECLARE @ConfigId INT = SCOPE_IDENTITY();");
 
@@ -898,7 +972,53 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, CancellationToken cancellationToken)
+    /// <summary>
+    /// Bir stok kartina (MaterialCode) bagli FEATURE_STOCK kayitlarini tamamen replace eder.
+    /// stockCode icin mevcut tum FEATURE_STOCK kayitlari silinir, sonra verilen featureIds icin yeni kayitlar eklenir.
+    /// </summary>
+    public async Task ReplaceStockFeatureLinksAsync(string stockCode, (int FeatureId, bool PrintDescriptionInDesign)[] items, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(stockCode))
+            throw new ArgumentException("Stok kodu zorunludur.", nameof(stockCode));
+        var normalizedCode = stockCode.Trim().ToUpperInvariant();
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        var sql = new StringBuilder();
+
+        sql.AppendLine("BEGIN TRANSACTION;");
+        sql.AppendLine($"""
+            DELETE FROM {_productConfigurationTableName}
+            WHERE [RecordType] = N'FEATURE_STOCK'
+              AND UPPER(LTRIM(RTRIM([RelatedMaterialCode]))) = @StockCode;
+            """);
+        command.Parameters.Add(new SqlParameter("@StockCode", normalizedCode));
+
+        // (FeatureId, PrintDescriptionInDesign) — ayni featureId birden fazla kez gelirse son deger gecerli
+        var distinctItems = (items ?? Array.Empty<(int, bool)>())
+            .Where(x => x.FeatureId > 0)
+            .GroupBy(x => x.FeatureId)
+            .Select(g => (FeatureId: g.Key, PrintDescriptionInDesign: g.Last().PrintDescriptionInDesign))
+            .ToArray();
+
+        for (var i = 0; i < distinctItems.Length; i++)
+        {
+            sql.AppendLine($"""
+                INSERT INTO {_productConfigurationTableName}
+                    ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate], [VisibleInDesign])
+                VALUES
+                    (@FeatureId{i}, N'FEATURE_STOCK', @StockCode, @StockCode, NULL, @StockCode, 1, GETDATE(), @PrintDesc{i});
+                """);
+            command.Parameters.Add(new SqlParameter($"@FeatureId{i}", distinctItems[i].FeatureId));
+            command.Parameters.Add(new SqlParameter($"@PrintDesc{i}", distinctItems[i].PrintDescriptionInDesign));
+        }
+
+        sql.AppendLine("COMMIT TRANSACTION;");
+        command.CommandText = sql.ToString();
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, bool visibleInDesign, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -906,7 +1026,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             UPDATE {_productConfigurationTableName}
             SET [RecordName]          = @RecordName,
                 [DataType]            = @DataType,
-                [RelatedMaterialCode] = @UnitOfMeasure
+                [RelatedMaterialCode] = @UnitOfMeasure,
+                [VisibleInDesign]     = @VisibleInDesign
             WHERE [Id] = @Id
               AND [RecordType] = N'FEATURE';
             """;
@@ -915,6 +1036,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@RecordName", name));
         command.Parameters.Add(new SqlParameter("@DataType", dataType));
         command.Parameters.Add(new SqlParameter("@UnitOfMeasure", (object?)unitOfMeasure ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@VisibleInDesign", visibleInDesign));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1013,9 +1135,23 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<WarehouseLocation>> GetWarehouseLocationsAsync(CancellationToken cancellationToken)
+    public async Task UpdateProductConfigDescriptionAsync(int id, string? description, CancellationToken cancellationToken)
     {
-        var locations = new List<WarehouseLocation>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_productConfigurationTableName}
+            SET [RecordName] = @RecordName
+            WHERE [RecordType] = N'CONFIG' AND [Id] = @Id AND [ParentId] IS NULL;
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@RecordName", (object?)description ?? DBNull.Value));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Location>> GetLocationsAsync(CancellationToken cancellationToken)
+    {
+        var locations = new List<Location>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1036,7 +1172,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            locations.Add(new WarehouseLocation
+            locations.Add(new Location
             {
                 Id = reader.GetInt32(0),
                 ParentId = reader.IsDBNull(1) ? null : reader.GetInt32(1),
@@ -1053,22 +1189,22 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return locations;
     }
 
-    public async Task<int> AddStockCardAsync(StockCard stockCard, CancellationToken cancellationToken)
+    public async Task<int> AddItemAsync(Item stockCard, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockCardsTableName}
-                ([material_code], [material_name], [material_description], [material_type_id], [is_active], [created_at], [created_by_user_id], [image_data], [image_mime_type], [track_combinations], [tax_rate], [updated_at])
+                ([code], [name], [description], [type_id], [is_active], [created_at], [created_by_user_id], [image_data], [image_mime_type], [track_combinations], [tax_rate], [updated_at])
             VALUES
-                (@MaterialCode, @MaterialName, @MaterialDescription, @MaterialTypeId, @IsActive, @CreatedDate, @CreatedByUserId, @ImageData, @ImageMimeType, @TrackCombinations, @TaxRate, GETDATE());
+                (@Code, @Name, @Description, @TypeId, @IsActive, @CreatedDate, @CreatedByUserId, @ImageData, @ImageMimeType, @TrackCombinations, @TaxRate, GETDATE());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
-        command.Parameters.Add(new SqlParameter("@MaterialCode", stockCard.MaterialCode));
-        command.Parameters.Add(new SqlParameter("@MaterialName", stockCard.MaterialName));
-        command.Parameters.Add(new SqlParameter("@MaterialDescription", (object?)stockCard.MaterialDescription ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@MaterialTypeId", (object?)stockCard.MaterialTypeId ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@Code", stockCard.Code));
+        command.Parameters.Add(new SqlParameter("@Name", stockCard.Name));
+        command.Parameters.Add(new SqlParameter("@Description", (object?)stockCard.Description ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@TypeId", (object?)stockCard.TypeId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", stockCard.IsActive ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@CreatedDate", (object?)stockCard.CreatedDate ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@CreatedByUserId", (object?)stockCard.CreatedByUserId ?? DBNull.Value));
@@ -1082,17 +1218,17 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
 
-    public async Task UpdateStockCardAsync(StockCard stockCard, CancellationToken cancellationToken)
+    public async Task UpdateItemAsync(Item stockCard, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_stockCardsTableName}
             SET
-                [material_code] = @MaterialCode,
-                [material_name] = @MaterialName,
-                [material_description] = @MaterialDescription,
-                [material_type_id] = @MaterialTypeId,
+                [code] = @Code,
+                [name] = @Name,
+                [description] = @Description,
+                [type_id] = @TypeId,
                 [modified_at] = @ModifiedDate,
                 [modified_by_user_id] = @ModifiedByUserId,
                 [track_combinations] = @TrackCombinations,
@@ -1104,10 +1240,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", stockCard.Id));
-        command.Parameters.Add(new SqlParameter("@MaterialCode", stockCard.MaterialCode));
-        command.Parameters.Add(new SqlParameter("@MaterialName", stockCard.MaterialName));
-        command.Parameters.Add(new SqlParameter("@MaterialDescription", (object?)stockCard.MaterialDescription ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@MaterialTypeId", (object?)stockCard.MaterialTypeId ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@Code", stockCard.Code));
+        command.Parameters.Add(new SqlParameter("@Name", stockCard.Name));
+        command.Parameters.Add(new SqlParameter("@Description", (object?)stockCard.Description ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@TypeId", (object?)stockCard.TypeId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@ModifiedDate", (object?)stockCard.ModifiedDate ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@ModifiedByUserId", (object?)stockCard.ModifiedByUserId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@UpdateImage", stockCard.ImageData != null ? 1 : 0));
@@ -1121,7 +1257,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task UpdateStockCardActiveStatusAsync(int stockCardId, bool isActive, CancellationToken cancellationToken)
+    public async Task UpdateItemActiveStatusAsync(int stockCardId, bool isActive, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1141,7 +1277,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task DeleteStockCardAsync(int stockCardId, CancellationToken cancellationToken)
+    public async Task DeleteItemAsync(int stockCardId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
@@ -1151,9 +1287,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             deleteMappingsCommand.Transaction = transaction;
             deleteMappingsCommand.CommandText = $"""
                 DELETE FROM {_stockPropertyMappingsTableName}
-                WHERE [stock_card_id] = @StockCardId;
+                WHERE [item_id] = @ItemId;
                 """;
-            deleteMappingsCommand.Parameters.Add(new SqlParameter("@StockCardId", stockCardId));
+            deleteMappingsCommand.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
             await deleteMappingsCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -1162,16 +1298,16 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             deleteMaterialCardCommand.Transaction = transaction;
             deleteMaterialCardCommand.CommandText = $"""
                 DELETE FROM {_stockCardsTableName}
-                WHERE [id] = @StockCardId;
+                WHERE [id] = @ItemId;
                 """;
-            deleteMaterialCardCommand.Parameters.Add(new SqlParameter("@StockCardId", stockCardId));
+            deleteMaterialCardCommand.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
             await deleteMaterialCardCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task UpdateStockCardConfigurableStatusAsync(int stockCardId, bool isConfigurable, CancellationToken cancellationToken)
+    public async Task UpdateItemConfigurableStatusAsync(int stockCardId, bool isConfigurable, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1188,7 +1324,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task AddWarehouseLocationAsync(WarehouseLocation location, CancellationToken cancellationToken)
+    public async Task AddLocationAsync(Location location, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1211,7 +1347,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task UpdateWarehouseLocationAsync(WarehouseLocation location, CancellationToken cancellationToken)
+    public async Task UpdateLocationAsync(Location location, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1242,7 +1378,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task DeleteWarehouseLocationAsync(int locationId, CancellationToken cancellationToken)
+    public async Task DeleteLocationAsync(int locationId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1255,7 +1391,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task AddMeasureUnitDefinitionAsync(MeasureUnitDefinition definition, CancellationToken cancellationToken)
+    public async Task AddUnitAsync(Unit definition, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1278,7 +1414,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task UpdateMeasureUnitDefinitionAsync(MeasureUnitDefinition definition, CancellationToken cancellationToken)
+    public async Task UpdateUnitAsync(Unit definition, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1305,7 +1441,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task DeleteMeasureUnitDefinitionAsync(int id, CancellationToken cancellationToken)
+    public async Task DeleteUnitAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1322,21 +1458,22 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     {
         var results = new List<StockUnitConversion>();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureStockUnitConversionsTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[stock_card_id],[line_no],[unit_code],[multiplier]
+            SELECT [id],[item_id],[line_no],[unit_code],[multiplier]
             FROM {_stockUnitConversionsTableName}
-            WHERE [stock_card_id] = @StockCardId
+            WHERE [item_id] = @ItemId
             ORDER BY [line_no];
             """;
-        cmd.Parameters.Add(new SqlParameter("@StockCardId", stockCardId));
+        cmd.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             results.Add(new StockUnitConversion
             {
                 Id = reader.GetInt32(0),
-                StockCardId = reader.GetInt32(1),
+                ItemId = reader.GetInt32(1),
                 LineNo = reader.GetInt32(2),
                 UnitCode = reader.GetString(3),
                 Multiplier = reader.GetDecimal(4),
@@ -1345,15 +1482,43 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return results;
     }
 
+    /// <summary>
+    /// Per-company DB'de tablonun var olmadigi durumda idempotent olarak yaratir.
+    /// CalibraDatabaseInitializer startup'ta ana DB'de yaratiyor, fakat per-company
+    /// DB baglandiginda tablo yok ise Invalid object name (208) hatasi aliniyor.
+    /// </summary>
+    private async Task EnsureStockUnitConversionsTableAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s = _schema.Replace("]", "]]");
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            IF OBJECT_ID(N'[{s}].[stock_unit_conversions]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[stock_unit_conversions]
+                (
+                    [id]            INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [item_id] INT               NOT NULL,
+                    [line_no]       INT               NOT NULL,
+                    [unit_code]     NVARCHAR(20)      NOT NULL,
+                    [multiplier]    DECIMAL(18,6)     NOT NULL DEFAULT(1)
+                );
+                CREATE UNIQUE INDEX [ux_stock_unit_conversions_card_line]
+                    ON [{s}].[stock_unit_conversions]([item_id], [line_no]);
+            END;
+            """;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task SaveStockUnitConversionsAsync(int stockCardId, IReadOnlyCollection<StockUnitConversion> conversions, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureStockUnitConversionsTableAsync(connection, cancellationToken);
 
         // Mevcut satirlari sil
         await using (var delCmd = connection.CreateCommand())
         {
-            delCmd.CommandText = $"DELETE FROM {_stockUnitConversionsTableName} WHERE [stock_card_id] = @StockCardId;";
-            delCmd.Parameters.Add(new SqlParameter("@StockCardId", stockCardId));
+            delCmd.CommandText = $"DELETE FROM {_stockUnitConversionsTableName} WHERE [item_id] = @ItemId;";
+            delCmd.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
             await delCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -1365,10 +1530,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = $"""
                 INSERT INTO {_stockUnitConversionsTableName}
-                    ([stock_card_id],[line_no],[unit_code],[multiplier])
-                VALUES (@StockCardId, @LineNo, @UnitCode, @Multiplier);
+                    ([item_id],[line_no],[unit_code],[multiplier])
+                VALUES (@ItemId, @LineNo, @UnitCode, @Multiplier);
                 """;
-            cmd.Parameters.Add(new SqlParameter("@StockCardId", stockCardId));
+            cmd.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
             cmd.Parameters.Add(new SqlParameter("@LineNo", lineNo));
             cmd.Parameters.Add(new SqlParameter("@UnitCode", c.UnitCode));
             cmd.Parameters.Add(new SqlParameter("@Multiplier", c.Multiplier));
@@ -1376,7 +1541,219 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         }
     }
 
-    public async Task AddPropertyAsync(ConfigurationProperty property, CancellationToken cancellationToken)
+    // ── Item Locations (malzeme-lokasyon cok-cogu) ─────────────────────────
+
+    private async Task EnsureItemLocationsTableAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s = _schema.Replace("]", "]]");
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            IF OBJECT_ID(N'[{s}].[item_locations]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[item_locations]
+                (
+                    [id]          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [item_id]     INT NOT NULL,
+                    [location_id] INT NOT NULL,
+                    [is_default]  BIT NOT NULL DEFAULT(0),
+                    [sort_order]  INT NOT NULL DEFAULT(0)
+                );
+                CREATE UNIQUE INDEX [ux_item_locations_item_location]
+                    ON [{s}].[item_locations]([item_id], [location_id]);
+                CREATE UNIQUE INDEX [ux_item_locations_item_default]
+                    ON [{s}].[item_locations]([item_id])
+                    WHERE [is_default] = 1;
+                CREATE INDEX [ix_item_locations_location]
+                    ON [{s}].[item_locations]([location_id]);
+            END;
+            """;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyCollection<ItemLocation>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken)
+    {
+        var results = new List<ItemLocation>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [id],[item_id],[location_id],[is_default],[sort_order]
+            FROM {_itemLocationsTableName}
+            WHERE [item_id] = @ItemId
+            ORDER BY [sort_order], [id];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new ItemLocation
+            {
+                Id = reader.GetInt32(0),
+                ItemId = reader.GetInt32(1),
+                LocationId = reader.GetInt32(2),
+                IsDefault = reader.GetBoolean(3),
+                SortOrder = reader.GetInt32(4),
+            });
+        }
+        return results;
+    }
+
+    public async Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<ItemLocation> locations, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureItemLocationsTableAsync(connection, cancellationToken);
+
+        // Strateji: sil + yeniden ekle (kuctuk liste, <20 satir)
+        await using (var delCmd = connection.CreateCommand())
+        {
+            delCmd.CommandText = $"DELETE FROM {_itemLocationsTableName} WHERE [item_id] = @ItemId;";
+            delCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            await delCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // En fazla bir varsayilan olabilir — ilk true'yu esas al, digerlerini sil
+        var defaultSeen = false;
+        var sortOrder = 0;
+        foreach (var l in locations)
+        {
+            var isDefault = l.IsDefault && !defaultSeen;
+            if (isDefault) defaultSeen = true;
+
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"""
+                INSERT INTO {_itemLocationsTableName}
+                    ([item_id],[location_id],[is_default],[sort_order])
+                VALUES (@ItemId, @LocationId, @IsDefault, @SortOrder);
+                """;
+            cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            cmd.Parameters.Add(new SqlParameter("@LocationId", l.LocationId));
+            cmd.Parameters.Add(new SqlParameter("@IsDefault", isDefault));
+            cmd.Parameters.Add(new SqlParameter("@SortOrder", sortOrder++));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    // ── Location Types (dinamik tip sozlugu) ─────────────────────────
+
+    private async Task EnsureLocationTypesTableAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s = _schema.Replace("]", "]]");
+        await using var cmd = connection.CreateCommand();
+        // Sadece tabloyu yarat + ilk seed. Tablo zaten varsa seed re-insert yapilmaz
+        // (aksi halde silinen seed tipler her GetAll cagrisinda geri gelir).
+        cmd.CommandText = $"""
+            IF OBJECT_ID(N'[{s}].[location_types]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[location_types]
+                (
+                    [id]         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [code]       NVARCHAR(50)  NOT NULL,
+                    [name]       NVARCHAR(100) NOT NULL,
+                    [sort_order] INT           NOT NULL DEFAULT(0),
+                    [is_active]  BIT           NOT NULL DEFAULT(1)
+                );
+                CREATE UNIQUE INDEX [ux_location_types_code]
+                    ON [{s}].[location_types]([code]);
+
+                -- Seed yalnizca yeni tablo olusturuldugu anda eklenir
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'FACTORY', N'Fabrika', 10, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'SECTION', N'Bolum', 20, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'SHELF', N'Raf', 30, 1);
+                INSERT INTO [{s}].[location_types]([code],[name],[sort_order],[is_active]) VALUES (N'BIN', N'Hucre', 40, 1);
+            END;
+            """;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyCollection<LocationType>> GetLocationTypesAsync(CancellationToken cancellationToken)
+    {
+        var results = new List<LocationType>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureLocationTypesTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [id],[code],[name],[sort_order],[is_active]
+            FROM {_locationTypesTableName}
+            ORDER BY [sort_order], [name];
+            """;
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new LocationType
+            {
+                Id = reader.GetInt32(0),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                SortOrder = reader.GetInt32(3),
+                IsActive = reader.GetBoolean(4),
+            });
+        }
+        return results;
+    }
+
+    public async Task<int> UpsertLocationTypeAsync(LocationType type, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureLocationTypesTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        if (type.Id > 0)
+        {
+            cmd.CommandText = $"""
+                UPDATE {_locationTypesTableName}
+                SET [code] = @Code, [name] = @Name, [sort_order] = @SortOrder, [is_active] = @IsActive
+                WHERE [id] = @Id;
+                SELECT @Id;
+                """;
+            cmd.Parameters.Add(new SqlParameter("@Id", type.Id));
+        }
+        else
+        {
+            cmd.CommandText = $"""
+                INSERT INTO {_locationTypesTableName}([code],[name],[sort_order],[is_active])
+                VALUES (@Code, @Name, @SortOrder, @IsActive);
+                SELECT CAST(SCOPE_IDENTITY() AS INT);
+                """;
+        }
+        cmd.Parameters.Add(new SqlParameter("@Code", type.Code));
+        cmd.Parameters.Add(new SqlParameter("@Name", type.Name));
+        cmd.Parameters.Add(new SqlParameter("@SortOrder", type.SortOrder));
+        cmd.Parameters.Add(new SqlParameter("@IsActive", type.IsActive));
+        var newId = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(newId);
+    }
+
+    public async Task DeleteLocationTypeAsync(int id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await EnsureLocationTypesTableAsync(connection, cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"DELETE FROM {_locationTypesTableName} WHERE [id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id", id));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<int> CountLocationsOfTypeAsync(string code, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT(*) FROM {_warehouseLocationsTableName} WHERE [LocationTypeCode] = @Code;";
+        cmd.Parameters.Add(new SqlParameter("@Code", code));
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<int> RenameLocationTypeCodeAsync(string oldCode, string newCode, CancellationToken cancellationToken)
+    {
+        if (string.Equals(oldCode, newCode, StringComparison.OrdinalIgnoreCase)) return 0;
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"UPDATE {_warehouseLocationsTableName} SET [LocationTypeCode] = @NewCode WHERE [LocationTypeCode] = @OldCode;";
+        cmd.Parameters.Add(new SqlParameter("@OldCode", oldCode));
+        cmd.Parameters.Add(new SqlParameter("@NewCode", newCode));
+        return await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task AddPropertyAsync(Feature property, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1398,13 +1775,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task AddPropertyValueAsync(ConfigurationPropertyValue propertyValue, CancellationToken cancellationToken)
+    public async Task AddPropertyValueAsync(FeatureValue propertyValue, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_propertyValuesTableName}
-                ([id], [property_id], [code], [description], [value], [sort_order], [is_active], [created_at], [updated_at])
+                ([id], [feature_id], [code], [description], [value], [sort_order], [is_active], [created_at], [updated_at])
             VALUES
                 (@Id, @PropertyId, @Code, @Description, @Value, @SortOrder, @IsActive, @CreatedAt, @UpdatedAt);
             """;
@@ -1422,19 +1799,19 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task AddStockPropertyMappingAsync(StockCardPropertyMapping mapping, CancellationToken cancellationToken)
+    public async Task AddStockPropertyMappingAsync(ItemPropertyMapping mapping, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockPropertyMappingsTableName}
-                ([id], [stock_card_id], [property_id], [property_value_id], [configuration_code], [text_value], [numeric_value], [date_value], [is_active], [created_at], [updated_at])
+                ([id], [item_id], [property_id], [property_value_id], [configuration_code], [text_value], [numeric_value], [date_value], [is_active], [created_at], [updated_at])
             VALUES
-                (@Id, @StockCardId, @PropertyId, @PropertyValueId, @ConfigurationCode, @TextValue, @NumericValue, @DateValue, @IsActive, @CreatedAt, @UpdatedAt);
+                (@Id, @ItemId, @PropertyId, @PropertyValueId, @ConfigurationCode, @TextValue, @NumericValue, @DateValue, @IsActive, @CreatedAt, @UpdatedAt);
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", mapping.Id));
-        command.Parameters.Add(new SqlParameter("@StockCardId", mapping.StockCardId));
+        command.Parameters.Add(new SqlParameter("@ItemId", mapping.ItemId));
         command.Parameters.Add(new SqlParameter("@PropertyId", mapping.PropertyId));
         command.Parameters.Add(new SqlParameter("@PropertyValueId", (object?)mapping.PropertyValueId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@ConfigurationCode", (object?)mapping.ConfigurationCode ?? DBNull.Value));
@@ -1506,7 +1883,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             _ => "STRING"
         };
         
-    public async Task<IReadOnlyCollection<ProductTree>> GetProductTreesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<BOM>> GetBOMsAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1515,19 +1892,19 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 t.[Id], t.[ParentMaterialCode], t.[ConfigurationCode], t.[Description],
                 t.[ImageData], t.[ImageMimeType],
                 l.[Id]       AS [LineId],
-                l.[ProductTreeId],
+                l.[BOMId],
                 l.[ComponentMaterialCode],
                 l.[ComponentConfigCode],
                 l.[Quantity],
                 l.[ScrapRatio],
                 l.[LineGuid]
             FROM {_productTreesTableName} t
-            LEFT JOIN {_productTreeLinesTableName} l ON l.[ProductTreeId] = t.[Id]
+            LEFT JOIN {_productTreeLinesTableName} l ON l.[BOMId] = t.[Id]
             ORDER BY t.[Id], l.[Id];
             """;
 
-        var treesById = new Dictionary<int, ProductTree>();
-        var linesByTreeId = new Dictionary<int, List<ProductTreeLine>>();
+        var treesById = new Dictionary<int, BOM>();
+        var linesByTreeId = new Dictionary<int, List<BOMLine>>();
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -1535,7 +1912,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             var treeId = reader.GetInt32(0);
             if (!treesById.ContainsKey(treeId))
             {
-                treesById[treeId] = new ProductTree
+                treesById[treeId] = new BOM
                 {
                     Id                 = treeId,
                     ParentMaterialCode = reader.GetString(1),
@@ -1544,15 +1921,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     ImageData          = reader.IsDBNull(4) ? null : (byte[])reader.GetValue(4),
                     ImageMimeType      = reader.IsDBNull(5) ? null : reader.GetString(5),
                 };
-                linesByTreeId[treeId] = new List<ProductTreeLine>();
+                linesByTreeId[treeId] = new List<BOMLine>();
             }
 
             if (!reader.IsDBNull(6))
             {
-                linesByTreeId[treeId].Add(new ProductTreeLine
+                linesByTreeId[treeId].Add(new BOMLine
                 {
                     Id                    = reader.GetInt32(6),
-                    ProductTreeId         = reader.GetInt32(7),
+                    BOMId         = reader.GetInt32(7),
                     ComponentMaterialCode = reader.GetString(8),
                     ComponentConfigCode   = reader.IsDBNull(9) ? null : reader.GetString(9),
                     Quantity              = reader.GetDecimal(10),
@@ -1563,12 +1940,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         }
 
         foreach (var (treeId, lines) in linesByTreeId)
-            ((List<ProductTreeLine>)treesById[treeId].Lines).AddRange(lines);
+            ((List<BOMLine>)treesById[treeId].Lines).AddRange(lines);
 
         return treesById.Values.ToList();
     }
 
-    public async Task<ProductTreeWithNames?> GetProductTreeByCodeAsync(string materialCode, string? configCode, CancellationToken cancellationToken)
+    public async Task<BOMWithNames?> GetBOMByCodeAsync(string materialCode, string? configCode, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -1585,13 +1962,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 t.[Id], t.[ParentMaterialCode], t.[ConfigurationCode], t.[Description],
                 t.[ImageData], t.[ImageMimeType], t.[ImageFitMode],
                 l.[ComponentMaterialCode],
-                ISNULL(m.[material_name], l.[ComponentMaterialCode]) AS [ComponentMaterialName],
+                ISNULL(m.[name], l.[ComponentMaterialCode]) AS [ComponentMaterialName],
                 l.[ComponentConfigCode],
                 l.[Quantity],
                 l.[ScrapRatio]
             FROM {_productTreesTableName} t
-            LEFT JOIN {_productTreeLinesTableName} l  ON l.[ProductTreeId] = t.[Id]
-            LEFT JOIN {_stockCardsTableName}        m ON m.[material_code]  = l.[ComponentMaterialCode]
+            LEFT JOIN {_productTreeLinesTableName} l  ON l.[BOMId] = t.[Id]
+            LEFT JOIN {_stockCardsTableName}        m ON m.[code]  = l.[ComponentMaterialCode]
             WHERE t.[ParentMaterialCode] = @MaterialCode
               AND {configFilter}
               AND t.[Id] = (
@@ -1605,15 +1982,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         if (!string.IsNullOrWhiteSpace(configCode))
             command.Parameters.Add(new SqlParameter("@ConfigCode", configCode.Trim()));
 
-        ProductTreeWithNames? result = null;
-        var lines = new List<ProductTreeLineWithName>();
+        BOMWithNames? result = null;
+        var lines = new List<BOMLineWithName>();
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             if (result is null)
             {
-                result = new ProductTreeWithNames(
+                result = new BOMWithNames(
                     reader.GetInt32(0),
                     reader.GetString(1),
                     reader.IsDBNull(2)  ? null : reader.GetString(2),
@@ -1626,7 +2003,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
             if (!reader.IsDBNull(7))
             {
-                lines.Add(new ProductTreeLineWithName(
+                lines.Add(new BOMLineWithName(
                     reader.GetString(7),
                     reader.GetString(8),
                     reader.IsDBNull(9)  ? null : reader.GetString(9),
@@ -1638,7 +2015,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return result;
     }
 
-    public async Task<int> AddProductTreeAsync(ProductTree tree, CancellationToken cancellationToken)
+    public async Task<int> AddBOMAsync(BOM tree, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction();
@@ -1669,7 +2046,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Transaction = transaction;
             lineCmd.CommandText = $"""
                 INSERT INTO {_productTreeLinesTableName}
-                    ([ProductTreeId],[ComponentMaterialCode],[ComponentConfigCode],[Quantity],[ScrapRatio],[LineGuid])
+                    ([BOMId],[ComponentMaterialCode],[ComponentConfigCode],[Quantity],[ScrapRatio],[LineGuid])
                 VALUES
                     (@TreeId,@CompCode,@CompCfg,@Qty,@Scrap,@LineGuid);
                 """;
@@ -1686,7 +2063,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return newId;
     }
 
-    public async Task UpdateProductTreeAsync(ProductTree tree, CancellationToken cancellationToken)
+    public async Task UpdateBOMAsync(BOM tree, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction();
@@ -1718,7 +2095,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using (var deleteCmd = connection.CreateCommand())
         {
             deleteCmd.Transaction = transaction;
-            deleteCmd.CommandText = $"DELETE FROM {_productTreeLinesTableName} WHERE [ProductTreeId] = @TreeId;";
+            deleteCmd.CommandText = $"DELETE FROM {_productTreeLinesTableName} WHERE [BOMId] = @TreeId;";
             deleteCmd.Parameters.Add(new SqlParameter("@TreeId", tree.Id));
             await deleteCmd.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -1729,7 +2106,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Transaction = transaction;
             lineCmd.CommandText = $"""
                 INSERT INTO {_productTreeLinesTableName}
-                    ([ProductTreeId],[ComponentMaterialCode],[ComponentConfigCode],[Quantity],[ScrapRatio],[LineGuid])
+                    ([BOMId],[ComponentMaterialCode],[ComponentConfigCode],[Quantity],[ScrapRatio],[LineGuid])
                 VALUES
                     (@TreeId,@CompCode,@CompCfg,@Qty,@Scrap,@LineGuid);
                 """;
@@ -1745,12 +2122,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task DeleteProductTreeAsync(int id, CancellationToken cancellationToken)
+    public async Task DeleteBOMAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            DELETE FROM {_productTreeLinesTableName} WHERE [ProductTreeId] = @Id;
+            DELETE FROM {_productTreeLinesTableName} WHERE [BOMId] = @Id;
             DELETE FROM {_productTreesTableName}     WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
@@ -1781,9 +2158,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using (var r1 = await cmd1.ExecuteReaderAsync(cancellationToken))
         {
             while (await r1.ReadAsync(cancellationToken))
-                combos[r1.GetInt32(0)] = new CombinationLookupRow(r1.GetString(1),
+            {
+                var configId = r1.GetInt32(0);
+                combos[configId] = new CombinationLookupRow(
+                    configId,
+                    r1.GetString(1),
                     r1.IsDBNull(2) ? r1.GetString(1) : r1.GetString(2),
                     new List<(string Feature, string Value)>());
+            }
         }
 
         if (combos.Count == 0) return Array.Empty<CombinationLookupRow>();
@@ -1885,10 +2267,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SELECT m.[SlotOrder], m.[GroupCode], g.[GroupDescription]
             FROM {_materialGroupMappingsTableName} m
             LEFT JOIN {_materialGroupsTableName} g ON g.[GroupCode] = m.[GroupCode] AND g.[GroupCategory] = m.[SlotOrder]
-            WHERE m.[StockCardId] = @StockCardId
+            WHERE m.[ItemId] = @ItemId
             ORDER BY m.[SlotOrder];
             """;
-        command.Parameters.Add(new SqlParameter("@StockCardId", stockCardId));
+        command.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
         var result = new List<MaterialGroupMappingDto>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -1904,8 +2286,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using (var delCmd = connection.CreateCommand())
         {
             delCmd.Transaction = transaction;
-            delCmd.CommandText = $"DELETE FROM {_materialGroupMappingsTableName} WHERE [StockCardId]=@StockCardId;";
-            delCmd.Parameters.Add(new SqlParameter("@StockCardId", stockCardId));
+            delCmd.CommandText = $"DELETE FROM {_materialGroupMappingsTableName} WHERE [ItemId]=@ItemId;";
+            delCmd.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
             await delCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -1913,8 +2295,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         {
             await using var insCmd = connection.CreateCommand();
             insCmd.Transaction = transaction;
-            insCmd.CommandText = $"INSERT INTO {_materialGroupMappingsTableName} ([StockCardId],[SlotOrder],[GroupCode]) VALUES (@StockCardId,@Slot,@Code);";
-            insCmd.Parameters.Add(new SqlParameter("@StockCardId", stockCardId));
+            insCmd.CommandText = $"INSERT INTO {_materialGroupMappingsTableName} ([ItemId],[SlotOrder],[GroupCode]) VALUES (@ItemId,@Slot,@Code);";
+            insCmd.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
             insCmd.Parameters.Add(new SqlParameter("@Slot",        slot));
             insCmd.Parameters.Add(new SqlParameter("@Code",        code));
             await insCmd.ExecuteNonQueryAsync(cancellationToken);

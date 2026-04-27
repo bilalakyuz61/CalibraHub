@@ -21,16 +21,17 @@ import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFac
  */
 var MODULE_META = {
   // Yeni Faz B FormMas kodlari (dbo.Forms)
-  ITEMS:            { label: 'Malzeme Kartlari',    icon: 'Package',   color: 'indigo' },
-  CONTACTS:         { label: 'Cari Hesaplar',       icon: 'Building2', color: 'cyan'   },
-  SALES_QUOTE_EDIT: { label: 'Satis Teklifi',       icon: 'FileText',  color: 'violet' },
-  PRODUCT_TREES:    { label: 'Urun Agaci',          icon: 'GitBranch', color: 'emerald'},
-  PRODUCT_CONFIG:   { label: 'Urun Konfigurasyonu', icon: 'Sliders',   color: 'teal'   },
+  ITEMS:             { label: 'Malzeme Kartları',              icon: 'Package',   color: 'indigo' },
+  CONTACTS:          { label: 'Cari Hesaplar',                 icon: 'Building2', color: 'cyan'   },
+  SALES_QUOTE_EDIT:  { label: 'Satış Teklifi — Üst Bilgi',     icon: 'FileText',  color: 'violet' },
+  SALES_QUOTE_LINES: { label: 'Satış Teklifi — Kalem Bilgisi', icon: 'List',      color: 'amber'  },
+  PRODUCT_TREES:     { label: 'Ürün Ağacı',                    icon: 'GitBranch', color: 'emerald'},
+  PRODUCT_CONFIG:    { label: 'Ürün Konfigürasyonu',           icon: 'Sliders',   color: 'teal'   },
   // Legacy (eski admin akisi)
-  material_cards:        { label: 'Malzeme Kartlari',    icon: 'Package',   color: 'indigo' },
+  material_cards:        { label: 'Malzeme Kartları',    icon: 'Package',   color: 'indigo' },
   contact_accounts:      { label: 'Cari Hesaplar',       icon: 'Building2', color: 'cyan'   },
-  sales_quotes:          { label: 'Satis Teklifleri',    icon: 'FileText',  color: 'violet' },
-  product_configuration: { label: 'Urun Konfigurasyonu', icon: 'Sliders',   color: 'teal'   },
+  sales_quotes:          { label: 'Satış Teklifleri',    icon: 'FileText',  color: 'violet' },
+  product_configuration: { label: 'Ürün Konfigürasyonu', icon: 'Sliders',   color: 'teal'   },
 }
 
 export default function ModuleSelector(props) {
@@ -68,15 +69,19 @@ export default function ModuleSelector(props) {
   var selectedPalette = resolveColor(selectedMeta.color)
   var SelectedIcon = resolveIcon(selectedMeta.icon)
 
+  // Body grid'i ile ayni olculer: grid-cols-[1fr_2fr] + gap-4 + px-5.
+  // Secici 1fr (sol form eninde), trailing 2fr (sag liste eninde).
+  // Trigger w-full ile kolon genisligini kaplar — secilen formun etiketine
+  // gore boyutu degismez.
   return (
-    <div className="px-5 py-3 border-b border-slate-200/50 dark:border-white/[0.06] flex-shrink-0 grid grid-cols-[1fr_2fr] gap-4 items-center">
-      <div className="relative" ref={wrapperRef} style={{ width: 340 }}>
-        {/* Trigger */}
+    <div className="px-5 py-2.5 border-b border-slate-200/50 dark:border-white/[0.06] flex-shrink-0 grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4 items-center">
+      <div className="relative min-w-0" ref={wrapperRef}>
+        {/* Trigger — kompakt: sadece ikon + etiket + chevron */}
         <button
           type="button"
           onClick={function() { setOpen(function(o) { return !o }) }}
           className={
-            'w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ' +
+            'w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all ' +
             'bg-white/70 dark:bg-white/[0.04] border text-slate-800 dark:text-white/90 ' +
             (open
               ? 'border-indigo-400/60 dark:border-white/20 shadow-[0_0_0_3px_rgba(99,102,241,0.12)]'
@@ -84,21 +89,18 @@ export default function ModuleSelector(props) {
           }
         >
           <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+            className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
             style={{ background: selectedPalette.bg, border: '1px solid ' + selectedPalette.border }}
           >
-            <SelectedIcon size={14} style={{ color: selectedPalette.icon }} strokeWidth={1.8} />
+            <SelectedIcon size={12} style={{ color: selectedPalette.icon }} strokeWidth={1.8} />
           </div>
-          <span className="flex-1 text-left">{selectedMeta.label}</span>
-          <span className="text-[10px] font-mono text-slate-400 dark:text-white/30">
-            {selectedOpt.value}
-          </span>
+          <span className="flex-1 min-w-0 text-left truncate">{selectedMeta.label}</span>
           <motion.span
             animate={{ rotate: open ? 180 : 0 }}
             transition={{ duration: 0.2 }}
-            className="text-slate-400 dark:text-white/30"
+            className="text-slate-400 dark:text-white/30 flex-shrink-0"
           >
-            <ChevronDown size={14} />
+            <ChevronDown size={13} />
           </motion.span>
         </button>
 
@@ -110,8 +112,9 @@ export default function ModuleSelector(props) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden"
+              className="absolute left-0 top-full mt-1 z-50 rounded-xl overflow-hidden whitespace-nowrap"
               style={{
+                minWidth: '100%',
                 background: 'rgba(8, 11, 20, 0.96)',
                 backdropFilter: 'blur(24px)',
                 WebkitBackdropFilter: 'blur(24px)',

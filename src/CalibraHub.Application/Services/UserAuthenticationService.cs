@@ -7,12 +7,12 @@ namespace CalibraHub.Application.Services;
 
 public sealed class UserAuthenticationService : IUserAuthenticationService
 {
-    private readonly ICompanyDefinitionRepository _companyDefinitionRepository;
+    private readonly ICompanyRepository _companyDefinitionRepository;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IPasswordHashService _passwordHashService;
 
     public UserAuthenticationService(
-        ICompanyDefinitionRepository companyDefinitionRepository,
+        ICompanyRepository companyDefinitionRepository,
         IUserProfileRepository userProfileRepository,
         IPasswordHashService passwordHashService)
     {

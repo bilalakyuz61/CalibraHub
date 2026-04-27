@@ -22,8 +22,8 @@ public sealed class ReportController : Controller
         _generationService = generationService;
     }
 
-    [HttpGet("/Report/Pdf/{templateId:guid}/{recordId:guid}")]
-    public async Task<IActionResult> Pdf(Guid templateId, Guid recordId, CancellationToken ct)
+    [HttpGet("/Report/Pdf/{templateId:int}/{recordId:int}")]
+    public async Task<IActionResult> Pdf(int templateId, int recordId, CancellationToken ct)
     {
         try
         {
@@ -38,8 +38,8 @@ public sealed class ReportController : Controller
         }
     }
 
-    [HttpGet("/Report/Preview/{templateId:guid}/{recordId:guid}")]
-    public async Task<IActionResult> Preview(Guid templateId, Guid recordId, CancellationToken ct)
+    [HttpGet("/Report/Preview/{templateId:int}/{recordId:int}")]
+    public async Task<IActionResult> Preview(int templateId, int recordId, CancellationToken ct)
     {
         try
         {
@@ -53,8 +53,8 @@ public sealed class ReportController : Controller
         }
     }
 
-    [HttpGet("/Report/HtmlPreview/{templateId:guid}/{recordId:guid}")]
-    public async Task<IActionResult> HtmlPreview(Guid templateId, Guid recordId, CancellationToken ct)
+    [HttpGet("/Report/HtmlPreview/{templateId:int}/{recordId:int}")]
+    public async Task<IActionResult> HtmlPreview(int templateId, int recordId, CancellationToken ct)
     {
         try
         {

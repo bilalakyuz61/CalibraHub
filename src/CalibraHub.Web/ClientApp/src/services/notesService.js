@@ -27,6 +27,9 @@ export function saveNote(note) {
     folderId: note.folderId || null,
     title: note.title || '',
     content: note.content || '',
+    // Mod 2 E2E: sifreli not ise content alani JSON payload tutar
+    isFullyEncrypted: !!note.isFullyEncrypted,
+    encryptionHint:   note.encryptionHint || null,
   })
 }
 
@@ -47,4 +50,39 @@ export function renameFolder(id, name) {
 
 export function deleteFolder(id) {
   return postJson(BASE + '/DeleteFolderJson', { id: id })
+}
+
+export function togglePin(id) {
+  return postJson(BASE + '/TogglePinJson', { id: id })
+}
+
+export function getReminders(noteId) {
+  return fetch(BASE + '/RemindersJson?noteId=' + encodeURIComponent(noteId), { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return r.json()
+    })
+}
+
+export function addReminder(noteId, remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserId) {
+  return postJson(BASE + '/AddReminderJson', {
+    noteId:          noteId,
+    remindAt:        remindAtIso,
+    recurrenceType:  recurrenceType || 0,
+    recurrenceData:  recurrenceData || null,
+    deliveryChannel: deliveryChannel || 0,  // 0=InApp, 1=Email, 2=Both
+    targetUserId:    targetUserId || null,
+  })
+}
+
+export function deleteReminder(reminderId, noteId) {
+  return postJson(BASE + '/DeleteReminderJson', { reminderId: reminderId, noteId: noteId })
+}
+
+export function getCompanyUsers() {
+  return fetch(BASE + '/CompanyUsersJson', { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return r.json()
+    })
 }

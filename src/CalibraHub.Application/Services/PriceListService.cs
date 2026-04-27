@@ -67,13 +67,13 @@ public sealed class PriceListService : IPriceListService
 
     // ── Fiyat Kalemleri ──────────────────────────────────────────────────────
 
-    public async Task<IReadOnlyCollection<PriceListEntryDto>> GetEntriesByGroupAsync(int groupId, CancellationToken ct)
+    public async Task<IReadOnlyCollection<PriceListDto>> GetEntriesByGroupAsync(int groupId, CancellationToken ct)
     {
         var entries = await _repo.GetEntriesByGroupAsync(groupId, ct);
         return entries.Select(MapEntry).ToArray();
     }
 
-    public async Task<(bool Success, string? Error, int? Id)> SaveEntryAsync(SavePriceListEntryRequest req, CancellationToken ct)
+    public async Task<(bool Success, string? Error, int? Id)> SaveEntryAsync(SavePriceListRequest req, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.MaterialCode)) return (false, "Malzeme kodu zorunludur.", null);
 
@@ -82,33 +82,37 @@ public sealed class PriceListService : IPriceListService
             var existing = await _repo.GetEntryByIdAsync(req.Id.Value, ct);
             if (existing is null) return (false, "Kayit bulunamadi.", null);
 
-            existing.MaterialCode  = req.MaterialCode.Trim();
-            existing.MaterialName  = req.MaterialName?.Trim();
-            existing.Currency      = req.Currency;
-            existing.BuyingPrice   = req.BuyingPrice;
-            existing.SellingPrice  = req.SellingPrice;
-            existing.ValidFrom     = req.ValidFrom;
-            existing.ValidTo       = req.ValidTo;
-            existing.IsActive      = req.IsActive;
-            existing.UpdatedAt     = DateTime.Now;
+            existing.MaterialCode     = req.MaterialCode.Trim();
+            existing.MaterialName     = req.MaterialName?.Trim();
+            existing.CombinationCode  = req.CombinationCode?.Trim();
+            existing.CombinationName  = req.CombinationName?.Trim();
+            existing.Currency         = req.Currency;
+            existing.BuyingPrice      = req.BuyingPrice;
+            existing.SellingPrice     = req.SellingPrice;
+            existing.ValidFrom        = req.ValidFrom;
+            existing.ValidTo          = req.ValidTo;
+            existing.IsActive         = req.IsActive;
+            existing.UpdatedAt        = DateTime.Now;
 
             await _repo.UpdateEntryAsync(existing, ct);
             return (true, null, existing.Id);
         }
         else
         {
-            var entity = new PriceListEntry
+            var entity = new PriceList
             {
-                PriceGroupId  = req.PriceGroupId,
-                StockCardId   = req.StockCardId,
-                MaterialCode  = req.MaterialCode.Trim(),
-                MaterialName  = req.MaterialName?.Trim(),
-                Currency      = req.Currency,
-                BuyingPrice   = req.BuyingPrice,
-                SellingPrice  = req.SellingPrice,
-                ValidFrom     = req.ValidFrom,
-                ValidTo       = req.ValidTo,
-                IsActive      = req.IsActive
+                PriceGroupId     = req.PriceGroupId,
+                ItemId      = req.ItemId,
+                MaterialCode     = req.MaterialCode.Trim(),
+                MaterialName     = req.MaterialName?.Trim(),
+                CombinationCode  = req.CombinationCode?.Trim(),
+                CombinationName  = req.CombinationName?.Trim(),
+                Currency         = req.Currency,
+                BuyingPrice      = req.BuyingPrice,
+                SellingPrice     = req.SellingPrice,
+                ValidFrom        = req.ValidFrom,
+                ValidTo          = req.ValidTo,
+                IsActive         = req.IsActive
             };
             var id = await _repo.AddEntryAsync(entity, ct);
             return (true, null, id);
@@ -132,30 +136,43 @@ public sealed class PriceListService : IPriceListService
         return (true, null);
     }
 
-    // ── Toplu Fiyat Girisi ──────────────────────────────────────────────────
+    // ── Toplu Fiyat Girisi (Upsert) ─────────────────────────────────────────
 
-    public async Task<(bool Success, string? Error, int Count)> SaveBulkEntriesAsync(SaveBulkPriceEntriesRequest req, CancellationToken ct)
+    public async Task<(bool Success, string? Error, int Inserted, int Updated)> SaveBulkEntriesAsync(SaveBulkPriceEntriesRequest req, CancellationToken ct)
     {
-        if (req.PriceGroupId <= 0) return (false, "Fiyat grubu secilmedi.", 0);
-        if (req.Lines == null || req.Lines.Count == 0) return (false, "En az bir malzeme secilmelidir.", 0);
-        if (string.IsNullOrWhiteSpace(req.Currency)) return (false, "Doviz tipi secilmedi.", 0);
+        if (req.PriceGroupId <= 0) return (false, "Fiyat grubu secilmedi.", 0, 0);
+        if (req.Lines == null || req.Lines.Count == 0) return (false, "En az bir malzeme secilmelidir.", 0, 0);
+        if (string.IsNullOrWhiteSpace(req.Currency)) return (false, "Doviz tipi secilmedi.", 0, 0);
 
-        var entities = req.Lines.Select(line => new PriceListEntry
+        var entities = req.Lines.Select(line => new PriceList
         {
-            PriceGroupId = req.PriceGroupId,
-            StockCardId  = line.StockCardId,
-            MaterialCode = line.MaterialCode.Trim(),
-            MaterialName = line.MaterialName?.Trim(),
-            Currency     = req.Currency,
-            BuyingPrice  = line.BuyingPrice,
-            SellingPrice = line.SellingPrice,
-            ValidFrom    = req.ValidFrom,
-            ValidTo      = req.ValidTo,
-            IsActive     = true
+            PriceGroupId    = req.PriceGroupId,
+            ItemId     = line.ItemId,
+            MaterialCode    = line.MaterialCode.Trim(),
+            MaterialName    = line.MaterialName?.Trim(),
+            CombinationCode = string.IsNullOrWhiteSpace(line.CombinationCode) ? null : line.CombinationCode.Trim(),
+            CombinationName = string.IsNullOrWhiteSpace(line.CombinationName) ? null : line.CombinationName.Trim(),
+            Currency        = req.Currency,
+            BuyingPrice     = line.BuyingPrice,
+            SellingPrice    = line.SellingPrice,
+            ValidFrom       = req.ValidFrom,
+            ValidTo         = req.ValidTo,
+            IsActive        = true
         }).ToArray();
 
-        await _repo.AddBulkEntriesAsync(entities, ct);
-        return (true, null, entities.Length);
+        var result = await _repo.UpsertBulkEntriesAsync(entities, ct);
+        return (true, null, result.Inserted, result.Updated);
+    }
+
+    // ── Mevcut Fiyat Sorgusu ────────────────────────────────────────────────
+
+    public async Task<IReadOnlyCollection<ExistingPriceRow>> GetExistingPricesAsync(GetExistingPricesRequest req, CancellationToken ct)
+    {
+        if (req.PriceGroupId <= 0 || req.Keys == null || req.Keys.Count == 0)
+            return Array.Empty<ExistingPriceRow>();
+
+        return await _repo.GetExistingPricesAsync(
+            req.PriceGroupId, req.Currency ?? "TRY", req.ValidFrom, req.Keys, ct);
     }
 
     // ── Mapper'lar ────────────────────────────────────────────────────────────
@@ -163,9 +180,10 @@ public sealed class PriceListService : IPriceListService
     private static PriceGroupDto MapGroup(PriceGroup g) => new(
         g.Id, g.GroupCode, g.GroupName, g.Description, g.IsActive, g.CreatedAt, g.UpdatedAt);
 
-    private static PriceListEntryDto MapEntry(PriceListEntry e) => new(
-        e.Id, e.PriceGroupId, e.StockCardId,
+    private static PriceListDto MapEntry(PriceList e) => new(
+        e.Id, e.PriceGroupId, e.ItemId,
         e.MaterialCode, e.MaterialName,
+        e.CombinationCode, e.CombinationName,
         e.Currency, e.BuyingPrice, e.SellingPrice,
         e.ValidFrom, e.ValidTo, e.IsActive,
         e.CreatedAt, e.UpdatedAt);

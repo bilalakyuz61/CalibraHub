@@ -54,7 +54,7 @@ public sealed class InMemoryDevelopmentBootstrapper
         return Task.CompletedTask;
     }
 
-    private CompanyDefinition EnsureDefaultCompany()
+    private Company EnsureDefaultCompany()
     {
         var existingCompany = _dataStore.Companies.Values.FirstOrDefault(x => x.IsActive);
         if (existingCompany is not null)
@@ -62,7 +62,7 @@ public sealed class InMemoryDevelopmentBootstrapper
             return existingCompany;
         }
 
-        var company = new CompanyDefinition
+        var company = new Company
         {
             Id = DefaultCompanyId,
             Name = "Calibra Merkez",

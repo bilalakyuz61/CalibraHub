@@ -1,0 +1,784 @@
+@{
+    ViewData["Title"] = "Rapor Tasarımı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@6.2.5/dist/css/tabulator.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.min.css" />
+    <style>
+        :root {
+            --rpt-accent: #6366f1;
+            --rpt-accent-2: #818cf8;
+            --rpt-accent-soft: rgba(99,102,241,.1);
+            --rpt-surface: #ffffff;
+            --rpt-surface-alt: #fafbfc;
+            --rpt-border: #eceef3;
+            --rpt-border-strong: #d9dce4;
+            --rpt-text: #111827;
+            --rpt-text-muted: #6b7280;
+            --rpt-text-soft: #9ca3af;
+            --rpt-success: #10b981;
+            --rpt-warning: #f59e0b;
+            --rpt-danger: #ef4444;
+            --rpt-shadow: 0 1px 2px rgba(17,24,39,.04), 0 1px 3px rgba(17,24,39,.06);
+            --rpt-shadow-lg: 0 4px 12px rgba(17,24,39,.06), 0 1px 3px rgba(17,24,39,.08);
+            --rpt-radius: 10px;
+            --rpt-radius-sm: 6px;
+            --rpt-radius-lg: 14px;
+        }
+
+        .rpt-wrap { display: grid; grid-template-columns: 360px 1fr; gap: 18px; padding: 20px; height: calc(100vh - 90px); box-sizing: border-box; background: #f7f8fa; }
+        .rpt-panel { background: var(--rpt-surface); border: 1px solid var(--rpt-border); border-radius: var(--rpt-radius-lg); overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--rpt-shadow); }
+        .rpt-panel-header { padding: 16px 18px; border-bottom: 1px solid var(--rpt-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+        .rpt-panel-header h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--rpt-text); letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+        .rpt-panel-header h2 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rpt-accent); }
+        .rpt-panel-body { padding: 18px; overflow-y: auto; flex: 1; }
+
+        .rpt-field { margin-bottom: 18px; }
+        .rpt-field-label { display: block; font-size: 11px; font-weight: 600; color: var(--rpt-text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 7px; }
+        .rpt-input, .rpt-select { width: 100%; padding: 9px 12px; border: 1px solid var(--rpt-border-strong); border-radius: var(--rpt-radius); background: var(--rpt-surface); color: var(--rpt-text); font-size: 13px; transition: all .15s; box-sizing: border-box; font-family: inherit; }
+        .rpt-input:focus, .rpt-select:focus { outline: none; border-color: var(--rpt-accent); box-shadow: 0 0 0 3px var(--rpt-accent-soft); }
+        .rpt-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+
+        /* Category tabs */
+        .rpt-cat-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: var(--rpt-surface-alt); border-radius: var(--rpt-radius); border: 1px solid var(--rpt-border); }
+        .rpt-cat-tabs button { border: none; background: transparent; padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 12.5px; color: var(--rpt-text-muted); font-weight: 500; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; }
+        .rpt-cat-tabs button:hover { color: var(--rpt-text); }
+        .rpt-cat-tabs button.active { background: var(--rpt-surface); color: var(--rpt-accent); font-weight: 600; box-shadow: var(--rpt-shadow); }
+        .rpt-cat-tabs button svg { width: 14px; height: 14px; }
+
+        /* Column list */
+        .rpt-cols { display: flex; flex-direction: column; gap: 3px; max-height: 280px; overflow-y: auto; padding: 6px; background: var(--rpt-surface-alt); border-radius: var(--rpt-radius); border: 1px solid var(--rpt-border); }
+        .rpt-col { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--rpt-radius-sm); cursor: pointer; font-size: 12.5px; color: var(--rpt-text); transition: background .12s; user-select: none; }
+        .rpt-col:hover { background: #f1f3f7; }
+        .rpt-col.selected { background: var(--rpt-accent-soft); color: var(--rpt-accent); font-weight: 500; }
+        .rpt-col.disabled { opacity: .35; cursor: not-allowed; }
+        .rpt-col-check { width: 14px; height: 14px; border: 1.5px solid var(--rpt-border-strong); border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+        .rpt-col.selected .rpt-col-check { background: var(--rpt-accent); border-color: var(--rpt-accent); }
+        .rpt-col.selected .rpt-col-check::after { content: ''; width: 7px; height: 4px; border: 1.5px solid #fff; border-top: 0; border-right: 0; transform: rotate(-45deg) translateY(-1px); }
+        .rpt-col-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rpt-col-tag { font-size: 9.5px; padding: 2px 6px; border-radius: 4px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; flex-shrink: 0; }
+        .rpt-col-tag.data { background: #eef2f7; color: #64748b; }
+        .rpt-col-tag.grp { background: #dcfce7; color: #166534; }
+        .rpt-col-tag.agg { background: #fef3c7; color: #92400e; }
+
+        /* Section */
+        .rpt-section { margin-bottom: 18px; }
+        .rpt-section-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .rpt-section-title h4 { margin: 0; font-size: 11px; font-weight: 600; color: var(--rpt-text-muted); text-transform: uppercase; letter-spacing: .06em; }
+
+        /* Rows for filter & aggregate */
+        .rpt-row-grid { display: grid; grid-template-columns: 1fr 90px 1.2fr 28px; gap: 5px; margin-bottom: 5px; align-items: center; }
+        .rpt-row-grid .rpt-input, .rpt-row-grid .rpt-select { padding: 6px 8px; font-size: 11.5px; border-radius: 6px; }
+        .rpt-row-grid .rpt-select { padding-right: 22px; background-position: right 6px center; }
+        .rpt-icon-btn { border: none; background: transparent; color: var(--rpt-text-soft); cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all .12s; }
+        .rpt-icon-btn:hover { color: var(--rpt-danger); background: #fee2e2; }
+        .rpt-icon-btn svg { width: 14px; height: 14px; }
+
+        .rpt-add { width: 100%; padding: 8px 12px; border: 1.5px dashed var(--rpt-border-strong); background: transparent; border-radius: var(--rpt-radius); cursor: pointer; font-size: 12px; color: var(--rpt-text-muted); transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; margin-top: 4px; }
+        .rpt-add:hover { border-color: var(--rpt-accent); color: var(--rpt-accent); border-style: solid; background: var(--rpt-accent-soft); }
+
+        /* Config panels */
+        .rpt-config-panel { display: none; background: var(--rpt-surface-alt); border: 1px solid var(--rpt-border); border-radius: var(--rpt-radius); padding: 14px; }
+        .rpt-config-panel.active { display: block; }
+
+        .rpt-chip-wrap { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px; border: 1px solid var(--rpt-border-strong); border-radius: var(--rpt-radius); background: var(--rpt-surface); min-height: 34px; }
+        .rpt-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; background: var(--rpt-accent-soft); color: var(--rpt-accent); border-radius: 12px; font-size: 11.5px; font-weight: 500; }
+        .rpt-chip-x { cursor: pointer; opacity: .6; font-size: 13px; line-height: 1; }
+        .rpt-chip-x:hover { opacity: 1; }
+        .rpt-chip-wrap .rpt-select { flex: 1; min-width: 90px; padding: 3px 8px; font-size: 11.5px; border-radius: 8px; border: none; background-color: transparent; background-position: right 4px center; padding-right: 20px; }
+
+        /* Buttons */
+        .rpt-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 14px; border-radius: var(--rpt-radius); border: 1px solid transparent; font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s; font-family: inherit; }
+        .rpt-btn svg { width: 15px; height: 15px; }
+        .rpt-btn-primary { background: var(--rpt-accent); color: #fff; border-color: var(--rpt-accent); }
+        .rpt-btn-primary:hover { background: #4f46e5; box-shadow: 0 4px 12px rgba(99,102,241,.3); }
+        .rpt-btn-ghost { background: var(--rpt-surface); color: var(--rpt-text); border-color: var(--rpt-border-strong); }
+        .rpt-btn-ghost:hover { background: var(--rpt-surface-alt); border-color: var(--rpt-text-muted); }
+
+        .rpt-action-bar { display: flex; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--rpt-border); background: var(--rpt-surface-alt); flex-shrink: 0; }
+        .rpt-action-bar .rpt-btn-primary { flex: 1; }
+
+        /* Right panel */
+        .rpt-preview { position: relative; flex: 1; padding: 18px; overflow: auto; }
+        .rpt-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 320px; color: var(--rpt-text-soft); }
+        .rpt-empty svg { width: 64px; height: 64px; margin-bottom: 14px; opacity: .25; }
+        .rpt-empty h3 { margin: 0 0 4px; font-size: 15px; font-weight: 500; color: var(--rpt-text-muted); }
+        .rpt-empty p { margin: 0; font-size: 13px; }
+        #rpt-table-mount, #rpt-chart-mount, #rpt-pivot-mount { width: 100%; min-height: 400px; display: none; }
+        #rpt-chart-mount { height: 520px; }
+        #rpt-table-mount { height: calc(100vh - 260px); }
+
+        .rpt-footer { padding: 12px 18px; border-top: 1px solid var(--rpt-border); background: var(--rpt-surface-alt); display: none; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 11.5px; color: var(--rpt-text-muted); flex-shrink: 0; }
+        .rpt-footer.visible { display: flex; }
+        .rpt-stat { display: inline-flex; align-items: center; gap: 5px; }
+        .rpt-stat b { color: var(--rpt-text); font-weight: 600; }
+        .rpt-sql { flex-basis: 100%; margin-top: 6px; padding: 10px 12px; background: #111827; color: #e5e7eb; border-radius: var(--rpt-radius); font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+        .rpt-sql .kw { color: #c084fc; font-weight: 600; }
+
+        .rpt-toast { position: absolute; top: 14px; right: 14px; padding: 10px 14px; border-radius: var(--rpt-radius); background: #fee2e2; color: #991b1b; font-size: 12.5px; box-shadow: var(--rpt-shadow-lg); display: flex; align-items: center; gap: 8px; max-width: 480px; z-index: 10; animation: rpt-slide-in .2s ease-out; }
+        .rpt-toast svg { width: 16px; height: 16px; flex-shrink: 0; }
+        @@keyframes rpt-slide-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Tabulator overrides */
+        .tabulator { border: 1px solid var(--rpt-border) !important; border-radius: var(--rpt-radius) !important; font-size: 12.5px !important; background: var(--rpt-surface) !important; }
+        .tabulator-header { background: var(--rpt-surface-alt) !important; border-bottom: 1px solid var(--rpt-border) !important; font-weight: 600; }
+        .tabulator .tabulator-row.tabulator-row-even { background: var(--rpt-surface-alt) !important; }
+        .tabulator .tabulator-row:hover { background: var(--rpt-accent-soft) !important; }
+
+        /* Dark mode support */
+        @@media (prefers-color-scheme: dark) {
+            .rpt-wrap { background: #0f1115; }
+            :root {
+                --rpt-surface: #1a1d23;
+                --rpt-surface-alt: #14161b;
+                --rpt-border: #2a2f38;
+                --rpt-border-strong: #3a4150;
+                --rpt-text: #e5e7eb;
+                --rpt-text-muted: #9ca3af;
+                --rpt-text-soft: #6b7280;
+            }
+            .rpt-col-tag.data { background: #2a2f38; color: #9ca3af; }
+        }
+    </style>
+}
+
+<div class="rpt-wrap">
+
+    <!-- SOL PANEL -->
+    <aside class="rpt-panel">
+        <div class="rpt-panel-header">
+            <h2><span class="dot"></span> Konfigürasyon</h2>
+        </div>
+        <div class="rpt-panel-body">
+
+            <div class="rpt-field">
+                <label class="rpt-field-label">Veri Kaynağı</label>
+                <select id="rpt-view-select" class="rpt-select">
+                    <option value="">VIEW seç…</option>
+                </select>
+            </div>
+
+            <div class="rpt-field">
+                <label class="rpt-field-label">Rapor Tipi</label>
+                <div class="rpt-cat-tabs">
+                    <button type="button" class="active" data-cat="1">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+                        Tablo
+                    </button>
+                    <button type="button" data-cat="2">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V6"/><path d="M17 16v-4"/></svg>
+                        Grafik
+                    </button>
+                    <button type="button" data-cat="3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                        Pivot
+                    </button>
+                </div>
+            </div>
+
+            <div class="rpt-section">
+                <div class="rpt-section-title">
+                    <h4>Kolonlar</h4>
+                    <span id="rpt-col-count" style="font-size:11px; color:var(--rpt-text-soft);"></span>
+                </div>
+                <div id="rpt-col-list" class="rpt-cols">
+                    <div style="padding: 24px; text-align: center; color: var(--rpt-text-soft); font-size: 12.5px;">Önce VIEW seç</div>
+                </div>
+            </div>
+
+            <!-- Grafik ayarları -->
+            <div id="rpt-config-chart" class="rpt-config-panel rpt-section">
+                <div class="rpt-section-title"><h4>Grafik Ayarları</h4></div>
+
+                <div class="rpt-field">
+                    <label class="rpt-field-label">Grafik Tipi</label>
+                    <select id="rpt-chart-type" class="rpt-select">
+                        <option value="bar">Bar</option>
+                        <option value="line">Çizgi</option>
+                        <option value="pie">Pasta</option>
+                        <option value="area">Alan</option>
+                    </select>
+                </div>
+
+                <div class="rpt-field">
+                    <label class="rpt-field-label">X Ekseni (Grup)</label>
+                    <select id="rpt-chart-x" class="rpt-select"></select>
+                </div>
+
+                <div class="rpt-field">
+                    <label class="rpt-field-label">Y Değerleri (Aggregate)</label>
+                    <div id="rpt-agg-list"></div>
+                    <button type="button" class="rpt-add" id="rpt-add-agg">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                        Aggregate ekle
+                    </button>
+                </div>
+
+                <div class="rpt-field" style="margin-bottom:0;">
+                    <label class="rpt-field-label">Seri Kolonu (opsiyonel)</label>
+                    <select id="rpt-chart-series" class="rpt-select"><option value="">— yok —</option></select>
+                </div>
+            </div>
+
+            <!-- Pivot ayarları -->
+            <div id="rpt-config-pivot" class="rpt-config-panel rpt-section">
+                <div class="rpt-section-title"><h4>Pivot Ayarları</h4></div>
+
+                <div class="rpt-field">
+                    <label class="rpt-field-label">Satır Boyutları</label>
+                    <div id="rpt-pivot-rows" class="rpt-chip-wrap"></div>
+                </div>
+
+                <div class="rpt-field">
+                    <label class="rpt-field-label">Kolon Boyutları</label>
+                    <div id="rpt-pivot-cols" class="rpt-chip-wrap"></div>
+                </div>
+
+                <div class="rpt-field">
+                    <label class="rpt-field-label">Değer Kolonu</label>
+                    <select id="rpt-pivot-value" class="rpt-select"></select>
+                </div>
+
+                <div class="rpt-field" style="margin-bottom:0;">
+                    <label class="rpt-field-label">Aggregate</label>
+                    <select id="rpt-pivot-agg" class="rpt-select">
+                        <option value="1">Count</option>
+                        <option value="3" selected>Sum</option>
+                        <option value="4">Ortalama</option>
+                        <option value="5">Min</option>
+                        <option value="6">Max</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="rpt-section">
+                <div class="rpt-section-title">
+                    <h4>Filtreler</h4>
+                </div>
+                <div id="rpt-filter-list"></div>
+                <button type="button" class="rpt-add" id="rpt-add-filter">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                    Filtre ekle
+                </button>
+            </div>
+
+            <div class="rpt-field" id="rpt-topn-section" style="margin-bottom:0;">
+                <label class="rpt-field-label">Satır Limiti (Top N)</label>
+                <input id="rpt-topn" type="number" min="1" max="10000" value="100" class="rpt-input" />
+            </div>
+        </div>
+
+        <div class="rpt-action-bar">
+            <button type="button" class="rpt-btn rpt-btn-primary" id="rpt-run">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="6 3 20 12 6 21 6 3" fill="currentColor"/></svg>
+                Çalıştır
+            </button>
+            <button type="button" class="rpt-btn rpt-btn-ghost" id="rpt-export-csv" title="CSV olarak indir">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                CSV
+            </button>
+        </div>
+    </aside>
+
+    <!-- SAĞ PANEL -->
+    <main class="rpt-panel">
+        <div class="rpt-panel-header">
+            <h2><span class="dot" style="background:var(--rpt-success)"></span> Önizleme</h2>
+            <div id="rpt-stats-inline" style="display:none; font-size:12px; color:var(--rpt-text-muted);"></div>
+        </div>
+
+        <div class="rpt-preview" id="rpt-preview">
+            <div class="rpt-empty" id="rpt-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                    <path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V6"/><path d="M17 16v-4"/>
+                </svg>
+                <h3>Rapor Henüz Oluşturulmadı</h3>
+                <p>Soldaki panelde veri kaynağı, kolonlar ve filtreler seç — sonra <b>Çalıştır</b>'a bas.</p>
+            </div>
+            <div id="rpt-table-mount"></div>
+            <div id="rpt-chart-mount"></div>
+            <div id="rpt-pivot-mount"></div>
+        </div>
+
+        <div class="rpt-footer" id="rpt-footer">
+            <span class="rpt-stat"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <b id="rpt-duration">—</b></span>
+            <span class="rpt-stat"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg> <b id="rpt-rowcount">—</b> satır</span>
+            <details style="flex-basis:100%;">
+                <summary style="cursor:pointer; font-size:11.5px; font-weight:500; color:var(--rpt-text-muted); padding:4px 0;">SQL'i göster</summary>
+                <pre class="rpt-sql" id="rpt-sql-preview"></pre>
+            </details>
+        </div>
+    </main>
+
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js" integrity="sha256-lSjKY0/srUM9BE3dPm+c4fBo1dky2v27Gdjm2uoZaL0=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://unpkg.com/tabulator-tables@6.2.5/dist/js/tabulator.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.min.js"></script>
+    <script>
+    (function () {
+        'use strict';
+
+        const API = '/api/reporting';
+        const OP_LABELS = { 1:'=', 2:'≠', 3:'>', 4:'≥', 5:'<', 6:'≤', 7:'BETWEEN', 8:'IN', 9:'NOT IN', 10:'CONTAINS', 11:'STARTS WITH', 12:'ENDS WITH', 13:'IS NULL', 14:'IS NOT NULL' };
+        const AGG_LABELS_TR = { 1:'Count', 2:'CountDistinct', 3:'Sum', 4:'Ortalama', 5:'Min', 6:'Max' };
+        const AGG_LABELS_EN = { 1:'Count', 2:'Count Distinct', 3:'Sum', 4:'Average', 5:'Minimum', 6:'Maximum' };
+
+        const state = {
+            category: 1,
+            viewId: null,
+            columns: [],
+            selected: [],
+            aggregates: [],
+            chart: { type: 'bar', xColumn: '', yColumns: [], seriesColumn: '' },
+            pivot: { rowDimensions: [], columnDimensions: [], valueColumn: '', aggregate: 3 },
+            filters: [],
+            topN: 100
+        };
+
+        let tabulator = null;
+        let echart = null;
+
+        // ── Boot ──
+        loadViews();
+        document.getElementById('rpt-view-select').addEventListener('change', onViewChange);
+        document.querySelectorAll('.rpt-cat-tabs button').forEach(b =>
+            b.addEventListener('click', () => setCategory(Number(b.dataset.cat))));
+        document.getElementById('rpt-add-filter').addEventListener('click', addFilter);
+        document.getElementById('rpt-add-agg').addEventListener('click', addAggregate);
+        document.getElementById('rpt-run').addEventListener('click', runReport);
+        document.getElementById('rpt-export-csv').addEventListener('click', exportCsv);
+        document.getElementById('rpt-topn').addEventListener('change', e => state.topN = Number(e.target.value) || 100);
+        window.addEventListener('resize', () => { if (echart) echart.resize(); });
+
+        async function loadViews() {
+            try {
+                const res = await fetch(API + '/views');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const views = await res.json();
+                const sel = document.getElementById('rpt-view-select');
+                views.forEach(v => {
+                    const o = document.createElement('option');
+                    o.value = v.id;
+                    o.textContent = v.name + '  ·  ' + v.code;
+                    sel.appendChild(o);
+                });
+            } catch (e) {
+                showError('VIEW listesi alınamadı: ' + e.message);
+            }
+        }
+
+        async function onViewChange(e) {
+            const id = Number(e.target.value);
+            if (!id) { state.viewId = null; state.columns = []; renderColumnList(); return; }
+            try {
+                const res = await fetch(API + '/views/' + id);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const detail = await res.json();
+                state.viewId = id;
+                state.columns = detail.columns;
+                state.selected = [];
+                state.aggregates = [];
+                state.filters = [];
+                state.chart = { type: 'bar', xColumn: '', yColumns: [], seriesColumn: '' };
+                state.pivot = { rowDimensions: [], columnDimensions: [], valueColumn: '', aggregate: 3 };
+                renderAll();
+            } catch (err) {
+                showError('VIEW detay hatası: ' + err.message);
+            }
+        }
+
+        function setCategory(cat) {
+            state.category = cat;
+            document.querySelectorAll('.rpt-cat-tabs button').forEach(b => b.classList.toggle('active', Number(b.dataset.cat) === cat));
+            document.getElementById('rpt-topn-section').style.display = (cat === 1) ? '' : 'none';
+            renderAll();
+            clearAllMounts();
+            showEmptyState();
+            hideFooter();
+        }
+
+        function renderAll() {
+            renderColumnList();
+            renderFilters();
+            renderCategoryPanels();
+        }
+
+        function renderColumnList() {
+            const wrap = document.getElementById('rpt-col-list');
+            const count = document.getElementById('rpt-col-count');
+            wrap.innerHTML = '';
+            if (!state.columns.length) {
+                wrap.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--rpt-text-soft); font-size: 12.5px;">Önce VIEW seç</div>';
+                count.textContent = '';
+                return;
+            }
+            count.textContent = state.selected.length + ' / ' + state.columns.length + ' seçili';
+            state.columns.forEach(col => {
+                const isGrp = !!col.isGroupable;
+                const isAgg = !!col.isAggregatable;
+                const selected = state.selected.includes(col.colName);
+
+                const disabled = (state.category === 2 && !isGrp) || (state.category === 3 && !isGrp);
+
+                const row = document.createElement('div');
+                row.className = 'rpt-col' + (selected ? ' selected' : '') + (disabled ? ' disabled' : '');
+
+                const check = document.createElement('div');
+                check.className = 'rpt-col-check';
+
+                const name = document.createElement('span');
+                name.className = 'rpt-col-name';
+                name.textContent = col.displayName || col.colName;
+
+                const tag = document.createElement('span');
+                tag.className = 'rpt-col-tag ' + (isGrp ? 'grp' : (isAgg ? 'agg' : 'data'));
+                tag.textContent = isGrp ? 'GRP' : (isAgg ? 'AGG' : 'DATA');
+
+                row.appendChild(check);
+                row.appendChild(name);
+                row.appendChild(tag);
+
+                if (!disabled) {
+                    row.addEventListener('click', () => {
+                        if (selected) state.selected = state.selected.filter(c => c !== col.colName);
+                        else state.selected.push(col.colName);
+                        renderColumnList();
+                    });
+                }
+                wrap.appendChild(row);
+            });
+        }
+
+        function renderCategoryPanels() {
+            document.getElementById('rpt-config-chart').classList.toggle('active', state.category === 2);
+            document.getElementById('rpt-config-pivot').classList.toggle('active', state.category === 3);
+            if (state.category === 2) renderChartConfig();
+            if (state.category === 3) renderPivotConfig();
+        }
+
+        function renderChartConfig() {
+            const xSel = document.getElementById('rpt-chart-x');
+            const sSel = document.getElementById('rpt-chart-series');
+            const grpCols = state.columns.filter(c => c.isGroupable);
+            const opts = grpCols.map(c => `<option value="${escapeHtml(c.colName)}">${escapeHtml(c.displayName || c.colName)}</option>`).join('');
+            xSel.innerHTML = '<option value="">— seç —</option>' + opts;
+            sSel.innerHTML = '<option value="">— yok —</option>' + opts;
+            xSel.value = state.chart.xColumn || '';
+            sSel.value = state.chart.seriesColumn || '';
+            xSel.onchange = e => state.chart.xColumn = e.target.value;
+            sSel.onchange = e => state.chart.seriesColumn = e.target.value;
+            document.getElementById('rpt-chart-type').value = state.chart.type;
+            document.getElementById('rpt-chart-type').onchange = e => state.chart.type = e.target.value;
+            renderAggList();
+        }
+
+        function renderAggList() {
+            const wrap = document.getElementById('rpt-agg-list');
+            wrap.innerHTML = '';
+            const aggCols = state.columns.filter(c => c.isAggregatable);
+            state.aggregates.forEach((a, idx) => {
+                const row = document.createElement('div');
+                row.className = 'rpt-row-grid';
+                const colSel = document.createElement('select');
+                colSel.className = 'rpt-select';
+                colSel.innerHTML = aggCols.map(c => `<option value="${escapeHtml(c.colName)}">${escapeHtml(c.displayName || c.colName)}</option>`).join('');
+                colSel.value = a.colName;
+                colSel.onchange = e => { a.colName = e.target.value; };
+                const fnSel = document.createElement('select');
+                fnSel.className = 'rpt-select';
+                Object.entries(AGG_LABELS_TR).forEach(([k, v]) => {
+                    const o = document.createElement('option'); o.value = k; o.textContent = v; fnSel.appendChild(o);
+                });
+                fnSel.value = String(a.fn);
+                fnSel.onchange = e => { a.fn = Number(e.target.value); };
+                const aliasInp = document.createElement('input');
+                aliasInp.className = 'rpt-input'; aliasInp.type = 'text'; aliasInp.placeholder = 'alias'; aliasInp.value = a.alias || '';
+                aliasInp.onchange = e => { a.alias = e.target.value; };
+                const del = document.createElement('button');
+                del.type = 'button'; del.className = 'rpt-icon-btn';
+                del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+                del.onclick = () => { state.aggregates.splice(idx, 1); renderAggList(); };
+                row.appendChild(colSel); row.appendChild(fnSel); row.appendChild(aliasInp); row.appendChild(del);
+                wrap.appendChild(row);
+            });
+        }
+
+        function addAggregate() {
+            const aggCols = state.columns.filter(c => c.isAggregatable);
+            if (!aggCols.length) return showError('Aggregate edilebilir kolon yok.');
+            state.aggregates.push({ colName: aggCols[0].colName, fn: 3, alias: 'val' + (state.aggregates.length + 1) });
+            renderAggList();
+        }
+
+        function renderPivotConfig() {
+            const p = state.pivot;
+            const grpCols = state.columns.filter(c => c.isGroupable);
+            const aggCols = state.columns.filter(c => c.isAggregatable);
+            renderPivotChips('rpt-pivot-rows', grpCols, p.rowDimensions);
+            renderPivotChips('rpt-pivot-cols', grpCols, p.columnDimensions);
+            const vSel = document.getElementById('rpt-pivot-value');
+            vSel.innerHTML = '<option value="">— seç —</option>' + aggCols.map(c => `<option value="${escapeHtml(c.colName)}">${escapeHtml(c.displayName || c.colName)}</option>`).join('');
+            vSel.value = p.valueColumn || '';
+            vSel.onchange = e => p.valueColumn = e.target.value;
+            document.getElementById('rpt-pivot-agg').value = String(p.aggregate);
+            document.getElementById('rpt-pivot-agg').onchange = e => p.aggregate = Number(e.target.value);
+        }
+
+        function renderPivotChips(containerId, sourceCols, targetArr) {
+            const wrap = document.getElementById(containerId);
+            wrap.innerHTML = '';
+            targetArr.forEach((col, idx) => {
+                const chip = document.createElement('span');
+                chip.className = 'rpt-chip';
+                chip.textContent = col + ' ';
+                const x = document.createElement('span'); x.className = 'rpt-chip-x'; x.textContent = '×';
+                x.onclick = () => { targetArr.splice(idx, 1); renderPivotConfig(); };
+                chip.appendChild(x);
+                wrap.appendChild(chip);
+            });
+            const addSel = document.createElement('select');
+            addSel.className = 'rpt-select';
+            addSel.innerHTML = '<option value="">+ ekle</option>' + sourceCols.filter(c => !targetArr.includes(c.colName)).map(c => `<option value="${escapeHtml(c.colName)}">${escapeHtml(c.displayName || c.colName)}</option>`).join('');
+            addSel.onchange = e => { if (e.target.value) { targetArr.push(e.target.value); renderPivotConfig(); } };
+            wrap.appendChild(addSel);
+        }
+
+        function renderFilters() {
+            const wrap = document.getElementById('rpt-filter-list');
+            wrap.innerHTML = '';
+            const filterCols = state.columns.filter(c => c.isFilterable);
+            if (!filterCols.length) return;
+            state.filters.forEach((f, idx) => {
+                const row = document.createElement('div'); row.className = 'rpt-row-grid';
+                const colSel = document.createElement('select');
+                colSel.className = 'rpt-select';
+                colSel.innerHTML = filterCols.map(c => `<option value="${escapeHtml(c.colName)}">${escapeHtml(c.displayName || c.colName)}</option>`).join('');
+                colSel.value = f.colName;
+                colSel.onchange = e => { f.colName = e.target.value; };
+                const opSel = document.createElement('select');
+                opSel.className = 'rpt-select';
+                Object.entries(OP_LABELS).forEach(([k,v]) => { const o = document.createElement('option'); o.value = k; o.textContent = v; opSel.appendChild(o); });
+                opSel.value = String(f.op);
+                opSel.onchange = e => { f.op = Number(e.target.value); };
+                const valInp = document.createElement('input');
+                valInp.className = 'rpt-input';
+                valInp.type = 'text'; valInp.placeholder = 'değer'; valInp.value = (f.values || []).join(',');
+                valInp.onchange = e => { f.values = e.target.value.split(',').map(s => s.trim()).filter(s => s); };
+                const del = document.createElement('button');
+                del.type = 'button'; del.className = 'rpt-icon-btn';
+                del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+                del.onclick = () => { state.filters.splice(idx, 1); renderFilters(); };
+                row.appendChild(colSel); row.appendChild(opSel); row.appendChild(valInp); row.appendChild(del);
+                wrap.appendChild(row);
+            });
+        }
+
+        function addFilter() {
+            const first = state.columns.find(c => c.isFilterable);
+            if (!first) return showError('Filtrelenebilir kolon yok.');
+            state.filters.push({ colName: first.colName, op: 1, values: [] });
+            renderFilters();
+        }
+
+        function buildConfig() {
+            const cfg = { category: state.category, injectContext: false };
+            if (state.category === 1) {
+                cfg.columns = state.selected.map(c => ({ colName: c }));
+                if (state.topN > 0) cfg.topN = state.topN;
+            } else if (state.category === 2) {
+                cfg.groupBy = state.selected.map(c => ({ colName: c }));
+                cfg.aggregates = state.aggregates.map(a => ({ colName: a.colName, fn: a.fn, alias: a.alias }));
+                cfg.chart = {
+                    type: state.chart.type,
+                    xColumn: state.chart.xColumn,
+                    yColumns: state.aggregates.map(a => a.alias).filter(Boolean),
+                    seriesColumn: state.chart.seriesColumn || null
+                };
+            } else if (state.category === 3) {
+                cfg.pivot = {
+                    rowDimensions: state.pivot.rowDimensions,
+                    columnDimensions: state.pivot.columnDimensions,
+                    valueColumn: state.pivot.valueColumn,
+                    aggregate: state.pivot.aggregate
+                };
+            }
+            if (state.filters.length) {
+                cfg.filters = state.filters.filter(f => f.values.length > 0 || f.op === 13 || f.op === 14).map(f => ({ colName: f.colName, op: f.op, values: f.values }));
+            }
+            return cfg;
+        }
+
+        async function runReport() {
+            if (!state.viewId) return showError('Önce VIEW seç.');
+            clearError();
+
+            const runBtn = document.getElementById('rpt-run');
+            runBtn.disabled = true; runBtn.style.opacity = '.6';
+
+            const cfg = buildConfig();
+            const body = { viewId: state.viewId, adHocConfigJson: JSON.stringify(cfg), page: 1, pageSize: 500 };
+            try {
+                const res = await fetch(API + '/execute', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                });
+                const txt = await res.text();
+                let data;
+                try { data = JSON.parse(txt); } catch (_) {
+                    throw new Error('Sunucu hatası (HTTP ' + res.status + '): ' + txt.substring(0, 120));
+                }
+                if (!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+                document.getElementById('rpt-empty').style.display = 'none';
+                renderResult(data);
+                showFooter(data);
+            } catch (e) {
+                clearAllMounts();
+                showEmptyState();
+                hideFooter();
+                showError(e.message);
+            } finally {
+                runBtn.disabled = false; runBtn.style.opacity = '';
+            }
+        }
+
+        function clearAllMounts() {
+            if (tabulator) { try { tabulator.destroy(); } catch(_) {} tabulator = null; }
+            if (echart) { try { echart.dispose(); } catch(_) {} echart = null; }
+            const t = document.getElementById('rpt-table-mount');
+            const c = document.getElementById('rpt-chart-mount');
+            const p = document.getElementById('rpt-pivot-mount');
+            t.style.display = 'none'; t.innerHTML = '';
+            c.style.display = 'none';
+            p.style.display = 'none'; p.innerHTML = '';
+        }
+
+        function showEmptyState() { document.getElementById('rpt-empty').style.display = ''; }
+        function showFooter(data) {
+            document.getElementById('rpt-footer').classList.add('visible');
+            document.getElementById('rpt-duration').textContent = data.durationMs + ' ms';
+            document.getElementById('rpt-rowcount').textContent = data.rowCount;
+            document.getElementById('rpt-sql-preview').innerHTML = highlightSql(data.generatedSqlPreview || '');
+        }
+        function hideFooter() { document.getElementById('rpt-footer').classList.remove('visible'); }
+
+        function renderResult(data) {
+            clearAllMounts();
+            if (state.category === 1) renderTable(data);
+            else if (state.category === 2) renderChart(data);
+            else if (state.category === 3) renderPivot(data);
+        }
+
+        function renderTable(data) {
+            const mount = document.getElementById('rpt-table-mount');
+            mount.style.display = '';
+            const rows = data.rows.map(r => { const o = {}; data.columns.forEach((c, i) => o[c.name] = r[i]); return o; });
+            const cols = data.columns.map(c => ({
+                title: c.displayName,
+                field: c.name,
+                headerFilter: 'input',
+                formatter: c.dataType === 3 ? 'money' : undefined,
+                formatterParams: c.dataType === 3 ? { decimal: ',', thousand: '.', precision: 2 } : undefined
+            }));
+            tabulator = new Tabulator(mount, {
+                data: rows, columns: cols, layout: 'fitColumns', pagination: true, paginationSize: 50,
+                height: '100%', placeholder: 'Veri yok'
+            });
+        }
+
+        function renderChart(data) {
+            const mount = document.getElementById('rpt-chart-mount');
+            mount.style.display = '';
+            echart = echarts.init(mount);
+            const chart = data.chart;
+            if (!chart || !chart.categories || !chart.categories.length) {
+                echart.setOption({ title: { text: 'Veri yok', left: 'center', top: 'center', textStyle: { color: '#9ca3af', fontSize: 14 } } });
+                return;
+            }
+            if (state.chart.type === 'pie') {
+                const pieData = chart.categories.map((cat, i) => ({ name: cat, value: (chart.series[0]?.values || [])[i] || 0 }));
+                echart.setOption({
+                    tooltip: { trigger: 'item' },
+                    legend: { top: 'bottom' },
+                    series: [{ type: 'pie', radius: ['40%', '70%'], data: pieData, label: { formatter: '{b}\n{d}%' }, itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 } }]
+                });
+            } else {
+                const type = state.chart.type === 'area' ? 'line' : state.chart.type;
+                const series = chart.series.map(s => ({
+                    name: s.name, type, data: s.values,
+                    areaStyle: state.chart.type === 'area' ? { opacity: 0.3 } : undefined,
+                    smooth: state.chart.type === 'line' || state.chart.type === 'area',
+                    itemStyle: { borderRadius: type === 'bar' ? [4,4,0,0] : undefined }
+                }));
+                echart.setOption({
+                    color: ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+                    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                    legend: { top: 'top', icon: 'roundRect' },
+                    grid: { left: '3%', right: '3%', bottom: '8%', top: '15%', containLabel: true },
+                    xAxis: { type: 'category', data: chart.categories, axisLabel: { rotate: chart.categories.length > 8 ? -40 : 0, color: '#6b7280' }, axisLine: { lineStyle: { color: '#e5e7eb' } } },
+                    yAxis: { type: 'value', axisLabel: { color: '#6b7280' }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
+                    series
+                });
+            }
+            setTimeout(() => echart && echart.resize(), 200);
+        }
+
+        function renderPivot(data) {
+            const mount = document.getElementById('rpt-pivot-mount');
+            mount.style.display = '';
+            const rows = data.rows.map(r => { const o = {}; data.columns.forEach((c, i) => o[c.name || '(Değer)'] = r[i]); return o; });
+            if (!rows.length) { mount.innerHTML = '<div class="rpt-empty" style="height:300px;"><h3>Veri yok</h3></div>'; return; }
+            $(mount).pivotUI(rows, {
+                rows: state.pivot.rowDimensions,
+                cols: state.pivot.columnDimensions,
+                aggregatorName: AGG_LABELS_EN[state.pivot.aggregate] || 'Sum',
+                vals: [state.pivot.valueColumn]
+            });
+        }
+
+        async function exportCsv() {
+            if (!state.viewId) return showError('Önce VIEW seç.');
+            const cfg = buildConfig();
+            const body = { viewId: state.viewId, adHocConfigJson: JSON.stringify(cfg) };
+            try {
+                const res = await fetch(API + '/execute/csv', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                });
+                if (!res.ok) { const t = await res.text(); throw new Error(t); }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'rapor-' + new Date().toISOString().slice(0,10) + '.csv'; a.click();
+                URL.revokeObjectURL(url);
+                clearError();
+            } catch (e) { showError('CSV hata: ' + e.message); }
+        }
+
+        function showError(msg) {
+            clearError();
+            const preview = document.getElementById('rpt-preview');
+            const err = document.createElement('div');
+            err.className = 'rpt-toast'; err.id = 'rpt-err';
+            err.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg><span></span>';
+            err.querySelector('span').textContent = msg;
+            preview.appendChild(err);
+            setTimeout(() => { const e = document.getElementById('rpt-err'); if (e) e.style.opacity = '0'; }, 6000);
+        }
+        function clearError() { const e = document.getElementById('rpt-err'); if (e) e.remove(); }
+
+        function highlightSql(sql) {
+            const kw = /\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|JOIN|LEFT|RIGHT|INNER|ON|AND|OR|NOT|IN|BETWEEN|LIKE|IS|NULL|AS|TOP|OFFSET|FETCH|NEXT|ROWS|ONLY|ASC|DESC|SUM|AVG|COUNT|MIN|MAX|DISTINCT)\b/gi;
+            const esc = s => s.replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+            return esc(sql).replace(kw, m => '<span class="kw">' + m + '</span>');
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+        }
+    })();
+    </script>
+}

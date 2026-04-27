@@ -4,17 +4,17 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace CalibraHub.Web.Models.Logistics;
 
-public sealed class WarehouseLocationsViewModel
+public sealed class LocationsViewModel
 {
-    public required IReadOnlyCollection<WarehouseLocationRowViewModel> Locations { get; init; }
+    public required IReadOnlyCollection<LocationRowViewModel> Locations { get; init; }
     public required IReadOnlyCollection<SelectListItem> LocationTypeOptions { get; init; }
     public required IReadOnlyCollection<SelectListItem> ParentLocationOptions { get; init; }
     public required IReadOnlyCollection<ScreenLayoutTabViewModel> LayoutTabs { get; init; }
     public required GridListStateViewModel ListState { get; init; }
-    public WarehouseLocationInput LocationInput { get; init; } = new();
+    public LocationInput LocationInput { get; init; } = new();
 }
 
-public sealed class WarehouseLocationRowViewModel
+public sealed class LocationRowViewModel
 {
     public int Id { get; init; }
     public int? ParentId { get; init; }
@@ -30,7 +30,7 @@ public sealed class WarehouseLocationRowViewModel
     public bool IsActive { get; init; }
 }
 
-public sealed class WarehouseLocationInput
+public sealed class LocationInput
 {
     public int? Id { get; set; }
 

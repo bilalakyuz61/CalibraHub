@@ -102,4 +102,16 @@ public interface IWidgetService
     /// Widget bulunamazsa KeyNotFoundException firlatir.
     /// </summary>
     Task ToggleIsPlainFieldAsync(int widgetId, bool isPlainField, CancellationToken ct);
+
+    /// <summary>
+    /// Toplu required kontrolu — bir formdaki tum IsRequired=true widget'lari, verilen
+    /// recordId'lerin degerleriyle kesistirip bos olanlari bulur. SALES_QUOTE_LINES
+    /// gibi satir-bazli formlar icin save oncesi dogrulama amacli.
+    ///
+    /// Donus: recordId → [(WidgetCode, Label)] — eksik zorunlu widget listesi.
+    /// Eksik olmayan recordId'ler sozlukte yer almaz.
+    /// Form bulunamazsa veya hic required widget yoksa bos sozluk doner.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<(string WidgetCode, string Label)>>>
+        ValidateRequiredAsync(string formCode, IReadOnlyCollection<string> recordIds, CancellationToken ct);
 }

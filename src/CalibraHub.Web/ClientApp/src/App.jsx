@@ -55,7 +55,7 @@ var materialBoardConfig = {
         { id: 'expiry', type: 'data', dataType: 'date',     label: 'Son Kullanma', value: '2026-12-31',
           detail: 'Stok takip eden tarih', permissionKey: 'VIEW_EXPIRY', color: 'amber' },
         // Link widget degismedi
-        { id: 'tree',   type: 'link', icon: 'TreePine',   label: 'Urun Agaci', url: '/Production/ProductTree?code=CLK-2MM-A', color: 'indigo' },
+        { id: 'tree',   type: 'link', icon: 'TreePine',   label: 'Urun Agaci', url: '/Production/BOM?code=CLK-2MM-A', color: 'indigo' },
       ],
       primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Logistics/MaterialCardEdit?id=1' },
       secondaryAction: { label: 'Sil', icon: 'Trash2', url: '#', confirm: 'Bu malzeme silinecek, emin misiniz?' },
@@ -71,7 +71,7 @@ var materialBoardConfig = {
         { id: 'price',  type: 'data', icon: 'DollarSign', label: 'Fiyat',   value: '₺128,00', color: 'amber' },
         { id: 'unit',   type: 'data', icon: 'Scale',      label: 'Birim',   value: 'Metre', color: 'cyan' },
         { id: 'store',  type: 'data', icon: 'Warehouse',  label: 'Depo',    value: 'B-03', color: 'blue' },
-        { id: 'tree',   type: 'link', icon: 'TreePine',   label: 'Urun Agaci', url: '/Production/ProductTree?code=ALM-5MM-B', color: 'indigo' },
+        { id: 'tree',   type: 'link', icon: 'TreePine',   label: 'Urun Agaci', url: '/Production/BOM?code=ALM-5MM-B', color: 'indigo' },
       ],
       primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Logistics/MaterialCardEdit?id=2' },
       secondaryAction: { label: 'Sil', icon: 'Trash2', url: '#' },
@@ -86,7 +86,7 @@ var materialBoardConfig = {
         { id: 'stock',  type: 'data', icon: 'Package',    label: 'Stok',    value: '85', detail: 'KRITIK | Min: 500', color: 'rose' },
         { id: 'price',  type: 'data', icon: 'DollarSign', label: 'Fiyat',   value: '₺1,20', color: 'amber' },
         { id: 'unit',   type: 'data', icon: 'Scale',      label: 'Birim',   value: 'Adet', color: 'cyan' },
-        { id: 'tree',   type: 'link', icon: 'TreePine',   label: 'Urun Agaci', url: '/Production/ProductTree?code=BLN-M8-ZN', color: 'indigo' },
+        { id: 'tree',   type: 'link', icon: 'TreePine',   label: 'Urun Agaci', url: '/Production/BOM?code=BLN-M8-ZN', color: 'indigo' },
       ],
       primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Logistics/MaterialCardEdit?id=3' },
       secondaryAction: { label: 'Sil', icon: 'Trash2', url: '#' },
@@ -169,7 +169,7 @@ var quoteBoardConfig = {
   iconColor: 'violet',
   searchPlaceholder: 'Teklif ara... (no, musteri)',
   actions: [
-    { id: 'new', label: 'Yeni Teklif', icon: 'FileText', variant: 'primary', url: '/Sales/SalesQuoteEdit' }
+    { id: 'new', label: 'Yeni Teklif', icon: 'FileText', variant: 'primary', url: '/Sales/DocumentEdit' }
   ],
   entities: [
     {
@@ -186,7 +186,7 @@ var quoteBoardConfig = {
         { id: 'order',   type: 'link', icon: 'FileCheck',  label: 'Siparise Cevir', url: '/Sales/ConvertToOrder?quoteId=1', color: 'emerald' },
         { id: 'print',   type: 'link', icon: 'Printer',    label: 'Yazdir',     url: '/Sales/PrintQuote?id=1', color: 'slate' },
       ],
-      primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Sales/SalesQuoteEdit?id=1' },
+      primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Sales/DocumentEdit?id=1' },
       secondaryAction: { label: 'Sil', icon: 'Trash2', url: '#' },
     },
     {
@@ -202,7 +202,7 @@ var quoteBoardConfig = {
         { id: 'rep',     type: 'data', icon: 'User',       label: 'Temsilci',   value: 'Mehmet K.', color: 'blue' },
         { id: 'order',   type: 'link', icon: 'FileCheck',  label: 'Siparise Cevir', url: '/Sales/ConvertToOrder?quoteId=2', color: 'emerald' },
       ],
-      primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Sales/SalesQuoteEdit?id=2' },
+      primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Sales/DocumentEdit?id=2' },
       secondaryAction: { label: 'Sil', icon: 'Trash2', url: '#' },
     },
     {
@@ -217,7 +217,7 @@ var quoteBoardConfig = {
         { id: 'lines',   type: 'data', icon: 'Layers',     label: 'Kalem',      value: '12', color: 'violet' },
         { id: 'rep',     type: 'data', icon: 'User',       label: 'Temsilci',   value: 'Ayse D.', color: 'blue' },
       ],
-      primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Sales/SalesQuoteEdit?id=3' },
+      primaryAction: { label: 'Duzenle', icon: 'Edit', url: '/Sales/DocumentEdit?id=3' },
     },
   ],
 }

@@ -1,25 +1,292 @@
-﻿@model ErrorViewModel
+@model ErrorViewModel
 @{
-    ViewData["Title"] = "Error";
+    ViewData["Title"] = "Bir sorun olustu";
+    Layout = null;
 }
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CalibraHub — Bir sorun olustu</title>
+<style>
+    :root { color-scheme: dark light; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background:
+            radial-gradient(at 12% 8%, rgba(99,102,241,0.22) 0px, transparent 50%),
+            radial-gradient(at 88% 12%, rgba(14,165,233,0.14) 0px, transparent 50%),
+            radial-gradient(at 50% 100%, rgba(168,85,247,0.14) 0px, transparent 50%),
+            #0a0d17;
+        color: rgba(255,255,255,0.9);
+        min-height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px;
+    }
 
-<h1 class="text-danger">Error.</h1>
-<h2 class="text-danger">An error occurred while processing your request.</h2>
+    .err-card {
+        width: 100%; max-width: 640px;
+        background: linear-gradient(135deg, rgba(30,41,59,0.95), rgba(15,23,42,0.98));
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 18px;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+        overflow: hidden;
+        animation: errIn 0.3s cubic-bezier(.2,.8,.3,1);
+    }
+    @@keyframes errIn {
+        from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
 
-@if (Model.ShowRequestId)
-{
-    <p>
-        <strong>Request ID:</strong> <code>@Model.RequestId</code>
-    </p>
-}
+    /* Ust serit — kirmizi/amber animasyonlu */
+    .err-card::before {
+        content: ''; display: block; height: 4px;
+        background: linear-gradient(90deg, #ef4444, #f59e0b, #ef4444);
+        background-size: 200% 100%;
+        animation: errShimmer 2.4s linear infinite;
+    }
+    @@keyframes errShimmer { 0% { background-position: 0% 0%; } 100% { background-position: 200% 0%; } }
 
-<h3>Development Mode</h3>
-<p>
-    Swapping to <strong>Development</strong> environment will display more detailed information about the error that occurred.
-</p>
-<p>
-    <strong>The Development environment shouldn't be enabled for deployed applications.</strong>
-    It can result in displaying sensitive information from exceptions to end users.
-    For local debugging, enable the <strong>Development</strong> environment by setting the <strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
-    and restarting the app.
-</p>
+    .err-body { padding: 32px 32px 24px; text-align: center; }
+
+    /* Sevimli kurumsal ikon */
+    .err-icon {
+        width: 84px; height: 84px; border-radius: 50%;
+        background: rgba(239,68,68,0.15);
+        display: inline-flex; align-items: center; justify-content: center;
+        margin-bottom: 16px;
+        animation: errFloat 3s ease-in-out infinite;
+    }
+    @@keyframes errFloat {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-6px); }
+    }
+    .err-icon svg { color: #fca5a5; }
+
+    .err-title {
+        font-size: 1.3rem; font-weight: 800; margin: 0 0 6px;
+        color: #ffffff;
+        letter-spacing: -0.01em;
+    }
+    .err-sub {
+        font-size: 0.88rem; color: rgba(255,255,255,0.55);
+        margin: 0 0 20px;
+        line-height: 1.5;
+    }
+
+    .err-msg {
+        background: rgba(239,68,68,0.08);
+        border: 1px solid rgba(239,68,68,0.25);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 16px;
+        text-align: left;
+    }
+    .err-msg__type {
+        display: inline-block;
+        font-family: 'JetBrains Mono', 'Consolas', monospace;
+        font-size: 0.72rem; font-weight: 700;
+        color: #fca5a5;
+        background: rgba(239,68,68,0.15);
+        padding: 3px 9px; border-radius: 999px;
+        margin-bottom: 8px;
+        letter-spacing: 0.5px;
+    }
+    .err-msg__text {
+        font-size: 0.92rem; color: rgba(255,255,255,0.92);
+        line-height: 1.55; word-break: break-word;
+    }
+
+    .err-hint {
+        display: flex; align-items: flex-start; gap: 10px;
+        padding: 12px 14px; border-radius: 10px;
+        background: rgba(245,158,11,0.08);
+        border: 1px solid rgba(245,158,11,0.25);
+        font-size: 0.82rem; color: #fcd34d;
+        text-align: left;
+        line-height: 1.5;
+        margin-bottom: 16px;
+    }
+    .err-hint svg { flex-shrink: 0; color: #fbbf24; margin-top: 1px; }
+
+    .err-meta {
+        display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+        font-size: 0.74rem; color: rgba(255,255,255,0.45);
+        padding-top: 12px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .err-meta code {
+        font-family: 'JetBrains Mono', 'Consolas', monospace;
+        color: rgba(255,255,255,0.7);
+        background: rgba(255,255,255,0.04);
+        padding: 2px 7px; border-radius: 5px;
+    }
+
+    .err-actions {
+        display: flex; gap: 10px; justify-content: center; margin: 22px 0 6px;
+    }
+    .err-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 9px 18px; border-radius: 10px;
+        font-size: 0.86rem; font-weight: 700;
+        cursor: pointer; border: none;
+        transition: transform 0.12s, box-shadow 0.12s, opacity 0.12s;
+        text-decoration: none;
+    }
+    .err-btn--primary {
+        color: #fff;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        box-shadow: 0 4px 14px rgba(99,102,241,0.35);
+    }
+    .err-btn--primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,0.5); }
+    .err-btn--secondary {
+        color: rgba(255,255,255,0.9);
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.12);
+    }
+    .err-btn--secondary:hover { background: rgba(255,255,255,0.10); }
+
+    /* Stack trace — sadece Dev'de, acilip-kapanabilir */
+    .err-details {
+        margin-top: 18px;
+        text-align: left;
+    }
+    .err-details summary {
+        cursor: pointer;
+        font-size: 0.78rem; font-weight: 600;
+        color: rgba(255,255,255,0.5);
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.06);
+        user-select: none;
+        list-style: none;
+    }
+    .err-details summary::before {
+        content: '▸ '; color: rgba(255,255,255,0.4);
+    }
+    .err-details[open] summary::before { content: '▾ '; }
+    .err-details summary:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.75); }
+    .err-details pre {
+        margin: 8px 0 0;
+        padding: 14px;
+        background: rgba(0,0,0,0.35);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 8px;
+        color: rgba(255,255,255,0.75);
+        font-family: 'JetBrains Mono', 'Consolas', monospace;
+        font-size: 0.72rem;
+        line-height: 1.55;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        max-height: 280px;
+        overflow-y: auto;
+    }
+
+    /* Light theme */
+    @@media (prefers-color-scheme: light) {
+        body {
+            background:
+                radial-gradient(at 12% 8%, rgba(99,102,241,0.14) 0px, transparent 50%),
+                radial-gradient(at 88% 12%, rgba(14,165,233,0.08) 0px, transparent 50%),
+                #f1f5f9;
+            color: #1e293b;
+        }
+        .err-card { background: #ffffff; border-color: #e2e8f0; box-shadow: 0 16px 40px rgba(15,23,42,0.12); }
+        .err-title { color: #1e293b; }
+        .err-sub { color: #64748b; }
+        .err-icon { background: #fee2e2; }
+        .err-icon svg { color: #ef4444; }
+        .err-msg { background: #fef2f2; border-color: #fecaca; }
+        .err-msg__type { background: #fee2e2; color: #b91c1c; }
+        .err-msg__text { color: #1e293b; }
+        .err-hint { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+        .err-hint svg { color: #f59e0b; }
+        .err-meta { color: #94a3b8; border-top-color: #e2e8f0; }
+        .err-meta code { color: #475569; background: #f1f5f9; }
+        .err-btn--secondary { color: #334155; background: #f1f5f9; border-color: #e2e8f0; }
+        .err-btn--secondary:hover { background: #e2e8f0; }
+        .err-details summary { background: #f8fafc; border-color: #e2e8f0; color: #64748b; }
+        .err-details summary:hover { background: #f1f5f9; color: #334155; }
+        .err-details pre { background: #f8fafc; border-color: #e2e8f0; color: #475569; }
+    }
+</style>
+</head>
+<body>
+    <div class="err-card">
+        <div class="err-body">
+            <div class="err-icon">
+                <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+            </div>
+            <h1 class="err-title">Bir sorun oluştu</h1>
+            <p class="err-sub">
+                İsteğinizi işlerken beklenmedik bir hata meydana geldi.<br/>
+                Ekip bilgilendirildi; aşağıdaki detaylar sorunu çözmeye yardımcı olabilir.
+            </p>
+
+            @if (!string.IsNullOrWhiteSpace(Model.Message))
+            {
+                <div class="err-msg">
+                    @if (!string.IsNullOrWhiteSpace(Model.ExceptionType))
+                    {
+                        <div class="err-msg__type">@Model.ExceptionType</div>
+                    }
+                    <div class="err-msg__text">@Model.Message</div>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.Hint))
+            {
+                <div class="err-hint">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a7 7 0 0 0-7 7c0 3 2 5 2 7h10c0-2 2-4 2-7a7 7 0 0 0-7-7z"/>
+                        <line x1="9" y1="18" x2="15" y2="18"/>
+                        <line x1="10" y1="22" x2="14" y2="22"/>
+                    </svg>
+                    <span><strong>İpucu:</strong> @Model.Hint</span>
+                </div>
+            }
+
+            <div class="err-actions">
+                <a href="javascript:history.back()" class="err-btn err-btn--secondary">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+                    </svg>
+                    Geri Dön
+                </a>
+                <button type="button" class="err-btn err-btn--primary" onclick="location.reload()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    Tekrar Dene
+                </button>
+            </div>
+
+            <div class="err-meta">
+                @if (!string.IsNullOrWhiteSpace(Model.Path))
+                {
+                    <span>Sayfa: <code>@Model.Path</code></span>
+                }
+                @if (Model.ShowRequestId)
+                {
+                    <span>İstek: <code>@Model.RequestId</code></span>
+                }
+            </div>
+
+            @if (Model.IsDevelopment && !string.IsNullOrWhiteSpace(Model.StackTrace))
+            {
+                <details class="err-details">
+                    <summary>Geliştirici Detayı (Stack Trace)</summary>
+                    <pre>@Model.StackTrace</pre>
+                </details>
+            }
+        </div>
+    </div>
+</body>
+</html>

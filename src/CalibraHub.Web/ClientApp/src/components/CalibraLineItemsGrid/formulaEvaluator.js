@@ -6,7 +6,7 @@
  *   → 475
  *
  * Guvenlik notu: `new Function` kullanir. Formul string'i **C#'tan server-side**
- * gelir (BuildSalesQuoteLineGridConfig), kullanici kaynakli degil — XSS riski yok.
+ * gelir (BuildDocumentLineGridConfig), kullanici kaynakli degil — XSS riski yok.
  * Yine de 'with' scoping ile yalnizca row objesinin anahtarlarini expose ederiz.
  */
 

@@ -26,7 +26,7 @@ public sealed class SqlPltSystemLogRepository : IIntegratorImportLogRepository
 
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _tableName = $"[{schema}].[PLT_SISTEM_LOG]";
-        _companyTableName = $"[{schema}].[company]";
+        _companyTableName = $"[{schema}].[Company]";
 
         try
         {

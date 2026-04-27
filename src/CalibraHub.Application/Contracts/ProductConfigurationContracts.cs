@@ -15,7 +15,8 @@ public sealed record ProductConfigurationFeatureDto(
     string DataType,
     bool IsActive,
     DateTime CreatedDate,
-    string? UnitOfMeasure = null);
+    string? UnitOfMeasure = null,
+    bool VisibleInDesign = true);
 
 public sealed record ProductConfigurationValueDto(
     int Id,
@@ -47,13 +48,15 @@ public sealed record ProductConfigurationItemDto(
 
 public sealed record ProductConfigurationFeatureStockLinkDto(
     int FeatureId,
-    string StockCode);
+    string StockCode,
+    bool PrintDescriptionInDesign = true);
 
 public sealed record CreateProductConfigurationFeatureRequest(
     string Name,
     ConfigurationFieldDataType DataType,
     bool IsActive = true,
-    string? UnitOfMeasure = null);
+    string? UnitOfMeasure = null,
+    bool VisibleInDesign = true);
 
 public sealed record CreateProductConfigurationValueRequest(
     int FeatureId,
@@ -79,7 +82,8 @@ public sealed record UpdateProductConfigurationFeatureRequest(
     int Id,
     string Name,
     ConfigurationFieldDataType DataType,
-    string? UnitOfMeasure = null);
+    string? UnitOfMeasure = null,
+    bool VisibleInDesign = true);
 
 public sealed record SaveProductConfigurationFeatureStocksRequest(
     int FeatureId,

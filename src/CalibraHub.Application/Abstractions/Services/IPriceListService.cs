@@ -12,13 +12,16 @@ public interface IPriceListService
     Task<(bool Success, string? Error)> DeleteGroupAsync(int id, CancellationToken ct);
 
     // Fiyat Kalemleri
-    Task<IReadOnlyCollection<PriceListEntryDto>> GetEntriesByGroupAsync(int groupId, CancellationToken ct);
-    Task<(bool Success, string? Error, int? Id)> SaveEntryAsync(SavePriceListEntryRequest request, CancellationToken ct);
+    Task<IReadOnlyCollection<PriceListDto>> GetEntriesByGroupAsync(int groupId, CancellationToken ct);
+    Task<(bool Success, string? Error, int? Id)> SaveEntryAsync(SavePriceListRequest request, CancellationToken ct);
     Task<(bool Success, string? Error)> DeleteEntryAsync(int id, CancellationToken ct);
 
     // Inline fiyat guncelleme (sadece alis/satis degistirir)
     Task<(bool Success, string? Error)> UpdateEntryPricesAsync(UpdatePriceEntryRequest request, CancellationToken ct);
 
-    // Toplu Fiyat Girisi
-    Task<(bool Success, string? Error, int Count)> SaveBulkEntriesAsync(SaveBulkPriceEntriesRequest request, CancellationToken ct);
+    // Toplu Fiyat Girisi (upsert — mevcut kayit varsa guncelle, yoksa ekle)
+    Task<(bool Success, string? Error, int Inserted, int Updated)> SaveBulkEntriesAsync(SaveBulkPriceEntriesRequest request, CancellationToken ct);
+
+    // Mevcut fiyat sorgusu — toplu stok+kombinasyon listesi icin
+    Task<IReadOnlyCollection<ExistingPriceRow>> GetExistingPricesAsync(GetExistingPricesRequest request, CancellationToken ct);
 }

@@ -7,11 +7,16 @@ using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Persistence.Repositories;
 using CalibraHub.Worker;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var host = Host.CreateDefaultBuilder(args)
+    // ContentRoot'u binary dizinine cek — `dotnet run --project X` ile calistirildiginda
+    // cwd repo root kaliyor ve appsettings.json bulunamiyor. BaseDirectory bin/Debug/netX/
+    // olur; appsettings.json oraya kopyalanirsa (csproj'da None Update) dogru okunur.
+    .UseContentRoot(AppContext.BaseDirectory)
     .UseWindowsService(options =>
     {
         options.ServiceName = "CalibraHub Worker";
@@ -28,9 +33,23 @@ var host = Host.CreateDefaultBuilder(args)
             useMockIntegratorClient = false;
         }
 
+        var rawCs = configuration[$"{CalibraDatabaseOptions.SectionName}:ConnectionString"] ?? string.Empty;
+        var decryptedCs = DecryptIfNeeded(rawCs);
+        // Debug: Console'a kisaltarak yazdir (sifre icermez cunku DPAPI oncesi raw veya kullanici plain)
+        Console.WriteLine($"[WORKER BOOT] CalibraDatabase:ConnectionString raw-length={rawCs.Length}, decrypted-length={decryptedCs.Length}");
+        if (decryptedCs.Length > 0)
+        {
+            try
+            {
+                var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(decryptedCs);
+                Console.WriteLine($"[WORKER BOOT] DataSource={b.DataSource}, InitialCatalog={b.InitialCatalog}");
+            }
+            catch (Exception e) { Console.WriteLine($"[WORKER BOOT] CS parse hatasi: {e.Message}"); }
+        }
+
         var databaseOptions = new CalibraDatabaseOptions
         {
-            ConnectionString = DecryptIfNeeded(configuration[$"{CalibraDatabaseOptions.SectionName}:ConnectionString"] ?? string.Empty),
+            ConnectionString = decryptedCs,
             Schema = configuration[$"{CalibraDatabaseOptions.SectionName}:Schema"] ?? "dbo",
             AutoCreateDatabaseOnStartup = configuration.GetValue<bool?>($"{CalibraDatabaseOptions.SectionName}:AutoCreateDatabaseOnStartup") ?? true
         };
@@ -56,6 +75,14 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddSingleton<InMemoryDataStore>();
         services.AddSingleton(databaseOptions);
         services.AddSingleton(bootstrapAdminOptions);
+        // Per-company connection registry (Web ile ayni) — SqlServerConnectionFactory bu
+        // dependency'yi bekliyor, kayit olmadan DI validation basarisiz oluyor.
+        services.AddSingleton<CompanyConnectionRegistry>();
+        services.AddSingleton<ICompanyConnectionRegistry>(sp => sp.GetRequiredService<CompanyConnectionRegistry>());
+        // SqlServerConnectionFactory Web'de IHttpContextAccessor kullanarak tenant cozer.
+        // Worker'da HTTP yok — dummy accessor yeter (HttpContext null doner, factory ilk
+        // sirket kaydina duser).
+        services.AddHttpContextAccessor();
         services.AddSingleton<SqlServerConnectionFactory>();
         services.AddScoped<IDocumentImportService, DocumentImportService>();
         services.AddScoped<IAdminReadService, AdminReadService>();
@@ -66,12 +93,47 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IIntegratorSettingsRepository, SqlIntegratorSettingsRepository>();
         services.AddScoped<ISmtpProfileRepository, SqlSmtpProfileRepository>();
         services.AddScoped<IErpConnectionSettingsRepository, SqlErpConnectionSettingsRepository>();
-        services.AddScoped<ICompanyDefinitionRepository, SqlCompanyDefinitionRepository>();
+        services.AddScoped<ICompanyRepository, SqlCompanyRepository>();
         services.AddScoped<IDepartmentRepository, SqlDepartmentRepository>();
         services.AddScoped<IUserProfileRepository, SqlUserProfileRepository>();
         services.AddScoped<IIncomingDocumentRepository, SqlIncomingDocumentRepository>();
         services.AddScoped<IIntegratorImportLogRepository, SqlPltSystemLogRepository>();
         services.AddScoped<INoteRepository, SqlNoteRepository>();
+        services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IReminderEmailSender,
+                           CalibraHub.Infrastructure.Notifications.SmtpReminderEmailSender>();
+        services.AddScoped<IScheduledTaskRepository, SqlScheduledTaskRepository>();
+        services.AddScoped<IScheduledTaskRunRepository, SqlScheduledTaskRunRepository>();
+
+        // Executor registry — her TaskType icin bir IScheduledTaskExecutor.
+        // DI `IEnumerable<IScheduledTaskExecutor>` enjekte ettiginde tum kayitlari doner.
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Persistence.Scheduling.SqlProcedureTaskExecutor>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Infrastructure.Scheduling.HttpApiTaskExecutor>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Application.Services.Scheduling.CurrencyRefreshTaskExecutor>();
+        services.AddHttpClient();
+
+        services.AddScoped<CalibraHub.Application.Services.Scheduling.IScheduledTaskDispatcher,
+                           CalibraHub.Application.Services.Scheduling.ScheduledTaskDispatcher>();
+
+        // Scheduler polling worker — BUILTIN olmayan tasklari orchestrate eder
+        services.AddHostedService<ScheduledTaskPollingWorker>();
+
+        // Notlar at-rest sifreleme — Web ile ayni key ring'i paylasir.
+        // Worker sadece reminder icin metadata okur, note.Content alanini kullanmaz,
+        // o yuzden key paylasimi zorunlu degil; ama Unprotect basarisiz olursa
+        // ciphertext aynen gelir ve worker tarafindan kullanilmaz (risk yok).
+        var dpKeysPath = System.IO.Path.Combine(environment.ContentRootPath, ".app-data-protection");
+        System.IO.Directory.CreateDirectory(dpKeysPath);
+        services.AddDataProtection()
+            .SetApplicationName("CalibraHub.Web")
+            .PersistKeysToFileSystem(new System.IO.DirectoryInfo(dpKeysPath));
+        services.AddSingleton<
+            CalibraHub.Application.Abstractions.Security.INoteEncryptionService,
+            CalibraHub.Infrastructure.Security.DataProtectionNoteEncryptionService>();
+
         services.AddHostedService<DocumentImportWorker>();
         services.AddHostedService<ReminderNotificationWorker>();
         services.AddScoped<ICurrencyRepository, SqlCurrencyRepository>();

@@ -7,7 +7,7 @@
  *
  * Props:
  *   - groups:   [{ id, groupKey, groupLabel, displayOrder, isActive }, ...]
- *   - value:    secili groupId (null = "Grupsuz")
+ *   - value:    secili groupId (null = "Genel")
  *   - onChange: function(groupId|null)
  *   - disabled: bool (edit modunda veya saving sirasinda)
  */
@@ -95,7 +95,7 @@ export default function GroupSelector(props) {
           />
         </div>
         <span className="flex-1 text-left truncate">
-          {selected ? selected.groupLabel : <span className="text-slate-400 dark:text-white/30">Grupsuz</span>}
+          {selected ? selected.groupLabel : <span className="text-slate-400 dark:text-white/30">Genel</span>}
         </span>
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}
@@ -129,7 +129,7 @@ export default function GroupSelector(props) {
               maxWidth: 420,
             }}
           >
-            {/* Grupsuz secenegi */}
+            {/* Genel secenegi */}
             <button
               type="button"
               onClick={function() {
@@ -153,7 +153,7 @@ export default function GroupSelector(props) {
                 <Layers size={12} style={{ color: palette.icon }} strokeWidth={1.8} />
               </div>
               <span className={'flex-1 text-sm ' + (isDark ? 'text-white/60' : 'text-slate-500')}>
-                Grupsuz
+                Genel
               </span>
               {value === null && <Check size={13} className="flex-shrink-0 text-indigo-500 dark:text-indigo-400" />}
             </button>

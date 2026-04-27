@@ -2,7 +2,7 @@
  * DynamicWidgetRenderer — Faz C
  *
  * Ortak React bileseni — Razor edit sayfalari (MaterialCardEdit,
- * ContactAccountEdit, SalesQuoteEdit) icinden mount edilir. formCode ve
+ * ContactEdit, DocumentEdit) icinden mount edilir. formCode ve
  * recordId alir, /api/widgets/forms/{formCode}/records/{recordId}
  * endpoint'inden schema+value birlesimi yukler, dataType'a gore input
  * cizer ve kullanici kaydettiginde ayni endpoint'e POST eder.
@@ -518,7 +518,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
             <summary className={classPrefix + '-card-title'} style={{ cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
               {g.label}
             </summary>
-            <div className={classPrefix + '-grid-2'} style={{ marginTop: 6 }}>
+            <div className={classPrefix + '-grid-2'} style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 14 }}>
               {children.map(function (w) {
                 return renderField(w, values[w.widgetId], handleChange, classPrefix, displays, setDisplays, grids, setGrids, visibility, disabledMap, ruleErrors, saveAttemptErrors, values)
               })}
@@ -527,16 +527,17 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
         )
       })}
 
-      {/* Grupsuz field'lar — ayri kart */}
+      {/* Grupsuz field'lar — admin'de "Genel" secildiginde veya grup bos birakildiginda
+          buraya duser. Etiket "Genel" olarak gosterilir (eskiden "Ek Alanlar" idi). */}
       {childrenByParent['__ungrouped'] && childrenByParent['__ungrouped'].length > 0 && (
         <details className={classPrefix + '-card'} open
           data-dyn-group-id="__ungrouped"
-          data-dyn-group-label="Ek Alanlar"
+          data-dyn-group-label="Genel"
           style={{ marginBottom: 16, borderRadius: 14, overflow: 'hidden' }}>
           <summary className={classPrefix + '-card-title'} style={{ cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
-            Ek Alanlar
+            Genel
           </summary>
-          <div className={classPrefix + '-grid-2'} style={{ marginTop: 6 }}>
+          <div className={classPrefix + '-grid-2'} style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 14 }}>
             {childrenByParent['__ungrouped'].map(function (w) {
               return renderField(w, values[w.widgetId], handleChange, classPrefix, displays, setDisplays, grids, setGrids, visibility, disabledMap, ruleErrors, saveAttemptErrors, values)
             })}
@@ -717,10 +718,31 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
     }
     case 'boolean': {
       var isOn = value === true || value === 'true' || value === '1'
+      // Switch toggle — iOS-style. Sadece MODERN baslik stilinde tutarli goruntu
+      // icin cerceveli container'a alinir (textbox gibi). Aksi halde minimal
+      // (baska input'lari taklit eden cerceve olmadan). "Evet/Hayir" metni
+      // gosterilmez — switch zaten durumu tasiyor.
+      var booleanIsModern = w.labelStyle === 'modern'
       inputEl = (
         <label
           htmlFor={'dyn_' + w.widgetId}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 4, cursor: 'pointer' }}
+          data-widget-code={w.widgetId}
+          className={(booleanIsModern ? (prefix + '-input ') : '') + reqCls}
+          style={Object.assign({
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0,
+            cursor: 'pointer',
+            userSelect: 'none',
+            boxSizing: 'border-box',
+          }, booleanIsModern ? {
+            width: '100%',
+            minHeight: 36,
+            height: 'auto',
+            padding: '6px 12px',
+          } : {
+            marginTop: 4,
+          })}
         >
           <input
             id={'dyn_' + w.widgetId}
@@ -728,8 +750,38 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
             data-widget-code={w.widgetId}
             checked={isOn}
             onChange={function (e) { onChange(w.widgetId, e.target.checked) }}
+            style={{
+              position: 'absolute',
+              width: 1, height: 1, padding: 0, margin: -1,
+              overflow: 'hidden', clip: 'rect(0,0,0,0)',
+              whiteSpace: 'nowrap', border: 0,
+            }}
           />
-          <span style={{ fontSize: '0.8rem' }}>{isOn ? 'Evet' : 'Hayir'}</span>
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'relative',
+              display: 'inline-block',
+              width: 50, height: 28,
+              borderRadius: 999,
+              background: isOn ? '#10b981' : 'rgba(148, 163, 184, 0.38)',
+              transition: 'background-color 0.18s ease',
+              flexShrink: 0,
+              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.18)',
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                top: 2, left: isOn ? 24 : 2,
+                width: 24, height: 24,
+                borderRadius: '50%',
+                background: '#ffffff',
+                boxShadow: '0 2px 5px rgba(0,0,0,0.28)',
+                transition: 'left 0.18s ease',
+              }}
+            />
+          </span>
         </label>
       )
       break
@@ -755,28 +807,81 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
       var selected = Array.isArray(value)
         ? value
         : (typeof value === 'string' && value ? value.split(',') : [])
+      // Chip / pill-tabanli coklu secim — native checkbox yerine klikli rozetler.
+      // Tutarli gorunum icin sqe/mce-input class'i ile cercevelenir (textbox gibi).
       inputEl = (
-        <div className={prefix + '-multicheck' + reqCls} data-widget-code={w.widgetId}>
+        <div
+          className={prefix + '-input ' + prefix + '-multicheck' + reqCls}
+          data-widget-code={w.widgetId}
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+            minHeight: 36,
+            height: 'auto',
+            alignItems: 'center',
+            padding: '6px 10px',
+            boxSizing: 'border-box',
+          }}
+        >
           {msOpts.map(function (o) {
             var isChecked = selected.indexOf(o) !== -1
+            function toggle() {
+              var next = isChecked
+                ? selected.filter(function (v) { return v !== o })
+                : selected.concat([o])
+              onChange(w.widgetId, next)
+            }
             return (
-              <label key={o} className={prefix + '-multicheck-item' + (isChecked ? ' is-checked' : '')}>
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={function () {
-                    var next = isChecked
-                      ? selected.filter(function (v) { return v !== o })
-                      : selected.concat([o])
-                    onChange(w.widgetId, next)
-                  }}
-                />
-                <span>{o}</span>
-              </label>
+              <span
+                key={o}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isChecked}
+                onClick={toggle}
+                onKeyDown={function(e) {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    toggle()
+                  }
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 28,
+                  padding: '0 12px',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  borderRadius: 999,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+                  border: isChecked
+                    ? '1px solid rgba(99,102,241,0.55)'
+                    : '1px solid rgba(148,163,184,0.35)',
+                  background: isChecked
+                    ? 'rgba(99,102,241,0.20)'
+                    : 'transparent',
+                  color: isChecked
+                    ? 'rgba(165,180,252,0.98)'
+                    : 'rgba(148,163,184,0.85)',
+                }}
+              >
+                {isChecked && (
+                  <span aria-hidden="true" style={{
+                    display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+                    background: '#a5b4fc',
+                  }} />
+                )}
+                {o}
+              </span>
             )
           })}
           {msOpts.length === 0 && (
-            <span className={prefix + '-multicheck-empty'}>Secenek tanimlanmamis</span>
+            <span className={prefix + '-multicheck-empty'} style={{ fontSize: '0.78rem', opacity: 0.5 }}>
+              Seçenek tanımlanmamış
+            </span>
           )}
         </div>
       )
@@ -893,20 +998,25 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
   }
 
   // isPlainField: grup wrapper olmadan sade label + input — yatay hizalı düzen.
-  // gridColumn:1/-1 ile 2-sutunlu grid'de tam genislik kaplar; tum plainField
-  // satirlarinin inputlari ayni X noktasindan baslar (sabit 160px label sutunu).
+  // 12-col grid'de colSpan kadar yer kaplar (default 12 = tam satir). Plain field
+  // her zaman label solda + input sagda; span daraltildikca input sutunu daralir.
   // Zorunlu hata: is-invalid sinifi input'a eklendi (reqCls ile), wrapper div yok.
   var inputWithError = inputEl
+  // colSpan admin tanimindan gelir; 1-12 disinda plain field icin varsayilan 12.
+  var plainSpan = (typeof w.colSpan === 'number' && w.colSpan >= 1 && w.colSpan <= 12)
+    ? w.colSpan : 12
 
   if (w.isPlainField) {
+    // Plain field: label HER ZAMAN solda, input sagda — dikey stack yok.
     return (
       <div
         key={key}
         style={Object.assign({
           display: 'flex',
           alignItems: 'center',
+          flexDirection: 'row',
           gap: 12,
-          gridColumn: '1 / -1',
+          gridColumn: 'span ' + plainSpan,
           minWidth: 0,
           padding: '4px 0 4px 6px',
         }, widgetColor ? {
@@ -943,15 +1053,84 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
   if (hasFormula) wrapperCls += ' ' + prefix + '-field--formula'
   if (ruleErrorMsg) wrapperCls += ' ' + prefix + '-field--has-rule-error'
 
+  // colSpan — admin tanimindaki 12-col grid span degeri; 1-12 disinda varsayilan 6.
+  var safeColSpan = (typeof w.colSpan === 'number' && w.colSpan >= 1 && w.colSpan <= 12)
+    ? w.colSpan : 6
+  var spanStyle = { gridColumn: 'span ' + safeColSpan }
+
+  // labelStyle — 'modern' ise floating/outline label (input cercevesi UZERINDE,
+  // ust sinir cizgisini "keser"). Referans: Material Design Outlined Text Field.
+  // CSS: .calibra-modern-wrap + .calibra-modern-label (index.css'te tanimli).
+  // Case-insensitive check: eski / manuel girilmis "Modern" de calissin.
+  var isModernLabel = String(w.labelStyle || '').toLowerCase() === 'modern'
+  if (isModernLabel) {
+    // data-filled — label'in inside/floated durumunu belirler. Boolean, multi-select,
+    // grid, lookup gibi "her zaman dolu" tipler true; text/number/date gibi tipler
+    // value'ya bakar (bos string = false → label input icinde duracak).
+    var modernDataType = String(w.dataType || '').toLowerCase()
+    // Date/datetime/time her zaman floated — browser'in native "gg.aa.yyyy"
+    // placeholder'i ile gorsel cakisma yasanmasin diye.
+    var alwaysFilledTypes = ['boolean', 'multi-select', 'grid', 'lookup', 'dropdown', 'link',
+                              'date', 'datetime', 'datetime-local', 'time']
+    var isFilled
+    if (alwaysFilledTypes.indexOf(modernDataType) !== -1) {
+      isFilled = true
+    } else if (value == null) {
+      isFilled = false
+    } else if (typeof value === 'string') {
+      isFilled = value.trim() !== ''
+    } else if (Array.isArray(value)) {
+      isFilled = value.length > 0
+    } else {
+      isFilled = true
+    }
+    return (
+      <div
+        key={key}
+        className={wrapperCls + ' calibra-modern-wrap ' + prefix + '-field--modern'}
+        data-filled={isFilled ? 'true' : 'false'}
+        style={Object.assign({
+          // .sqe-field'in icsel 200px+1fr grid'ini ez; modern widget single-column.
+          // minWidth:0 → dar hucrelerde (span<6) icerik 200px'e dayanip cell'i
+          // gerdirmesin diye.
+          display: 'block',
+          gridTemplateColumns: 'none',
+          padding: '12px 0 0 0',
+          minWidth: 0,
+        }, spanStyle, widgetColor ? {
+          borderLeft: '3px solid ' + widgetColor.border,
+          paddingLeft: 8,
+          borderRadius: '0 6px 6px 0',
+        } : {})}
+      >
+        <span className="calibra-modern-label">
+          {w.label}
+          {w.isRequired && <span style={{ color: '#f87171', marginLeft: 3, fontWeight: 700 }}>*</span>}
+        </span>
+        {isDisabled ? (
+          <div className={prefix + '-field__readonly-wrap'} style={{ pointerEvents: 'none' }}>
+            {inputWithError}
+          </div>
+        ) : inputWithError}
+        {ruleErrorMsg && (
+          <div className={prefix + '-rule-error'}>{ruleErrorMsg}</div>
+        )}
+      </div>
+    )
+  }
+
+  // Klasik (standart) baslik: label HER ZAMAN solda, input sagda (ayni satir).
+  // Cell daraldiginda label truncate olur ama dikey stack'e DUSMEZ.
+  // (narrowStack davranisi kaldirildi — kullanici klasik'te label-solda istiyor.)
   return (
     <div
       key={key}
       className={wrapperCls}
-      style={widgetColor ? {
+      style={Object.assign({ minWidth: 0 }, spanStyle, widgetColor ? {
         borderLeft: '3px solid ' + widgetColor.border,
         paddingLeft: 8,
         borderRadius: '0 6px 6px 0',
-      } : undefined}
+      } : {})}
     >
       {labelEl}
       {/* pointer-events: none + opacity CSS ile readonly efekti — tum input tipleri icin tek noktada */}

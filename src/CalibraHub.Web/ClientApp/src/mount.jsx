@@ -25,6 +25,7 @@ import OrgChartWorkspace from './components/OrgChart/OrgChartWorkspace'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import { guideResolve as mountGuideResolve } from './components/DynamicWidgetRenderer/dynamicWidgetService'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
+import CombinationPickerModal from './components/CalibraLineItemsGrid/CombinationPickerModal'
 import { getRuntimeBindings } from './services/fieldSettingService'
 import './index.css'
 
@@ -234,7 +235,7 @@ function mountShell(element, config) {
 
 /**
  * CalibraLineItemsGrid mount — Satir-ici duzenlenebilir dinamik kalem grid'i.
- * SalesQuoteEdit gibi formlarda kullanilir. Kolonlar + satirlar tamamen
+ * DocumentEdit gibi formlarda kullanilir. Kolonlar + satirlar tamamen
  * server-side config'ten gelir ("Aptal Bilesen, Zeki Veri").
  *
  * @param {HTMLElement} element
@@ -530,7 +531,14 @@ function attachGuide(selectorOrEl, guideCode, options) {
       if (fm) {
         Object.keys(fm).forEach(function (sel) {
           var target = document.querySelector(sel)
-          if (target) { target.value = ''; target.dispatchEvent(new Event('change', { bubbles: true })) }
+          if (!target) return
+          var tag = (target.tagName || '').toUpperCase()
+          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+            target.value = ''
+            target.dispatchEvent(new Event('change', { bubbles: true }))
+          } else {
+            target.textContent = ''
+          }
         })
       }
       return
@@ -542,15 +550,21 @@ function attachGuide(selectorOrEl, guideCode, options) {
         input.setAttribute('data-value', val)
         input.setAttribute('data-display', result.display)
         input.classList.remove('is-invalid')
-        // fillMap ile diger alanlari doldur
+        // fillMap ile diger alanlari doldur — input'a .value, span/div'e .textContent
         var fm = options.fillMap
         if (fm && result.cells) {
           Object.keys(fm).forEach(function (sel) {
             var target = document.querySelector(sel)
             if (target && result.cells[fm[sel]] != null) {
-              target.value = String(result.cells[fm[sel]])
-              target.dispatchEvent(new Event('input', { bubbles: true }))
-              target.dispatchEvent(new Event('change', { bubbles: true }))
+              var val2 = String(result.cells[fm[sel]])
+              var tag = (target.tagName || '').toUpperCase()
+              if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+                target.value = val2
+                target.dispatchEvent(new Event('input', { bubbles: true }))
+                target.dispatchEvent(new Event('change', { bubbles: true }))
+              } else {
+                target.textContent = val2
+              }
             }
           })
         }
@@ -611,13 +625,21 @@ async function mountFixedFieldLookups(formCode) {
         return
       }
 
-      // Input'u readonly yap
-      input.setAttribute('readonly', 'readonly')
-      input.style.cursor = 'pointer'
+      // Input'a elle yazi girilmesine izin veriliyor mu?
+      // data-cb-allow-typing="true" ise readonly ve input-click-to-open davranisi
+      // eklenmez — kullanici ya butona tiklayarak ya da klavyeyle deger girebilir.
+      var allowTyping = input.getAttribute('data-cb-allow-typing') === 'true'
 
-      // Wrapper olustur
+      if (!allowTyping) {
+        input.setAttribute('readonly', 'readonly')
+        input.style.cursor = 'pointer'
+      }
+
+      // Wrapper olustur — flash'i onlemek icin gizli baslatilir,
+      // wireBridgeBtn lookup btn'u gizledikten sonra gosterir
       var wrapper = document.createElement('div')
       wrapper.className = 'ffl-wrapper'
+      wrapper.style.display = 'none'
       input.parentNode.insertBefore(wrapper, input.nextSibling)
 
       // React mount
@@ -628,6 +650,7 @@ async function mountFixedFieldLookups(formCode) {
         React.createElement(ErrorBoundary, null,
           React.createElement(FixedFieldLookupBridge, {
             inputElement: input,
+            formCode: formCode,
             fieldKey: binding.fieldKey,
             guideCode: binding.guideCode,
             filterJson: binding.filterJson,
@@ -636,11 +659,15 @@ async function mountFixedFieldLookups(formCode) {
         )
       )
 
-      // Input'a tiklayinca da modal acilsin
-      input.addEventListener('click', function () {
-        var btn = wrapper.querySelector('.ffl-lookup-btn')
-        if (btn) btn.click()
-      })
+      // Readonly alanlarda input'a tiklayinca da modal acilsin.
+      // Elle yazilabilir alanlarda bu eklenmez — yoksa kullanici her tikladiginda
+      // modal aciliyor.
+      if (!allowTyping) {
+        input.addEventListener('click', function () {
+          var btn = wrapper.querySelector('.ffl-lookup-btn')
+          if (btn) btn.click()
+        })
+      }
     })
   } catch (e) {
     console.error('[CalibraHub] mountFixedFieldLookups hata:', e)
@@ -683,6 +710,57 @@ function mountProductCombinations(element, config) {
   }
 }
 
+/**
+ * openCombinationPicker — Global API. Razor sayfalarindan kombinasyon rehberi modalini acar.
+ *
+ * Ornek (BOM ekrani):
+ *   CalibraHub.openCombinationPicker('MAT123', {
+ *     currentCode: 'CFG-42',
+ *     onApply: function(configId, code, details) { ... },
+ *   })
+ *
+ * @param {string} materialCode  — Secili malzemenin kodu (bos ise "once malzeme sec" mesaji)
+ * @param {{ currentCode?: string, currentDetails?: object[], onApply?: function, onClose?: function }} opts
+ * @returns {{ close: function }}
+ */
+function openCombinationPicker(materialCode, opts) {
+  opts = opts || {}
+  var container = document.createElement('div')
+  container.setAttribute('data-cb-combo-picker', '')
+  document.body.appendChild(container)
+  var root = createRoot(container)
+
+  function cleanup() {
+    try { root.unmount() } catch (e) { /* ignore */ }
+    if (container.parentNode) container.parentNode.removeChild(container)
+  }
+
+  function handleClose() {
+    cleanup()
+    if (typeof opts.onClose === 'function') opts.onClose()
+  }
+
+  function handleApply(configId, code, details) {
+    cleanup()
+    if (typeof opts.onApply === 'function') opts.onApply(configId, code, details)
+  }
+
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(CombinationPickerModal, {
+        materialCode: materialCode || '',
+        materialName: opts.materialName || '',
+        currentCode: opts.currentCode || null,
+        currentDetails: Array.isArray(opts.currentDetails) ? opts.currentDetails : [],
+        onApply: handleApply,
+        onClose: handleClose,
+      })
+    )
+  )
+
+  return { close: handleClose }
+}
+
 window.CalibraHub = window.CalibraHub || {}
 window.CalibraHub.mountSmartBoard = mountSmartBoard
 window.CalibraHub.mountMaterialList = mountMaterialList
@@ -698,5 +776,12 @@ window.CalibraHub.mountCompanyUserManagement = mountCompanyUserManagement
 window.CalibraHub.mountInvoiceDataGrid = mountInvoiceDataGrid
 window.CalibraHub.mountOrgChart = mountOrgChart
 window.CalibraHub.mountFixedFieldLookups = mountFixedFieldLookups
+window.CalibraHub.openCombinationPicker = openCombinationPicker
 window.CalibraHub.attachGuide = attachGuide
+// Lookup cache temizleme — sekmeler arasi veri senkronizasyonu icin export.
+// Ornek: malzeme karti sekmesinde birim degisti → satis teklifi sekmesi focus aldiginda
+// bu fonksiyonu cagirip /Sales/GetMaterials + /Sales/GetMaterialUnits cache'lerini invalide eder.
+import('./components/CalibraLineItemsGrid/useLookup').then(function (m) {
+  window.CalibraHub.clearLookupCache = m.clearLookupCache
+})
 window.CalibraHub.mountProductCombinations = mountProductCombinations

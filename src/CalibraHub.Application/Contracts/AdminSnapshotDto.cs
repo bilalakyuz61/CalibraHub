@@ -1,14 +1,14 @@
 namespace CalibraHub.Application.Contracts;
 
 public sealed record AdminSnapshotDto(
-    IReadOnlyCollection<CompanyDefinitionDto> Companies,
+    IReadOnlyCollection<CompanyDto> Companies,
     IReadOnlyCollection<IntegratorSettingsDto> Integrators,
     IReadOnlyCollection<SmtpProfileDto> SmtpProfiles,
     IReadOnlyCollection<ErpConnectionSettingsDto> ErpConnections,
     IReadOnlyCollection<DepartmentDto> Departments,
     IReadOnlyCollection<UserProfileDto> Users);
 
-public sealed record CompanyDefinitionDto(
+public sealed record CompanyDto(
     int Id,
     string Name,
     string Title,

@@ -151,17 +151,64 @@ public sealed class PriceListController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> SearchStocks(string? q, CancellationToken ct)
+    public async Task<IActionResult> SearchStocks(string? q, int offset = 0, int pageSize = 50, CancellationToken ct = default)
     {
-        var cards = await _logistics.GetStockCardsForLookupAsync(ct);
-        var query = (q ?? "").Trim().ToLowerInvariant();
-        var results = cards
-            .Where(s => string.IsNullOrEmpty(query)
-                     || s.MaterialCode.ToLowerInvariant().Contains(query)
-                     || (s.MaterialName?.ToLowerInvariant().Contains(query) ?? false))
-            .Take(200)
-            .Select(s => new { id = s.Id, materialCode = s.MaterialCode, materialName = s.MaterialName ?? s.MaterialCode });
-        return Json(results);
+        if (pageSize <= 0 || pageSize > 200) pageSize = 50;
+        if (offset < 0) offset = 0;
+
+        var search = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+        var (items, totalCount) = await _logistics.GetItemsPagedAsync(search, offset, pageSize, ct);
+
+        var results = items.Select(s => new
+        {
+            id                = s.Id,
+            materialCode      = s.Code,
+            materialName      = s.Name ?? s.Code,
+            trackCombinations = s.TrackCombinations
+        }).ToArray();
+
+        return Json(new
+        {
+            items      = results,
+            totalCount = totalCount,
+            offset     = offset,
+            pageSize   = pageSize,
+            hasMore    = offset + results.Length < totalCount
+        });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetCombinations(string materialCode, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(materialCode))
+            return Json(Array.Empty<object>());
+
+        var combos = await _logistics.GetCombinationsForLookupAsync(materialCode.Trim(), ct);
+        return Json(combos.Select(c => new
+        {
+            configId = c.ConfigId,
+            code = c.Code,
+            name = c.Name,
+            featureValues = c.FeatureValues.Select(fv => new { feature = fv.Feature, value = fv.Value })
+        }));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetExistingPrices(
+        [FromBody] GetExistingPricesRequest request, CancellationToken ct)
+    {
+        if (request is null || request.PriceGroupId <= 0 || request.Keys == null || request.Keys.Count == 0)
+            return Json(Array.Empty<object>());
+
+        var rows = await _svc.GetExistingPricesAsync(request, ct);
+        return Json(rows.Select(r => new
+        {
+            stockCardId     = r.ItemId,
+            materialCode    = r.MaterialCode,
+            combinationCode = r.CombinationCode,
+            buyingPrice     = r.BuyingPrice,
+            sellingPrice    = r.SellingPrice
+        }));
     }
 
     [HttpGet]
@@ -171,6 +218,7 @@ public sealed class PriceListController : Controller
         return Json(entries.Select(e => new
         {
             e.Id, e.MaterialCode, e.MaterialName,
+            e.CombinationCode, e.CombinationName,
             e.Currency, e.BuyingPrice, e.SellingPrice,
             validFrom = e.ValidFrom.ToString("yyyy-MM-dd"),
             validTo = e.ValidTo?.ToString("yyyy-MM-dd")
@@ -183,17 +231,24 @@ public sealed class PriceListController : Controller
     {
         try
         {
-            var (ok, err, count) = await _svc.SaveBulkEntriesAsync(request, ct);
-            return Json(new { success = ok, message = ok ? $"{count} kayit basariyla eklendi." : err, count });
+            var (ok, err, inserted, updated) = await _svc.SaveBulkEntriesAsync(request, ct);
+            string? msg = ok
+                ? (updated > 0 && inserted > 0
+                    ? $"{inserted} yeni kayit eklendi, {updated} kayit guncellendi."
+                    : inserted > 0
+                        ? $"{inserted} yeni kayit eklendi."
+                        : $"{updated} kayit guncellendi.")
+                : err;
+            return Json(new { success = ok, message = msg, inserted, updated });
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Sunucu hatasi: " + ex.Message, count = 0 });
+            return Json(new { success = false, message = "Sunucu hatasi: " + ex.Message, inserted = 0, updated = 0 });
         }
     }
 
     [HttpPost]
-    public async Task<IActionResult> UpdatePriceListEntryJson(
+    public async Task<IActionResult> UpdatePriceListJson(
         [FromBody] UpdatePriceEntryRequest request, CancellationToken ct)
     {
         if (request.Id <= 0)
@@ -203,7 +258,7 @@ public sealed class PriceListController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeletePriceListEntryJson(int id, CancellationToken ct)
+    public async Task<IActionResult> DeletePriceListJson(int id, CancellationToken ct)
     {
         var (ok, err) = await _svc.DeleteEntryAsync(id, ct);
         return Json(new { success = ok, message = ok ? "Kayit silindi." : err });

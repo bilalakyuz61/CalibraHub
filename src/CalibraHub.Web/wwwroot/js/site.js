@@ -1406,21 +1406,37 @@
                         setActiveTab(tab.key);
                     });
 
-                    const groupBtn = document.createElement("div");
-                    groupBtn.className = "btn-group btn-group-sm";
-
-                    const btnGo = document.createElement("button");
-                    btnGo.type = "button";
-                    btnGo.className = "btn btn-outline-primary";
-                    btnGo.textContent = "Git";
-                    btnGo.addEventListener("click", () => btnLink.click());
-
+                    // En sagda belirgin kapatma (X) butonu — tek aksiyon olarak.
+                    // Satir basligina tiklama zaten o tab'a gecisi yapiyor (btnLink.click).
+                    // Explicit kirmizi stroke + background'la her temada gorunur:
                     const btnClose = document.createElement("button");
                     btnClose.type = "button";
-                    btnClose.className = "btn btn-outline-danger";
-                    btnClose.title = "Kapat";
-                    btnClose.innerHTML = "<svg viewBox='0 0 24 24' stroke='currentColor' stroke-width='2' fill='none' width='14' height='14'><line x1='18' y1='6' x2='6' y2='18'></line><line x1='6' y1='6' x2='18' y2='18'></line></svg>";
-                    btnClose.addEventListener("click", () => {
+                    btnClose.className = "d-inline-flex align-items-center justify-content-center";
+                    btnClose.style.cssText =
+                        "width: 32px; height: 32px; padding: 0; border-radius: 6px; flex-shrink: 0; " +
+                        "background: rgba(239, 68, 68, 0.15); " +
+                        "border: 1px solid rgba(239, 68, 68, 0.35); " +
+                        "color: #ef4444; cursor: pointer; " +
+                        "transition: background 0.12s, border-color 0.12s;";
+                    btnClose.title = "Sayfayi kapat";
+                    btnClose.setAttribute("aria-label", "Sayfayi kapat");
+                    btnClose.innerHTML =
+                        "<svg viewBox='0 0 24 24' width='16' height='16' " +
+                             "fill='none' stroke='#ef4444' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' " +
+                             "style='display:block;'>" +
+                            "<line x1='18' y1='6' x2='6' y2='18'></line>" +
+                            "<line x1='6' y1='6' x2='18' y2='18'></line>" +
+                        "</svg>";
+                    btnClose.addEventListener("mouseenter", () => {
+                        btnClose.style.background   = "rgba(239, 68, 68, 0.28)";
+                        btnClose.style.borderColor  = "rgba(239, 68, 68, 0.55)";
+                    });
+                    btnClose.addEventListener("mouseleave", () => {
+                        btnClose.style.background   = "rgba(239, 68, 68, 0.15)";
+                        btnClose.style.borderColor  = "rgba(239, 68, 68, 0.35)";
+                    });
+                    btnClose.addEventListener("click", (ev) => {
+                        ev.stopPropagation();
                         const idx = tabs.findIndex(t => t.key === tab.key);
                         if (idx === -1) return;
                         const nextTabs = tabs.filter(t => t.key !== tab.key);
@@ -1430,7 +1446,12 @@
                         if (panel instanceof HTMLElement && !panel.hasAttribute("data-workspace-native-page")) {
                             panel.remove();
                         }
+                        // Modal'daki satiri hemen kaldir (render'dan hizli feedback)
+                        entry.remove();
                         if (nextTabs.length === 0) {
+                            // Tum sayfalar kapali — modali kapat ve anasayfaya git
+                            const modalInst = bootstrap.Modal.getInstance(document.getElementById('openWindowsModal'));
+                            if (modalInst) modalInst.hide();
                             window.location.replace(homeUrl);
                             return;
                         }
@@ -1443,8 +1464,7 @@
                         setActiveTab(fallback.key, { history: "replace" });
                     });
 
-                    groupBtn.append(btnGo, btnClose);
-                    entry.append(btnLink, groupBtn);
+                    entry.append(btnLink, btnClose);
                     modalList.appendChild(entry);
                 });
             }

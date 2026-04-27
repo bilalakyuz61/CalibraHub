@@ -1,6 +1,6 @@
 @model CalibraHub.Web.Models.Logistics.ProductCombinationsViewModel
 @{
-    ViewData["Title"] = "Konfigurasyon Tanimlama";
+    ViewData["Title"] = "Ozellik ve Kombinasyon";
     ViewData["BodyClass"] = "page-product-combinations";
     var antiforgery = Context.RequestServices.GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>();
     var tokens = antiforgery.GetAndStoreTokens(Context);

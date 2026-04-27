@@ -34,7 +34,9 @@ public sealed record WidgetDefinitionDto(
     decimal? MinValue = null,
     decimal? MaxValue = null,
     int ColorType = 0,
-    string? ColorValue = null);
+    string? ColorValue = null,
+    int ColSpan = 6,
+    string LabelStyle = "standard");
 
 /// <summary>
 /// Faz G — Kural ve formul motoru payload'i. Tum alanlar opsiyonel string ifade.
@@ -95,7 +97,9 @@ public sealed record WidgetRenderDto(
     decimal? MinValue = null,
     decimal? MaxValue = null,
     int ColorType = 0,
-    string? ColorValue = null);
+    string? ColorValue = null,
+    int ColSpan = 6,
+    string LabelStyle = "standard");
 
 /// <summary>
 /// Grid widget'inin tek bir child satirinin serialize edilmis hali.
@@ -200,7 +204,9 @@ public sealed record UpsertWidgetRequest(
     decimal? MinValue = null,
     decimal? MaxValue = null,
     int ColorType = 0,
-    string? ColorValue = null);
+    string? ColorValue = null,
+    int? ColSpan = null,
+    string? LabelStyle = null);
 
 public sealed record UpsertWidgetResponse(int Id);
 

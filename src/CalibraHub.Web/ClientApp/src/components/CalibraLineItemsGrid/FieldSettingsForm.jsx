@@ -223,9 +223,9 @@ export default function FieldSettingsForm({ column, isOpen, onClose }) {
                   onChange={function(e) { handleViewChange(e.target.value) }}
                   style={{ width: '100%', padding: '6px 8px', fontSize: 12, background: iBg, border: selectedView ? iBdr : '1px solid rgba(239,68,68,0.5)', borderRadius: 5, color: iClr, outline: 'none', cursor: 'pointer', colorScheme: isLight ? 'light' : 'dark' }}
                 >
-                  <option value="">— View seçin —</option>
+                  <option value="" style={{ background: isLight ? '#ffffff' : '#0d1117', color: iClr }}>— View seçin —</option>
                   {(catalog || []).map(function(g) {
-                    return <option key={g.guideCode} value={g.viewName}>{g.viewName}</option>
+                    return <option key={g.guideCode} value={g.viewName} style={{ background: isLight ? '#ffffff' : '#0d1117', color: iClr }}>{g.viewName}</option>
                   })}
                 </select>
               )

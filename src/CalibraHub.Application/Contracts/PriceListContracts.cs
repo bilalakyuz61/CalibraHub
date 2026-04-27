@@ -9,16 +9,18 @@ public sealed record CreatePriceGroupRequest(string GroupCode, string GroupName,
 public sealed record UpdatePriceGroupRequest(int Id, string GroupCode, string GroupName, string? Description, bool IsActive);
 
 // ── Fiyat Kalemi ─────────────────────────────────────────────────────────────
-public sealed record PriceListEntryDto(
-    int Id, int PriceGroupId, int? StockCardId,
+public sealed record PriceListDto(
+    int Id, int PriceGroupId, int? ItemId,
     string MaterialCode, string? MaterialName,
+    string? CombinationCode, string? CombinationName,
     string Currency, decimal BuyingPrice, decimal SellingPrice,
     DateTime ValidFrom, DateTime? ValidTo, bool IsActive,
     DateTime CreatedAt, DateTime UpdatedAt);
 
-public sealed record SavePriceListEntryRequest(
+public sealed record SavePriceListRequest(
     int? Id, int PriceGroupId,
-    int? StockCardId, string MaterialCode, string? MaterialName,
+    int? ItemId, string MaterialCode, string? MaterialName,
+    string? CombinationCode, string? CombinationName,
     string Currency, decimal BuyingPrice, decimal SellingPrice,
     DateTime ValidFrom, DateTime? ValidTo, bool IsActive);
 
@@ -27,10 +29,25 @@ public sealed record UpdatePriceEntryRequest(int Id, decimal BuyingPrice, decima
 
 // ── Toplu Fiyat Girisi ──────────────────────────────────────────────────────
 public sealed record BulkPriceEntryLine(
-    int? StockCardId, string MaterialCode, string? MaterialName,
+    int? ItemId, string MaterialCode, string? MaterialName,
+    string? CombinationCode, string? CombinationName,
     decimal BuyingPrice, decimal SellingPrice);
 
 public sealed record SaveBulkPriceEntriesRequest(
     int PriceGroupId, string Currency,
     DateTime ValidFrom, DateTime? ValidTo,
     IReadOnlyCollection<BulkPriceEntryLine> Lines);
+
+// ── Mevcut Fiyat Sorgusu ────────────────────────────────────────────────────
+public sealed record PriceEntryKey(int? ItemId, string MaterialCode, string? CombinationCode);
+
+public sealed record GetExistingPricesRequest(
+    int PriceGroupId, string Currency, DateTime ValidFrom,
+    IReadOnlyCollection<PriceEntryKey> Keys);
+
+public sealed record ExistingPriceRow(
+    int? ItemId, string MaterialCode, string? CombinationCode,
+    decimal BuyingPrice, decimal SellingPrice);
+
+// ── Upsert Sonucu ───────────────────────────────────────────────────────────
+public sealed record BulkUpsertResult(int Inserted, int Updated);

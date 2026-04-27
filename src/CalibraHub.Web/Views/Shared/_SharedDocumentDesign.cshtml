@@ -1,0 +1,561 @@
+@model CalibraHub.Web.Models.Shared.SharedDocumentDesignViewModel
+@*
+    _SharedDocumentDesign.cshtml — Tum belge edit/design sayfalari icin ortak
+    parca. 4 bolum icerir:
+       1) Ust bilgiler        — belge no, tarih, cari, temsilci, para birimi
+       2) Kalem bilgileri     — CalibraLineItemsGrid React mount
+       3) Ek alanlar          — DynamicWidgetRenderer (header + line widget'lari)
+       4) Kalibrasyon         — Company kimlik bilgileri (belge ustu basligi)
+
+    Kullanim (controller action icinde):
+       var vm = new SharedDocumentDesignViewModel { ... };
+       return View("_SharedDocumentDesign", vm);
+    veya herhangi bir sayfa icinde:
+       <partial name="_SharedDocumentDesign" model="@vm" />
+
+    Prefix: sdd-* (SharedDocumentDesign). Dark + light tema uyumlu.
+    React bundle gereksinimi: /react/calibrahub-widgets.js (mount helpers).
+*@
+
+<section class="sdd-root" data-document-type="@Model.DocumentTypeCode"
+         data-document-id="@(Model.DocumentId?.ToString() ?? string.Empty)">
+
+    @* ═══════════════ 4) KALIBRASYON (BELGE USTU SIRKET KARTI) ══════════════ *@
+    @if (Model.Calibration != null)
+    {
+        <div class="sdd-calibration">
+            <div class="sdd-cal-brand">
+                @if (!string.IsNullOrWhiteSpace(Model.Calibration.LogoUrl))
+                {
+                    <img src="@Model.Calibration.LogoUrl" alt="@Model.Calibration.Title" class="sdd-cal-logo" />
+                }
+                else
+                {
+                    <div class="sdd-cal-logo sdd-cal-logo--placeholder" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                            <path d="M3 21V7l9-4 9 4v14"/>
+                            <path d="M9 21V12h6v9"/>
+                        </svg>
+                    </div>
+                }
+                <div class="sdd-cal-title">
+                    <div class="sdd-cal-name">@Model.Calibration.Title</div>
+                    <div class="sdd-cal-sub">@Model.Calibration.Name</div>
+                </div>
+            </div>
+            <dl class="sdd-cal-meta">
+                <div class="sdd-cal-row"><dt>Vergi D.</dt><dd>@Model.Calibration.TaxOffice</dd></div>
+                <div class="sdd-cal-row"><dt>Vergi No</dt><dd>@Model.Calibration.TaxNumber</dd></div>
+                <div class="sdd-cal-row sdd-cal-row--full"><dt>Adres</dt>
+                    <dd>
+                        @Model.Calibration.Address
+                        @{ var locBits = new List<string>(); }
+                        @if (!string.IsNullOrWhiteSpace(Model.Calibration.District)) { locBits.Add(Model.Calibration.District!); }
+                        @if (!string.IsNullOrWhiteSpace(Model.Calibration.City))     { locBits.Add(Model.Calibration.City!); }
+                        @if (!string.IsNullOrWhiteSpace(Model.Calibration.PostalCode)) { locBits.Add(Model.Calibration.PostalCode!); }
+                        @if (locBits.Count > 0)
+                        {
+                            <span class="sdd-cal-locline">@(" • " + string.Join(" / ", locBits))</span>
+                        }
+                    </dd>
+                </div>
+                @if (Model.Calibration.IsEDocumentEnabled)
+                {
+                    <div class="sdd-cal-row sdd-cal-row--badge">
+                        <dt></dt>
+                        <dd><span class="sdd-cal-badge">e-Belge Aktif</span></dd>
+                    </div>
+                }
+            </dl>
+        </div>
+    }
+
+    @* ═══════════════ 1) UST BILGILER ══════════════════════════════════════ *@
+    <div class="sdd-section sdd-section--header">
+        <h3 class="sdd-section-title">Ust Bilgiler</h3>
+        <div class="sdd-hform">
+            <div class="sdd-hrow">
+                <label class="sdd-hlabel" for="sddDocNumber">Belge No</label>
+                <input id="sddDocNumber" class="sdd-hinput" readonly
+                       value="@(Model.DocumentNumber ?? string.Empty)"
+                       placeholder="Kaydedildiginde olusturulur" />
+            </div>
+            <div class="sdd-hrow">
+                <label class="sdd-hlabel" for="sddDocDate">Tarih</label>
+                <input id="sddDocDate" type="date" class="sdd-hinput"
+                       value="@Model.DocumentDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="sdd-hrow">
+                <label class="sdd-hlabel" for="sddSecondaryDate">@Model.SecondaryDateLabel</label>
+                <input id="sddSecondaryDate" type="date" class="sdd-hinput"
+                       value="@(Model.SecondaryDate?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+            </div>
+            <div class="sdd-hrow">
+                <label class="sdd-hlabel" for="sddCurrency">Para Birimi</label>
+                <select id="sddCurrency" class="sdd-hinput sdd-hinput--narrow">
+                    <option value="TRY" selected="@(Model.Currency == "TRY")">TRY</option>
+                    <option value="USD" selected="@(Model.Currency == "USD")">USD</option>
+                    <option value="EUR" selected="@(Model.Currency == "EUR")">EUR</option>
+                </select>
+            </div>
+            <div class="sdd-hrow">
+                <label class="sdd-hlabel" for="sddContactCode">Cari Kod</label>
+                <input type="text" id="sddContactCode" class="sdd-hinput sdd-hinput--narrow" readonly
+                       value="@(Model.Contact?.Code ?? string.Empty)"
+                       placeholder="Rehberden seciniz" />
+                <input type="hidden" id="sddContactId" value="@(Model.Contact?.Id?.ToString() ?? string.Empty)" />
+            </div>
+            <div class="sdd-hrow">
+                <label class="sdd-hlabel">Cari Isim</label>
+                <span id="sddContactName" class="sdd-hlabel-value"
+                      data-placeholder="Cari secildiginde otomatik dolar">@(Model.Contact?.Name ?? string.Empty)</span>
+            </div>
+            <div class="sdd-hrow">
+                <label class="sdd-hlabel" for="sddSalesRepId">Temsilci</label>
+                <select id="sddSalesRepId" class="sdd-hinput">
+                    <option value="">Seciniz</option>
+                </select>
+            </div>
+            <div class="sdd-hrow">
+                <label class="sdd-hlabel">Durum</label>
+                <span id="sddStatusBadge" class="sdd-status-badge sdd-status-@Model.Status">@Model.Status</span>
+            </div>
+        </div>
+    </div>
+
+    @* ═══════════════ 2) KALEM BILGILERI ══════════════════════════════════ *@
+    <div class="sdd-section sdd-section--lines">
+        <h3 class="sdd-section-title">Kalem Bilgileri</h3>
+        <div id="sddLineGrid" class="sdd-line-grid" style="min-height:220px;"></div>
+        <div id="sddLineGridTotals" class="sdd-totals" data-sdd-totals></div>
+    </div>
+
+    @* ═══════════════ 3) UST BILGI EK ALANLARI ════════════════════════════ *@
+    @if (!string.IsNullOrWhiteSpace(Model.HeaderFormCode))
+    {
+        <div class="sdd-section sdd-section--widgets">
+            <h3 class="sdd-section-title">Ek Alanlar (Ust Bilgi)</h3>
+            <div id="sddHeaderWidgets"
+                 class="sdd-widget-wrap"
+                 data-form-code="@Model.HeaderFormCode"
+                 data-record-id="@(Model.DocumentId?.ToString() ?? string.Empty)">
+            </div>
+            <div id="sddHeaderWidgetEmpty" class="sdd-widget-empty is-hidden">
+                "<strong>@Model.HeaderFormCode</strong>" formu icin tanimli widget bulunamadi.
+            </div>
+        </div>
+    }
+
+    @* Satir bazli ek alanlar line-grid'in ⚙ butonuyla modal olarak
+       acilir — ayrica bir bolum gerektirmez. LineFormCode'u grid config
+       icinde formCode olarak reactDocumentLineGrid'e tasiriz (asagidaki JS). *@
+</section>
+
+@* ───────────────────────── STIL (self-contained) ───────────────────────── *@
+<style>
+    .sdd-root {
+        display: flex; flex-direction: column; gap: 18px;
+        padding: 16px 20px;
+        color: var(--app-text, #1e293b);
+    }
+    body.app-theme-dark .sdd-root { color: rgba(255,255,255,0.88); }
+
+    /* Kalibrasyon karti — belge ustu kurumsal kimlik */
+    .sdd-calibration {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(280px, 2fr);
+        gap: 20px;
+        padding: 16px 20px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(168,85,247,0.03) 100%);
+        border: 1px solid rgba(99,102,241,0.14);
+    }
+    body.app-theme-dark .sdd-calibration {
+        background: linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(168,85,247,0.05) 100%);
+        border-color: rgba(99,102,241,0.22);
+    }
+    .sdd-cal-brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+    .sdd-cal-logo {
+        width: 52px; height: 52px; border-radius: 12px; flex-shrink: 0;
+        object-fit: contain;
+    }
+    .sdd-cal-logo--placeholder {
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(99,102,241,0.14); color: #6366f1;
+        border: 1px solid rgba(99,102,241,0.28);
+    }
+    body.app-theme-dark .sdd-cal-logo--placeholder {
+        background: rgba(99,102,241,0.18); color: #a5b4fc;
+        border-color: rgba(99,102,241,0.35);
+    }
+    .sdd-cal-title { min-width: 0; }
+    .sdd-cal-name {
+        font-size: 1rem; font-weight: 700; letter-spacing: -0.01em;
+        color: #0f172a;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.app-theme-dark .sdd-cal-name { color: #fff; }
+    .sdd-cal-sub {
+        font-size: 0.72rem; font-weight: 500; color: #64748b;
+        margin-top: 2px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.app-theme-dark .sdd-cal-sub { color: rgba(255,255,255,0.5); }
+
+    .sdd-cal-meta {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 18px;
+        margin: 0;
+    }
+    .sdd-cal-row { display: contents; }
+    .sdd-cal-row--full { grid-column: 1 / -1; }
+    .sdd-cal-row--badge { grid-column: 1 / -1; }
+    .sdd-cal-row dt {
+        font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #94a3b8;
+        margin: 0;
+    }
+    body.app-theme-dark .sdd-cal-row dt { color: rgba(255,255,255,0.4); }
+    .sdd-cal-row dd {
+        font-size: 0.8rem; font-weight: 500;
+        color: #334155;
+        margin: 0 0 0 10px;
+    }
+    body.app-theme-dark .sdd-cal-row dd { color: rgba(255,255,255,0.78); }
+    .sdd-cal-locline { opacity: 0.6; }
+    .sdd-cal-badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 2px 8px; border-radius: 999px;
+        font-size: 0.66rem; font-weight: 700;
+        background: rgba(34,197,94,0.14); color: #15803d;
+        border: 1px solid rgba(34,197,94,0.28);
+    }
+    body.app-theme-dark .sdd-cal-badge { color: #86efac; }
+
+    /* Bolumler — baslik + govde */
+    .sdd-section {
+        background: var(--app-surface, #fff);
+        border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 12px;
+        padding: 14px 18px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+    body.app-theme-dark .sdd-section {
+        background: rgba(255,255,255,0.03);
+        border-color: rgba(255,255,255,0.08);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+    }
+    .sdd-section-title {
+        font-size: 0.82rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.04em;
+        color: #64748b;
+        margin: 0 0 12px 0;
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    body.app-theme-dark .sdd-section-title { color: rgba(255,255,255,0.55); }
+    .sdd-section-title::before {
+        content: ''; width: 3px; height: 13px; border-radius: 2px;
+        background: linear-gradient(180deg, #6366f1 0%, #a855f7 100%);
+    }
+
+    /* Ust bilgiler formu — 2 sutunlu, esnek */
+    .sdd-hform {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 10px 20px;
+    }
+    .sdd-hrow {
+        display: flex; align-items: center; gap: 12px;
+        min-width: 0;
+    }
+    .sdd-hlabel {
+        flex: 0 0 110px;
+        font-size: 0.72rem; font-weight: 600;
+        color: #64748b;
+        margin: 0;
+        text-align: right;
+    }
+    body.app-theme-dark .sdd-hlabel { color: rgba(255,255,255,0.5); }
+    .sdd-hlabel-value {
+        font-size: 0.84rem; font-weight: 500;
+        color: #1e293b;
+        flex: 1; min-width: 0;
+    }
+    body.app-theme-dark .sdd-hlabel-value { color: rgba(255,255,255,0.82); }
+    .sdd-hlabel-value:empty::before {
+        content: attr(data-placeholder);
+        color: #94a3b8; opacity: 0.7;
+    }
+    body.app-theme-dark .sdd-hlabel-value:empty::before { color: rgba(255,255,255,0.3); }
+    .sdd-hinput {
+        flex: 1; min-width: 0;
+        height: 32px;
+        padding: 0 10px;
+        font-size: 0.82rem;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        color: #1e293b;
+        outline: none;
+        transition: border-color .12s, box-shadow .12s;
+    }
+    .sdd-hinput--narrow { max-width: 150px; }
+    .sdd-hinput:focus {
+        border-color: rgba(99,102,241,0.55);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    .sdd-hinput[readonly] { background: #f8fafc; color: #475569; }
+    body.app-theme-dark .sdd-hinput {
+        background: rgba(10,14,24,0.55);
+        border-color: rgba(255,255,255,0.12);
+        color: rgba(255,255,255,0.9);
+    }
+    body.app-theme-dark .sdd-hinput[readonly] {
+        background: rgba(255,255,255,0.03);
+        color: rgba(255,255,255,0.55);
+    }
+
+    /* Durum rozetleri */
+    .sdd-status-badge {
+        display: inline-block; padding: 3px 10px;
+        font-size: 0.7rem; font-weight: 700;
+        border-radius: 999px;
+        background: rgba(148,163,184,0.15);
+        color: #475569;
+        border: 1px solid rgba(148,163,184,0.28);
+    }
+    .sdd-status-Draft     { background: rgba(100,116,139,0.12); color: #475569; border-color: rgba(100,116,139,0.25); }
+    .sdd-status-Sent      { background: rgba(59,130,246,0.12);  color: #1d4ed8; border-color: rgba(59,130,246,0.30); }
+    .sdd-status-Approved  { background: rgba(34,197,94,0.14);   color: #15803d; border-color: rgba(34,197,94,0.30); }
+    .sdd-status-Rejected  { background: rgba(239,68,68,0.12);   color: #b91c1c; border-color: rgba(239,68,68,0.30); }
+    .sdd-status-Cancelled { background: rgba(148,163,184,0.15); color: #64748b; border-color: rgba(148,163,184,0.28); }
+    body.app-theme-dark .sdd-status-Draft     { color: #94a3b8; }
+    body.app-theme-dark .sdd-status-Sent      { color: #93c5fd; }
+    body.app-theme-dark .sdd-status-Approved  { color: #86efac; }
+    body.app-theme-dark .sdd-status-Rejected  { color: #fca5a5; }
+    body.app-theme-dark .sdd-status-Cancelled { color: #94a3b8; }
+
+    /* Kalem grid konteyneri — React mount alani */
+    .sdd-line-grid { width: 100%; }
+    .sdd-totals {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px 16px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--app-border, #e2e8f0);
+        font-size: 0.82rem;
+    }
+    body.app-theme-dark .sdd-totals { border-top-color: rgba(255,255,255,0.08); }
+
+    /* Widget wrap — DynamicWidgetRenderer ust bilgi mount'u (gruplar dikey) */
+    .sdd-widget-wrap { display: block; }
+    .sdd-widget-wrap .sdd-dyn-root {
+        display: flex; flex-direction: column; gap: 28px;
+    }
+    .sdd-widget-wrap details.sdd-card,
+    .sdd-widget-wrap .sdd-card {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        margin-bottom: 0 !important;
+        overflow: visible !important;
+        padding: 0 !important;
+    }
+    .sdd-widget-wrap details.sdd-card > summary,
+    .sdd-widget-wrap .sdd-card > summary.sdd-card-title {
+        display: flex !important; align-items: center; gap: 10px;
+        padding: 0 2px 10px 2px !important; margin: 0 0 12px 0 !important;
+        border-bottom: 1px solid rgba(100,116,139,0.18);
+        font-size: 0.85rem; font-weight: 700; color: #334155;
+        list-style: none !important; cursor: default !important;
+    }
+    body.app-theme-dark .sdd-widget-wrap details.sdd-card > summary,
+    body.app-theme-dark .sdd-widget-wrap .sdd-card > summary.sdd-card-title {
+        color: rgba(255,255,255,0.85);
+        border-bottom-color: rgba(255,255,255,0.08);
+    }
+    .sdd-widget-wrap details.sdd-card > summary::before {
+        content: ''; width: 3px; height: 13px; border-radius: 2px;
+        background: linear-gradient(180deg, #6366f1 0%, #a855f7 100%);
+        flex-shrink: 0;
+    }
+    .sdd-widget-wrap details.sdd-card > summary::-webkit-details-marker,
+    .sdd-widget-wrap details.sdd-card > summary::marker { display: none; content: ''; }
+    .sdd-widget-wrap .sdd-grid-2 {
+        display: flex !important; flex-direction: column !important;
+        grid-template-columns: none !important;
+        gap: 6px; margin-top: 0 !important;
+    }
+    .sdd-widget-wrap .sdd-field {
+        display: grid; grid-column: auto !important;
+        grid-template-columns: 200px 1fr;
+        align-items: center; gap: 16px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(148,163,184,0.15);
+        background: rgba(148,163,184,0.04);
+    }
+    body.app-theme-dark .sdd-widget-wrap .sdd-field {
+        border-color: rgba(255,255,255,0.06);
+        background: rgba(255,255,255,0.02);
+    }
+    .sdd-widget-wrap .sdd-field > label.sdd-label {
+        font-size: 12px; font-weight: 600;
+        color: #64748b; margin: 0;
+    }
+    body.app-theme-dark .sdd-widget-wrap .sdd-field > label.sdd-label {
+        color: rgba(255,255,255,0.6);
+    }
+    .sdd-widget-wrap .sdd-input,
+    .sdd-widget-wrap input[type="text"],
+    .sdd-widget-wrap input[type="number"],
+    .sdd-widget-wrap input[type="date"],
+    .sdd-widget-wrap input[type="datetime-local"],
+    .sdd-widget-wrap select,
+    .sdd-widget-wrap textarea {
+        width: 100%; font-size: 13px; padding: 7px 10px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0; background: #fff; color: #1e293b;
+        outline: none; font-family: inherit;
+    }
+    body.app-theme-dark .sdd-widget-wrap .sdd-input,
+    body.app-theme-dark .sdd-widget-wrap input[type="text"],
+    body.app-theme-dark .sdd-widget-wrap input[type="number"],
+    body.app-theme-dark .sdd-widget-wrap input[type="date"],
+    body.app-theme-dark .sdd-widget-wrap input[type="datetime-local"],
+    body.app-theme-dark .sdd-widget-wrap select,
+    body.app-theme-dark .sdd-widget-wrap textarea {
+        background: rgba(10,14,24,0.55);
+        border-color: rgba(255,255,255,0.12);
+        color: rgba(255,255,255,0.9);
+    }
+    .sdd-widget-wrap .sdd-input:focus,
+    .sdd-widget-wrap input:focus,
+    .sdd-widget-wrap select:focus,
+    .sdd-widget-wrap textarea:focus {
+        border-color: rgba(99,102,241,0.55);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+
+    /* Bos durum mesaji */
+    .sdd-widget-empty {
+        padding: 18px 14px; text-align: center;
+        font-size: 0.8rem; color: #64748b;
+        border: 1px dashed #cbd5e1; border-radius: 10px;
+        background: #f8fafc;
+    }
+    body.app-theme-dark .sdd-widget-empty {
+        color: rgba(255,255,255,0.45);
+        border-color: rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.02);
+    }
+    .sdd-widget-empty.is-hidden { display: none; }
+
+    /* Kucuk ekranlarda uyum */
+    @@media (max-width: 720px) {
+        .sdd-calibration { grid-template-columns: 1fr; }
+        .sdd-cal-meta    { grid-template-columns: 1fr; }
+        .sdd-hform       { grid-template-columns: 1fr; }
+        .sdd-hlabel      { flex-basis: 100px; }
+    }
+</style>
+
+@* ───────────────────────── SCRIPT (self-contained) ─────────────────────── *@
+<script>
+(function () {
+    // React bundle'i async yukle ve mount helper'lari hazir olunca mount et.
+    // Hem line grid hem widget renderer icin polling kullanilir — Razor'un
+    // DOMContentLoaded'inda bundle henuz hazir olmayabilir.
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+    // CSS <link> tek sefer
+    if (!document.querySelector('link[data-sdd-widgets-css]')) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-sdd-widgets-css', '1');
+        document.head.appendChild(link);
+    }
+
+    // Line grid config Razor'dan inline JSON olarak gelir
+    window.__SDD_LINE_GRID__ = @Html.Raw(Model.LineGridConfigJson ?? "{}");
+
+    function loadBundle(onReady) {
+        if (window.CalibraHub && window.CalibraHub.mountLineItemsGrid) { onReady(); return; }
+        var existing = document.querySelector('script[data-sdd-widgets-js]');
+        if (existing) {
+            existing.addEventListener('load', onReady); return;
+        }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-sdd-widgets-js', '1');
+        script.onload = function () { setTimeout(onReady, 0); };
+        script.onerror = function () { console.error('[SDD] bundle yuklenemedi'); };
+        document.head.appendChild(script);
+    }
+
+    function mountGrid() {
+        var el = document.getElementById('sddLineGrid');
+        if (!el) return;
+        if (!window.CalibraHub || !window.CalibraHub.mountLineItemsGrid) return;
+        try {
+            window.CalibraHub.mountLineItemsGrid(el, window.__SDD_LINE_GRID__, {
+                onRowsChange: function (rows) {
+                    window.__SDD_LINES__ = rows || [];
+                    // Dis taraftakilere rows change sinyali — opsiyonel event listener
+                    document.dispatchEvent(new CustomEvent('sdd:lines-changed', { detail: { rows: rows } }));
+                },
+            });
+            console.log('[SDD] line grid mounted');
+        } catch (e) { console.error('[SDD] grid mount hatasi:', e); }
+    }
+
+    function mountHeaderWidgets() {
+        var el = document.getElementById('sddHeaderWidgets');
+        if (!el) return;
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+        try {
+            window._sddHeaderRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode:    el.getAttribute('data-form-code'),
+                recordId:    el.getAttribute('data-record-id') || '',
+                classPrefix: 'sdd',
+            });
+            console.log('[SDD] header widgets mounted');
+        } catch (e) { console.error('[SDD] widget mount hatasi:', e); }
+    }
+
+    // Dis taraftan cagirilabilir API — recordId degisince (kayit sonrasi) reload
+    window.sddReloadHeaderWidgets = function (recordId) {
+        if (!window._sddHeaderRenderer || !window._sddHeaderRenderer.reload) return;
+        var tries = [0, 80, 300, 800];
+        tries.forEach(function (d) {
+            setTimeout(function () {
+                try { window._sddHeaderRenderer.reload({ recordId: String(recordId) }); }
+                catch (_) {}
+            }, d);
+        });
+    };
+    window.sddSaveHeaderWidgets = async function (recordId) {
+        if (!window._sddHeaderRenderer || !window._sddHeaderRenderer.save) {
+            return { success: false, message: 'Renderer hazir degil.' };
+        }
+        return await window._sddHeaderRenderer.save({ recordId: String(recordId) });
+    };
+
+    function boot() {
+        loadBundle(function () {
+            mountGrid();
+            mountHeaderWidgets();
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+})();
+</script>

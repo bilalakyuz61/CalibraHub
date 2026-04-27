@@ -1,0 +1,54 @@
+@{
+    ViewData["Title"] = "Veritabani Haritasi";
+    ViewData["AdminMenu"] = "db-schema";
+    ViewData["FormCode"] = "ADMIN_DB_SCHEMA";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sys.tables + sys.columns + sys.indexes + sys.foreign_keys</td>"
+        + "<td style='padding:6px 8px;'>Aktif sirket DB'sinin sistem katalogu — fiziksel metadata okuma (PII olmayan)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<link rel="stylesheet" href="~/css/dbSchema.css" asp-append-version="true" />
+}
+
+<div class="sch-layout">
+    <div class="sch-list-panel">
+        <div class="sch-toolbar">
+            <input type="search" id="sch-search" placeholder="Tablo ara..." autocomplete="off" />
+            <span class="sch-count" id="sch-count">0</span>
+        </div>
+        <div class="sch-list" id="sch-list">
+            <div style="padding:12px;color:#94a3b8;font-size:0.82rem;">Yukleniyor...</div>
+        </div>
+    </div>
+    <div class="sch-detail-panel">
+        <div class="sch-detail-header">
+            <div>
+                <div class="sch-detail-title" id="sch-detail-title">Tablo secin</div>
+                <div class="sch-detail-meta" id="sch-detail-meta"></div>
+            </div>
+            <div class="sch-export-dropdown">
+                <button type="button" class="sch-export-btn" id="sch-export-btn">📥 Export ▾</button>
+                <div class="sch-export-menu" id="sch-export-menu">
+                    <a href="/admin/db-schema/export?format=csv">CSV (tablo × kolon)</a>
+                    <a href="/admin/db-schema/export?format=json">JSON (tum sema)</a>
+                    <a href="/admin/db-schema/export?format=mermaid">Mermaid ER (.mmd)</a>
+                    <a href="/admin/db-schema/export?format=markdown">Markdown (.md)</a>
+                </div>
+            </div>
+        </div>
+        <div class="sch-tabs" id="sch-tabs" style="display:none;">
+            <div class="sch-tab active" data-tab="columns">📋 Kolonlar <span id="sch-col-count"></span></div>
+            <div class="sch-tab" data-tab="indexes">🔑 Indeksler <span id="sch-idx-count"></span></div>
+            <div class="sch-tab" data-tab="fks">🔗 FK'ler <span id="sch-fk-count"></span></div>
+        </div>
+        <div class="sch-tab-body" id="sch-tab-body">
+            <div class="sch-empty">Sol panelden bir tablo secin — fiziksel sema metadata'si burada goruntulenir.</div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="~/js/dbSchema.js?v=1" asp-append-version="true"></script>
+}
