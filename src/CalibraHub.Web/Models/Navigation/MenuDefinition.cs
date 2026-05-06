@@ -34,11 +34,12 @@ public static class MenuDefinition
     {
         var settingsChildren = new List<MenuNode>
         {
-            new("settings.company",           "Şirket Ayarları",        "Building2",   "/Admin/CompanySettings",    null),
-            new("settings.integrationevents", "Entegrasyon Tanımları",  "Zap",         "/Admin/IntegrationEvents",  null),
-            new("settings.viewsettings",      "Alan ve Widget Tanımları", "LayoutGrid",  "/Admin/ViewSettings",       null),
-            new("settings.dbschema",          "Veritabanı Haritası",    "Database",    "/admin/db-schema",          null),
-            new("settings.scheduledtasks",    "Zamanlanmış Görevler",   "Clock",       "/Admin/ScheduledTasks",     null),
+            new("settings.company",           "Şirket Ayarları",         "Building2",   "/Admin/CompanySettings",    null),
+            new("settings.parameters",        "Şirket Parametreleri",    "SlidersHorizontal", "/Admin/Parameters",   null),
+            new("settings.integrationevents", "Entegrasyon Tanımları",   "Zap",         "/Admin/IntegrationEvents",  null),
+            new("settings.viewsettings",      "Alan Rehberi",            "LayoutGrid",  "/Admin/ViewSettings",       null),
+            new("settings.dbschema",          "Veritabanı Haritası",     "Database",    "/admin/db-schema",          null),
+            new("settings.scheduledtasks",    "Zamanlanmış Görevler",    "Clock",       "/Admin/ScheduledTasks",     null),
         };
         if (isSystemAdmin)
         {
@@ -53,9 +54,17 @@ public static class MenuDefinition
             {
                 new("general.notes", "Notlar", "FileText", "/Notes", null),
                 new("general.orgchart", "Organizasyon Şeması", "Network", "/OrgChart", null),
+                new("general.whatsapp", "WhatsApp", "MessageCircle", "/Whatsapp", null),
             }),
 
-            // ────────────── 2. Onay Islemleri ──────────────
+            // ────────────── 2. Raporlar ──────────────
+            new("reports", "Raporlar", "BarChart3", null, new List<MenuNode>
+            {
+                new("reports.dashboards", "Panolar", "BarChart3", "/Dashboard", null),
+                new("reports.grafana", "Grafana", "Activity", "/Dashboard/Grafana", null),
+            }),
+
+            // ────────────── 3. Onay Islemleri ──────────────
             new("approval", "Onay İşlemleri", "CheckCircle2", null, new List<MenuNode>
             {
                 new("approval.documents", "Elektronik Belgeler", "Files", null, new List<MenuNode>
@@ -77,13 +86,16 @@ public static class MenuDefinition
                 new("logistics.sales", "Satış", "TrendingUp", null, new List<MenuNode>
                 {
                     new("logistics.salesquotes", "Satış Teklifi", "FileText", "/Sales/Documents", null),
+                    new("logistics.salesorders", "Satış Siparişi", "ShoppingCart", "/Sales/Orders", null),
                 }),
             }),
 
             // ────────────── 4. Uretim ──────────────
             new("production", "Üretim", "Factory", null, new List<MenuNode>
             {
-                new("production.tree", "Ürün Ağacı", "Network", "/Logistics/BOMs", null),
+                new("production.tree",       "Ürün Ağacı",      "Network",      "/Logistics/BOMs",          null),
+                new("production.workorders", "İş Emirleri",     "ClipboardList","/Production/WorkOrders",   null),
+                new("production.shopfloor",  "Üretim Terminali","Tablet",       "/Production/ShopFloor",    null),
             }),
 
             // ────────────── 5. Finans ──────────────
@@ -95,14 +107,18 @@ public static class MenuDefinition
                 }),
             }),
 
-            // ────────────── 6. Genel Tanimlamalar ──────────────
-            new("generaldefs", "Genel Tanımlamalar", "Settings2", null, new List<MenuNode>
+            // ────────────── 6. Tanimlamalar ──────────────
+            new("generaldefs", "Tanımlamalar", "Settings2", null, new List<MenuNode>
             {
                 new("gendef.salesreps",   "Satış Temsilcileri",         "UserCircle",  "/GeneralDefinitions/SalesRepresentatives", null),
                 new("gendef.currencies",  "Döviz Tanımlamaları",        "DollarSign",  "/GeneralDefinitions/Currencies",           null),
                 new("gendef.warehouses",  "Lokasyon Tanımlamaları",     "MapPin",      "/Logistics/Locations",            null),
                 new("gendef.measureunit", "Ölçü Birimleri",  "Ruler",       "/Logistics/Units",        null),
                 new("gendef.cardgroups",  "Grup Tanımlamaları",         "Layers",      "/Definitions/CardGroups",                  null),
+                new("gendef.machines",    "Makine Tanımlamaları",       "Cog",         "/Logistics/Machines",                      null),
+                new("gendef.operations",  "Operasyon Tanımlamaları",    "Hammer",      "/Production/Operations",                   null),
+                new("gendef.routings",    "Rota Tanımlamaları",         "Workflow",    "/Production/Routings",                     null),
+                new("gendef.personnel",   "Personel Tanımlamaları",     "Users",       "/Production/Personnel",                    null),
                 new("gendef.pricelist",   "Fiyat Listesi",              "Tag",         "/PriceList/PriceGroups",                   null),
             }),
 
@@ -110,7 +126,9 @@ public static class MenuDefinition
             new("design", "Tasarım", "LayoutGrid", null, new List<MenuNode>
             {
                 new("design.documents",       "Belge Şablonları",      "FileText",   "/Document",              null),
-                new("design.guides",          "Rehber Yönetimi",       "BookOpen",   "/Admin/GuideManagement", null),
+                // Rehber Yonetimi menusu kaldirildi — rehber konfigurasyonu artik
+                // widget bazinda inline (WidgetBuilderForm'daki "Rehber" satiri +
+                // GuideSettingsModal) ya da text+rehber butonu uzerinden yapiliyor.
                 new("design.formmanagement",  "Form Tasarım Ayarları", "LayoutList", "/Admin/FormManagement",  null),
             }),
 

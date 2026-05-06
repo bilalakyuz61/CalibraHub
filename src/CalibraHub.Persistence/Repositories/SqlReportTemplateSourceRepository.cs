@@ -19,7 +19,7 @@ public sealed class SqlReportTemplateSourceRepository : IReportTemplateSourceRep
     }
 
     private const string Columns =
-        "[id],[template_id],[source_name],[view_name],[key_column],[parent_source_name],[parent_key_column],[is_primary],[display_order],[created_at],[sort_column],[sort_direction]";
+        "[id],[template_id],[source_name],[view_name],[key_column],[parent_source_name],[parent_key_column],[is_primary],[display_order],[Created],[sort_column],[sort_direction]";
 
     public async Task<IReadOnlyList<ReportTemplateSource>> GetByTemplateIdAsync(int templateId, CancellationToken cancellationToken)
     {
@@ -61,7 +61,7 @@ public sealed class SqlReportTemplateSourceRepository : IReportTemplateSourceRep
                     INSERT INTO {_table}
                         ([template_id],[source_name],[view_name],[key_column],
                          [parent_source_name],[parent_key_column],[is_primary],[display_order],
-                         [sort_column],[sort_direction],[created_at])
+                         [sort_column],[sort_direction],[Created])
                     VALUES (@Tid,@SourceName,@ViewName,@KeyColumn,
                             @ParentSrc,@ParentKey,@IsPrimary,@Order,
                             @SortCol,@SortDir,GETDATE());

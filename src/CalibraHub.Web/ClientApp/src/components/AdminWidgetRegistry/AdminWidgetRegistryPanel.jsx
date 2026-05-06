@@ -29,6 +29,7 @@ import {
   upsertWidget as upsertWidgetApi,
   deleteWidget as deleteWidgetApi,
 } from './adminRegistryService'
+import { discoverFields as discoverFieldsApi, getFieldsByForm as getFieldsByFormApi } from '../../services/fieldSettingService'
 
 // Form hiyerarsisi — bir form tanimi yapilirken hangi ust formlarin widget'lari
 // kullanilabilir? Ornek: Satis Teklifi Kalem Bilgisi (lines) icinde hem kendi
@@ -49,6 +50,10 @@ export default function AdminWidgetRegistryPanel(props) {
   var [currentFormCode, setCurrentFormCode] = useState(initialFormCode)
   var [widgets, setWidgets]             = useState([])      // tum widget'lar (group + field karma)
   var [parentFormWidgets, setParentFormWidgets] = useState([])  // ust form widget'lari (rule/formul icin)
+  // Form sabit alanlari — INFORMATION_SCHEMA'dan kesfedilen DB tablo kolonlari.
+  // Tip 2 rehberlerde "Form Alani Ekle" listesinde bunlar da gorunsun ki admin
+  // ornek "WHERE [ItemCode] = '{#item_code}'" gibi kisitlar yazabilsin.
+  var [formStaticFields, setFormStaticFields] = useState([])
   var [editingField, setEditingField]   = useState(null)
   var [savingGlobal, setSavingGlobal]   = useState(false)
   var [savingId, setSavingId]           = useState(null)
@@ -105,6 +110,45 @@ export default function AdminWidgetRegistryPanel(props) {
       setCurrentFormCode(formCode || schema.formCode)
       setWidgets(Array.isArray(schema.widgets) ? schema.widgets : [])
       setEditingField(null)
+
+      // Form sabit alanlarini kesfet (INFORMATION_SCHEMA tablo kolonlari).
+      // Paralel olarak FldSet kayitlarindaki Turkce label'lari da cek; eslesmis
+      // alanlar icin label kullan, eslesmemisler icin raw column adi fallback.
+      // Hata olursa sessizce bos liste — rehber tanimlamada sadece kardes widget'lar
+      // ve DOM'dan gelenler gorunur (eski davranis).
+      if (schema.formId) {
+        Promise.all([
+          // includeMapped=true: form'un TUM kolonlari (FldSet'e eslesmis dahil) gelir.
+          // Widget rehberinde admin tum form alanlarini parametre olarak kullanmak ister.
+          discoverFieldsApi(schema.formId, { includeMapped: true }).catch(function(e) {
+            // eslint-disable-next-line no-console
+            console.warn('[AdminRegistry] discoverFields failed:', e && e.message)
+            return []
+          }),
+          getFieldsByFormApi(schema.formId).catch(function(e) {
+            // eslint-disable-next-line no-console
+            console.warn('[AdminRegistry] getFieldsByForm failed:', e && e.message)
+            return []
+          }),
+        ]).then(function(results) {
+          if (cancelledFlag) return
+          var cols = Array.isArray(results[0]) ? results[0] : []
+          var mapped = Array.isArray(results[1]) ? results[1] : []
+          // fieldKey → fieldLabel haritasi (case-insensitive)
+          var labelMap = {}
+          mapped.forEach(function(m) {
+            if (m && m.fieldKey) labelMap[String(m.fieldKey).toLowerCase()] = m.fieldLabel || ''
+          })
+          var enriched = cols.map(function(col) {
+            var key = String(col)
+            var label = labelMap[key.toLowerCase()] || ''
+            return { fieldKey: key, label: label || key }
+          })
+          setFormStaticFields(enriched)
+        })
+      } else {
+        setFormStaticFields([])
+      }
 
       // Ust form widget'larini da cek — rule/formula modalinde kullanicinin
       // gorebilmesi icin. Sadece alt form'da (child) calisiyoruz; header'da
@@ -178,9 +222,9 @@ export default function AdminWidgetRegistryPanel(props) {
         isPlainField: payload.isPlainField || false,
         isRequired: payload.isRequired === true,
         rules: payload.rules || null,     // Faz G — kural & formul JSON objesi
-        // Form uzerinde kaplayacagi 12-col grid span degeri (1-12). Backend
-        // tanımadıgı surece metadata'da saklanabilir; runtime renderer okur.
-        colSpan: (typeof payload.colSpan === 'number' && payload.colSpan >= 1 && payload.colSpan <= 12)
+        // Form uzerinde kaplayacagi 24-col grid span degeri (1-24). Runtime
+        // renderer CSS grid-column span'ine cevirir.
+        colSpan: (typeof payload.colSpan === 'number' && payload.colSpan >= 1 && payload.colSpan <= 24)
           ? payload.colSpan : null,
         // Etiket gorunum stili — 'standard' (default) veya 'modern' (floating).
         labelStyle: payload.labelStyle === 'modern' ? 'modern' : 'standard',
@@ -194,7 +238,11 @@ export default function AdminWidgetRegistryPanel(props) {
 
       // Schema'yi yeniden cek (id generated + server validation sonuclari icin)
       await loadSchemaFor(currentFormCode, false)
-      try { localStorage.setItem('calibra:widget-schema-changed', String(Date.now())) } catch(_) {}
+      try {
+        localStorage.setItem('calibra:widget-schema-changed', String(Date.now()))
+        // Aynı tab'da listener'lari da uyandir (storage event sadece DIGER tab'lere gider).
+        window.dispatchEvent(new CustomEvent('calibra:widget-schema-changed'))
+      } catch(_) {}
       showToast('success', payload.id ? 'Widget guncellendi' : 'Yeni widget eklendi')
     } catch (e) {
       showToast('error', 'Hata: ' + e.message)
@@ -253,7 +301,11 @@ export default function AdminWidgetRegistryPanel(props) {
           return w.id === wid ? Object.assign({}, w, { isActive: nextActive }) : w
         })
       })
-      try { localStorage.setItem('calibra:widget-schema-changed', String(Date.now())) } catch(_) {}
+      try {
+        localStorage.setItem('calibra:widget-schema-changed', String(Date.now()))
+        // Aynı tab'da listener'lari da uyandir (storage event sadece DIGER tab'lere gider).
+        window.dispatchEvent(new CustomEvent('calibra:widget-schema-changed'))
+      } catch(_) {}
       showToast('success', nextActive ? 'Widget aktif edildi' : 'Widget pasife alindi')
     } catch (e) {
       showToast('error', 'Hata: ' + e.message)
@@ -280,7 +332,11 @@ export default function AdminWidgetRegistryPanel(props) {
         return
       }
       setWidgets(function(prev) { return prev.filter(function(w) { return w.id !== wid }) })
-      try { localStorage.setItem('calibra:widget-schema-changed', String(Date.now())) } catch(_) {}
+      try {
+        localStorage.setItem('calibra:widget-schema-changed', String(Date.now()))
+        // Aynı tab'da listener'lari da uyandir (storage event sadece DIGER tab'lere gider).
+        window.dispatchEvent(new CustomEvent('calibra:widget-schema-changed'))
+      } catch(_) {}
       showToast('success', 'Widget silindi')
     } catch (e) {
       showToast('error', 'Hata: ' + e.message)
@@ -511,6 +567,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 groups={derivedGroups}
                 existingFields={derivedFields}
                 parentFormWidgets={parentFormWidgets}
+                formStaticFields={formStaticFields}
                 activeLayer={null}
                 activeLayerLabel={null}
               />

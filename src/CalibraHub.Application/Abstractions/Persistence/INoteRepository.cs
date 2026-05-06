@@ -37,6 +37,9 @@ public interface INoteRepository
 
     Task<IReadOnlyCollection<NoteAttachment>> GetAttachmentsAsync(Guid noteId, CancellationToken cancellationToken);
     Task<NoteAttachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken cancellationToken);
+    // Yalnizca download path'inde cagrilir; varbinary(max) kolonunu doner.
+    // Liste/metadata sorgularinda kullanilmamali (gereksiz IO yuku).
+    Task<byte[]?> GetAttachmentBinaryAsync(Guid attachmentId, CancellationToken cancellationToken);
     Task AddAttachmentAsync(NoteAttachment attachment, CancellationToken cancellationToken);
     Task DeleteAttachmentAsync(Guid attachmentId, CancellationToken cancellationToken);
     Task DeleteAllAttachmentsAsync(Guid noteId, CancellationToken cancellationToken);

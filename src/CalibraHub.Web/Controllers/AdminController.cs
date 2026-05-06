@@ -26,6 +26,7 @@ public sealed class AdminController : Controller
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IIntegrationEventService _integrationEventService;
     private readonly IScheduledTaskRepository _scheduledTaskRepo;
+    private readonly ICompanyParameterService _companyParameters;
     private static readonly JsonSerializerOptions ProjectRequestJsonOptions = new()
     {
         WriteIndented = true
@@ -39,7 +40,8 @@ public sealed class AdminController : Controller
         IDocumentImportService documentImportService,
         IWebHostEnvironment webHostEnvironment,
         IIntegrationEventService integrationEventService,
-        IScheduledTaskRepository scheduledTaskRepo)
+        IScheduledTaskRepository scheduledTaskRepo,
+        ICompanyParameterService companyParameters)
     {
         _adminReadService = adminReadService;
         _adminManagementService = adminManagementService;
@@ -49,6 +51,7 @@ public sealed class AdminController : Controller
         _webHostEnvironment = webHostEnvironment;
         _integrationEventService = integrationEventService;
         _scheduledTaskRepo = scheduledTaskRepo;
+        _companyParameters = companyParameters;
     }
 
     [HttpGet]
@@ -64,6 +67,108 @@ public sealed class AdminController : Controller
     {
         return RedirectToAction(nameof(Index));
     }
+
+    // ==== Sirket Parametreleri ====================================================
+    // /Admin/Parameters → sabit sol-tab listesi (Genel, Onay Islemleri, Is Emri,
+    // Satis Teklifi). Her tab kodla gomulu hardcoded UI kontrollerini gosterir;
+    // dinamik (kullanicinin yeni form/parametre ekledigi) yapi kaldirildi.
+    [HttpGet]
+    public async Task<IActionResult> Parameters(CancellationToken cancellationToken)
+    {
+        SetActiveMenu("settings");
+
+        // Genel tab'i icin: E-Belge Onay Sistemi switch'i (Sirket Ayarlari'ndan tasindi).
+        // Bu deger Company entity'sindeki IsEDocumentApprovalEnabled property'si.
+        var companyId = GetCompanyId();
+        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+        var company = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
+        ViewData["IsEDocumentApprovalEnabled"] = company?.IsEDocumentApprovalEnabled ?? false;
+
+        return View();
+    }
+
+    /// <summary>
+    /// Genel tab'indaki sirket-seviyesi parametreleri kaydeder.
+    /// Su an sadece IsEDocumentApprovalEnabled var; ileride buraya yeni
+    /// Company entity property'leri eklenebilir.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveGeneralParametersJson(
+        [FromBody] GeneralParametersInput input,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var companyId = GetCompanyId();
+            var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+            var company = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
+            if (company is null) return Json(new { ok = false, error = "Sirket bulunamadi." });
+
+            await _adminManagementService.SaveCompanyAsync(
+                new SaveCompanyRequest(
+                    company.Id,
+                    company.Name,
+                    company.Title,
+                    company.Address,
+                    company.City,
+                    company.District,
+                    company.PostalCode,
+                    company.TaxOffice,
+                    company.TaxNumber,
+                    input.IsEDocumentApprovalEnabled,
+                    company.IsActive,
+                    company.DatabaseConnectionString),
+                cancellationToken);
+
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled);
+
+    [HttpGet]
+    public async Task<IActionResult> ParametersList(string? formCode, CancellationToken ct)
+    {
+        var list = await _companyParameters.ListAsync(formCode, ct);
+        return Json(list);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveParameter([FromBody] SetCompanyParameterRequest req, CancellationToken ct)
+    {
+        try
+        {
+            await _companyParameters.SetAsync(req, ct);
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteParameter([FromBody] DeleteCompanyParameterRequest req, CancellationToken ct)
+    {
+        try
+        {
+            await _companyParameters.DeleteAsync(req.FormCode, req.ParamKey, ct);
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);
 
     /// <summary>
     /// Zamanlanmis gorevler — Worker'daki hosted service'lerin kayit + calistirma durumu.
@@ -85,7 +190,6 @@ public sealed class AdminController : Controller
         return Json(tasks.Select(t => new
         {
             t.Id,
-            t.Code,
             t.Name,
             t.Description,
             TaskType     = (int)t.TaskType,
@@ -102,26 +206,27 @@ public sealed class AdminController : Controller
             t.LastRunMessage,
             t.LastRunDurationMs,
             NextRunAtLocal = t.NextRunAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
+            t.PrerequisiteTaskId,
         }));
     }
 
     /// <summary>Gorevi hemen calistir (MANUAL trigger).</summary>
-    [HttpPost("/Admin/ScheduledTasks/{code}/RunNow")]
+    [HttpPost("/Admin/ScheduledTasks/{id:int}/RunNow")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ScheduledTaskRunNow(string code,
+    public async Task<IActionResult> ScheduledTaskRunNow(int id,
         [FromServices] CalibraHub.Application.Services.Scheduling.IScheduledTaskDispatcher dispatcher,
         CancellationToken ct)
     {
-        var (ok, message) = await dispatcher.TriggerNowAsync(code, ct);
+        var (ok, message) = await dispatcher.TriggerNowAsync(id, ct);
         return Json(new { success = ok, message });
     }
 
     /// <summary>Gorevi etkinlestir/devre disi birak.</summary>
-    [HttpPost("/Admin/ScheduledTasks/{code}/Toggle")]
+    [HttpPost("/Admin/ScheduledTasks/{id:int}/Toggle")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ScheduledTaskToggle(string code, [FromForm] bool enabled, CancellationToken ct)
+    public async Task<IActionResult> ScheduledTaskToggle(int id, [FromForm] bool enabled, CancellationToken ct)
     {
-        await _scheduledTaskRepo.SetEnabledAsync(code, enabled, ct);
+        await _scheduledTaskRepo.SetEnabledAsync(id, enabled, ct);
         return Json(new { success = true });
     }
 
@@ -143,19 +248,23 @@ public sealed class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ScheduledTaskSave([FromBody] ScheduledTaskSaveRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Name))
-            return Json(new { success = false, message = "Kod ve isim zorunlu." });
-        if (!System.Text.RegularExpressions.Regex.IsMatch(req.Code, @"^[A-Za-z_][A-Za-z0-9_]*$"))
-            return Json(new { success = false, message = "Kod sadece harf, rakam ve alt cizgi olmali." });
+        if (string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { success = false, message = "Gorev adi zorunlu." });
 
         var taskType = (CalibraHub.Domain.Enums.ScheduledTaskType)req.TaskType;
         if (taskType == CalibraHub.Domain.Enums.ScheduledTaskType.Builtin)
             return Json(new { success = false, message = "BUILTIN gorevler UI'dan eklenemez — Worker kodunda tanimlanir." });
 
+        // CompanyId — UI'dan kayit edilen task hangi sirket icin tanimlandiysa o claim'den alinir.
+        // Token resolver runtime'da bu deger uzerinden sirket bilgilerini ({COMPANY_ID}, {INTEGRATION_DB}) cozer.
+        int? companyId = null;
+        var companyIdClaim = User.FindFirst("company_id")?.Value;
+        if (!string.IsNullOrWhiteSpace(companyIdClaim) && int.TryParse(companyIdClaim, out var parsedCompanyId))
+            companyId = parsedCompanyId;
+
         var task = new CalibraHub.Domain.Entities.ScheduledTask
         {
             Id                  = req.Id,
-            Code                = req.Code.Trim(),
             Name                = req.Name.Trim(),
             Description         = req.Description,
             TaskType            = taskType,
@@ -164,20 +273,32 @@ public sealed class AdminController : Controller
             ScheduleExpression  = req.ScheduleExpression,
             ScheduleDescription = req.ScheduleDescription,
             IsEnabled           = req.IsEnabled,
+            CompanyId           = companyId,
+            PrerequisiteTaskId  = req.PrerequisiteTaskId,
         };
         task.NextRunAt = CalibraHub.Application.Services.Scheduling.ScheduleEvaluator.ComputeNextRun(task, DateTime.UtcNow);
         var id = await _scheduledTaskRepo.SaveAsync(task, ct);
         return Json(new { success = true, id });
     }
 
+    /// <summary>Sirketin DB'sindeki user-defined view adlarini doner — ViewReport task form dropdown'u icin.</summary>
+    [HttpGet("/Admin/ScheduledTasks/DbViews")]
+    public async Task<IActionResult> ScheduledTaskDbViews(
+        [FromServices] CalibraHub.Application.Abstractions.Persistence.IDbSchemaRepository dbSchema,
+        CancellationToken ct)
+    {
+        var names = await dbSchema.GetViewNamesAsync(ct);
+        return Json(names);
+    }
+
     /// <summary>Bir gorevin son N calistirma gecmisini doner.</summary>
-    [HttpGet("/Admin/ScheduledTasks/{code}/History")]
-    public async Task<IActionResult> ScheduledTaskHistory(string code, int limit,
+    [HttpGet("/Admin/ScheduledTasks/{id:int}/History")]
+    public async Task<IActionResult> ScheduledTaskHistory(int id, int limit,
         [FromServices] CalibraHub.Application.Abstractions.Persistence.IScheduledTaskRunRepository runRepo,
         CancellationToken ct)
     {
         var takeLimit = limit > 0 && limit <= 200 ? limit : 20;
-        var runs = await runRepo.GetRecentByCodeAsync(code, takeLimit, ct);
+        var runs = await runRepo.GetRecentByTaskIdAsync(id, takeLimit, ct);
         return Json(runs.Select(r => new
         {
             r.Id,
@@ -187,6 +308,7 @@ public sealed class AdminController : Controller
             r.Status,
             r.Message,
             r.DurationMs,
+            r.ExecutedCommand,
             Trigger     = (int)r.Trigger,
             TriggerName = r.Trigger.ToString(),
         }));
@@ -332,10 +454,156 @@ public sealed class AdminController : Controller
         }
     }
 
+    // ── WhatsApp endpoint'leri (Sirket Ayarlari > WhatsApp sekmesi tarafindan kullanilir) ─
+
+    [HttpPost("/Admin/WhatsApp/Save")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveWhatsApp(
+        [FromServices] IWhatsAppService whatsAppService,
+        int provider, string? accessToken, string? phoneNumberId,
+        string? businessAccountId, string? webhookVerifyToken,
+        string? webQrBridgeUrl, bool isEnabled, bool? respectQuietHours, CancellationToken ct)
+    {
+        // Provider seçimi: 0=CloudApi, 1=WebQr
+        var existing = await whatsAppService.GetConfigAsync(ct);
+        var providerType = (CalibraHub.Domain.Entities.WhatsAppProviderType)provider;
+
+        // Mevcut config'i yeni provider değeri ile güncellemek için:
+        // SaveConfigAsync sadece Cloud API alanlari icin yapildi, simdi genisletmeliyiz.
+        // Bu MVP'de doğrudan repo üzerinden manipule ediyoruz (cleaner refactor v1.0.12'de).
+        var configRepo = HttpContext.RequestServices.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IWhatsAppConfigRepository>();
+        var cfg = await configRepo.GetAsync(ct) ?? new CalibraHub.Domain.Entities.WhatsAppConfig
+        {
+            Id = 1,
+            CreatedAt = DateTime.UtcNow,
+        };
+        cfg.Provider           = providerType;
+        cfg.PhoneNumberId      = phoneNumberId?.Trim();
+        cfg.BusinessAccountId  = businessAccountId?.Trim();
+        cfg.WebhookVerifyToken = webhookVerifyToken?.Trim();
+        cfg.WebQrBridgeUrl     = webQrBridgeUrl?.Trim();
+        cfg.IsEnabled          = isEnabled;
+        cfg.UpdatedAt          = DateTime.UtcNow;
+        if (cfg.CreatedAt == default) cfg.CreatedAt = DateTime.UtcNow;
+
+        // Yeni token gelirse DPAPI ile şifrele
+        if (!string.IsNullOrWhiteSpace(accessToken))
+        {
+            try { cfg.AccessTokenEncrypted = CalibraHub.Application.Security.DpapiSecretDecryptor.Encrypt(accessToken.Trim()); }
+            catch { cfg.AccessTokenEncrypted = accessToken.Trim(); }
+        }
+        // Cloud API seçilip token henüz yoksa hata
+        if (providerType == CalibraHub.Domain.Entities.WhatsAppProviderType.CloudApi
+            && string.IsNullOrEmpty(cfg.AccessTokenEncrypted))
+        {
+            return Json(new { success = false, message = "Cloud API için Access Token zorunlu." });
+        }
+
+        await configRepo.SaveAsync(cfg, ct);
+
+        // Safety Rules — sessiz saatler toggle'i (opsiyonel, sadece bool gelirse guncelle)
+        if (respectQuietHours.HasValue)
+        {
+            var safetyRepo = HttpContext.RequestServices
+                .GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IWhatsAppSafetyRulesRepository>();
+            var rules = await safetyRepo.GetAsync(ct);
+            if (rules is not null && rules.RespectQuietHours != respectQuietHours.Value)
+            {
+                rules.RespectQuietHours = respectQuietHours.Value;
+                rules.UpdatedAt = DateTime.UtcNow;
+                await safetyRepo.SaveAsync(rules, ct);
+            }
+        }
+
+        return Json(new { success = true, message = "Yapılandırma kaydedildi." });
+    }
+
+    [HttpPost("/Admin/WhatsApp/Test")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TestWhatsApp([FromServices] IWhatsAppService whatsAppService, CancellationToken ct)
+    {
+        var result = await whatsAppService.TestConfigAsync(ct);
+        return Json(new
+        {
+            success      = result.Success,
+            kind         = result.Kind,                // ok | info | error
+            message      = result.Message,
+            displayPhone = result.DisplayPhoneNumber,
+        });
+    }
+
+    [HttpPost("/Admin/WhatsApp/SendTest")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendWhatsAppTest(
+        [FromServices] IWhatsAppService whatsAppService,
+        string toPhone, string message, CancellationToken ct)
+    {
+        var result = await whatsAppService.SendTextMessageAsync(toPhone ?? "", message ?? "", ct);
+        return Json(new { success = result.Success, message = result.Message, messageId = result.MessageId });
+    }
+
+    /// <summary>Bridge'den 8 haneli pairing code iste — telefonla baglanmak icin alternatif yol.</summary>
+    [HttpPost("/Admin/WhatsApp/PairingCode")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> GetWhatsAppPairingCode(
+        [FromServices] CalibraHub.Application.Abstractions.Persistence.IWhatsAppConfigRepository configRepo,
+        [FromServices] IHttpClientFactory httpClientFactory,
+        string phone, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(phone))
+            return Json(new { success = false, message = "Telefon zorunlu (orn: 905338168150)" });
+
+        var cfg = await configRepo.GetAsync(ct);
+        if (cfg is null || string.IsNullOrWhiteSpace(cfg.WebQrBridgeUrl))
+            return Json(new { success = false, message = "Bridge URL ayarlanmamis." });
+
+        try
+        {
+            using var client = httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
+            var resp = await client.PostAsJsonAsync(
+                cfg.WebQrBridgeUrl.TrimEnd('/') + "/pairing-code",
+                new { phone },
+                ct);
+            var body = await resp.Content.ReadAsStringAsync(ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            var ok = root.TryGetProperty("ok", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.True;
+            var code = root.TryGetProperty("code", out var c) ? c.GetString() : null;
+            var error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
+            return Json(new { success = ok, code, message = error ?? "Pairing code uretildi." });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = $"Bridge hatasi: {ex.Message}" });
+        }
+    }
+
+    /// <summary>Web QR sayfasi icin polling ucu — Bridge'in /status+/qr cevabini birlestirip frontend'e doner.</summary>
+    [HttpGet("/Admin/WhatsApp/Qr")]
+    public async Task<IActionResult> GetWhatsAppQr([FromServices] IWhatsAppService whatsAppService, CancellationToken ct)
+    {
+        var r = await whatsAppService.GetWebQrStatusAsync(ct);
+        return Json(new
+        {
+            reachable   = r.Reachable,
+            state       = r.State,
+            qr          = r.Qr,
+            phone       = r.Phone,
+            displayName = r.DisplayName,
+            error       = r.Error,
+        });
+    }
+
     [HttpGet]
-    public async Task<IActionResult> CompanySettings(CancellationToken cancellationToken)
+    public async Task<IActionResult> CompanySettings(
+        [FromServices] IWhatsAppService whatsAppService,
+        [FromServices] CalibraHub.Application.Abstractions.Persistence.IWhatsAppSafetyRulesRepository safetyRepo,
+        CancellationToken cancellationToken)
     {
         SetActiveMenu("company-settings");
+        ViewBag.WhatsAppConfig = await whatsAppService.GetConfigAsync(cancellationToken);
+        ViewBag.WhatsAppSafetyRules = await safetyRepo.GetAsync(cancellationToken);
         var companyId = GetCompanyId();
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
         var myCompany = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
@@ -482,16 +750,6 @@ public sealed class AdminController : Controller
         SetActiveMenu("project-instructions");
         var viewModel = await BuildProjectInstructionsViewModelAsync(cancellationToken);
         return View(viewModel);
-    }
-
-    /// <summary>
-    /// Rehber Merkezi — GuideMas yönetim ekranı (React bileşeni mount edilir).
-    /// </summary>
-    [HttpGet]
-    public IActionResult GuideManagement()
-    {
-        SetActiveMenu("guide-management");
-        return View();
     }
 
     /// <summary>
@@ -2540,9 +2798,12 @@ public sealed class AdminController : Controller
                     Group = new SelectListGroup { Name = x.GroupLabel }
                 })
                 .ToArray(),
-            MaterialCardDesigner = usesMaterialCardSchema
-                ? await BuildMaterialCardViewSettingsViewModelAsync(selectedGroupId, selectedFieldId, cancellationToken, normalizedScreenCode)
-                : new MaterialCardViewSettingsViewModel(),
+            // MaterialCardDesigner — legacy material card field designer (artik kullanilmiyor;
+            // yerine React panel /api/widgets uzerinden calisiyor). Eski tablo (FieldGroup/Field)
+            // INT IDENTITY ID'li, entity Guid bekliyor → schema fetch InvalidCastException atiyor.
+            // usesMaterialCardSchema=true icinde de bos donelim — legacy view'lar artik bu modeli
+            // tuketmiyor.
+            MaterialCardDesigner = new MaterialCardViewSettingsViewModel(),
             StandardDesigner = usesMaterialCardSchema
                 ? new StandardScreenDesignViewModel
                 {
@@ -3135,6 +3396,23 @@ public sealed class AdminController : Controller
         }
     }
 
+    [HttpGet]
+    public IActionResult GetIntegrationEndpointCatalogJson(string vendor = "Netsis")
+    {
+        IReadOnlyList<CalibraHub.Application.Services.IntegrationEndpointEntry> entries =
+            vendor.Equals("Netsis", StringComparison.OrdinalIgnoreCase)
+                ? CalibraHub.Application.Services.IntegrationEndpointCatalog.Netsis
+                : Array.Empty<CalibraHub.Application.Services.IntegrationEndpointEntry>();
+        return Json(entries.Select(e => new
+        {
+            path = e.Path,
+            method = e.Method,
+            title = e.Title,
+            description = e.Description,
+            bodyTemplate = e.BodyTemplate
+        }).ToArray());
+    }
+
     [HttpPost]
     public async Task<IActionResult> SaveApiProfileJson([FromBody] ApiProfileInput input, CancellationToken ct)
     {
@@ -3193,10 +3471,11 @@ public sealed class AdminController : Controller
         }
         return Json(items.Select(x => new
         {
-            x.Id, x.CompanyName, x.FullName, x.Email, x.EmployeeCode,
+            x.Id, x.CompanyId, x.CompanyName, x.FullName, x.Email, x.EmployeeCode,
             x.DepartmentName, supervisorName = x.SupervisorName ?? "-",
             x.Role, permissions = string.Join(", ", x.Permissions),
-            x.IsActive
+            x.IsActive,
+            grafanaRole = x.GrafanaRole // "Viewer"/"Editor"/"Admin"/null
         }).ToArray());
     }
 
@@ -3255,6 +3534,17 @@ public sealed class AdminController : Controller
         if (!TryParsePermissions(input.Permissions, out var permissions))
             return Json(new { success = false, message = "Secilen yetkilerden biri gecersiz." });
 
+        // Grafana yetki seviyesi (opsiyonel) — bos/null ise kullanici Grafana'ya eklenmez.
+        // Gecerli degerler: "Viewer" / "Editor" / "Admin" (case-insensitive).
+        CalibraHub.Domain.Enums.GrafanaRole? grafanaRole = null;
+        if (!string.IsNullOrWhiteSpace(input.GrafanaRole))
+        {
+            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out CalibraHub.Domain.Enums.GrafanaRole parsed))
+                grafanaRole = parsed;
+            else
+                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Editor/Admin)." });
+        }
+
         try
         {
             await _adminManagementService.CreateUserAsync(
@@ -3266,9 +3556,59 @@ public sealed class AdminController : Controller
                     input.DepartmentId.Value,
                     input.SupervisorUserId,
                     role,
-                    permissions),
+                    permissions,
+                    Password: null,
+                    GrafanaRole: grafanaRole),
                 cancellationToken);
             return Json(new { success = true, message = "Kullanici olusturuldu." });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Mevcut kullanicinin temel bilgilerini ve Grafana rolunu gunceller.
+    /// Frontend "Duzenle" akisindan cagrilir.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> UpdateAdminUserJson(
+        [FromBody] UserUpdateInput input, CancellationToken cancellationToken)
+    {
+        if (input.Id == Guid.Empty)
+            return Json(new { success = false, message = "Kullanici Id zorunlu." });
+        if (!input.CompanyId.HasValue)
+            return Json(new { success = false, message = "Sirket secimi zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.FullName))
+            return Json(new { success = false, message = "Ad Soyad zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.Email))
+            return Json(new { success = false, message = "E-posta zorunludur." });
+
+        // Grafana yetki seviyesi: input.GrafanaRoleProvided = true ise "" → null (Yok),
+        // "Viewer"/"Editor"/"Admin" → enum. Provided = false ise mevcut rol korunur.
+        CalibraHub.Domain.Enums.GrafanaRole? grafanaRole = null;
+        if (input.GrafanaRoleProvided && !string.IsNullOrWhiteSpace(input.GrafanaRole))
+        {
+            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out CalibraHub.Domain.Enums.GrafanaRole parsed))
+                grafanaRole = parsed;
+            else
+                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Editor/Admin/bos)." });
+        }
+
+        try
+        {
+            await _adminManagementService.UpdateUserAsync(
+                new UpdateUserRequest(
+                    input.Id,
+                    input.CompanyId.Value,
+                    input.FullName,
+                    input.Email,
+                    Password: null,
+                    SetGrafanaRole: input.GrafanaRoleProvided,
+                    GrafanaRole: grafanaRole),
+                cancellationToken);
+            return Json(new { success = true, message = "Kullanici guncellendi." });
         }
         catch (ArgumentException ex)
         {
@@ -3466,7 +3806,6 @@ public sealed class TestRestApiInput
 public sealed class ScheduledTaskSaveRequest
 {
     public int     Id                  { get; set; }
-    public string  Code                { get; set; } = string.Empty;
     public string  Name                { get; set; } = string.Empty;
     public string? Description         { get; set; }
     public int     TaskType            { get; set; }
@@ -3475,6 +3814,7 @@ public sealed class ScheduledTaskSaveRequest
     public string? ScheduleExpression  { get; set; }
     public string? ScheduleDescription { get; set; }
     public bool    IsEnabled           { get; set; } = true;
+    public int?    PrerequisiteTaskId  { get; set; }
 }
 
 public sealed class IntegratorSettingsJsonInput

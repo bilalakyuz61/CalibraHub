@@ -64,14 +64,14 @@ export function getReminders(noteId) {
     })
 }
 
-export function addReminder(noteId, remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserId) {
+export function addReminder(noteId, remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserIds) {
   return postJson(BASE + '/AddReminderJson', {
     noteId:          noteId,
     remindAt:        remindAtIso,
     recurrenceType:  recurrenceType || 0,
     recurrenceData:  recurrenceData || null,
     deliveryChannel: deliveryChannel || 0,  // 0=InApp, 1=Email, 2=Both
-    targetUserId:    targetUserId || null,
+    targetUserIds:   Array.isArray(targetUserIds) ? targetUserIds : [],
   })
 }
 

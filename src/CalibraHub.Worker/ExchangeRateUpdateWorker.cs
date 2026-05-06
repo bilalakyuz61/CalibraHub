@@ -9,7 +9,7 @@ namespace CalibraHub.Worker;
 
 public sealed class ExchangeRateUpdateWorker : BackgroundService
 {
-    private const string TaskCode = "EXCHANGE_RATE";
+    private const string TaskName = "Doviz Kuru Guncelleme";
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExchangeRateUpdateWorker> _logger;
 
@@ -75,8 +75,7 @@ public sealed class ExchangeRateUpdateWorker : BackgroundService
             var repo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
             await repo.UpsertRegistrationAsync(new ScheduledTask
             {
-                Code                = TaskCode,
-                Name                = "Doviz Kuru Guncelleme",
+                Name                = TaskName,
                 Description         = "TCMB'den guncel doviz kurlarini cekip DB'ye yazar.",
                 ScheduleDescription = "Her gun 09:00",
                 IsEnabled           = true,
@@ -91,7 +90,11 @@ public sealed class ExchangeRateUpdateWorker : BackgroundService
         {
             using var scope = _scopeFactory.CreateScope();
             var repo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
-            await repo.ReportRunAsync(TaskCode, status, msg, null, nextRun, ct);
+            // Name uzerinden Id resolve et (built-in tasklar UpsertRegistrationAsync ile
+            // Name uniqueness'le eklendi). Bulunamazsa skip — bir sonraki run'da retry.
+            var task = await repo.GetByNameAsync(TaskName, ct);
+            if (task is not null)
+                await repo.ReportRunAsync(task.Id, status, msg, null, nextRun, ct);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "ScheduledTask ReportRun failed."); }
     }

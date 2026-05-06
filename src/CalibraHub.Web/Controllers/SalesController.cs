@@ -26,6 +26,7 @@ public sealed class SalesController : Controller
     private readonly IReportTemplateRepository _templateRepo;
     private readonly IDocumentGenerationService _reportGenerationService;
     private readonly IDocumentTypeRepository _documentTypeRepo;
+    private readonly IWorkOrderService _workOrderService;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
 
@@ -52,6 +53,7 @@ public sealed class SalesController : Controller
         IReportTemplateRepository templateRepo,
         IDocumentGenerationService reportGenerationService,
         IDocumentTypeRepository documentTypeRepo,
+        IWorkOrderService workOrderService,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
     {
@@ -65,6 +67,7 @@ public sealed class SalesController : Controller
         _templateRepo = templateRepo;
         _reportGenerationService = reportGenerationService;
         _documentTypeRepo = documentTypeRepo;
+        _workOrderService = workOrderService;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
@@ -215,6 +218,26 @@ public sealed class SalesController : Controller
                 {
                     new
                     {
+                        // Tek teklif → siparise donustur (kart-bazli) + opsiyonel is emri.
+                        // Sadece Approved tekliflerde aktif anlamli — yine de kullaniciya
+                        // gosterip server-side validation'a birakiyoruz (UX kalabaliklik).
+                        label = "Siparise Donustur",
+                        icon = "ShoppingCart",
+                        color = "emerald",
+                        type = "trigger",
+                        trigger = "convert-single-quote-modal",
+                        payload = new
+                        {
+                            quoteId = quote.Id,
+                            quoteNumber = quote.DocumentNumber,
+                            contactName = quote.ContactName,
+                            grandTotal = quote.GrandTotal,
+                            currency = quote.Currency,
+                            lineCount = quote.LineCount,
+                        },
+                    },
+                    new
+                    {
                         label = "Yazdir",
                         icon = "Printer",
                         color = "indigo",
@@ -279,7 +302,7 @@ public sealed class SalesController : Controller
             iconColor = "indigo",
             searchPlaceholder = "Hizli ara... (teklif no, musteri)",
             emptyText = "Henuz teklif olusturulmamis",
-            actions = new[]
+            actions = new object[]
             {
                 new
                 {
@@ -293,6 +316,191 @@ public sealed class SalesController : Controller
             masterWidgets,
             entities,
         };
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // SIPARIS LISTESI EKRANI (Document type = satis_siparisi)
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    public async Task<IActionResult> Orders(CancellationToken ct)
+    {
+        var boardConfig = await BuildOrdersBoardConfigAsync(ct);
+        return View(new DocumentsViewModel
+        {
+            AvailableColumns = DocumentGridColumns,
+            VisibleColumns = DefaultDocumentColumns,
+            BoardConfig = boardConfig,
+        });
+    }
+
+    private async Task<object> BuildOrdersBoardConfigAsync(CancellationToken ct)
+    {
+        var orders = await _quoteService.GetByTypeAsync("satis_siparisi", search: null, status: null, ct);
+        var trCulture = CultureInfo.GetCultureInfo("tr-TR");
+
+        var entities = new List<object>();
+        foreach (var order in orders)
+        {
+            var widgets = new List<object>
+            {
+                new { id = "w_tutar", type = "data", dataType = "currency", label = "Toplam Tutar",
+                    value = order.GrandTotal.ToString("N2", trCulture), detail = order.Currency ?? "TRY",
+                    color = "blue" },
+                new { id = "w_durum", type = "data", dataType = "text", label = "Durum",
+                    value = TranslateStatus(order.Status), detail = (string?)null,
+                    color = StatusColor(order.Status) },
+                new { id = "w_kalem", type = "data", dataType = "numeric", label = "Kalem Sayisi",
+                    value = order.LineCount.ToString(CultureInfo.InvariantCulture), detail = "kalem",
+                    color = "slate" },
+                new { id = "w_tarih", type = "data", dataType = "date", label = "Siparis Tarihi",
+                    value = order.DocumentDate.ToString("dd.MM.yyyy", trCulture), detail = (string?)null,
+                    color = "slate" },
+            };
+
+            entities.Add(new
+            {
+                id = order.Id,
+                title = string.IsNullOrWhiteSpace(order.ContactName) ? "(musterisiz)" : order.ContactName,
+                subtitle = order.DocumentNumber ?? string.Empty,
+                description = string.Empty,
+                imageUrl = (string?)null,
+                statusBadge = (object?)null,
+                widgets,
+                primaryAction = new
+                {
+                    label = "Duzenle",
+                    icon = "Edit",
+                    color = "amber",
+                    url = $"/Sales/DocumentEdit?id={order.Id}",
+                    hideButton = true,
+                },
+                secondaryAction = new
+                {
+                    label = "Sil",
+                    icon = "Trash2",
+                    apiUrl = $"/Sales/DeleteDocumentJson?id={order.Id}",
+                    confirm = $"Bu siparisi silmek istediginizden emin misiniz? ({order.DocumentNumber})",
+                },
+            });
+        }
+
+        return new
+        {
+            boardKey = "sales-orders",
+            title = "Satis Siparisleri",
+            subtitle = $"{entities.Count} siparis",
+            icon = "ShoppingCart",
+            iconColor = "emerald",
+            searchPlaceholder = "Hizli ara... (siparis no, musteri)",
+            emptyText = "Henuz siparis olusturulmamis",
+            actions = new object[]
+            {
+                new
+                {
+                    id = "new-order",
+                    label = "Yeni Siparis",
+                    icon = "Plus",
+                    variant = "primary",
+                    url = "/Sales/DocumentEdit?type=order",
+                },
+                // Toolbar — onaylanmis teklifleri cari bazinda siparise donusturen modal
+                new
+                {
+                    id = "convert-to-orders",
+                    label = "Tekliften Siparis",
+                    icon = "ArrowRightCircle",
+                    variant = "secondary",
+                    trigger = "convert-orders-modal",
+                },
+            },
+            masterWidgets = Array.Empty<object>(),
+            entities,
+        };
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // TEKLIFLERDEN SIPARIS OLUSTURMA (modal API'leri)
+    // ════════════════════════════════════════════════════════════════
+
+    [HttpGet]
+    public async Task<IActionResult> GetConvertibleQuotes(
+        DateTime? fromDate, DateTime? toDate, int? contactId, string? search, CancellationToken ct)
+    {
+        var quotes = await _quoteService.GetConvertibleQuotesAsync(fromDate, toDate, contactId, search, ct);
+        return Json(quotes);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> CreateOrdersFromQuotes(
+        [FromBody] CreateOrdersFromQuotesRequest req, CancellationToken ct)
+    {
+        var createdBy = User?.Identity?.Name;
+        var result = await _quoteService.CreateOrdersFromQuotesAsync(req, createdBy, ct);
+        if (!result.Success)
+            return Json(new { success = false, error = result.Error });
+        return Json(new
+        {
+            success = true,
+            ordersCreated = result.OrdersCreated,
+            orderIds = result.OrderIds,
+        });
+    }
+
+    /// <summary>
+    /// Tek bir teklifi siparise donusturur — kart aksiyonundan tetiklenir.
+    /// Mevcut CreateOrdersFromQuotesAsync altyapisini tek-elemanli QuoteIds ile cagirir;
+    /// CreateWorkOrders=true ise olusan siparişin her satirindan birer is emri (WorkOrder) acar.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> ConvertSingleQuoteToOrder(
+        [FromBody] ConvertSingleQuoteToOrderRequest req, CancellationToken ct)
+    {
+        if (req == null || req.QuoteId <= 0)
+            return Json(new { success = false, error = "Teklif id gecersiz." });
+
+        var createdBy = User?.Identity?.Name;
+        var orderResult = await _quoteService.CreateOrdersFromQuotesAsync(
+            new CreateOrdersFromQuotesRequest(new[] { req.QuoteId }, req.OrderDate),
+            createdBy, ct);
+
+        if (!orderResult.Success || orderResult.OrderIds.Count == 0)
+            return Json(new { success = false, error = orderResult.Error ?? "Siparis olusturulamadi." });
+
+        var orderId = orderResult.OrderIds[0];
+        var workOrderIds = new List<int>();
+
+        if (req.CreateWorkOrders)
+        {
+            var orderLines = await _quoteService.GetQuoteLinesAsync(orderId, ct);
+            foreach (var line in orderLines)
+            {
+                if (line.Quantity <= 0) continue;
+                try
+                {
+                    var woId = await _workOrderService.CreateFromSalesLineAsync(
+                        new CreateWorkOrderFromSalesLineRequest(
+                            SourceDocumentId: orderId,
+                            SourceLineId: line.Id,
+                            Quantity: line.Quantity,
+                            TargetWorkOrderId: null),
+                        ct);
+                    workOrderIds.Add(woId);
+                }
+                catch
+                {
+                    // Bir satirin is emri olusturulamasa diğer satirlar etkilenmesin;
+                    // partial success kabul edilir, response icinde oluşan id'ler doner.
+                }
+            }
+        }
+
+        return Json(new
+        {
+            success = true,
+            orderId,
+            workOrderIds,
+        });
     }
 
     /// <summary>Quote status enum → Turkce etiket</summary>
@@ -329,7 +537,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> DocumentEdit(int? id, CancellationToken ct)
+    public async Task<IActionResult> DocumentEdit(int? id, string? type, CancellationToken ct)
     {
         // Iframe/tarayici cache nedeniyle eski HTML icerigi yapis(an)mayi
         // onlemek icin her GET'te no-cache header'lari set edilir.
@@ -337,8 +545,37 @@ public sealed class SalesController : Controller
         Response.Headers["Pragma"] = "no-cache";
         Response.Headers["Expires"] = "0";
 
-        // Satır grid kolonlarına rehber binding'lerini runtime'da inject et
-        var bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
+        // Belge tipini cozumle:
+        //  1) Mevcut belge (id dolu) → DB'den oku, type FK'sinden code'a resolve
+        //  2) Yeni belge + ?type=order → satis_siparisi
+        //  3) Aksi → satis_teklifi (varsayilan)
+        var typeCode = "satis_teklifi";
+        int? typeId = null;
+        if (id.HasValue && id.Value > 0)
+        {
+            var existing = await _quoteService.GetQuoteByIdAsync(id.Value, ct);
+            if (existing != null && existing.DocumentTypeId.HasValue)
+            {
+                var dt = await _documentTypeRepo.GetByIdAsync(existing.DocumentTypeId.Value, ct);
+                if (dt != null) { typeCode = dt.Code; typeId = dt.Id; }
+            }
+        }
+        else if (string.Equals(type, "order", StringComparison.OrdinalIgnoreCase))
+        {
+            typeCode = "satis_siparisi";
+        }
+
+        if (typeId == null)
+        {
+            var dt = await _documentTypeRepo.GetByCodeAsync(typeCode, ct);
+            typeId = dt?.Id;
+        }
+
+        // Satır grid kolonlarına rehber binding'lerini runtime'da inject et — belge tipine göre form kodu seç
+        var lineFormCode = string.Equals(typeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase)
+            ? "SALES_ORDER_LINES"
+            : "SALES_QUOTE_LINES";
+        var bindings = await _fieldSettings.GetGuideBindingsForFormAsync(lineFormCode, ct);
         var lineGridConfig = BuildDocumentLineGridConfig(bindings);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
@@ -349,6 +586,8 @@ public sealed class SalesController : Controller
         {
             DocumentId = id,
             LineGridConfigJson = System.Text.Json.JsonSerializer.Serialize(lineGridConfig, jsonOpts),
+            DocumentTypeCode = typeCode,
+            DocumentTypeId = typeId,
         };
 
         return View("DocumentEdit", vm);
@@ -401,6 +640,8 @@ public sealed class SalesController : Controller
                         ["trackCombinations"] = "trackCombinations",
                         ["taxRate"]           = "taxRate",
                         ["locationId"]        = "defaultLocationId",
+                        // Stok kartinin master birimi — view'dan gelmezse enrichMaterialPatch fallback olur
+                        ["unitId"]            = "unitId",
                     },
                     width    = 220,
                     required = matBinding?.IsRequired ?? false,
@@ -597,8 +838,10 @@ public sealed class SalesController : Controller
                 MaterialCode = x.Code,
                 MaterialName = x.Name,
                 x.TaxRate,
-                x.TrackCombinations,
+                TrackCombinations = x.Combinations,
                 DefaultLocationId = defaultLocations.TryGetValue(x.Id, out var locId) ? (int?)locId : null,
+                // Stok kartindaki master birim — kalem secildiginde line.unitId'ye otomatik atanir
+                x.UnitId,
             })
             .OrderBy(x => x.MaterialCode)
             .ToArray();
@@ -636,48 +879,52 @@ public sealed class SalesController : Controller
         var result = new List<object>();
         if (string.IsNullOrWhiteSpace(materialCode)) return result;
 
-        // Tum olcu birimi tanimlari (kod → isim + id lookup)
+        // Tum olcu birimi tanimlari — Id ile lookup
         var allUnits = await _logisticsService.GetUnitsAsync(ct);
-        var unitByCode = allUnits
+        var unitById = allUnits
             .Where(u => u.IsActive)
-            .ToDictionary(u => u.UnitCode.Trim().ToUpperInvariant(),
-                          u => (Id: u.Id, Name: u.UnitName),
-                          StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(u => u.Id, u => u);
 
-        (int? Id, string Name) Resolve(string code)
+        var seenIds = new HashSet<int>();
+        var seenLegacyCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void PushById(int? id)
         {
-            if (string.IsNullOrWhiteSpace(code)) return (null, code);
-            return unitByCode.TryGetValue(code.Trim().ToUpperInvariant(), out var u)
-                ? (u.Id, u.Name)
-                : (null, code);
+            if (!id.HasValue || !seenIds.Add(id.Value)) return;
+            if (!unitById.TryGetValue(id.Value, out var u)) return;
+            seenLegacyCodes.Add(u.UnitCode);
+            result.Add(new { id = (int?)u.Id, code = u.UnitCode, name = u.UnitName });
         }
 
-        var usedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void Push(string code)
+        void PushByCode(string code)
         {
-            if (string.IsNullOrWhiteSpace(code) || !usedCodes.Add(code)) return;
-            var (id, name) = Resolve(code);
-            result.Add(new { id, code, name });
+            if (string.IsNullOrWhiteSpace(code) || !seenLegacyCodes.Add(code)) return;
+            // Aktif birim kodu ise Id resolve, degilse legacy code-only entry (Id=null)
+            var match = unitById.Values.FirstOrDefault(u =>
+                string.Equals(u.UnitCode, code, StringComparison.OrdinalIgnoreCase));
+            if (match != null) { seenIds.Add(match.Id); result.Add(new { id = (int?)match.Id, code = match.UnitCode, name = match.UnitName }); }
+            else                { result.Add(new { id = (int?)null, code, name = code }); }
         }
 
-        // Tum birimleri yeni EAV widget'lardan al (WidgetMas/WidgetTra — form ITEMS).
-        var widgetValues = await LoadMaterialWidgetValuesAsync(materialCode, ct);
-
-        Push(widgetValues.GetValueOrDefault("unit_name") ?? "");            // 1) Master birim
-        Push(widgetValues.GetValueOrDefault("purchase_unit_name") ?? "");   // 2) Satin alma birimi
-        for (var i = 1; i <= 5; i++)                                        // 3) unit_conv_N_code
-            Push(widgetValues.GetValueOrDefault($"unit_conv_{i}_code") ?? "");
-
-        // 4) stock_unit_conversions tablosundan da birimleri topla.
+        // 1) Stok kart Item.UnitId — MASTER (ana) birim, ilk siraya konur (autoSelectFirst icin)
         var snapshot = await _logisticsService.GetSnapshotAsync(ct);
         var stockCard = snapshot.Items.FirstOrDefault(x =>
             string.Equals(x.Code, materialCode, StringComparison.OrdinalIgnoreCase));
         if (stockCard != null)
         {
-            var conversions = await _logisticsService.GetStockUnitConversionsAsync(stockCard.Id, ct);
-            foreach (var cv in conversions) Push(cv.UnitCode);
+            PushById(stockCard.UnitId);
+
+            // 2) ItemUnits tablosu — kullanicinin tanimladigi alternatif/donusum birimleri
+            var conversions = await _logisticsService.GetItemUnitsAsync(stockCard.Id, ct);
+            foreach (var cv in conversions) PushById(cv.UnitId);
         }
+
+        // 3) Legacy fallback — eski EAV widget'lardan tanimlanmis birimler (geri uyumluluk)
+        var widgetValues = await LoadMaterialWidgetValuesAsync(materialCode, ct);
+        PushByCode(widgetValues.GetValueOrDefault("unit_name") ?? "");
+        PushByCode(widgetValues.GetValueOrDefault("purchase_unit_name") ?? "");
+        for (var i = 1; i <= 5; i++)
+            PushByCode(widgetValues.GetValueOrDefault($"unit_conv_{i}_code") ?? "");
 
         return result;
     }
@@ -727,7 +974,7 @@ public sealed class SalesController : Controller
             configId = c.ConfigId,
             code = c.Code,
             name = c.Name,
-            features = c.FeatureValues.Select(fv => new { feature = fv.Feature, value = fv.Value })
+            features = c.FeatureValues.Select(fv => new { valueId = fv.FeatureValueId, feature = fv.Feature, value = fv.Value, valueCode = fv.ValueCode })
         }));
     }
 
@@ -735,17 +982,20 @@ public sealed class SalesController : Controller
     public async Task<IActionResult> GetMaterialFeatures(string materialCode, CancellationToken ct)
     {
         var snapshot = await _logisticsService.GetProductConfigurationSnapshotAsync(ct);
-        // Bu malzemeye bagli ozellik ID'lerini bul
-        var linkedFeatureIds = snapshot.FeatureStockLinks
+        // Bu malzemeye bagli ozellik linkleri — featureId -> AllowedValueIds (null/bos = hepsi)
+        var stockLinks = snapshot.FeatureStockLinks
             .Where(l => string.Equals(l.StockCode, materialCode, StringComparison.OrdinalIgnoreCase))
-            .Select(l => l.FeatureId)
-            .ToHashSet();
+            .ToDictionary(l => l.FeatureId, l => l.AllowedValueIds);
 
         var features = new List<object>();
-        foreach (var feature in snapshot.Features.Where(f => linkedFeatureIds.Contains(f.Id) && f.IsActive))
+        foreach (var feature in snapshot.Features.Where(f => stockLinks.ContainsKey(f.Id) && f.IsActive))
         {
+            // Stok karti icin admin tarafindan ozellestirilmis deger seti varsa filtrele;
+            // null veya bos ise (admin secim yapmadiysa) hepsi gosterilir (back-compat).
+            var allowed = stockLinks[feature.Id];
             var values = snapshot.Values
                 .Where(v => v.FeatureId == feature.Id && v.IsActive)
+                .Where(v => allowed == null || allowed.Count == 0 || allowed.Contains(v.Id))
                 .Select(v => new { id = v.Id, code = v.Code, name = v.Description })
                 .ToArray();
             features.Add(new { featureId = feature.Id, featureName = feature.Name, featureCode = feature.Code, values });
@@ -1348,30 +1598,30 @@ public sealed class SalesController : Controller
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Ekli Dosyalar — sales_quote_attachments
-    // Raw ADO.NET: tablo sadece bu controller tarafindan okunuyor,
-    // service/repository layer acmaya degmeyecek kadar kucuk bir yuzey.
+    // Ekli Dosyalar — document_attachments (yeni, INT FK, tek tablo).
+    // Eski sales_quote_attachments (Guid) deprecated — initializer yeni tabloyu garanti eder.
+    // Tablo tamami synonym ile farkli bir DB'ye yonlendirilebilir.
     // ════════════════════════════════════════════════════════════════
 
     [HttpGet]
-    public async Task<IActionResult> GetQuoteAttachments(Guid quoteId, CancellationToken ct)
+    public async Task<IActionResult> GetDocumentAttachments(int documentId, CancellationToken ct)
     {
         var list = new List<object>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [id],[file_name],[mime_type],[file_size],[uploaded_at]
-            FROM [{_schema}].[sales_quote_attachments]
+            FROM [{_schema}].[document_attachments]
             WHERE [document_id] = @DocumentId AND [is_active] = 1
             ORDER BY [uploaded_at] DESC;
             """;
-        cmd.Parameters.Add(new SqlParameter("@DocumentId", quoteId));
+        cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
             list.Add(new
             {
-                id = r.GetGuid(0),
+                id = r.GetInt32(0),
                 fileName = r.GetString(1),
                 mimeType = r.IsDBNull(2) ? null : r.GetString(2),
                 fileSize = r.GetInt64(3),
@@ -1383,11 +1633,13 @@ public sealed class SalesController : Controller
 
     [HttpPost]
     [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB per dosya
-    public async Task<IActionResult> UploadQuoteAttachment(
-        [FromForm] Guid quoteId,
+    public async Task<IActionResult> UploadDocumentAttachment(
+        [FromForm] int documentId,
         [FromForm] List<IFormFile> files,
         CancellationToken ct)
     {
+        if (documentId <= 0)
+            return BadRequest(new { success = false, message = "Belge id gecersiz." });
         if (files == null || files.Count == 0)
             return BadRequest(new { success = false, message = "Dosya yok." });
 
@@ -1403,12 +1655,11 @@ public sealed class SalesController : Controller
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                INSERT INTO [{_schema}].[sales_quote_attachments]
-                    ([id],[document_id],[file_name],[mime_type],[file_size],[content],[uploaded_by],[uploaded_at],[is_active])
-                VALUES (@Id,@DocumentId,@FileName,@Mime,@Size,@Content,@User,SYSUTCDATETIME(),1);
+                INSERT INTO [{_schema}].[document_attachments]
+                    ([document_id],[file_name],[mime_type],[file_size],[content],[uploaded_by],[uploaded_at],[is_active])
+                VALUES (@DocumentId,@FileName,@Mime,@Size,@Content,@User,SYSUTCDATETIME(),1);
                 """;
-            cmd.Parameters.Add(new SqlParameter("@Id", Guid.NewGuid()));
-            cmd.Parameters.Add(new SqlParameter("@DocumentId", quoteId));
+            cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
             cmd.Parameters.Add(new SqlParameter("@FileName", file.FileName ?? "file"));
             cmd.Parameters.Add(new SqlParameter("@Mime", (object?)file.ContentType ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@Size", (long)bytes.Length));
@@ -1420,13 +1671,13 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> DownloadQuoteAttachment(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DownloadDocumentAttachment(int id, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [file_name],[mime_type],[content]
-            FROM [{_schema}].[sales_quote_attachments]
+            FROM [{_schema}].[document_attachments]
             WHERE [id] = @Id AND [is_active] = 1;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
@@ -1439,11 +1690,13 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeleteQuoteAttachment([FromBody] DeleteQuoteBody body, CancellationToken ct)
+    public async Task<IActionResult> DeleteDocumentAttachment([FromBody] DeleteAttachmentBody body, CancellationToken ct)
     {
+        if (body == null || body.Id <= 0)
+            return BadRequest(new { success = false, message = "Id gecersiz." });
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE [{_schema}].[sales_quote_attachments] SET [is_active] = 0 WHERE [id] = @Id;";
+        cmd.CommandText = $"UPDATE [{_schema}].[document_attachments] SET [is_active] = 0 WHERE [id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", body.Id));
         await cmd.ExecuteNonQueryAsync(ct);
         return Json(new { success = true });
@@ -1451,4 +1704,5 @@ public sealed class SalesController : Controller
 }
 
 public sealed record DeleteQuoteBody(int Id);
+public sealed record DeleteAttachmentBody(int Id);
 public sealed record ChangeStatusBody(int Id, string Status);

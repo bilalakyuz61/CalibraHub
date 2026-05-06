@@ -86,6 +86,25 @@
     .cs-instruction li { margin-bottom: 4px; }
     .cs-instruction code { background: #e0f2fe; padding: 1px 5px; border-radius: 3px; font-size: 0.74rem; }
     .cs-instruction a { color: #0369a1; text-decoration: underline; }
+
+    /* ── WhatsApp tab ─────────────────────────────────────────────────── */
+    .wa-prov-card {
+        text-align: left; padding: 12px 14px; border-radius: 8px; cursor: pointer;
+        background: var(--app-surface,#fff); border: 1.5px solid var(--app-border,#dde3ee);
+        transition: border-color .12s, background .12s;
+    }
+    .wa-prov-card:hover { border-color: var(--app-border-strong,#94a3b8); }
+    .wa-prov-card.is-active {
+        border-color: var(--theme-accent,#2563eb);
+        background: var(--theme-accent-soft, rgba(37,99,235,.06));
+    }
+    .wa-prov-card__title { font-weight: 700; font-size: 0.88rem; color: var(--app-text,#1e293b); margin-bottom: 4px; }
+    .wa-prov-card__desc  { font-size: 0.74rem; color: var(--app-text-muted,#64748b); line-height: 1.4; }
+    .wa-prov-card__badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.62rem; font-weight: 700; margin-left: 6px; vertical-align: middle; }
+    .wa-badge-ok   { background: rgba(34,197,94,.15);   color: #16a34a; }
+    .wa-badge-warn { background: rgba(245,158,11,.15);  color: #b45309; }
+    body.app-theme-dark .wa-badge-ok   { color: #86efac; }
+    body.app-theme-dark .wa-badge-warn { color: #fbbf24; }
     .isr-line {
         display: flex; align-items: center; gap: 12px;
         padding: 5px 0;
@@ -160,6 +179,65 @@
     body.app-theme-dark.page-admin-company .cs-instruction a { color: #38bdf8; }
     body.app-theme-dark.page-admin-company .isr-line-desc { color: #475569; }
     body.app-theme-dark.page-admin-company .isr-line > label { color: #64748b; }
+
+    /* WhatsApp tab — dark theme overrides */
+    body.app-theme-dark.page-admin-company .wa-prov-card {
+        background: rgba(255,255,255,.03);
+        border-color: rgba(255,255,255,.10);
+    }
+    body.app-theme-dark.page-admin-company .wa-prov-card:hover {
+        background: rgba(255,255,255,.06);
+        border-color: rgba(255,255,255,.18);
+    }
+    body.app-theme-dark.page-admin-company .wa-prov-card.is-active {
+        background: rgba(129,140,248,.10);
+        border-color: #818cf8;
+    }
+    body.app-theme-dark.page-admin-company .wa-prov-card__title { color: #e2e8f0; }
+    body.app-theme-dark.page-admin-company .wa-prov-card__desc  { color: #94a3b8; }
+    body.app-theme-dark.page-admin-company .wa-badge-ok   { background: rgba(34,197,94,.18);  color: #86efac; }
+    body.app-theme-dark.page-admin-company .wa-badge-warn { background: rgba(245,158,11,.18); color: #fbbf24; }
+
+    /* WhatsApp ust durum rozeti */
+    .wa-status {
+        padding: 10px 14px; border-radius: 8px; margin-bottom: 12px;
+        font-size: 0.84rem; line-height: 1.4;
+        border: 1px solid transparent;
+    }
+    .wa-status--off  { background: var(--app-muted-surface, #f1f5f9); border-color: var(--app-border, #e2e8f0); color: var(--app-text, #475569); }
+    .wa-status--ok   { background: rgba(34,197,94,.10);  border-color: rgba(34,197,94,.3);  color: #15803d; }
+    .wa-status--warn { background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.3); color: #b45309; }
+    body.app-theme-dark.page-admin-company .wa-status--off  { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.10); color: #cbd5e1; }
+    body.app-theme-dark.page-admin-company .wa-status--ok   { background: rgba(34,197,94,.14);  border-color: rgba(34,197,94,.35);  color: #86efac; }
+    body.app-theme-dark.page-admin-company .wa-status--warn { background: rgba(245,158,11,.14); border-color: rgba(245,158,11,.35); color: #fcd34d; }
+
+    /* WhatsApp QR area + form metinleri — dark okunurluk */
+    .wa-qr-area {
+        flex:1; padding:18px; border:1px dashed var(--app-border,#cbd5e1); border-radius:8px;
+        text-align:center; min-height:96px;
+        display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+        background: var(--app-muted-surface, #f8fafc);
+        color: var(--app-text, #334155); font-size:.82rem;
+    }
+    .wa-qr-area__msg { color: var(--app-text, #334155); line-height:1.4; }
+    .wa-qr-area__img { max-width:240px; border-radius:8px; background:#fff; padding:8px; }
+    .wa-enabled-toggle {
+        display:inline-flex; align-items:center; gap:8px; font-size:.82rem; cursor:pointer;
+        color: var(--app-text, #1e293b);
+    }
+    .wa-safety-note {
+        margin-left:138px; font-size:.7rem; line-height:1.5;
+        color: var(--app-text-muted, #64748b);
+    }
+    body.app-theme-dark.page-admin-company .wa-qr-area {
+        background: rgba(129,140,248,.05);
+        border-color: rgba(255,255,255,.18);
+        color: #cbd5e1;
+    }
+    body.app-theme-dark.page-admin-company .wa-qr-area__msg { color: #cbd5e1; }
+    body.app-theme-dark.page-admin-company .wa-qr-area__img { background:#0f172a; }
+    body.app-theme-dark.page-admin-company .wa-enabled-toggle { color: #e2e8f0; }
+    body.app-theme-dark.page-admin-company .wa-safety-note { color: #94a3b8; }
     /* Entegrasyon API tablo — light tema */
     #apTable { font-size: 0.85rem; }
     #apTable thead th {
@@ -214,8 +292,9 @@
                 <button type="button" class="cs-tab-btn" data-cs-tab="mail">Mail Ayarlari</button>
                 <button type="button" class="cs-tab-btn" data-cs-tab="apiprofile">Entegrasyon API</button>
                 <button type="button" class="cs-tab-btn" data-cs-tab="integrator">Entegrator Ayarlari</button>
-                <button type="button" class="cs-tab-btn" data-cs-tab="settings">Genel Parametreler</button>
+                @* "Genel Parametreler" sekmesi /Admin/Parameters > Genel altina tasindi (E-Belge Onay Sistemi). *@
                 <button type="button" class="cs-tab-btn" data-cs-tab="addresses">Adres Kataloğu</button>
+                <button type="button" class="cs-tab-btn" data-cs-tab="whatsapp">WhatsApp</button>
             </div>
 
             <div class="cs-tab-content">
@@ -359,15 +438,11 @@
                 </div>
 
                 <!-- Ayarlar -->
-                <div class="cs-tab-pane" id="cs-pane-settings">
-                    <div class="cs-section-title">Ayarlar</div>
-                    <div class="cs-switch-row">
-                        <div class="form-check form-switch">
-                            <input asp-for="Input.IsEDocumentApprovalEnabled" class="form-check-input" type="checkbox" role="switch" />
-                            <label asp-for="Input.IsEDocumentApprovalEnabled" class="form-check-label">E-Belge Onay Sistemi</label>
-                        </div>
-                    </div>
-                </div>
+                @* "Genel Parametreler" pane'i (cs-pane-settings) kaldirildi.
+                   E-Belge Onay Sistemi: /Admin/Parameters > Genel sekmesine tasindi.
+                   IsEDocumentApprovalEnabled mevcut degerini POST sirasinda korumak icin
+                   gizli input olarak burada tutuluyor (CompanySettings save action onu yine bekliyor). *@
+                <input asp-for="Input.IsEDocumentApprovalEnabled" type="hidden" />
 
                 <!-- Entegrasyon API -->
                 <div class="cs-tab-pane" id="cs-pane-apiprofile">
@@ -632,6 +707,187 @@
                             Yüklerken mevcut katalogu sıfırla (TRUNCATE)
                         </label>
                     </div>
+                </div>
+
+                @{
+                    var waCfg = ViewBag.WhatsAppConfig as CalibraHub.Domain.Entities.WhatsAppConfig;
+                    var waSafety = ViewBag.WhatsAppSafetyRules as CalibraHub.Domain.Entities.WhatsAppSafetyRules;
+                    var waQuietHoursActive = waSafety?.RespectQuietHours ?? true;
+                    var waProviderInt = waCfg is null ? 0 : (int)waCfg.Provider;
+                }
+
+                <!-- WhatsApp Tab Pane -->
+                <div class="cs-tab-pane" id="cs-pane-whatsapp">
+                    <div class="cs-section-title">WhatsApp Yönetimi</div>
+
+                    @if (waCfg is null || !waCfg.IsEnabled)
+                    {
+                        <div class="wa-status wa-status--off">
+                            ● Henüz yapılandırılmadı veya pasif. Aşağıdaki Bağlantı Yöntemi'ni seç ve gerekli bilgileri gir.
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(waCfg.DisplayPhoneNumber))
+                    {
+                        <div class="wa-status wa-status--ok">
+                            ✓ Aktif — <b>@waCfg.DisplayPhoneNumber</b> (@(waCfg.Provider == CalibraHub.Domain.Entities.WhatsAppProviderType.CloudApi ? "Cloud API" : "Web QR"))
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="wa-status wa-status--warn">
+                            ⚠ Yapılandırıldı ama bağlantı henüz test edilmedi.
+                        </div>
+                    }
+
+                    <div class="cs-section-title" style="margin-top:14px;">Bağlantı Yöntemi</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                        <button type="button" class="wa-prov-card @(waProviderInt == 0 ? "is-active" : "")" data-wa-provider="0" onclick="waSelectProvider(0)">
+                            <div class="wa-prov-card__title">
+                                Cloud API
+                                <span class="wa-prov-card__badge wa-badge-ok">Resmi</span>
+                            </div>
+                            <div class="wa-prov-card__desc">Meta Business Manager hesabı gerekli. Ayda 1000 mesaj ücretsiz, ban riski yok.</div>
+                        </button>
+                        <button type="button" class="wa-prov-card @(waProviderInt == 1 ? "is-active" : "")" data-wa-provider="1" onclick="waSelectProvider(1)">
+                            <div class="wa-prov-card__title">
+                                Web QR (Node Bridge)
+                                <span class="wa-prov-card__badge wa-badge-warn">ToS riski</span>
+                            </div>
+                            <div class="wa-prov-card__desc">Facebook gerektirmez, telefondan QR tarama. Ücretsiz ama ban riski mevcut.</div>
+                        </button>
+                    </div>
+                    <input type="hidden" id="waProvider" value="@waProviderInt" />
+
+                    <!-- Cloud API panel -->
+                    <div id="waPanelCloudApi" style="@(waProviderInt == 0 ? "" : "display:none;")">
+                        <div class="cs-instruction">
+                            <strong>Cloud API Kurulum:</strong>
+                            <ol style="margin:6px 0 4px 18px; padding:0;">
+                                <li><a href="https://business.facebook.com" target="_blank">business.facebook.com</a> → Meta Business hesabı aç</li>
+                                <li>WhatsApp Business Account oluştur, numara doğrula</li>
+                                <li>Apps → Add App → Business → WhatsApp ekle</li>
+                                <li><b>Phone Number ID</b> ve <b>Access Token</b> kopyala, aşağıya yapıştır</li>
+                            </ol>
+                        </div>
+                        <div class="cs-line" style="margin-top:10px;">
+                            <label>Access Token</label>
+                            <input type="password" class="form-control form-control-sm" id="waToken" autocomplete="new-password"
+                                   placeholder="@(string.IsNullOrEmpty(waCfg?.AccessTokenEncrypted) ? "EAA... (Meta'dan kopyala)" : "Değiştirmek için yeni token gir")" />
+                        </div>
+                        <div class="cs-line">
+                            <label>Phone Number ID *</label>
+                            <input type="text" class="form-control form-control-sm" id="waPhoneId" placeholder="123456789012345" value="@waCfg?.PhoneNumberId" />
+                        </div>
+                        <div class="cs-line">
+                            <label>Business Account</label>
+                            <input type="text" class="form-control form-control-sm" id="waBizId" placeholder="opsiyonel — WABA ID" value="@waCfg?.BusinessAccountId" />
+                        </div>
+                        <div class="cs-line">
+                            <label>Webhook Token</label>
+                            <input type="text" class="form-control form-control-sm" id="waWebhookToken" placeholder="opsiyonel — gelen mesajlar için" value="@waCfg?.WebhookVerifyToken" />
+                        </div>
+                    </div>
+
+                    <!-- Web QR panel -->
+                    <div id="waPanelWebQr" style="@(waProviderInt == 1 ? "" : "display:none;")">
+                        <div class="cs-instruction">
+                            <strong>Web QR Bridge Kurulumu:</strong>
+                            <p style="margin:6px 0;">Bridge sunucuda Windows Service olarak çalışır. Kurulum sırasında atladıysan iki yöntemle ekleyebilirsin:</p>
+                            <ol style="margin:6px 0 4px 18px; padding:0;">
+                                <li><b>En kolay:</b> CalibraHub kurulum klasöründe <code>WhatsAppBridge\install-bridge.bat</code> dosyasına sağ tık → <b>Yönetici olarak çalıştır</b>. Otomatik olarak npm install + service kaydı yapar.</li>
+                                <li><b>Manuel (ileri):</b> Admin PowerShell'de:
+                                    <code style="display:block; margin:4px 0;">cd "C:\Program Files\CalibraHub\WhatsAppBridge"<br/>npm install<br/>node install-service.js</code>
+                                </li>
+                            </ol>
+                            <p style="margin:6px 0 0;"><b>Gereksinim:</b> <a href="https://nodejs.org" target="_blank">Node.js 18+</a> sunucuda yüklü olmalı.</p>
+                            <p style="margin:6px 0 0;">Servis kurulduktan sonra: telefondan WhatsApp → <b>Bağlı Cihazlar → Cihaz Bağla</b> → aşağıdaki Bridge URL'in <code>/qr</code> endpoint'inden QR'ı al ve tara.</p>
+                        </div>
+                        <div class="cs-line" style="margin-top:10px;">
+                            <label>Bridge URL</label>
+                            <input type="text" class="form-control form-control-sm" id="waBridgeUrl" placeholder="http://localhost:61100" value="@(waCfg?.WebQrBridgeUrl ?? "http://localhost:61100")" />
+                        </div>
+                        <div class="cs-line">
+                            <label>Pairing Code</label>
+                            <span style="display:flex; gap:8px; align-items:center; flex:1;">
+                                <input type="tel" class="form-control form-control-sm" id="waPairPhone"
+                                       placeholder="905338168150 (ülke kodu dahil, +'sız)" maxlength="14" style="flex:1;" />
+                                <button type="button" class="btn btn-sm" id="waPairBtn"
+                                        style="background:linear-gradient(135deg,#25d366,#128c7e); color:#fff; border:none; padding:6px 16px; border-radius:6px; font-weight:600; white-space:nowrap;">
+                                    Kod Al
+                                </button>
+                            </span>
+                        </div>
+                        <div id="waPairResult" class="cs-line" style="display:none; margin-top:6px;">
+                            <label></label>
+                            <div style="flex:1;">
+                                <div style="font-size:.8rem; color:var(--app-text-muted, #64748b); margin-bottom:6px; line-height:1.5;">
+                                    <b>Telefonda yapılacaklar:</b><br/>
+                                    1. WhatsApp aç → ⋮ menü → <b>Bağlı Cihazlar</b><br/>
+                                    2. <b>"Cihaz Bağla"</b> → <b>"Telefon numarasıyla bağla"</b><br/>
+                                    3. Aşağıdaki kodu <b>60 saniye içinde</b> gir
+                                </div>
+                                <div id="waPairCode"
+                                     style="font-family:'Courier New',monospace; font-size:1.6rem; font-weight:700; letter-spacing:6px; padding:10px 16px; background:rgba(37,211,102,.12); color:#16a34a; border:2px solid rgba(37,211,102,.4); border-radius:8px; display:inline-block; user-select:all; cursor:pointer;"
+                                     title="Tıkla → kopyala">—</div>
+                            </div>
+                        </div>
+                        <!-- waQrArea hidden — sadece JS internal kullanim icin (msg gostermek istersek) -->
+                        <div id="waQrArea" class="wa-qr-area" style="display:none;">
+                            <div id="waQrMsg" class="wa-qr-area__msg"></div>
+                            <img id="waQrImg" class="wa-qr-area__img" alt="" style="display:none;" />
+                        </div>
+                    </div>
+
+                    <div class="cs-line" style="margin-top:8px;">
+                        <label></label>
+                        <label class="wa-enabled-toggle">
+                            <input type="checkbox" id="waEnabled" @(waCfg?.IsEnabled == true ? "checked" : "") />
+                            <span>WhatsApp entegrasyonunu etkinleştir</span>
+                        </label>
+                    </div>
+
+                    <div class="cs-line" style="margin-top:4px;">
+                        <label></label>
+                        <label class="wa-enabled-toggle" title="Aktifken 20:00-08:00 arasi mesaj gonderimi engellenir (anti-ban koruma).">
+                            <input type="checkbox" id="waQuietHours" @(waQuietHoursActive ? "checked" : "") />
+                            <span>Sessiz saatler aktif (20:00-08:00 arası mesaj gönderme)</span>
+                        </label>
+                    </div>
+
+                    <div id="waMsg" style="margin: 8px 0; min-height:24px; font-size:.8rem;"></div>
+
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="waSave()">Kaydet</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="waTest()">Bağlantıyı Test Et</button>
+                    </div>
+
+                    @if (waCfg?.IsEnabled == true && (!string.IsNullOrEmpty(waCfg?.PhoneNumberId) || !string.IsNullOrEmpty(waCfg?.WebQrBridgeUrl)))
+                    {
+                        <div class="cs-section-title" style="margin-top:18px;">Test Mesajı</div>
+                        <div class="cs-line">
+                            <label>Hedef Numara</label>
+                            <input type="text" class="form-control form-control-sm" id="waToPhone" placeholder="+905555555555" />
+                        </div>
+                        <div class="cs-line">
+                            <label>Mesaj</label>
+                            <input type="text" class="form-control form-control-sm" id="waText" value="CalibraHub test mesajı" />
+                        </div>
+                        <div class="cs-line">
+                            <label></label>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="waSendTest()">📤 Gönder</button>
+                        </div>
+                        <div class="wa-safety-note">
+                            Safety Layer aktif: dakikada max 5, saatte 60, günde 300 mesaj. Aynı alıcıya günde 3.
+                            Sessiz saatler 20:00-08:00. İnsan-benzeri 3-15sn rastgele gecikme. Aynı içerik günde max 10.
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(waCfg?.LastError))
+                    {
+                        <div class="cs-instruction" style="margin-top:14px; background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.25); color:#dc2626;">
+                            <strong>Son hata:</strong> @waCfg.LastError
+                        </div>
+                    }
                 </div>
 
             </div>
@@ -1197,6 +1453,238 @@
         if (tabBtn) tabBtn.addEventListener('click', refreshCount);
         // Sayfayi acarken de fetch etsin (az trafik)
         refreshCount();
+    });
+})();
+
+// ── WhatsApp tab handlers ───────────────────────────────────────────────
+(function () {
+    function getCsrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function waMsg(text, ok) {
+        var el = document.getElementById('waMsg');
+        if (!el) return;
+        if (!text) { el.innerHTML = ''; return; }
+        var bg = ok === null ? 'rgba(148,163,184,.12)' : (ok ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.12)');
+        var cl = ok === null ? 'var(--app-text-muted,#64748b)' : (ok ? '#16a34a' : '#dc2626');
+        var br = ok === null ? 'rgba(148,163,184,.3)' : (ok ? 'rgba(34,197,94,.3)' : 'rgba(239,68,68,.3)');
+        el.innerHTML = '<span style="display:inline-block;padding:5px 12px;border-radius:6px;background:'
+            + bg + ';color:' + cl + ';border:1px solid ' + br + ';">' + text + '</span>';
+    }
+
+    window.waSelectProvider = function (p) {
+        var hidden = document.getElementById('waProvider');
+        if (!hidden) return;
+        hidden.value = p;
+        document.querySelectorAll('.wa-prov-card').forEach(function (t) {
+            t.classList.toggle('is-active', parseInt(t.dataset.waProvider) === p);
+        });
+        var cap = document.getElementById('waPanelCloudApi');
+        var qr  = document.getElementById('waPanelWebQr');
+        if (cap) cap.style.display = (p === 0 ? '' : 'none');
+        if (qr)  qr.style.display  = (p === 1 ? '' : 'none');
+    };
+
+    window.waSave = function () {
+        var providerEl = document.getElementById('waProvider');
+        if (!providerEl) return;
+        var fd = new FormData();
+        fd.append('provider', providerEl.value);
+        fd.append('accessToken', (document.getElementById('waToken') || {}).value || '');
+        fd.append('phoneNumberId', (document.getElementById('waPhoneId') || {}).value || '');
+        fd.append('businessAccountId', (document.getElementById('waBizId') || {}).value || '');
+        fd.append('webhookVerifyToken', (document.getElementById('waWebhookToken') || {}).value || '');
+        fd.append('webQrBridgeUrl', (document.getElementById('waBridgeUrl') || {}).value || '');
+        fd.append('isEnabled', document.getElementById('waEnabled').checked ? 'true' : 'false');
+        var qhEl = document.getElementById('waQuietHours');
+        if (qhEl) fd.append('respectQuietHours', qhEl.checked ? 'true' : 'false');
+        fd.append('__RequestVerificationToken', getCsrf());
+        waMsg('Kaydediliyor...', null);
+        fetch('/Admin/WhatsApp/Save', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                waMsg(d.message || (d.success ? 'Kaydedildi' : 'Hata'), d.success);
+                if (d.success) setTimeout(function () { location.reload(); }, 800);
+            });
+    };
+
+    window.waTest = function () {
+        waMsg('Test ediliyor...', null);
+        var fd = new FormData(); fd.append('__RequestVerificationToken', getCsrf());
+        fetch('/Admin/WhatsApp/Test', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                // kind: 'ok' (yesil) | 'info' (sari/notr — Bridge connecting/awaiting_qr) | 'error' (kirmizi)
+                var ok;
+                if (d.kind === 'info') ok = null;             // notr — gecici durum, hata degil
+                else if (d.kind === 'error') ok = false;      // gercek hata
+                else ok = d.success;                           // backwards-compat
+                waMsg(d.message || (d.success ? 'OK' : 'Hata'), ok);
+                if (d.success) setTimeout(function () { location.reload(); }, 1200);
+            });
+    };
+
+    window.waSendTest = function () {
+        var to  = (document.getElementById('waToPhone') || {}).value || '';
+        var msg = (document.getElementById('waText')    || {}).value || '';
+        if (!to.trim())  { waMsg('Hedef numara zorunlu.', false); return; }
+        if (!msg.trim()) { waMsg('Mesaj zorunlu.', false); return; }
+        waMsg('Mesaj gönderiliyor...', null);
+        var fd = new FormData();
+        fd.append('toPhone', to.trim());
+        fd.append('message', msg.trim());
+        fd.append('__RequestVerificationToken', getCsrf());
+        fetch('/Admin/WhatsApp/SendTest', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { waMsg(d.message || (d.success ? 'Gönderildi' : 'Hata'), d.success); });
+    };
+
+    // ── Pairing Code (Baileys) ────────────────────────────────────────────
+    function waSetupPairingButton() {
+        var btn = document.getElementById('waPairBtn');
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+            var phoneEl = document.getElementById('waPairPhone');
+            var raw = (phoneEl?.value || '').replace(/[^\d]/g, '');
+            if (raw.length < 10) { alert('Telefon en az 10 basamak olmali (ulke kodu dahil)'); return; }
+
+            btn.disabled = true; btn.textContent = 'Kod aliniyor...';
+            var fd = new FormData();
+            fd.append('phone', raw);
+            fd.append('__RequestVerificationToken', getCsrf());
+            fetch('/Admin/WhatsApp/PairingCode', { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    btn.disabled = false; btn.textContent = 'Kod Al';
+                    if (d.success && d.code) {
+                        document.getElementById('waPairResult').style.display = '';
+                        document.getElementById('waPairCode').textContent = d.code;
+                        // Otomatik kopyala
+                        try {
+                            var codeEl = document.getElementById('waPairCode');
+                            codeEl.addEventListener('click', function () {
+                                navigator.clipboard?.writeText(d.code);
+                            });
+                        } catch (e) { /* ignore */ }
+                    } else {
+                        alert('Kod alinamadi: ' + (d.message || 'bilinmeyen hata'));
+                    }
+                })
+                .catch(function (err) {
+                    btn.disabled = false; btn.textContent = 'Kod Al';
+                    alert('Aglar hatasi: ' + err.message);
+                });
+        });
+    }
+    waSetupPairingButton();
+
+    // QR Yenile butonu — tek seferlik /Admin/WhatsApp/Qr cek
+    var qrRefreshBtn = document.getElementById('waQrRefreshBtn');
+    if (qrRefreshBtn) {
+        qrRefreshBtn.addEventListener('click', function () {
+            qrRefreshBtn.disabled = true;
+            qrRefreshBtn.textContent = '⏳ Yukleniyor...';
+            _pollQrOnce().finally(function () {
+                qrRefreshBtn.disabled = false;
+                qrRefreshBtn.textContent = '🔄 QR Yenile';
+            });
+        });
+    }
+
+    // ── Web QR polling (Bridge'in /status + /qr cevabini server uzerinden cek) ──
+    var _qrTimer = null;
+    var _lastQr = null;
+
+    function _setQrMsg(text, color) {
+        var el = document.getElementById('waQrMsg');
+        if (!el) return;
+        el.textContent = text;
+        el.style.color = color || 'var(--app-text-muted,#64748b)';
+    }
+    function _setQrImg(dataUrl) {
+        var img = document.getElementById('waQrImg');
+        if (!img) return;
+        if (dataUrl) {
+            if (_lastQr !== dataUrl) { img.src = dataUrl; _lastQr = dataUrl; }
+            img.style.display = '';
+        } else {
+            img.style.display = 'none';
+            img.removeAttribute('src');
+            _lastQr = null;
+        }
+    }
+    function _applyQrState(d) {
+        if (!d) return;
+        if (!d.reachable) {
+            _setQrImg(null);
+            _setQrMsg('Bridge\'e ulasilamiyor: ' + (d.error || 'bilinmeyen hata'), '#dc2626');
+            return;
+        }
+        switch (d.state) {
+            case 'awaiting_qr':
+                if (d.qr) {
+                    _setQrImg(d.qr);
+                    _setQrMsg('Telefondan tara: WhatsApp → Bagli Cihazlar → Cihaz Bagla', '#16a34a');
+                } else {
+                    _setQrImg(null);
+                    _setQrMsg('QR bekleniyor...', null);
+                }
+                break;
+            case 'connecting':
+                _setQrImg(null);
+                _setQrMsg('Bridge baglaniyor (~10sn)...', null);
+                break;
+            case 'ready':
+                _setQrImg(null);
+                _setQrMsg('Bagli: ' + (d.displayName || '') + (d.phone ? ' (+' + d.phone + ')' : ''), '#16a34a');
+                _stopQrPoll();
+                // Reload yok — uzerine biniyor. DOM'u in-place guncelle: WhatsApp YONETIMI altindaki
+                // status div'i guncellenir.
+                var oldStatus = document.querySelector('.wa-status--off, .wa-status--warn');
+                if (oldStatus && d.phone) {
+                    oldStatus.className = 'wa-status wa-status--ok';
+                    oldStatus.innerHTML = '✓ Aktif — <b>+' + d.phone + '</b> (Web QR)';
+                }
+                break;
+            default:
+                _setQrImg(null);
+                _setQrMsg('Bridge state: ' + d.state, null);
+        }
+    }
+    function _pollQrOnce() {
+        return fetch('/Admin/WhatsApp/Qr', { credentials: 'same-origin', cache: 'no-store' })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(_applyQrState)
+            .catch(function (err) {
+                console.error('[WA-QR] polling hatasi:', err);
+                _setQrImg(null);
+                _setQrMsg('QR cekilemedi: ' + (err && err.message ? err.message : err), '#dc2626');
+            });
+    }
+    function _startQrPoll() {
+        if (_qrTimer) return;
+        console.log('[WA-QR] polling basliyor (her 4sn)');
+        _setQrMsg('Bridge sorgulaniyor...', null);
+        _pollQrOnce();
+        _qrTimer = setInterval(_pollQrOnce, 4000); // 4sn — daha rahat, flicker'i azaltir
+    }
+    function _stopQrPoll() {
+        if (_qrTimer) { clearInterval(_qrTimer); _qrTimer = null; console.log('[WA-QR] polling durdu'); }
+    }
+    function _isWebQrSelected() {
+        var p = document.getElementById('waProvider');
+        return p && parseInt(p.value, 10) === 1;
+    }
+
+    // Polling artik OTOMATIK BASLAMIYOR — kullanici "Test Et" / "Pairing Code Al" butonlariyla
+    // tetikler. Tab gecislerine zarar verme riski sifir.
+    // Tab arkaplanda gizlenince calisan polling varsa durdur (manuel baslatildiysa).
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) _stopQrPoll();
     });
 })();
     </script>

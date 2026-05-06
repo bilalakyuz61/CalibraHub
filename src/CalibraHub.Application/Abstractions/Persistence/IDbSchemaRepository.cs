@@ -14,4 +14,7 @@ public interface IDbSchemaRepository
 
     /// <summary>Tum FK'leri tek sorguda doner (Mermaid ER export icin).</summary>
     Task<IReadOnlyList<DbForeignKeyDto>> GetAllForeignKeysAsync(CancellationToken cancellationToken);
+
+    /// <summary>Sistem DB'sindeki user-defined view adlarini doner (ViewReport task icin).</summary>
+    Task<IReadOnlyList<string>> GetViewNamesAsync(CancellationToken cancellationToken);
 }

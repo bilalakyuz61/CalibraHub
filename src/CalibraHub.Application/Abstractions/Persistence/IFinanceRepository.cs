@@ -11,4 +11,9 @@ public interface IFinanceRepository
     Task<int> AddContactAsync(Contact account, CancellationToken cancellationToken);
     Task UpdateContactAsync(Contact account, CancellationToken cancellationToken);
     Task DeleteContactAsync(int id, CancellationToken cancellationToken);
+
+    // Cari ↔ Fiyat Grubu eslestirme (1 cari → 0..1 fiyat grubu).
+    // priceGroupId NULL = eslestirme kaldirilir.
+    Task UpdateContactPriceGroupAsync(int contactId, int? priceGroupId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<Contact>> GetContactsByPriceGroupAsync(int priceGroupId, CancellationToken cancellationToken);
 }

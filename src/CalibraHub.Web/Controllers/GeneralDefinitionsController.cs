@@ -156,7 +156,7 @@ public sealed class GeneralDefinitionsController : Controller
         {
             // Tek doviz icin tarih araligindaki kurlar
             var rates = await rateRepo.GetRatesInRangeAsync(filterCode, from, to, ct);
-            rateList = rates.Select(r => new Application.Contracts.ExchangeRateDto(r.CurrencyCode, r.RateDate, r.BuyingRate, r.SellingRate, r.EffectiveBuyingRate, r.EffectiveSellingRate, r.Source)).ToList();
+            rateList = rates.Select(r => new Application.Contracts.ExchangeRateDto(r.CurrencyCode, r.Date, r.BuyingRate, r.SellingRate, r.EffectiveBuyingRate, r.EffectiveSellingRate, r.Source)).ToList();
         }
         else
         {
@@ -239,7 +239,7 @@ public sealed class GeneralDefinitionsController : Controller
         var rate = new Domain.Entities.ExchangeRate
         {
             CurrencyCode = currencyCode.Trim().ToUpperInvariant(),
-            RateDate = rateDate,
+            Date = rateDate,
             BuyingRate = buyingRate,
             SellingRate = sellingRate,
             EffectiveBuyingRate = effBuyingRate,
@@ -327,7 +327,7 @@ public sealed class GeneralDefinitionsController : Controller
         // ardisik kayitlar) atlanarak gercek anlamda farkli olan onceki kur bulunur.
         var history = known
             .GroupBy(r => r.CurrencyCode, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.RateDate).ToList(), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Date).ToList(), StringComparer.OrdinalIgnoreCase);
 
         var prevMap = new Dictionary<Domain.Entities.ExchangeRate, Domain.Entities.ExchangeRate?>();
         foreach (var kv in history)
@@ -353,7 +353,7 @@ public sealed class GeneralDefinitionsController : Controller
         // Kullaniciya sadece istenen [from, to] araliginda olan kurlari goster — tarihce kayitlari
         // yalnizca karsilastirma icin kullanildi.
         var displayed = known
-            .Where(r => r.RateDate.Date >= from.Date && r.RateDate.Date <= to.Date)
+            .Where(r => r.Date.Date >= from.Date && r.Date.Date <= to.Date)
             .ToList();
 
         return Json(displayed.Select(r =>
@@ -362,14 +362,14 @@ public sealed class GeneralDefinitionsController : Controller
             return new {
                 r.CurrencyCode,
                 currencyName = nameMap.TryGetValue(r.CurrencyCode, out var n) ? n : "",
-                rateDate = r.RateDate.ToString("yyyy-MM-dd"),
-                rateDateDisplay = r.RateDate.ToString("dd.MM.yyyy"),
+                rateDate = r.Date.ToString("yyyy-MM-dd"),
+                rateDateDisplay = r.Date.ToString("dd.MM.yyyy"),
                 r.BuyingRate, r.SellingRate, r.EffectiveBuyingRate, r.EffectiveSellingRate,
                 prevBuyingRate = prev?.BuyingRate,
                 prevSellingRate = prev?.SellingRate,
                 prevEffectiveBuyingRate = prev?.EffectiveBuyingRate,
                 prevEffectiveSellingRate = prev?.EffectiveSellingRate,
-                prevRateDateDisplay = prev?.RateDate.ToString("dd.MM.yyyy")
+                prevRateDateDisplay = prev?.Date.ToString("dd.MM.yyyy")
             };
         }));
     }
@@ -415,7 +415,7 @@ public sealed class GeneralDefinitionsController : Controller
     {
         if (string.IsNullOrWhiteSpace(req.CurrencyCode)) return Json(new { success = false, message = "Doviz kodu bos." });
         var rate = new Domain.Entities.ExchangeRate {
-            CurrencyCode = req.CurrencyCode.Trim().ToUpperInvariant(), RateDate = req.RateDate,
+            CurrencyCode = req.CurrencyCode.Trim().ToUpperInvariant(), Date = req.RateDate,
             BuyingRate = req.BuyingRate, SellingRate = req.SellingRate,
             EffectiveBuyingRate = req.EffectiveBuyingRate, EffectiveSellingRate = req.EffectiveSellingRate,
             Source = "Manuel"

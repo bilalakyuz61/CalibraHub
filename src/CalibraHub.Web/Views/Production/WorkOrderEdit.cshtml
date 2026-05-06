@@ -1,0 +1,1714 @@
+@model CalibraHub.Application.Contracts.WorkOrderDto
+@using CalibraHub.Domain.Enums
+@{
+    var isNew = Model is null;
+    ViewData["Title"] = isNew ? "Yeni İş Emri" : $"İş Emri: {Model!.OrderNumber}";
+    ViewData["FormCode"] = "WORK_ORDER";
+    ViewData["BodyClass"] = "page-work-order-edit";
+
+    string Iso(DateTime? d) => d?.ToLocalTime().ToString("yyyy-MM-ddTHH:mm") ?? "";
+
+    var status = Model?.Status ?? WorkOrderStatus.Planned;
+    var canEditPlan = status == WorkOrderStatus.Planned;
+    var canRelease  = status == WorkOrderStatus.Planned;
+    var canStart    = status == WorkOrderStatus.Released;
+    var canComplete = status == WorkOrderStatus.InProgress;
+    var canClose    = status == WorkOrderStatus.Completed;
+    var canCancel   = status is WorkOrderStatus.Planned or WorkOrderStatus.Released or WorkOrderStatus.InProgress or WorkOrderStatus.Completed;
+    var canRevise   = !isNew && status is not WorkOrderStatus.Planned and not WorkOrderStatus.Closed and not WorkOrderStatus.Cancelled;
+}
+
+@section Styles {
+<style>
+/* ── Tema değişkenleri (light default) ── */
+.woe-page {
+    --woe-bg:           #f8fafc;
+    --woe-surface:      #ffffff;
+    --woe-surface2:     #f1f5f9;
+    --woe-border:       #e2e8f0;
+    --woe-border-light: #f1f5f9;
+    --woe-text:         #0f172a;
+    --woe-text-muted:   #64748b;
+    --woe-input-bg:     #ffffff;
+    --woe-input-disabled:#f8fafc;
+    --woe-accent:       var(--theme-accent, #2563eb);
+    --woe-toast-ok-bg:  #d1fae5;
+    --woe-toast-ok-tx:  #065f46;
+    --woe-toast-er-bg:  #fee2e2;
+    --woe-toast-er-tx:  #991b1b;
+}
+/* ── Tema değişkenleri (dark override) ── */
+body.app-theme-dark .woe-page {
+    --woe-bg:           #080c17;
+    --woe-surface:      #0d1323;
+    --woe-surface2:     #111827;
+    --woe-border:       rgba(255,255,255,.09);
+    --woe-border-light: rgba(255,255,255,.04);
+    --woe-text:         #e2e8f0;
+    --woe-text-muted:   #94a3b8;
+    --woe-input-bg:     rgba(255,255,255,.06);
+    --woe-input-disabled:rgba(255,255,255,.03);
+    --woe-accent:       var(--theme-accent, #6366f1);
+    --woe-toast-ok-bg:  rgba(34,197,94,.18);
+    --woe-toast-ok-tx:  #4ade80;
+    --woe-toast-er-bg:  rgba(239,68,68,.18);
+    --woe-toast-er-tx:  #f87171;
+}
+
+.woe-page {
+    padding: 16px 24px; height: 100%;
+    display: flex; flex-direction: column; min-height: 0; gap: 12px;
+    overflow: auto;
+    background: var(--woe-bg); color: var(--woe-text);
+}
+
+.woe-toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--woe-border);
+}
+.woe-toolbar h1 { font-size: 18px; margin: 0; color: var(--woe-text); }
+.woe-toolbar .spacer { flex: 1; }
+.woe-back { color: var(--woe-text-muted); text-decoration: none; font-size: 13px; }
+.woe-back:hover { color: var(--woe-text); }
+
+.woe-btn {
+    padding: 7px 14px; border-radius: 7px;
+    border: 1px solid var(--woe-border);
+    background: var(--woe-surface); color: var(--woe-text);
+    cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: background .12s, border-color .12s;
+}
+.woe-btn:hover:not(:disabled) { background: var(--woe-surface2); border-color: var(--woe-accent); }
+.woe-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.woe-btn--primary { background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; border-color: #4f46e5; }
+.woe-btn--primary:hover:not(:disabled) { filter: brightness(1.07); border-color: #4f46e5; }
+.woe-btn--success { background: linear-gradient(135deg, #10b981, #059669); color: #fff; border-color: #059669; }
+.woe-btn--success:hover:not(:disabled) { filter: brightness(1.07); border-color: #059669; }
+.woe-btn--danger  { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.woe-btn--warn    { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+body.app-theme-dark .woe-btn--danger  { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.32); }
+body.app-theme-dark .woe-btn--danger:hover:not(:disabled)  { background: rgba(239,68,68,.20); border-color: rgba(239,68,68,.45); }
+body.app-theme-dark .woe-btn--warn    { background: rgba(245,158,11,.12); color: #fcd34d; border-color: rgba(245,158,11,.32); }
+body.app-theme-dark .woe-btn--warn:hover:not(:disabled)    { background: rgba(245,158,11,.20); border-color: rgba(245,158,11,.45); }
+
+.woe-status { padding: 4px 12px; border-radius: 14px; font-size: 12px; font-weight: 700; }
+.woe-status-0 { background: #e0e7ff; color: #4338ca; }
+.woe-status-1 { background: #fef3c7; color: #92400e; }
+.woe-status-2 { background: #ddd6fe; color: #6d28d9; }
+.woe-status-3 { background: #d1fae5; color: #065f46; }
+.woe-status-4 { background: #f3f4f6; color: #6b7280; }
+.woe-status-5 { background: #fee2e2; color: #991b1b; }
+body.app-theme-dark .woe-status-0 { background: rgba(99,102,241,.18); color: #a5b4fc; }
+body.app-theme-dark .woe-status-1 { background: rgba(245,158,11,.18); color: #fcd34d; }
+body.app-theme-dark .woe-status-2 { background: rgba(168,85,247,.18); color: #d8b4fe; }
+body.app-theme-dark .woe-status-3 { background: rgba(34,197,94,.18); color: #86efac; }
+body.app-theme-dark .woe-status-4 { background: rgba(148,163,184,.18); color: #cbd5e1; }
+body.app-theme-dark .woe-status-5 { background: rgba(239,68,68,.18); color: #fca5a5; }
+
+.woe-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; min-height: 0; }
+@@media (max-width: 1024px) { .woe-grid { grid-template-columns: 1fr; } }
+
+/* ── Sol-tab + sağ-pane yapısı ── */
+.woe-tabbed {
+    display: flex; min-height: 380px; gap: 0;
+    background: var(--woe-surface);
+    border: 1px solid var(--woe-border); border-radius: 10px;
+    overflow: hidden;
+}
+.woe-nav {
+    width: 220px; flex-shrink: 0;
+    background: var(--woe-surface2);
+    border-right: 1px solid var(--woe-border);
+    padding: 10px 0; overflow-y: auto;
+    display: flex; flex-direction: column;
+}
+.woe-nav-grouptitle {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--woe-text-muted);
+    padding: 10px 14px 4px; margin: 0;
+}
+.woe-nav-btn {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; padding: 9px 14px;
+    border: none; background: transparent;
+    text-align: left; cursor: pointer;
+    color: var(--woe-text); font-size: 13px; font-weight: 500;
+    border-left: 3px solid transparent;
+    transition: background .12s, color .12s;
+}
+.woe-nav-btn:hover { background: rgba(99,102,241,.08); }
+.woe-nav-btn.is-active {
+    border-left-color: var(--woe-accent);
+    background: rgba(99,102,241,.14);
+    font-weight: 600;
+}
+.woe-nav-icon {
+    width: 14px; height: 14px; flex-shrink: 0; opacity: .7;
+}
+.woe-nav-btn.is-active .woe-nav-icon { opacity: 1; }
+.woe-nav-count {
+    margin-left: auto; padding: 1px 7px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace;
+    background: rgba(99,102,241,.14); color: #4f46e5;
+    border: 1px solid rgba(99,102,241,.28);
+}
+body.app-theme-dark .woe-nav-count { color: #a5b4fc; }
+
+.woe-pane {
+    flex: 1 1 auto; min-width: 0;
+    padding: 18px 22px; overflow-y: auto;
+}
+.woe-pane-section { display: none; }
+.woe-pane-section.is-active { display: block; }
+.woe-pane h2 {
+    margin: 0 0 4px; font-size: 15px; color: var(--woe-text); font-weight: 700;
+}
+.woe-pane .pane-hint {
+    font-size: 12px; color: var(--woe-text-muted); margin-bottom: 14px;
+}
+.woe-placeholder {
+    padding: 32px 16px; border: 1px dashed var(--woe-border); border-radius: 8px;
+    text-align: center; color: var(--woe-text-muted); font-size: 13px;
+}
+
+/* ── Widget pane: grup başlığı sağ panelde gözükmesin (sol nav'da zaten var) ──
+   DynamicWidgetRenderer her grup için <details> + <summary>{grupAdı}</summary>
+   render ediyor. Summary'yi gizliyoruz, details'in card chrome'unu düzleştirip
+   sadece widget alanları gözüksün. ÖNEMLİ: modern (floating) label widget'ın
+   üst kenarına -8/-10px ile yapışıyor — kart padding-top:0 yapılırsa label
+   üstten kesiliyor. Bu yüzden padding-top:12 + overflow:visible. */
+#woeDynamicWidgets details > summary {
+    display: none !important;
+}
+#woeDynamicWidgets details[data-dyn-group-id] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 12px 4px 0 4px !important;
+    margin: 0 0 12px 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+}
+.woe-placeholder strong { color: var(--woe-text); display: block; margin-bottom: 6px; font-size: 14px; }
+
+.woe-card {
+    background: var(--woe-surface);
+    border: 1px solid var(--woe-border);
+    border-radius: 10px; padding: 16px;
+}
+.woe-card h3 {
+    margin: 0 0 12px; font-size: 13px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--woe-text-muted);
+}
+
+.woe-row {
+    display: grid; grid-template-columns: 140px 1fr;
+    gap: 10px; align-items: center; margin-bottom: 10px;
+}
+.woe-row label { font-size: 12px; color: var(--woe-text-muted); font-weight: 500; }
+.woe-row input, .woe-row select, .woe-row textarea {
+    padding: 7px 10px; border-radius: 6px;
+    border: 1px solid var(--woe-border);
+    background: var(--woe-input-bg); color: var(--woe-text);
+    font-size: 13px; font-family: inherit;
+    outline: none; transition: border-color .12s, box-shadow .12s;
+}
+.woe-row input::placeholder, .woe-row textarea::placeholder { color: var(--woe-text-muted); opacity: .65; }
+.woe-row input:focus, .woe-row select:focus, .woe-row textarea:focus {
+    border-color: var(--woe-accent);
+    box-shadow: 0 0 0 2px rgba(99,102,241,.18);
+}
+.woe-row input[readonly], .woe-row input:disabled,
+.woe-row select:disabled, .woe-row textarea[readonly] {
+    background: var(--woe-input-disabled);
+    color: var(--woe-text-muted);
+}
+body.app-theme-dark .woe-row select,
+html.dark .woe-row select { color-scheme: dark; }
+body.app-theme-dark .woe-row input[type="datetime-local"],
+html.dark .woe-row input[type="datetime-local"] { color-scheme: dark; }
+/* select > * = option/optgroup (Razor parser "option" kelimesini OptionTagHelper
+   olarak yorumladığı için universal child selector kullanılıyor). */
+.woe-row select > * {
+    background: var(--woe-surface);
+    color: var(--woe-text);
+}
+body.app-theme-dark .woe-row select > *,
+html.dark .woe-row select > * {
+    background-color: #0d1323;
+    color: #e2e8f0;
+}
+.woe-row textarea { min-height: 60px; resize: vertical; }
+.woe-row.split { grid-template-columns: 140px 1fr 60px 100px; }
+
+.woe-source-list { font-size: 13px; }
+.woe-source-list .src-item {
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--woe-border);
+    display: flex; justify-content: space-between;
+    color: var(--woe-text);
+}
+.woe-source-list .src-item:last-child { border-bottom: none; }
+.woe-source-list .src-item a { color: var(--woe-accent); text-decoration: none; }
+.woe-source-list .src-item a:hover { text-decoration: underline; }
+.woe-source-list .src-empty { color: var(--woe-text-muted); padding: 12px 0; text-align: center; font-size: 12px; }
+
+.woe-meta {
+    font-size: 12px; color: var(--woe-text-muted);
+    display: flex; gap: 16px; flex-wrap: wrap;
+    padding-top: 8px; border-top: 1px dashed var(--woe-border); margin-top: 8px;
+}
+.woe-meta a { color: var(--woe-accent); text-decoration: none; }
+.woe-meta a:hover { text-decoration: underline; }
+
+/* ── Inline fields (kod + okur etiket / qty + birim) ── */
+.woe-inline-fields {
+    display: flex; align-items: center; gap: 8px;
+    min-width: 0;
+}
+.woe-input--code { max-width: 240px; flex: 0 0 240px; }
+.woe-input--qty  {
+    max-width: 130px; flex: 0 0 130px;
+    text-align: right;
+    /* Number input spinner (yukarı/aşağı oklar) — Firefox + Webkit tarafından gizle */
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+.woe-input--qty::-webkit-outer-spin-button,
+.woe-input--qty::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.woe-readonly-text {
+    font-size: 13px; font-weight: 500;
+    color: var(--woe-text);
+    padding: 7px 10px;
+    background: var(--woe-input-disabled);
+    border: 1px solid var(--woe-border-light);
+    border-radius: 6px;
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.woe-readonly-text:empty::before {
+    content: '—';
+    opacity: .4;
+}
+/* Birim dropdown — readonly text alanıyla benzer görünüm, ama tıklanabilir.
+   Stok kartındaki "miktar + birim" deseninin üretim emrindeki karşılığı. */
+.woe-unit-select {
+    flex: 0 0 auto; min-width: 110px;
+    padding: 7px 10px; border-radius: 6px;
+    border: 1px solid var(--woe-border);
+    background: var(--woe-input-bg); color: var(--woe-text);
+    font-size: 13px; font-weight: 500;
+    outline: none; cursor: pointer;
+    transition: border-color .12s, box-shadow .12s;
+}
+.woe-unit-select:hover:not(:disabled) { border-color: var(--woe-accent); }
+.woe-unit-select:focus { border-color: var(--woe-accent); box-shadow: 0 0 0 2px rgba(99,102,241,.18); }
+.woe-unit-select:disabled { opacity: .65; cursor: not-allowed; }
+body.app-theme-dark .woe-unit-select,
+html.dark .woe-unit-select { color-scheme: dark; }
+.woe-unit-select > * { background: var(--woe-surface); color: var(--woe-text); }
+body.app-theme-dark .woe-unit-select > *,
+html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
+
+/* ── Toast (sag alt) — auto-dismiss + manuel close ── */
+#woe-toast-host {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+    display: flex; flex-direction: column-reverse; gap: 10px;
+    pointer-events: none;        /* host clickleri yutmaz; sadece toast'lar interaktif */
+    max-width: 380px;
+}
+.woe-toast {
+    pointer-events: auto;
+    display: flex; align-items: flex-start; gap: 10px;
+    min-width: 240px; max-width: 380px;
+    padding: 11px 14px; border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.32);
+    font-size: 13px; line-height: 1.4;
+    animation: woe-toast-slide .22s ease-out;
+    position: relative;
+}
+.woe-toast--ok  { background: var(--woe-toast-ok-bg); color: var(--woe-toast-ok-tx); border: 1px solid rgba(16,185,129,.32); }
+.woe-toast--err { background: var(--woe-toast-er-bg); color: var(--woe-toast-er-tx); border: 1px solid rgba(239,68,68,.32); }
+.woe-toast.is-leaving { animation: woe-toast-fade .25s ease-in forwards; }
+.woe-toast-msg  { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+.woe-toast-close {
+    flex-shrink: 0;
+    background: transparent; border: none; cursor: pointer;
+    color: inherit; opacity: .7;
+    width: 22px; height: 22px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    font-size: 16px; line-height: 1; padding: 0;
+}
+.woe-toast-close:hover { opacity: 1; background: rgba(0,0,0,.08); }
+@@keyframes woe-toast-slide {
+    from { transform: translateY(12px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+@@keyframes woe-toast-fade {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(8px); }
+}
+
+/* ── Ek Alanlar (DynamicWidgetRenderer) — Material Card ile ayni pattern ── */
+#woeDynamicWidgetsCard {
+    background: var(--woe-surface);
+    border: 1px solid var(--woe-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 12px;
+}
+#woeDynamicWidgetsCard h3 {
+    margin: 0 0 12px; font-size: 14px; font-weight: 600;
+    color: var(--woe-text);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--woe-border-light);
+}
+#woeDynamicWidgets { width: 100%; }
+
+/* ── Layout wrapper resetleri (diger admin sayfalariyla ayni pattern) ── */
+.page-work-order-edit .integrator-dashboard {
+    height: 100% !important; min-height: 0 !important;
+    padding: 0 !important; max-width: none !important;
+    background: transparent !important; box-shadow: none !important;
+    border: none !important; border-radius: 0 !important;
+}
+.page-work-order-edit .integrator-dashboard__content {
+    display: flex !important; flex-direction: column !important;
+    width: 100% !important; max-width: none !important;
+    min-height: 0 !important; padding: 0 !important;
+    margin: 0 !important; overflow: hidden !important;
+    height: 100% !important;
+}
+
+/* ── Rota / Operasyonlar tab (Faz 3a-5) ────────────────────────────── */
+.woe-rota-table {
+    display: flex; flex-direction: column; gap: 1px;
+    background: var(--woe-border-light);
+    border: 1px solid var(--woe-border);
+    border-radius: 6px; overflow: hidden;
+    margin-top: 8px;
+}
+.woe-rota-row {
+    display: grid;
+    grid-template-columns: 60px 1.6fr 1.4fr 110px 130px 110px 56px;
+    gap: 8px; padding: 8px 12px; align-items: center;
+    background: var(--woe-surface);
+    font-size: 13px;
+}
+.woe-rota-row.woe-rota-head {
+    background: var(--woe-surface2);
+    font-weight: 600; font-size: 12px; color: var(--woe-text-muted);
+    text-transform: uppercase; letter-spacing: 0.4px;
+}
+.woe-rota-row input,
+.woe-rota-row select {
+    width: 100%; box-sizing: border-box;
+    padding: 4px 6px; font-size: 13px;
+    background: var(--woe-input-bg, var(--woe-surface));
+    border: 1px solid var(--woe-border);
+    border-radius: 4px; color: var(--woe-text);
+}
+.woe-rota-row input:read-only,
+.woe-rota-row input[readonly] { opacity: 0.7; cursor: default; }
+.woe-rota-status {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; text-align: center;
+}
+.woe-rota-status-0 { background: rgba(148,163,184,.16); color: #94a3b8; }
+.woe-rota-status-1 { background: rgba(59,130,246,.18); color: #60a5fa; }
+.woe-rota-status-2 { background: rgba(34,197,94,.18); color: #4ade80; }
+.woe-rota-status-3 { background: rgba(239,68,68,.18); color: #f87171; }
+.woe-rota-row .rota-del {
+    background: transparent; border: none; color: var(--woe-text-muted);
+    cursor: pointer; font-size: 18px; padding: 4px;
+    border-radius: 4px;
+}
+.woe-rota-row .rota-del:hover { background: rgba(239,68,68,.15); color: #f87171; }
+.woe-rota-empty { padding: 14px; text-align: center; }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+<div class="woe-page">
+    <div class="woe-toolbar">
+        <a class="woe-back" href="@Url.Action("WorkOrders")" title="Listeye dön">←</a>
+        <a class="woe-btn" href="@Url.Action("WorkOrderEdit")" id="btn-new" title="Yeni iş emri">+ Yeni</a>
+        <button class="woe-btn woe-btn--primary" id="btn-save" @(isNew || canEditPlan ? "" : "disabled")>Kaydet</button>
+        @if (!isNew)
+        {
+            @* Başlat / Tamamla butonları kaldırıldı — bu işlemler Faz 3'te
+               makine ataması üzerinden (Makine → İş Emrini Başlat / Bitir / Kısmi Bitir)
+               yapılacak. Salına/Kapat/Revize/İptal yöneticilik aksiyonları olarak kalır. *@
+            <button class="woe-btn woe-btn--success" id="btn-release" @(canRelease ? "" : "disabled")>Salına ▶</button>
+            <button class="woe-btn" id="btn-close" @(canClose ? "" : "disabled")>Kapat</button>
+            <button class="woe-btn woe-btn--warn" id="btn-revise" @(canRevise ? "" : "disabled")>Revize</button>
+            <button class="woe-btn woe-btn--danger" id="btn-cancel" @(canCancel ? "" : "disabled")>İptal</button>
+        }
+        <span class="spacer"></span>
+        <h1>@(isNew ? "Yeni İş Emri" : Model!.OrderNumber)@(Model is { RevisionNo: > 0 } ? $" • Rev {Model.RevisionNo}" : "")</h1>
+        @if (!isNew)
+        {
+            <span class="woe-status woe-status-@((byte)status)">@StatusLabel(status)</span>
+        }
+    </div>
+
+    <div class="woe-tabbed">
+        <nav class="woe-nav">
+            <div class="woe-nav-grouptitle">İş Emri</div>
+            <button type="button" class="woe-nav-btn is-active" data-tab="genel">
+                <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span>Genel Bilgiler</span>
+            </button>
+            <button type="button" class="woe-nav-btn" data-tab="makine">
+                <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span>Makine</span>
+            </button>
+            <button type="button" class="woe-nav-btn" data-tab="rota">
+                <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                <span>Rota / Operasyonlar</span>
+            </button>
+            <button type="button" class="woe-nav-btn" data-tab="recete">
+                <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20v-6h4v6a2 2 0 002 2h3a2 2 0 002-2v-3a2 2 0 00-2-2h-3v-4h3a2 2 0 002-2V6a2 2 0 00-2-2h-3a2 2 0 00-2 2v3a2 2 0 002 2h1v4h-3a2 2 0 01-2-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v3a2 2 0 002 2h3a2 2 0 002-2v-3"/></svg>
+                <span>Reçete</span>
+            </button>
+            <button type="button" class="woe-nav-btn" data-tab="kaynak">
+                <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2a4 4 0 00-4-4H3m18 6v-2a4 4 0 00-4-4h-2m-4-4a4 4 0 100-8 4 4 0 000 8zm-2 4a4 4 0 100-8 4 4 0 000 8z"/></svg>
+                <span>Kaynak Sipariş</span>
+                @if (!isNew && Model!.Sources.Count > 0)
+                {
+                    <span class="woe-nav-count">@Model.Sources.Count</span>
+                }
+            </button>
+            @if (!isNew && (Model!.RevisionNo > 0 || Model.RevisedFromId.HasValue))
+            {
+                <button type="button" class="woe-nav-btn" data-tab="revize">
+                    <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    <span>Revizyon</span>
+                </button>
+            }
+
+            <div class="woe-nav-grouptitle">Ek Sahalar</div>
+            <button type="button" class="woe-nav-btn" data-tab="widgets">
+                <svg class="woe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                <span>Widget Sahaları</span>
+            </button>
+        </nav>
+
+        <div class="woe-pane">
+            <!-- Tab: Genel Bilgiler -->
+            <section class="woe-pane-section is-active" data-pane="genel">
+                <h2>Genel Bilgiler</h2>
+                <div class="pane-hint">İş emri kimlik, plan, mamul ve sorumlu bilgileri.</div>
+
+                <div class="woe-row">
+                    <label>Numara</label>
+                    <input type="text" id="f-orderNumber" value="@(Model?.OrderNumber ?? "(otomatik)")" readonly />
+                </div>
+                <div class="woe-row">
+                    <label>İş Emri Tarihi</label>
+                    <input type="text" id="f-orderDate" value="@(Model?.OrderDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm") ?? DateTime.Now.ToString("dd.MM.yyyy HH:mm"))" readonly />
+                </div>
+
+                @* Mamul Kodu — Tip 1 (Mamul) standart rehberi (ITEMS_FINISHED guide).
+                   Mamul Adi okunur etiket olarak gosterilir; rehberden secince ya da
+                   kod yazip Tab/blur sonrasi resolveItem() doldurur. *@
+                <div class="woe-row">
+                    <label>Mamul Kodu *</label>
+                    <div class="woe-inline-fields">
+                        <input type="text" id="f-itemCode" class="woe-input--code" value="@Model?.ItemCode" placeholder="Mamul kodu seçiniz..." @(canEditPlan || isNew ? "" : "readonly") />
+                        <input type="hidden" id="f-itemId" value="@Model?.ItemId" />
+                        <span class="woe-readonly-text" id="f-itemName">@Model?.ItemName</span>
+                    </div>
+                </div>
+
+                <div class="woe-row" id="f-configWrapper" style="display:none;">
+                    <label>Konfigürasyon Kodu</label>
+                    <input type="text" id="f-configCode" placeholder="Kombinasyon kodunu yazın..." @(canEditPlan || isNew ? "" : "readonly") />
+                    <input type="hidden" id="f-configId" value="@Model?.ConfigId" />
+                </div>
+                <div class="woe-row" id="f-configDescWrapper" style="display:none;">
+                    <label>Konfigürasyon</label>
+                    <input type="text" id="f-configDesc" readonly />
+                </div>
+
+                <div class="woe-row">
+                    <label>Planlanan Miktar *</label>
+                    <div class="woe-inline-fields">
+                        <input type="number" step="0.0001" id="f-plannedQty" class="woe-input--qty"
+                               value="@Model?.PlannedQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                               min="0" @(canEditPlan || isNew ? "" : "readonly") />
+                        @* Birim: stok kartındaki default + tüm tanımlı birimler arasında seçim.
+                           Dropdown sayfa yüklenirken /Logistics/GetAllMeasureUnits ile doldurulur. *@
+                        <select id="f-unitId" class="woe-unit-select"
+                                data-preselect="@(Model?.UnitId?.ToString() ?? "")"
+                                @(canEditPlan || isNew ? "" : "disabled")
+                                title="Ölçü birimi">
+                            <option value="">— Birim —</option>
+                            @if (Model?.UnitId.HasValue == true)
+                            {
+                                <option value="@Model.UnitId" selected>@(Model.UnitCode ?? $"#{Model.UnitId}")</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="woe-row" style="align-items: start;">
+                    <label>Notlar</label>
+                    <textarea id="f-notes" @(canEditPlan || isNew ? "" : "readonly")>@Model?.Notes</textarea>
+                </div>
+
+                @if (!isNew)
+                {
+                    <div class="woe-meta">
+                        <span>Üretilen: <strong>@Model!.ProducedQuantity.ToString("N2")</strong></span>
+                        <span>Fire: <strong>@Model.ScrapQuantity.ToString("N2")</strong></span>
+                        @if (Model.ActualStartDate.HasValue)
+                        {
+                            <span>Gerçek Başlangıç: @Model.ActualStartDate.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                        }
+                        @if (Model.ActualEndDate.HasValue)
+                        {
+                            <span>Gerçek Bitiş: @Model.ActualEndDate.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                        }
+                    </div>
+                }
+            </section>
+
+            <!-- Tab: Makine / Planlama -->
+            <section class="woe-pane-section" data-pane="makine">
+                <h2>Planlama &amp; Makine</h2>
+                <div class="pane-hint">Üretim takvimi, sorumlu, öncelik ve üretim konumu. (Makine / iş merkezi ataması Faz 3'te eklenecek.)</div>
+
+                <div class="woe-row split">
+                    <label>Plan Başlangıç</label>
+                    <input type="datetime-local" id="f-plannedStart" value="@Iso(Model?.PlannedStartDate)" @(canEditPlan || isNew ? "" : "readonly") />
+                    <label style="text-align:right; padding-right:6px;">Bitiş</label>
+                    <input type="datetime-local" id="f-plannedEnd" value="@Iso(Model?.PlannedEndDate)" @(canEditPlan || isNew ? "" : "readonly") />
+                </div>
+
+                <div class="woe-row split">
+                    <label>Sorumlu (User.Id)</label>
+                    <input type="text" id="f-assignedUserId" value="@Model?.AssignedUserId" placeholder="GUID (User.id)" maxlength="36" @(canEditPlan || isNew ? "" : "readonly") />
+                    <label style="text-align:right; padding-right:6px;">Öncelik</label>
+                    <select id="f-priority" @(canEditPlan || isNew ? "" : "disabled")>
+                        @foreach (var p in Enum.GetValues<WorkOrderPriority>())
+                        {
+                            var sel = (Model?.Priority ?? WorkOrderPriority.Medium) == p;
+                            if (sel) { <option value="@((byte)p)" selected>@PriorityLabel(p)</option> }
+                            else     { <option value="@((byte)p)">@PriorityLabel(p)</option> }
+                        }
+                    </select>
+                </div>
+
+                <div class="woe-row">
+                    <label>Üretim Konumu</label>
+                    <input type="number" id="f-locationId" value="@Model?.WarehouseLocationId" placeholder="Location.Id" @(canEditPlan || isNew ? "" : "readonly") />
+                </div>
+
+                @* Rota seçimi — Routing rehberi (ROUTING). Boş bırakılırsa Release sırasında
+                   Item bazlı default rota otomatik aranır. Mamul kodu değişince f-itemCode
+                   change handler'ı bu alanı resetler. *@
+                <div class="woe-row">
+                    <label>Rota</label>
+                    <div class="woe-inline-fields">
+                        <input type="text" id="f-routingCode" value="@Model?.RoutingCode" placeholder="Boş = otomatik (Item bazlı)" @(canEditPlan || isNew ? "" : "readonly") />
+                        <input type="hidden" id="f-routingId" value="@Model?.RoutingId" />
+                        <span class="woe-readonly-text" id="f-routingName">@Model?.RoutingName</span>
+                    </div>
+                </div>
+            </section>
+
+            @* ── Tab: Rota / Operasyonlar (Faz 3a-5) ─────────────────────
+               WorkOrderOperation listesi: sequence sıralı, satır içi düzenlenebilir.
+               Released öncesi serbest düzenleme; Released+ aşamalarında salt-okur
+               (Faz 3b'de shop-floor tablet aksiyonları üretilen miktarı ilerletecek).
+               Patlat butonu: Routing'i seçilmiş emirde RoutingOperation'ı temizleyip
+               yeniden kopyalar (idempotent re-explode). *@
+            <section class="woe-pane-section" data-pane="rota">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+                    <h2 style="margin:0; flex:1;">Rota / Operasyonlar</h2>
+                    @if (!isNew)
+                    {
+                        <button type="button" class="woe-btn" id="btn-rota-explode" title="Rota'daki operasyonları kopyala (mevcutları siler)">
+                            ⚙ Rota'dan Patlat
+                        </button>
+                        @if (canEditPlan)
+                        {
+                            <button type="button" class="woe-btn woe-btn--primary" id="btn-rota-add">+ Operasyon Ekle</button>
+                        }
+                    }
+                </div>
+                <div class="pane-hint">
+                    İş emrinin operasyon adımları. <strong>Released</strong> aşamasında rota'daki operasyonlar otomatik kopyalanır;
+                    burada manuel ekleme/düzenleme de yapılabilir. Shop-floor tablet ekranından Başlat / Kısmi Bitir / Bitir aksiyonları
+                    bu listeye işlenir.
+                </div>
+                @if (isNew)
+                {
+                    <div class="src-empty">İş emri kaydedildikten sonra operasyon ekleyebilirsin.</div>
+                }
+                else
+                {
+                    <div id="woe-rota-list" class="woe-rota-table" data-workorder-id="@Model!.Id" data-can-edit="@(canEditPlan ? "1" : "0")">
+                        <div class="woe-rota-row woe-rota-head">
+                            <span>Sıra</span>
+                            <span>Operasyon</span>
+                            <span>Makine</span>
+                            <span>Süre</span>
+                            <span>Üretilen / Fire</span>
+                            <span>Durum</span>
+                            <span></span>
+                        </div>
+                        <div class="woe-rota-empty src-empty">Yükleniyor…</div>
+                    </div>
+                }
+            </section>
+
+            <!-- Tab: Reçete -->
+            <section class="woe-pane-section" data-pane="recete">
+                <h2>Reçete (Bill of Materials)</h2>
+                <div class="pane-hint">Mamul reçetesinden patlatılacak bileşen ve fire bilgisi.</div>
+                <div class="woe-placeholder" id="woe-recipe-pane">
+                    <strong>Faz 2 — BOM Patlatma</strong>
+                    Mamul kodu ve konfigürasyon seçildiğinde mevcut reçete bu sekmede listelenecek; bileşen miktarı planlanan üretim miktarına göre çoğaltılacak.
+                    <br><br>
+                    <a href="@Url.Action("BOMs", "Logistics")">→ Ürün Ağacı'nı yönet</a>
+                </div>
+            </section>
+
+            <!-- Tab: Kaynak Siparişler -->
+            <section class="woe-pane-section" data-pane="kaynak">
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+                    <h2 style="margin:0; flex:1;">Kaynak Siparişler</h2>
+                    @if (!isNew)
+                    {
+                        <button type="button" class="woe-btn woe-btn--primary" id="btn-add-source" title="Bu iş emrine satış siparişi kalemi bağla">+ Sipariş Ekle</button>
+                    }
+                </div>
+                <div class="pane-hint">Bu iş emri hangi satış siparişi kalem(ler)inden tetiklendi. Yeni kaynak ekleyince planlanan miktar otomatik artar.</div>
+                <div class="woe-source-list">
+                    @if (isNew)
+                    {
+                        <div class="src-empty">İş emri kaydedildikten sonra kaynak sipariş bağlayabilirsin.</div>
+                    }
+                    else if (Model!.Sources.Count == 0)
+                    {
+                        <div class="src-empty">Kaynak sipariş yok — manuel açılmış iş emri. Yukarıdaki butonla sipariş bağlayabilirsin.</div>
+                    }
+                    else
+                    {
+                        foreach (var src in Model.Sources)
+                        {
+                            <div class="src-item">
+                                <a href="@Url.Action("DocumentEdit", "Sales", new { id = src.SourceDocumentId })">
+                                    @(src.SourceDocumentNumber ?? $"#{src.SourceDocumentId}") · satır #@src.SourceLineId
+                                </a>
+                                <strong>@src.AllocatedQuantity.ToString("N2")</strong>
+                            </div>
+                        }
+                    }
+                </div>
+            </section>
+
+            @* ── Kaynak Sipariş Ekleme Modalı (Faz 1.5) ────────────────────────
+               1. Açık siparişleri listele (status filter: Approved/Sent — backend'in
+                  GetDocuments endpoint'i kullanılır)
+               2. Sipariş seçilince satırları getir (Sales/GetQuote?id=)
+               3. Mamul/config eşleşen satırlar vurgulanır (eşleşmeyenler de seçilebilir
+                  — kullanıcı sorumluluğunda)
+               4. Satır + miktar gir → /Production/CreateFromSalesLine POST
+                  targetWorkOrderId=mevcutId ile mevcut emire allocation eklenir,
+                  PlannedQuantity otomatik artar (servis tarafında zaten yapılıyor). *@
+            @if (!isNew)
+            {
+                <div id="addSourceModal" style="display:none; position:fixed; inset:0; background:rgba(8,12,24,.55); backdrop-filter:blur(4px); z-index:5000; align-items:center; justify-content:center;">
+                    <div style="background:var(--woe-surface); border:1px solid var(--woe-border); border-radius:12px; width:min(640px,94vw); max-height:85vh; overflow:auto; box-shadow:0 12px 48px rgba(0,0,0,.35); color:var(--woe-text);">
+                        <div style="display:flex; align-items:center; padding:14px 18px; border-bottom:1px solid var(--woe-border);">
+                            <h3 style="margin:0; flex:1; font-size:15px;">Kaynak Sipariş Ekle</h3>
+                            <button type="button" id="btn-add-source-close" style="background:transparent; border:none; color:var(--woe-text-muted); font-size:20px; cursor:pointer; padding:0 6px;">×</button>
+                        </div>
+                        <div style="padding:14px 18px;">
+                            <div class="pane-hint" style="margin-bottom:10px;">
+                                Sipariş listesinden seç → satır seç → miktar gir → "Ekle".
+                                Mevcut iş emrinin mamul/konfigürasyonuyla eşleşmeyen satırlar da seçilebilir; backend mamul-config eşleşmesini doğrular.
+                            </div>
+
+                            <div style="margin-bottom:12px;">
+                                <label style="font-size:12px; color:var(--woe-text-muted); display:block; margin-bottom:4px;">Sipariş</label>
+                                <select id="add-src-doc" class="woe-unit-select" style="width:100%; min-width:0;">
+                                    <option value="">Yükleniyor…</option>
+                                </select>
+                            </div>
+
+                            <div style="margin-bottom:12px;">
+                                <label style="font-size:12px; color:var(--woe-text-muted); display:block; margin-bottom:4px;">Satır</label>
+                                <select id="add-src-line" class="woe-unit-select" style="width:100%; min-width:0;" disabled>
+                                    <option value="">Önce sipariş seç</option>
+                                </select>
+                                <div id="add-src-line-info" style="font-size:11px; color:var(--woe-text-muted); margin-top:4px;"></div>
+                            </div>
+
+                            <div style="margin-bottom:14px;">
+                                <label style="font-size:12px; color:var(--woe-text-muted); display:block; margin-bottom:4px;">Eklenecek Miktar</label>
+                                <input type="number" step="0.0001" min="0" id="add-src-qty" class="woe-input--qty" style="width:160px; max-width:160px; flex:0 0 160px;" />
+                            </div>
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 18px; border-top:1px solid var(--woe-border); background:var(--woe-surface2);">
+                            <button type="button" class="woe-btn" id="btn-add-source-cancel">Vazgeç</button>
+                            <button type="button" class="woe-btn woe-btn--primary" id="btn-add-source-submit" disabled>Ekle</button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Tab: Revizyon -->
+            @if (!isNew && (Model!.RevisionNo > 0 || Model.RevisedFromId.HasValue))
+            {
+                <section class="woe-pane-section" data-pane="revize">
+                    <h2>Revizyon</h2>
+                    <div class="pane-hint">Bu iş emrinin revizyon zinciri.</div>
+                    <div class="woe-meta" style="border-top:none;padding-top:0;margin-top:0;">
+                        <span>Revizyon No: <strong>@Model.RevisionNo</strong></span>
+                        @if (Model.RevisedFromId.HasValue)
+                        {
+                            <span><a href="@Url.Action("WorkOrderEdit", new { id = Model.RevisedFromId.Value })">← Önceki revizyon</a></span>
+                        }
+                    </div>
+                </section>
+            }
+
+            <!-- Tab: Widget Sahaları —
+                 Sol nav butonu admin tanımlı ilk grubun adıyla guncellenir;
+                 sag pane'de tekrar baslik/hint yok — DynamicWidgetRenderer
+                 grup baslıklarını kendi icinde render ediyor. -->
+            <section class="woe-pane-section" data-pane="widgets">
+                <div id="woeDynamicWidgets"
+                     data-form-code="WORK_ORDER_EDIT"
+                     data-record-id="@(Model?.Id.ToString() ?? "")">
+                    <div class="woe-placeholder" id="woeDynamicWidgetsEmpty">
+                        Bu form için tanımlı widget yok. <a href="@Url.Action("FormManagement", "Admin")">Form Tasarım Ayarları</a>'ndan ekleyebilirsin.
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+</section>
+
+@* Toast container — sag alt kose, otomatik kapanan + manuel close butonlu *@
+<div id="woe-toast-host"></div>
+@Html.AntiForgeryToken()
+
+@functions {
+    static string StatusLabel(WorkOrderStatus s) => s switch
+    {
+        WorkOrderStatus.Planned => "Taslak",
+        WorkOrderStatus.Released => "Salındı",
+        WorkOrderStatus.InProgress => "Devam ediyor",
+        WorkOrderStatus.Completed => "Tamamlandı",
+        WorkOrderStatus.Closed => "Kapatıldı",
+        WorkOrderStatus.Cancelled => "İptal",
+        _ => s.ToString()
+    };
+    static string PriorityLabel(WorkOrderPriority p) => p switch
+    {
+        WorkOrderPriority.Low => "Düşük",
+        WorkOrderPriority.Medium => "Normal",
+        WorkOrderPriority.High => "Yüksek",
+        _ => p.ToString()
+    };
+}
+
+@section Scripts {
+<script>
+(function () {
+    const isNew = @(isNew ? "true" : "false");
+    const id = @(Model?.Id ?? 0);
+
+    function token() {
+        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    // ── Toast — sag alt kose, 4 sn auto-dismiss + manuel close ──
+    function flash(msg, ok) {
+        const host = document.getElementById('woe-toast-host');
+        if (!host) return;
+
+        const el = document.createElement('div');
+        el.className = 'woe-toast ' + (ok ? 'woe-toast--ok' : 'woe-toast--err');
+        el.setAttribute('role', ok ? 'status' : 'alert');
+
+        const msgEl = document.createElement('div');
+        msgEl.className = 'woe-toast-msg';
+        msgEl.textContent = msg;
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'woe-toast-close';
+        closeBtn.setAttribute('aria-label', 'Kapat');
+        closeBtn.textContent = '×';
+
+        function dismiss() {
+            if (el.classList.contains('is-leaving')) return;
+            el.classList.add('is-leaving');
+            clearTimeout(autoTm);
+            setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+        }
+        closeBtn.addEventListener('click', dismiss);
+
+        el.appendChild(msgEl);
+        el.appendChild(closeBtn);
+        host.appendChild(el);
+
+        // 4 saniye sonra otomatik kapat
+        const autoTm = setTimeout(dismiss, 4000);
+    }
+    function num(id) {
+        const v = document.getElementById(id).value;
+        return v === '' ? null : Number(v);
+    }
+    function txt(id) {
+        const v = document.getElementById(id).value;
+        return v === '' ? null : v;
+    }
+
+    function payload() {
+        return {
+            // f-itemId hidden input — itemCode resolve edildikten sonra dolar
+            itemId: num('f-itemId') || 0,
+            // f-configId hidden — configCode resolve edildikten sonra dolar
+            configId: num('f-configId'),
+            plannedQuantity: num('f-plannedQty') || 0,
+            unitId: num('f-unitId'),
+            plannedStartDate: txt('f-plannedStart'),
+            plannedEndDate: txt('f-plannedEnd'),
+            priority: num('f-priority') ?? 1,
+            assignedUserId: txt('f-assignedUserId'),
+            warehouseLocationId: num('f-locationId'),
+            // Rota: Genel tab'taki rehber alanından (boşsa server tarafı item bazlı arar)
+            routingId: num('f-routingId'),
+            notes: txt('f-notes')
+        };
+    }
+
+    // ── Mamul kodu resolve (itemCode → itemId, itemName, hasConfig) ─────
+    async function resolveItem() {
+        const codeEl = document.getElementById('f-itemCode');
+        const nameEl = document.getElementById('f-itemName');
+        const idEl   = document.getElementById('f-itemId');
+        const cfgWrap     = document.getElementById('f-configWrapper');
+        const cfgDescWrap = document.getElementById('f-configDescWrapper');
+        if (!codeEl) return null;
+
+        // Yardimci — span/input ayrimi yapmadan yaz (textContent vs value)
+        function setText(el, val) {
+            if (!el) return;
+            if ('value' in el && el.tagName === 'INPUT') el.value = val || '';
+            else el.textContent = val || '';
+        }
+
+        const code = (codeEl.value || '').trim();
+        if (!code) {
+            setText(nameEl, '');
+            idEl.value = '';
+            // Birim de temizlensin
+            const unitDispClr = document.getElementById('f-unitDisplay');
+            const unitIdClr   = document.getElementById('f-unitId');
+            setText(unitDispClr, '');
+            if (unitIdClr) unitIdClr.value = '';
+            cfgWrap.style.display = 'none';
+            cfgDescWrap.style.display = 'none';
+            document.getElementById('f-configCode').value = '';
+            document.getElementById('f-configId').value = '';
+            document.getElementById('f-configDesc').value = '';
+            return null;
+        }
+
+        try {
+            const resp = await fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code), { credentials: 'same-origin' });
+            const list = await resp.json();
+            const match = (list || []).find(s => (s.code || '').toLowerCase() === code.toLowerCase());
+            if (!match) {
+                setText(nameEl, '');
+                idEl.value = '';
+                cfgWrap.style.display = 'none';
+                cfgDescWrap.style.display = 'none';
+                return null;
+            }
+            // StockLookup artik id, unitId, unitCode dondur (LogisticsController ext'i)
+            codeEl.value = match.code;
+            setText(nameEl, match.name || '');
+            // ItemId direkt StockLookup'tan
+            if (match.id != null) idEl.value = String(match.id);
+
+            // Birim — mamulun ana birimi default; kullanici degistirmemisse otomatik dolar.
+            // f-unitId artik <select> oldugu icin option yoksa eklemek gerekir
+            // (loadWorkOrderUnits ile race condition'i da bu sekilde absorbe eder).
+            const unitIdEl = document.getElementById('f-unitId');
+            if (unitIdEl && match.unitId != null) {
+                const targetVal = String(match.unitId);
+                let exists = false;
+                for (const o of unitIdEl.options) {
+                    if (String(o.value) === targetVal) { exists = true; break; }
+                }
+                if (!exists) {
+                    const opt = document.createElement('option');
+                    opt.value = targetVal;
+                    opt.textContent = match.unitCode || ('#' + match.unitId);
+                    unitIdEl.appendChild(opt);
+                }
+                // Default davranış: stok kartının ana birimi otomatik seçilir.
+                // Kullanici farkli bir birim sectiyse korunur — ancak ilk yeni kayitta
+                // (boş seçim) ya da edit modda birim aynıysa override edilir.
+                const unitWasEmpty = !unitIdEl.value;
+                if (unitWasEmpty || unitIdEl.value === targetVal) {
+                    unitIdEl.value = targetVal;
+                }
+            }
+
+            const hasCfg = match.hasConfig === true || match.hasConfig === 'true';
+            cfgWrap.style.display = hasCfg ? '' : 'none';
+            cfgDescWrap.style.display = hasCfg ? '' : 'none';
+            if (!hasCfg) {
+                document.getElementById('f-configCode').value = '';
+                document.getElementById('f-configId').value = '';
+                document.getElementById('f-configDesc').value = '';
+            } else {
+                // hasConfig=true ve mevcut configId var ise (edit modu) → kombinasyon
+                // bilgilerini fetch et ve f-configCode + f-configDesc doldur.
+                const existingCfgId = (document.getElementById('f-configId').value || '').trim();
+                const cfgCodeEl = document.getElementById('f-configCode');
+                if (existingCfgId && !cfgCodeEl.value) {
+                    try {
+                        const cfgResp = await fetch('/Logistics/CombinationLookup?materialCode=' + encodeURIComponent(match.code), { credentials: 'same-origin' });
+                        const cfgList = await cfgResp.json();
+                        const cfgMatch = (cfgList || []).find(c => String(c.configId) === existingCfgId);
+                        if (cfgMatch) {
+                            cfgCodeEl.value = cfgMatch.code;
+                            const descEl = document.getElementById('f-configDesc');
+                            if (descEl) {
+                                descEl.value = (cfgMatch.features || [])
+                                    .map(f => `${f.feature}: ${f.value || f.valueCode || ''}`).join(' | ');
+                            }
+                        }
+                    } catch (_) { /* sessiz */ }
+                }
+            }
+            return match;
+        } catch (err) {
+            console.error('[WOE resolveItem]', err);
+            return null;
+        }
+    }
+
+    // ── Konfigurasyon kodu resolve (configCode → configId + features desc) ─
+    async function resolveConfig() {
+        const matCode = (document.getElementById('f-itemCode')?.value || '').trim();
+        const cfgCodeEl = document.getElementById('f-configCode');
+        const cfgIdEl   = document.getElementById('f-configId');
+        const descEl    = document.getElementById('f-configDesc');
+        const cfgCode   = (cfgCodeEl?.value || '').trim();
+
+        if (!matCode || !cfgCode) {
+            if (cfgIdEl) cfgIdEl.value = '';
+            if (descEl) descEl.value = '';
+            return null;
+        }
+        try {
+            const resp = await fetch('/Logistics/CombinationLookup?materialCode=' + encodeURIComponent(matCode), { credentials: 'same-origin' });
+            const list = await resp.json();
+            const match = (list || []).find(c => (c.code || '').toLowerCase() === cfgCode.toLowerCase());
+            if (!match) {
+                if (cfgIdEl) cfgIdEl.value = '';
+                if (descEl) descEl.value = '';
+                return null;
+            }
+            cfgCodeEl.value = match.code;
+            if (cfgIdEl) cfgIdEl.value = (match.configId ?? '').toString();
+            if (descEl) {
+                descEl.value = (match.features || []).map(f => `${f.feature}: ${f.value || f.valueCode || ''}`).join(' | ');
+            }
+            return match;
+        } catch (err) {
+            console.error('[WOE resolveConfig]', err);
+            return null;
+        }
+    }
+
+    // Initial: edit modunda yuklenince itemCode dolu ise resolve et
+    if (document.getElementById('f-itemCode').value) { resolveItem(); }
+
+    async function call(url, body) {
+        const headers = { 'Content-Type': 'application/json', 'RequestVerificationToken': token() };
+        const res = await fetch(url, { method: 'POST', headers, body: body ? JSON.stringify(body) : null, credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({ ok: false, error: 'Yanit JSON degil' }));
+        return data;
+    }
+
+    document.getElementById('btn-save')?.addEventListener('click', async () => {
+        // Save'den once mamul kodu + konfigurasyon kodunu yeniden cozumle —
+        // kullanici yazdiktan sonra blur etmeden direkt save tikladiysa
+        // hidden id'ler dolmamis olabilir.
+        await resolveItem();
+        if ((document.getElementById('f-configCode')?.value || '').trim()) {
+            await resolveConfig();
+        }
+        const body = payload();
+        if (!body.itemId) { flash('Mamul kodu seçilmedi veya geçersiz.', false); return; }
+        if (!body.plannedQuantity || body.plannedQuantity <= 0) { flash('Planlanan miktar 0\'dan büyük olmalı.', false); return; }
+
+        // Ek alan (widget) zorunlu + kisitlama validasyonu — entity save'den ONCE kontrol et
+        if (window._woeDynRenderer && window._woeDynRenderer.validate) {
+            const dynValidation = window._woeDynRenderer.validate();
+            if (!dynValidation.valid) {
+                flash(dynValidation.message || 'Ek alanlarda eksik/hatali veri var.', false);
+                return;
+            }
+        }
+
+        const url = isNew ? '@Url.Action("Create")' : '@Url.Action("Update")/' + id;
+        const r = await call(url, isNew ? body : {
+            plannedQuantity: body.plannedQuantity, unitId: body.unitId,
+            plannedStartDate: body.plannedStartDate, plannedEndDate: body.plannedEndDate,
+            priority: body.priority, assignedUserId: body.assignedUserId,
+            warehouseLocationId: body.warehouseLocationId, notes: body.notes
+        });
+        if (!r.ok) { flash(r.error || 'Hata.', false); return; }
+
+        // Entity basarili — simdi widget degerlerini de kaydet (WidgetTra)
+        const newId = (r.id && r.id > 0) ? r.id : id;
+        if (window._woeDynRenderer && newId > 0) {
+            try {
+                const dynResult = await window._woeDynRenderer.save({ recordId: String(newId) });
+                if (dynResult && dynResult.success === false) {
+                    console.warn('[WOE] widget save basarisiz:', dynResult.message);
+                }
+            } catch (e) { console.warn('[WOE] widget save hatasi:', e); }
+        }
+
+        flash(isNew ? 'İş emri oluşturuldu.' : 'Kaydedildi.', true);
+        if (isNew && r.id) location.href = '@Url.Action("WorkOrderEdit")?id=' + r.id;
+        else setTimeout(() => location.reload(), 600);
+    });
+
+    async function changeStatus(newStatus) {
+        const r = await call('@Url.Action("ChangeStatus")/' + id, { workOrderId: id, newStatus });
+        if (r.ok) { flash('Durum değişti.', true); setTimeout(() => location.reload(), 500); }
+        else flash(r.error || 'Hata.', false);
+    }
+
+    document.getElementById('btn-release')?.addEventListener('click', () => changeStatus(1));
+    /* Başlat (Status=2 InProgress) ve Tamamla (Status=3 Completed) iş emri toolbar'ından
+       kaldırıldı — bu geçişler Faz 3'te makine ataması üzerinden tetiklenecek
+       (Üretim → Makine → İş Emrini Başlat / Bitir / Kısmi Bitir). */
+    document.getElementById('btn-close')?.addEventListener('click',   () => { if (confirm('İş emrini kalıcı kapatıyorsun. Devam edilsin mi?')) changeStatus(4); });
+    document.getElementById('btn-cancel')?.addEventListener('click',  () => { if (confirm('İş emrini iptal etmek istediğine emin misin?')) changeStatus(5); });
+
+    document.getElementById('btn-revise')?.addEventListener('click', async () => {
+        if (!confirm('Yeni revizyon emri oluşturulsun mu? Mevcut emir iptal edilecek.')) return;
+        const r = await call('@Url.Action("Revise")/' + id);
+        if (r.ok && r.id) location.href = '@Url.Action("WorkOrderEdit")?id=' + r.id;
+        else flash(r.error || 'Hata.', false);
+    });
+
+    // ── Mamul + Konfigurasyon lookup mount ──────────────────────────────
+    // Mamul kodu icin Tip 1 (Mamul) standart rehberi (ITEMS_FINISHED).
+    // Pick sonrasi 'change' event tetiklenir → resolveItem() id+hasConfig'i cozer.
+    // Tab tusu / focus loss / paste durumlarinda da resolveItem calissin diye
+    // change + blur + keydown(Enter) dinleniyor.
+    document.getElementById('f-itemCode')?.addEventListener('change', resolveItem);
+    document.getElementById('f-itemCode')?.addEventListener('blur', resolveItem);
+    document.getElementById('f-itemCode')?.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === 'Tab') {
+            // setTimeout ile blur'dan once resolveItem cagrilmasin diye event loop'a birak
+            setTimeout(resolveItem, 0);
+        }
+    });
+    document.getElementById('f-configCode')?.addEventListener('blur', resolveConfig);
+
+    function ensureLookupsMounted() {
+        if (!window.CalibraHub || !window.CalibraHub.mountLookupForInput) return;
+        const itemEl = document.getElementById('f-itemCode');
+        if (itemEl && !itemEl.dataset.lookupMounted) {
+            try {
+                window.CalibraHub.mountLookupForInput({
+                    inputElement: itemEl,
+                    // formCode + fieldKey verilince LookupCard header'inda
+                    // "Alan Ayarlari" (gear/Settings) butonu gorunur. Boylece
+                    // admin bu rehberin gosterim kolonlarini, kisitlarini vs
+                    // form bazinda override edebilir.
+                    formCode: 'WORK_ORDER_EDIT',
+                    fieldKey: 'itemCode',
+                    guideCode: 'ITEMS_FINISHED',
+                    isRequired: true
+                });
+                itemEl.dataset.lookupMounted = '1';
+            } catch (e) { console.warn('[WOE] item lookup mount hatasi:', e); }
+        }
+        // Konfigurasyon icin standart guide yok — kullanici kodu manuel yazar,
+        // blur'da CombinationLookup ile resolve edilir. Ileride dedicated
+        // CombinationPickerModal eklenebilir (BOMs.cshtml'deki pattern gibi).
+    }
+
+    if (window.CalibraHub && window.CalibraHub.mountLookupForInput) {
+        ensureLookupsMounted();
+    } else {
+        // Bundle henuz yuklenmedi — DynamicWidgetRenderer init'i bundle yukleyince retry et
+        var lookupTries = 0;
+        var lookupTimer = setInterval(() => {
+            lookupTries++;
+            if (window.CalibraHub && window.CalibraHub.mountLookupForInput) {
+                clearInterval(lookupTimer); ensureLookupsMounted();
+            } else if (lookupTries >= 50) clearInterval(lookupTimer);
+        }, 100);
+    }
+
+    // ── Sol nav "Widget Sahaları" butonunu admin tanimli ilk grup adiyla guncelle.
+    //   Form schema'sini /api/widgets/forms/{code}/schema'dan cek; group widget
+    //   varsa nav buton label'ini onun title'i ile degistir (yoksa "Ek Sahalar" kalsin).
+    async function updateWidgetNavLabel() {
+        try {
+            const resp = await fetch('/api/widgets/forms/WORK_ORDER_EDIT/schema', { credentials: 'same-origin' });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const widgets = (data && (data.widgets || data.items || data)) || [];
+            const arr = Array.isArray(widgets) ? widgets : [];
+            const groups = arr.filter(w =>
+                String((w.dataType || w.DataType) || '').toLowerCase() === 'group');
+            if (groups.length === 0) return;
+            // Ilk grubun label/title'i (sortOrder ile siralanmis ilk eleman)
+            groups.sort((a, b) => ((a.sortOrder || a.SortOrder || 0) - (b.sortOrder || b.SortOrder || 0)));
+            const first = groups[0];
+            const label = first.label || first.Label || first.title || first.Title || null;
+            if (!label) return;
+            const navBtn = document.querySelector('.woe-nav-btn[data-tab="widgets"] span');
+            if (navBtn) navBtn.textContent = label;
+        } catch (_) { /* sessiz */ }
+    }
+    updateWidgetNavLabel();
+
+    // ── DynamicWidgetRenderer mount (Material Card ile ayni pattern) ──
+    // Bundle React Shell modunda hazir, workspace iframe modunda dinamik yuklenir.
+    (function initDynRenderer() {
+        var el = document.getElementById('woeDynamicWidgets');
+        if (!el) return;
+
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) {
+                console.warn('[WOE] mountDynamicWidgetRenderer bulunamadi');
+                return;
+            }
+            try {
+                window._woeDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                    formCode: el.getAttribute('data-form-code') || 'WORK_ORDER_EDIT',
+                    recordId: el.getAttribute('data-record-id') || '',
+                    classPrefix: 'woe',
+                    containerId: 'woeDynamicWidgetsCard'
+                });
+            } catch (e) { console.warn('[WOE] mountDynamicWidgetRenderer hatasi:', e); }
+        }
+
+        if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+            // Bundle zaten yuklu (React Shell)
+            doMount();
+        } else {
+            // Workspace iframe — bundle dinamik yukle
+            var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+            var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+
+            if (!document.querySelector('link[data-woe-bundle]')) {
+                var link = document.createElement('link');
+                link.rel = 'stylesheet'; link.href = cssUrl;
+                link.setAttribute('data-woe-bundle', '1');
+                document.head.appendChild(link);
+            }
+            if (!document.querySelector('script[data-woe-bundle]')) {
+                var script = document.createElement('script');
+                script.src = jsUrl;
+                script.setAttribute('data-woe-bundle', '1');
+                script.onload = doMount;
+                script.onerror = function () { console.warn('[WOE] bundle yuklenemedi'); };
+                document.head.appendChild(script);
+            } else {
+                // Diger script tag'i yuklenmis olabilir, tekrar dene
+                var tries = 0;
+                var tm = setInterval(function () {
+                    tries++;
+                    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+                        clearInterval(tm); doMount();
+                    } else if (tries >= 50) { clearInterval(tm); }
+                }, 100);
+            }
+        }
+    })();
+})();
+
+/* ── Tab switch — sol nav + sağ pane ── */
+(function () {
+    const navBtns = document.querySelectorAll('.woe-nav-btn');
+    const panes   = document.querySelectorAll('.woe-pane-section');
+    if (!navBtns.length || !panes.length) return;
+
+    function activate(tabKey) {
+        navBtns.forEach(b => b.classList.toggle('is-active', b.dataset.tab === tabKey));
+        panes.forEach(p => p.classList.toggle('is-active', p.dataset.pane === tabKey));
+    }
+
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', () => activate(btn.dataset.tab));
+    });
+
+    /* Hash deep-link: #genel | #makine | #recete | #kaynak | #revize | #widgets */
+    function applyHash() {
+        const h = (location.hash || '').replace('#', '').trim();
+        if (!h) return;
+        const exists = Array.from(navBtns).some(b => b.dataset.tab === h);
+        if (exists) activate(h);
+    }
+    window.addEventListener('hashchange', applyHash);
+    applyHash();
+})();
+
+/* ── Birim dropdown'unu doldur (Logistics/GetAllMeasureUnits) ──────────────────
+   Sayfa yüklenir yüklenmez tüm tanımlı ölçü birimlerini çekip f-unitId select'ine
+   ekler. data-preselect attribute'ünde Model.UnitId varsa onu seçili kalır.
+   Mamul (StockLookup) resolve edildiğinde resolveItem zaten select.value'yu set eder. */
+(async function loadWorkOrderUnits() {
+    const sel = document.getElementById('f-unitId');
+    if (!sel) return;
+    const preselect = sel.dataset.preselect || '';
+    try {
+        const r = await fetch('/Logistics/GetAllMeasureUnits', { credentials: 'same-origin' });
+        if (!r.ok) return;
+        const list = await r.json();
+        const existing = new Set();
+        for (const o of sel.options) existing.add(String(o.value));
+        (list || []).forEach(u => {
+            if (existing.has(String(u.id))) return;
+            const opt = document.createElement('option');
+            opt.value = String(u.id);
+            opt.textContent = (u.unitCode || ('#' + u.id)) + (u.unitName ? ' — ' + u.unitName : '');
+            sel.appendChild(opt);
+        });
+        if (preselect) {
+            for (const o of sel.options) {
+                if (String(o.value) === preselect) { sel.value = preselect; break; }
+            }
+        }
+    } catch (e) {
+        console.error('[WOE] Birim listesi yüklenemedi:', e);
+    }
+})();
+
+/* ── Kaynak Sipariş Ekleme — modal akışı ──────────────────────────────────────
+   Mevcut iş emrine sales order kalemini bağlar. Backend
+   /Production/CreateFromSalesLine endpoint'i targetWorkOrderId parametresi ile
+   AddSourceAsync + PlannedQuantity güncellemesini birlikte yapar (toplama). */
+(function () {
+    const modal      = document.getElementById('addSourceModal');
+    const btnOpen    = document.getElementById('btn-add-source');
+    const btnClose   = document.getElementById('btn-add-source-close');
+    const btnCancel  = document.getElementById('btn-add-source-cancel');
+    const btnSubmit  = document.getElementById('btn-add-source-submit');
+    const docSel     = document.getElementById('add-src-doc');
+    const lineSel    = document.getElementById('add-src-line');
+    const lineInfo   = document.getElementById('add-src-line-info');
+    const qtyInput   = document.getElementById('add-src-qty');
+    if (!modal || !btnOpen) return;
+
+    const workOrderId = @(Model?.Id ?? 0);
+    let docsLoaded = false;
+    let currentLines = [];
+
+    function open() {
+        modal.style.display = 'flex';
+        if (!docsLoaded) loadDocs();
+    }
+    function close() {
+        modal.style.display = 'none';
+        docSel.value = '';
+        lineSel.innerHTML = '<option value="">Önce sipariş seç</option>';
+        lineSel.disabled = true;
+        lineInfo.textContent = '';
+        qtyInput.value = '';
+        btnSubmit.disabled = true;
+    }
+
+    async function loadDocs() {
+        try {
+            // Sales order listesi — sadece açık siparişler (status: Approved/Sent),
+            // Cancelled/Rejected dışında. Backend GetDocuments endpoint'i tüm
+            // statüleri döner, biz client-side filtreliyoruz.
+            const r = await fetch('/Sales/GetDocuments', { credentials: 'same-origin' });
+            const list = await r.json();
+            docSel.innerHTML = '<option value="">— Sipariş seç —</option>';
+            (Array.isArray(list) ? list : []).forEach(function (d) {
+                // d.status: 'Cancelled' / 'Rejected' siparişler için ekleme yok
+                const status = String(d.status || d.Status || '').toLowerCase();
+                if (status === 'cancelled' || status === 'rejected') return;
+                const opt = document.createElement('option');
+                opt.value = String(d.id || d.Id);
+                const num = d.documentNumber || d.DocumentNumber || ('#' + opt.value);
+                const cust = d.contactName || d.ContactName || '';
+                opt.textContent = num + (cust ? ' · ' + cust : '');
+                docSel.appendChild(opt);
+            });
+            docsLoaded = true;
+        } catch (e) {
+            console.error('[WOE-AddSrc] Sipariş listesi yüklenemedi:', e);
+            docSel.innerHTML = '<option value="">(Yüklenemedi — yenileyin)</option>';
+        }
+    }
+
+    async function loadLines(docId) {
+        lineSel.disabled = true;
+        lineSel.innerHTML = '<option value="">Yükleniyor…</option>';
+        lineInfo.textContent = '';
+        currentLines = [];
+        if (!docId) {
+            lineSel.innerHTML = '<option value="">Önce sipariş seç</option>';
+            return;
+        }
+        try {
+            const r = await fetch('/Sales/GetQuote?id=' + encodeURIComponent(docId), { credentials: 'same-origin' });
+            const data = await r.json();
+            currentLines = Array.isArray(data?.lines) ? data.lines : (Array.isArray(data?.Lines) ? data.Lines : []);
+            if (currentLines.length === 0) {
+                lineSel.innerHTML = '<option value="">Bu siparişte kalem yok</option>';
+                return;
+            }
+            lineSel.innerHTML = '<option value="">— Satır seç —</option>';
+            currentLines.forEach(function (l, i) {
+                const id   = l.id || l.Id;
+                const code = l.materialCode || l.MaterialCode || l.material_code || '';
+                const name = l.materialName || l.MaterialName || l.material_name || '';
+                const qty  = Number(l.quantity || l.Quantity || 0);
+                const opt  = document.createElement('option');
+                opt.value = String(id);
+                opt.dataset.qty = String(qty);
+                opt.dataset.code = code;
+                opt.dataset.name = name;
+                opt.textContent = '#' + id + ' — ' + (code || '?') + (name ? ' / ' + name : '') + ' (' + qty.toFixed(2) + ')';
+                lineSel.appendChild(opt);
+            });
+            lineSel.disabled = false;
+        } catch (e) {
+            console.error('[WOE-AddSrc] Sipariş satırları yüklenemedi:', e);
+            lineSel.innerHTML = '<option value="">(Hata — yenileyin)</option>';
+        }
+    }
+
+    async function onLineChange() {
+        const opt = lineSel.options[lineSel.selectedIndex];
+        if (!opt || !opt.value) {
+            lineInfo.textContent = '';
+            qtyInput.value = '';
+            btnSubmit.disabled = true;
+            return;
+        }
+        const lineId = Number(opt.value);
+        const totalQty = Number(opt.dataset.qty || 0);
+        // Allocated qty (zaten başka iş emirlerine atanmış miktar) — kalan açık
+        let allocated = 0;
+        try {
+            const r = await fetch('/Production/AllocatedQuantity?sourceLineId=' + lineId, { credentials: 'same-origin' });
+            const data = await r.json();
+            allocated = Number(data?.allocated || 0);
+        } catch (e) { /* ignore */ }
+        const remaining = totalQty - allocated;
+        lineInfo.textContent = 'Toplam: ' + totalQty.toFixed(2) + ' · Atanmış: ' + allocated.toFixed(2) + ' · Kalan: ' + remaining.toFixed(2);
+        qtyInput.value = remaining > 0 ? remaining.toFixed(4) : '';
+        btnSubmit.disabled = remaining <= 0;
+    }
+
+    async function submit() {
+        const docId  = Number(docSel.value);
+        const lineId = Number(lineSel.value);
+        const qty    = Number(qtyInput.value);
+        if (!docId || !lineId) { alert('Sipariş ve satır seçin.'); return; }
+        if (!qty || qty <= 0) { alert('Geçerli miktar girin.'); return; }
+
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = 'Ekleniyor…';
+        try {
+            const tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+            const token = tokenEl ? tokenEl.value : '';
+            const body = {
+                sourceDocumentId: docId,
+                sourceLineId: lineId,
+                quantity: qty,
+                targetWorkOrderId: workOrderId  // Mevcut emire ekle (toplama)
+            };
+            const r = await fetch('/Production/CreateFromSalesLine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                credentials: 'same-origin',
+                body: JSON.stringify(body)
+            });
+            const data = await r.json();
+            if (data?.ok) {
+                // Sayfayı yenile — yeni source list ve PlannedQuantity gözüksün
+                location.reload();
+            } else {
+                alert('Hata: ' + (data?.error || 'Bilinmeyen.'));
+                btnSubmit.disabled = false;
+                btnSubmit.textContent = 'Ekle';
+            }
+        } catch (e) {
+            alert('İstek hatası: ' + e.message);
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = 'Ekle';
+        }
+    }
+
+    btnOpen.addEventListener('click', open);
+    btnClose.addEventListener('click', close);
+    btnCancel.addEventListener('click', close);
+    modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.style.display === 'flex') close();
+    });
+    docSel.addEventListener('change', function () { loadLines(docSel.value); });
+    lineSel.addEventListener('change', onLineChange);
+    btnSubmit.addEventListener('click', submit);
+})();
+
+// ── Rota / Operasyonlar tab — WorkOrderOperation listesi ──────────────
+(function () {
+    const rotaList = document.getElementById('woe-rota-list');
+    if (!rotaList) return; // isNew durumunda render olmuyor
+
+    const woId = parseInt(rotaList.getAttribute('data-workorder-id'), 10);
+    const canEdit = rotaList.getAttribute('data-can-edit') === '1';
+
+    function token() {
+        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function flashRota(msg, ok) {
+        // Use existing flash if present
+        if (typeof window.calibraToast === 'function') return window.calibraToast(msg, ok ? 'ok' : 'err');
+        const host = document.getElementById('woe-toast-host');
+        if (!host) { console[ok ? 'log' : 'error'](msg); return; }
+        const el = document.createElement('div');
+        el.className = 'woe-toast ' + (ok ? 'woe-toast--ok' : 'woe-toast--err');
+        el.textContent = msg;
+        host.appendChild(el);
+        setTimeout(() => el.remove(), 4000);
+    }
+
+    function statusLabel(s) {
+        switch (Number(s) || 0) {
+            case 0: return 'Bekliyor';
+            case 1: return 'Devam';
+            case 2: return 'Tamam';
+            case 3: return 'Atlandı';
+            default: return '?';
+        }
+    }
+
+    function fmtDuration(d, unit) {
+        if (d == null) return '—';
+        const u = (Number(unit) === 2) ? 'sa' : 'dk';
+        return Number(d).toFixed(2) + ' ' + u;
+    }
+
+    function fmtQty(produced, scrap) {
+        const p = Number(produced || 0).toFixed(2);
+        const s = Number(scrap || 0).toFixed(2);
+        return p + ' / ' + s;
+    }
+
+    async function loadRota() {
+        try {
+            const r = await fetch('/Production/WorkOrderOperations?workOrderId=' + woId, { credentials: 'same-origin' });
+            const list = await r.json();
+            renderRota(list || []);
+        } catch (ex) {
+            flashRota('Rota yüklenemedi: ' + ex.message, false);
+        }
+    }
+
+    function renderRota(items) {
+        // Header'ı koru, satırları replace et
+        const head = rotaList.querySelector('.woe-rota-head');
+        rotaList.innerHTML = '';
+        if (head) rotaList.appendChild(head);
+
+        if (!items || items.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'woe-rota-empty src-empty';
+            empty.textContent = 'Operasyon yok. "Rota\'dan Patlat" ile rota şablonundan kopyalayın veya manuel ekleyin.';
+            rotaList.appendChild(empty);
+            return;
+        }
+
+        for (const op of items) {
+            const row = document.createElement('div');
+            row.className = 'woe-rota-row';
+            row.dataset.id = op.id;
+
+            // Sıra
+            const seq = document.createElement('input');
+            seq.type = 'number'; seq.min = '0'; seq.step = '1';
+            seq.value = op.sequence ?? 0;
+            seq.readOnly = !canEdit || (op.status > 0);
+            row.appendChild(seq);
+
+            // Operasyon (kod + ad — şimdilik salt-okur display, değiştirme için silip yeniden eklemek)
+            const opCell = document.createElement('span');
+            opCell.textContent = (op.operationCode ? op.operationCode + ' · ' : '') + (op.operationName || '#' + op.operationId);
+            row.appendChild(opCell);
+
+            // Makine
+            const machCell = document.createElement('span');
+            machCell.textContent = op.machineCode
+                ? (op.machineCode + (op.machineName ? ' · ' + op.machineName : ''))
+                : '—';
+            row.appendChild(machCell);
+
+            // Süre
+            const durCell = document.createElement('span');
+            durCell.textContent = fmtDuration(op.plannedDuration, op.durationUnit);
+            row.appendChild(durCell);
+
+            // Üretilen / Fire
+            const qtyCell = document.createElement('span');
+            qtyCell.textContent = fmtQty(op.producedQuantity, op.scrapQuantity);
+            row.appendChild(qtyCell);
+
+            // Durum
+            const stCell = document.createElement('span');
+            const stBadge = document.createElement('span');
+            stBadge.className = 'woe-rota-status woe-rota-status-' + (op.status ?? 0);
+            stBadge.textContent = statusLabel(op.status);
+            stCell.appendChild(stBadge);
+            row.appendChild(stCell);
+
+            // Sil
+            const delWrap = document.createElement('span');
+            if (canEdit && (op.status || 0) === 0) {
+                const del = document.createElement('button');
+                del.type = 'button'; del.className = 'rota-del'; del.title = 'Sil';
+                del.textContent = '×';
+                del.addEventListener('click', () => removeOp(op.id));
+                delWrap.appendChild(del);
+            }
+            row.appendChild(delWrap);
+
+            rotaList.appendChild(row);
+        }
+    }
+
+    async function removeOp(opId) {
+        if (!confirm('Bu operasyonu silmek istediğinize emin misiniz?')) return;
+        try {
+            const r = await fetch('/Production/DeleteWorkOrderOperation/' + opId, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': token() }
+            });
+            const j = await r.json();
+            if (!j.ok) { flashRota(j.error || 'Silme başarısız', false); return; }
+            flashRota('Silindi', true);
+            await loadRota();
+        } catch (ex) {
+            flashRota('Hata: ' + ex.message, false);
+        }
+    }
+
+    async function explodeFromRouting() {
+        const routingIdEl = document.getElementById('f-routingId');
+        const routingId = routingIdEl ? parseInt(routingIdEl.value || '0', 10) : 0;
+        if (!routingId) {
+            flashRota('Önce Genel sekmesinden Rota seçin (veya emir Released aşamasına gelince otomatik patlatılır).', false);
+            return;
+        }
+        if (!confirm('Rota şablonundaki operasyonlar bu iş emrine kopyalanacak. Mevcut operasyonlar silinecek. Devam edilsin mi?')) return;
+        try {
+            const r = await fetch('/Production/ExplodeFromRouting', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({ workOrderId: woId, routingId })
+            });
+            const j = await r.json();
+            if (!j.ok) { flashRota(j.error || 'Patlatma başarısız', false); return; }
+            flashRota('Operasyonlar kopyalandı.', true);
+            await loadRota();
+        } catch (ex) {
+            flashRota('Hata: ' + ex.message, false);
+        }
+    }
+
+    // Manuel ekleme: minimal modal yerine prompt akışı (Phase 3a için yeterli; sonradan modal'a yükseltilebilir)
+    async function addOp() {
+        const opCodePrompt = prompt('Operasyon kodu (Operation.Code):');
+        if (!opCodePrompt) return;
+        // Operation lookup: /Production/OperationsList ile arama (basit liste)
+        let opId = 0;
+        try {
+            const lr = await fetch('/Production/OperationsList?includeInactive=false', { credentials: 'same-origin' });
+            const ops = await lr.json();
+            const match = (ops || []).find(o =>
+                String(o.code).trim().toLowerCase() === opCodePrompt.trim().toLowerCase());
+            if (!match) { flashRota('Operasyon bulunamadı: ' + opCodePrompt, false); return; }
+            opId = match.id;
+        } catch (ex) { flashRota('Operasyon listesi alınamadı: ' + ex.message, false); return; }
+
+        const seqStr = prompt('Sıra numarası:', '10');
+        if (seqStr == null) return;
+        const seq = parseInt(seqStr, 10);
+        if (Number.isNaN(seq) || seq < 0) { flashRota('Geçersiz sıra.', false); return; }
+
+        const dur = prompt('Planlanan süre (dakika, boş geçilebilir):', '');
+        const plannedDuration = (dur == null || dur === '') ? null : Number(dur);
+
+        try {
+            const r = await fetch('/Production/SaveWorkOrderOperation', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({
+                    id: 0, workOrderId: woId,
+                    sequence: seq, operationId: opId,
+                    machineId: null, plannedDuration: plannedDuration,
+                    durationUnit: 1 /* Minute */,
+                    notes: null
+                })
+            });
+            const j = await r.json();
+            if (!j.ok) { flashRota(j.error || 'Kayıt başarısız', false); return; }
+            flashRota('Operasyon eklendi.', true);
+            await loadRota();
+        } catch (ex) {
+            flashRota('Hata: ' + ex.message, false);
+        }
+    }
+
+    const explBtn = document.getElementById('btn-rota-explode');
+    if (explBtn) explBtn.addEventListener('click', explodeFromRouting);
+    const addBtn = document.getElementById('btn-rota-add');
+    if (addBtn) addBtn.addEventListener('click', addOp);
+
+    // Tab açılınca lazy-load: data attribute ile tek seferlik flag
+    let loaded = false;
+    function maybeLoad() {
+        if (loaded) return;
+        const rotaSection = document.querySelector('.woe-pane-section[data-pane="rota"]');
+        if (rotaSection && rotaSection.classList.contains('is-active')) {
+            loaded = true;
+            loadRota();
+        }
+    }
+    document.querySelectorAll('.woe-nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => setTimeout(maybeLoad, 50));
+    });
+    // Eğer rota tabı açık başlıyorsa direkt yükle
+    setTimeout(maybeLoad, 100);
+})();
+</script>
+}

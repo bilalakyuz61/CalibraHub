@@ -10,11 +10,16 @@ public sealed class ScheduledTask
 {
     public int Id { get; init; }
 
-    /// <summary>Unique task identifier (e.g. "DOC_IMPORT", "NIGHTLY_ANALYTICS").</summary>
-    public required string Code { get; init; }
-
     public required string Name { get; init; }
     public string? Description { get; init; }
+
+    /// <summary>
+    /// Bu gorevi tanimlayan sirketin id'si. UI'dan kayit edildiginde HttpContext'teki
+    /// company_id claim'inden set edilir; runtime'da executor token resolver bu deger
+    /// uzerinden sirket bilgilerini ({COMPANY_ID}, {INTEGRATION_DB} vb.) cozer.
+    /// Builtin/legacy kayitlar icin null olabilir.
+    /// </summary>
+    public int? CompanyId { get; set; }
 
     /// <summary>Task turunu belirler — BUILTIN / SQL_PROCEDURE / HTTP_API / FILE_TRANSFER.</summary>
     public ScheduledTaskType TaskType { get; set; } = ScheduledTaskType.Builtin;
@@ -44,6 +49,14 @@ public sealed class ScheduledTask
     public string? ScheduleDescription { get; set; }
 
     public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Oncul gorev id'si (self-FK). Bu gorev calistirilmadan once oncul gorev calistirilir;
+    /// oncul basarili olursa ana gorev calisir, basarisiz olursa ana gorev iptal edilir.
+    /// Tek seviyeli alan ama zincirleme calisir (A→B, B→C tanimlanabilir; cycle runtime'da
+    /// visit-set ile yakalanir). NULL = on kosul yok.
+    /// </summary>
+    public int? PrerequisiteTaskId { get; set; }
 
     /// <summary>Son calistirma zamani (UTC).</summary>
     public DateTime? LastRunAt { get; set; }

@@ -17,9 +17,14 @@ public interface IScheduledTaskExecutor
     Task<TaskExecutionResult> ExecuteAsync(ScheduledTask task, CancellationToken cancellationToken);
 }
 
-/// <summary>Bir gorev calistirmasinin sonucu.</summary>
-public sealed record TaskExecutionResult(int Status, string? Message)
+/// <summary>
+/// Bir gorev calistirmasinin sonucu. ExecutedCommand opsiyonel — SQL prosedur turu
+/// icin "EXEC [dbo].[sp_X] @p=N'value'" formatinda parametre tokenleri resolve edilmis
+/// hali, HTTP turu icin "GET https://..." gibi anlamli bir komut ozeti tasiyabilir.
+/// Run kaydina yazilir, history modal'da debug icin gosterilir.
+/// </summary>
+public sealed record TaskExecutionResult(int Status, string? Message, string? ExecutedCommand = null)
 {
-    public static TaskExecutionResult Success(string? message = null) => new(0, message);
-    public static TaskExecutionResult Error(string message) => new(1, message);
+    public static TaskExecutionResult Success(string? message = null, string? executedCommand = null) => new(0, message, executedCommand);
+    public static TaskExecutionResult Error(string message, string? executedCommand = null) => new(1, message, executedCommand);
 }

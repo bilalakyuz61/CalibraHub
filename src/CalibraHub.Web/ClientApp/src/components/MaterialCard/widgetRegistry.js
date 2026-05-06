@@ -95,20 +95,6 @@ var widgetRegistry = [
     getDetail: function() { return 'KDV haric birim fiyat' },
   },
 
-  // ── Teknik ────────────────────────────────────────────
-  {
-    id: 'description',
-    icon: FileText,
-    label: 'Aciklama',
-    defaultColor: 'violet',
-    category: 'teknik',
-    getValue: function(item) {
-      if (!item.materialDescription) return null
-      var txt = item.materialDescription
-      return txt.length > 20 ? txt.substring(0, 20) + '...' : txt
-    },
-    getDetail: function(item) { return item.materialDescription || '' },
-  },
 ]
 
 export var colorOptions = [

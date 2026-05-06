@@ -49,7 +49,8 @@ public sealed record ProductConfigurationItemDto(
 public sealed record ProductConfigurationFeatureStockLinkDto(
     int FeatureId,
     string StockCode,
-    bool PrintDescriptionInDesign = true);
+    bool PrintDescriptionInDesign = true,
+    IReadOnlyCollection<int>? AllowedValueIds = null);
 
 public sealed record CreateProductConfigurationFeatureRequest(
     string Name,
@@ -87,6 +88,11 @@ public sealed record UpdateProductConfigurationFeatureRequest(
 
 public sealed record SaveProductConfigurationFeatureStocksRequest(
     int FeatureId,
-    IReadOnlyCollection<string> StockCodes);
+    IReadOnlyCollection<SaveProductConfigurationFeatureStockItem> Stocks);
+
+public sealed record SaveProductConfigurationFeatureStockItem(
+    string StockCode,
+    bool PrintDescriptionInDesign = true,
+    IReadOnlyCollection<int>? AllowedValueIds = null);
 
 

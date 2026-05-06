@@ -22,4 +22,7 @@ public enum DocumentStatus
 
     [Description("Iptal edildi")]
     Cancelled = 5,
+
+    [Description("Siparise donusturuldu — kaynak teklif kilitlendi")]
+    Converted = 6,
 }

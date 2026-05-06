@@ -463,7 +463,9 @@ function ReminderPopover(props) {
   var [recurrenceData, setRecurrenceData] = useState('')
   var [submitting, setSubmitting] = useState(false)
   var [deliveryChannel, setDeliveryChannel] = useState(0) // 0=InApp, 1=Email, 2=Both
-  var [targetUserId, setTargetUserId] = useState('')      // '' = kendim
+  var [targetIds, setTargetIds] = useState([])            // bos ise = not sahibi
+  var [userPickerOpen, setUserPickerOpen] = useState(false)
+  var [userSearch, setUserSearch] = useState('')
   var [companyUsers, setCompanyUsers] = useState([])
 
   useEffect(function () {
@@ -492,7 +494,7 @@ function ReminderPopover(props) {
       recurrence,
       recurrenceData.trim() || null,
       deliveryChannel,
-      targetUserId || null
+      targetIds
     ))
       .finally(function () {
         setSubmitting(false)
@@ -503,7 +505,25 @@ function ReminderPopover(props) {
       })
   }
 
+  function addTarget(id) {
+    setTargetIds(function (prev) { return prev.indexOf(id) === -1 ? prev.concat([id]) : prev })
+    setUserSearch('')
+    setUserPickerOpen(false)
+  }
+  function removeTarget(id) {
+    setTargetIds(function (prev) { return prev.filter(function (x) { return x !== id }) })
+  }
+
   var DELIVERY_LABELS = { 0: 'Bildirim', 1: 'E-posta', 2: 'Bildirim + E-posta' }
+  var selectedTargetUsers = targetIds
+    .map(function (id) { return companyUsers.find(function (u) { return u.id === id }) })
+    .filter(Boolean)
+  var availableUsers = companyUsers
+    .filter(function (u) { return !u.isSelf && targetIds.indexOf(u.id) === -1 })
+    .filter(function (u) {
+      if (!userSearch) return true
+      return (u.fullName || '').toLowerCase().indexOf(userSearch.toLowerCase()) !== -1
+    })
 
   return (
     <div className="nw-reminder-pop" onClick={function (e) { e.stopPropagation() }}>
@@ -520,8 +540,11 @@ function ReminderPopover(props) {
         {!loading && reminders.map(function (r) {
           var isSent = r.isSent
           var dChan = r.deliveryChannel || 0
+          var targets = Array.isArray(r.targets) ? r.targets : []
           var meta = DELIVERY_LABELS[dChan] || 'Bildirim'
-          if (r.targetUserName) meta += ' → ' + r.targetUserName
+          if (targets.length > 0) {
+            meta += ' → ' + targets.map(function (t) { return t.fullName }).join(', ')
+          }
           return (
             <div key={r.id} className={'nw-reminder-row' + (isSent ? ' nw-reminder-row--sent' : '')}>
               <div className="nw-reminder-row-info">
@@ -594,18 +617,67 @@ function ReminderPopover(props) {
             <option value={2}>Bildirim + E-posta</option>
           </select>
         </div>
-        <div className="nw-reminder-add-row">
+        <div className="nw-reminder-add-row nw-reminder-add-row--chips">
           <label>Kime</label>
-          <select
-            className="nw-reminder-input"
-            value={targetUserId}
-            onChange={function (e) { setTargetUserId(e.target.value) }}
-          >
-            <option value="">Kendim</option>
-            {companyUsers.filter(function (u) { return !u.isSelf }).map(function (u) {
-              return <option key={u.id} value={u.id}>{u.fullName}</option>
-            })}
-          </select>
+          <div className="nw-reminder-chips-wrap">
+            <div className="nw-reminder-chips">
+              {selectedTargetUsers.length === 0 && (
+                <span className="nw-reminder-chip-placeholder">Kendim</span>
+              )}
+              {selectedTargetUsers.map(function (u) {
+                return (
+                  <span key={u.id} className="nw-reminder-chip">
+                    {u.fullName}
+                    <button
+                      type="button"
+                      className="nw-reminder-chip-x"
+                      onClick={function () { removeTarget(u.id) }}
+                      aria-label="Kaldir"
+                    >
+                      <X size={10} />
+                    </button>
+                  </span>
+                )
+              })}
+              <button
+                type="button"
+                className="nw-reminder-chip-add"
+                onClick={function () { setUserPickerOpen(function (p) { return !p }) }}
+                title="Kisi ekle"
+              >
+                + Kisi
+              </button>
+            </div>
+            {userPickerOpen && (
+              <div className="nw-reminder-picker">
+                <input
+                  type="text"
+                  className="nw-reminder-input nw-reminder-picker-search"
+                  placeholder="Ara..."
+                  value={userSearch}
+                  onChange={function (e) { setUserSearch(e.target.value) }}
+                  autoFocus
+                />
+                <div className="nw-reminder-picker-list">
+                  {availableUsers.length === 0 && (
+                    <div className="nw-reminder-picker-empty">Eklenebilecek kullanici yok.</div>
+                  )}
+                  {availableUsers.map(function (u) {
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        className="nw-reminder-picker-item"
+                        onClick={function () { addTarget(u.id) }}
+                      >
+                        {u.fullName}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <button
           className="nw-reminder-add-btn"
@@ -1141,10 +1213,10 @@ export default function NotesWorkspace() {
     return function () { cancelled = true }
   }, [selectedNoteId])
 
-  var handleAddReminder = useCallback(function (remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserId) {
+  var handleAddReminder = useCallback(function (remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserIds) {
     if (!selectedNoteId) return Promise.resolve()
     var nid = selectedNoteId
-    return api.addReminder(nid, remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserId)
+    return api.addReminder(nid, remindAtIso, recurrenceType, recurrenceData, deliveryChannel, targetUserIds)
       .then(function (r) {
         if (!r || !r.success) {
           alert('Hatirlatici eklenemedi: ' + (r && r.message ? r.message : 'Bilinmeyen hata.'))

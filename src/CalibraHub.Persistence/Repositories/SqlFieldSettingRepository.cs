@@ -10,6 +10,10 @@ namespace CalibraHub.Persistence.Repositories;
 /// <summary>
 /// FldSet tablosu persistence — form sabit alanlarinin rehber eslestirmesi.
 /// SqlGuideRepository ile ayni ADO.NET pattern'ini kullanir.
+///
+/// PR 1+: ViewName primary, GuideCode geriye uyumluluk kolonu (PR 3'te kaldirilacak).
+/// SELECT/INSERT/UPDATE her iki kolonu da yazip okur. Migration startup sirasinda
+/// GuideMas'tan ViewName'i backfill eder (CalibraDatabaseInitializer).
 /// </summary>
 public sealed class SqlFieldSettingRepository : IFieldSettingRepository
 {
@@ -29,7 +33,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[FormId],[FieldKey],[FieldLabel],[GuideCode],[FilterJson],
+            SELECT [Id],[FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],
                    [IsRequired],[FormatJson],[IsActive],[SortOrder],[CreatedAt],[UpdatedAt]
             FROM {_fldSetTable}
             WHERE [FormId] = @FormId
@@ -43,7 +47,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[FormId],[FieldKey],[FieldLabel],[GuideCode],[FilterJson],
+            SELECT [Id],[FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],
                    [IsRequired],[FormatJson],[IsActive],[SortOrder],[CreatedAt],[UpdatedAt]
             FROM {_fldSetTable}
             WHERE [GuideCode] = @GuideCode AND [IsActive] = 1
@@ -61,10 +65,10 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         {
             cmd.CommandText = $@"
                 INSERT INTO {_fldSetTable}
-                    ([FormId],[FieldKey],[FieldLabel],[GuideCode],[FilterJson],
+                    ([FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],
                      [IsRequired],[FormatJson],[IsActive],[SortOrder])
                 VALUES
-                    (@FormId,@FieldKey,@FieldLabel,@GuideCode,@FilterJson,
+                    (@FormId,@FieldKey,@FieldLabel,@GuideCode,@ViewName,@FilterJson,
                      @IsRequired,@FormatJson,@IsActive,@SortOrder);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
@@ -73,7 +77,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
             cmd.CommandText = $@"
                 UPDATE {_fldSetTable}
                 SET [FormId]=@FormId, [FieldKey]=@FieldKey, [FieldLabel]=@FieldLabel,
-                    [GuideCode]=@GuideCode, [FilterJson]=@FilterJson,
+                    [GuideCode]=@GuideCode, [ViewName]=@ViewName, [FilterJson]=@FilterJson,
                     [IsRequired]=@IsRequired, [FormatJson]=@FormatJson,
                     [IsActive]=@IsActive, [SortOrder]=@SortOrder,
                     [UpdatedAt]=SYSUTCDATETIME()
@@ -86,6 +90,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         cmd.Parameters.AddWithValue("@FieldKey", request.FieldKey);
         cmd.Parameters.AddWithValue("@FieldLabel", request.FieldLabel);
         cmd.Parameters.AddWithValue("@GuideCode", (object?)request.GuideCode ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ViewName",  (object?)request.ViewName  ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@FilterJson", (object?)request.FilterJson ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@IsRequired", request.IsRequired);
         cmd.Parameters.AddWithValue("@FormatJson", (object?)request.FormatJson ?? DBNull.Value);
@@ -100,34 +105,49 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
     {
         if (request.Fields == null || request.Fields.Count == 0) return;
 
+        var s = _schemaName.Replace("]", "]]");
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
 
         foreach (var field in request.Fields)
         {
             await using var cmd = conn.CreateCommand();
 
-            // MERGE: varsa guncelle, yoksa ekle
+            // MERGE: varsa guncelle, yoksa ekle. ViewName'i GuideMas'tan resolve eder
+            // (subquery ile). GuideMas yoksa NULL kalir; migration startup'ta backfill eder.
             cmd.CommandText = $@"
+                DECLARE @ResolvedViewName NVARCHAR(128) = NULL;
+                IF @Mapped = 1 AND OBJECT_ID(N'[{s}].[GuideMas]', N'U') IS NOT NULL
+                BEGIN
+                    SELECT TOP 1 @ResolvedViewName = [ViewName]
+                    FROM   [{s}].[GuideMas]
+                    WHERE  [GuideCode] = @GuideCode
+                    ORDER  BY [Id] DESC; -- duplikat varsa son kayit (kullanici feedback'i)
+                END;
+
                 MERGE {_fldSetTable} AS T
                 USING (SELECT @FormId AS FormId, @FieldKey AS FieldKey) AS S
                 ON T.[FormId] = S.FormId AND T.[FieldKey] = S.FieldKey
                 WHEN MATCHED THEN
                     UPDATE SET
                         [FieldLabel]  = @FieldLabel,
-                        [GuideCode]   = @GuideCode,
+                        [GuideCode]   = CASE WHEN @Mapped = 1 THEN @GuideCode ELSE NULL END,
+                        [ViewName]    = CASE WHEN @Mapped = 1 THEN @ResolvedViewName ELSE NULL END,
                         [FilterJson]  = @FilterJson,
                         [IsRequired]  = @IsRequired,
                         [IsActive]    = 1,
                         [UpdatedAt]   = SYSUTCDATETIME()
                 WHEN NOT MATCHED THEN
-                    INSERT ([FormId],[FieldKey],[FieldLabel],[GuideCode],[FilterJson],[IsRequired],[IsActive])
-                    VALUES (@FormId, @FieldKey, @FieldLabel, @GuideCode, @FilterJson, @IsRequired, 1);";
+                    INSERT ([FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],[IsRequired],[IsActive])
+                    VALUES (@FormId, @FieldKey, @FieldLabel,
+                            CASE WHEN @Mapped = 1 THEN @GuideCode ELSE NULL END,
+                            CASE WHEN @Mapped = 1 THEN @ResolvedViewName ELSE NULL END,
+                            @FilterJson, @IsRequired, 1);";
 
             cmd.Parameters.AddWithValue("@FormId", request.FormId);
             cmd.Parameters.AddWithValue("@FieldKey", field.FieldKey);
             cmd.Parameters.AddWithValue("@FieldLabel", field.FieldLabel);
-            cmd.Parameters.AddWithValue("@GuideCode",
-                field.Mapped ? (object)request.GuideCode : DBNull.Value);
+            cmd.Parameters.AddWithValue("@Mapped", field.Mapped);
+            cmd.Parameters.AddWithValue("@GuideCode", request.GuideCode);
             cmd.Parameters.AddWithValue("@FilterJson",
                 field.Mapped ? (object?)field.FilterJson ?? DBNull.Value : DBNull.Value);
             cmd.Parameters.AddWithValue("@IsRequired",
@@ -151,12 +171,13 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
             ON T.[FormId] = S.FormId AND T.[FieldKey] = S.FieldKey
             WHEN MATCHED THEN
                 UPDATE SET [FieldLabel] = @FieldLabel, [GuideCode]  = @GuideCode,
+                           [ViewName]   = @ViewName,
                            [FilterJson] = @FilterJson, [IsRequired] = @IsRequired,
                            [FormatJson] = @FormatJson, [IsActive]   = 1,
                            [UpdatedAt]  = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
-                INSERT ([FormId],[FieldKey],[FieldLabel],[GuideCode],[FilterJson],[IsRequired],[FormatJson],[IsActive],[SortOrder])
-                VALUES (@FormId,@FieldKey,@FieldLabel,@GuideCode,@FilterJson,@IsRequired,@FormatJson,1,10);
+                INSERT ([FormId],[FieldKey],[FieldLabel],[GuideCode],[ViewName],[FilterJson],[IsRequired],[FormatJson],[IsActive],[SortOrder])
+                VALUES (@FormId,@FieldKey,@FieldLabel,@GuideCode,@ViewName,@FilterJson,@IsRequired,@FormatJson,1,10);
 
             SELECT [Id] FROM {_fldSetTable} WHERE [FormId] = @FormId AND [FieldKey] = @FieldKey;";
 
@@ -164,6 +185,7 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         cmd.Parameters.AddWithValue("@FieldKey",   request.FieldKey);
         cmd.Parameters.AddWithValue("@FieldLabel", request.FieldLabel);
         cmd.Parameters.AddWithValue("@GuideCode",  (object?)request.GuideCode  ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ViewName",   (object?)request.ViewName   ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@FilterJson", (object?)request.FilterJson ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@IsRequired", request.IsRequired);
         cmd.Parameters.AddWithValue("@FormatJson", (object?)request.FormatJson ?? DBNull.Value);
@@ -187,12 +209,16 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         var s = _schemaName.Replace("]", "]]");
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // PR 1: GuideCode VEYA ViewName dolu olanlari bagli sayar (co-existence)
         cmd.CommandText = $@"
-            SELECT fs.[FieldKey], fs.[FieldLabel], fs.[GuideCode], fs.[FilterJson], fs.[IsRequired], fs.[FormatJson]
+            SELECT fs.[FieldKey], fs.[FieldLabel],
+                   ISNULL(fs.[GuideCode], N'') AS [GuideCode],
+                   fs.[ViewName],
+                   fs.[FilterJson], fs.[IsRequired], fs.[FormatJson]
             FROM [{s}].[FldSet] fs
             INNER JOIN [dbo].[Forms] f ON f.[Id] = fs.[FormId]
             WHERE f.[FormCode] = @FormCode
-              AND fs.[GuideCode] IS NOT NULL
+              AND (fs.[GuideCode] IS NOT NULL OR fs.[ViewName] IS NOT NULL)
               AND fs.[IsActive] = 1
             ORDER BY fs.[SortOrder], fs.[FieldKey];";
         cmd.Parameters.AddWithValue("@FormCode", formCode);
@@ -205,14 +231,15 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
                 FieldKey:   reader.GetString(0),
                 FieldLabel: reader.GetString(1),
                 GuideCode:  reader.GetString(2),
-                FilterJson: reader.IsDBNull(3) ? null : reader.GetString(3),
-                IsRequired: reader.GetBoolean(4),
-                FormatJson: reader.IsDBNull(5) ? null : reader.GetString(5)));
+                ViewName:   reader.IsDBNull(3) ? null : reader.GetString(3),
+                FilterJson: reader.IsDBNull(4) ? null : reader.GetString(4),
+                IsRequired: reader.GetBoolean(5),
+                FormatJson: reader.IsDBNull(6) ? null : reader.GetString(6)));
         }
         return result;
     }
 
-    public async Task<IReadOnlyCollection<string>> DiscoverFieldsAsync(int formId, CancellationToken ct)
+    public async Task<IReadOnlyCollection<string>> DiscoverFieldsAsync(int formId, bool includeMapped, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
 
@@ -239,20 +266,31 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
             tableName = parts[0].Trim('[', ']', ' ');
         }
 
-        // 3) INFORMATION_SCHEMA + FldSet'te zaten tanimli olanlari haric tut
+        // 3) INFORMATION_SCHEMA — `includeMapped` true ise FldSet'teki kolonlar da dahil
+        // (Alan Rehberi widget tanim formundan rehber kisiti yazarken admin form'un
+        // tum alanlarini gormeli; FldSet'e eslesmis olan da rehbere parametre verilebilir).
+        // false (default) ise FldSet eslestirme sayfasi icin haric tutulur.
         var s = _schemaName.Replace("]", "]]");
+        var sql = includeMapped
+            ? @"
+                SELECT c.COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS c
+                WHERE c.TABLE_SCHEMA = @TableSchema
+                  AND c.TABLE_NAME   = @TableName
+                ORDER BY c.ORDINAL_POSITION;"
+            : $@"
+                SELECT c.COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS c
+                WHERE c.TABLE_SCHEMA = @TableSchema
+                  AND c.TABLE_NAME   = @TableName
+                  AND c.COLUMN_NAME NOT IN (
+                      SELECT fs.[FieldKey]
+                      FROM [{s}].[FldSet] fs
+                      WHERE fs.[FormId] = @FormId
+                  )
+                ORDER BY c.ORDINAL_POSITION;";
         await using var colCmd = conn.CreateCommand();
-        colCmd.CommandText = $@"
-            SELECT c.COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS c
-            WHERE c.TABLE_SCHEMA = @TableSchema
-              AND c.TABLE_NAME   = @TableName
-              AND c.COLUMN_NAME NOT IN (
-                  SELECT fs.[FieldKey]
-                  FROM [{s}].[FldSet] fs
-                  WHERE fs.[FormId] = @FormId
-              )
-            ORDER BY c.ORDINAL_POSITION;";
+        colCmd.CommandText = sql;
         colCmd.Parameters.AddWithValue("@TableSchema", tableSchema);
         colCmd.Parameters.AddWithValue("@TableName", tableName);
         colCmd.Parameters.AddWithValue("@FormId", formId);
@@ -271,20 +309,23 @@ public sealed class SqlFieldSettingRepository : IFieldSettingRepository
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct);
         while (await reader.ReadAsync(ct))
         {
+            // Order: Id, FormId, FieldKey, FieldLabel, GuideCode, ViewName, FilterJson,
+            //        IsRequired, FormatJson, IsActive, SortOrder, CreatedAt, UpdatedAt
             result.Add(new FieldSetting
             {
-                Id = reader.GetInt32(0),
-                FormId = reader.GetInt32(1),
-                FieldKey = reader.GetString(2),
+                Id         = reader.GetInt32(0),
+                FormId     = reader.GetInt32(1),
+                FieldKey   = reader.GetString(2),
                 FieldLabel = reader.GetString(3),
-                GuideCode = reader.IsDBNull(4) ? null : reader.GetString(4),
-                FilterJson = reader.IsDBNull(5) ? null : reader.GetString(5),
-                IsRequired = reader.GetBoolean(6),
-                FormatJson = reader.IsDBNull(7) ? null : reader.GetString(7),
-                IsActive = reader.GetBoolean(8),
-                SortOrder = reader.GetInt32(9),
-                CreatedAt = reader.GetDateTime(10),
-                UpdatedAt = reader.GetDateTime(11)
+                GuideCode  = reader.IsDBNull(4) ? null : reader.GetString(4),
+                ViewName   = reader.IsDBNull(5) ? null : reader.GetString(5),
+                FilterJson = reader.IsDBNull(6) ? null : reader.GetString(6),
+                IsRequired = reader.GetBoolean(7),
+                FormatJson = reader.IsDBNull(8) ? null : reader.GetString(8),
+                IsActive   = reader.GetBoolean(9),
+                SortOrder  = reader.GetInt32(10),
+                CreatedAt  = reader.GetDateTime(11),
+                UpdatedAt  = reader.GetDateTime(12)
             });
         }
         return result;

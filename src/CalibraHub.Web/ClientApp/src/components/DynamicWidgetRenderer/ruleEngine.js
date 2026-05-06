@@ -166,7 +166,7 @@ export function buildRuleGraph(widgets) {
     var rules = w2.rules
     if (!rules) continue
 
-    var entry = { _fexpr: null, _vexpr: null, _dexpr: null }
+    var entry = { _fexpr: null, _vexpr: null, _dexpr: null, _rexpr: null }
     var allVars = new Set()
 
     function parseSlot(key, src, errLabel) {
@@ -197,8 +197,9 @@ export function buildRuleGraph(widgets) {
     entry._fexpr = parseSlot('_fexpr', rules.formula,    'formula')
     entry._vexpr = parseSlot('_vexpr', rules.visibleIf,  'visibleIf')
     entry._dexpr = parseSlot('_dexpr', rules.disabledIf, 'disabledIf')
+    entry._rexpr = parseSlot('_rexpr', rules.requiredIf, 'requiredIf')
 
-    if (entry._fexpr || entry._vexpr || entry._dexpr) {
+    if (entry._fexpr || entry._vexpr || entry._dexpr || entry._rexpr) {
       parsed[w2.widgetId] = entry
       hasRules = true
 
@@ -322,6 +323,7 @@ export function recomputeAll(graph, inputValues) {
       values: Object.assign({}, inputValues),
       visibility: {},
       disabled: {},
+      required: {},
       errors: { __cycle: 'Sonsuz dongu: ' + graph.cycle.join(' → ') },
     }
   }
@@ -329,6 +331,7 @@ export function recomputeAll(graph, inputValues) {
   var values = Object.assign({}, inputValues)
   var visibility = {}
   var disabled = {}
+  var required = {}
   var errors = {}
 
   var iterations = 0
@@ -363,9 +366,14 @@ export function recomputeAll(graph, inputValues) {
       disabled[code] = dr.ok ? !!dr.value : false
       if (!dr.ok) errors[code] = (errors[code] || '') + ' disabledIf: ' + dr.error
     }
+    if (p._rexpr) {
+      var rr = evalSafe(p._rexpr, scope)
+      required[code] = rr.ok ? !!rr.value : false
+      if (!rr.ok) errors[code] = (errors[code] || '') + ' requiredIf: ' + rr.error
+    }
   }
 
-  return { values: values, visibility: visibility, disabled: disabled, errors: errors }
+  return { values: values, visibility: visibility, disabled: disabled, required: required, errors: errors }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -386,6 +394,7 @@ export function propagateChange(changedCode, newValue, graph, currentState) {
       values: v,
       visibility: currentState.visibility || {},
       disabled: currentState.disabled || {},
+      required: currentState.required || {},
       errors: currentState.errors || {},
     }
   }
@@ -394,6 +403,7 @@ export function propagateChange(changedCode, newValue, graph, currentState) {
   var values = Object.assign({}, currentState.values, { [changedCode]: newValue })
   var visibility = Object.assign({}, currentState.visibility || {})
   var disabled = Object.assign({}, currentState.disabled || {})
+  var required = Object.assign({}, currentState.required || {})
   var errors = Object.assign({}, currentState.errors || {})
   // Onceki bu widget'a ait hatalari temizle — yeni edit yeni sans
   delete errors[changedCode]
@@ -414,7 +424,7 @@ export function propagateChange(changedCode, newValue, graph, currentState) {
   }
 
   if (affected.size === 0) {
-    return { values: values, visibility: visibility, disabled: disabled, errors: errors }
+    return { values: values, visibility: visibility, disabled: disabled, required: required, errors: errors }
   }
 
   // 3) Topo siraya gore sadece etkilenen widget'lari recompute et
@@ -455,7 +465,12 @@ export function propagateChange(changedCode, newValue, graph, currentState) {
       disabled[code] = dr.ok ? !!dr.value : false
       if (!dr.ok) errors[code] = (errors[code] || '') + ' disabledIf: ' + dr.error
     }
+    if (p._rexpr) {
+      var rr = evalSafe(p._rexpr, scope)
+      required[code] = rr.ok ? !!rr.value : false
+      if (!rr.ok) errors[code] = (errors[code] || '') + ' requiredIf: ' + rr.error
+    }
   }
 
-  return { values: values, visibility: visibility, disabled: disabled, errors: errors }
+  return { values: values, visibility: visibility, disabled: disabled, required: required, errors: errors }
 }

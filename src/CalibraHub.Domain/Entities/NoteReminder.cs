@@ -13,8 +13,8 @@ public sealed class NoteReminder : Entity
     /// <summary>Tetiklenince nereye gonderilecek. Default: InApp.</summary>
     public ReminderDeliveryChannel DeliveryChannel { get; init; } = ReminderDeliveryChannel.InApp;
 
-    /// <summary>Hedef kullanici (NULL ise notun sahibine gider).</summary>
-    public Guid? TargetUserId { get; init; }
+    /// <summary>Hedef kullanicilar — bos ise notun sahibine gider, aksi halde listedeki her user'a.</summary>
+    public IReadOnlyCollection<Guid> TargetUserIds { get; init; } = Array.Empty<Guid>();
 
     public bool IsSent { get; private set; }
     public DateTime? SentAt { get; private set; }

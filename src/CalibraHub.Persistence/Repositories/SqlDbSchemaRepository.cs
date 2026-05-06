@@ -113,6 +113,23 @@ public sealed class SqlDbSchemaRepository : IDbSchemaRepository
         return list;
     }
 
+    public async Task<IReadOnlyList<string>> GetViewNamesAsync(CancellationToken cancellationToken)
+    {
+        var list = new List<string>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT s.name + '.' + v.name AS full_name
+              FROM sys.views v
+              INNER JOIN sys.schemas s ON s.schema_id = v.schema_id
+             WHERE v.is_ms_shipped = 0
+             ORDER BY s.name, v.name;
+            """;
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) list.Add(reader.GetString(0));
+        return list;
+    }
+
     private static async Task<long?> GetRowCountAsync(SqlConnection connection, string fullName, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();

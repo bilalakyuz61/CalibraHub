@@ -16,26 +16,36 @@ public static class UserAuthorizationCatalog
                 UserPermission.RejectDocuments,
                 UserPermission.ExportReports,
                 UserPermission.ViewReports,
-                UserPermission.DesignReports
+                UserPermission.DesignReports,
+                UserPermission.ViewDashboards,
+                UserPermission.DesignDashboards,
+                UserPermission.ManageWorkOrders,
+                UserPermission.ReleaseWorkOrders
             },
             [UserRole.Approver] = new[]
             {
                 UserPermission.ViewIncomingDocuments,
                 UserPermission.ApproveDocuments,
                 UserPermission.RejectDocuments,
-                UserPermission.ViewReports
+                UserPermission.ViewReports,
+                UserPermission.ViewDashboards
             },
             [UserRole.Operator] = new[]
             {
                 UserPermission.ViewIncomingDocuments,
-                UserPermission.ViewReports
+                UserPermission.ViewReports,
+                UserPermission.ViewDashboards,
+                UserPermission.ManageWorkOrders,
+                UserPermission.ReportProduction,
+                UserPermission.OperateMachine
             },
             [UserRole.Auditor] = new[]
             {
                 UserPermission.ViewIncomingDocuments,
                 UserPermission.ExportReports,
                 UserPermission.ViewAuditLogs,
-                UserPermission.ViewReports
+                UserPermission.ViewReports,
+                UserPermission.ViewDashboards
             }
         };
 
@@ -47,6 +57,26 @@ public static class UserAuthorizationCatalog
 
     public static bool IsPermissionAllowed(UserRole role, UserPermission permission) =>
         GetAllowedPermissions(role).Contains(permission);
+
+    // ClaimTypes.Role hem enum adi ("SystemAdmin") hem de Turkce label
+    // ("Sistem Yoneticisi") seklinde gelebilir. Iki formati da kabul eder.
+    public static bool TryParseRole(string? value, out UserRole role)
+    {
+        role = default;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        if (Enum.TryParse(value, ignoreCase: true, out role)) return true;
+
+        foreach (var candidate in Roles)
+        {
+            if (string.Equals(GetRoleLabel(candidate), value, StringComparison.OrdinalIgnoreCase))
+            {
+                role = candidate;
+                return true;
+            }
+        }
+        return false;
+    }
 
     public static string GetRoleLabel(UserRole role) =>
         role switch
@@ -74,6 +104,12 @@ public static class UserAuthorizationCatalog
             UserPermission.ViewReports => "Rapor Goruntuleme",
             UserPermission.DesignReports => "Rapor Tasarlama",
             UserPermission.ManageReports => "Rapor Yonetimi",
+            UserPermission.ViewDashboards => "Pano Goruntuleme",
+            UserPermission.DesignDashboards => "Pano Tasarlama",
+            UserPermission.ManageWorkOrders => "Is Emri Yonetimi",
+            UserPermission.ReleaseWorkOrders => "Is Emri Salma (Release)",
+            UserPermission.ReportProduction => "Uretim Hareketi Bildirme",
+            UserPermission.OperateMachine => "Makine Operatorlugu (Shop-Floor)",
             _ => permission.ToString()
         };
 }

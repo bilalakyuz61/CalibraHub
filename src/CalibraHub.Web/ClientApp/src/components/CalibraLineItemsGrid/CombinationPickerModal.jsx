@@ -38,6 +38,7 @@ export default function CombinationPickerModal(props) {
   var materialCode   = props.materialCode
   var materialName   = props.materialName || ''
   var currentCode    = props.currentCode
+  var currentId      = props.currentId != null ? props.currentId : null
   var currentDetails = Array.isArray(props.currentDetails) ? props.currentDetails : []
   var onApply        = props.onApply
   var onClose        = props.onClose
@@ -286,9 +287,19 @@ export default function CombinationPickerModal(props) {
               {materialName && (
                 <span style={{ marginLeft: 6 }}>{materialName}</span>
               )}
-              {currentCode && (
+              {(currentCode || currentId) && (
                 <span style={{ marginLeft: 10 }}>
-                  · Seçili: <strong style={{ color: '#a5b4fc' }}>{currentCode}</strong>
+                  · Seçili:{' '}
+                  {currentId ? (
+                    <span style={{
+                      fontFamily: "'JetBrains Mono','Consolas',monospace",
+                      fontSize: 9.5, fontWeight: 700,
+                      padding: '1px 6px', borderRadius: 5, marginRight: 6,
+                      background: 'rgba(99,102,241,.10)', color: '#a5b4fc',
+                      border: '1px solid rgba(99,102,241,.20)',
+                    }} title="Kombinasyon ID">#{currentId}</span>
+                  ) : null}
+                  <strong style={{ color: '#a5b4fc' }}>{currentCode}</strong>
                 </span>
               )}
             </div>
@@ -536,22 +547,7 @@ function ExistingTab(props) {
   var pendingDetails = props.pendingDetails
   var onDescriptionChange = props.onDescriptionChange
 
-  var [popup, setPopup] = useState(null)
   var [search, setSearch] = useState('')
-
-  var descInputStyle = {
-    padding: '4px 8px', borderRadius: 7,
-    background: isLight ? '#fff' : 'rgba(255,255,255,.04)',
-    border: '1px solid ' + (isLight ? '#e2e8f0' : 'rgba(255,255,255,.1)'),
-    color: textColor, fontSize: '.78rem', outline: 'none', width: '100%',
-    colorScheme: isLight ? 'light' : 'dark',
-  }
-
-  function openPopup(e, c) {
-    e.stopPropagation()
-    var rect = e.currentTarget.getBoundingClientRect()
-    setPopup({ combo: c, x: rect.left, y: rect.bottom + 4 })
-  }
 
   // Secili olan en uste, geri kalanlar orijinal sirada
   var sortedItems = (items || []).slice().sort(function(a, b) {
@@ -637,19 +633,11 @@ function ExistingTab(props) {
                               ? (isLight ? 'rgba(16,185,129,.1)' : 'rgba(16,185,129,.18)')
                               : 'transparent',
                         }}>
-                      <td style={{ padding: '5px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                        <span
-                          onClick={function(e) { openPopup(e, c) }}
-                          title="Özellikleri gör"
-                          style={{
-                            color: isCurrent
-                              ? (isLight ? '#059669' : '#6ee7b7')
-                              : (isLight ? '#4f46e5' : '#a5b4fc'),
-                            cursor: 'pointer',
-                            textDecoration: 'underline dotted',
-                            textUnderlineOffset: 2,
-                          }}
-                        >{c.code}</span>
+                      <td style={{ padding: '5px 8px', fontWeight: 700, whiteSpace: 'nowrap',
+                                   color: isCurrent
+                                     ? (isLight ? '#059669' : '#6ee7b7')
+                                     : (isLight ? '#4f46e5' : '#a5b4fc') }}>
+                        {c.code}
                       </td>
                       <td style={{ padding: '5px 8px', fontSize: '.75rem', color: mutedText }}>
                         {valuesSummary}
@@ -678,82 +666,52 @@ function ExistingTab(props) {
         </div>
       </div>
 
-      {/* Alt bolum: ozellik aciklamalari — sadece secim yapildiysa */}
-      {pendingDetails && pendingDetails.length > 0 && (
+      {/* Alt bolum: secili kombinasyonun ozellikleri (Ozellik | Deger) */}
+      <div style={{
+        flex: '0 0 auto',
+        maxHeight: '38%',
+        minHeight: 110,
+        overflowY: 'auto',
+        borderTop: '1px solid ' + panelBorder,
+        background: subSurface,
+        padding: '10px 14px',
+      }}>
         <div style={{
-          flex: 1,
-          minHeight: 0,
-          borderTop: '2px solid ' + panelBorder,
-          background: subSurface,
-          padding: '6px 14px 8px',
-          overflowY: 'auto',
+          fontSize: '.68rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '.04em', color: mutedText, marginBottom: 8,
         }}>
-          {pendingDetails.map(function(d, idx) {
-            return (
-              <div key={idx} style={{
-                display: 'grid',
-                gridTemplateColumns: '120px 140px 1fr',
-                gap: 8, alignItems: 'center',
-                padding: '2px 0',
-              }}>
-                <label style={{ fontSize: '.73rem', fontWeight: 600, color: mutedText, textAlign: 'right' }}>
-                  {d.featureName}
-                </label>
-                <div style={{ fontSize: '.73rem', color: textColor, paddingLeft: 4 }}>
-                  {d.valueName}
-                </div>
-                <input
-                  type="text"
-                  value={d.description || ''}
-                  onChange={function(e) { onDescriptionChange(idx, e.target.value) }}
-                  placeholder="Açıklama..."
-                  style={descInputStyle}
-                />
-              </div>
-            )
-          })}
+          {pendingCode ? ('Özellikler — ' + pendingCode) : 'Özellikler'}
         </div>
-      )}
-
-      {/* Kombinasyon detay popup */}
-      {popup && (
-        <div
-          onClick={function() { setPopup(null) }}
-          style={{ position: 'fixed', inset: 0, zIndex: 10100 }}
-        >
-          <div
-            onClick={function(e) { e.stopPropagation() }}
-            style={{
-              position: 'fixed',
-              top: Math.min(popup.y, window.innerHeight - 260),
-              left: Math.min(popup.x, window.innerWidth - 280),
-              zIndex: 10101,
-              background: panelBg,
-              border: '1px solid ' + panelBorder,
-              borderRadius: 10,
-              padding: '10px 14px',
-              minWidth: 220, maxWidth: 320,
-              boxShadow: '0 8px 32px rgba(0,0,0,.35)',
-            }}
-          >
-            <div style={{ fontSize: '.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: mutedText, marginBottom: 6 }}>
-              {popup.combo.code}
-            </div>
-            {(popup.combo.features || []).map(function(f, i) {
-              var desc = pendingCode === popup.combo.code && pendingDetails
-                ? (pendingDetails[i] ? pendingDetails[i].description : '')
-                : ''
-              return (
-                <div key={i} style={{ display: 'flex', gap: 6, padding: '2px 0', fontSize: '.78rem' }}>
-                  <span style={{ color: mutedText, flex: '0 0 auto' }}>{f.feature}:</span>
-                  <span style={{ color: textColor, fontWeight: 600 }}>{f.value}</span>
-                  {desc && <span style={{ color: mutedText, fontStyle: 'italic', marginLeft: 4 }}>{desc}</span>}
-                </div>
-              )
-            })}
+        {(!pendingDetails || pendingDetails.length === 0) ? (
+          <div style={{ fontSize: '.78rem', color: mutedText, fontStyle: 'italic' }}>
+            {pendingCode ? 'Bu kombinasyona bağlı özellik tanımlanmamış.' : 'Listeden bir kombinasyon seçin — özellikleri burada görünür.'}
           </div>
-        </div>
-      )}
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.8rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid ' + panelBorder }}>
+                <th style={{ padding: '4px 8px', textAlign: 'left', color: mutedText, fontSize: '.66rem', textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap', width: '38%' }}>Özellik</th>
+                <th style={{ padding: '4px 8px', textAlign: 'left', color: mutedText, fontSize: '.66rem', textTransform: 'uppercase', letterSpacing: '.04em' }}>Değer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingDetails.map(function(d, i) {
+                var valLabel = d.valueName || d.valueCode || '';
+                var valCode = d.valueCode && d.valueName && d.valueCode !== d.valueName ? d.valueCode : null;
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid ' + panelBorder }}>
+                    <td style={{ padding: '5px 8px', color: mutedText, whiteSpace: 'nowrap' }}>{d.featureName}</td>
+                    <td style={{ padding: '5px 8px', color: textColor, fontWeight: 600 }}>
+                      {valLabel}
+                      {valCode && <span style={{ color: mutedText, fontWeight: 400, marginLeft: 6, fontSize: '.74rem' }}>({valCode})</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   )
 }
@@ -804,17 +762,23 @@ function NewTab(props) {
   }
   var optionStyle = { background: selectBg, color: selectFg }
 
+  // Aciklama input'u icin daha kompakt stil — value select ile ayni satirda
+  var descStyle = Object.assign({}, inputStyle, { fontSize: '.78rem' })
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ fontSize: '.72rem', color: mutedText, marginBottom: 4 }}>
-        Her özellik için bir değer seçin. İstediğiniz özellikler için açıklama girebilirsiniz.
+        Her özellik için bir değer seçin ve isterseniz açıklama girin.
+        "Uygula" basildiginda ayni ozellik+deger setine sahip kombinasyon varsa otomatik o secilir;
+        yoksa yeni kombinasyon olusturulur ve girdiginiz aciklamalar satira yansir.
       </div>
+      {/* 3 kolon: etiket + deger secimi + aciklama (per-feature description geri eklendi) */}
       {features.map(function(f) {
         var sel = selections[f.featureId] || {}
         return (
           <div key={f.featureId} style={{
             display: 'grid',
-            gridTemplateColumns: '130px 180px 1fr',
+            gridTemplateColumns: '140px 1fr 1fr',
             gap: 10, alignItems: 'center',
             padding: '8px 0',
             borderBottom: '1px solid ' + panelBorder,
@@ -839,8 +803,8 @@ function NewTab(props) {
               type="text"
               value={sel.description || ''}
               onChange={function(e) { updateSel(f.featureId, { description: e.target.value }) }}
-              placeholder="Açıklama (opsiyonel)"
-              style={inputStyle}
+              placeholder="Açıklama (ops.)"
+              style={descStyle}
             />
           </div>
         )

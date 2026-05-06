@@ -30,9 +30,17 @@ public enum ScheduledTaskType
     FileTransfer = 3,
 
     /// <summary>
-    /// TCMB'den doviz kurlarini ceker ve exchange_rates tablosuna yazar.
+    /// TCMB'den doviz kurlarini ceker ve Exchange tablosuna yazar.
     /// Parametresiz — CurrencyService.UpdateRatesFromTcmbAsync icindeki hafta sonu/tatil
     /// fallback mantigi ile en yakin is gununun kurlarini bugune stamp eder.
     /// </summary>
     CurrencyRefresh = 4,
+
+    /// <summary>
+    /// DB view'ini sorgulayip sonucu rapor dosyasi (CSV/XLSX/PDF) olarak belirli mail
+    /// adreslerine gonderir.
+    /// Parameters: {"viewName":"vw_X","recipients":["a@b","c@d"],"format":"csv|xlsx|pdf",
+    /// "subject":"...","bodyText":"...","maxRows":10000}.
+    /// </summary>
+    ViewReport = 5,
 }

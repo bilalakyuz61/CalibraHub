@@ -1,0 +1,121 @@
+@model CalibraHub.Web.Models.Production.PersonnelViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Personel Tanımlamaları";
+    ViewData["FormCode"] = "PERSONNEL_EDIT";
+    ViewData["BodyClass"] = "page-personnel";
+    ViewData["DbInfo"] =
+        "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>Personnel</td><td style='padding:6px 8px;'>Üretim personeli (PIN/NFC kart, ünvan, departman, operatör flag)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>WorkOrderOperation</td><td style='padding:6px 8px;'>StartedByPersonnelId / CompletedByPersonnelId FK</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>User</td><td style='padding:6px 8px;'>Personnel.UserId opsiyonel link (sistem login varsa)</td></tr>"
+        + "</table>";
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = Model.BoardConfig != null
+        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
+        : "null";
+}
+
+@section Styles {
+<style>
+    .page-personnel .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-personnel .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-personnel .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-personnel .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@section Scripts {
+<script>
+(function() {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[Personnel] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayı Yenile</button>'
+            + '</div>';
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadı');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            console.log('[Personnel] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'personel');
+        } catch (ex) {
+            console.error('[Personnel] Mount exception:', ex);
+            showError('Mount hatası: ' + (ex.message || ex));
+        }
+    }
+
+    function loadCss() {
+        var prev = document.querySelector('link[data-personnel-smartboard]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = CSS_URL;
+        link.setAttribute('data-personnel-smartboard', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-personnel-smartboard]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-personnel-smartboard', '1');
+        script.onload = function() { setTimeout(cb, 0); };
+        script.onerror = function() {
+            console.error('[Personnel] Bundle script failed');
+            showError('Bundle yüklenemedi (network hatası)');
+        };
+        document.head.appendChild(script);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
+
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted) location.reload();
+    });
+})();
+</script>
+}

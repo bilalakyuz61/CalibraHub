@@ -25,7 +25,7 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT TOP (1) [id], [screen_code], [layout_json], [created_at], [updated_at]
+            SELECT TOP (1) [id], [screen_code], [layout_json], [Created], [Updated]
             FROM {_tableName}
             WHERE [screen_code] = @ScreenCode;
             """;
@@ -56,13 +56,13 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
                 UPDATE {_tableName}
                 SET
                     [layout_json] = @LayoutJson,
-                    [updated_at] = @UpdatedAt
+                    [Updated] = @UpdatedAt
                 WHERE [screen_code] = @ScreenCode;
             END
             ELSE
             BEGIN
                 INSERT INTO {_tableName}
-                    ([id], [screen_code], [layout_json], [created_at], [updated_at])
+                    ([id], [screen_code], [layout_json], [Created], [Updated])
                 VALUES
                     (@Id, @ScreenCode, @LayoutJson, @CreatedAt, @UpdatedAt);
             END;

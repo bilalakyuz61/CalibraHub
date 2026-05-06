@@ -28,6 +28,7 @@ public sealed class AdminManagementService : IAdminManagementService
     private readonly IPasswordHashService _passwordHashService;
     private readonly IIntegratorImportLogRepository _integratorImportLogRepository;
     private readonly ICompanyConnectionRegistry _companyConnectionRegistry;
+    private readonly IGrafanaProvisioningService _grafanaProvisioning;
 
     public AdminManagementService(
         IIntegratorDocumentClient integratorDocumentClient,
@@ -39,7 +40,8 @@ public sealed class AdminManagementService : IAdminManagementService
         IUserProfileRepository userProfileRepository,
         IPasswordHashService passwordHashService,
         IIntegratorImportLogRepository integratorImportLogRepository,
-        ICompanyConnectionRegistry companyConnectionRegistry)
+        ICompanyConnectionRegistry companyConnectionRegistry,
+        IGrafanaProvisioningService grafanaProvisioning)
     {
         _integratorDocumentClient = integratorDocumentClient;
         _integratorSettingsRepository = integratorSettingsRepository;
@@ -51,6 +53,7 @@ public sealed class AdminManagementService : IAdminManagementService
         _passwordHashService = passwordHashService;
         _integratorImportLogRepository = integratorImportLogRepository;
         _companyConnectionRegistry = companyConnectionRegistry;
+        _grafanaProvisioning = grafanaProvisioning;
     }
 
     public async Task<int> SaveCompanyAsync(
@@ -153,6 +156,19 @@ public sealed class AdminManagementService : IAdminManagementService
         }
 
         _companyConnectionRegistry.Set(savedId, connectionString);
+
+        // Grafana per-company org/datasource/dashboard provisioning. IsEnabled=false
+        // ise no-op; HTTP hatasi exception firlatmaz, sadece log yazar.
+        if (_grafanaProvisioning.IsEnabled)
+        {
+            var orgId = await _grafanaProvisioning.EnsureOrganizationAsync(savedId, name, cancellationToken);
+            if (orgId > 0 && !string.IsNullOrWhiteSpace(connectionString))
+            {
+                await _grafanaProvisioning.EnsureDataSourceAsync(orgId, name, connectionString, cancellationToken);
+                await _grafanaProvisioning.ProvisionDefaultDashboardsAsync(orgId, cancellationToken);
+            }
+        }
+
         return savedId;
     }
 
@@ -803,12 +819,184 @@ public sealed class AdminManagementService : IAdminManagementService
             DepartmentId = request.DepartmentId,
             SupervisorUserId = request.SupervisorUserId,
             Role = role,
-            Permissions = normalizedPermissions
+            Permissions = normalizedPermissions,
+            GrafanaRole = request.GrafanaRole
         };
         var password = string.IsNullOrWhiteSpace(request.Password) ? DefaultInitialPassword : request.Password;
         userProfile.SetPasswordHash(_passwordHashService.HashPassword(password));
 
         await _userProfileRepository.AddAsync(userProfile, cancellationToken);
+
+        // Grafana per-user provisioning: GrafanaRole set edilmis ve Grafana enabled ise
+        // kullaniciyi sirket org'una istenen rolde ekle. Idempotent — fail olursa
+        // exception firlatmaz, log'a gecer (CalibraHub akisi devam eder).
+        if (request.GrafanaRole.HasValue && _grafanaProvisioning.IsEnabled)
+        {
+            try
+            {
+                var orgId = await _grafanaProvisioning.EnsureOrganizationAsync(
+                    request.CompanyId, company.Name, cancellationToken);
+                if (orgId > 0)
+                {
+                    await _grafanaProvisioning.EnsureUserOrganizationMembershipAsync(
+                        orgId,
+                        userProfile.Email,        // username = email (yeni middleware ile uyumlu)
+                        userProfile.Email,
+                        userProfile.FullName,
+                        request.GrafanaRole.Value,
+                        cancellationToken);
+                }
+            }
+            catch
+            {
+                // Service-level fail — repository'e zaten yazildi, kullanici manuel olarak
+                // "Duzenle"den tekrar tetikleyebilir.
+            }
+        }
+    }
+
+    public async Task UpdateUserAsync(UpdateUserRequest request, CancellationToken cancellationToken)
+    {
+        var existing = await _userProfileRepository.GetByIdAsync(request.Id, cancellationToken);
+        if (existing is null)
+        {
+            throw new ArgumentException("Guncellenecek kullanici bulunamadi.");
+        }
+
+        var fullName = (request.FullName ?? string.Empty).Trim();
+        var email = (request.Email ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            throw new ArgumentException("Ad soyad zorunludur.");
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new ArgumentException("E-posta zorunludur.");
+        }
+
+        if (request.CompanyId <= 0)
+        {
+            throw new ArgumentException("Sirket secimi zorunludur.");
+        }
+
+        var company = await _companyDefinitionRepository.GetByIdAsync(request.CompanyId, cancellationToken);
+        if (company is null)
+        {
+            throw new ArgumentException("Secilen sirket bulunamadi.");
+        }
+
+        if (!company.IsActive)
+        {
+            throw new ArgumentException("Secilen sirket pasif durumda.");
+        }
+
+        var allUsers = await _userProfileRepository.GetAllAsync(cancellationToken);
+        if (allUsers.Any(x =>
+                x.Id != existing.Id &&
+                x.CompanyId == request.CompanyId &&
+                string.Equals(x.Email, email, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("Bu sirkette ayni e-posta ile kullanici zaten tanimli.");
+        }
+
+        // Şirket değişti ise yeni şirkette bir departman bulup ata; yoksa default YNT olustur.
+        var departmentId = existing.DepartmentId;
+        if (existing.CompanyId != request.CompanyId)
+        {
+            var departments = await _departmentRepository.GetAllAsync(cancellationToken);
+            var dept = departments.FirstOrDefault(x => x.CompanyId == request.CompanyId);
+            if (dept is null)
+            {
+                await CreateDepartmentAsync(
+                    new CreateDepartmentRequest(request.CompanyId, "YNT", "Yonetim"),
+                    cancellationToken);
+                departments = await _departmentRepository.GetAllAsync(cancellationToken);
+                dept = departments.First(x => x.CompanyId == request.CompanyId);
+            }
+            departmentId = dept.Id;
+        }
+
+        // GrafanaRole — request.SetGrafanaRole = true ise yeni deger kullanilir,
+        // false ise mevcut rol korunur (geriye uyumlu — eski caller'lari bozmaz).
+        var newGrafanaRole = request.SetGrafanaRole ? request.GrafanaRole : existing.GrafanaRole;
+
+        // Role / Permissions — request.SetRole = true ve Role != null ise yeni deger kullanilir,
+        // izinler de UserAuthorizationCatalog'tan turetilir. Aksi halde mevcut korunur.
+        var newRole = (request.SetRole && request.Role.HasValue) ? request.Role.Value : existing.Role;
+        var newPermissions = (request.SetRole && request.Role.HasValue)
+            ? UserAuthorizationCatalog.GetAllowedPermissions(request.Role.Value)
+            : existing.Permissions;
+
+        var updated = new UserProfile
+        {
+            Id = existing.Id,
+            CompanyId = request.CompanyId,
+            FullName = fullName,
+            Email = email,
+            EmployeeCode = existing.EmployeeCode,
+            DepartmentId = departmentId,
+            SupervisorUserId = existing.SupervisorUserId,
+            Role = newRole,
+            Permissions = newPermissions,
+            GrafanaRole = newGrafanaRole
+        };
+
+        // Private setter degerleri korunmasi icin yeniden uygula
+        var passwordHash = string.IsNullOrWhiteSpace(request.Password)
+            ? existing.PasswordHash
+            : _passwordHashService.HashPassword(request.Password);
+        updated.SetPasswordHash(passwordHash);
+        updated.SetInterfacePreferences(existing.LanguageCode, existing.ThemeCode);
+        updated.SetGridPreferencesJson(existing.GridPreferencesJson);
+        if (!existing.IsActive)
+        {
+            updated.Deactivate();
+        }
+
+        await _userProfileRepository.UpdateAsync(updated, cancellationToken);
+
+        // Grafana sync — sadece SetGrafanaRole = true ise tetikle (geriye uyumlu).
+        // Eski rol → Yeni rol kombinasyonlari:
+        //   NULL  → NULL    : no-op
+        //   NULL  → Editor  : EnsureUserOrganizationMembershipAsync (add)
+        //   Editor → Admin  : EnsureUserOrganizationMembershipAsync (rol update)
+        //   Editor → NULL   : RemoveUserFromOrganizationAsync (org'tan cikar)
+        if (request.SetGrafanaRole && _grafanaProvisioning.IsEnabled)
+        {
+            try
+            {
+                var orgId = await _grafanaProvisioning.EnsureOrganizationAsync(
+                    request.CompanyId, company.Name, cancellationToken);
+
+                if (orgId > 0)
+                {
+                    if (newGrafanaRole.HasValue)
+                    {
+                        // Add veya rol update — idempotent
+                        await _grafanaProvisioning.EnsureUserOrganizationMembershipAsync(
+                            orgId,
+                            email,                  // username = email
+                            email,
+                            fullName,
+                            newGrafanaRole.Value,
+                            cancellationToken);
+                    }
+                    else if (existing.GrafanaRole.HasValue)
+                    {
+                        // Eski rol vardi, yeni NULL → org'tan cikar
+                        await _grafanaProvisioning.RemoveUserFromOrganizationAsync(
+                            orgId, email, cancellationToken);
+                    }
+                }
+            }
+            catch
+            {
+                // Provisioning fail olursa exception firlatma — DB update yine
+                // de basarili. Kullanici "Duzenle"den tekrar tetikleyebilir.
+            }
+        }
     }
 
     private static (string Name, string BaseUrl, string CompanyTaxNumber, string Username, string Secret, int PollingIntervalSeconds, int MaxRecordsPerPull, int LogRetentionDays, bool IncludeReceivedDocumentsInPull, bool MarkDownloadedDocumentsAsReceived, bool IncludeIssuedEInvoicesInPull, bool IncludeIssuedEArchivesInPull, bool IncludeIssuedEDispatchesInPull)

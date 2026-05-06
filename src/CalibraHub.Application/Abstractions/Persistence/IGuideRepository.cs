@@ -7,7 +7,9 @@ namespace CalibraHub.Application.Abstractions.Persistence;
 /// SQL View tabanli jenerik rehber (Lookup) persistence arayuzu.
 ///
 /// Sorumluluklar:
-///   - GuideMas katalogu (tanim tablosu) CRUD
+///   - GuideMas metadata cache okuma (PR 3: admin CRUD kaldirildi — UI direkt fiziksel
+///     view'lar uzerinden calisiyor; GuideMas sadece startup auto-discovery ve
+///     runtime resolve icin metadata cache rolu)
 ///   - Dinamik SQL inşası ile SQL View uzerinde arama + sayfalama
 ///   - Tek value'dan display cozumleme (sayfa yukleme senaryosu)
 ///
@@ -17,7 +19,8 @@ namespace CalibraHub.Application.Abstractions.Persistence;
 /// </summary>
 public interface IGuideRepository
 {
-    Task<IReadOnlyCollection<GuideDefinition>> GetAllAsync(CancellationToken ct);
+    // PR 3: GetAllAsync kaldirildi — UI artik /api/guides/views uzerinden fiziksel
+    // view listesini kullaniyor (GuideMas catalog gereksiz).
     Task<GuideDefinition?> GetByCodeAsync(string guideCode, CancellationToken ct);
 
     /// <summary>
@@ -45,6 +48,22 @@ public interface IGuideRepository
         CancellationToken ct);
 
     /// <summary>
+    /// Belirli bir kolonun farkli (DISTINCT) degerlerini doner — distinct
+    /// filtre cipleri icin. SADECE GridColumnsJson icindeki kolonlar kabul edilir
+    /// (allowlist guvenligi). Sonuclar alfabetik siralanir, NULL/bos atilir,
+    /// max 200 satir doner (UI'i bogmamak icin).
+    ///
+    /// search non-empty ise CAST(...) COLLATE Turkish_CI_AI LIKE %search% filtresi
+    /// uygulanir — kullanici popover'in arama kutusuna yazinca alfabetik kuyrukta
+    /// kalmis degerler de bulunabilir.
+    /// </summary>
+    Task<IReadOnlyCollection<string>> GetDistinctValuesAsync(
+        GuideDefinition guide,
+        string column,
+        string? search,
+        CancellationToken ct);
+
+    /// <summary>
     /// DB'deki cbv_Guide_% pattern'ine uyan tum SQL view'lari listeler.
     /// Admin "Yeni Rehber" modalindaki "SQL View Kaynagi" dropdown'unu besler.
     /// Her view icin kolon listesi de doner — kolon dropdown'lari icin.
@@ -57,17 +76,8 @@ public interface IGuideRepository
     /// </summary>
     Task<IReadOnlyCollection<string>> GetViewColumnsAsync(string viewName, CancellationToken ct);
 
-    /// <summary>
-    /// Rehber ekle (Id=0) veya guncelle (Id>0).
-    /// GuideCode null ise GuideLabel'dan otomatik uretilir.
-    /// Donus: kayit Id'si.
-    /// </summary>
-    Task<int> UpsertAsync(UpsertGuideRequest request, CancellationToken ct);
-
-    /// <summary>
-    /// Rehberi soft-delete ile devre disi birak (IsActive=0).
-    /// </summary>
-    Task DeleteAsync(int id, CancellationToken ct);
+    // PR 3: UpsertAsync ve DeleteAsync kaldirildi — admin GuideMas CRUD UI
+    // gereksiz; GuideMas startup auto-discovery ile besleniyor (DiscoverAndRegisterGuidesAsync).
 
     /// <summary>
     /// Startup auto-discovery — sys.views uzerinden 'cbv_Guide_%' pattern'ine uyan
@@ -89,4 +99,26 @@ public interface IGuideRepository
     /// Donus: otomatik eklenmis yeni guide sayisi (log icin).
     /// </summary>
     Task<int> DiscoverAndRegisterGuidesAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Standart rehber kuralini tum GuideMas kayitlarina uygular: view'da
+    /// 'Code' kolonu varsa ValueColumn=Code, 'Name' kolonu varsa DisplayColumn=Name
+    /// olarak guncellenir. Idempotent — degisiklik yoksa UPDATE yazilmaz.
+    ///
+    /// Standart rehberlerde zorunlu kolonlar (Id/Code/Name+) oldugu icin tum
+    /// ekranlarda ayni davranis: rehberden secim → input'a Code, gorunume Name.
+    /// Discovery heuristic'i de yeni kayitlari ayni kurala uyarak ekler.
+    ///
+    /// Donus: guncellenen GuideMas kayit sayisi.
+    /// </summary>
+    Task<int> NormalizeStandardColumnsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Rehber bazli varsayilan WHERE filter fragment'ini guncelle.
+    /// Bu rehberin kullanildigi tum form alanlarinda runtime'da otomatik AND ile uygulanir.
+    /// guideCode hem GuideCode hem ViewName ile eslesir (GetByCodeAsync ile ayni mantik).
+    /// filterJson NULL veya bos ise filtre kaldirilir.
+    /// Donus: etkilenen kayit sayisi (0 = guide bulunamadi).
+    /// </summary>
+    Task<int> SetDefaultFilterAsync(string guideCode, string? filterJson, CancellationToken ct);
 }

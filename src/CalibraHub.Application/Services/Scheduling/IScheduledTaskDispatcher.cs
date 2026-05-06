@@ -1,14 +1,20 @@
+using CalibraHub.Domain.Enums;
+
 namespace CalibraHub.Application.Services.Scheduling;
 
 /// <summary>
-/// Web tarafindan manual "Run Now" tetiklemesi icin kullanilir.
-/// Gorev DB'den okunur, uygun executor bulunur, calistirilir ve run history yazilir.
-/// Web process Worker process'ten ayri calistigi icin her iki tarafta da implementation
-/// calisir — Web process'ten tetikle-et-an-and-return, gorev Worker'in polling'i ile
-/// normal akista tekrar calisabilir.
+/// Hem Web manual "Simdi Calistir" hem de Worker'in scheduler dispatch'i icin kullanilir.
+/// Oncul gorev (PrerequisiteTaskId) varsa once o calistirilir; oncul basarili olursa
+/// ana gorev calisir. Cycle detection runtime'da visit-set ile.
 /// </summary>
 public interface IScheduledTaskDispatcher
 {
-    /// <summary>Verilen gorevi hemen calistir. Trigger MANUAL olarak kaydedilir.</summary>
-    Task<(bool ok, string? message)> TriggerNowAsync(string code, CancellationToken cancellationToken);
+    /// <summary>
+    /// Verilen gorevi hemen calistir. Trigger varsayilan MANUAL — scheduler/polling
+    /// tetikleyecekse RunTrigger.Schedule gecmeli.
+    /// </summary>
+    Task<(bool ok, string? message)> TriggerNowAsync(
+        int taskId,
+        CancellationToken cancellationToken,
+        RunTrigger trigger = RunTrigger.Manual);
 }

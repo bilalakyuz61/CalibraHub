@@ -209,70 +209,18 @@ export default function Shell(props) {
   var [dirtyTabs, setDirtyTabs] = useState({}) // { tabKey: true }
   var iframeRefs = useRef({})
 
-  /* ── Bildirim dropdown + polling ─────────────
-     ReminderNotificationWorker her 60 sn'de bir bildirim uretebilir;
-     biz de 60 sn'de unread count'u tazeleyelim. Dropdown aciksa full list
-     yuklenir ve goruntulenir. */
-  var [notifOpen, setNotifOpen] = useState(false)
-  var [notifItems, setNotifItems] = useState([])
-  var [notifUnread, setNotifUnread] = useState(0)
-  var notifBtnRef = useRef(null)
-  var notifPanelRef = useRef(null)
+  /* ── Sidebar acik/kapali (kullanici tercihi, localStorage'a yazilir) ── */
+  var [sidebarOpen, setSidebarOpen] = useState(function() {
+    try {
+      var v = localStorage.getItem('calibra.sidebarOpen')
+      return v === null ? true : v === '1'
+    } catch (e) { return true }
+  })
+  useEffect(function() {
+    try { localStorage.setItem('calibra.sidebarOpen', sidebarOpen ? '1' : '0') } catch (e) { /* ignore */ }
+  }, [sidebarOpen])
+  function toggleSidebar() { setSidebarOpen(function(v) { return !v }) }
 
-  useEffect(function () {
-    // Baslangic + 60 sn polling
-    function refreshCount() {
-      notifApi.unreadCount().then(function (d) {
-        setNotifUnread((d && d.unreadCount) || 0)
-      })
-    }
-    refreshCount()
-    var tid = setInterval(refreshCount, 60000)
-    return function () { clearInterval(tid) }
-  }, [])
-
-  useEffect(function () {
-    if (!notifOpen) return
-    // Acildi — full listeyi cek
-    notifApi.list(30).then(function (d) {
-      setNotifItems((d && d.items) || [])
-      setNotifUnread((d && d.unreadCount) || 0)
-    })
-    function handleOutside(e) {
-      if (notifBtnRef.current && notifBtnRef.current.contains(e.target)) return
-      if (notifPanelRef.current && notifPanelRef.current.contains(e.target)) return
-      setNotifOpen(false)
-    }
-    document.addEventListener('mousedown', handleOutside)
-    return function () { document.removeEventListener('mousedown', handleOutside) }
-  }, [notifOpen])
-
-  function handleNotifClick(n) {
-    if (!n.isRead) {
-      notifApi.markRead(n.id)
-      setNotifItems(function (prev) { return prev.map(function (x) { return x.id === n.id ? { ...x, isRead: true } : x }) })
-      setNotifUnread(function (c) { return Math.max(0, c - 1) })
-    }
-    if (n.link) window.location.href = n.link
-  }
-
-  function handleMarkAllRead() {
-    notifApi.markAllRead()
-    setNotifItems(function (prev) { return prev.map(function (x) { return { ...x, isRead: true } }) })
-    setNotifUnread(0)
-  }
-
-  function formatNotifTime(iso) {
-    if (!iso) return ''
-    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso)
-    if (!m) return iso
-    var now = new Date()
-    var y = parseInt(m[1], 10), mo = parseInt(m[2], 10), d = parseInt(m[3], 10)
-    if (now.getFullYear() === y && (now.getMonth() + 1) === mo && now.getDate() === d) {
-      return m[4] + ':' + m[5]
-    }
-    return d + '.' + m[2] + '.' + y + ' ' + m[4] + ':' + m[5]
-  }
 
   /* ── Baglanti durumu izleme ──────────────────────────────────────
      Sunucu duser (ornek dotnet restart) tarayici iframe icinde
@@ -291,11 +239,12 @@ export default function Shell(props) {
     var cancelled = false
     var controller
 
+    var consecutiveFailures = 0  // 2+ ardisik fail bekle, kisa hiccup'larda offline deklare etme
     async function ping() {
       if (cancelled) return
       try {
         controller = new AbortController()
-        var timer = setTimeout(function () { controller.abort() }, 4000)
+        var timer = setTimeout(function () { controller.abort() }, 8000) // 8sn timeout — yavas server'a tolerans
         // Lightweight: HEAD istegi ile sadece baglanti kontrolu — body indirmez.
         // Any status (200/302/401) OK — sunucu cevap veriyorsa baglanti var.
         await fetch('/Home/Index', {
@@ -305,22 +254,22 @@ export default function Shell(props) {
           cache: 'no-store',
         })
         clearTimeout(timer)
+        consecutiveFailures = 0
         if (cancelled) return
         if (connectionLostRef.current) {
-          // Reconnect — iframe'leri reload et ve overlay'i kapat
+          // Reconnect — sadece overlay'i kapat, iframe reload YOK (kullanici state'i kaybolmasin)
           setReconnecting(true)
           setTimeout(function () {
             if (cancelled) return
-            Object.values(iframeRefs.current).forEach(function (el) {
-              try { if (el && el.src) el.src = el.src } catch (e) {}
-            })
             setConnectionLost(false)
             setReconnecting(false)
           }, 400)
         }
       } catch (e) {
         if (cancelled) return
-        if (!connectionLostRef.current) setConnectionLost(true)
+        consecutiveFailures += 1
+        // 2+ ardisik fail bekle — yalnizca tek seferlik yavas yanit/timeout offline saymasin
+        if (consecutiveFailures >= 2 && !connectionLostRef.current) setConnectionLost(true)
       }
     }
 
@@ -681,7 +630,8 @@ export default function Shell(props) {
         }}
       />
 
-      {/* Sol: Sidebar */}
+      {/* Sol: Sidebar — her zaman gorunur. Collapse sirasinda sadece search+nav
+          gizlenir; brand (CalibraHub Premium ERP) ve footer (v1.0.0) sabit kalir. */}
       <Sidebar
         isDark={isDark}
         menu={menu}
@@ -690,6 +640,8 @@ export default function Shell(props) {
         onToggleNode={toggleExpand}
         onSelectLeaf={openNodeAsTab}
         system={system}
+        onCollapse={toggleSidebar}
+        collapsed={!sidebarOpen}
       />
 
       {/* Sag: Ana alan */}
@@ -699,6 +651,8 @@ export default function Shell(props) {
           isDark={isDark}
           user={user}
           tabsCount={tabs.length}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={toggleSidebar}
           onProfileClick={function() { setProfileOpen(function(o) { return !o }); setOpenTabsOpen(false) }}
           onOpenTabsClick={function() { setOpenTabsOpen(function(o) { return !o }); setProfileOpen(false) }}
         />
@@ -770,6 +724,10 @@ export default function Shell(props) {
                   src={appendWorkspaceFlag(t.url)}
                   title={t.title}
                   className="absolute inset-0 w-full h-full border-0"
+                  // Üretim Terminali (kiosk) iframe içinden tam ekran isteyebilsin —
+                  // Permissions Policy: fullscreen + Web NFC + media (tablet sahasi).
+                  allow="fullscreen; nfc; microphone; camera"
+                  allowFullScreen
                   style={{
                     display: t.key === activeTabKey ? 'block' : 'none',
                     background: isDark ? '#0a0d17' : '#f8fafc',
@@ -1060,6 +1018,7 @@ function filterMenuTree(menu, term) {
 
 function Sidebar(props) {
   var isDark = props.isDark
+  var collapsed = !!props.collapsed
   var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
   var bgColor = isDark ? 'bg-[#0c0f1a]/70' : 'bg-white/70'
 
@@ -1074,15 +1033,26 @@ function Sidebar(props) {
   return (
     <aside
       className={
-        'relative z-10 flex flex-col w-[260px] flex-shrink-0 border-r backdrop-blur-xl transition-colors duration-500 ' +
+        'relative z-10 flex flex-col flex-shrink-0 border-r backdrop-blur-xl transition-colors duration-500 ' +
         borderColor + ' ' + bgColor
       }
-      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      style={{
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        overflow: 'hidden',
+        width: collapsed ? 64 : 260,
+      }}
     >
-      {/* Brand */}
-      <div className={'flex items-center gap-2.5 px-5 h-14 border-b ' + borderColor}>
+      {/* Brand — collapsed iken sadece logo + toggle (dikey), aksi halde
+          logo + isim + toggle (yatay). Calibra branding (logo) her durumda gorunur. */}
+      <div className={
+        'border-b flex-shrink-0 ' + borderColor + ' ' +
+        (collapsed
+          ? 'flex flex-col items-center gap-1.5 py-3'
+          : 'flex items-center gap-2.5 px-5 h-14')
+      }>
         <div
-          className="w-8 h-8 rounded-xl flex items-center justify-center"
+          className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{
             background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
             boxShadow: '0 6px 18px rgba(99,102,241,0.4)',
@@ -1090,86 +1060,112 @@ function Sidebar(props) {
         >
           <Sparkles size={15} className="text-white" strokeWidth={2.2} />
         </div>
-        <div className="flex-1 min-w-0">
-          <h1 className={'text-sm font-bold tracking-tight leading-tight ' + (isDark ? 'text-white' : 'text-slate-900')}>
-            CalibraHub
-          </h1>
-          <p className={'text-[10px] leading-tight ' + (isDark ? 'text-white/55' : 'text-slate-500')}>
-            Premium ERP
-          </p>
-        </div>
-      </div>
-
-      {/* Search — menuyu filtreler */}
-      <div className="px-3 pt-3 pb-1">
-        <div className="relative">
-          <Search
-            size={13}
-            className={'absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ' + (isDark ? 'text-white/50' : 'text-slate-400')}
-          />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={function(e) { setSearchTerm(e.target.value) }}
-            placeholder="Menude ara..."
-            style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
-            className={
-              'w-full pl-9 pr-8 py-1.5 rounded-lg text-[12px] transition-all focus:outline-none ' +
-              (isDark
-                ? 'bg-white/[0.04] border border-white/[0.08] text-white placeholder:text-white/50 focus:border-indigo-400/50 focus:bg-white/[0.06]'
-                : 'bg-white/70 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-indigo-400/60')
-            }
-          />
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={function() { setSearchTerm('') }}
-              className={
-                'absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded flex items-center justify-center transition-colors ' +
-                (isDark ? 'text-white/40 hover:text-white/80 hover:bg-white/10' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200')
-              }
-              title="Aramayi temizle"
-            >
-              <X size={10} strokeWidth={2.4} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <nav className="flex-1 overflow-y-auto py-2 px-3 smartcard-widgets-scroll">
-        {displayTree.length > 0 ? (
-          displayTree.map(function(node) {
-            return (
-              <SidebarNode
-                key={node.key}
-                node={node}
-                level={0}
-                isDark={isDark}
-                activeKey={props.activeKey}
-                expandedNodes={effectiveExpanded}
-                onToggleNode={props.onToggleNode}
-                onSelectLeaf={props.onSelectLeaf}
-              />
-            )
-          })
-        ) : (
-          <div className={'text-center py-6 text-[11px] ' + (isDark ? 'text-white/45' : 'text-slate-400')}>
-            <Search size={16} className="mx-auto mb-1.5 opacity-60" strokeWidth={1.5} />
-            <p>Eslesme bulunamadi</p>
+        {!collapsed && (
+          <div className="flex-1 min-w-0">
+            <h1 className={'text-sm font-bold tracking-tight leading-tight ' + (isDark ? 'text-white' : 'text-slate-900')}>
+              CalibraHub
+            </h1>
+            <p className={'text-[10px] leading-tight ' + (isDark ? 'text-white/55' : 'text-slate-500')}>
+              Premium ERP
+            </p>
           </div>
         )}
-      </nav>
+        {props.onCollapse && (
+          <button
+            onClick={props.onCollapse}
+            className={
+              'p-1.5 rounded-lg transition-colors flex-shrink-0 ' +
+              (isDark ? 'hover:bg-white/10 text-white/55 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
+            }
+            title={collapsed ? 'Menuyu goster' : 'Menuyu gizle'}
+            aria-label={collapsed ? 'Menuyu goster' : 'Menuyu gizle'}
+          >
+            {collapsed
+              ? <ChevronRight size={14} strokeWidth={2} />
+              : <ChevronLeft size={14} strokeWidth={2} />}
+          </button>
+        )}
+      </div>
 
-      <div className={'px-4 py-3 border-t ' + borderColor}>
-        <div className={'flex items-center gap-2 text-[10px] font-mono ' + (isDark ? 'text-white/55' : 'text-slate-500')}>
-          {props.system && props.system.company && (
-            <span className="flex items-center gap-1.5 truncate">
-              <Building2 size={11} className="flex-shrink-0" />
-              <span className="truncate">{props.system.company}</span>
-            </span>
+      {/* Search + Nav — sadece bu kisim collapse'a tabidir */}
+      {!collapsed && (
+        <div className="px-3 pt-3 pb-1 flex-shrink-0">
+          <div className="relative">
+            <Search
+              size={13}
+              className={'absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ' + (isDark ? 'text-white/50' : 'text-slate-400')}
+            />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={function(e) { setSearchTerm(e.target.value) }}
+              placeholder="Menude ara..."
+              style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+              className={
+                'w-full pl-9 pr-8 py-1.5 rounded-lg text-[12px] transition-all focus:outline-none ' +
+                (isDark
+                  ? 'bg-white/[0.04] border border-white/[0.08] text-white placeholder:text-white/50 focus:border-indigo-400/50 focus:bg-white/[0.06]'
+                  : 'bg-white/70 border border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-indigo-400/60')
+              }
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={function() { setSearchTerm('') }}
+                className={
+                  'absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded flex items-center justify-center transition-colors ' +
+                  (isDark ? 'text-white/40 hover:text-white/80 hover:bg-white/10' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200')
+                }
+                title="Aramayi temizle"
+              >
+                <X size={10} strokeWidth={2.4} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!collapsed && (
+        <nav className="flex-1 overflow-y-auto py-2 px-3 smartcard-widgets-scroll">
+          {displayTree.length > 0 ? (
+            displayTree.map(function(node) {
+              return (
+                <SidebarNode
+                  key={node.key}
+                  node={node}
+                  level={0}
+                  isDark={isDark}
+                  activeKey={props.activeKey}
+                  expandedNodes={effectiveExpanded}
+                  onToggleNode={props.onToggleNode}
+                  onSelectLeaf={props.onSelectLeaf}
+                />
+              )
+            })
+          ) : (
+            <div className={'text-center py-6 text-[11px] ' + (isDark ? 'text-white/45' : 'text-slate-400')}>
+              <Search size={16} className="mx-auto mb-1.5 opacity-60" strokeWidth={1.5} />
+              <p>Eslesme bulunamadi</p>
+            </div>
           )}
-          {props.system && props.system.company && (
-            <span className={isDark ? 'text-white/20' : 'text-slate-300'}>·</span>
+        </nav>
+      )}
+
+      {/* Footer — page footer gibi her zaman en altta sabit (mt-auto). Collapsed
+          iken sadece "v1.0.0" kompakt gorunur, dar moda sigsin. */}
+      <div className={'mt-auto border-t flex-shrink-0 ' + borderColor + ' ' +
+        (collapsed ? 'px-2 py-2.5' : 'px-4 py-3')}>
+        <div className={'flex items-center text-[10px] font-mono ' +
+          (isDark ? 'text-white/55' : 'text-slate-500') + ' ' +
+          (collapsed ? 'justify-center' : 'gap-2')}>
+          {!collapsed && props.system && props.system.company && (
+            <>
+              <span className="flex items-center gap-1.5 truncate">
+                <Building2 size={11} className="flex-shrink-0" />
+                <span className="truncate">{props.system.company}</span>
+              </span>
+              <span className={isDark ? 'text-white/20' : 'text-slate-300'}>·</span>
+            </>
           )}
           <span className="flex-shrink-0">v1.0.0</span>
         </div>
@@ -1197,7 +1193,10 @@ function SidebarNode(props) {
 
   // Cerceve (border) kaldirildi — dar sidebar'da kart gibi gorunen hat
   // yerine yalnizca arka plan opakligi ile aktif/hover durumu ayirt edilir.
-  var base = 'flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-sm font-medium cursor-pointer transition-all group'
+  // Top-level (level 0) ust kategori — biraz daha buyuk ve kalin.
+  var base = level === 0
+    ? 'flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-[15px] font-semibold cursor-pointer transition-all group'
+    : 'flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-sm font-medium cursor-pointer transition-all group'
   // Aktif menu item: yesil (acik konumdaki sayfayi vurgular)
   var variant = isActive
     ? (isDark
@@ -1216,13 +1215,13 @@ function SidebarNode(props) {
         style={{ marginLeft: level * 12, marginBottom: 2, userSelect: 'none', WebkitUserSelect: 'none' }}
       >
         <Icon
-          size={15}
+          size={level === 0 ? 17 : 15}
           strokeWidth={1.8}
           className={isActive
             ? (isDark ? 'text-emerald-300' : 'text-emerald-600')
             : (isDark ? 'text-white/40 group-hover:text-white/80' : 'text-slate-400 group-hover:text-slate-700')}
         />
-        <span className="flex-1 truncate text-[13px] select-none">{node.label}</span>
+        <span className={'flex-1 truncate select-none ' + (level === 0 ? 'text-[15px]' : 'text-[13px]')}>{node.label}</span>
         {hasChildren && (
           <motion.span
             animate={{ rotate: expanded ? 90 : 0 }}
@@ -1276,6 +1275,68 @@ function Header(props) {
   var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
   var bgColor = isDark ? 'bg-[#0a0d17]/70' : 'bg-white/70'
 
+  /* ── Bildirim dropdown + polling ─────────────
+     ReminderNotificationWorker her 60 sn'de bildirim uretebilir; unread
+     count'u da 60 sn'de tazeleyelim. Dropdown aciksa full list fetch. */
+  var [notifOpen, setNotifOpen] = useState(false)
+  var [notifItems, setNotifItems] = useState([])
+  var [notifUnread, setNotifUnread] = useState(0)
+  var notifBtnRef = useRef(null)
+  var notifPanelRef = useRef(null)
+
+  useEffect(function () {
+    function refreshCount() {
+      notifApi.unreadCount().then(function (d) {
+        setNotifUnread((d && d.unreadCount) || 0)
+      })
+    }
+    refreshCount()
+    var tid = setInterval(refreshCount, 60000)
+    return function () { clearInterval(tid) }
+  }, [])
+
+  useEffect(function () {
+    if (!notifOpen) return
+    notifApi.list(30).then(function (d) {
+      setNotifItems((d && d.items) || [])
+      setNotifUnread((d && d.unreadCount) || 0)
+    })
+    function handleOutside(e) {
+      if (notifBtnRef.current && notifBtnRef.current.contains(e.target)) return
+      if (notifPanelRef.current && notifPanelRef.current.contains(e.target)) return
+      setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return function () { document.removeEventListener('mousedown', handleOutside) }
+  }, [notifOpen])
+
+  function handleNotifClick(n) {
+    if (!n.isRead) {
+      notifApi.markRead(n.id)
+      setNotifItems(function (prev) { return prev.map(function (x) { return x.id === n.id ? { ...x, isRead: true } : x }) })
+      setNotifUnread(function (c) { return Math.max(0, c - 1) })
+    }
+    if (n.link) window.location.href = n.link
+  }
+
+  function handleMarkAllRead() {
+    notifApi.markAllRead()
+    setNotifItems(function (prev) { return prev.map(function (x) { return { ...x, isRead: true } }) })
+    setNotifUnread(0)
+  }
+
+  function formatNotifTime(iso) {
+    if (!iso) return ''
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(iso)
+    if (!m) return iso
+    var now = new Date()
+    var y = parseInt(m[1], 10), mo = parseInt(m[2], 10), d = parseInt(m[3], 10)
+    if (now.getFullYear() === y && (now.getMonth() + 1) === mo && now.getDate() === d) {
+      return m[4] + ':' + m[5]
+    }
+    return d + '.' + m[2] + '.' + y + ' ' + m[4] + ':' + m[5]
+  }
+
   return (
     <header
       className={
@@ -1283,20 +1344,114 @@ function Header(props) {
         borderColor + ' ' + bgColor
       }
     >
+      {/* Sidebar toggle butonu kaldirildi — sidebar'in kendi header'inda
+          (Brand kismi yaninda) zaten ChevronLeft/Right toggle butonu var. */}
+
       {/* Spacer — Bell + Profil saga yaslanir */}
       <div className="flex-1" />
 
       <div className="flex items-center gap-2">
-        <button
-          className={
-            'relative p-2 rounded-xl transition-colors ' +
-            (isDark ? 'hover:bg-white/5 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
-          }
-          title="Bildirimler"
-        >
-          <Bell size={15} strokeWidth={1.8} />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]" />
-        </button>
+        <div className="relative" ref={notifBtnRef}>
+          <button
+            onClick={function () { setNotifOpen(function (p) { return !p }) }}
+            className={
+              'relative p-2 rounded-xl transition-colors ' +
+              (isDark ? 'hover:bg-white/5 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
+            }
+            title={notifUnread > 0 ? (notifUnread + ' okunmamis bildirim') : 'Bildirimler'}
+          >
+            {notifUnread > 0 ? <BellRing size={15} strokeWidth={1.8} /> : <Bell size={15} strokeWidth={1.8} />}
+            {notifUnread > 0 && (
+              <span
+                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center"
+                style={{
+                  background: 'linear-gradient(135deg,#f43f5e,#e11d48)',
+                  color: '#fff',
+                  boxShadow: '0 2px 6px rgba(244,63,94,0.45)',
+                }}
+              >
+                {notifUnread > 99 ? '99+' : notifUnread}
+              </span>
+            )}
+          </button>
+          <AnimatePresence>
+            {notifOpen && (
+              <motion.div
+                ref={notifPanelRef}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+                className={
+                  'absolute right-0 mt-2 w-[360px] max-h-[480px] rounded-xl border overflow-hidden z-50 flex flex-col ' +
+                  (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
+                }
+                style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
+              >
+                <div className={'flex items-center justify-between px-4 py-3 border-b ' + (isDark ? 'border-white/10' : 'border-slate-100')}>
+                  <div className="flex items-center gap-2">
+                    <Bell size={14} />
+                    <span className="text-sm font-semibold">Bildirimler</span>
+                    {notifUnread > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-500">
+                        {notifUnread} yeni
+                      </span>
+                    )}
+                  </div>
+                  {notifUnread > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className={'text-[11px] px-2 py-1 rounded-md transition-colors inline-flex items-center gap-1 ' +
+                        (isDark ? 'hover:bg-white/10 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')}
+                    >
+                      <Check size={11} />
+                      Tumunu okundu say
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {notifItems.length === 0 && (
+                    <div className={'px-4 py-10 text-center text-[12px] italic ' + (isDark ? 'text-white/40' : 'text-slate-400')}>
+                      Bildirim yok.
+                    </div>
+                  )}
+                  {notifItems.map(function (n) {
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={function () { handleNotifClick(n) }}
+                        className={
+                          'px-4 py-3 cursor-pointer border-b transition-colors ' +
+                          (isDark ? 'border-white/5 hover:bg-white/5' : 'border-slate-100 hover:bg-slate-50') +
+                          (!n.isRead ? (isDark ? ' bg-indigo-500/5' : ' bg-indigo-50/60') : '')
+                        }
+                      >
+                        <div className="flex items-start gap-2">
+                          {!n.isRead && (
+                            <span className="w-1.5 h-1.5 mt-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.7)] flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className={'text-[12.5px] font-semibold leading-snug ' + (n.isRead ? (isDark ? 'text-white/70' : 'text-slate-600') : '')}>
+                              {n.title}
+                            </div>
+                            {n.body && (
+                              <div className={'text-[11px] mt-0.5 leading-snug line-clamp-2 ' + (isDark ? 'text-white/50' : 'text-slate-500')}>
+                                {n.body}
+                              </div>
+                            )}
+                            <div className={'text-[10px] mt-1 ' + (isDark ? 'text-white/35' : 'text-slate-400')}>
+                              {formatNotifTime(n.createdAt)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         <button
           onClick={props.onOpenTabsClick}
@@ -1780,7 +1935,7 @@ function TabBar(props) {
             onClick={function() { props.onTabClick(t.key) }}
             onMouseDown={function(e) { e.preventDefault() }}
             className={
-              'relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium cursor-pointer transition-all flex-shrink-0 max-w-[220px] select-none ' +
+              'relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium cursor-pointer transition-all flex-shrink-0 max-w-[220px] select-none ' +
               (isActive
                 ? (isDark ? 'text-white bg-white/[0.06]' : 'text-slate-900 bg-slate-100')
                 : (isDark ? 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'))

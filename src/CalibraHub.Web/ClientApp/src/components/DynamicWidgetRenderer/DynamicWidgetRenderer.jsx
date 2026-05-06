@@ -26,8 +26,11 @@ import { useState, useEffect, useImperativeHandle, forwardRef, useRef, useCallba
 import { Settings, X } from 'lucide-react'
 import { getRecord, saveRecord, guideResolve } from './dynamicWidgetService'
 import LookupFieldInput from './LookupFieldInput'
+import GuideListField from './GuideListField'
 import GridFieldInput from './GridFieldInput'
+import WidgetFieldShell from './WidgetFieldShell'
 import { buildRuleGraph, recomputeAll, propagateChange } from './ruleEngine'
+import { resolveTokens as resolveAllTokens } from '../../utils/fieldTokens'
 
 /* ── localStorage yardımcıları ─────────────────────────────── */
 function dwrStorageKey(formCode) { return 'dwrEnabled.' + formCode }
@@ -57,6 +60,26 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   var [loading, setLoading]   = useState(true)
   var [widgets, setWidgets]   = useState([])      // WidgetRenderDto[]
   var [values, setValues]     = useState({})      // { widgetCode: value }
+
+  // ── Global widget registry (Tip 1 sabit alan rehberlerinde widget alanlarina erisim icin) ──
+  // Sayfada DWR mount oldugunda window.__CALIBRA_WIDGETS__'a schema + values yansitilir.
+  // FixedFieldLookupBridge / GuideCustomizationModal @ dropdown bu registry'den
+  // "Widget Alanları" grubunu uretip {#widget.WCODE} secilebilir hale getirir.
+  // Runtime'da resolveTokens widget branch'i de bu registry'den canli degeri okur.
+  useEffect(function () {
+    if (typeof window === 'undefined') return undefined
+    var schema = (widgets || []).map(function (w) {
+      return { code: w.widgetCode, label: w.label || w.fieldLabel || w.widgetCode }
+    }).filter(function (s) { return !!s.code })
+    window.__CALIBRA_WIDGETS__ = { formCode: formCode, schema: schema, values: values || {} }
+    return function () {
+      // Sadece bu DWR yayini ise temizle (baska bir DWR mount olduysa onu bozma)
+      if (window.__CALIBRA_WIDGETS__ && window.__CALIBRA_WIDGETS__.formCode === formCode) {
+        delete window.__CALIBRA_WIDGETS__
+      }
+    }
+  }, [widgets, values, formCode])
+
   // Faz E — grid widget'lari icin her biri bir rows list state'i:
   // { [gridWidgetCode]: { childFormCode, rows: [{ recordId, values, displays? }] } }
   var [grids, setGrids]       = useState({})
@@ -67,10 +90,12 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   // Faz G — Rule Engine state'leri:
   //   visibility: { [code]: boolean }         — false ise widget UI'da gizlenir
   //   disabledMap: { [code]: boolean }        — true ise widget readonly
+  //   requiredMap: { [code]: boolean }        — true ise widget zorunlu (statik IsRequired'i override eder)
   //   ruleErrors: { [code]: string }          — widget altinda inline hata mesaji
   //   cycleError:  string | null              — mount-time cycle → form cizilmez
   var [visibility, setVisibility] = useState({})
   var [disabledMap, setDisabledMap] = useState({})
+  var [requiredMap, setRequiredMap] = useState({})
   var [ruleErrors, setRuleErrors] = useState({})
   var [cycleError, setCycleError] = useState(null)
   // Hangi widget'ların edit formunda görüneceği — localStorage'dan yükle
@@ -81,6 +106,12 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   // Zorunlu alan validasyonu — save denemesinde bos kalan zorunlu widgetId listesi.
   // handleChange'de temizlenir; save basarili olunca da sifirlanir.
   var [saveAttemptErrors, setSaveAttemptErrors] = useState([])
+  // Toast bildirimleri — save denemesinde bos zorunlu alanlar icin sag alt
+  // koseden cikar. Her item: { id, title, detail }. Auto-dismiss 4.5s.
+  var [requiredToasts, setRequiredToasts] = useState([])
+  function dismissToast(id) {
+    setRequiredToasts(function(prev) { return prev.filter(function(t) { return t.id !== id }) })
+  }
   // Graph ref — buildRuleGraph mount'ta cagrilir, keystroke'lar tek parsed AST'yi kullanir
   var ruleGraphRef = useRef(null)
   // State refs — handleChange useCallback stable kalmasi icin guncel state'i ref'ten okur
@@ -92,6 +123,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   var widgetsRef    = useRef([])
   var visibilityRef = useRef({})
   var disabledRef   = useRef({})
+  var requiredRef   = useRef({})
   var errorsRef     = useRef({})
   var [error, setError]       = useState(null)
   // activeRecordId — handle.reload() ile degisebilir
@@ -181,6 +213,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           setCycleError(null)
           if (graph.hasRules) {
             var patch = recomputeAll(graph, dict)
+            setRequiredMap(patch.required || {})
             setValues(patch.values)
             setVisibility(patch.visibility)
             setDisabledMap(patch.disabled)
@@ -195,11 +228,14 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           recordIdRef.current = activeRecordId
         }
 
-        // Lookup widget'lari icin display cozumleme — paralel fetch, hata sessiz.
+        // Rehber bagli widget'lar icin display cozumleme — paralel fetch, hata sessiz.
+        // Hem `lookup` hem `text+rehber` widget'lari kapsanir; ikisinde de
+        // metadata.guideCode dolu ve LookupFieldInput render edilir.
         // Guide yoksa / deger bos ise skipped.
         var lookupJobs = ws
           .filter(function (w) {
-            return String(w.dataType || '').toLowerCase() === 'lookup'
+            var dt = String(w.dataType || '').toLowerCase()
+            return (dt === 'lookup' || dt === 'text')
               && dict[w.widgetId]
               && w.metadata
               && w.metadata.guideCode
@@ -294,12 +330,17 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
       var currentGrids   = gridsRef.current
       var currentWidgets = widgetsRef.current
 
-      // Zorunlu alan validasyonu
+      // Zorunlu alan validasyonu — effective required:
+      //   statik IsRequired (widget formundaki toggle) VEYA
+      //   requiredIf kuralinin runtime'da true ettigi durum.
+      var currentRequired = requiredRef.current || {}
       var requiredErrors = []    // label listesi (hata mesaji icin)
       var requiredErrorIds = []  // widgetId listesi (gorsel hata icin)
       currentWidgets.forEach(function (w) {
-        if (!w.isRequired) return
-        if (String(w.dataType || '').toLowerCase() === 'group') return
+        var dt = String(w.dataType || '').toLowerCase()
+        if (dt === 'group' || dt === 'guide-list') return
+        var effReq = w.isRequired || currentRequired[w.widgetId] === true
+        if (!effReq) return
         var val = currentValues[w.widgetId]
         var isEmpty = val === null || val === undefined || val === ''
           || (Array.isArray(val) && val.length === 0)
@@ -309,7 +350,33 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
         }
       })
       if (requiredErrors.length > 0) {
-        setSaveAttemptErrors(requiredErrorIds)
+        // Shake animasyonunu yeniden tetiklemek icin: bir frame icin saveAttemptErrors'i
+        // bosalt → React class'i kaldirir → animation reset olur → sonraki tick'te
+        // yeniden setlenir → animation tekrar oynar. Aksi halde "is-invalid" zaten
+        // setli oldugu durumda animation tetiklenmez (className referans degismedikce).
+        setSaveAttemptErrors([])
+        var nextIds = requiredErrorIds.slice()
+        var nextLabels = requiredErrors.slice()
+        setTimeout(function() {
+          setSaveAttemptErrors(nextIds)
+          // Sag alt kose toast'lari — her bos zorunlu alan icin bir kart.
+          // Onceki listeyi temizle (eski hatalar duruyor olabilir), yenisini koy.
+          var stamp = Date.now()
+          var toasts = nextLabels.map(function(lbl, i) {
+            return {
+              id: 'req-' + stamp + '-' + i,
+              title: lbl,
+              detail: 'Bu alan zorunlu, lütfen doldurun.',
+            }
+          })
+          setRequiredToasts(toasts)
+          // Auto-dismiss 4.5s sonra
+          toasts.forEach(function(t) {
+            setTimeout(function() {
+              setRequiredToasts(function(prev) { return prev.filter(function(x) { return x.id !== t.id }) })
+            }, 4500)
+          })
+        }, 0)
         return Promise.resolve({
           success: false,
           message: 'Zorunlu alanlar bos birakilamaz: ' + requiredErrors.join(', '),
@@ -317,6 +384,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
         })
       }
       setSaveAttemptErrors([])
+      setRequiredToasts([])
       // Faz E — grids state'ini SaveRecordRequest shape'ine serialize et
       var gridsPayload = null
       var gridKeys = Object.keys(currentGrids || {})
@@ -339,11 +407,14 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
     validate: function () {
       var currentValues  = valuesRef.current
       var currentWidgets = widgetsRef.current
+      var currentRequired = requiredRef.current || {}
       var requiredErrors    = []
       var requiredErrorIds  = []
       currentWidgets.forEach(function (w) {
-        if (!w.isRequired) return
-        if (String(w.dataType || '').toLowerCase() === 'group') return
+        var dt = String(w.dataType || '').toLowerCase()
+        if (dt === 'group' || dt === 'guide-list') return
+        var effReq = w.isRequired || currentRequired[w.widgetId] === true
+        if (!effReq) return
         var val = currentValues[w.widgetId]
         var isEmpty = val === null || val === undefined || val === ''
           || (Array.isArray(val) && val.length === 0)
@@ -354,7 +425,8 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
       })
       // Kısıtlama kontrolleri (dolu değerler üzerinde)
       currentWidgets.forEach(function(w) {
-        if (String(w.dataType || '').toLowerCase() === 'group') return
+        var dtc = String(w.dataType || '').toLowerCase()
+        if (dtc === 'group' || dtc === 'guide-list') return
         // Aynı widget'a zaten isRequired hatası eklenmiş ise atla (duplicate önle)
         if (requiredErrorIds.indexOf(w.widgetId) !== -1) return
         var val = currentValues[w.widgetId]
@@ -389,10 +461,34 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
       })
 
       if (requiredErrors.length > 0) {
-        setSaveAttemptErrors(requiredErrorIds)
+        // save() ile ayni pattern: shake animasyonunu yeniden tetiklemek icin
+        // saveAttemptErrors'i bir frame icin bosalt → React class'i kaldirir
+        // → animation reset olur → sonraki tick'te yeniden setlenir.
+        // Toast'lar sag alt koseden cikar, 4.5s sonra otomatik kaybolur.
+        setSaveAttemptErrors([])
+        var nextIdsV = requiredErrorIds.slice()
+        var nextLabelsV = requiredErrors.slice()
+        setTimeout(function() {
+          setSaveAttemptErrors(nextIdsV)
+          var stamp = Date.now()
+          var toasts = nextLabelsV.map(function(lbl, i) {
+            return {
+              id: 'req-' + stamp + '-' + i,
+              title: lbl,
+              detail: 'Bu alan zorunlu, lütfen doldurun.',
+            }
+          })
+          setRequiredToasts(toasts)
+          toasts.forEach(function(t) {
+            setTimeout(function() {
+              setRequiredToasts(function(prev) { return prev.filter(function(x) { return x.id !== t.id }) })
+            }, 4500)
+          })
+        }, 0)
         return { valid: false, errors: requiredErrors, errorIds: requiredErrorIds }
       }
       setSaveAttemptErrors([])
+      setRequiredToasts([])
       return { valid: true, errors: [], errorIds: [] }
     },
     getValues: function () { return Object.assign({}, valuesRef.current) },
@@ -414,6 +510,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   useEffect(function () { widgetsRef.current    = widgets      }, [widgets])
   useEffect(function () { visibilityRef.current = visibility   }, [visibility])
   useEffect(function () { disabledRef.current   = disabledMap  }, [disabledMap])
+  useEffect(function () { requiredRef.current   = requiredMap  }, [requiredMap])
   useEffect(function () { errorsRef.current     = ruleErrors   }, [ruleErrors])
 
   // ── Value change handler ──
@@ -436,9 +533,11 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
       values: valuesRef.current,
       visibility: visibilityRef.current,
       disabled: disabledRef.current,
+      required: requiredRef.current,
       errors: errorsRef.current,
     }
     var patch = propagateChange(widgetCode, newValue, graph, currentState)
+    setRequiredMap(patch.required || {})
     setValues(patch.values)
     setVisibility(patch.visibility)
     setDisabledMap(patch.disabled)
@@ -506,7 +605,8 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   return (
     <div className={classPrefix + '-dyn-root'} data-widget-renderer>
 
-      {/* Grup'lara gore ayri kartlar */}
+      {/* Grup'lara gore ayri kartlar — `${classPrefix}-card` page chrome (cam efekti),
+          `wf-grid` ise widget renderer'in kendi 24-col grid'i. */}
       {groupWidgets.map(function (g) {
         var children = childrenByParent[g.id] || []
         if (children.length === 0) return null
@@ -518,7 +618,7 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
             <summary className={classPrefix + '-card-title'} style={{ cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
               {g.label}
             </summary>
-            <div className={classPrefix + '-grid-2'} style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 14 }}>
+            <div className="wf-grid" style={{ marginTop: 6 }}>
               {children.map(function (w) {
                 return renderField(w, values[w.widgetId], handleChange, classPrefix, displays, setDisplays, grids, setGrids, visibility, disabledMap, ruleErrors, saveAttemptErrors, values)
               })}
@@ -534,15 +634,41 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           data-dyn-group-id="__ungrouped"
           data-dyn-group-label="Genel"
           style={{ marginBottom: 16, borderRadius: 14, overflow: 'hidden' }}>
-          <summary className={classPrefix + '-card-title'} style={{ cursor: 'pointer', listStyle: 'none', userSelect: 'none' }}>
-            Genel
-          </summary>
-          <div className={classPrefix + '-grid-2'} style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 14 }}>
+          {/* Sol panel sekme navigasyonunda zaten "Genel" basligi gosterildigi icin
+              sagda tekrar etmiyoruz — sade gorunum. <details> open kalir cunku
+              icerik daima goruntulenmeli; <summary> tag'i HTML gerekligi sebebiyle
+              ekleniyor ama hidden. */}
+          <summary className={classPrefix + '-card-title'} style={{ display: 'none' }}>Genel</summary>
+          <div className="wf-grid" style={{ marginTop: 6 }}>
             {childrenByParent['__ungrouped'].map(function (w) {
               return renderField(w, values[w.widgetId], handleChange, classPrefix, displays, setDisplays, grids, setGrids, visibility, disabledMap, ruleErrors, saveAttemptErrors, values)
             })}
           </div>
         </details>
+      )}
+
+      {/* Sag alt kose toast bildirimleri — save denemesinde bos zorunlu alanlar.
+          Her bos alan icin tek kart; tikla X ile dismiss veya 4.5s sonra otomatik. */}
+      {requiredToasts.length > 0 && (
+        <div className="wf-toast-host" role="status" aria-live="polite">
+          {requiredToasts.map(function(t) {
+            return (
+              <div key={t.id} className="wf-toast">
+                <span className="wf-toast-icon" aria-hidden="true">!</span>
+                <div className="wf-toast-body">
+                  <div className="wf-toast-title">{t.title}</div>
+                  {t.detail && <div className="wf-toast-detail">{t.detail}</div>}
+                </div>
+                <button
+                  type="button"
+                  className="wf-toast-close"
+                  onClick={function() { dismissToast(t.id) }}
+                  aria-label="Kapat"
+                >×</button>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
@@ -600,22 +726,13 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
   var ruleErrorMsg = (ruleErrors && ruleErrors[w.widgetId]) || null
   // Zorunlu alan bos bırakıldıysa gorsel hata
   var hasReqError = Array.isArray(saveAttemptErrors) && saveAttemptErrors.indexOf(w.widgetId) !== -1
-  // is-invalid CSS sinifi — .mce-input.is-invalid { border:red; animation:mceShake }
+  // is-invalid CSS sinifi — .wf-input.is-invalid { border:red; box-shadow:red-ring }
   var reqCls = hasReqError ? ' is-invalid' : ''
 
   // Semantik renk coz — token yoksa null (renksiz, normal gorunum)
   var widgetColor = resolveWidgetColor(w, allValues)
 
-  var labelEl = (
-    <label
-      className={prefix + '-label'}
-      htmlFor={'dyn_' + w.widgetId}
-      style={widgetColor ? { color: widgetColor.label } : undefined}
-    >
-      {w.label}
-      {w.isRequired && <span style={{ color: '#f87171', marginLeft: 3, fontWeight: 700 }}>*</span>}
-    </label>
-  )
+  // Label artik WidgetFieldShell tarafindan uretiliyor (uc mod tek noktada).
 
   var inputEl = null
   switch (dt) {
@@ -624,27 +741,37 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
       if (textGuide) {
         // Text + rehber → lookup davranisi
         var textDisplay = (displays && displays[w.widgetId]) || ''
-        // Constraints resolve: {w_xxx} tokenlarini form degerlerinden coz
+        // Constraints resolve: iki paralel format
+        //  1) Legacy: `{w_xxx}` veya `{xxx}` (\w+) → allValues[xxx] (eski widget tokenleri)
+        //  2) Standart: `{#widget.WCODE}`, `{#sqCustomerId}` → fieldTokens.resolveTokens
+        // Iki regex cakismaz: `\w+` `#` ve `.` icermez; `{#...}` standart sadece nokta-prefiksli.
         var textConstraintsRaw = (w.metadata && w.metadata.constraints) || ''
         var resolvedConstraints = null
         if (textConstraintsRaw) {
           try {
             var cStr = typeof textConstraintsRaw === 'string' ? textConstraintsRaw : JSON.stringify(textConstraintsRaw)
-            // {w_xxx} tokenlarini degerlerle degistir
+            // 1) Legacy: {w_xxx} / {xxx}
             cStr = cStr.replace(/\{(\w+)\}/g, function(match, wid) {
               var v = allValues && allValues[wid]
               return v != null ? String(v) : ''
             })
+            // 2) Standart: {#widget.WCODE} + {#sqCustomerId} (DOM) — ortak resolveTokens
+            cStr = resolveAllTokens(cStr, { widgets: allValues || {} })
             resolvedConstraints = cStr
           } catch(e) { /* ignore */ }
         }
+        // guideConfig: GuideSettingsModal ile widget bazinda kaydedilen JSON
+        // ({ viewCode, columns:[{name,label,visible,distinct}], constraint })
+        var textGuideConfig = (w.metadata && w.metadata.guideConfig) || null
         inputEl = (
           <LookupFieldInput
             widgetId={w.widgetId}
             guideCode={textGuide}
+            guideConfig={textGuideConfig}
             value={value != null ? String(value) : ''}
             display={textDisplay}
             constraints={resolvedConstraints}
+            isInvalid={hasReqError}
             onPick={function (picked, disp) {
               onChange(w.widgetId, picked)
               if (setDisplays) {
@@ -663,7 +790,7 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
           <input
             id={'dyn_' + w.widgetId}
             type="text"
-            className={prefix + '-input' + reqCls}
+            className={'wf-input' + reqCls}
             data-widget-code={w.widgetId}
             value={value != null ? value : ''}
             onChange={function (e) { onChange(w.widgetId, e.target.value) }}
@@ -688,7 +815,7 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
             id={'dyn_' + w.widgetId}
             type="number"
             step={nStep}
-            className={prefix + '-input' + reqCls}
+            className={'wf-input' + reqCls}
             data-widget-code={w.widgetId}
             value={value != null && value !== '' ? value : ''}
             onChange={function (e) { onChange(w.widgetId, e.target.value) }}
@@ -708,7 +835,7 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
         <input
           id={'dyn_' + w.widgetId}
           type="date"
-          className={prefix + '-input' + reqCls}
+          className={'wf-input' + reqCls}
           data-widget-code={w.widgetId}
           value={dateVal}
           onChange={function (e) { onChange(w.widgetId, e.target.value) }}
@@ -727,7 +854,7 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
         <label
           htmlFor={'dyn_' + w.widgetId}
           data-widget-code={w.widgetId}
-          className={(booleanIsModern ? (prefix + '-input ') : '') + reqCls}
+          className={(booleanIsModern ? 'wf-input ' : '') + reqCls}
           style={Object.assign({
             display: 'inline-flex',
             alignItems: 'center',
@@ -791,7 +918,7 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
       inputEl = (
         <select
           id={'dyn_' + w.widgetId}
-          className={prefix + '-select' + reqCls}
+          className={'wf-select' + reqCls}
           data-widget-code={w.widgetId}
           value={value != null ? value : ''}
           onChange={function (e) { onChange(w.widgetId, e.target.value) }}
@@ -808,21 +935,11 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
         ? value
         : (typeof value === 'string' && value ? value.split(',') : [])
       // Chip / pill-tabanli coklu secim — native checkbox yerine klikli rozetler.
-      // Tutarli gorunum icin sqe/mce-input class'i ile cercevelenir (textbox gibi).
+      // wf-multicheck token uyumlu container (kendi bg/border/radius'u).
       inputEl = (
         <div
-          className={prefix + '-input ' + prefix + '-multicheck' + reqCls}
+          className={'wf-multicheck' + reqCls}
           data-widget-code={w.widgetId}
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-            minHeight: 36,
-            height: 'auto',
-            alignItems: 'center',
-            padding: '6px 10px',
-            boxSizing: 'border-box',
-          }}
         >
           {msOpts.map(function (o) {
             var isChecked = selected.indexOf(o) !== -1
@@ -879,7 +996,7 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
             )
           })}
           {msOpts.length === 0 && (
-            <span className={prefix + '-multicheck-empty'} style={{ fontSize: '0.78rem', opacity: 0.5 }}>
+            <span className="wf-multicheck-empty" style={{ fontSize: '0.78rem', opacity: 0.5 }}>
               Seçenek tanımlanmamış
             </span>
           )}
@@ -899,18 +1016,18 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
         : ''
       var linkDisabled = !hasLinkTpl || linkCurrent.length === 0
       inputEl = (
-        <div className={prefix + '-link-group'}>
+        <div className="wf-link-group">
           <input
             id={'dyn_' + w.widgetId}
             type="text"
-            className={prefix + '-input' + reqCls}
+            className={'wf-input' + reqCls}
             data-widget-code={w.widgetId}
             value={linkCurrent}
             onChange={function (e) { onChange(w.widgetId, e.target.value) }}
             placeholder={hasLinkTpl ? w.label : 'URL sablonu tanimlanmamis'}
           />
           <a
-            className={prefix + '-link-btn' + (linkDisabled ? ' is-disabled' : '')}
+            className={'wf-link-btn' + (linkDisabled ? ' is-disabled' : '')}
             href={linkDisabled ? undefined : linkHref}
             target="_blank"
             rel="noopener noreferrer"
@@ -927,16 +1044,71 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
       )
       break
     }
+    case 'guide-list': {
+      // displayScope: 'card' ise form'da render etme (SmartCard popup'a ozel).
+      // 'form' ise akordion default ACIK gelir; 'both' default kapali.
+      var glScope = String((w.metadata && w.metadata.displayScope) || 'both').toLowerCase()
+      if (glScope === 'card') return null
+      // Salt okunur akordion rehber listesi — kullanici secim yapmaz, DB'ye
+      // deger yazilmaz. WHERE constraint form alanlarindan token resolve ile
+      // runtime'da uretilir; akordion lazy fetch yapar.
+      // Constraint kaynagi: metadata.guideConfig (JSON string) → parse → .constraint
+      // GuideCustomizationModal serializeRawSql() ile [{rawSql,logic}] JSON yazar.
+      var glGuide = (w.metadata && w.metadata.guideCode) || ''
+      var glConfigRaw = (w.metadata && w.metadata.guideConfig) || null
+      var glConfig = null
+      try {
+        glConfig = (typeof glConfigRaw === 'string') ? JSON.parse(glConfigRaw) : glConfigRaw
+      } catch (e) { glConfig = null }
+      var glConstraintsRaw = (glConfig && glConfig.constraint) || ''
+      // Constraint, [{rawSql,logic}] JSON array string'i. Token resolve string
+      // uzerinde calistirilir — backend mergeConstraints yine JSON.parse eder.
+      var glResolvedConstraints = null
+      if (glConstraintsRaw) {
+        try {
+          var glStr = typeof glConstraintsRaw === 'string' ? glConstraintsRaw : JSON.stringify(glConstraintsRaw)
+          // Legacy: {w_xxx} / {xxx}
+          glStr = glStr.replace(/\{(\w+)\}/g, function(match, wid) {
+            var v = allValues && allValues[wid]
+            return v != null ? String(v) : ''
+          })
+          // Standart: {#widget.WCODE} / {#sqCustomerId} → fieldTokens.resolveTokens
+          glStr = resolveAllTokens(glStr, { widgets: allValues || {} })
+          glResolvedConstraints = glStr
+        } catch (e) { /* ignore */ }
+      }
+      // Akordion kendi <details><summary>'si ile baslik tasir; widget Shell'in
+      // label'i yerine direkt full-width div ile cikar.
+      // Form'da render edilen tum guide-list'ler default ACIK gelir (sandwich
+      // tiklamaya gerek yok). 'card' scope'ta zaten yukarida null donduk.
+      return (
+        <div key={key} className="wf-field wf-field--full" style={{ gridColumn: '1 / -1' }}>
+          <GuideListField
+            widgetId={w.widgetId}
+            label={w.label}
+            guideCode={glGuide}
+            guideConfig={glConfig}
+            constraints={glResolvedConstraints}
+            classPrefix={prefix}
+            alwaysOpen={true}
+          />
+        </div>
+      )
+    }
     case 'lookup': {
       // EAV lookup — LookupFieldInput tum UX'i yonetir:
       //   readonly input + search butonu → debounced arama + infinite scroll modal
       // Metadata'dan guideCode alinir; guideCode yoksa widget inactive gorunur.
       var guideCode = (w.metadata && w.metadata.guideCode) || ''
       var displayValue = (displays && displays[w.widgetId]) || ''
+      // guideConfig: GuideSettingsModal ile widget bazinda kaydedilen JSON
+      // ({ viewCode, columns:[{name,label,visible,distinct}], constraint })
+      var guideConfigStr = (w.metadata && w.metadata.guideConfig) || null
       inputEl = (
         <LookupFieldInput
           widgetId={w.widgetId}
           guideCode={guideCode}
+          guideConfig={guideConfigStr}
           value={value != null ? String(value) : ''}
           display={displayValue}
           onPick={function (picked, disp) {
@@ -962,8 +1134,8 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
       var childFormCode = (w.metadata && w.metadata.childFormCode) || ''
       var gridState = (grids && grids[w.widgetId]) || { childFormCode: childFormCode, rows: [] }
       return (
-        <div key={key} className={prefix + '-field ' + prefix + '-field--grid'} style={{ gridColumn: '1 / -1' }}>
-          <label className={prefix + '-label'}>{w.label}</label>
+        <div key={key} className="wf-field wf-field--full" style={{ gridColumn: '1 / -1' }}>
+          <label className="wf-label">{w.label}</label>
           <GridFieldInput
             widgetId={w.widgetId}
             label={w.label}
@@ -988,7 +1160,7 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
         <input
           id={'dyn_' + w.widgetId}
           type="text"
-          className={prefix + '-input' + reqCls}
+          className={'wf-input' + reqCls}
           data-widget-code={w.widgetId}
           value={value != null ? value : ''}
           onChange={function (e) { onChange(w.widgetId, e.target.value) }}
@@ -997,152 +1169,41 @@ function renderField(w, value, onChange, prefix, displays, setDisplays, grids, s
     }
   }
 
-  // isPlainField: grup wrapper olmadan sade label + input — yatay hizalı düzen.
-  // 12-col grid'de colSpan kadar yer kaplar (default 12 = tam satir). Plain field
-  // her zaman label solda + input sagda; span daraltildikca input sutunu daralir.
-  // Zorunlu hata: is-invalid sinifi input'a eklendi (reqCls ile), wrapper div yok.
-  var inputWithError = inputEl
-  // colSpan admin tanimindan gelir; 1-12 disinda plain field icin varsayilan 12.
-  var plainSpan = (typeof w.colSpan === 'number' && w.colSpan >= 1 && w.colSpan <= 12)
-    ? w.colSpan : 12
-
-  if (w.isPlainField) {
-    // Plain field: label HER ZAMAN solda, input sagda — dikey stack yok.
-    return (
-      <div
-        key={key}
-        style={Object.assign({
-          display: 'flex',
-          alignItems: 'center',
-          flexDirection: 'row',
-          gap: 12,
-          gridColumn: 'span ' + plainSpan,
-          minWidth: 0,
-          padding: '4px 0 4px 6px',
-        }, widgetColor ? {
-          borderLeft: '3px solid ' + widgetColor.border,
-          paddingLeft: 8,
-          borderRadius: '0 4px 4px 0',
-        } : {})}
-      >
-        <label
-          className={prefix + '-label'}
-          htmlFor={'dyn_' + w.widgetId}
-          style={{ width: 160, minWidth: 160, flexShrink: 0, textAlign: 'left', marginBottom: 0 }}
-        >
-          {w.label}
-          {w.isRequired && <span style={{ color: '#f87171', marginLeft: 3, fontWeight: 700 }}>*</span>}
-        </label>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {isDisabled ? (
-            <div className={prefix + '-field__readonly-wrap'} style={{ pointerEvents: 'none' }}>
-              {inputWithError}
-            </div>
-          ) : inputWithError}
-          {ruleErrorMsg && (
-            <div className={prefix + '-rule-error'}>{ruleErrorMsg}</div>
-          )}
-        </div>
-      </div>
-    )
+  // Modern label "isFilled" hesabi — Shell'e gecirilir, data-filled attribute icin.
+  // Boolean/multi-select/grid/lookup/dropdown/link/date... gibi her zaman dolu kabul edilen
+  // tipler true; text/number gibi tipler value'ya gore.
+  var modernDataType = String(w.dataType || '').toLowerCase()
+  var alwaysFilledTypes = ['boolean', 'multi-select', 'grid', 'lookup', 'dropdown', 'link',
+                            'date', 'datetime', 'datetime-local', 'time']
+  var isFilled
+  if (alwaysFilledTypes.indexOf(modernDataType) !== -1) {
+    isFilled = true
+  } else if (value == null) {
+    isFilled = false
+  } else if (typeof value === 'string') {
+    isFilled = value.trim() !== ''
+  } else if (Array.isArray(value)) {
+    isFilled = value.length > 0
+  } else {
+    isFilled = true
   }
 
-  // Faz G — field wrapper'a disabled/formula sinifi ekle, ruleError varsa inline metin goster
-  var wrapperCls = prefix + '-field'
-  if (isDisabled) wrapperCls += ' ' + prefix + '-field--readonly'
-  if (hasFormula) wrapperCls += ' ' + prefix + '-field--formula'
-  if (ruleErrorMsg) wrapperCls += ' ' + prefix + '-field--has-rule-error'
-
-  // colSpan — admin tanimindaki 12-col grid span degeri; 1-12 disinda varsayilan 6.
-  var safeColSpan = (typeof w.colSpan === 'number' && w.colSpan >= 1 && w.colSpan <= 12)
-    ? w.colSpan : 6
-  var spanStyle = { gridColumn: 'span ' + safeColSpan }
-
-  // labelStyle — 'modern' ise floating/outline label (input cercevesi UZERINDE,
-  // ust sinir cizgisini "keser"). Referans: Material Design Outlined Text Field.
-  // CSS: .calibra-modern-wrap + .calibra-modern-label (index.css'te tanimli).
-  // Case-insensitive check: eski / manuel girilmis "Modern" de calissin.
-  var isModernLabel = String(w.labelStyle || '').toLowerCase() === 'modern'
-  if (isModernLabel) {
-    // data-filled — label'in inside/floated durumunu belirler. Boolean, multi-select,
-    // grid, lookup gibi "her zaman dolu" tipler true; text/number/date gibi tipler
-    // value'ya bakar (bos string = false → label input icinde duracak).
-    var modernDataType = String(w.dataType || '').toLowerCase()
-    // Date/datetime/time her zaman floated — browser'in native "gg.aa.yyyy"
-    // placeholder'i ile gorsel cakisma yasanmasin diye.
-    var alwaysFilledTypes = ['boolean', 'multi-select', 'grid', 'lookup', 'dropdown', 'link',
-                              'date', 'datetime', 'datetime-local', 'time']
-    var isFilled
-    if (alwaysFilledTypes.indexOf(modernDataType) !== -1) {
-      isFilled = true
-    } else if (value == null) {
-      isFilled = false
-    } else if (typeof value === 'string') {
-      isFilled = value.trim() !== ''
-    } else if (Array.isArray(value)) {
-      isFilled = value.length > 0
-    } else {
-      isFilled = true
-    }
-    return (
-      <div
-        key={key}
-        className={wrapperCls + ' calibra-modern-wrap ' + prefix + '-field--modern'}
-        data-filled={isFilled ? 'true' : 'false'}
-        style={Object.assign({
-          // .sqe-field'in icsel 200px+1fr grid'ini ez; modern widget single-column.
-          // minWidth:0 → dar hucrelerde (span<6) icerik 200px'e dayanip cell'i
-          // gerdirmesin diye.
-          display: 'block',
-          gridTemplateColumns: 'none',
-          padding: '12px 0 0 0',
-          minWidth: 0,
-        }, spanStyle, widgetColor ? {
-          borderLeft: '3px solid ' + widgetColor.border,
-          paddingLeft: 8,
-          borderRadius: '0 6px 6px 0',
-        } : {})}
-      >
-        <span className="calibra-modern-label">
-          {w.label}
-          {w.isRequired && <span style={{ color: '#f87171', marginLeft: 3, fontWeight: 700 }}>*</span>}
-        </span>
-        {isDisabled ? (
-          <div className={prefix + '-field__readonly-wrap'} style={{ pointerEvents: 'none' }}>
-            {inputWithError}
-          </div>
-        ) : inputWithError}
-        {ruleErrorMsg && (
-          <div className={prefix + '-rule-error'}>{ruleErrorMsg}</div>
-        )}
-      </div>
-    )
-  }
-
-  // Klasik (standart) baslik: label HER ZAMAN solda, input sagda (ayni satir).
-  // Cell daraldiginda label truncate olur ama dikey stack'e DUSMEZ.
-  // (narrowStack davranisi kaldirildi — kullanici klasik'te label-solda istiyor.)
+  // Tek-yol-wrapper: WidgetFieldShell uc label modunu (standard/modern/inline)
+  // tek yerde yonetir. labelStyle, isPlainField, colSpan, isRequired Shell icinde
+  // resolve edilir. classPrefix readonly-wrap class adi icin (legacy uyumluluk).
   return (
-    <div
+    <WidgetFieldShell
       key={key}
-      className={wrapperCls}
-      style={Object.assign({ minWidth: 0 }, spanStyle, widgetColor ? {
-        borderLeft: '3px solid ' + widgetColor.border,
-        paddingLeft: 8,
-        borderRadius: '0 6px 6px 0',
-      } : {})}
+      widget={w}
+      isFilled={isFilled}
+      isDisabled={isDisabled}
+      hasFormula={hasFormula}
+      ruleErrorMsg={ruleErrorMsg}
+      widgetColor={widgetColor}
+      classPrefix={prefix}
     >
-      {labelEl}
-      {/* pointer-events: none + opacity CSS ile readonly efekti — tum input tipleri icin tek noktada */}
-      {isDisabled ? (
-        <div className={prefix + '-field__readonly-wrap'} style={{ pointerEvents: 'none' }}>
-          {inputWithError}
-        </div>
-      ) : inputWithError}
-      {ruleErrorMsg && (
-        <div className={prefix + '-rule-error'}>{ruleErrorMsg}</div>
-      )}
-    </div>
+      {inputEl}
+    </WidgetFieldShell>
   )
 }
 

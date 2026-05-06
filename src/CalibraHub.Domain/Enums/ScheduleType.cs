@@ -32,4 +32,16 @@ public enum ScheduleType
     /// Sadece manuel tetiklenir, otomatik calismaz (Expression ignore edilir).
     /// </summary>
     Manual = 4,
+
+    /// <summary>
+    /// Haftanin belirli gunleri, belirli saatte. Expression: "HH:mm|d1,d2,..."
+    /// gunler 0=Pazar..6=Cumartesi (DayOfWeek). Ornek: "09:00|1,3,5" = pzt/cars/cuma 09:00.
+    /// </summary>
+    WeeklyOnDays = 5,
+
+    /// <summary>
+    /// Ayin belirli gunleri, belirli saatte. Expression: "HH:mm|d1,d2,..."
+    /// gunler 1..31. Ornek: "10:00|1,15" = her ayin 1 ve 15'inde 10:00.
+    /// </summary>
+    MonthlyOnDays = 6,
 }

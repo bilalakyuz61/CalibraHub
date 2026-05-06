@@ -23,7 +23,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
         var list = new List<Currency>();
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [id],[code],[name],[symbol],[is_active],[created_at],[updated_at] FROM {_table} ORDER BY [code];";
+        cmd.CommandText = $"SELECT [id],[code],[name],[symbol],[is_active],[Created],[Updated] FROM {_table} ORDER BY [code];";
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(Map(r));
         return list;
@@ -33,7 +33,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"SELECT [id],[code],[name],[symbol],[is_active],[created_at],[updated_at] FROM {_table} WHERE [id] = @Id;";
+        cmd.CommandText = $"SELECT [id],[code],[name],[symbol],[is_active],[Created],[Updated] FROM {_table} WHERE [id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         return await r.ReadAsync(ct) ? Map(r) : null;
@@ -44,7 +44,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_table} ([code],[name],[symbol],[is_active],[created_at],[updated_at])
+            INSERT INTO {_table} ([code],[name],[symbol],[is_active],[Created],[Updated])
             VALUES (@Code, @Name, @Symbol, @IsActive, GETDATE(), GETDATE());
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
@@ -59,7 +59,7 @@ public sealed class SqlCurrencyRepository : ICurrencyRepository
     {
         await using var conn = await _connectionFactory.OpenSystemConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [code]=@Code,[name]=@Name,[symbol]=@Symbol,[is_active]=@IsActive,[updated_at]=GETDATE() WHERE [id]=@Id;";
+        cmd.CommandText = $"UPDATE {_table} SET [code]=@Code,[name]=@Name,[symbol]=@Symbol,[is_active]=@IsActive,[Updated]=GETDATE() WHERE [id]=@Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", entity.Id));
         cmd.Parameters.Add(new SqlParameter("@Code", entity.Code));
         cmd.Parameters.Add(new SqlParameter("@Name", entity.Name));

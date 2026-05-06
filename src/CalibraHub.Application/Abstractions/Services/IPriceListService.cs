@@ -11,8 +11,9 @@ public interface IPriceListService
     Task<(bool Success, string? Error)> UpdateGroupAsync(UpdatePriceGroupRequest request, CancellationToken ct);
     Task<(bool Success, string? Error)> DeleteGroupAsync(int id, CancellationToken ct);
 
-    // Fiyat Kalemleri
-    Task<IReadOnlyCollection<PriceListDto>> GetEntriesByGroupAsync(int groupId, CancellationToken ct);
+    // Fiyat Kalemleri — server-side pagination + filter
+    Task<PagedPriceListResult> GetEntriesByGroupAsync(
+        int groupId, PriceListFilter filter, CancellationToken ct);
     Task<(bool Success, string? Error, int? Id)> SaveEntryAsync(SavePriceListRequest request, CancellationToken ct);
     Task<(bool Success, string? Error)> DeleteEntryAsync(int id, CancellationToken ct);
 

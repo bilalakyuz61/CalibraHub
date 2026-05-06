@@ -6,6 +6,20 @@ public interface IDocumentService
 {
     Task<IReadOnlyCollection<DocumentListItemDto>> GetQuotesAsync(string? search, string? status, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentListItemDto>> GetQuotesByContactAsync(int contactId, CancellationToken ct);
+
+    /// <summary>Belge tipi kodu ile filtrelenmis liste — orn. "satis_siparisi" siparis ekrani icin.</summary>
+    Task<IReadOnlyCollection<DocumentListItemDto>> GetByTypeAsync(string typeCode, string? search, string? status, CancellationToken ct);
+
+    /// <summary>Siparise donusturulebilir teklifleri filtrele — modal listesi icin.</summary>
+    Task<IReadOnlyCollection<DocumentListItemDto>> GetConvertibleQuotesAsync(
+        DateTime? fromDate, DateTime? toDate, int? contactId, string? search, CancellationToken ct);
+
+    /// <summary>
+    /// Secili teklifleri cari bazinda gruplayip her cari icin tek bir siparis (Document, type=satis_siparisi) uretir.
+    /// Kaynak teklifin durumu Converted'a geciler, document_source koprusu kayit eklenir.
+    /// </summary>
+    Task<CreateOrdersFromQuotesResult> CreateOrdersFromQuotesAsync(
+        CreateOrdersFromQuotesRequest req, string? createdBy, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentListItemDto>> GetMovementsByContactAsync(int contactId, int? documentTypeId, DateTime? fromDate, DateTime? toDate, CancellationToken ct);
     Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct);

@@ -35,7 +35,8 @@ public interface IFieldSettingRepository
 
     /// <summary>
     /// Alan kesfi: BaseTable uzerinden INFORMATION_SCHEMA.COLUMNS sorgusu.
-    /// Donen kolon adlari zaten FldSet'te tanimli olanlari haric tutar.
+    /// includeMapped=false (default): FldSet'te tanimli olanlari haric tutar (eslestirme sayfasi).
+    /// includeMapped=true: tum kolonlari doner (Alan Rehberi widget tanim formundaki rehber kisiti).
     /// </summary>
-    Task<IReadOnlyCollection<string>> DiscoverFieldsAsync(int formId, CancellationToken ct);
+    Task<IReadOnlyCollection<string>> DiscoverFieldsAsync(int formId, bool includeMapped, CancellationToken ct);
 }

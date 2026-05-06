@@ -171,7 +171,54 @@ export default function WidgetRegistryCard(props) {
                 </span>
               </>
             )}
+            {/* Modern etiket tipi rozeti */}
+            {field.labelStyle === 'modern' && (
+              <span
+                className="text-[9px] font-bold px-1.5 py-px rounded-full uppercase tracking-wider flex-shrink-0"
+                style={{
+                  background: 'rgba(99, 102, 241, 0.12)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  color: '#a5b4fc',
+                }}
+                title="Başlık stili: Modern (floating label)"
+              >
+                Modern
+              </span>
+            )}
           </div>
+          {/* Genislik mini-preview — 24-col grid'deki span'i gorsel cubuk.
+              Kart yuksekligini artirmamak icin cok ince (3px). */}
+          {(function() {
+            var cs = parseInt(field.colSpan, 10)
+            if (isNaN(cs) || cs < 1) cs = 24
+            if (cs > 24) cs = 24
+            var pct = (cs / 24) * 100
+            return (
+              <div
+                className="mt-1 flex items-center gap-1.5"
+                title={'Genişlik: ' + cs + '/24 (' +
+                  (cs === 24 ? 'Tam satır' :
+                   cs === 18 ? '3/4' :
+                   cs === 16 ? '2/3' :
+                   cs === 12 ? '1/2' :
+                   cs === 8  ? '1/3' :
+                   cs === 6  ? '1/4' :
+                   cs === 4  ? '1/6' :
+                   cs === 3  ? '1/8' : cs + '/24') + ')'
+                }
+              >
+                <div className="flex-1 h-[3px] rounded-full overflow-hidden bg-slate-200/40 dark:bg-white/[0.05]">
+                  <div
+                    className="h-full bg-emerald-500 dark:bg-emerald-400/80 rounded-full transition-all"
+                    style={{ width: pct + '%' }}
+                  />
+                </div>
+                <span className="font-mono text-[9px] text-slate-400 dark:text-white/35 w-8 text-right flex-shrink-0">
+                  {cs}/24
+                </span>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Sag: Actions */}

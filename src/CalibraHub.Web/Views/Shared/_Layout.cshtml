@@ -219,6 +219,7 @@
       data-page-url="@currentUrl"
       data-page-title="@pageTitle"
       data-home-url="@homeUrl"
+      data-form-code="@(ViewData["FormCode"] as string ?? string.Empty)"
       data-page-tabs-enabled="@(tabsEnabled ? "1" : "0")">
 @if (shouldUseReactShell)
 {
@@ -518,6 +519,14 @@ else if (!isWorkspaceFrame)
 }
 else if (isWorkspaceFrame)
 {
+    @* Workspace iframe içinde anti-forgery token zorunlu — POST endpointleri
+       [ValidateAntiForgeryToken] ile korunduğu için JS handler'ları
+       document.querySelector('input[name="__RequestVerificationToken"]') ile
+       okur. Profil dropdown'u iframe'de render edilmediği için token'ı
+       burada hidden form ile garantiliyoruz. *@
+    <form id="workspaceAntiforgeryForm" style="display:none;">
+        @Html.AntiForgeryToken()
+    </form>
     <main class="app-content-area app-content-area--workspace-frame">
         @RenderBody()
     </main>
@@ -571,7 +580,7 @@ else if (!useDashboardShell)
                     <span>@profileCompany</span>
                 </div>
             }
-            <div class="status-item">v1.0.0</div>
+            <div class="status-item">v1.1.0</div>
         </div>
     </footer>
 }
@@ -700,6 +709,28 @@ else
         var sep = location.search ? '&' : '?';
         location.href = location.pathname + location.search + sep + '_t=' + Date.now();
     }
+
+    // Eski PWA/Service Worker temizleyici — tek seferlik, idempotent.
+    // Telefonlarda kalmis eski SW'lerden gelen "senkronizasyon tamamlandi"
+    // sistem bildirimlerini durdurmak icin sayfa yuklenir yuklenmez calisir.
+    (async function cleanupLegacyServiceWorker() {
+        try {
+            if (!('serviceWorker' in navigator)) return;
+            const regs = await navigator.serviceWorker.getRegistrations();
+            if (!regs || regs.length === 0) return;
+            for (const reg of regs) {
+                try {
+                    const sub = reg.pushManager && await reg.pushManager.getSubscription();
+                    if (sub) { try { await sub.unsubscribe(); } catch (_) {} }
+                } catch (_) {}
+                try { await reg.unregister(); } catch (_) {}
+            }
+            if ('caches' in window) {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            }
+        } catch (_) { /* sessiz kal */ }
+    })();
 </script>
 
 <script src="~/lib/jquery/dist/jquery.min.js"></script>

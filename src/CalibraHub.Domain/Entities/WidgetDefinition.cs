@@ -35,6 +35,13 @@ public sealed class WidgetDefinition
     public int SortOrder { get; init; }
     public string? OptionsJson { get; init; }
     public string? RulesJson { get; init; }
+    /// <summary>
+    /// DEPRECATED — yerine <see cref="LabelStyle"/> = "inline" kullanin. Kolon DB'de
+    /// korunuyor (eski okuyucular bozulmasin); renderer artik bu alana bakmaz,
+    /// yalnizca LabelStyle uzerinden karar verir. Mevcut IsPlainField=1 satirlari
+    /// kademeli olarak LabelStyle='inline' degerine migrate edilir
+    /// (CalibraDatabaseInitializer.cs icindeki idempotent UPDATE).
+    /// </summary>
     public bool IsPlainField { get; init; } = false;
     public bool IsRequired { get; init; } = false;
     public bool IsActive { get; set; } = true;
@@ -50,10 +57,11 @@ public sealed class WidgetDefinition
     /// </summary>
     public string? ColorValue { get; init; }
     /// <summary>
-    /// Form uzerinde kaplayacagi 12-kolonlu grid span'i (1-12).
-    /// Varsayilan 6 = 1/2 satir. Renderer CSS grid-column'a cevirir.
+    /// Form uzerinde kaplayacagi 24-kolonlu grid span'i (1-24).
+    /// Varsayilan 12 = 1/2 satir. Renderer CSS grid-column'a cevirir.
+    /// Daha hassas genislik ayari icin 12 yerine 24 kolon secildi.
     /// </summary>
-    public int ColSpan { get; init; } = 6;
+    public int ColSpan { get; init; } = 12;
     /// <summary>
     /// Etiket gorunum stili: "standard" (label input ustunde) veya
     /// "modern" (floating/outlined — label input cercevesi uzerinde).

@@ -83,6 +83,22 @@ public sealed class SetupUserInput
 
     [MinLength(8, ErrorMessage = "Sifre en az 8 karakter olmalidir.")]
     public string? Password { get; set; }
+
+    /// <summary>
+    /// CalibraHub yetki seviyesi: "Admin" / "SistemAdmin" / "User" (case-insensitive).
+    /// Mapping → UserRole enum:
+    ///   • "Admin"        → DepartmentManager (sirket admini, dashboards tasarlar, dokumanlari yonetir)
+    ///   • "SistemAdmin"  → SystemAdmin (tum yetkiler — admin@calibra.local gibi)
+    ///   • "User"         → Operator (temel goruntuleme yetkileri)
+    /// </summary>
+    public string? Role { get; set; }
+
+    /// <summary>
+    /// Grafana yetki seviyesi: NULL/empty = Grafana'ya eklenmez,
+    /// "Viewer" / "Designer" / "Admin" → ilgili rolde Calibra_{companyId} org'a eklenir.
+    /// Update sirasinda da uygulanir (mevcut rol farkli ise update, NULL'a inerse cikarilir).
+    /// </summary>
+    public string? GrafanaRole { get; set; }
 }
 
 public sealed class SetupUserViewModel

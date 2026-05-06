@@ -37,9 +37,9 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
             USING (SELECT @UserId AS [user_id], @Key AS [setting_key]) AS src
                 ON tgt.[user_id] = src.[user_id] AND tgt.[setting_key] = src.[setting_key]
             WHEN MATCHED THEN
-                UPDATE SET [setting_value] = @Value, [updated_at] = GETDATE()
+                UPDATE SET [setting_value] = @Value, [Updated] = GETDATE()
             WHEN NOT MATCHED THEN
-                INSERT ([id], [user_id], [setting_key], [setting_value], [updated_at])
+                INSERT ([id], [user_id], [setting_key], [setting_value], [Updated])
                 VALUES (NEWID(), @UserId, @Key, @Value, GETDATE());
             """;
         command.Parameters.Add(new SqlParameter("@UserId", userId));

@@ -9,14 +9,15 @@ namespace CalibraHub.Web.Controllers;
 /// <summary>
 /// SQL View tabanli jenerik Rehber (Lookup) HTTP endpoint'leri.
 ///
-///   GET    /api/guides                          → Rehber katalogu (liste)
+/// PR 3'te admin endpoint'leri (GET /, POST, DELETE) kaldirildi — GuideMas
+/// tablosu yonetimi artik gereksiz; UI direkt fiziksel view'lari kullaniyor.
+///
 ///   GET    /api/guides/views                    → cbv_Guide_% view listesi (form modalı için)
 ///   GET    /api/guides/views/{viewName}/columns → View'in kolon listesi (dinamik dropdown)
-///   POST   /api/guides                          → Yeni/güncelle rehber tanımı
-///   DELETE /api/guides/{id}                     → Soft-delete
-///   GET    /api/guides/{guideCode}/schema       → Rehber metadatası
-///   GET    /api/guides/{guideCode}              → Arama + sayfalama
+///   GET    /api/guides/{guideCode}/schema       → Rehber metadatası (guideCode VEYA viewName)
+///   GET    /api/guides/{guideCode}              → Arama + sayfalama (guideCode VEYA viewName)
 ///   GET    /api/guides/{guideCode}/resolve      → Tek value → display
+///   GET    /api/guides/{guideCode}/distinct/{column} → Distinct degerler (filtre cipleri)
 /// </summary>
 [ApiController]
 [Route("api/guides")]
@@ -31,23 +32,9 @@ public sealed class GuidesController : ControllerBase
         _guideRepository = guideRepository;
     }
 
-    // ──────────────────────────────────────────────────────
-    // Rehber Merkezi Admin API
-    // ──────────────────────────────────────────────────────
-
     /// <summary>
-    /// Tüm aktif rehberlerin kataloğu (liste sayfası için)
-    /// GET /api/guides
-    /// </summary>
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
-    {
-        var catalog = await _guideService.GetCatalogAsync(ct);
-        return Ok(catalog);
-    }
-
-    /// <summary>
-    /// DB'deki cbv_Guide_% view'larını listele (form modalı dropdown'u için)
+    /// DB'deki cbv_Guide_% view'larını listele (form modalı dropdown'u için).
+    /// PR 2'den itibaren UI'nin tek rehber kaynagi — duplikat YOK.
     /// GET /api/guides/views
     /// </summary>
     [HttpGet("views")]
@@ -89,62 +76,10 @@ public sealed class GuidesController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Rehber ekle (id=0) veya güncelle (id>0)
-    /// POST /api/guides
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> Upsert([FromBody] UpsertGuideRequest request, CancellationToken ct)
-    {
-        if (request == null)
-            return BadRequest(new { success = false, message = "Geçersiz istek." });
-
-        if (string.IsNullOrWhiteSpace(request.GuideLabel))
-            return BadRequest(new { success = false, message = "Rehber adı zorunlu." });
-        if (string.IsNullOrWhiteSpace(request.ViewName))
-            return BadRequest(new { success = false, message = "SQL View adı zorunlu." });
-        if (string.IsNullOrWhiteSpace(request.ValueColumn))
-            return BadRequest(new { success = false, message = "Değer kolonu zorunlu." });
-        if (string.IsNullOrWhiteSpace(request.DisplayColumn))
-            return BadRequest(new { success = false, message = "Gösterim kolonu zorunlu." });
-
-        try
-        {
-            var id = await _guideRepository.UpsertAsync(request, ct);
-            return Ok(new { success = true, id });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { success = false, message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Rehberi devre dışı bırak (soft-delete)
-    /// DELETE /api/guides/{id}
-    /// </summary>
-    [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id, CancellationToken ct)
-    {
-        if (id <= 0) return BadRequest(new { success = false, message = "Geçersiz id." });
-
-        try
-        {
-            await _guideRepository.DeleteAsync(id, ct);
-            return Ok(new { success = true });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { success = false, message = ex.Message });
-        }
-    }
-
     // ──────────────────────────────────────────────────────
     // Runtime Lookup API (widget renderer tarafından kullanılır)
+    // {guideCode} parametresi GuideMas.GuideCode VEYA GuideMas.ViewName kabul eder —
+    // SqlGuideRepository.GetByCodeAsync iki kolonda da eslestirme yapar.
     // ──────────────────────────────────────────────────────
 
     [HttpGet("{guideCode}/schema")]
@@ -154,6 +89,35 @@ public sealed class GuidesController : ControllerBase
         if (schema == null)
             return NotFound(new { success = false, message = $"Rehber bulunamadi: '{guideCode}'" });
         return Ok(schema);
+    }
+
+    public sealed record SetGuideDefaultFilterRequest(string? Filter);
+
+    /// <summary>
+    /// Rehber bazli varsayilan WHERE filter — bu rehberin kullanildigi tum form
+    /// alanlarinda runtime'da otomatik AND ile uygulanir. Filter NULL/bos ise filtre
+    /// kaldirilir.
+    /// PUT /api/guides/{guideCode}/default-filter   body: { "filter": "TYPID IN (2,3)" }
+    /// </summary>
+    [HttpPut("{guideCode}/default-filter")]
+    public async Task<IActionResult> SetDefaultFilter(
+        string guideCode,
+        [FromBody] SetGuideDefaultFilterRequest body,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(guideCode))
+            return BadRequest(new { success = false, message = "Rehber kodu bos olamaz." });
+        try
+        {
+            var affected = await _guideService.SetDefaultFilterAsync(guideCode, body?.Filter, ct);
+            if (affected == 0)
+                return NotFound(new { success = false, message = $"Rehber bulunamadi: '{guideCode}'" });
+            return Ok(new { success = true, affected });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpGet("{guideCode}/resolve")]
@@ -177,6 +141,44 @@ public sealed class GuidesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Bir kolonun DISTINCT degerlerini doner (max 200) — runtime'da
+    /// rehber popup'inda distinct filtre cipleri icin.
+    /// GET /api/guides/{guideCode}/distinct/{column}?q=...
+    /// q dolu ise sunucu-tarafi LIKE filtresi (Turkish_CI_AI) uygulanir.
+    /// </summary>
+    [HttpGet("{guideCode}/distinct/{column}")]
+    public async Task<IActionResult> GetDistinct(
+        string guideCode,
+        string column,
+        [FromQuery] string? q,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(column))
+            return BadRequest(new { success = false, message = "column parametresi bos olamaz." });
+        try
+        {
+            var values = await _guideService.GetDistinctValuesAsync(guideCode, column, q, ct);
+            if (values == null)
+                return NotFound(new { success = false, message = $"Rehber bulunamadi: '{guideCode}'" });
+            return Ok(values);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (Microsoft.Data.SqlClient.SqlException sqlEx)
+        {
+            Console.Error.WriteLine($"[GuideDistinct] SQL hatasi (guide='{guideCode}', col='{column}'): {sqlEx.Number} {sqlEx.Message}");
+            return StatusCode(500, new { success = false, message = sqlEx.Message });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[GuideDistinct] Hata: {ex}");
+            return StatusCode(500, new { success = false, message = ex.Message });
+        }
+    }
+
     [HttpGet("{guideCode}")]
     public async Task<IActionResult> Search(
         string guideCode,
@@ -190,7 +192,10 @@ public sealed class GuidesController : ControllerBase
     {
         try
         {
-            // Constraints JSON deserialize — hata olursa sessizce null
+            // Constraints JSON deserialize — hata olursa logla ve kisitsiz devam et.
+            // Eski silent-catch frontend'in raw SQL constraint'i ({rawSql,logic} —
+            // structural alanlar yok) ile uyumsuzluk durumunu gizliyordu; artik
+            // GuideConstraintDto tum alanlari nullable, deserialize toleransli.
             IReadOnlyCollection<GuideConstraintDto>? parsedConstraints = null;
             if (!string.IsNullOrWhiteSpace(constraints))
             {
@@ -199,8 +204,18 @@ public sealed class GuidesController : ControllerBase
                     parsedConstraints = JsonSerializer.Deserialize<List<GuideConstraintDto>>(
                         constraints,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    // DEBUG: incoming constraints'i logla — sorun teshisi icin (gecici)
+                    Console.WriteLine($"[GuideSearch:DBG] guide='{guideCode}' raw='{constraints}' parsedCount={(parsedConstraints?.Count ?? -1)}");
+                    if (parsedConstraints != null)
+                    {
+                        foreach (var c in parsedConstraints)
+                            Console.WriteLine($"  → Field='{c.Field}' Op='{c.Operator}' Val='{c.Value}' Logic='{c.Logic}' RawSql='{c.RawSql}'");
+                    }
                 }
-                catch { /* Geçersiz JSON → kısıtsız devam */ }
+                catch (Exception parseEx)
+                {
+                    Console.Error.WriteLine($"[GuideSearch] Constraint JSON parse hatasi (guide='{guideCode}'): {parseEx.Message}; raw='{constraints}'");
+                }
             }
 
             var result = await _guideService.SearchAsync(

@@ -1,3 +1,6 @@
+@import './components/GuideLookup/guideLookup.css';
+@import './components/DynamicWidgetRenderer/widgetField.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -18,51 +21,9 @@
 }
 .cbh-shake { animation: calibraShake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
 
-/* Modern (floating/outline) label — widget label'i input cercevesini tam
-   ortalanmis sekilde "keser". Referans: Material Design Outlined Text Field.
-   Tema'ya gore arka plan rengi container ile ayni olur; boylece border cizgisi
-   label'in altindan "geciyormus" gibi gorunur. */
-html body {
-  --calibra-modern-label-bg:          rgba(15, 23, 42, 0.98);
-  --calibra-modern-label-color:       rgba(165, 180, 252, 0.95);
-  --calibra-modern-label-focus:       #a5b4fc;
-  --calibra-modern-label-placeholder: rgba(148, 163, 184, 0.55);
-}
-html:not(.dark) body,
-body.app-theme-light {
-  --calibra-modern-label-bg:          #ffffff;
-  --calibra-modern-label-color:       #475569;
-  --calibra-modern-label-focus:       #3730a3;
-  --calibra-modern-label-placeholder: #94a3b8;
-}
-
-.calibra-modern-wrap {
-  position: relative;
-  padding-top: 12px;
-}
-.calibra-modern-label {
-  /* ── Modern baslik: HER ZAMAN border'in ustune asili (floated).
-        Arka plan yok — label saf metin olarak border'in uzerinde durur.
-        Sola yaslandi (left:2) — input'un sol kenari ile hizalanir. */
-  position: absolute;
-  top: -2px;
-  left: 2px;
-  transform: translateY(0);
-  padding: 0 3px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--calibra-modern-label-color);
-  background: transparent;
-  pointer-events: none;
-  z-index: 1;
-  line-height: 1.35;
-  white-space: nowrap;
-  transition: color 0.15s ease;
-}
-.calibra-modern-wrap:focus-within .calibra-modern-label {
-  color: var(--calibra-modern-label-focus);
-}
+/* NOT: `.calibra-modern-wrap` ve `.calibra-modern-label` tanimlari
+   `widgetField.css`'e tasindi (geriye-donuk alias olarak). Tek kaynak,
+   tek tema sistemi (--wf-modern-label-* token'lari). */
 
 @layer base {
   body {
@@ -1224,6 +1185,73 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,0.2)
 .nw-reminder-add-btn:hover:not(:disabled) { filter: brightness(1.1); }
 .nw-reminder-add-btn:disabled { opacity: .5; cursor: not-allowed; }
 
+/* Chip multi-select (hedef kullanicilar) */
+.nw-reminder-add-row--chips { align-items: flex-start; }
+.nw-reminder-chips-wrap { flex: 1; position: relative; }
+.nw-reminder-chips {
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  min-height: 30px; padding: 4px 6px;
+  background: #fff; border: 1px solid #cbd5e1; border-radius: 5px;
+}
+.dark .nw-reminder-chips { background: #0f172a; border-color: rgba(255,255,255,.15); }
+.nw-reminder-chip-placeholder {
+  font-size: .72rem; color: #94a3b8; padding: 2px 4px;
+}
+.dark .nw-reminder-chip-placeholder { color: rgba(255,255,255,.4); }
+.nw-reminder-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 4px 2px 8px;
+  background: rgba(99,102,241,.12); color: #4f46e5;
+  border-radius: 10px; font-size: .72rem; font-weight: 600;
+}
+.dark .nw-reminder-chip { background: rgba(165,180,252,.18); color: #a5b4fc; }
+.nw-reminder-chip-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border: none; cursor: pointer;
+  background: transparent; color: currentColor; opacity: .65;
+  border-radius: 50%;
+}
+.nw-reminder-chip-x:hover { opacity: 1; background: rgba(99,102,241,.2); }
+.nw-reminder-chip-add {
+  padding: 2px 7px; font-size: .7rem; font-weight: 600;
+  background: transparent; border: 1px dashed rgba(99,102,241,.35);
+  color: #4f46e5; border-radius: 10px; cursor: pointer;
+}
+.nw-reminder-chip-add:hover { background: rgba(99,102,241,.08); }
+.dark .nw-reminder-chip-add { color: #a5b4fc; border-color: rgba(165,180,252,.35); }
+.dark .nw-reminder-chip-add:hover { background: rgba(165,180,252,.1); }
+
+.nw-reminder-picker {
+  position: absolute; bottom: calc(100% + 4px); top: auto; left: 0; right: 0;
+  z-index: 50; background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 7px; max-height: 220px; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 -6px 20px rgba(15,23,42,.18);
+}
+.dark .nw-reminder-picker {
+  background: #0f172a; border-color: rgba(255,255,255,.1);
+  box-shadow: 0 6px 20px rgba(0,0,0,.4);
+}
+.nw-reminder-picker-search {
+  border: none !important; border-radius: 0 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+.dark .nw-reminder-picker-search { border-bottom-color: rgba(255,255,255,.08) !important; }
+.nw-reminder-picker-list { overflow-y: auto; }
+.nw-reminder-picker-empty {
+  padding: 10px; text-align: center; font-size: .72rem;
+  color: #94a3b8; font-style: italic;
+}
+.dark .nw-reminder-picker-empty { color: rgba(255,255,255,.4); }
+.nw-reminder-picker-item {
+  display: block; width: 100%; text-align: left;
+  padding: 6px 10px; border: none; background: transparent;
+  font-size: .78rem; color: #1e293b; cursor: pointer;
+}
+.nw-reminder-picker-item:hover { background: rgba(99,102,241,.08); }
+.dark .nw-reminder-picker-item { color: rgba(255,255,255,.85); }
+.dark .nw-reminder-picker-item:hover { background: rgba(99,102,241,.15); }
+
 /* ── Klasör Sağ-Tık Menüsü ── */
 .nw-ctx-menu {
   position: fixed; z-index: 9998;
@@ -1490,6 +1518,21 @@ html:not(.dark) .nw-modal-btn--ghost:hover { background: #e2e8f0; }
 .oc-card:hover .oc-card-remove { color: #94a3b8; }
 .oc-card-remove:hover { color: #ef4444 !important; background: rgba(239,68,68,.08); }
 
+/* "+ Alt Bagla" butonu — bu kartin cocuklarina kullanici ekler */
+.oc-card-add-child {
+  width: 24px; height: 24px; border-radius: 5px;
+  background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.28);
+  color: #4f46e5; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  margin-left: 4px; flex-shrink: 0;
+  transition: all .12s;
+}
+.oc-card-add-child:hover {
+  background: rgba(99,102,241,.22); border-color: rgba(99,102,241,.45);
+  transform: scale(1.08);
+}
+.dark .oc-card-add-child { color: #a5b4fc; background: rgba(99,102,241,.18); }
+
 /* ── User Picker ── */
 .oc-picker {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 100;
@@ -1528,121 +1571,8 @@ html:not(.dark) .nw-modal-btn--ghost:hover { background: #e2e8f0; }
 .dark .oc-picker-name { color: #f1f5f9; }
 .oc-picker-email { font-size: .68rem; color: #94a3b8; }
 
-/* ══════════════════════════════════════════════════════════
-   FixedFieldLookupBridge — ffl-* stilleri
-   ══════════════════════════════════════════════════════════ */
-.ffl-lookup-btn, .ffl-clear-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border: none; border-radius: 5px;
-  cursor: pointer; background: transparent; color: #94a3b8;
-  transition: background .12s, color .12s; flex-shrink: 0;
-}
-.ffl-lookup-btn:hover { background: rgba(99,102,241,.1); color: #6366f1; }
-.ffl-clear-btn:hover { background: rgba(239,68,68,.08); color: #ef4444; }
-.dark .ffl-lookup-btn { color: rgba(255,255,255,.4); }
-.dark .ffl-lookup-btn:hover { color: #a5b4fc; background: rgba(99,102,241,.15); }
-.dark .ffl-clear-btn:hover { color: #f87171; background: rgba(248,113,113,.1); }
-
-/* Backdrop — tam ekran overlay */
-.ffl-modal-backdrop {
-  position: fixed; inset: 0; z-index: 9000;
-  background: rgba(0,0,0,.45); backdrop-filter: blur(2px);
-  display: flex; align-items: center; justify-content: center;
-  animation: fflFadeIn .12s ease-out;
-}
-@keyframes fflFadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-/* Modal kutusu */
-.ffl-modal {
-  width: min(680px, 94vw); max-height: 70vh;
-  background: #fff; border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.22);
-  display: flex; flex-direction: column; overflow: hidden;
-  animation: fflSlideUp .18s ease-out;
-}
-@keyframes fflSlideUp {
-  from { transform: translateY(12px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
-}
-.dark .ffl-modal { background: #1e293b; }
-
-/* Header — arama */
-.ffl-modal-header {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px; border-bottom: 1px solid #e2e8f0;
-  color: #64748b;
-}
-.dark .ffl-modal-header { border-bottom-color: rgba(255,255,255,.08); color: rgba(255,255,255,.45); }
-.ffl-modal-header input {
-  flex: 1; border: none; outline: none; background: transparent;
-  font-size: .88rem; color: #1e293b;
-}
-.dark .ffl-modal-header input { color: #f1f5f9; }
-.ffl-close-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border: none; border-radius: 6px;
-  background: transparent; cursor: pointer; color: #94a3b8;
-}
-.ffl-close-btn:hover { background: rgba(239,68,68,.08); color: #ef4444; }
-.ffl-settings-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border: none; border-radius: 6px;
-  background: transparent; cursor: pointer; color: #94a3b8;
-  transition: background .12s, color .12s;
-}
-.ffl-settings-btn:hover { background: rgba(99,102,241,.1); color: #6366f1; }
-.dark .ffl-settings-btn:hover { color: #a5b4fc; background: rgba(99,102,241,.15); }
-
-/* Scroll alanı */
-.ffl-scroll {
-  flex: 1; overflow-y: auto; min-height: 120px; max-height: 55vh;
-}
-
-/* Tablo */
-.ffl-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-.ffl-table th {
-  position: sticky; top: 0; z-index: 1;
-  padding: 8px 12px; text-align: left; font-weight: 700;
-  font-size: .76rem;
-  color: #64748b; background: #f8fafc;
-  border-bottom: 2px solid #e2e8f0;
-}
-.dark .ffl-table th {
-  background: #111827; color: rgba(255,255,255,.45);
-  border-bottom-color: rgba(255,255,255,.08);
-}
-.ffl-table td {
-  padding: 7px 12px; border-bottom: 1px solid #f1f5f9;
-  color: #334155; cursor: pointer;
-}
-.dark .ffl-table td { color: rgba(255,255,255,.75); border-bottom-color: rgba(255,255,255,.04); }
-.ffl-table tbody tr:hover td { background: rgba(99,102,241,.06); }
-.dark .ffl-table tbody tr:hover td { background: rgba(99,102,241,.1); }
-
-.ffl-empty, .ffl-sentinel {
-  text-align: center; padding: 16px; color: #94a3b8; font-size: .8rem;
-}
-.ffl-error {
-  padding: 8px 16px; font-size: .8rem; color: #ef4444;
-  background: rgba(239,68,68,.06); border-bottom: 1px solid rgba(239,68,68,.1);
-}
-
-/* Footer */
-.ffl-footer {
-  padding: 8px 16px; font-size: .72rem; color: #94a3b8;
-  border-top: 1px solid #e2e8f0; text-align: right;
-}
-.dark .ffl-footer { border-top-color: rgba(255,255,255,.06); }
-
-/* Spin animation */
-.ffl-modal .spin { animation: spin 1s linear infinite; }
-
-/* Shake + flash — gecersiz alan / kod girildiginde (proje standardi) */
-.ffl-shake {
-  animation: cbInvalidShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.20) !important;
-  border-color: #ef4444 !important;
-}
+/* FixedFieldLookupBridge — ffl-* stilleri taşındı:
+   src/components/GuideLookup/guideLookup.css (gl-* prefix). */
 
 /* ══════════════════════════════════════════════════════════
    Notlar sifreleme (Mod 1 + Mod 2)
@@ -1698,7 +1628,7 @@ html:not(.dark) .nw-modal-btn--ghost:hover { background: #e2e8f0; }
   backdrop-filter: blur(4px);
   z-index: 10000;
   display: flex; align-items: center; justify-content: center;
-  animation: fflFadeIn .15s ease;
+  animation: glFadeIn .15s ease;
 }
 .nw-enc-modal {
   width: min(420px, 92vw);
@@ -1860,11 +1790,10 @@ html:not(.dark) .nw-modal-btn--ghost:hover { background: #e2e8f0; }
 }
 .dark .nw-lockscreen-foot { color: rgba(255,255,255,0.35); }
 
-@keyframes fflFadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes nwMenuIn { from { opacity: 0; transform: scale(0.96) translateY(-6px) } to { opacity: 1; transform: scale(1) translateY(0) } }
 
 /* ── PROJE STANDARDI: gecersiz alan/kod uyari titreşimi ────────
-   Tüm shake animasyonlari (ffl-shake, lgc-invalid-shake, mceShake,
+   Tüm shake animasyonlari (gl-shake, lgc-invalid-shake, mceShake,
    sqeShake, caShake) ayni keyframes/duration/easing kullanir. */
 @keyframes cbInvalidShake {
   10%, 90% { transform: translateX(-2px); }

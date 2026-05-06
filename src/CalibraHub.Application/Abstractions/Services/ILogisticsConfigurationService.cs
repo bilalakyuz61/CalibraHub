@@ -5,7 +5,7 @@ namespace CalibraHub.Application.Abstractions.Services;
 public interface ILogisticsConfigurationService
 {
     Task<LogisticsConfigurationSnapshotDto> GetSnapshotAsync(CancellationToken cancellationToken);
-    Task<(IReadOnlyCollection<ItemDto> Items, int TotalCount)> GetItemsPagedAsync(string? search, int offset, int pageSize, CancellationToken cancellationToken);
+    Task<(IReadOnlyCollection<ItemDto> Items, int TotalCount)> GetItemsPagedAsync(string? search, int offset, int pageSize, CancellationToken cancellationToken, string? groupCode = null);
     Task<ProductConfigurationSnapshotDto> GetProductConfigurationSnapshotAsync(CancellationToken cancellationToken);
     Task<MaterialCardDynamicSchemaDto> GetMaterialCardDynamicSchemaAsync(CancellationToken cancellationToken);
     Task SaveFieldGroupAsync(
@@ -26,11 +26,25 @@ public interface ILogisticsConfigurationService
     Task CreateLocationAsync(CreateLocationRequest request, CancellationToken cancellationToken);
     Task UpdateLocationAsync(UpdateLocationRequest request, CancellationToken cancellationToken);
     Task DeleteLocationAsync(int locationId, CancellationToken cancellationToken);
+
+    // ── Machine (uretim/depo makineleri) ─────────────────────────────
+    Task<IReadOnlyCollection<MachineDto>> GetMachinesAsync(CancellationToken cancellationToken);
+    Task<int> CreateMachineAsync(CreateMachineRequest request, CancellationToken cancellationToken);
+    Task UpdateMachineAsync(UpdateMachineRequest request, CancellationToken cancellationToken);
+    Task DeleteMachineAsync(int machineId, CancellationToken cancellationToken);
+
+    // ── MachineType referans verisi ──────────────────────────────────
+    Task<IReadOnlyCollection<MachineTypeDto>> GetMachineTypesAsync(CancellationToken cancellationToken);
+    Task<int> SaveMachineTypeAsync(SaveMachineTypeRequest request, CancellationToken cancellationToken);
+    Task DeleteMachineTypeAsync(int id, CancellationToken cancellationToken);
     Task CreateUnitAsync(CreateUnitRequest request, CancellationToken cancellationToken);
     Task UpdateUnitAsync(UpdateUnitRequest request, CancellationToken cancellationToken);
     Task DeleteUnitAsync(int id, CancellationToken cancellationToken);
-    Task<IReadOnlyCollection<StockUnitConversionDto>> GetStockUnitConversionsAsync(int stockCardId, CancellationToken cancellationToken);
-    Task SaveStockUnitConversionsAsync(int stockCardId, IReadOnlyCollection<SaveStockUnitConversionItem> items, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ItemUnitDto>> GetItemUnitsAsync(int itemId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<int>> GetUsedFeatureIdsInCombinationsAsync(int itemId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<(int FeatureId, int ValueId)>> GetUsedFeatureValueIdsInCombinationsAsync(int itemId, CancellationToken cancellationToken);
+    Task<int> GetCombinationCountForItemAsync(int itemId, CancellationToken cancellationToken);
+    Task SaveItemUnitsAsync(int itemId, IReadOnlyCollection<SaveItemUnitItem> items, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<ItemLocationDto>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken);
     Task SaveItemLocationsAsync(int itemId, IReadOnlyCollection<SaveItemLocationItem> items, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<LocationTypeDto>> GetLocationTypesAsync(CancellationToken cancellationToken);
@@ -40,7 +54,7 @@ public interface ILogisticsConfigurationService
     Task CreatePropertyAsync(CreateFeatureRequest request, CancellationToken cancellationToken);
     Task CreateStockPropertyLinkAsync(CreateItemPropertyLinkRequest request, CancellationToken cancellationToken);
     Task CreatePropertyValueAsync(CreateFeatureValueRequest request, CancellationToken cancellationToken);
-    Task CreateStockPropertyMappingAsync(CreateItemPropertyMappingRequest request, CancellationToken cancellationToken);
+    Task CreateStockPropertyMappingAsync(CreateItemFeatureMappingRequest request, CancellationToken cancellationToken);
     Task<int> CreateProductConfigurationFeatureAsync(
         CreateProductConfigurationFeatureRequest request,
         CancellationToken cancellationToken);
@@ -59,9 +73,10 @@ public interface ILogisticsConfigurationService
 
     /// <summary>
     /// Bir malzeme kartina bagli ozellik (FEATURE) listesini tamamen yeniden yazar.
-    /// Kombinasyon Takibi acik olan stok kartlarinin Ozellikler sekmesinde kullanilir.
+    /// Her feature icin opsiyonel AllowedValueIds[] gonderilirse, o (stok, ozellik) pair'i
+    /// yalniz secili degerlere kisitlanir; bos ise kisitlama yok (tum degerler gecerli).
     /// </summary>
-    Task SetFeaturesForItemAsync(string stockCode, IReadOnlyCollection<(int FeatureId, bool PrintDescriptionInDesign)> items, CancellationToken cancellationToken);
+    Task SetFeaturesForItemAsync(string stockCode, IReadOnlyCollection<(int FeatureId, bool PrintDescriptionInDesign, int[] AllowedValueIds)> items, CancellationToken cancellationToken);
     Task UpdateProductConfigurationFeatureAsync(UpdateProductConfigurationFeatureRequest request, CancellationToken cancellationToken);
     Task DeleteProductConfigurationFeatureAsync(int id, CancellationToken cancellationToken);
     Task DeleteProductConfigurationValueAsync(int id, CancellationToken cancellationToken);
@@ -82,6 +97,7 @@ public interface ILogisticsConfigurationService
 
     Task<IReadOnlyCollection<BOMDto>> GetBOMsAsync(CancellationToken cancellationToken);
     Task<BOMWithNames?> GetBOMByCodeAsync(string materialCode, string? configCode, CancellationToken cancellationToken);
+    Task<BOMWithNames?> GetBOMByIdAsync(int id, CancellationToken cancellationToken);
     Task<int> SaveBOMAsync(SaveBOMRequest request, CancellationToken cancellationToken);
     Task DeleteBOMAsync(int id, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<MaterialGroupDto>> GetMaterialGroupsAsync(int? category, CancellationToken cancellationToken);

@@ -16,7 +16,7 @@ public sealed class SqlServerConnectionFactory
         CompanyConnectionRegistry registry,
         IHttpContextAccessor httpContextAccessor)
     {
-        _systemConnectionString = options.ConnectionString;
+        _systemConnectionString = EnsureMars(options.ConnectionString);
         _registry = registry;
         _httpContextAccessor = httpContextAccessor;
     }
@@ -35,10 +35,19 @@ public sealed class SqlServerConnectionFactory
     /// </summary>
     public async Task<SqlConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {
-        var connectionString = ResolveConnectionString();
+        var connectionString = EnsureMars(ResolveConnectionString());
         var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         return connection;
+    }
+
+    private static string EnsureMars(string connectionString)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString)
+        {
+            MultipleActiveResultSets = true
+        };
+        return builder.ConnectionString;
     }
 
     public async Task EnsureDatabaseExistsAsync(CancellationToken cancellationToken)
@@ -58,6 +67,18 @@ public sealed class SqlServerConnectionFactory
     public string ResolveConnectionStringForCompany(int companyId)
     {
         return _registry.TryGet(companyId, out var connStr) ? connStr : _systemConnectionString;
+    }
+
+    /// <summary>
+    /// Mevcut request'in company_id claim degerini dondurur. Authenticated degilse 0 doner —
+    /// SQL filtrelerinde "WHERE CompanyId = @CompanyId" calisir, 0 ile eslesen kayit yoksa bos liste doner.
+    /// </summary>
+    public int ResolveCurrentCompanyId()
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.User.Identity?.IsAuthenticated != true) return 0;
+        var raw = httpContext.User.FindFirst("company_id")?.Value;
+        return int.TryParse(raw, out var id) ? id : 0;
     }
 
     private string ResolveConnectionString()

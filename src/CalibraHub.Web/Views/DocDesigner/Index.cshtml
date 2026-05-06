@@ -1,0 +1,25 @@
+@{
+    ViewData["Title"] = "Belge Şablonları";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div id="doc-designer-list-root"></div>
+
+@section Scripts {
+<script>
+(function () {
+    var el = document.getElementById('doc-designer-list-root');
+    if (!el || !window.CalibraHub || !window.CalibraHub.mountDocDesignerList) {
+        console.error('DocDesignerList mount noktası bulunamadı.');
+        return;
+    }
+    window.CalibraHub.mountDocDesignerList(el, {
+        apiBase: '/api/doc-designer',
+        newUrl: '/DocDesigner/New',
+        editUrlTemplate: '/DocDesigner/Edit/{id}',
+        title: 'Belge Şablonları',
+        subtitle: 'Satış Teklifi, Sipariş, İrsaliye gibi belgeler için görsel şablon tasarımcısı'
+    });
+})();
+</script>
+}

@@ -1,9 +1,9 @@
 @inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
 @{
     var activeMenu = (ViewData["AdminMenu"] as string ?? string.Empty).ToLowerInvariant();
-    var managementOpen = activeMenu is "dashboard" or "guide-management" or "form-management";
+    var managementOpen = activeMenu is "dashboard" or "form-management";
     var panelModuleOpen = activeMenu is "dashboard";
-    var guideModuleOpen = activeMenu is "guide-management" or "form-management";
+    var guideModuleOpen = activeMenu is "form-management";
     var systemSettingsOpen = activeMenu is "company-settings" or "integrator-settings" or "mail-settings" or "erp-settings" or "appearance" or "project-instructions";
     var logsOpen = activeMenu is "system-logs" or "db-schema";
     var viewSettingsOpen = activeMenu is "view-settings-screens" or "view-settings-material-cards";
@@ -109,19 +109,6 @@
 
                     <div class="menu-group-content">
                         <div class="menu-group-content-inner">
-                            <div class="menu-entry" data-menu-entry data-favorite-key="admin-guide-management">
-                                <a class="admin-nav-item @(activeMenu == "guide-management" ? "active" : string.Empty)"
-                                   asp-controller="Admin" asp-action="GuideManagement" title="Rehber Yönetimi">
-                                    <span class="menu-icon" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-                                    </span>
-                                    <span class="menu-text">Rehber Yönetimi</span>
-                                </a>
-                                <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Rehber Yönetimi favorilere ekle">
-                                    <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
-                                </button>
-                            </div>
-
                             <div class="menu-entry" data-menu-entry data-favorite-key="admin-form-management">
                                 <a class="admin-nav-item @(activeMenu == "form-management" ? "active" : string.Empty)"
                                    asp-controller="Admin" asp-action="FormManagement" title="Form Tasarım Ayarları">

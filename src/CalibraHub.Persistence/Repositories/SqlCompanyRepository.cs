@@ -73,7 +73,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
                 ([name], [title], [address], [city], [district], [postal_code],
                  [tax_office], [tax_number],
                  [is_e_document_approval_enabled], [is_active], [connection_string],
-                 [created_at], [updated_at])
+                 [Created], [Updated])
             OUTPUT INSERTED.[id]
             VALUES
                 (@Name, @Title, @Address, @City, @District, @PostalCode,
@@ -106,7 +106,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
                 [is_e_document_approval_enabled] = @IsEDocumentApprovalEnabled,
                 [is_active] = @IsActive,
                 [connection_string] = @ConnectionString,
-                [updated_at] = @UpdatedAt
+                [Updated] = @UpdatedAt
             WHERE [id] = @Id;
             """;
         AddInsertParameters(command, company);

@@ -22,32 +22,38 @@ public sealed class GuideService : IGuideService
         _repository = repository;
     }
 
-    public async Task<IReadOnlyCollection<GuideCatalogItemDto>> GetCatalogAsync(CancellationToken ct)
-    {
-        var guides = await _repository.GetAllAsync(ct);
-        return guides
-            .Select(g => new GuideCatalogItemDto(
-                Id: g.Id,
-                GuideCode: g.GuideCode,
-                GuideLabel: g.GuideLabel,
-                ViewName: g.ViewName,
-                ValueColumn: g.ValueColumn,
-                DisplayColumn: g.DisplayColumn,
-                DefaultSortColumn: g.DefaultSortColumn,
-                Columns: ParseColumns(g.GridColumnsJson)))
-            .ToArray();
-    }
-
     public async Task<GuideSchemaDto?> GetSchemaAsync(string guideCode, CancellationToken ct)
     {
         var guide = await _repository.GetByCodeAsync(Normalize(guideCode), ct);
         if (guide == null) return null;
+
+        // Defensive: GuideMas.GridColumnsJson view ile drift edebilir (stale seed,
+        // legacy duplicate row, view rename/drop). View'in gercek kolonlarini al ve
+        // GridColumnsJson ile kesisimini doner — boylece modal header'lari view'da
+        // var olmayan kolonlari hic gostermez (search'teki defansif filtre ile uyumlu).
+        var declaredCols = ParseColumns(guide.GridColumnsJson);
+        IReadOnlyCollection<string> actualCols;
+        try
+        {
+            actualCols = await _repository.GetViewColumnsAsync(guide.ViewName, ct);
+        }
+        catch
+        {
+            // View okunamazsa GridColumnsJson'i oldugu gibi don (regression olmasin)
+            actualCols = Array.Empty<string>();
+        }
+        var resolvedCols = actualCols.Count == 0
+            ? declaredCols
+            : declaredCols
+                .Where(c => actualCols.Any(ac => string.Equals(ac, c, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+
         return new GuideSchemaDto(
             GuideCode: guide.GuideCode,
             GuideLabel: guide.GuideLabel,
             ValueColumn: guide.ValueColumn,
             DisplayColumn: guide.DisplayColumn,
-            Columns: ParseColumns(guide.GridColumnsJson),
+            Columns: resolvedCols,
             DefaultSortColumn: guide.DefaultSortColumn);
     }
 
@@ -66,6 +72,22 @@ public sealed class GuideService : IGuideService
         var guide = await _repository.GetByCodeAsync(Normalize(guideCode), ct);
         if (guide == null) return null;
         return await _repository.ResolveAsync(guide, value, ct);
+    }
+
+    public async Task<IReadOnlyCollection<string>?> GetDistinctValuesAsync(
+        string guideCode, string column, string? search, CancellationToken ct)
+    {
+        var guide = await _repository.GetByCodeAsync(Normalize(guideCode), ct);
+        if (guide == null) return null;
+        return await _repository.GetDistinctValuesAsync(guide, column, search, ct);
+    }
+
+    public Task<int> SetDefaultFilterAsync(string guideCode, string? filterJson, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(guideCode))
+            throw new ArgumentException("Rehber kodu boş olamaz.", nameof(guideCode));
+        // Normalize sadece arama icin — UPDATE'te orijinal kod da geçerli (ViewName eslestirmesi var).
+        return _repository.SetDefaultFilterAsync(Normalize(guideCode), filterJson, ct);
     }
 
     private static string Normalize(string? code) =>

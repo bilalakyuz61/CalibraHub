@@ -127,4 +127,23 @@ public sealed record CreateUserRequest(
     Guid? SupervisorUserId,
     UserRole Role,
     IReadOnlyCollection<UserPermission> Permissions,
-    string? Password = null);
+    string? Password = null,
+    GrafanaRole? GrafanaRole = null);
+
+public sealed record UpdateUserRequest(
+    Guid Id,
+    int CompanyId,
+    string FullName,
+    string Email,
+    string? Password = null,
+    // GrafanaRole degeri:
+    //   • SetGrafanaRole = false → mevcut rol korunur (geriye uyumlu — SetupController gibi caller'lar)
+    //   • SetGrafanaRole = true && GrafanaRole = null → kullanici Grafana'dan cikarilir
+    //   • SetGrafanaRole = true && GrafanaRole != null → kullanici Grafana'ya eklenir/rolu guncellenir
+    bool SetGrafanaRole = false,
+    GrafanaRole? GrafanaRole = null,
+    // Role / Permissions:
+    //   • SetRole = false → mevcut rol/izinler korunur (geriye uyumlu)
+    //   • SetRole = true && Role != null → rol guncellenir; izinler de UserAuthorizationCatalog'tan turetilip set edilir
+    bool SetRole = false,
+    UserRole? Role = null);

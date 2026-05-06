@@ -249,11 +249,19 @@ export default function OptionsModal(props) {
       }
       setLookupCode(code)
       setErrors({})
-      // Guide katalogunu cek
+      // PR 3: Rehber listesi /api/guides/views uzerinden — fiziksel cbv_Guide_% view'lar.
+      // GuideMas catalog indirection'i kaldirildi; her view tek satir, duplikat YOK.
       setLoadingGuides(true)
-      fetch('/api/guides')
+      fetch('/api/guides/views')
         .then(function (r) { return r.ok ? r.json() : [] })
-        .then(function (list) { setGuides(Array.isArray(list) ? list : []) })
+        .then(function (list) {
+          // Eski guides shape'iyle uyumlu hale getir: { guideCode, guideLabel } gerekli.
+          var arr = Array.isArray(list) ? list : []
+          var mapped = arr.map(function (g) {
+            return { guideCode: g.viewName, guideLabel: g.viewName, viewName: g.viewName }
+          })
+          setGuides(mapped)
+        })
         .catch(function () { setGuides([]) })
         .finally(function () { setLoadingGuides(false) })
     } else if (mode === 'grid') {

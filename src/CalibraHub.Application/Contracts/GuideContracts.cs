@@ -1,18 +1,8 @@
 namespace CalibraHub.Application.Contracts;
 
-/// <summary>
-/// Admin UI icin rehber katalogu — GuideMas tablosundan tum kayitlar.
-/// OptionsModal dropdown'unda listelenecek rehberler.
-/// </summary>
-public sealed record GuideCatalogItemDto(
-    int Id,
-    string GuideCode,
-    string GuideLabel,
-    string ViewName,
-    string ValueColumn,
-    string DisplayColumn,
-    string? DefaultSortColumn,
-    IReadOnlyCollection<string> Columns);
+// PR 3: GuideCatalogItemDto kaldirildi — UI artik /api/guides/views uzerinden
+// fiziksel SQL view listesini kullaniyor (GuideViewInfoDto). GuideMas catalog
+// indirection'i gereksiz oldugu icin bu DTO'ya ihtiyac kalmadi.
 
 /// <summary>
 /// Tek rehberin metadatasi — React modal kolon header'lari icin.
@@ -67,24 +57,33 @@ public sealed record GuideViewInfoDto(
     IReadOnlyCollection<string> Columns);
 
 /// <summary>
-/// Yeni rehber eklemek veya mevcut rehberi güncellemek için istek nesnesi.
-/// POST /api/guides
-/// </summary>
-/// <summary>
 /// Dinamik kisit — rehber aramasinda cascading filtre.
+///
+/// Iki kullanim modu var:
+///   1) Yapisal (struct): Field/Operator/Value uclusu — backend parametrize SQL uretir
+///      (SQL injection guvenli; column allowlist ile dogrulanir)
+///   2) Raw SQL fragment: RawSql doluysa, dogrudan WHERE'a append edilir
+///      (admin trusted; token resolution frontend'de yapildigi icin string-replace,
+///      column allowlist YOK — admin'in sorumluluğu)
+///
 /// Field: view kolon adi (ValidateIdentifier ile kontrol edilir)
 /// Operator: eq, neq, gt, lt, like, in (switch-case ile SQL'e cevirilir)
 /// Value: filtre degeri (parametrize edilir — asla SQL'e inline yazilmaz)
 /// Logic: "and" (varsayilan) veya "or" — kisitlar arasi birlestirme mantigi
+/// RawSql: opsiyonel raw SQL fragment — set ise Field/Operator/Value yok sayilir
 /// </summary>
-public sealed record GuideConstraintDto(string Field, string Operator, string Value, string? Logic = "and");
+public sealed record GuideConstraintDto(
+    string? Field    = null,
+    string? Operator = null,
+    string? Value    = null,
+    string? Logic    = "and",
+    string? RawSql   = null);
+// NOT: Field/Operator/Value nullable hale getirildi — frontend RawSql modunda
+// `{ rawSql, logic }` gonderir (struct alanlar yok). Eski non-nullable hali
+// System.Text.Json positional record'da bu alanlar default'suz oldugu icin
+// JSON exception atiyordu; controller catch ile sessizce yutuyor, constraint
+// hic uygulanmiyordu. Nullable + default null bu sorunu cozer; runtime'da
+// zaten string.IsNullOrWhiteSpace kontrolleri null-safe.
 
-public sealed record UpsertGuideRequest(
-    int Id,                // 0 = yeni kayıt, >0 = güncelle
-    string GuideLabel,
-    string ViewName,
-    string ValueColumn,
-    string DisplayColumn,
-    IReadOnlyCollection<string> GridColumns,
-    string? DefaultSortColumn,
-    string? GuideCode);    // null ise sistem otomatik üretir (GuideLabel'dan)
+// PR 3: UpsertGuideRequest kaldirildi — admin GuideMas CRUD UI gereksiz oldugu
+// icin POST /api/guides endpoint'i de kaldirildi.

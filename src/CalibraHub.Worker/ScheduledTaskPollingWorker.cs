@@ -70,7 +70,7 @@ public sealed class ScheduledTaskPollingWorker : BackgroundService
             var next = ScheduleEvaluator.ComputeNextRun(t, now);
             if (next.HasValue)
             {
-                await taskRepo.ReportRunAsync(t.Code, t.LastRunStatus ?? -1, t.LastRunMessage, t.LastRunDurationMs, next, ct);
+                await taskRepo.ReportRunAsync(t.Id, t.LastRunStatus ?? -1, t.LastRunMessage, t.LastRunDurationMs, next, ct);
             }
         }
 
@@ -87,60 +87,17 @@ public sealed class ScheduledTaskPollingWorker : BackgroundService
 
     private async Task TryDispatchAsync(IServiceScope scope, ScheduledTask task, CancellationToken ct)
     {
-        var taskRepo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
-        var runRepo  = scope.ServiceProvider.GetRequiredService<IScheduledTaskRunRepository>();
-        var executors = scope.ServiceProvider.GetServices<IScheduledTaskExecutor>();
-        var executor = executors.FirstOrDefault(e => e.SupportedType == task.TaskType);
+        var dispatcher = scope.ServiceProvider.GetRequiredService<IScheduledTaskDispatcher>();
+        var taskRepo   = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
 
-        if (executor is null)
-        {
-            _logger.LogWarning("[{Code}] TaskType={Type} icin executor yok — gorev NextRun 1 saat ilerletiliyor.", task.Code, task.TaskType);
-            await taskRepo.ReportRunAsync(task.Code, 1, $"Executor bulunamadi: {task.TaskType}", 0, DateTime.UtcNow.AddHours(1), ct);
-            return;
-        }
+        _logger.LogInformation("[{Name}#{Id}] dispatch (Schedule trigger) basladi.", task.Name, task.Id);
+        var (ok, msg) = await dispatcher.TriggerNowAsync(task.Id, ct, RunTrigger.Schedule);
+        _logger.LogInformation("[{Name}#{Id}] tamamlandi: ok={Ok}, msg={Msg}", task.Name, task.Id, ok, msg);
 
-        if (!await taskRepo.TryAcquireLockAsync(task.Code, ct))
-        {
-            _logger.LogDebug("[{Code}] baska instance calistiriyor, atlandi.", task.Code);
-            return;
-        }
-
-        var runId = await runRepo.CreateAsync(new ScheduledTaskRun
-        {
-            TaskId    = task.Id,
-            TaskCode  = task.Code,
-            StartedAt = DateTime.UtcNow,
-            Status    = 2,
-            Trigger   = RunTrigger.Schedule,
-        }, ct);
-
-        var sw = Stopwatch.StartNew();
-        TaskExecutionResult result;
-        try
-        {
-            _logger.LogInformation("[{Code}] executor={Executor} dispatch basladi.", task.Code, executor.GetType().Name);
-            result = await executor.ExecuteAsync(task, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[{Code}] executor exception.", task.Code);
-            result = TaskExecutionResult.Error(ex.Message);
-        }
-        sw.Stop();
-        var durationMs = (int)sw.ElapsedMilliseconds;
-
-        var nextRun = ScheduleEvaluator.ComputeNextRun(task, DateTime.UtcNow);
+        // ONCE: tek seferlik gorev tamamlandi, disable et
         if (task.ScheduleType == ScheduleType.Once)
         {
-            // ONCE calisti → disable et
-            await taskRepo.SetEnabledAsync(task.Code, false, ct);
+            await taskRepo.SetEnabledAsync(task.Id, false, ct);
         }
-
-        await runRepo.CompleteAsync(runId, result.Status, result.Message, durationMs, ct);
-        await taskRepo.ReportRunAsync(task.Code, result.Status, result.Message, durationMs, nextRun, ct);
-        await taskRepo.ReleaseLockAsync(task.Code, ct);
-
-        _logger.LogInformation("[{Code}] tamamlandi: status={Status}, ms={Ms}, next={Next}",
-            task.Code, result.Status, durationMs, nextRun);
     }
 }

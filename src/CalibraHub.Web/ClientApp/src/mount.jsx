@@ -16,16 +16,21 @@ import ShellRedesignDemo from './components/ShellRedesignDemo/ShellRedesignDemo'
 import Shell from './components/Shell/Shell'
 import CalibraLineItemsGrid from './components/CalibraLineItemsGrid/CalibraLineItemsGrid'
 import DynamicWidgetRenderer from './components/DynamicWidgetRenderer/DynamicWidgetRenderer'
-import GuideManagementPanel from './components/GuideManagement/GuideManagementPanel'
 import FormManagementPanel from './components/FormManagement/FormManagementPanel'
 import NotesWorkspace from './components/NotesWorkspace/NotesWorkspace'
 import CompanyUserManagementPanel from './components/CompanyUserManagement/CompanyUserManagementPanel'
 import InvoiceDataGrid from './components/InvoiceDataGrid/InvoiceDataGrid'
 import OrgChartWorkspace from './components/OrgChart/OrgChartWorkspace'
+import WhatsAppMessenger from './components/WhatsAppMessenger/WhatsAppMessenger'
+import './components/WhatsAppMessenger/WhatsAppMessenger.css'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
-import { guideResolve as mountGuideResolve } from './components/DynamicWidgetRenderer/dynamicWidgetService'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
 import CombinationPickerModal from './components/CalibraLineItemsGrid/CombinationPickerModal'
+import ConvertToOrdersModal from './components/ConvertToOrdersModal/ConvertToOrdersModal'
+import ConvertSingleQuoteModal from './components/ConvertToOrdersModal/ConvertSingleQuoteModal'
+import PriceGroupContactsModal from './components/PriceGroupContactsModal/PriceGroupContactsModal'
+import GuideLookupModal from './components/GuideLookup/GuideLookupModal'
+import { adaptFormatJson, extractValueDisplay } from './components/GuideLookup/guideLookupAdapters'
 import { getRuntimeBindings } from './services/fieldSettingService'
 import './index.css'
 
@@ -350,26 +355,6 @@ function mountFormManagement(element) {
 }
 
 /**
- * GuideManagementPanel mount — Rehber Merkezi admin ekrani.
- */
-function mountGuideManagement(element) {
-  if (mountedRoots.has(element)) {
-    mountedRoots.get(element).unmount()
-    mountedRoots.delete(element)
-  }
-  var root = createRoot(element)
-  mountedRoots.set(element, root)
-  root.render(
-    React.createElement(ErrorBoundary, null,
-      React.createElement(GuideManagementPanel, null)
-    )
-  )
-  return {
-    unmount: function () { root.unmount(); mountedRoots.delete(element) },
-  }
-}
-
-/**
  * NotesWorkspace mount — 3-pane Evernote/Notion UX.
  */
 function mountNotesWorkspace(element) {
@@ -478,13 +463,17 @@ function attachGuide(selectorOrEl, guideCode, options) {
     return { unmount: function() {} }
   }
 
-  // Elle yazilabilir — readonly kaldiriyoruz
+  // DOM input'u gizle — kart kendi input'unu render eder. DOM input form
+  // submit ve fillMap ile uyumluluk icin DOM'da kalir.
+  var prevDisplay  = input.style.display
+  var prevCursor   = input.style.cursor
+  var prevReadOnly = input.hasAttribute('readonly')
+  input.style.display = 'none'
   input.removeAttribute('readonly')
-  input.style.cursor = 'text'
 
   var wrapper = document.createElement('div')
-  wrapper.className = 'ffl-wrapper'
-  input.parentNode.insertBefore(wrapper, input.nextSibling)
+  wrapper.className = 'gl-wrapper'
+  input.parentNode.insertBefore(wrapper, input)
 
   var root = createRoot(wrapper)
   root.render(
@@ -497,92 +486,18 @@ function attachGuide(selectorOrEl, guideCode, options) {
         filterJson:   options.filterJson || null,
         isRequired:   options.isRequired || false,
         fillMap:      options.fillMap    || null,
+        resolveOnBlur: true,
       })
     )
   )
-
-  // Titresim + kirmizi flash + focus geri
-  function shakeAndFocus(el) {
-    el.classList.add('is-invalid', 'ffl-shake')
-    setTimeout(function () { el.focus(); el.select() }, 0)
-    // Flash: 3 kez yanip sonme
-    var count = 0
-    var flashInterval = setInterval(function () {
-      el.style.borderColor = count % 2 === 0 ? '#ef4444' : 'transparent'
-      count++
-      if (count >= 6) {
-        clearInterval(flashInterval)
-        el.style.borderColor = ''
-      }
-    }, 150)
-    // Shake animasyonu bitince class kaldir
-    setTimeout(function () { el.classList.remove('ffl-shake') }, 500)
-  }
-
-  // Elle kod girildiginde blur'da resolve et — bulunamazsa focus'u geri ver
-  var resolving = false
-  input.addEventListener('blur', function (e) {
-    var val = (input.value || '').trim()
-    if (!val) {
-      // Bos deger — temizle
-      input.removeAttribute('data-value')
-      input.removeAttribute('data-display')
-      var fm = options.fillMap
-      if (fm) {
-        Object.keys(fm).forEach(function (sel) {
-          var target = document.querySelector(sel)
-          if (!target) return
-          var tag = (target.tagName || '').toUpperCase()
-          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-            target.value = ''
-            target.dispatchEvent(new Event('change', { bubbles: true }))
-          } else {
-            target.textContent = ''
-          }
-        })
-      }
-      return
-    }
-    if (resolving) return
-    resolving = true
-    mountGuideResolve(guideCode, val).then(function (result) {
-      if (result && result.display) {
-        input.setAttribute('data-value', val)
-        input.setAttribute('data-display', result.display)
-        input.classList.remove('is-invalid')
-        // fillMap ile diger alanlari doldur — input'a .value, span/div'e .textContent
-        var fm = options.fillMap
-        if (fm && result.cells) {
-          Object.keys(fm).forEach(function (sel) {
-            var target = document.querySelector(sel)
-            if (target && result.cells[fm[sel]] != null) {
-              var val2 = String(result.cells[fm[sel]])
-              var tag = (target.tagName || '').toUpperCase()
-              if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-                target.value = val2
-                target.dispatchEvent(new Event('input', { bubbles: true }))
-                target.dispatchEvent(new Event('change', { bubbles: true }))
-              } else {
-                target.textContent = val2
-              }
-            }
-          })
-        }
-      } else {
-        // Kayit bulunamadi — titresim + kirmizi flash + focus geri
-        shakeAndFocus(input)
-      }
-    }).catch(function () {
-      shakeAndFocus(input)
-    }).finally(function () { resolving = false })
-  })
 
   return {
     unmount: function() {
       try { root.unmount() } catch(e) { /* ignore */ }
       if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper)
-      input.removeAttribute('readonly')
-      input.style.cursor = ''
+      input.style.display = prevDisplay || ''
+      input.style.cursor  = prevCursor  || ''
+      if (!prevReadOnly) input.removeAttribute('readonly')
     }
   }
 }
@@ -625,26 +540,24 @@ async function mountFixedFieldLookups(formCode) {
         return
       }
 
-      // Input'a elle yazi girilmesine izin veriliyor mu?
-      // data-cb-allow-typing="true" ise readonly ve input-click-to-open davranisi
-      // eklenmez — kullanici ya butona tiklayarak ya da klavyeyle deger girebilir.
-      var allowTyping = input.getAttribute('data-cb-allow-typing') === 'true'
+      // DOM input'u gizle — sadece form submit icin DOM'da kalir.
+      // Kullaniciya gorunen kontrol LookupCard (kart icindeki React-input).
+      // Onceki cursor/readonly/style override'larini koru ki tema CSS'leri
+      // donmus durumdan etkilenmesin.
+      var prevDisplay = input.style.display
+      var prevCursor  = input.style.cursor
+      var prevReadOnly = input.hasAttribute('readonly')
+      input.style.display = 'none'
 
-      if (!allowTyping) {
-        input.setAttribute('readonly', 'readonly')
-        input.style.cursor = 'pointer'
-      }
-
-      // Wrapper olustur — flash'i onlemek icin gizli baslatilir,
-      // wireBridgeBtn lookup btn'u gizledikten sonra gosterir
+      // Kart wrapper'i — input'un yerine yerlestir (insertBefore: input ondan sonra gizli kalir)
       var wrapper = document.createElement('div')
-      wrapper.className = 'ffl-wrapper'
-      wrapper.style.display = 'none'
-      input.parentNode.insertBefore(wrapper, input.nextSibling)
+      wrapper.className = 'gl-wrapper'
+      input.parentNode.insertBefore(wrapper, input)
 
       // React mount
       var root = createRoot(wrapper)
-      roots.push({ root: root, wrapper: wrapper })
+      roots.push({ root: root, wrapper: wrapper, input: input,
+                   prevDisplay: prevDisplay, prevCursor: prevCursor, prevReadOnly: prevReadOnly })
 
       root.render(
         React.createElement(ErrorBoundary, null,
@@ -658,16 +571,6 @@ async function mountFixedFieldLookups(formCode) {
           })
         )
       )
-
-      // Readonly alanlarda input'a tiklayinca da modal acilsin.
-      // Elle yazilabilir alanlarda bu eklenmez — yoksa kullanici her tikladiginda
-      // modal aciliyor.
-      if (!allowTyping) {
-        input.addEventListener('click', function () {
-          var btn = wrapper.querySelector('.ffl-lookup-btn')
-          if (btn) btn.click()
-        })
-      }
     })
   } catch (e) {
     console.error('[CalibraHub] mountFixedFieldLookups hata:', e)
@@ -678,6 +581,11 @@ async function mountFixedFieldLookups(formCode) {
       roots.forEach(function (r) {
         try { r.root.unmount() } catch (e) { /* ignore */ }
         if (r.wrapper.parentNode) r.wrapper.parentNode.removeChild(r.wrapper)
+        if (r.input) {
+          r.input.style.display = r.prevDisplay || ''
+          r.input.style.cursor  = r.prevCursor  || ''
+          if (!r.prevReadOnly) r.input.removeAttribute('readonly')
+        }
       })
       roots = []
     },
@@ -761,7 +669,156 @@ function openCombinationPicker(materialCode, opts) {
   return { close: handleClose }
 }
 
+/**
+ * mountLookupForInput — Mevcut DOM input uzerine FixedFieldLookupBridge (LookupCard)
+ * mount eder. Tek-input kullanim: dialog/modal icindeki bir input'u "tip 1 rehber"
+ * (standart) yapar. mountFixedFieldLookups gibi formCode/binding gerektirmez —
+ * caller direkt guideCode verir.
+ *
+ * Ornek (BOMs Islemler modal'i, Hedef Mamul Kodu):
+ *   var lookup = CalibraHub.mountLookupForInput({
+ *     inputElement: document.getElementById('ptaTargetCode'),
+ *     guideCode: 'ITEMS',
+ *     isRequired: true,
+ *   })
+ *   // sonra: lookup.clear() — bridge state'i temizle, lookup.unmount() — kaldir
+ */
+function mountLookupForInput(opts) {
+  opts = opts || {}
+  var input = opts.inputElement
+  if (!input) {
+    console.warn('[CalibraHub] mountLookupForInput: inputElement gerekli')
+    return { unmount: function() {}, clear: function() {} }
+  }
+  var guideCode = opts.guideCode || ''
+  if (!guideCode) {
+    console.warn('[CalibraHub] mountLookupForInput: guideCode gerekli')
+    return { unmount: function() {}, clear: function() {} }
+  }
+
+  var prevDisplay = input.style.display
+  input.style.display = 'none'
+
+  var wrapper = document.createElement('div')
+  wrapper.className = 'gl-wrapper'
+  input.parentNode.insertBefore(wrapper, input)
+  var root = createRoot(wrapper)
+
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(FixedFieldLookupBridge, {
+        inputElement: input,
+        formCode: opts.formCode || null,
+        fieldKey: opts.fieldKey || null,
+        guideCode: guideCode,
+        filterJson: opts.filterJson || null,
+        formatJson: opts.formatJson || null,
+        isRequired: !!opts.isRequired,
+      })
+    )
+  )
+
+  return {
+    unmount: function() {
+      try { root.unmount() } catch (e) { /* ignore */ }
+      if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper)
+      input.style.display = prevDisplay || ''
+    },
+    clear: function() {
+      try { input.dispatchEvent(new CustomEvent('ffl-clear')) } catch (e) { /* ignore */ }
+    }
+  }
+}
+
 window.CalibraHub = window.CalibraHub || {}
+
+// ── Global toast (sağ alt köşe) ─────────────────────────────────────────
+// Tüm uyarı/hata mesajları buradan akar. alert()/confirm() yerine kullanılır.
+// Kullanım:
+//   window.CalibraHub.toast('Kaydedildi', 'ok')           // yeşil
+//   window.CalibraHub.toast('Hata: ...', 'err')           // kırmızı
+//   window.CalibraHub.toast('Dikkat: ...', 'warn')        // sarı
+//   window.CalibraHub.toast('Bilgi', 'info')              // mavi (default)
+window.CalibraHub.toast = (function() {
+  var hostId = '__calibra_toast_host__';
+  var styleId = '__calibra_toast_styles__';
+
+  function ensureStyles() {
+    if (document.getElementById(styleId)) return;
+    var s = document.createElement('style');
+    s.id = styleId;
+    s.textContent = (
+      '#' + hostId + '{position:fixed;right:20px;bottom:20px;z-index:99999;display:flex;flex-direction:column;gap:10px;align-items:flex-end;pointer-events:none;}' +
+      '.calibra-toast{pointer-events:auto;min-width:280px;max-width:420px;padding:12px 16px;border-radius:10px;font-size:14px;font-weight:500;line-height:1.4;display:flex;align-items:flex-start;gap:10px;box-shadow:0 12px 32px rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.06);transform:translateX(20px);opacity:0;transition:transform .22s ease, opacity .22s ease;backdrop-filter:blur(10px);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;}' +
+      '.calibra-toast.show{transform:translateX(0);opacity:1;}' +
+      '.calibra-toast.leaving{transform:translateX(20px);opacity:0;}' +
+      '.calibra-toast .calibra-toast-icon{flex-shrink:0;font-size:18px;line-height:1;margin-top:1px;}' +
+      '.calibra-toast .calibra-toast-msg{flex:1;min-width:0;overflow-wrap:break-word;}' +
+      '.calibra-toast .calibra-toast-close{flex-shrink:0;background:transparent;border:none;color:inherit;cursor:pointer;font-size:16px;opacity:.6;padding:0 4px;line-height:1;}' +
+      '.calibra-toast .calibra-toast-close:hover{opacity:1;}' +
+      '.calibra-toast.kind-ok{background:rgba(34,197,94,.96);color:#052e16;}' +
+      '.calibra-toast.kind-err{background:rgba(239,68,68,.96);color:#450a0a;}' +
+      '.calibra-toast.kind-warn{background:rgba(251,191,36,.96);color:#451a03;}' +
+      '.calibra-toast.kind-info{background:rgba(59,130,246,.96);color:#0c1e42;}'
+    );
+    document.head.appendChild(s);
+  }
+
+  function ensureHost() {
+    var host = document.getElementById(hostId);
+    if (!host) {
+      host = document.createElement('div');
+      host.id = hostId;
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+
+  function iconFor(kind) {
+    if (kind === 'ok')   return '✓';
+    if (kind === 'err')  return '✕';
+    if (kind === 'warn') return '!';
+    return 'i';
+  }
+
+  function show(message, kind, opts) {
+    if (!message) return;
+    ensureStyles();
+    var host = ensureHost();
+    var k = (kind || 'info').toLowerCase();
+    if (k !== 'ok' && k !== 'err' && k !== 'warn' && k !== 'info') k = 'info';
+    var el = document.createElement('div');
+    el.className = 'calibra-toast kind-' + k;
+    var icon = document.createElement('span');
+    icon.className = 'calibra-toast-icon';
+    icon.textContent = iconFor(k);
+    var msg = document.createElement('span');
+    msg.className = 'calibra-toast-msg';
+    msg.textContent = String(message);
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'calibra-toast-close';
+    close.setAttribute('aria-label', 'Kapat');
+    close.textContent = '×';
+    el.appendChild(icon); el.appendChild(msg); el.appendChild(close);
+    host.appendChild(el);
+    requestAnimationFrame(function() { el.classList.add('show'); });
+    var ttl = (opts && opts.ttl != null) ? opts.ttl : (k === 'err' ? 6000 : 4000);
+    var dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
+      el.classList.add('leaving'); el.classList.remove('show');
+      setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 260);
+    }
+    close.addEventListener('click', dismiss);
+    if (ttl > 0) setTimeout(dismiss, ttl);
+    return { dismiss: dismiss };
+  }
+
+  return show;
+})();
+
 window.CalibraHub.mountSmartBoard = mountSmartBoard
 window.CalibraHub.mountMaterialList = mountMaterialList
 window.CalibraHub.mountAdminWidgetRegistry = mountAdminWidgetRegistry
@@ -769,14 +826,204 @@ window.CalibraHub.mountShellRedesignDemo = mountShellRedesignDemo
 window.CalibraHub.mountShell = mountShell
 window.CalibraHub.mountLineItemsGrid = mountLineItemsGrid
 window.CalibraHub.mountDynamicWidgetRenderer = mountDynamicWidgetRenderer
-window.CalibraHub.mountGuideManagement = mountGuideManagement
 window.CalibraHub.mountFormManagement = mountFormManagement
 window.CalibraHub.mountNotesWorkspace = mountNotesWorkspace
 window.CalibraHub.mountCompanyUserManagement = mountCompanyUserManagement
 window.CalibraHub.mountInvoiceDataGrid = mountInvoiceDataGrid
 window.CalibraHub.mountOrgChart = mountOrgChart
 window.CalibraHub.mountFixedFieldLookups = mountFixedFieldLookups
+window.CalibraHub.mountLookupForInput = mountLookupForInput
 window.CalibraHub.openCombinationPicker = openCombinationPicker
+
+/**
+ * openConvertToOrdersModal — Onayli teklifleri siparise donusturen modal'i acar.
+ * SmartBoard toolbar action'i (trigger: "convert-orders-modal") tetikledigi global fonksiyon.
+ *
+ * @param {{ onSuccess?: function, onClose?: function }} opts
+ */
+function openConvertToOrdersModal(opts) {
+  opts = opts || {}
+  var container = document.createElement('div')
+  container.setAttribute('data-cb-convert-orders', '')
+  document.body.appendChild(container)
+  var root = createRoot(container)
+
+  function cleanup() {
+    try { root.unmount() } catch (e) { /* ignore */ }
+    if (container.parentNode) container.parentNode.removeChild(container)
+  }
+
+  function handleClose() {
+    cleanup()
+    if (typeof opts.onClose === 'function') opts.onClose()
+  }
+
+  function handleSuccess(result) {
+    if (typeof opts.onSuccess === 'function') opts.onSuccess(result)
+  }
+
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(ConvertToOrdersModal, {
+        onClose: handleClose,
+        onSuccess: handleSuccess,
+      })
+    )
+  )
+
+  return { close: handleClose }
+}
+window.CalibraHub.openConvertToOrdersModal = openConvertToOrdersModal
+
+/**
+ * openConvertSingleQuoteModal — Tek teklifi siparise donusturen modali acar.
+ * SmartCard'taki "Siparise Donustur" extraAction (trigger) tarafindan cagrilir.
+ *
+ * @param {{ quoteId, quoteNumber?, contactName?, grandTotal?, currency?, lineCount?,
+ *          onSuccess?, onClose? }} opts
+ */
+function openConvertSingleQuoteModal(opts) {
+  opts = opts || {}
+  if (!opts.quoteId) {
+    console.warn('[CalibraHub] openConvertSingleQuoteModal: quoteId gerekli')
+    return { close: function () {} }
+  }
+  var container = document.createElement('div')
+  container.setAttribute('data-cb-convert-single', '')
+  document.body.appendChild(container)
+  var root = createRoot(container)
+
+  function cleanup() {
+    try { root.unmount() } catch (e) { /* ignore */ }
+    if (container.parentNode) container.parentNode.removeChild(container)
+  }
+  function handleClose() {
+    cleanup()
+    if (typeof opts.onClose === 'function') opts.onClose()
+  }
+  function handleSuccess(result) {
+    if (typeof opts.onSuccess === 'function') opts.onSuccess(result)
+  }
+
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(ConvertSingleQuoteModal, {
+        quoteId: opts.quoteId,
+        quoteNumber: opts.quoteNumber,
+        contactName: opts.contactName,
+        grandTotal: opts.grandTotal,
+        currency: opts.currency,
+        lineCount: opts.lineCount,
+        onClose: handleClose,
+        onSuccess: handleSuccess,
+      })
+    )
+  )
+
+  return { close: handleClose }
+}
+window.CalibraHub.openConvertSingleQuoteModal = openConvertSingleQuoteModal
+
+/**
+ * openPriceGroupContactsModal — Fiyat grubu ile cari kartlari eslestiren modal'i acar.
+ * SmartCard'taki "Cari Eslestir" extraAction (trigger = "price-group-contacts-modal")
+ * tarafindan cagrilir.
+ *
+ * @param {{ groupId, groupCode?, groupName?, onClose?, onChanged? }} opts
+ */
+function openPriceGroupContactsModal(opts) {
+  opts = opts || {}
+  if (!opts.groupId) {
+    console.warn('[CalibraHub] openPriceGroupContactsModal: groupId gerekli')
+    return { close: function () {} }
+  }
+  var container = document.createElement('div')
+  container.setAttribute('data-cb-pg-contacts', '')
+  document.body.appendChild(container)
+  var root = createRoot(container)
+
+  function cleanup() {
+    try { root.unmount() } catch (e) { /* ignore */ }
+    if (container.parentNode) container.parentNode.removeChild(container)
+  }
+  function handleClose() {
+    cleanup()
+    if (typeof opts.onClose === 'function') opts.onClose()
+  }
+
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(PriceGroupContactsModal, {
+        groupId:   opts.groupId,
+        groupCode: opts.groupCode,
+        groupName: opts.groupName,
+        onClose:   handleClose,
+      })
+    )
+  )
+
+  return { close: handleClose }
+}
+window.CalibraHub.openPriceGroupContactsModal = openPriceGroupContactsModal
+
+/**
+ * openGuideLookup — Standart rehber (Tip 1) modali'ni acar. Razor sayfalarindan
+ * cagrilir; ornek: bir butona tikladiginda mevcut bir kayda navigasyon.
+ *
+ * @param {string} guideCode  — Standart rehber kodu (orn. 'SALES_ORDERS')
+ * @param {{ formatJson?: string, onPick?: function, onClose?: function, guideLabel?: string }} opts
+ *   onPick(row): row = { value, display, cells } — secilen satir
+ */
+function openGuideLookup(guideCode, opts) {
+  opts = opts || {}
+  if (!guideCode) {
+    console.warn('[CalibraHub] openGuideLookup: guideCode gerekli')
+    return { close: function() {} }
+  }
+  var container = document.createElement('div')
+  container.setAttribute('data-cb-guide-lookup', '')
+  document.body.appendChild(container)
+  var root = createRoot(container)
+
+  function cleanup() {
+    try { root.unmount() } catch (e) { /* ignore */ }
+    if (container.parentNode) container.parentNode.removeChild(container)
+  }
+
+  function handleClose() {
+    cleanup()
+    if (typeof opts.onClose === 'function') opts.onClose()
+  }
+
+  function handlePick(row) {
+    cleanup()
+    if (typeof opts.onPick === 'function') opts.onPick(row)
+  }
+
+  var formatJsonRaw = opts.formatJson || null
+  var columnsAdapter = function(schemaCols) {
+    return adaptFormatJson(formatJsonRaw, schemaCols)
+  }
+
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(GuideLookupModal, {
+        guideCode: guideCode,
+        guideLabel: opts.guideLabel || null,
+        columnsAdapter: columnsAdapter,
+        open: true,
+        onClose: handleClose,
+        onPick: handlePick,
+        staticConstraint: opts.filterJson || null,
+      })
+    )
+  )
+
+  return { close: handleClose }
+}
+window.CalibraHub.openGuideLookup = openGuideLookup
+// extractValueDisplay'i Razor sayfalarina expose — onPick callback'i row.cells'i okurken kolaylik
+window.CalibraHub.guideExtractValueDisplay = extractValueDisplay
 window.CalibraHub.attachGuide = attachGuide
 // Lookup cache temizleme — sekmeler arasi veri senkronizasyonu icin export.
 // Ornek: malzeme karti sekmesinde birim degisti → satis teklifi sekmesi focus aldiginda
@@ -785,3 +1032,30 @@ import('./components/CalibraLineItemsGrid/useLookup').then(function (m) {
   window.CalibraHub.clearLookupCache = m.clearLookupCache
 })
 window.CalibraHub.mountProductCombinations = mountProductCombinations
+
+/**
+ * WhatsAppMessenger mount — WhatsApp Web tarzi sohbet UI'i.
+ * @param {HTMLElement} element
+ * @param {{ initialPhone?: string, csrfToken?: string }} config
+ */
+function mountWhatsAppMessenger(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(WhatsAppMessenger, {
+        initialPhone: config.initialPhone || null,
+        csrfToken: config.csrfToken || '',
+      })
+    )
+  )
+  return {
+    unmount: function() { root.unmount(); mountedRoots.delete(element) }
+  }
+}
+window.CalibraHub.mountWhatsAppMessenger = mountWhatsAppMessenger

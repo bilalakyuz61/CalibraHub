@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,60 +12,205 @@ public sealed class PriceListController : Controller
     private readonly IPriceListService _svc;
     private readonly ILogisticsConfigurationService _logistics;
     private readonly ICurrencyService _currencySvc;
+    private readonly IFinanceService _finance;
 
     public PriceListController(
         IPriceListService svc,
         ILogisticsConfigurationService logistics,
-        ICurrencyService currencySvc)
+        ICurrencyService currencySvc,
+        IFinanceService finance)
     {
         _svc         = svc;
         _logistics   = logistics;
         _currencySvc = currencySvc;
+        _finance     = finance;
     }
 
-    // ── Fiyat Gruplari (mevcut — form-post) ──────────────────────────────────
+    // ── Fiyat Gruplari (CalibraSmartBoard kart sistemi) ─────────────────────
+    // Liste = SmartBoard React component (MaterialCards pattern). Her grup bir kart;
+    // kart uzerinde Duzenle/Sil/Cariler aksiyonlari ile detay ekrani acilir.
+
+    private const int PriceGroupPageSize = 50;
 
     [HttpGet]
-    public IActionResult PriceGroups()
+    public async Task<IActionResult> PriceGroups(CancellationToken ct)
     {
-        ViewData["Title"] = "Fiyat Listesi";
+        ViewData["Title"] = "Fiyat Gruplari";
         ViewData["FormCode"] = "PRICE_LIST";
+        ViewData["BodyClass"] = "page-price-groups";
+
+        var boardConfig = await BuildPriceGroupsBoardConfigAsync(ct);
+        return View(new PriceGroupsViewModel { BoardConfig = boardConfig });
+    }
+
+    [HttpGet]
+    public IActionResult PriceGroupEdit(int? id)
+    {
+        ViewData["Title"] = id is > 0 ? "Fiyat Grubu Duzenle" : "Yeni Fiyat Grubu";
+        ViewData["FormCode"] = "PRICE_LIST";
+        ViewBag.PriceGroupId = id ?? 0;
         return View();
     }
 
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SavePriceGroup(
-        [Bind(Prefix = "Input")] PriceGroupInput input, string? search, CancellationToken ct)
+    private async Task<object> BuildPriceGroupsBoardConfigAsync(CancellationToken ct)
     {
-        if (!ModelState.IsValid)
-            return View(nameof(PriceGroups), await BuildGroupVm(input, search, ct));
+        var groups = (await _svc.GetAllGroupsAsync(ct)).ToArray();
+        var totalCount = groups.Length;
+        var pageItems  = groups.Take(PriceGroupPageSize).ToArray();
+        var entities   = BuildPriceGroupEntities(pageItems);
 
-        int? savedId;
-        if (input.Id.HasValue && input.Id.Value > 0)
+        return new
         {
-            var (ok, err) = await _svc.UpdateGroupAsync(
-                new UpdatePriceGroupRequest(input.Id.Value, input.GroupCode!, input.GroupName!, input.Description, input.IsActive), ct);
-            if (!ok) { ModelState.AddModelError("", err ?? "Guncelleme basarisiz."); return View(nameof(PriceGroups), await BuildGroupVm(input, search, ct)); }
-            savedId = input.Id.Value;
-        }
-        else
-        {
-            var (ok, err, newId) = await _svc.CreateGroupAsync(
-                new CreatePriceGroupRequest(input.GroupCode!, input.GroupName!, input.Description, input.IsActive), ct);
-            if (!ok) { ModelState.AddModelError("", err ?? "Kayit basarisiz."); return View(nameof(PriceGroups), await BuildGroupVm(input, search, ct)); }
-            savedId = newId;
-        }
-
-        return RedirectToAction(nameof(PriceGroups), new { id = savedId, search });
+            boardKey          = "pricelist-price-groups",
+            title             = "Fiyat Gruplari",
+            subtitle          = totalCount.ToString("N0") + " grup",
+            icon              = "Tag",
+            iconColor         = "indigo",
+            searchPlaceholder = "Grup ara... (kod, ad)",
+            emptyText         = "Henuz fiyat grubu tanimlanmamis",
+            apiUrl            = "/PriceList/GetPriceGroupsPage",
+            totalCount,
+            pageSize          = PriceGroupPageSize,
+            actions = new[]
+            {
+                new
+                {
+                    id      = "new",
+                    label   = "Yeni Grup",
+                    icon    = "Plus",
+                    variant = "primary",
+                    url     = "/PriceList/PriceGroupEdit"
+                }
+            },
+            masterWidgets = new object[]
+            {
+                new { id = "code",       type = "data", dataType = "text",      label = "Kod" },
+                new { id = "name",       type = "data", dataType = "text",      label = "Ad" },
+                new { id = "isActive",   type = "data", dataType = "boolean",   label = "Durum" },
+                new { id = "allowsBuying",  type = "data", dataType = "boolean", label = "Alis" },
+                new { id = "allowsSelling", type = "data", dataType = "boolean", label = "Satis" },
+                new { id = "allowsCost",    type = "data", dataType = "boolean", label = "Maliyet" }
+            },
+            entities
+        };
     }
 
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeletePriceGroup(int id, string? search, CancellationToken ct)
+    [HttpGet]
+    public async Task<IActionResult> GetPriceGroupsPage(
+        int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default)
     {
-        await _svc.DeleteGroupAsync(id, ct);
-        return RedirectToAction(nameof(PriceGroups), new { search });
+        if (page < 1) page = 1;
+        if (pageSize is < 10 or > 200) pageSize = 50;
+        try
+        {
+            var all = (await _svc.GetAllGroupsAsync(ct)).AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var q = search.Trim();
+                all = all.Where(g =>
+                    g.Code.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    g.Name.Contains(q, StringComparison.OrdinalIgnoreCase));
+            }
+            var arr = all.ToArray();
+            var totalCount = arr.Length;
+            var pageItems  = arr.Skip((page - 1) * pageSize).Take(pageSize).ToArray();
+            var entities   = BuildPriceGroupEntities(pageItems);
+            return Json(new { entities, totalCount, page, pageSize });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = ex.Message });
+        }
+    }
+
+    private static List<object> BuildPriceGroupEntities(IEnumerable<PriceGroupDto> groups)
+    {
+        var list = new List<object>();
+        foreach (var g in groups)
+        {
+            // Tipler kisa rozet stringi: "Alis · Satis · Maliyet" gibi
+            var allowsList = new List<string>();
+            if (g.AllowsBuying)  allowsList.Add("Alis");
+            if (g.AllowsSelling) allowsList.Add("Satis");
+            if (g.AllowsCost)    allowsList.Add("Maliyet");
+            var allowsTxt = allowsList.Count == 0 ? "—" : string.Join(" · ", allowsList);
+
+            list.Add(new
+            {
+                id          = g.Id,
+                title       = g.Name ?? "(adsiz)",
+                subtitle    = g.Code ?? string.Empty,
+                description = g.Description ?? string.Empty,
+                imageUrl    = (string?)null,
+                statusBadge = new
+                {
+                    label = g.IsActive ? "Aktif" : "Pasif",
+                    color = g.IsActive ? "emerald" : "slate"
+                },
+                widgets = new object[]
+                {
+                    new { id = "code",          type = "data", dataType = "text",    label = "Kod",     value = g.Code },
+                    new { id = "name",          type = "data", dataType = "text",    label = "Ad",      value = g.Name },
+                    new { id = "isActive",      type = "data", dataType = "boolean", label = "Durum",   value = g.IsActive },
+                    new { id = "allowsTypes",   type = "data", dataType = "text",    label = "Izinli Tipler", value = allowsTxt }
+                },
+                primaryAction = new
+                {
+                    label = "Duzenle",
+                    icon  = "Edit",
+                    url   = $"/PriceList/PriceGroupEdit?id={g.Id}"
+                },
+                secondaryAction = new
+                {
+                    label   = "Sil",
+                    icon    = "Trash2",
+                    apiUrl  = $"/PriceList/DeletePriceGroupJson?id={g.Id}",
+                    confirm = $"'{g.Code}' grubunu silmek istediginize emin misiniz? Tum fiyat kayitlari da silinecek."
+                },
+                extraActions = new object[]
+                {
+                    // Yeni Fiyat Girisi — wizard ekranina gider (toplu fiyat giris).
+                    // Ikon: DollarSign (para/fiyat semantigi); renk: green (yeni kayit).
+                    new
+                    {
+                        id    = "new-price",
+                        label = "Yeni Fiyat Girisi",
+                        icon  = "DollarSign",
+                        color = "green",
+                        url   = $"/PriceList/PriceList?groupId={g.Id}"
+                    },
+                    // Raporlama — fiyat listesi duzenleme/raporlama ekrani (paginated tablo).
+                    // Ikon: Table (tablo gorunumu); renk: amber (vurgu, dikkat).
+                    new
+                    {
+                        id    = "report",
+                        label = "Raporlama",
+                        icon  = "Table",
+                        color = "amber",
+                        url   = $"/PriceList/Report?groupId={g.Id}"
+                    },
+                    // Cariler — fiyat grubunu cari kartlara baglar (Contact.PriceGroupId).
+                    // Modal acilir: atanmis cariler listesi + cari arama/ekleme. Bir cari
+                    // baska gruba bagli ise ortak onay modali ile guncelleme onayi alinir.
+                    new
+                    {
+                        id      = "contacts",
+                        type    = "trigger",
+                        trigger = "price-group-contacts-modal",
+                        label   = "Cari Eslestir",
+                        icon    = "Users",
+                        color   = "blue",
+                        payload = new
+                        {
+                            groupId   = g.Id,
+                            groupCode = g.Code ?? string.Empty,
+                            groupName = g.Name ?? string.Empty
+                        }
+                    }
+                }
+            });
+        }
+        return list;
     }
 
     // ── Fiyat Gruplari JSON Endpoint'leri ───────────────────────────────────
@@ -75,11 +221,12 @@ public sealed class PriceListController : Controller
         var all = await _svc.GetAllGroupsAsync(ct);
         var filtered = string.IsNullOrWhiteSpace(search)
             ? all
-            : all.Where(x => x.GroupCode.Contains(search, StringComparison.OrdinalIgnoreCase)
-                          || x.GroupName.Contains(search, StringComparison.OrdinalIgnoreCase));
+            : all.Where(x => x.Code.Contains(search, StringComparison.OrdinalIgnoreCase)
+                          || x.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
         return Json(filtered.Select(g => new
         {
-            g.Id, g.GroupCode, g.GroupName, g.Description, g.IsActive
+            g.Id, g.Code, g.Name, g.Description, g.IsActive,
+            g.AllowsBuying, g.AllowsSelling, g.AllowsCost
         }));
     }
 
@@ -88,25 +235,31 @@ public sealed class PriceListController : Controller
     {
         var g = await _svc.GetGroupByIdAsync(id, ct);
         if (g is null) return Json(new { success = false, message = "Kayit bulunamadi." });
-        return Json(new { g.Id, g.GroupCode, g.GroupName, g.Description, g.IsActive });
+        return Json(new
+        {
+            g.Id, g.Code, g.Name, g.Description, g.IsActive,
+            g.AllowsBuying, g.AllowsSelling, g.AllowsCost
+        });
     }
 
     [HttpPost]
     public async Task<IActionResult> SavePriceGroupJson([FromBody] PriceGroupInput input, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(input.GroupCode) || string.IsNullOrWhiteSpace(input.GroupName))
+        if (string.IsNullOrWhiteSpace(input.Code) || string.IsNullOrWhiteSpace(input.Name))
             return Json(new { success = false, message = "Kod ve Ad alanlari zorunludur." });
 
         if (input.Id.HasValue && input.Id.Value > 0)
         {
             var (ok, err) = await _svc.UpdateGroupAsync(
-                new UpdatePriceGroupRequest(input.Id.Value, input.GroupCode!, input.GroupName!, input.Description, input.IsActive), ct);
+                new UpdatePriceGroupRequest(input.Id.Value, input.Code!, input.Name!, input.Description, input.IsActive,
+                    input.AllowsBuying, input.AllowsSelling, input.AllowsCost), ct);
             return Json(new { success = ok, message = ok ? "Guncellendi." : err, id = input.Id.Value });
         }
         else
         {
             var (ok, err, newId) = await _svc.CreateGroupAsync(
-                new CreatePriceGroupRequest(input.GroupCode!, input.GroupName!, input.Description, input.IsActive), ct);
+                new CreatePriceGroupRequest(input.Code!, input.Name!, input.Description, input.IsActive,
+                    input.AllowsBuying, input.AllowsSelling, input.AllowsCost), ct);
             return Json(new { success = ok, message = ok ? "Kaydedildi." : err, id = newId });
         }
     }
@@ -116,6 +269,17 @@ public sealed class PriceListController : Controller
     {
         var (ok, err) = await _svc.DeleteGroupAsync(id, ct);
         return Json(new { success = ok, message = ok ? "Silindi." : err });
+    }
+
+    // ── Fiyat Listesi Raporlama (Wizard'a girmeden once filtreli izleme) ────
+    // Akis: PriceGroups → secilen grup icin /PriceList/Report?groupId=X (raporlama)
+    //      → "Yeni Fiyat Girisi" butonu → /PriceList/PriceList?groupId=X (wizard)
+    [HttpGet]
+    public IActionResult Report()
+    {
+        ViewData["Title"] = "Fiyat Listesi — Raporlama";
+        ViewData["FormCode"] = "PRICE_LIST";
+        return View();
     }
 
     // ── Fiyat Girisi (Wizard sayfasi) ────────────────────────────────────────
@@ -136,7 +300,7 @@ public sealed class PriceListController : Controller
         var groups = await _svc.GetAllGroupsAsync(ct);
         return Json(groups.Where(g => g.IsActive).Select(g => new
         {
-            g.Id, g.GroupCode, g.GroupName, g.Description
+            g.Id, g.Code, g.Name, g.Description
         }));
     }
 
@@ -146,25 +310,26 @@ public sealed class PriceListController : Controller
         var currencies = await _currencySvc.GetAllAsync(ct);
         return Json(currencies.Where(c => c.IsActive).Select(c => new
         {
-            c.Code, c.Name, c.Symbol
+            c.Id, c.Code, c.Name, c.Symbol
         }));
     }
 
     [HttpGet]
-    public async Task<IActionResult> SearchStocks(string? q, int offset = 0, int pageSize = 50, CancellationToken ct = default)
+    public async Task<IActionResult> SearchStocks(string? q, int offset = 0, int pageSize = 50, string? groupCode = null, CancellationToken ct = default)
     {
         if (pageSize <= 0 || pageSize > 200) pageSize = 50;
         if (offset < 0) offset = 0;
 
         var search = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
-        var (items, totalCount) = await _logistics.GetItemsPagedAsync(search, offset, pageSize, ct);
+        var group  = string.IsNullOrWhiteSpace(groupCode) ? null : groupCode.Trim();
+        var (items, totalCount) = await _logistics.GetItemsPagedAsync(search, offset, pageSize, ct, group);
 
         var results = items.Select(s => new
         {
             id                = s.Id,
             materialCode      = s.Code,
             materialName      = s.Name ?? s.Code,
-            trackCombinations = s.TrackCombinations
+            trackCombinations = s.Combinations
         }).ToArray();
 
         return Json(new
@@ -174,6 +339,73 @@ public sealed class PriceListController : Controller
             offset     = offset,
             pageSize   = pageSize,
             hasMore    = offset + results.Length < totalCount
+        });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetMaterialGroups(int? category = null, CancellationToken ct = default)
+    {
+        // Wizard'in stok seciminde dropdown filtre olarak kullaniliyor.
+        // category null ise tum kategorilerden gelir; default kategori 1.
+        var groups = await _logistics.GetMaterialGroupsAsync(category, ct);
+        return Json(groups
+            .OrderBy(g => g.GroupCode)
+            .Select(g => new { id = g.Id, code = g.GroupCode, description = g.GroupDescription, category = g.GroupCategory }));
+    }
+
+    // ── Cari ↔ Fiyat Grubu eslestirme ───────────────────────────────────────
+    // Bir cari sadece BIR fiyat grubuna baglanir (Contact.PriceGroupId NULL veya tek deger).
+    // Bir gruba birden fazla cari atanabilir.
+
+    [HttpGet]
+    public async Task<IActionResult> GetGroupContacts(int groupId, CancellationToken ct)
+    {
+        if (groupId <= 0) return Json(Array.Empty<object>());
+        var contacts = await _finance.GetContactsByPriceGroupAsync(groupId, ct);
+        return Json(contacts.Select(c => new
+        {
+            id           = c.Id,
+            accountCode  = c.AccountCode,
+            accountTitle = c.AccountTitle,
+            phone        = c.Phone,
+            email        = c.Email,
+            city         = c.City
+        }));
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> SearchContactsForGroup(string? q, int? excludeGroupId = null, int pageSize = 50, CancellationToken ct = default)
+    {
+        if (pageSize <= 0 || pageSize > 200) pageSize = 50;
+        var (items, _) = await _finance.GetContactsPagedAsync(null, q, 0, pageSize, ct);
+        return Json(items.Select(c => new
+        {
+            id                    = c.Id,
+            accountCode           = c.AccountCode,
+            accountTitle          = c.AccountTitle,
+            currentPriceGroupId   = c.PriceGroupId,
+            // Bu grupta zaten varsa frontend "atanmis" diye disable edebilir.
+            isAssignedToThisGroup = excludeGroupId.HasValue && c.PriceGroupId == excludeGroupId.Value,
+            // Başka bir gruba atanmis mi (uyari icin).
+            isAssignedElsewhere   = c.PriceGroupId.HasValue
+                                    && (!excludeGroupId.HasValue || c.PriceGroupId.Value != excludeGroupId.Value)
+        }));
+    }
+
+    public sealed record SetContactPriceGroupRequest(int ContactId, int? PriceGroupId);
+
+    [HttpPost]
+    public async Task<IActionResult> SetContactPriceGroup([FromBody] SetContactPriceGroupRequest req, CancellationToken ct)
+    {
+        if (req is null || req.ContactId <= 0)
+            return Json(new { success = false, message = "Geçersiz cari." });
+        var (ok, err) = await _finance.SetContactPriceGroupAsync(req.ContactId, req.PriceGroupId, ct);
+        return Json(new
+        {
+            success = ok,
+            message = ok
+                ? (req.PriceGroupId.HasValue ? "Cari fiyat grubuna atandı." : "Cari fiyat grubundan kaldırıldı.")
+                : err
         });
     }
 
@@ -189,7 +421,7 @@ public sealed class PriceListController : Controller
             configId = c.ConfigId,
             code = c.Code,
             name = c.Name,
-            featureValues = c.FeatureValues.Select(fv => new { feature = fv.Feature, value = fv.Value })
+            featureValues = c.FeatureValues.Select(fv => new { feature = fv.Feature, value = fv.Value, valueCode = fv.ValueCode })
         }));
     }
 
@@ -197,33 +429,163 @@ public sealed class PriceListController : Controller
     public async Task<IActionResult> GetExistingPrices(
         [FromBody] GetExistingPricesRequest request, CancellationToken ct)
     {
-        if (request is null || request.PriceGroupId <= 0 || request.Keys == null || request.Keys.Count == 0)
+        if (request is null || request.GroupId <= 0 || request.Keys == null || request.Keys.Count == 0)
             return Json(Array.Empty<object>());
 
         var rows = await _svc.GetExistingPricesAsync(request, ct);
         return Json(rows.Select(r => new
         {
-            stockCardId     = r.ItemId,
-            materialCode    = r.MaterialCode,
-            combinationCode = r.CombinationCode,
-            buyingPrice     = r.BuyingPrice,
-            sellingPrice    = r.SellingPrice
+            itemId   = r.ItemId,
+            configId = r.ConfigId,
+            price    = r.Price
         }));
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetPriceListEntries(int groupId, CancellationToken ct)
+    public async Task<IActionResult> GetPriceListEntries(
+        int groupId,
+        string? search = null,
+        int? currencyId = null,
+        string? priceType = null,
+        DateTime? validFromMin = null,
+        DateTime? validToMax = null,
+        DateTime? activeOn = null,
+        int page = 1,
+        int pageSize = 50,
+        CancellationToken ct = default)
     {
-        var entries = await _svc.GetEntriesByGroupAsync(groupId, ct);
-        return Json(entries.Select(e => new
+        try
         {
-            e.Id, e.MaterialCode, e.MaterialName,
-            e.CombinationCode, e.CombinationName,
-            e.Currency, e.BuyingPrice, e.SellingPrice,
-            validFrom = e.ValidFrom.ToString("yyyy-MM-dd"),
-            validTo = e.ValidTo?.ToString("yyyy-MM-dd")
-        }));
+            var filter = new PriceListFilter(
+                Search: search,
+                CurrencyId: currencyId,
+                PriceType: priceType,
+                ValidFromMin: validFromMin,
+                ValidToMax: validToMax,
+                ActiveOn: activeOn,
+                Page: page,
+                PageSize: pageSize);
+
+            var result = await _svc.GetEntriesByGroupAsync(groupId, filter, ct);
+            return Json(new
+            {
+                items = result.Items.Select(e => new
+                {
+                    e.Id, e.ItemId, e.ItemCode, e.ItemName,
+                    e.ConfigId, e.ConfigCode,
+                    e.CurrencyId, e.CurrencyCode,
+                    e.PriceType, e.Price,
+                    validFrom = e.ValidFrom.ToString("yyyy-MM-dd"),
+                    validTo   = e.ValidTo?.ToString("yyyy-MM-dd")
+                }),
+                totalCount = result.TotalCount,
+                page = result.Page,
+                pageSize = result.PageSize
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[PriceList.GetPriceListEntries] groupId={groupId} EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return Json(new { success = false, message = ex.Message });
+        }
     }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportExcel(
+        int groupId,
+        string? search = null,
+        int? currencyId = null,
+        string? priceType = null,
+        DateTime? validFromMin = null,
+        DateTime? validToMax = null,
+        DateTime? activeOn = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            // Tum filtrelenen kayitlari tek seferde cek (cap repo tarafinda 100k).
+            var filter = new PriceListFilter(
+                Search: search,
+                CurrencyId: currencyId,
+                PriceType: priceType,
+                ValidFromMin: validFromMin,
+                ValidToMax: validToMax,
+                ActiveOn: activeOn,
+                Page: 1,
+                PageSize: 100000);
+
+            var result = await _svc.GetEntriesByGroupAsync(groupId, filter, ct);
+            var group  = await _svc.GetGroupByIdAsync(groupId, ct);
+
+            using var wb = new XLWorkbook();
+            var sheetName = (group?.Code ?? "Fiyat Listesi");
+            if (sheetName.Length > 30) sheetName = sheetName.Substring(0, 30);
+            var ws = wb.AddWorksheet(sheetName);
+
+            // ── Header ────────────────────────────────────────────────────
+            string[] headers = { "Stok Kodu", "Stok Adı", "Kombinasyon", "Döviz", "Tip", "Fiyat", "Başlangıç", "Bitiş" };
+            for (var i = 0; i < headers.Length; i++)
+            {
+                var c = ws.Cell(1, i + 1);
+                c.Value = headers[i];
+                c.Style.Font.Bold = true;
+                c.Style.Fill.BackgroundColor = XLColor.FromHtml("#1e293b");
+                c.Style.Font.FontColor       = XLColor.White;
+                c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
+            // ── Rows ──────────────────────────────────────────────────────
+            var row = 2;
+            foreach (var e in result.Items)
+            {
+                ws.Cell(row, 1).Value = e.ItemCode;
+                ws.Cell(row, 2).Value = e.ItemName;
+                ws.Cell(row, 3).Value = e.ConfigCode ?? "";
+                ws.Cell(row, 4).Value = e.CurrencyCode;
+                ws.Cell(row, 5).Value = TypeLabel(e.PriceType);
+
+                ws.Cell(row, 6).Value = e.Price;
+                ws.Cell(row, 6).Style.NumberFormat.Format = "#,##0.00";
+
+                ws.Cell(row, 7).Value = e.ValidFrom;
+                ws.Cell(row, 7).Style.DateFormat.Format = "dd.MM.yyyy";
+                if (e.ValidTo.HasValue)
+                {
+                    ws.Cell(row, 8).Value = e.ValidTo.Value;
+                    ws.Cell(row, 8).Style.DateFormat.Format = "dd.MM.yyyy";
+                }
+                row++;
+            }
+
+            ws.RangeUsed()?.SetAutoFilter();
+            ws.Columns().AdjustToContents();
+            ws.SheetView.FreezeRows(1);
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+
+            var fileName = $"FiyatListesi_{group?.Code ?? groupId.ToString()}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            return File(
+                ms.ToArray(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                fileName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[PriceList.ExportExcel] groupId={groupId} EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine(ex.StackTrace);
+            return Content("Excel oluşturulamadı: " + ex.Message, "text/plain");
+        }
+    }
+
+    private static string TypeLabel(string? t) => (t ?? "").Trim().ToLowerInvariant() switch
+    {
+        "b" => "Alış",
+        "s" => "Satış",
+        "m" => "Maliyet",
+        _   => t ?? ""
+    };
 
     [HttpPost]
     public async Task<IActionResult> SaveBulkPriceEntries(
@@ -264,17 +626,6 @@ public sealed class PriceListController : Controller
         return Json(new { success = ok, message = ok ? "Kayit silindi." : err });
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private async Task<PriceGroupsViewModel> BuildGroupVm(PriceGroupInput input, string? search, CancellationToken ct)
-    {
-        var all = await _svc.GetAllGroupsAsync(ct);
-        var filtered = string.IsNullOrWhiteSpace(search)
-            ? all
-            : all.Where(x => x.GroupCode.Contains(search, StringComparison.OrdinalIgnoreCase)
-                          || x.GroupName.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
-        return new PriceGroupsViewModel { Items = filtered.ToArray(), Input = input, Search = search };
-    }
 }
 
 // ── View Models ───────────────────────────────────────────────────────────────
@@ -282,15 +633,19 @@ public sealed class PriceListController : Controller
 public sealed class PriceGroupInput
 {
     public int? Id { get; set; }
-    public string? GroupCode { get; set; }
-    public string? GroupName { get; set; }
+    public string? Code { get; set; }
+    public string? Name { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
+
+    // Bu gruba hangi fiyat tipleri girilebilir? Default: hepsi.
+    public bool AllowsBuying  { get; set; } = true;
+    public bool AllowsSelling { get; set; } = true;
+    public bool AllowsCost    { get; set; } = true;
 }
 
 public sealed class PriceGroupsViewModel
 {
-    public IReadOnlyCollection<PriceGroupDto> Items { get; set; } = [];
-    public PriceGroupInput Input { get; set; } = new();
-    public string? Search { get; set; }
+    // CalibraSmartBoard inline config — anonymous object, JSON serialize edilecek.
+    public object? BoardConfig { get; init; }
 }

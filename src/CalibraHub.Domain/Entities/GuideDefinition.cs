@@ -20,6 +20,16 @@ public sealed class GuideDefinition
     public string DisplayColumn { get; set; } = string.Empty;
     public string GridColumnsJson { get; set; } = "[]";
     public string? DefaultSortColumn { get; set; }
+
+    /// <summary>
+    /// Rehber bazında varsayılan SQL WHERE fragment'ı. Bu rehberin kullanıldığı
+    /// her formda, FldSet'in field-level filtresinden bağımsız olarak otomatik
+    /// uygulanır (AND ile birleşir). Örn: cbv_Guide_Items için "TYPID IN (2,3)"
+    /// — yarı mamul/mamul filtrelemesi her yerde geçerli.
+    /// Token desteği yok — bu seviye global, tablodan tabloya değişmez.
+    /// </summary>
+    public string? DefaultFilterJson { get; set; }
+
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

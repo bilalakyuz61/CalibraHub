@@ -11,18 +11,31 @@ public sealed class DocumentService : IDocumentService
     private readonly IDocumentRepository _repo;
     private readonly IFinanceService _financeService;
     private readonly IDocumentTypeRepository _documentTypeRepo;
+    private readonly IDocumentSourceRepository _docSourceRepo;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
+    private const string DefaultSalesOrderTypeCode = "satis_siparisi";
 
-    public DocumentService(IDocumentRepository repo, IFinanceService financeService, IDocumentTypeRepository documentTypeRepo)
+    public DocumentService(
+        IDocumentRepository repo,
+        IFinanceService financeService,
+        IDocumentTypeRepository documentTypeRepo,
+        IDocumentSourceRepository docSourceRepo)
     {
         _repo = repo;
         _financeService = financeService;
         _documentTypeRepo = documentTypeRepo;
+        _docSourceRepo = docSourceRepo;
     }
 
     private async Task<int?> ResolveDefaultQuoteTypeIdAsync(CancellationToken ct)
     {
         var type = await _documentTypeRepo.GetByCodeAsync(DefaultSalesQuoteTypeCode, ct);
+        return type?.Id;
+    }
+
+    private async Task<int?> ResolveDefaultOrderTypeIdAsync(CancellationToken ct)
+    {
+        var type = await _documentTypeRepo.GetByCodeAsync(DefaultSalesOrderTypeCode, ct);
         return type?.Id;
     }
 
@@ -68,6 +81,34 @@ public sealed class DocumentService : IDocumentService
                 d.ContactId,
                 d.DocumentTypeId
             )).ToArray();
+    }
+
+    public async Task<IReadOnlyCollection<DocumentListItemDto>> GetByTypeAsync(string typeCode, string? search, string? status, CancellationToken ct)
+    {
+        var docs = await _repo.GetByTypeAsync(typeCode, search, status, ct);
+        return docs.Select(q => new DocumentListItemDto(
+            q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
+            q.ContactName, q.Currency, q.GrandTotal,
+            q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount,
+            q.ContactId,
+            q.DocumentTypeId
+        )).ToArray();
+    }
+
+    public async Task<IReadOnlyCollection<DocumentListItemDto>> GetConvertibleQuotesAsync(
+        DateTime? fromDate, DateTime? toDate, int? contactId, string? search, CancellationToken ct)
+    {
+        // document_source tablosu yoksa olustur — modal/repo NOT EXISTS subquery'sinin
+        // calismasi icin garanti gerekir. Idempotent.
+        await _docSourceRepo.EnsureSchemaAsync(ct);
+        var docs = await _repo.GetConvertibleQuotesAsync(fromDate, toDate, contactId, search, ct);
+        return docs.Select(q => new DocumentListItemDto(
+            q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
+            q.ContactName, q.Currency, q.GrandTotal,
+            q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount,
+            q.ContactId,
+            q.DocumentTypeId
+        )).ToArray();
     }
 
     public async Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct)
@@ -374,6 +415,185 @@ public sealed class DocumentService : IDocumentService
     public Task<int?> ReviseLineAsync(int parentLineId, string? description, CancellationToken ct)
         => _repo.ReviseLineAsync(parentLineId, description, ct);
 
+    /// <summary>
+    /// Tekliflerden cari bazli siparis(ler) uretir.
+    ///   1) Tum kaynak teklifleri yukle + dogrula (Approved + henuz consume edilmemis)
+    ///   2) ContactId bazinda grupla — her grup icin tek bir Document (type=satis_siparisi) olustur
+    ///   3) Tum gruptaki teklifin satirlarini siparise clone et (LineNo resequence + Notes'a kaynak ekle)
+    ///   4) Kombinasyon detaylarini ayrica kopyala
+    ///   5) document_source koprusu kayit ekle, kaynak teklif statusunu Converted yap
+    /// Service-level transaction yok; document_source UNIQUE INDEX cift insert riskini engeller.
+    /// </summary>
+    public async Task<CreateOrdersFromQuotesResult> CreateOrdersFromQuotesAsync(
+        CreateOrdersFromQuotesRequest req, string? createdBy, CancellationToken ct)
+    {
+        if (req.QuoteIds == null || req.QuoteIds.Count == 0)
+            return new CreateOrdersFromQuotesResult(false, "En az bir teklif secilmelidir.", 0, Array.Empty<int>());
+
+        await _docSourceRepo.EnsureSchemaAsync(ct);
+
+        var orderTypeId = await ResolveDefaultOrderTypeIdAsync(ct);
+        if (!orderTypeId.HasValue)
+            return new CreateOrdersFromQuotesResult(false, "'satis_siparisi' belge tipi bulunamadi.", 0, Array.Empty<int>());
+
+        var quoteTypeId = await ResolveDefaultQuoteTypeIdAsync(ct);
+
+        // ── 1) Yukle + dogrula ──
+        var quotes = new List<(Document Quote, IReadOnlyCollection<DocumentLine> Lines)>(req.QuoteIds.Count);
+        foreach (var qid in req.QuoteIds.Distinct())
+        {
+            var doc = await _repo.GetByIdAsync(qid, ct);
+            if (doc == null)
+                return new CreateOrdersFromQuotesResult(false, $"Teklif #{qid} bulunamadi.", 0, Array.Empty<int>());
+            if (!doc.IsActive)
+                return new CreateOrdersFromQuotesResult(false, $"Teklif {doc.DocumentNumber} pasif.", 0, Array.Empty<int>());
+            if (doc.Status != DocumentStatus.Approved)
+                return new CreateOrdersFromQuotesResult(false,
+                    $"Teklif {doc.DocumentNumber} onaylanmamis (durum: {doc.Status}). Sadece Approved teklifler siparise donusturulebilir.", 0, Array.Empty<int>());
+            if (quoteTypeId.HasValue && doc.DocumentTypeId.HasValue && doc.DocumentTypeId != quoteTypeId)
+                return new CreateOrdersFromQuotesResult(false,
+                    $"Belge {doc.DocumentNumber} satis teklifi degil.", 0, Array.Empty<int>());
+            if (!doc.ContactId.HasValue)
+                return new CreateOrdersFromQuotesResult(false,
+                    $"Teklif {doc.DocumentNumber} icin cari bos. Cari secilmeden siparise donusturulemez.", 0, Array.Empty<int>());
+            if (await _docSourceRepo.IsSourceConsumedAsync(qid, ct))
+                return new CreateOrdersFromQuotesResult(false,
+                    $"Teklif {doc.DocumentNumber} zaten siparise donusturulmus.", 0, Array.Empty<int>());
+
+            var lines = await _repo.GetLinesAsync(qid, ct);
+            if (lines.Count == 0)
+                return new CreateOrdersFromQuotesResult(false,
+                    $"Teklif {doc.DocumentNumber} icin satir yok — bos teklif siparise donusturulemez.", 0, Array.Empty<int>());
+            quotes.Add((doc, lines));
+        }
+
+        // ── 2) Cari bazli grupla ──
+        var groups = quotes.GroupBy(t => t.Quote.ContactId!.Value).ToArray();
+        var orderIds = new List<int>(groups.Length);
+
+        foreach (var grp in groups)
+        {
+            var first = grp.First().Quote;
+
+            // Yeni siparis numarasi
+            var orderNumber = await _repo.GetNextDocumentNumberAsync(ct);
+
+            // Tutar hesabi: subtotal = tum gruptaki line'larin line_total toplami
+            var allLines = grp.SelectMany(t => t.Lines).ToArray();
+            var subTotal = allLines.Sum(l => l.LineTotal);
+            var discountRate = first.DiscountRate;
+            var taxRate = first.TaxRate;
+            var discountAmount = Math.Round(subTotal * (discountRate / 100m), 4);
+            var afterDiscount = subTotal - discountAmount;
+            var taxAmount = Math.Round(afterDiscount * (taxRate / 100m), 4);
+            var grandTotal = afterDiscount + taxAmount;
+
+            var order = new Document
+            {
+                DocumentNumber = orderNumber,
+                DocumentTypeId = orderTypeId,
+                DocumentDate = req.OrderDate,
+                ValidUntil = null,
+                ContactId = first.ContactId,
+                ContactName = first.ContactName,
+                ContactAddress = first.ContactAddress,
+                SalesRepId = first.SalesRepId,
+                Currency = first.Currency,
+                SubTotal = Math.Round(subTotal, 4),
+                DiscountRate = discountRate,
+                DiscountAmount = discountAmount,
+                TaxRate = taxRate,
+                TaxAmount = taxAmount,
+                GrandTotal = Math.Round(grandTotal, 4),
+                PaymentTerms = first.PaymentTerms,
+                DeliveryTerms = first.DeliveryTerms,
+                DeliveryAddress = first.DeliveryAddress,
+                Notes = grp.Count() > 1
+                    ? $"Kaynak teklifler: {string.Join(", ", grp.Select(t => t.Quote.DocumentNumber))}"
+                    : $"Kaynak teklif: {first.DocumentNumber}",
+                CreatedBy = createdBy,
+                Status = DocumentStatus.Draft,
+            };
+
+            var newOrderId = await _repo.UpsertAsync(order, ct);
+
+            // ── 3) Satirlari clone et (LineNo resequence + Notes'a kaynak ekle) ──
+            var clonedLines = new List<DocumentLine>();
+            // Her clone'un kaynak QuoteLine.Id'sini hatirla — detail kopyasinda kullanilacak
+            var lineSourceMap = new List<int>();
+            int lineNo = 1;
+            foreach (var (quote, lines) in grp)
+            {
+                foreach (var src in lines)
+                {
+                    var sourceTag = $"[Kaynak: {quote.DocumentNumber}]";
+                    var combinedNotes = string.IsNullOrWhiteSpace(src.Notes)
+                        ? sourceTag
+                        : $"{src.Notes}\n{sourceTag}";
+
+                    clonedLines.Add(new DocumentLine
+                    {
+                        Id = 0, // INSERT
+                        DocumentId = newOrderId,
+                        LineNo = lineNo++,
+                        ItemId = src.ItemId,
+                        UnitId = src.UnitId,
+                        Quantity = src.Quantity,
+                        UnitPrice = src.UnitPrice,
+                        DiscountRate = src.DiscountRate,
+                        LineTotal = src.LineTotal,
+                        CombinationId = src.CombinationId,
+                        LocationId = src.LocationId,
+                        Notes = combinedNotes,
+                        NotesPinned = src.NotesPinned,
+                        // RevisedFromId YOK — siparis revizyonu farkli bir senaryo
+                        // SourceLineId — kalem bazli kaynak iz (sipariş satiri ↔ teklif satiri)
+                        SourceLineId = src.Id,
+                    });
+                    lineSourceMap.Add(src.Id);
+                }
+            }
+
+            await _repo.SaveLinesAsync(newOrderId, clonedLines, ct);
+
+            // ── 4) Kombinasyon detaylarini kopyala ──
+            // SaveLinesAsync sonrasi yeni Id'leri yukleyip line_no -> new id eslestirmesi yap
+            var savedLines = await _repo.GetLinesAsync(newOrderId, ct);
+            // savedLines line_no'ya gore sirali; lineSourceMap da line_no sirasiyla insert edilmisti.
+            var savedByLineNo = savedLines.OrderBy(l => l.LineNo).ToArray();
+            for (int i = 0; i < savedByLineNo.Length && i < lineSourceMap.Count; i++)
+            {
+                var sourceLineId = lineSourceMap[i];
+                var destLineId = savedByLineNo[i].Id;
+                var details = await _repo.GetLineDetailsAsync(sourceLineId, ct);
+                if (details.Count == 0) continue;
+                var clonedDetails = details.Select((d, idx) => new DocumentLineDetail
+                {
+                    QuoteLineId = destLineId,
+                    FeatureName = d.FeatureName,
+                    ValueCode = d.ValueCode,
+                    ValueName = d.ValueName,
+                    Description = d.Description,
+                    LineOrder = d.LineOrder > 0 ? d.LineOrder : (idx + 1),
+                }).ToList();
+                await _repo.SaveLineDetailsAsync(destLineId, clonedDetails, ct);
+            }
+
+            // ── 5) document_source koprusu + status update ──
+            foreach (var (quote, _) in grp)
+            {
+                await _docSourceRepo.AddAsync(newOrderId, quote.Id, ct);
+                quote.Status = DocumentStatus.Converted;
+                quote.UpdatedAt = DateTime.Now;
+                await _repo.UpsertAsync(quote, ct);
+            }
+
+            orderIds.Add(newOrderId);
+        }
+
+        return new CreateOrdersFromQuotesResult(true, null, orderIds.Count, orderIds);
+    }
+
     private static DocumentLineDto MapLineDto(DocumentLine ln, IReadOnlyList<DocumentLineDetailDto>? details = null) => new(
         ln.Id, ln.DocumentId, ln.LineNo,
         ln.ItemId, ln.MaterialCode, ln.MaterialName,
@@ -383,5 +603,6 @@ public sealed class DocumentService : IDocumentService
         ln.LocationId, ln.LocationCode, ln.LocationName,
         ln.Notes, details,
         NotesPinned: ln.NotesPinned,
-        RevisedFromId: ln.RevisedFromId);
+        RevisedFromId: ln.RevisedFromId,
+        SourceLineId: ln.SourceLineId);
 }

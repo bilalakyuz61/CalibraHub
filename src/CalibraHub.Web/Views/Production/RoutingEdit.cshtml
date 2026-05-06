@@ -1,0 +1,877 @@
+@model CalibraHub.Application.Contracts.RoutingDto
+@using CalibraHub.Application.Contracts
+@using CalibraHub.Domain.Enums
+@{
+    var isNew = Model is null;
+    ViewData["Title"] = isNew ? "Yeni Rota" : $"Rota: {Model!.Code}";
+    ViewData["FormCode"] = "ROUTING_EDIT";
+    ViewData["BodyClass"] = "page-routing-edit";
+
+    var operations = ViewBag.Operations as IReadOnlyCollection<RoutingOperationDto>
+                  ?? Array.Empty<RoutingOperationDto>();
+}
+
+@section Styles {
+<style>
+.re-page {
+    --re-bg:           #f8fafc;
+    --re-surface:      #ffffff;
+    --re-surface2:     #f1f5f9;
+    --re-border:       #e2e8f0;
+    --re-border-light: #f1f5f9;
+    --re-text:         #0f172a;
+    --re-text-muted:   #64748b;
+    --re-input-bg:     #ffffff;
+    --re-accent:       var(--theme-accent, #2563eb);
+    --re-toast-ok-bg:  #d1fae5;
+    --re-toast-ok-tx:  #065f46;
+    --re-toast-er-bg:  #fee2e2;
+    --re-toast-er-tx:  #991b1b;
+}
+body.app-theme-dark .re-page {
+    --re-bg:           #080c17;
+    --re-surface:      #0d1323;
+    --re-surface2:     #111827;
+    --re-border:       rgba(255,255,255,.09);
+    --re-border-light: rgba(255,255,255,.04);
+    --re-text:         #e2e8f0;
+    --re-text-muted:   #94a3b8;
+    --re-input-bg:     rgba(255,255,255,.06);
+    --re-accent:       var(--theme-accent, #6366f1);
+    --re-toast-ok-bg:  rgba(34,197,94,.18);
+    --re-toast-ok-tx:  #4ade80;
+    --re-toast-er-bg:  rgba(239,68,68,.18);
+    --re-toast-er-tx:  #f87171;
+}
+
+.re-page {
+    padding: 16px 24px; height: 100%;
+    display: flex; flex-direction: column; min-height: 0; gap: 12px;
+    overflow: auto;
+    background: var(--re-bg); color: var(--re-text);
+}
+.re-toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--re-border);
+}
+.re-toolbar h1 { font-size: 18px; margin: 0; color: var(--re-text); }
+.re-toolbar .spacer { flex: 1; }
+.re-back { color: var(--re-text-muted); text-decoration: none; font-size: 13px; }
+.re-back:hover { color: var(--re-text); }
+.re-btn {
+    padding: 7px 14px; border-radius: 7px;
+    border: 1px solid var(--re-border);
+    background: var(--re-surface); color: var(--re-text);
+    cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: background .12s, border-color .12s;
+    text-decoration: none; display: inline-block;
+}
+.re-btn:hover:not(:disabled) { background: var(--re-surface2); border-color: var(--re-accent); }
+.re-btn:disabled { opacity: .4; cursor: not-allowed; }
+.re-btn--primary { background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; border-color: #4f46e5; }
+.re-btn--primary:hover:not(:disabled) { filter: brightness(1.07); border-color: #4f46e5; }
+.re-btn--danger  { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+body.app-theme-dark .re-btn--danger { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.32); }
+
+/* Sol-tab + sağ-pane (master-detail) */
+.re-tabbed {
+    display: flex; min-height: 380px; gap: 0;
+    background: var(--re-surface);
+    border: 1px solid var(--re-border); border-radius: 10px;
+    overflow: hidden; flex: 1 1 auto;
+}
+.re-nav {
+    width: 220px; flex-shrink: 0;
+    background: var(--re-surface2);
+    border-right: 1px solid var(--re-border);
+    padding: 10px 0; display: flex; flex-direction: column;
+}
+.re-nav-grouptitle {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--re-text-muted); padding: 10px 14px 4px; margin: 0;
+}
+.re-nav-btn {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; padding: 9px 14px;
+    border: none; background: transparent;
+    text-align: left; cursor: pointer;
+    color: var(--re-text); font-size: 13px; font-weight: 500;
+    border-left: 3px solid transparent;
+    transition: background .12s, color .12s;
+}
+.re-nav-btn:hover { background: rgba(99,102,241,.08); }
+.re-nav-btn.is-active {
+    border-left-color: var(--re-accent);
+    background: rgba(99,102,241,.14);
+    font-weight: 600;
+}
+.re-nav-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: .7; }
+.re-nav-btn.is-active .re-nav-icon { opacity: 1; }
+.re-nav-count {
+    margin-left: auto; padding: 1px 7px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace;
+    background: rgba(99,102,241,.14); color: #4f46e5;
+    border: 1px solid rgba(99,102,241,.28);
+}
+body.app-theme-dark .re-nav-count { color: #a5b4fc; }
+
+.re-pane { flex: 1 1 auto; min-width: 0; padding: 18px 22px; overflow-y: auto; }
+.re-pane-section { display: none; }
+.re-pane-section.is-active { display: block; }
+.re-pane h2 { margin: 0 0 4px; font-size: 15px; color: var(--re-text); font-weight: 700; }
+.re-pane .pane-hint { font-size: 12px; color: var(--re-text-muted); margin-bottom: 14px; }
+
+/* Form */
+.re-row { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+.re-row label { font-size: 12px; color: var(--re-text-muted); font-weight: 500; }
+.re-row input, .re-row select, .re-row textarea {
+    padding: 7px 10px; border-radius: 6px;
+    border: 1px solid var(--re-border);
+    background: var(--re-input-bg); color: var(--re-text);
+    font-size: 13px; outline: none;
+}
+.re-row input:focus, .re-row select:focus, .re-row textarea:focus {
+    border-color: var(--re-accent); box-shadow: 0 0 0 2px rgba(99,102,241,.18);
+}
+body.app-theme-dark .re-row select,
+html.dark .re-row select { color-scheme: dark; }
+.re-row select > * { background: var(--re-surface); color: var(--re-text); }
+body.app-theme-dark .re-row select > *,
+html.dark .re-row select > * { background-color: #0d1323; color: #e2e8f0; }
+.re-row textarea { min-height: 60px; resize: vertical; }
+.re-row .inline-pair { display: flex; gap: 8px; align-items: center; }
+.re-row .inline-pair input { flex: 1; }
+.re-row .inline-pair .read-label {
+    flex: 0 0 auto; padding: 7px 10px; font-size: 12px;
+    color: var(--re-text-muted); border-radius: 6px;
+    background: var(--re-surface2); min-width: 140px;
+}
+
+/* Operasyonlar tablosu */
+.re-ops-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.re-ops-table th, .re-ops-table td {
+    padding: 6px 8px; border-bottom: 1px solid var(--re-border-light);
+    text-align: left; color: var(--re-text);
+}
+.re-ops-table th {
+    background: var(--re-surface2); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .5px;
+    color: var(--re-text-muted);
+    border-bottom: 1px solid var(--re-border);
+    position: sticky; top: 0;
+}
+.re-ops-table input, .re-ops-table select {
+    width: 100%; padding: 5px 8px; border-radius: 5px;
+    border: 1px solid var(--re-border);
+    background: var(--re-input-bg); color: var(--re-text);
+    font-size: 12px; outline: none;
+}
+.re-ops-table input:focus, .re-ops-table select:focus {
+    border-color: var(--re-accent);
+    box-shadow: 0 0 0 2px rgba(99,102,241,.18);
+}
+.re-ops-table input[type="number"] { text-align: right; }
+.re-ops-table .col-seq    { width: 70px; }
+.re-ops-table .col-op     { width: 25%; }
+.re-ops-table .col-machine{ width: 22%; }
+.re-ops-table .col-dur    { width: 90px; }
+.re-ops-table .col-unit   { width: 90px; }
+.re-ops-table .col-action { width: 80px; text-align: center; }
+.re-ops-table .row-empty {
+    text-align: center; color: var(--re-text-muted);
+    padding: 28px 12px; font-size: 13px;
+}
+.re-icon-btn {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--re-text-muted); padding: 4px 6px; border-radius: 4px;
+    font-size: 16px; line-height: 1;
+}
+.re-icon-btn:hover { background: var(--re-surface2); color: var(--re-text); }
+.re-icon-btn--del:hover { color: #ef4444; background: rgba(239,68,68,.12); }
+.re-icon-btn--up:hover, .re-icon-btn--down:hover { color: var(--re-accent); }
+
+.re-add-row {
+    margin-top: 14px; padding: 10px 12px;
+    border: 1px dashed var(--re-border); border-radius: 8px;
+    background: var(--re-surface2);
+}
+.re-add-row .grid {
+    display: grid;
+    grid-template-columns: 70px 1fr 1fr 100px 100px auto;
+    gap: 8px; align-items: end;
+}
+.re-add-row .field { display: flex; flex-direction: column; gap: 4px; }
+.re-add-row .field label { font-size: 11px; color: var(--re-text-muted); }
+.re-add-row .field input,
+.re-add-row .field select {
+    padding: 6px 8px; border-radius: 5px;
+    border: 1px solid var(--re-border);
+    background: var(--re-input-bg); color: var(--re-text);
+    font-size: 12px; outline: none;
+}
+.re-add-row .field input[type="number"] { text-align: right; }
+body.app-theme-dark .re-add-row .field select,
+html.dark .re-add-row .field select { color-scheme: dark; }
+.re-add-row .field select > * { background: var(--re-surface); color: var(--re-text); }
+body.app-theme-dark .re-add-row .field select > *,
+html.dark .re-add-row .field select > * { background-color: #0d1323; color: #e2e8f0; }
+
+.re-status-pill {
+    padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+    background: rgba(34,197,94,.18); color: #16a34a;
+}
+.re-status-pill--off { background: rgba(148,163,184,.18); color: var(--re-text-muted); }
+body.app-theme-dark .re-status-pill { color: #86efac; }
+
+.re-meta {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--re-border-light);
+    display: flex; gap: 14px; flex-wrap: wrap;
+    font-size: 11px; color: var(--re-text-muted);
+}
+
+#reDynamicWidgets { width: 100%; }
+.re-placeholder {
+    padding: 18px; border: 1px dashed var(--re-border); border-radius: 8px;
+    color: var(--re-text-muted); font-size: 13px;
+    background: var(--re-surface2);
+}
+
+#re-flash { position: fixed; top: 16px; right: 16px; z-index: 9999;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.25);
+    display: none; max-width: 360px;
+}
+#re-flash.ok  { background: var(--re-toast-ok-bg); color: var(--re-toast-ok-tx); }
+#re-flash.err { background: var(--re-toast-er-bg); color: var(--re-toast-er-tx); }
+
+/* Layout sıfırlamaları */
+.page-routing-edit .integrator-dashboard {
+    height: 100% !important; min-height: 0 !important;
+    padding: 0 !important; max-width: none !important;
+    background: transparent !important; box-shadow: none !important;
+    border: none !important; border-radius: 0 !important;
+}
+.page-routing-edit .integrator-dashboard__content {
+    display: flex !important; flex-direction: column !important;
+    width: 100% !important; max-width: none !important;
+    min-height: 0 !important; padding: 0 !important;
+    margin: 0 !important; overflow: hidden !important;
+    height: 100% !important;
+}
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+<div class="re-page">
+    <div class="re-toolbar">
+        <a class="re-back" href="@Url.Action("Routings")" title="Listeye dön">←</a>
+        <a class="re-btn" href="@Url.Action("RoutingEdit")" id="btn-new" title="Yeni rota">+ Yeni</a>
+        <button class="re-btn re-btn--primary" id="btn-save">Kaydet</button>
+        @if (!isNew)
+        {
+            <button class="re-btn re-btn--danger" id="btn-delete">Sil</button>
+        }
+        <span class="spacer"></span>
+        <h1>@(isNew ? "Yeni Rota" : $"{Model!.Code} — {Model.Name}")</h1>
+        @if (!isNew)
+        {
+            var pillCls = Model!.IsActive ? "re-status-pill" : "re-status-pill re-status-pill--off";
+            <span class="@pillCls">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+        }
+    </div>
+
+    <div class="re-tabbed">
+        <nav class="re-nav">
+            <div class="re-nav-grouptitle">Rota</div>
+            <button type="button" class="re-nav-btn is-active" data-tab="genel">
+                <svg class="re-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span>Genel Bilgiler</span>
+            </button>
+            <button type="button" class="re-nav-btn" data-tab="operasyonlar">
+                <svg class="re-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
+                <span>Operasyonlar</span>
+                <span class="re-nav-count" id="nav-count-ops">@operations.Count</span>
+            </button>
+            <div class="re-nav-grouptitle">Ek Sahalar</div>
+            <button type="button" class="re-nav-btn" data-tab="widgets">
+                <svg class="re-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                <span>Widget Sahaları</span>
+            </button>
+        </nav>
+
+        <div class="re-pane">
+            <!-- Tab: Genel Bilgiler -->
+            <section class="re-pane-section is-active" data-pane="genel">
+                <h2>Genel Bilgiler</h2>
+                <div class="pane-hint">Rotanın kimlik ve mamul bağı. Boş Item = şablon rota (herhangi bir mamul için temel).</div>
+
+                <input type="hidden" id="f-id" value="@(Model?.Id ?? 0)" />
+
+                <div class="re-row">
+                    <label>Kod *</label>
+                    <input type="text" id="f-code" value="@Model?.Code" placeholder="RT-001, RT-WELDING" maxlength="50" />
+                </div>
+                <div class="re-row">
+                    <label>Ad *</label>
+                    <input type="text" id="f-name" value="@Model?.Name" placeholder="Standart Üretim Rotası" maxlength="200" />
+                </div>
+                <div class="re-row">
+                    <label>Mamul Kodu</label>
+                    <div class="inline-pair">
+                        <input type="text" id="f-itemCode" value="@Model?.ItemCode" placeholder="Items.Code (boş = şablon)" maxlength="50" autocomplete="off" />
+                        <input type="hidden" id="f-itemId" value="@(Model?.ItemId?.ToString() ?? "")" />
+                        <span class="read-label" id="f-itemName">@Model?.ItemName</span>
+                    </div>
+                </div>
+                <div class="re-row" style="align-items: start;">
+                    <label>Açıklama</label>
+                    <textarea id="f-description" maxlength="500" placeholder="İsteğe bağlı detay...">@Model?.Description</textarea>
+                </div>
+                <div class="re-row">
+                    <label>Aktif</label>
+                    <label style="display:inline-flex; gap:8px; align-items:center;">
+                        <input type="checkbox" id="f-active" @(Model is null || Model.IsActive ? "checked" : "") />
+                        <span style="font-size:12px;color:var(--re-text-muted);" id="f-active-label">@((Model is null || Model.IsActive) ? "Etkin" : "Pasif")</span>
+                    </label>
+                </div>
+
+                @if (!isNew)
+                {
+                    <div class="re-meta">
+                        <span>Oluşturma: @Model!.Created.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                        @if (Model.Updated.HasValue)
+                        {
+                            <span>Güncelleme: @Model.Updated.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                        }
+                    </div>
+                }
+            </section>
+
+            <!-- Tab: Operasyonlar -->
+            <section class="re-pane-section" data-pane="operasyonlar">
+                <h2>Operasyonlar</h2>
+                <div class="pane-hint">
+                    Operasyon dizisi (sıralı). Sıra numarasını değiştirerek veya ↑/↓ butonlarıyla yeniden düzenle.
+                    Süre ve birim opsiyonel — boş bırakılırsa Operation şablonundaki standart süre kullanılır.
+                </div>
+
+                <table class="re-ops-table">
+                    <thead>
+                        <tr>
+                            <th class="col-seq">Sıra</th>
+                            <th class="col-op">Operasyon *</th>
+                            <th class="col-machine">Makine</th>
+                            <th class="col-dur" style="text-align:right;">Süre</th>
+                            <th class="col-unit">Birim</th>
+                            <th>Notlar</th>
+                            <th class="col-action"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ops-tbody">
+                        @if (operations.Count == 0)
+                        {
+                            <tr id="ops-empty-row"><td colspan="7" class="row-empty">Henüz operasyon eklenmemiş. Aşağıdaki formdan ekleyin.</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var op in operations)
+                            {
+                                <tr data-row-id="@op.Id">
+                                    <td>
+                                        <input type="number" class="op-seq" min="0" step="1" value="@op.Sequence" />
+                                    </td>
+                                    <td>
+                                        <input type="text" class="op-code" value="@op.OperationCode" data-id="@op.OperationId" placeholder="OP-CUT" autocomplete="off" />
+                                    </td>
+                                    <td>
+                                        <input type="text" class="op-machine" value="@op.MachineCode" data-id="@(op.MachineId?.ToString() ?? "")" placeholder="(opsiyonel)" autocomplete="off" />
+                                    </td>
+                                    <td>
+                                        <input type="number" class="op-dur" step="0.0001" min="0" value="@op.OverrideDuration" />
+                                    </td>
+                                    <td>
+                                        <select class="op-unit">
+                                            @if (op.DurationUnit == DurationUnit.Minute) { <option value="1" selected>Dakika</option> } else { <option value="1">Dakika</option> }
+                                            @if (op.DurationUnit == DurationUnit.Hour) { <option value="2" selected>Saat</option> } else { <option value="2">Saat</option> }
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="text" class="op-notes" value="@op.Notes" placeholder="(opsiyonel)" maxlength="500" />
+                                    </td>
+                                    <td class="col-action">
+                                        <button type="button" class="re-icon-btn re-icon-btn--up" data-action="up" title="Yukarı">↑</button>
+                                        <button type="button" class="re-icon-btn re-icon-btn--down" data-action="down" title="Aşağı">↓</button>
+                                        <button type="button" class="re-icon-btn re-icon-btn--del" data-action="del" title="Sil">×</button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+
+                <div class="re-add-row">
+                    <div class="grid">
+                        <div class="field">
+                            <label>Sıra</label>
+                            <input type="number" id="add-seq" min="0" step="1" value="@(operations.Count > 0 ? (operations.Max(o => o.Sequence) + 10).ToString() : "10")" />
+                        </div>
+                        <div class="field">
+                            <label>Operasyon (Kod) *</label>
+                            <input type="text" id="add-op-code" list="add-op-options" placeholder="OP-CUT" autocomplete="off" />
+                            <datalist id="add-op-options"></datalist>
+                            <input type="hidden" id="add-op-id" value="" />
+                        </div>
+                        <div class="field">
+                            <label>Makine (opsiyonel)</label>
+                            <input type="text" id="add-machine-code" list="add-machine-options" placeholder="MAC-001" autocomplete="off" />
+                            <datalist id="add-machine-options"></datalist>
+                            <input type="hidden" id="add-machine-id" value="" />
+                        </div>
+                        <div class="field">
+                            <label>Süre</label>
+                            <input type="number" id="add-dur" step="0.0001" min="0" placeholder="0.0" />
+                        </div>
+                        <div class="field">
+                            <label>Birim</label>
+                            <select id="add-unit">
+                                <option value="1">Dakika</option>
+                                <option value="2">Saat</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>&nbsp;</label>
+                            <button type="button" class="re-btn re-btn--primary" id="btn-add-op">+ Ekle</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab: Widget Sahaları -->
+            <section class="re-pane-section" data-pane="widgets">
+                <div id="reDynamicWidgets"
+                     data-form-code="ROUTING_EDIT"
+                     data-record-id="@(Model?.Id.ToString() ?? "")">
+                    <div class="re-placeholder">
+                        Bu form için tanımlı widget yok. <a href="@Url.Action("FormManagement", "Admin")">Form Tasarım Ayarları</a>'ndan ekleyebilirsin.
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+</section>
+
+<div id="re-flash"></div>
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    const isNew = @(isNew ? "true" : "false");
+    const id    = @(Model?.Id ?? 0);
+
+    function token() {
+        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function flash(msg, ok) {
+        const el = document.getElementById('re-flash');
+        el.textContent = msg;
+        el.className = ok ? 'ok' : 'err';
+        el.style.display = 'block';
+        clearTimeout(window.__reFlashTm);
+        window.__reFlashTm = setTimeout(() => el.style.display = 'none', 3000);
+    }
+
+    /* ── Tab switch ── */
+    const navBtns = document.querySelectorAll('.re-nav-btn');
+    const panes   = document.querySelectorAll('.re-pane-section');
+    function activate(tabKey) {
+        navBtns.forEach(b => b.classList.toggle('is-active', b.dataset.tab === tabKey));
+        panes.forEach(p => p.classList.toggle('is-active', p.dataset.pane === tabKey));
+    }
+    navBtns.forEach(btn => btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        activate(btn.dataset.tab);
+    }));
+
+    /* ── Active switch label ── */
+    const activeChk = document.getElementById('f-active');
+    const activeLbl = document.getElementById('f-active-label');
+    activeChk?.addEventListener('change', () => {
+        if (activeLbl) activeLbl.textContent = activeChk.checked ? 'Etkin' : 'Pasif';
+    });
+
+    /* ── Item lookup (kod yazınca id resolve + isim göster) ── */
+    let itemLookupTm = null;
+    const itemCodeEl = document.getElementById('f-itemCode');
+    const itemIdEl   = document.getElementById('f-itemId');
+    const itemNameEl = document.getElementById('f-itemName');
+    async function resolveItem(code, opts) {
+        opts = opts || {};
+        const q = (code || '').trim();
+        if (!q) {
+            if (itemIdEl) itemIdEl.value = '';
+            if (itemNameEl) itemNameEl.textContent = '';
+            return null;
+        }
+        try {
+            const r = await fetch('/Logistics/StockLookup?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
+            const list = await r.json();
+            const arr = Array.isArray(list) ? list : [];
+            const match = arr.find(s => (s.code || '').toLowerCase() === q.toLowerCase());
+            if (match) {
+                if (itemIdEl) itemIdEl.value = String(match.id);
+                if (itemNameEl) itemNameEl.textContent = match.name || '';
+                return match;
+            } else {
+                if (itemIdEl) itemIdEl.value = '';
+                if (itemNameEl) itemNameEl.textContent = opts.silent ? '' : 'Bulunamadı';
+                return null;
+            }
+        } catch (e) { return null; }
+    }
+    itemCodeEl?.addEventListener('input', function () {
+        clearTimeout(itemLookupTm);
+        itemLookupTm = setTimeout(() => resolveItem(this.value, { silent: true }), 250);
+    });
+    itemCodeEl?.addEventListener('blur', function () { resolveItem(this.value); });
+
+    /* ── Operasyon kodu lookup helpers ── */
+    let opOptionsCache = null;
+    async function getOperationOptions() {
+        if (opOptionsCache) return opOptionsCache;
+        try {
+            const r = await fetch('/Production/OperationsList?includeInactive=false', { credentials: 'same-origin' });
+            const list = await r.json();
+            opOptionsCache = Array.isArray(list) ? list : [];
+        } catch (e) { opOptionsCache = []; }
+        return opOptionsCache;
+    }
+    async function fillOpDatalist(elId) {
+        const dl = document.getElementById(elId);
+        if (!dl) return;
+        const opts = await getOperationOptions();
+        dl.innerHTML = opts.map(o =>
+            '<option value="' + escapeAttr(o.code) + '">' + escapeAttr(o.code) + (o.name ? ' — ' + escapeAttr(o.name) : '') + '</option>'
+        ).join('');
+    }
+    function escapeAttr(s) { return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+    async function resolveOpByCode(code) {
+        if (!code) return null;
+        const opts = await getOperationOptions();
+        const match = opts.find(o => (o.code || '').trim().toLowerCase() === code.trim().toLowerCase());
+        return match ? { id: match.id, code: match.code, name: match.name } : null;
+    }
+
+    /* ── Makine kodu lookup helpers ── */
+    let machineOptionsCache = null;
+    async function getMachineOptions() {
+        if (machineOptionsCache) return machineOptionsCache;
+        try {
+            const r = await fetch('/Logistics/GetAllMachines', { credentials: 'same-origin' });
+            const list = await r.json();
+            machineOptionsCache = (Array.isArray(list) ? list : []).filter(m => m.isActive !== false);
+        } catch (e) { machineOptionsCache = []; }
+        return machineOptionsCache;
+    }
+    async function fillMachineDatalist(elId) {
+        const dl = document.getElementById(elId);
+        if (!dl) return;
+        const opts = await getMachineOptions();
+        dl.innerHTML = opts.map(m =>
+            '<option value="' + escapeAttr(m.machineCode || '') + '">' + escapeAttr(m.machineCode || '') + (m.machineName ? ' — ' + escapeAttr(m.machineName) : '') + '</option>'
+        ).join('');
+    }
+    async function resolveMachineByCode(code) {
+        if (!code) return null;
+        const opts = await getMachineOptions();
+        const match = opts.find(m => (m.machineCode || '').trim().toLowerCase() === code.trim().toLowerCase());
+        return match ? { id: match.id, code: match.machineCode, name: match.machineName } : null;
+    }
+
+    fillOpDatalist('add-op-options');
+    fillMachineDatalist('add-machine-options');
+
+    /* Add row form */
+    document.getElementById('add-op-code')?.addEventListener('blur', async function () {
+        const m = await resolveOpByCode(this.value);
+        document.getElementById('add-op-id').value = m ? String(m.id) : '';
+    });
+    document.getElementById('add-machine-code')?.addEventListener('blur', async function () {
+        const m = await resolveMachineByCode(this.value);
+        document.getElementById('add-machine-id').value = m ? String(m.id) : '';
+    });
+
+    function tbody() { return document.getElementById('ops-tbody'); }
+    function rebuildEmptyState() {
+        const rows = tbody().querySelectorAll('tr[data-row-id]');
+        const empty = document.getElementById('ops-empty-row');
+        if (rows.length === 0) {
+            if (!empty) {
+                tbody().innerHTML = '<tr id="ops-empty-row"><td colspan="7" class="row-empty">Henüz operasyon eklenmemiş. Aşağıdaki formdan ekleyin.</td></tr>';
+            }
+        } else if (empty) {
+            empty.remove();
+        }
+        document.getElementById('nav-count-ops').textContent = String(rows.length);
+    }
+
+    function bindRowActions(tr) {
+        tr.querySelector('[data-action="del"]')?.addEventListener('click', () => {
+            tr.remove(); rebuildEmptyState();
+        });
+        tr.querySelector('[data-action="up"]')?.addEventListener('click', () => {
+            const prev = tr.previousElementSibling;
+            if (prev && prev.dataset && prev.dataset.rowId) tr.parentNode.insertBefore(tr, prev);
+        });
+        tr.querySelector('[data-action="down"]')?.addEventListener('click', () => {
+            const next = tr.nextElementSibling;
+            if (next && next.dataset && next.dataset.rowId) tr.parentNode.insertBefore(next, tr);
+        });
+        // Kod alanlarına blur'da resolve
+        const opCodeInput = tr.querySelector('.op-code');
+        opCodeInput?.addEventListener('blur', async function () {
+            const m = await resolveOpByCode(this.value);
+            if (m) this.dataset.id = String(m.id);
+            else this.dataset.id = '';
+        });
+        const machInput = tr.querySelector('.op-machine');
+        machInput?.addEventListener('blur', async function () {
+            const m = await resolveMachineByCode(this.value);
+            if (m) this.dataset.id = String(m.id);
+            else this.dataset.id = '';
+        });
+    }
+
+    /* Mevcut satırlara da action bind */
+    tbody().querySelectorAll('tr[data-row-id]').forEach(tr => bindRowActions(tr));
+
+    /* Add new operation row (yerel, henüz kaydedilmedi) */
+    document.getElementById('btn-add-op')?.addEventListener('click', async () => {
+        const seq = Number(document.getElementById('add-seq').value || 0);
+        const opCode = document.getElementById('add-op-code').value.trim();
+        const opIdRaw = document.getElementById('add-op-id').value.trim();
+        let opId = opIdRaw ? Number(opIdRaw) : 0;
+        if (!opId && opCode) {
+            const r = await resolveOpByCode(opCode);
+            if (r) opId = r.id;
+        }
+        if (!opId) { flash('Operasyon kodu çözümlenemedi.', false); return; }
+
+        const machineCode = document.getElementById('add-machine-code').value.trim();
+        const machineIdRaw = document.getElementById('add-machine-id').value.trim();
+        let machineId = machineIdRaw ? Number(machineIdRaw) : null;
+        if (!machineId && machineCode) {
+            const r = await resolveMachineByCode(machineCode);
+            if (r) machineId = r.id;
+        }
+
+        const dur = document.getElementById('add-dur').value;
+        const unit = Number(document.getElementById('add-unit').value || 1);
+
+        const opRecord = await resolveOpByCode(opCode);
+        const machRecord = machineCode ? await resolveMachineByCode(machineCode) : null;
+
+        const tr = document.createElement('tr');
+        tr.dataset.rowId = 'new-' + Date.now();
+        tr.innerHTML = `
+            <td><input type="number" class="op-seq" min="0" step="1" value="${seq}" /></td>
+            <td><input type="text" class="op-code" value="${escapeAttr(opCode)}" data-id="${opId}" autocomplete="off" /></td>
+            <td><input type="text" class="op-machine" value="${escapeAttr(machineCode || '')}" data-id="${machineId || ''}" placeholder="(opsiyonel)" autocomplete="off" /></td>
+            <td><input type="number" class="op-dur" step="0.0001" min="0" value="${dur || ''}" /></td>
+            <td><select class="op-unit">
+                <option value="1"${unit === 1 ? ' selected' : ''}>Dakika</option>
+                <option value="2"${unit === 2 ? ' selected' : ''}>Saat</option>
+            </select></td>
+            <td><input type="text" class="op-notes" placeholder="(opsiyonel)" maxlength="500" /></td>
+            <td class="col-action">
+                <button type="button" class="re-icon-btn re-icon-btn--up" data-action="up" title="Yukarı">↑</button>
+                <button type="button" class="re-icon-btn re-icon-btn--down" data-action="down" title="Aşağı">↓</button>
+                <button type="button" class="re-icon-btn re-icon-btn--del" data-action="del" title="Sil">×</button>
+            </td>`;
+        tbody().appendChild(tr);
+        bindRowActions(tr);
+        rebuildEmptyState();
+
+        // Reset form
+        const next = (Number(document.getElementById('add-seq').value || 0) + 10);
+        document.getElementById('add-seq').value = String(next);
+        document.getElementById('add-op-code').value = '';
+        document.getElementById('add-op-id').value = '';
+        document.getElementById('add-machine-code').value = '';
+        document.getElementById('add-machine-id').value = '';
+        document.getElementById('add-dur').value = '';
+    });
+
+    /* ── Save (header + operations tek seferde) ── */
+    document.getElementById('btn-save')?.addEventListener('click', async () => {
+        const code = document.getElementById('f-code').value.trim();
+        const name = document.getElementById('f-name').value.trim();
+        if (!code) { flash('Kod zorunlu.', false); return; }
+        if (!name) { flash('Ad zorunlu.', false); return; }
+
+        // Item resolve (boşsa şablon)
+        const itemCodeVal = (itemCodeEl?.value || '').trim();
+        if (itemCodeVal) {
+            // Lookup'ı zorla — itemId boşsa code çözümlenmemiştir
+            await resolveItem(itemCodeVal);
+            if (!itemIdEl.value) {
+                flash('Mamul kodu çözümlenemedi. Boş bırakın veya geçerli kod seçin.', false);
+                return;
+            }
+        }
+        const itemId = itemIdEl.value ? Number(itemIdEl.value) : null;
+
+        // Operasyon satırları
+        const rows = Array.from(tbody().querySelectorAll('tr[data-row-id]'));
+        const operations = [];
+        for (const tr of rows) {
+            const opCodeInput = tr.querySelector('.op-code');
+            let opId = opCodeInput.dataset.id ? Number(opCodeInput.dataset.id) : 0;
+            if (!opId) {
+                const r = await resolveOpByCode(opCodeInput.value);
+                if (r) opId = r.id;
+            }
+            if (!opId) { flash('Operasyon kodu çözümlenmemiş satır var: ' + (opCodeInput.value || '(boş)'), false); return; }
+
+            const machInput = tr.querySelector('.op-machine');
+            let machineId = machInput.dataset.id ? Number(machInput.dataset.id) : null;
+            if (!machineId && machInput.value.trim()) {
+                const r = await resolveMachineByCode(machInput.value);
+                if (r) machineId = r.id;
+            }
+
+            const seq = Number(tr.querySelector('.op-seq').value || 0);
+            const durRaw = tr.querySelector('.op-dur').value;
+            const dur = durRaw === '' ? null : Number(durRaw);
+            const unit = Number(tr.querySelector('.op-unit').value || 1);
+            const notes = tr.querySelector('.op-notes').value.trim() || null;
+
+            operations.push({ sequence: seq, operationId: opId, machineId, overrideDuration: dur, durationUnit: unit, notes });
+        }
+
+        const body = {
+            id: Number(document.getElementById('f-id').value || 0),
+            code, name,
+            itemId,
+            configId: null,
+            description: document.getElementById('f-description').value.trim() || null,
+            isActive: activeChk.checked,
+            operations
+        };
+
+        try {
+            const r = await fetch('/Production/SaveRouting', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                credentials: 'same-origin',
+                body: JSON.stringify(body)
+            });
+            const data = await r.json();
+            if (data.ok) {
+                flash('Kaydedildi.', true);
+                if (isNew && data.id) {
+                    setTimeout(() => location.href = '/Production/RoutingEdit?id=' + data.id, 500);
+                } else {
+                    setTimeout(() => location.reload(), 500);
+                }
+            } else flash(data.error || 'Hata.', false);
+        } catch (e) { flash('İstek hatası: ' + e.message, false); }
+    });
+
+    /* ── Delete (custom modal) ── */
+    function showConfirm(opts) {
+        return new Promise(resolve => {
+            const backdrop = document.createElement('div');
+            backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(8,12,24,.55);backdrop-filter:blur(4px);z-index:9999;display:flex;align-items:center;justify-content:center;';
+            const card = document.createElement('div');
+            card.style.cssText = 'background:var(--re-surface);color:var(--re-text);border:1px solid var(--re-border);border-radius:12px;width:min(440px,92vw);box-shadow:0 12px 48px rgba(0,0,0,.4);overflow:hidden;';
+            card.innerHTML = `
+                <div style="padding:20px 22px 14px; display:flex;gap:14px;align-items:flex-start;">
+                    <div style="width:36px;height:36px;border-radius:50%;background:rgba(239,68,68,.18);color:#ef4444;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22m-4 0V4a2 2 0 00-2-2H8a2 2 0 00-2 2v3"/></svg>
+                    </div>
+                    <div style="flex:1;">
+                        <h3 style="margin:0 0 6px;font-size:15px;font-weight:600;">${opts.title || 'Onay'}</h3>
+                        <p style="margin:0;font-size:13px;color:var(--re-text-muted);line-height:1.5;">${opts.message || ''}</p>
+                    </div>
+                </div>
+                <div style="padding:12px 18px; display:flex;justify-content:flex-end;gap:8px; border-top:1px solid var(--re-border);background:var(--re-surface2);">
+                    <button id="cnf-cancel" class="re-btn">Vazgeç</button>
+                    <button id="cnf-ok" class="re-btn re-btn--danger">${opts.okLabel || 'Sil'}</button>
+                </div>`;
+            backdrop.appendChild(card);
+            document.body.appendChild(backdrop);
+            const okBtn = card.querySelector('#cnf-ok');
+            const cnBtn = card.querySelector('#cnf-cancel');
+            const cleanup = (val) => { document.body.removeChild(backdrop); resolve(val); };
+            okBtn.addEventListener('click', () => cleanup(true));
+            cnBtn.addEventListener('click', () => cleanup(false));
+            backdrop.addEventListener('click', e => { if (e.target === backdrop) cleanup(false); });
+            document.addEventListener('keydown', function onKey(e) {
+                if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); cleanup(false); }
+                if (e.key === 'Enter')  { document.removeEventListener('keydown', onKey); cleanup(true); }
+            });
+            okBtn.focus();
+        });
+    }
+
+    document.getElementById('btn-delete')?.addEventListener('click', async () => {
+        const ok = await showConfirm({
+            title: 'Rota Sil',
+            message: 'Bu rota ve içindeki tüm operasyon adımları kalıcı olarak silinecek. Devam edilsin mi?',
+            okLabel: 'Sil'
+        });
+        if (!ok) return;
+        try {
+            const r = await fetch('/Production/DeleteRouting/' + id, {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': token() },
+                credentials: 'same-origin'
+            });
+            const data = await r.json();
+            if (data.ok) location.href = '/Production/Routings';
+            else flash(data.error || 'Hata.', false);
+        } catch (e) { flash('İstek hatası: ' + e.message, false); }
+    });
+
+    /* Hash deep-link */
+    function applyHash() {
+        const h = (location.hash || '').replace('#', '').trim();
+        if (!h) return;
+        const ok = Array.from(navBtns).some(b => b.dataset.tab === h && !b.disabled);
+        if (ok) activate(h);
+    }
+    window.addEventListener('hashchange', applyHash);
+    applyHash();
+
+    /* DynamicWidgetRenderer mount */
+    function mountWidgets() {
+        var el = document.getElementById('reDynamicWidgets');
+        if (!el) return;
+        function tryMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+            try {
+                window._reDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                    formCode: 'ROUTING_EDIT',
+                    recordId: el.dataset.recordId || ''
+                });
+            } catch (e) { console.warn('[RE] mountDynamicWidgetRenderer hatasi:', e); }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+            tryMount();
+        } else {
+            var retries = 30;
+            var iv = setInterval(function () {
+                if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+                    clearInterval(iv); tryMount();
+                } else if (--retries <= 0) { clearInterval(iv); }
+            }, 200);
+        }
+    }
+    mountWidgets();
+})();
+</script>
+}

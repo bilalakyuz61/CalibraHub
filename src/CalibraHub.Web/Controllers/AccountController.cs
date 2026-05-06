@@ -6,6 +6,8 @@ using System.Text.Json.Nodes;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Models.Account;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -24,6 +26,7 @@ public sealed class AccountController : Controller
     private readonly IUiConfigurationService _uiConfigurationService;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IUserAuthenticationService _userAuthenticationService;
+    private readonly IGrafanaProvisioningService _grafanaProvisioning;
     private readonly IWebHostEnvironment _env;
 
     public AccountController(
@@ -31,12 +34,14 @@ public sealed class AccountController : Controller
         IUiConfigurationService uiConfigurationService,
         IUserProfileRepository userProfileRepository,
         IUserAuthenticationService userAuthenticationService,
+        IGrafanaProvisioningService grafanaProvisioning,
         IWebHostEnvironment env)
     {
         _companyDefinitionRepository = companyDefinitionRepository;
         _uiConfigurationService = uiConfigurationService;
         _userProfileRepository = userProfileRepository;
         _userAuthenticationService = userAuthenticationService;
+        _grafanaProvisioning = grafanaProvisioning;
         _env = env;
     }
 
@@ -128,6 +133,33 @@ public sealed class AccountController : Controller
             new("company_id", authenticatedUser.CompanyId.ToString()),
             new("company_name", authenticatedUser.CompanyName)
         };
+
+        // Grafana lazy provisioning: ViewDashboards yetkisi olan kullanicilar icin
+        // org/membership ensure edilir, orgId claim'e eklenir (middleware kullanir).
+        // Hata durumunda login bloke olmaz — IsEnabled=false ise hicbir cagri yapilmaz.
+        // Role claim hem enum adi hem Turkce label olabilir (UserAuth servisi label dondurur).
+        if (_grafanaProvisioning.IsEnabled
+            && UserAuthorizationCatalog.TryParseRole(authenticatedUser.Role, out var userRole))
+        {
+            var permissions = UserAuthorizationCatalog.GetAllowedPermissions(userRole);
+            if (permissions.Contains(UserPermission.ViewDashboards))
+            {
+                var orgId = await _grafanaProvisioning.EnsureOrganizationAsync(
+                    authenticatedUser.CompanyId, authenticatedUser.CompanyName, cancellationToken);
+                if (orgId > 0)
+                {
+                    var grafanaUsername = $"company_{authenticatedUser.CompanyId}_user_{authenticatedUser.Id}";
+                    var role = permissions.Contains(UserPermission.DesignDashboards)
+                        ? GrafanaRole.Designer
+                        : GrafanaRole.Viewer;
+
+                    await _grafanaProvisioning.EnsureUserOrganizationMembershipAsync(
+                        orgId, grafanaUsername, authenticatedUser.Email, authenticatedUser.FullName, role, cancellationToken);
+
+                    claims.Add(new Claim("grafana_org_id", orgId.ToString()));
+                }
+            }
+        }
 
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));

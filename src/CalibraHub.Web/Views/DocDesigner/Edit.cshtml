@@ -1,0 +1,25 @@
+@model int
+@{
+    ViewData["Title"] = Model == 0 ? "Yeni Belge Şablonu" : "Şablon Düzenle";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div id="doc-designer-editor-root" style="height:calc(100vh - 56px);overflow:hidden;"></div>
+
+@section Scripts {
+<script>
+(function () {
+    var el = document.getElementById('doc-designer-editor-root');
+    if (!el || !window.CalibraHub || !window.CalibraHub.mountDocDesigner) {
+        console.error('DocDesigner mount noktası bulunamadı.');
+        return;
+    }
+    window.CalibraHub.mountDocDesigner(el, {
+        layoutId: @Model,
+        apiBase: '/api/doc-designer',
+        reportingApiBase: '/api/reporting',
+        listUrl: '/DocDesigner'
+    });
+})();
+</script>
+}

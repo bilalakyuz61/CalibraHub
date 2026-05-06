@@ -38,6 +38,9 @@ public sealed class DocumentLine
     [Description("Revize zinciri — bu satir hangi satirdan revize edildi? NULL ise orijinal satir. FK -> DocumentLine.Id (self-referencing). Zincir geriye dogru takip edilerek kac revize oldugu gorulebilir.")]
     public int? RevisedFromId { get; set; }
 
+    [Description("Kalem bazli kaynak iz — bu sat�r hangi kaynak satirdan turetildi? Tekliften siparise donustururken her sipariş satirinin hangi teklif satirindan geldigini gosterir. NULL ise orijinal/manuel girilmis. FK -> DocumentLine.Id (self-referencing).")]
+    public int? SourceLineId { get; set; }
+
     // ── Transient display fields (Item + Unit + ProductConfiguration + Location JOIN ile okunur; tabloya yazilmaz) ──
     public string? MaterialCode { get; set; }
     public string? MaterialName { get; set; }

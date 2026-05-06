@@ -29,7 +29,7 @@ public sealed class CurrencyService : ICurrencyService
         {
             rateLookup.TryGetValue(c.Code, out var rate);
             return new CurrencyDto(c.Id, c.Code, c.Name, c.Symbol, c.IsActive,
-                rate?.BuyingRate, rate?.SellingRate, rate?.EffectiveBuyingRate, rate?.EffectiveSellingRate, rate?.RateDate);
+                rate?.BuyingRate, rate?.SellingRate, rate?.EffectiveBuyingRate, rate?.EffectiveSellingRate, rate?.Date);
         }).ToArray();
     }
 
@@ -43,7 +43,7 @@ public sealed class CurrencyService : ICurrencyService
         {
             rateLookup.TryGetValue(c.Code, out var rate);
             return new CurrencyDto(c.Id, c.Code, c.Name, c.Symbol, c.IsActive,
-                rate?.BuyingRate, rate?.SellingRate, rate?.EffectiveBuyingRate, rate?.EffectiveSellingRate, rate?.RateDate);
+                rate?.BuyingRate, rate?.SellingRate, rate?.EffectiveBuyingRate, rate?.EffectiveSellingRate, rate?.Date);
         }).ToArray();
     }
 
@@ -53,7 +53,7 @@ public sealed class CurrencyService : ICurrencyService
         if (c is null) return null;
         var rate = await _rateRepo.GetRateAsync(c.Code, DateTime.Today, ct);
         return new CurrencyDto(c.Id, c.Code, c.Name, c.Symbol, c.IsActive,
-            rate?.BuyingRate, rate?.SellingRate, rate?.EffectiveBuyingRate, rate?.EffectiveSellingRate, rate?.RateDate);
+            rate?.BuyingRate, rate?.SellingRate, rate?.EffectiveBuyingRate, rate?.EffectiveSellingRate, rate?.Date);
     }
 
     public async Task<(bool Success, string? Error, int? Id)> CreateAsync(CreateCurrencyRequest req, CancellationToken ct)
@@ -158,8 +158,9 @@ public sealed class CurrencyService : ICurrencyService
 
     private static ExchangeRate CloneWithDate(ExchangeRate r, DateTime newDate) => new()
     {
+        CurrencyId = r.CurrencyId,
         CurrencyCode = r.CurrencyCode,
-        RateDate = newDate,
+        Date = newDate,
         BuyingRate = r.BuyingRate,
         SellingRate = r.SellingRate,
         EffectiveBuyingRate = r.EffectiveBuyingRate,

@@ -10,7 +10,7 @@ namespace CalibraHub.Worker;
 
 public sealed class ReminderNotificationWorker : BackgroundService
 {
-    private const string TaskCode = "REMINDER_NOTIFY";
+    private const string TaskName = "Hatirlatici Bildirim";
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ReminderNotificationWorker> _logger;
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
@@ -32,8 +32,7 @@ public sealed class ReminderNotificationWorker : BackgroundService
             var repo = regScope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
             await repo.UpsertRegistrationAsync(new ScheduledTask
             {
-                Code                = TaskCode,
-                Name                = "Hatirlatici Bildirim",
+                Name                = TaskName,
                 Description         = "Not'lara bagli zamanlanmis hatirlaticilari kontrol edip suresi gelenleri gonderir.",
                 ScheduleDescription = "Her 60 saniyede",
                 IsEnabled           = true,
@@ -64,7 +63,9 @@ public sealed class ReminderNotificationWorker : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var repo = scope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
-                await repo.ReportRunAsync(TaskCode, status, msg, null, DateTime.UtcNow.Add(PollInterval), stoppingToken);
+                var t = await repo.GetByNameAsync(TaskName, stoppingToken);
+                if (t is not null)
+                    await repo.ReportRunAsync(t.Id, status, msg, null, DateTime.UtcNow.Add(PollInterval), stoppingToken);
             }
             catch { /* swallow */ }
 
@@ -98,38 +99,41 @@ public sealed class ReminderNotificationWorker : BackgroundService
         {
             try
             {
-                // Hedef kullanici: TargetUserId varsa o, yoksa notun sahibi
-                var targetUserId = reminder.TargetUserId ?? note.UserId;
+                // Hedef listesi: TargetUserIds doluysa o liste, yoksa fallback = notun sahibi
+                var targets = reminder.TargetUserIds.Count > 0
+                    ? reminder.TargetUserIds.ToArray()
+                    : new[] { note.UserId };
                 var channel = reminder.DeliveryChannel;
+                var subject = "Hatirlatici: " + (string.IsNullOrWhiteSpace(note.Title) ? "Basliksiz Not" : note.Title);
 
-                // InApp / Both: veritabanina bildirim kaydi yaz (Shell navbar bell dropdown okur)
-                if (channel == ReminderDeliveryChannel.InApp || channel == ReminderDeliveryChannel.Both)
+                foreach (var targetUserId in targets.Distinct())
                 {
-                    var notification = new UserNotification
+                    // InApp / Both: veritabanina bildirim kaydi yaz
+                    if (channel == ReminderDeliveryChannel.InApp || channel == ReminderDeliveryChannel.Both)
                     {
-                        CompanyId  = note.CompanyId,
-                        UserId     = targetUserId,
-                        Title      = "Hatirlatici: " + (string.IsNullOrWhiteSpace(note.Title) ? "Basliksiz Not" : note.Title),
-                        Body       = $"Bu notun hatirlaticisi {reminder.RemindAt:dd.MM.yyyy HH:mm} icin planlanmisti.",
-                        SourceType = "NoteReminder",
-                        SourceId   = note.Id,
-                        Link       = "/Notes?id=" + note.Id,
-                    };
-                    await notificationRepo.AddAsync(notification, cancellationToken);
-                }
-
-                // Email / Both: target user'in mail adresine gonder
-                if (channel == ReminderDeliveryChannel.Email || channel == ReminderDeliveryChannel.Both)
-                {
-                    var user = await userRepo.GetByIdAsync(targetUserId, cancellationToken);
-                    if (user is null)
-                    {
-                        _logger.LogWarning("Reminder {ReminderId} target user {UserId} bulunamadi — email atilmadi.",
-                            reminder.Id, targetUserId);
+                        var notification = new UserNotification
+                        {
+                            CompanyId  = note.CompanyId,
+                            UserId     = targetUserId,
+                            Title      = subject,
+                            Body       = $"Bu notun hatirlaticisi {reminder.RemindAt:dd.MM.yyyy HH:mm} icin planlanmisti.",
+                            SourceType = "NoteReminder",
+                            SourceId   = note.Id,
+                            Link       = "/Notes?id=" + note.Id,
+                        };
+                        await notificationRepo.AddAsync(notification, cancellationToken);
                     }
-                    else
+
+                    // Email / Both
+                    if (channel == ReminderDeliveryChannel.Email || channel == ReminderDeliveryChannel.Both)
                     {
-                        var subject = "Hatirlatici: " + (string.IsNullOrWhiteSpace(note.Title) ? "Basliksiz Not" : note.Title);
+                        var user = await userRepo.GetByIdAsync(targetUserId, cancellationToken);
+                        if (user is null)
+                        {
+                            _logger.LogWarning("Reminder {ReminderId} target user {UserId} bulunamadi — email atilmadi.",
+                                reminder.Id, targetUserId);
+                            continue;
+                        }
                         var body = $"Merhaba {user.FullName},\n\n" +
                                    $"Bu not icin bir hatirlatici zamanlamistiniz:\n\n" +
                                    $"  Baslik: {note.Title}\n" +
@@ -161,7 +165,7 @@ public sealed class ReminderNotificationWorker : BackgroundService
                             RecurrenceType  = reminder.RecurrenceType,
                             RecurrenceData  = reminder.RecurrenceData,
                             DeliveryChannel = reminder.DeliveryChannel,
-                            TargetUserId    = reminder.TargetUserId,
+                            TargetUserIds   = reminder.TargetUserIds,
                         };
                         await noteRepository.AddReminderAsync(nextReminder, cancellationToken);
                         _logger.LogInformation("Next occurrence scheduled for {RemindAt:dd.MM.yyyy HH:mm}.", nextRemindAt.Value);

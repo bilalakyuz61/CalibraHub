@@ -69,6 +69,12 @@ export default function SmartCard(props) {
   var imageUrl = props.imageUrl || null
   var statusBadge = props.statusBadge || null
   var rawWidgets = Array.isArray(props.widgets) ? props.widgets : []
+  // Record values — backend tarafindan entity'ye konulan DB kolon-adi (snake_case)
+  // → deger map'i. SmartWidget guide-list popup'i bunu token resolve icin kullanir
+  // ('{#code}' → recordValues.code). DOM lookup'i bypass ederek liste sayfasinda
+  // dogru kart-bagli filtre saglar.
+  var recordValues = (props.recordValues && typeof props.recordValues === 'object')
+    ? props.recordValues : {}
   var primaryAction = props.primaryAction || null
   var secondaryAction = props.secondaryAction || null
   var extraActions = Array.isArray(props.extraActions) ? props.extraActions : []
@@ -98,7 +104,16 @@ export default function SmartCard(props) {
     // Semantik renk cozumu: colorType/colorValue → color string (SmartWidget.color)
     // Dinamik (colorType=1): colorValue, ayni karttaki baska bir widget'in id'si;
     // o widget'in value'su token olarak okunur.
-    var listableRaw = rawWidgets.filter(function(w) { return w != null })
+    // displayScope filtresi — guide-list widget'lari icin: 'form' olanlar SmartCard'da
+    // gorunmez (sadece edit ekraninda); 'card' ve 'both' kart uzerinde gosterilir.
+    // Diger tipler her zaman gorunur.
+    var listableRaw = rawWidgets.filter(function(w) {
+      if (!w) return false
+      var dt = String(w.dataType || '').toLowerCase()
+      if (dt !== 'guide-list') return true
+      var scope = String((w.metadata && w.metadata.displayScope) || 'both').toLowerCase()
+      return scope !== 'form'
+    })
     var valueById = {}
     rawWidgets.forEach(function(w) { if (w && w.id) valueById[w.id] = w.value })
     listableRaw = listableRaw.map(function(w) {
@@ -295,13 +310,47 @@ export default function SmartCard(props) {
   function executeSecondary() {
     if (!secondaryAction) return
     if (secondaryAction.apiUrl) {
-      fetch(secondaryAction.apiUrl, { method: 'POST', credentials: 'same-origin' })
-        .then(function(r) { return r.json() })
-        .then(function(data) {
-          if (data && data.success === false) alert('Hata: ' + (data.message || 'Bilinmeyen'))
-          else window.location.reload()
+      // Anti-forgery token (Razor'in hidden input'u — _Layout veya partial _ValidationScripts injekte eder)
+      var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]')
+      var token = tokenEl ? tokenEl.value : ''
+      var method = (secondaryAction.apiMethod || 'POST').toUpperCase()
+      var hasBody = secondaryAction.apiBody != null
+      var headers = { 'Accept': 'application/json' }
+      if (token) headers['RequestVerificationToken'] = token
+      if (hasBody) headers['Content-Type'] = 'application/json'
+
+      var fetchOpts = { method: method, credentials: 'same-origin', headers: headers }
+      if (hasBody) fetchOpts.body = JSON.stringify(secondaryAction.apiBody)
+
+      fetch(secondaryAction.apiUrl, fetchOpts)
+        .then(function(r) {
+          // 200/4xx fark etmeksizin body'yi text olarak al — JSON parse'ı manuel dene
+          // (boş body veya HTML hata sayfasında JSON.parse "Unexpected end of JSON input" patlamasını engeller).
+          return r.text().then(function(txt) { return { status: r.status, ok: r.ok, txt: txt } })
         })
-        .catch(function(err) { alert('Hata: ' + err.message) })
+        .then(function(res) {
+          var data = null
+          if (res.txt) { try { data = JSON.parse(res.txt) } catch (_) { /* JSON değil — HTML hata sayfası vb. */ } }
+
+          // Backend konvansiyonu: { ok: true } veya { ok: false, error: "..." }
+          // Eski/farklı endpoint'ler için: { success: true/false, message: "..." } da destekli.
+          var serverOk = data && (data.ok === true || data.success === true)
+          var serverFailMsg = data && (data.error || data.message)
+
+          if (!res.ok || (data && (data.ok === false || data.success === false))) {
+            var msg = serverFailMsg || ('İstek başarısız (HTTP ' + res.status + ')')
+            if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'err')
+            else alert('Hata: ' + msg)
+            return
+          }
+          if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('İşlem tamamlandı.', 'ok')
+          // Listeyi tazele — SmartBoard yeniden yüklensin
+          setTimeout(function() { window.location.reload() }, 600)
+        })
+        .catch(function(err) {
+          if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Hata: ' + err.message, 'err')
+          else alert('Hata: ' + err.message)
+        })
     } else if (secondaryAction.url) {
       navigateInFrame(secondaryAction.url)
     }
@@ -422,6 +471,30 @@ export default function SmartCard(props) {
       var dlUrl = (action.url || '').replace('{id}', id)
       var a = document.createElement('a'); a.href = dlUrl; a.download = ''
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      return
+    }
+
+    // trigger: window.CalibraHub.openXxxModal({ payload }) seklinde global helper'a delege.
+    // Server-side config'te { type: 'trigger', trigger: 'convert-single-quote-modal', payload: {...} }
+    if (action.type === 'trigger') {
+      var ch = (typeof window !== 'undefined') && window.CalibraHub
+      var triggerName = action.trigger || ''
+      if (triggerName === 'convert-single-quote-modal' && ch && typeof ch.openConvertSingleQuoteModal === 'function') {
+        ch.openConvertSingleQuoteModal(Object.assign({}, action.payload || {}, {
+          onSuccess: function() {
+            try { window.location.reload() } catch (e) { /* ignore */ }
+          },
+        }))
+      } else if (triggerName === 'convert-orders-modal' && ch && typeof ch.openConvertToOrdersModal === 'function') {
+        ch.openConvertToOrdersModal({
+          onSuccess: function() { try { window.location.reload() } catch (e) { /* ignore */ } }
+        })
+      } else if (triggerName === 'price-group-contacts-modal' && ch && typeof ch.openPriceGroupContactsModal === 'function') {
+        // Cariler eslestirme modali — payload: { groupId, groupCode, groupName }
+        ch.openPriceGroupContactsModal(Object.assign({}, action.payload || {}))
+      } else {
+        console.warn('[SmartCard] Unknown trigger:', triggerName)
+      }
       return
     }
 
@@ -553,7 +626,7 @@ export default function SmartCard(props) {
               {(subtitle || badgeElement || violations.length > 0) && (
                 <div className="flex items-center gap-2 mb-0.5">
                   {subtitle && (
-                    <span className="text-[10px] font-mono font-semibold tracking-wider text-slate-600 dark:text-white/75 uppercase truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
+                    <span className="text-[13px] font-mono font-semibold tracking-wide text-slate-700 dark:text-white/85 uppercase truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
                       {subtitle}
                     </span>
                   )}
@@ -600,7 +673,7 @@ export default function SmartCard(props) {
                   }
                 >
                   {widgets.map(function(w) {
-                    return <SmartWidget key={w.id} widget={w} />
+                    return <SmartWidget key={w.id} widget={w} recordValues={recordValues} />
                   })}
                 </div>
 

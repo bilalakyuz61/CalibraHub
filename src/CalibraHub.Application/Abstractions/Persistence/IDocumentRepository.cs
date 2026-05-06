@@ -5,6 +5,21 @@ namespace CalibraHub.Application.Abstractions.Persistence;
 public interface IDocumentRepository
 {
     Task<IReadOnlyCollection<Document>> GetAllAsync(string? search, string? status, CancellationToken ct);
+
+    /// <summary>
+    /// Belge tipi kodu = @typeCode (orn. "satis_teklifi" / "satis_siparisi") olan belgeleri filtrele.
+    /// Status / search / tarih araligi opsiyoneldir; CalibraHub teklif vs. siparis listesinde kullanilir.
+    /// </summary>
+    Task<IReadOnlyCollection<Document>> GetByTypeAsync(string typeCode, string? search, string? status, CancellationToken ct);
+
+    /// <summary>
+    /// Siparise donusturulebilir teklifler — Status=Approved, type=satis_teklifi,
+    /// daha onceden document_source koprusunde kaynak olarak yer almamis. Opsiyonel
+    /// filtreler: tarih araligi, cari, belge no.
+    /// </summary>
+    Task<IReadOnlyCollection<Document>> GetConvertibleQuotesAsync(
+        DateTime? fromDate, DateTime? toDate, int? contactId, string? search, CancellationToken ct);
+
     Task<Document?> GetByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLine>> GetLinesAsync(int documentId, CancellationToken ct);
 

@@ -24,7 +24,7 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_table}
-                ([id],[company_id],[user_id],[created_at],[title],[body],
+                ([id],[company_id],[user_id],[Created],[title],[body],
                  [source_type],[source_id],[link],[is_read],[read_at])
             VALUES
                 (@Id,@CompanyId,@UserId,@CreatedAt,@Title,@Body,
@@ -51,11 +51,11 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT TOP (@Take)
-                   [id],[company_id],[user_id],[created_at],[title],[body],
+                   [id],[company_id],[user_id],[Created],[title],[body],
                    [source_type],[source_id],[link],[is_read],[read_at]
             FROM {_table}
             WHERE [user_id] = @UserId
-            ORDER BY [is_read] ASC, [created_at] DESC;
+            ORDER BY [is_read] ASC, [Created] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Take",   take));
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));

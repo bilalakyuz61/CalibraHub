@@ -1,0 +1,931 @@
+@{
+    Layout = null;
+    ViewData["Title"] = "Üretim Kontrol Paneli";
+}
+<!DOCTYPE html>
+<html lang="tr-TR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0b1020" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0b1020 0%, #131b3a 100%);
+            color: #e2e8f0;
+            font-size: 16px;
+            color-scheme: dark;
+        }
+        a, button, input, select { font-family: inherit; }
+        input { user-select: text; -webkit-user-select: text; }
+
+        /* ── Layout: tek viewport, header + content ── */
+        .shop-app { display: flex; flex-direction: column; height: 100dvh; min-height: 100dvh; }
+        .shop-header {
+            display: flex; align-items: center; gap: 16px;
+            padding: 12px 24px;
+            background: rgba(0,0,0,.35);
+            border-bottom: 1px solid rgba(255,255,255,.08);
+            min-height: 64px; flex-shrink: 0;
+        }
+        .shop-header h1 { margin: 0; font-size: 20px; font-weight: 600; flex: 1; letter-spacing: .3px; }
+        .shop-header .crumb {
+            display: flex; align-items: center; gap: 8px; font-size: 14px;
+            color: rgba(255,255,255,.7);
+        }
+        .shop-header .crumb-item {
+            padding: 4px 10px; border-radius: 999px;
+            background: rgba(99,102,241,.18); color: #a5b4fc;
+            font-weight: 500;
+        }
+        .shop-header .crumb-sep { opacity: .4; font-size: 18px; }
+        .shop-header .who {
+            display: flex; align-items: center; gap: 10px;
+            padding: 6px 14px; border-radius: 999px;
+            background: rgba(34,197,94,.14); border: 1px solid rgba(34,197,94,.3);
+            color: #86efac; font-size: 14px; font-weight: 500;
+        }
+        .shop-header .who-avatar {
+            width: 28px; height: 28px; border-radius: 50%;
+            background: rgba(34,197,94,.3);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 12px; color: #4ade80;
+        }
+        .shop-header button.exit {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: rgba(239,68,68,.16); border: 1px solid rgba(239,68,68,.4);
+            color: #fca5a5;
+            padding: 10px 18px; border-radius: 10px;
+            font-size: 15px; cursor: pointer; font-weight: 600;
+            min-height: 44px;
+            transition: background .12s, color .12s;
+        }
+        .shop-header button.exit:hover { background: rgba(239,68,68,.28); color: #fff; }
+        .shop-header button.exit svg { width: 18px; height: 18px; flex-shrink: 0; }
+        /* Tam ekran toggle */
+        .shop-header button.fs {
+            background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.18);
+            color: rgba(255,255,255,.7);
+            padding: 0; border-radius: 10px;
+            width: 44px; height: 44px;
+            display: inline-flex; align-items: center; justify-content: center;
+            cursor: pointer; flex-shrink: 0;
+            transition: background .12s, color .12s;
+        }
+        .shop-header button.fs:hover { background: rgba(255,255,255,.12); color: #fff; }
+        .shop-header button.fs.is-active { background: rgba(99,102,241,.22); border-color: rgba(99,102,241,.5); color: #a5b4fc; }
+        .shop-header button.fs svg { width: 20px; height: 20px; }
+        .shop-header button.back {
+            background: rgba(99,102,241,.18); border: 1px solid rgba(99,102,241,.4);
+            color: #a5b4fc;
+            padding: 10px 16px; border-radius: 10px;
+            font-size: 15px; cursor: pointer; font-weight: 600;
+            min-height: 44px; min-width: 44px;
+        }
+        .shop-header button.back:hover { background: rgba(99,102,241,.28); }
+
+        .shop-content { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 24px; }
+        .shop-screen { display: none; }
+        .shop-screen.is-active { display: block; }
+
+        /* ── PIN entry screen ── */
+        .pin-screen {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 28px; min-height: 100%;
+            padding: 24px;
+        }
+        .pin-title { font-size: 28px; font-weight: 700; text-align: center; margin: 0; }
+        .pin-subtitle { font-size: 16px; color: rgba(255,255,255,.6); text-align: center; margin: 0; max-width: 480px; }
+        .pin-display {
+            display: flex; gap: 12px; justify-content: center;
+            min-height: 72px; align-items: center;
+        }
+        .pin-dot {
+            width: 48px; height: 48px; border-radius: 50%;
+            background: rgba(255,255,255,.06);
+            border: 2px solid rgba(255,255,255,.14);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; font-weight: 700; transition: all .15s;
+        }
+        .pin-dot.filled {
+            background: rgba(99,102,241,.28); border-color: #6366f1;
+            color: #c7d2fe;
+        }
+        .pin-display.is-error .pin-dot {
+            background: rgba(239,68,68,.22); border-color: #ef4444;
+            color: #fca5a5;
+        }
+        .pin-display.is-shake { animation: pin-shake .42s cubic-bezier(.36,.07,.19,.97) both; }
+        @@keyframes pin-shake {
+            10%, 90%   { transform: translateX(-2px); }
+            20%, 80%   { transform: translateX(4px); }
+            30%, 50%, 70% { transform: translateX(-8px); }
+            40%, 60%   { transform: translateX(8px); }
+        }
+        .pin-display.is-busy { opacity: .6; pointer-events: none; }
+        .pin-keypad {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+            max-width: 360px; width: 100%;
+        }
+        .shop-touch-btn {
+            min-height: 76px; min-width: 76px;
+            border: 1px solid rgba(255,255,255,.12);
+            background: rgba(255,255,255,.06);
+            color: #e2e8f0;
+            border-radius: 14px;
+            font-size: 28px; font-weight: 600;
+            cursor: pointer;
+            transition: transform .08s, background .12s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .shop-touch-btn:active { transform: scale(0.95); background: rgba(99,102,241,.22); }
+        .shop-touch-btn:hover { background: rgba(255,255,255,.1); }
+        .shop-touch-btn.is-action {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            border-color: #4f46e5; color: #fff;
+            font-size: 16px; font-weight: 600;
+        }
+        .shop-touch-btn.is-action:hover { filter: brightness(1.08); }
+        .shop-touch-btn.is-clear {
+            background: rgba(239,68,68,.16); border-color: rgba(239,68,68,.32);
+            color: #fca5a5; font-size: 18px;
+        }
+        .shop-touch-btn.is-clear:hover { background: rgba(239,68,68,.24); }
+        .shop-touch-btn.is-secondary {
+            background: rgba(148,163,184,.14); border-color: rgba(148,163,184,.32);
+            color: #cbd5e1; font-size: 14px; font-weight: 500;
+        }
+        .pin-actions {
+            display: flex; gap: 12px; justify-content: center; margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        .pin-error {
+            color: #fca5a5; font-size: 15px; min-height: 22px; text-align: center;
+            font-weight: 500;
+        }
+        .pin-nfc-hint {
+            margin-top: 8px;
+            padding: 14px 22px; border-radius: 12px;
+            background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.2);
+            color: #86efac; font-size: 14px;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        /* ── Card grid (Locations + Machines) ── */
+        .shop-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 16px;
+        }
+        .shop-card {
+            min-height: 140px;
+            padding: 18px 20px;
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 14px;
+            display: flex; flex-direction: column; gap: 6px;
+            cursor: pointer;
+            transition: transform .1s, background .12s, border-color .12s;
+        }
+        .shop-card:active { transform: scale(0.98); }
+        .shop-card:hover {
+            background: rgba(99,102,241,.14);
+            border-color: rgba(99,102,241,.4);
+        }
+        .shop-card .icon {
+            width: 40px; height: 40px; border-radius: 10px;
+            background: rgba(99,102,241,.22);
+            color: #a5b4fc;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 4px; flex-shrink: 0;
+        }
+        .shop-card .icon svg { width: 22px; height: 22px; }
+        .shop-card .title { font-size: 17px; font-weight: 700; color: #fff; line-height: 1.25; }
+        .shop-card .subtitle { font-size: 13px; color: rgba(255,255,255,.55); }
+        .shop-card .stats { display: flex; gap: 10px; margin-top: auto; flex-wrap: wrap; }
+        .shop-card .stat-pill {
+            padding: 4px 10px; border-radius: 999px;
+            font-size: 12px; font-weight: 600;
+            background: rgba(148,163,184,.16); color: #cbd5e1;
+        }
+        .shop-card .stat-pill.is-busy { background: rgba(59,130,246,.22); color: #93c5fd; }
+        .shop-card .stat-pill.is-pending { background: rgba(251,191,36,.18); color: #fcd34d; }
+
+        /* ── Queue list ── */
+        .queue-list { display: flex; flex-direction: column; gap: 12px; }
+        .queue-row {
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 14px;
+            padding: 16px 18px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px; align-items: center;
+        }
+        .queue-row .info { min-width: 0; }
+        .queue-row .order { font-size: 16px; font-weight: 700; color: #fff; }
+        .queue-row .meta {
+            font-size: 13px; color: rgba(255,255,255,.6); margin-top: 2px;
+            display: flex; flex-wrap: wrap; gap: 6px 14px;
+        }
+        .queue-row .meta strong { color: rgba(255,255,255,.85); }
+        .queue-row .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .queue-row .actions button { min-height: 56px; min-width: 110px; font-size: 14px; }
+        .queue-row .actions .start  { background: linear-gradient(135deg, #16a34a, #059669); border-color: #059669; color: #fff; }
+        .queue-row .actions .partial { background: rgba(251,191,36,.2); border-color: rgba(251,191,36,.4); color: #fcd34d; }
+        .queue-row .actions .complete { background: linear-gradient(135deg, #6366f1, #4f46e5); border-color: #4f46e5; color: #fff; }
+        .queue-row.is-progress { border-color: rgba(59,130,246,.4); background: rgba(59,130,246,.08); }
+        .queue-row .status-pill {
+            display: inline-block; padding: 3px 10px; border-radius: 999px;
+            font-size: 11px; font-weight: 700;
+            background: rgba(148,163,184,.16); color: #cbd5e1;
+            margin-bottom: 4px;
+        }
+        .queue-row .status-pill.is-pending { background: rgba(251,191,36,.18); color: #fcd34d; }
+        .queue-row .status-pill.is-progress { background: rgba(59,130,246,.22); color: #93c5fd; }
+
+        .empty {
+            text-align: center; padding: 60px 20px;
+            color: rgba(255,255,255,.5); font-size: 15px;
+        }
+        .empty-icon {
+            font-size: 56px; margin-bottom: 12px;
+        }
+
+        /* ── Modal (Kısmi Bitir / Bitir miktar girişi) ── */
+        .modal-backdrop {
+            position: fixed; inset: 0; z-index: 200;
+            background: rgba(8,12,28,.7); backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+        }
+        .modal-card {
+            width: min(520px, 100%);
+            background: linear-gradient(135deg, #131b3a 0%, #1a2547 100%);
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 24px 80px rgba(0,0,0,.5);
+        }
+        .modal-card h2 { margin: 0 0 6px; font-size: 22px; font-weight: 700; }
+        .modal-card .modal-hint { color: rgba(255,255,255,.55); font-size: 14px; margin-bottom: 18px; }
+        .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+        .modal-row label { font-size: 13px; color: rgba(255,255,255,.7); font-weight: 500; }
+        .modal-row input[type=number] {
+            width: 100%; padding: 14px 16px;
+            font-size: 22px; font-weight: 600;
+            background: rgba(0,0,0,.3); color: #fff;
+            border: 1px solid rgba(255,255,255,.15); border-radius: 10px;
+            outline: none; text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .modal-row input[type=number]:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+        .modal-actions button { min-height: 52px; min-width: 110px; font-size: 15px; font-weight: 600; }
+
+        /* Toast */
+        #toast {
+            position: fixed; left: 50%; top: 90px; transform: translateX(-50%);
+            padding: 14px 22px; border-radius: 12px;
+            font-size: 15px; font-weight: 600;
+            z-index: 300;
+            box-shadow: 0 12px 32px rgba(0,0,0,.4);
+            display: none;
+            min-width: 240px; text-align: center;
+        }
+        #toast.ok  { background: rgba(34,197,94,.92); color: #052e16; }
+        #toast.err { background: rgba(239,68,68,.92); color: #450a0a; }
+
+        /* Spinner */
+        .loader {
+            width: 36px; height: 36px;
+            border: 4px solid rgba(255,255,255,.1);
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+            margin: 40px auto;
+        }
+        @@keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="shop-app">
+    <div class="shop-header">
+        <button class="back" id="btnBack" style="display:none;" title="Geri">←</button>
+        <h1 id="screenTitle">Üretim Kontrol</h1>
+        <div class="crumb" id="crumb"></div>
+        <div class="who" id="whoBadge" style="display:none;">
+            <div class="who-avatar" id="whoAvatar">?</div>
+            <span id="whoName">—</span>
+        </div>
+        <button class="fs" id="btnFullscreen" title="Tam ekran (F11)" aria-label="Tam ekran">
+            <svg id="fsIconEnter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+            </svg>
+            <svg id="fsIconExit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 9V5m0 4H5m4 0L4 4m11 5h4m-4 0V5m0 4l5-5M9 15v4m0-4H5m4 0l-5 5m11-5h4m-4 0v4m0-4l5 5"/>
+            </svg>
+        </button>
+        <button class="exit" id="btnExit" style="display:none;" title="Operatör çıkışı (PIN ekranına dön)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            <span>Çıkış</span>
+        </button>
+    </div>
+
+    <div class="shop-content">
+        <!-- 1: PIN entry -->
+        <div class="shop-screen is-active" data-screen="pin">
+            <div class="pin-screen">
+                <h2 class="pin-title">Operatör Girişi</h2>
+                <p class="pin-subtitle">PIN kodunuzu girin veya NFC kartınızı okutun.</p>
+                <div class="pin-display" id="pinDisplay"></div>
+                <div class="pin-error" id="pinError">&nbsp;</div>
+                <div class="pin-keypad">
+                    <button type="button" class="shop-touch-btn" data-pin-key="1">1</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="2">2</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="3">3</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="4">4</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="5">5</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="6">6</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="7">7</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="8">8</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="9">9</button>
+                    <button type="button" class="shop-touch-btn is-clear" id="pinClear">⌫</button>
+                    <button type="button" class="shop-touch-btn" data-pin-key="0">0</button>
+                    <button type="button" class="shop-touch-btn is-action" id="pinSubmit">Giriş</button>
+                </div>
+                <div class="pin-actions">
+                    <button type="button" class="shop-touch-btn is-secondary" id="pinNfcBtn" style="min-height:52px;min-width:auto;padding:0 22px;">NFC Kart Okut</button>
+                </div>
+                <div class="pin-nfc-hint" id="pinNfcHint" style="display:none;">
+                    <span>📡</span>
+                    <span>Kartınızı tablete yaklaştırın…</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2: Locations -->
+        <div class="shop-screen" data-screen="locations">
+            <div class="shop-grid" id="locationsGrid">
+                <div class="loader"></div>
+            </div>
+        </div>
+
+        <!-- 3: Machines -->
+        <div class="shop-screen" data-screen="machines">
+            <div class="shop-grid" id="machinesGrid">
+                <div class="loader"></div>
+            </div>
+        </div>
+
+        <!-- 4: Queue -->
+        <div class="shop-screen" data-screen="queue">
+            <div class="queue-list" id="queueList">
+                <div class="loader"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+@Html.AntiForgeryToken()
+
+<script>
+(function () {
+    'use strict';
+
+    var IDLE_MS = 5 * 60 * 1000; // 5 dakika idle → PIN ekrana dön
+    var REFRESH_MS = 15 * 1000;  // 15 sn'de bir queue refresh
+
+    var state = {
+        pin: '',
+        operator: null,        // { id, fullName, code, ... }
+        locationId: null, locationName: null,
+        machineId: null, machineName: null,
+        screen: 'pin',
+        idleTimer: null,
+        refreshTimer: null,
+        nfcSupported: false,
+    };
+
+    function token() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function escapeHtml(s) { return (s == null ? '' : String(s)).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+    function toast(msg, ok) {
+        var el = document.getElementById('toast');
+        el.textContent = msg; el.className = ok ? 'ok' : 'err'; el.style.display = 'block';
+        clearTimeout(window.__toastTm);
+        window.__toastTm = setTimeout(function(){ el.style.display = 'none'; }, 3500);
+    }
+
+    function gotoScreen(name) {
+        state.screen = name;
+        var screens = document.querySelectorAll('.shop-screen');
+        for (var i = 0; i < screens.length; i++) {
+            screens[i].classList.toggle('is-active', screens[i].getAttribute('data-screen') === name);
+        }
+        var back = document.getElementById('btnBack');
+        var exit = document.getElementById('btnExit');
+        var who = document.getElementById('whoBadge');
+        var title = document.getElementById('screenTitle');
+        var crumb = document.getElementById('crumb');
+        if (name === 'pin') {
+            back.style.display = 'none'; exit.style.display = 'none'; who.style.display = 'none';
+            title.textContent = 'Üretim Kontrol';
+            crumb.innerHTML = '';
+            state.pin = ''; renderPinDisplay();
+            document.getElementById('pinError').textContent = '';
+        } else {
+            back.style.display = 'inline-flex'; exit.style.display = 'inline-flex'; who.style.display = 'inline-flex';
+            if (state.operator) {
+                document.getElementById('whoName').textContent = state.operator.fullName + (state.operator.code ? ' · ' + state.operator.code : '');
+                document.getElementById('whoAvatar').textContent = (state.operator.fullName || '').slice(0,1).toUpperCase();
+            }
+        }
+        if (name === 'locations') {
+            title.textContent = 'Lokasyon Seç';
+            crumb.innerHTML = '';
+            loadLocations();
+        }
+        if (name === 'machines') {
+            title.textContent = 'Makine Seç';
+            crumb.innerHTML = '<span class="crumb-item">' + escapeHtml(state.locationName || '') + '</span>';
+            loadMachines();
+        }
+        if (name === 'queue') {
+            title.textContent = 'Kuyruk';
+            crumb.innerHTML = '<span class="crumb-item">' + escapeHtml(state.locationName || '') + '</span><span class="crumb-sep">→</span><span class="crumb-item">' + escapeHtml(state.machineName || '') + '</span>';
+            loadQueue();
+            startQueueRefresh();
+        } else {
+            stopQueueRefresh();
+        }
+        resetIdle();
+    }
+
+    /* ── Idle timer: 5 dk inaktif → PIN ekran ── */
+    function resetIdle() {
+        clearTimeout(state.idleTimer);
+        if (state.screen === 'pin') return; // PIN ekranındaysa zaten beklemede
+        state.idleTimer = setTimeout(function() {
+            logout('Otomatik çıkış: 5 dakika hareket yok.');
+        }, IDLE_MS);
+    }
+    ['mousedown','keydown','touchstart','pointerdown'].forEach(function (ev) {
+        document.addEventListener(ev, resetIdle, { passive: true });
+    });
+
+    function logout(reason) {
+        stopQueueRefresh();
+        state.operator = null;
+        state.locationId = state.locationName = null;
+        state.machineId = state.machineName = null;
+        state.pin = '';
+        gotoScreen('pin');
+        if (reason) toast(reason, false);
+    }
+
+    /* ── PIN keypad ──
+       Davranış:
+       - 4. karakter girilince otomatik authByPin() tetiklenir.
+       - Doğru ise → lokasyon ekranına geçer.
+       - Yanlış ise → noktalar kırmızı + 0.42sn shake; bittiğinde PIN sıfırlanır,
+         klavye tekrar aktif olur.
+       - Operatör 4 hane PIN seçemese de 5-6 hane girmek isteyebilir → 4 sn'lik
+         "ekstra hane" toleransı: 4. karakterde otomatik submit yerine 800ms
+         bekleyip ek tuş gelmediyse submit edelim. Böylece 5-10 haneli PIN'ler
+         kullanılabilir kalır. */
+    var PIN_AUTO_LEN = 4;          // ne zaman auto-submit denemeye başla
+    var PIN_AUTO_DELAY = 800;      // ms — ek tuş bekleme süresi
+    var pinAutoTm = null;
+
+    function setPinError(active) {
+        var el = document.getElementById('pinDisplay');
+        if (!el) return;
+        if (active) {
+            el.classList.remove('is-shake'); // restart animation
+            // force reflow
+            void el.offsetWidth;
+            el.classList.add('is-error', 'is-shake');
+        } else {
+            el.classList.remove('is-error', 'is-shake');
+        }
+    }
+
+    function setPinBusy(busy) {
+        var el = document.getElementById('pinDisplay');
+        if (!el) return;
+        el.classList.toggle('is-busy', !!busy);
+    }
+
+    function renderPinDisplay() {
+        var el = document.getElementById('pinDisplay');
+        var len = Math.max(state.pin.length, 4);
+        var html = '';
+        for (var i = 0; i < len; i++) {
+            var ch = i < state.pin.length ? '•' : '';
+            html += '<div class="pin-dot' + (ch ? ' filled' : '') + '">' + ch + '</div>';
+        }
+        // Hata state'ini ve shake'i koruyalım — class list innerHTML değiştirmiyor.
+        el.innerHTML = html;
+    }
+
+    function schedulePinAutoSubmit() {
+        if (pinAutoTm) { clearTimeout(pinAutoTm); pinAutoTm = null; }
+        if (state.pin.length < PIN_AUTO_LEN) return;
+        pinAutoTm = setTimeout(function () {
+            pinAutoTm = null;
+            // Hâlâ aynı PIN'deysek ve ekrandaysak — submit
+            if (state.screen === 'pin' && state.pin.length >= PIN_AUTO_LEN) authByPin();
+        }, PIN_AUTO_DELAY);
+    }
+
+    function pinKeyPressed(digit) {
+        if (state.pin.length >= 10) return;
+        // Önceki hata state'ini temizle (kullanıcı yeniden deneyince)
+        setPinError(false);
+        document.getElementById('pinError').textContent = '';
+        state.pin += digit; renderPinDisplay();
+        schedulePinAutoSubmit();
+    }
+
+    function pinBackspace() {
+        if (pinAutoTm) { clearTimeout(pinAutoTm); pinAutoTm = null; }
+        setPinError(false);
+        document.getElementById('pinError').textContent = '';
+        state.pin = state.pin.slice(0, -1); renderPinDisplay();
+    }
+
+    document.querySelectorAll('[data-pin-key]').forEach(function (b) {
+        b.addEventListener('click', function() { pinKeyPressed(b.dataset.pinKey); });
+    });
+    document.getElementById('pinClear').addEventListener('click', pinBackspace);
+    document.getElementById('pinSubmit').addEventListener('click', function () {
+        if (pinAutoTm) { clearTimeout(pinAutoTm); pinAutoTm = null; }
+        authByPin();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (state.screen !== 'pin') return;
+        if (/^[0-9]$/.test(e.key)) { pinKeyPressed(e.key); }
+        else if (e.key === 'Backspace') { pinBackspace(); }
+        else if (e.key === 'Enter') {
+            if (pinAutoTm) { clearTimeout(pinAutoTm); pinAutoTm = null; }
+            authByPin();
+        }
+    });
+
+    async function authByPin() {
+        if (!state.pin) { document.getElementById('pinError').textContent = 'PIN girmediniz.'; return; }
+        await authOperator({ pinCode: state.pin });
+    }
+
+    async function authOperator(body) {
+        setPinBusy(true);
+        try {
+            var r = await fetch('/Production/AuthOperator', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify(body)
+            });
+            var data = await r.json();
+            if (!data.ok) {
+                // Yanlış PIN → noktaları kırmızı yap + shake, PIN sıfırla
+                document.getElementById('pinError').textContent = data.error || 'Giriş başarısız.';
+                setPinError(true);
+                state.pin = ''; renderPinDisplay();
+                // Animasyon bitince error state'i bırak (yeni tuş zaten temizliyor)
+                return;
+            }
+            state.operator = data.operator_;
+            document.getElementById('pinError').textContent = '';
+            setPinError(false);
+            gotoScreen('locations');
+        } catch (ex) {
+            document.getElementById('pinError').textContent = 'İstek hatası: ' + ex.message;
+            setPinError(true);
+            state.pin = ''; renderPinDisplay();
+        } finally {
+            setPinBusy(false);
+        }
+    }
+
+    /* ── NFC (Web NFC API) — Chrome Android destekli ── */
+    var nfcReader = null;
+    var nfcAbort = null;
+    document.getElementById('pinNfcBtn').addEventListener('click', async function () {
+        var hint = document.getElementById('pinNfcHint');
+        if (!('NDEFReader' in window)) {
+            toast('Bu cihaz / tarayıcı NFC API desteklemiyor.', false);
+            return;
+        }
+        try {
+            nfcAbort = new AbortController();
+            nfcReader = new window.NDEFReader();
+            await nfcReader.scan({ signal: nfcAbort.signal });
+            hint.style.display = 'flex';
+            nfcReader.onreading = async function (event) {
+                var serial = (event.serialNumber || '').replace(/:/g, '').toUpperCase();
+                hint.style.display = 'none';
+                if (nfcAbort) nfcAbort.abort();
+                if (serial) await authOperator({ cardNo: serial });
+            };
+            nfcReader.onreadingerror = function () { toast('NFC okuma hatası.', false); hint.style.display = 'none'; };
+        } catch (e) {
+            toast('NFC başlatılamadı: ' + e.message, false);
+        }
+    });
+
+    /* ── Locations ── */
+    async function loadLocations() {
+        var grid = document.getElementById('locationsGrid');
+        grid.innerHTML = '<div class="loader"></div>';
+        try {
+            var r = await fetch('/Production/ShopFloor/Locations', { credentials: 'same-origin' });
+            var list = await r.json();
+            if (!Array.isArray(list) || list.length === 0) {
+                grid.innerHTML = '<div class="empty"><div class="empty-icon">🏭</div>Aktif lokasyon bulunamadı.</div>';
+                return;
+            }
+            grid.innerHTML = list.map(function (l) {
+                var sub = l.parentName ? escapeHtml(l.parentName) : '';
+                return '<button class="shop-card" data-loc-id="' + l.id + '" data-loc-name="' + escapeHtml(l.name) + '">'
+                    + '<div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg></div>'
+                    + '<div class="title">' + escapeHtml(l.name) + '</div>'
+                    + '<div class="subtitle">' + escapeHtml(l.code || '') + (sub ? ' · ' + sub : '') + '</div>'
+                    + '</button>';
+            }).join('');
+            grid.querySelectorAll('[data-loc-id]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    state.locationId = Number(btn.dataset.locId);
+                    state.locationName = btn.dataset.locName;
+                    gotoScreen('machines');
+                });
+            });
+        } catch (e) {
+            grid.innerHTML = '<div class="empty">Yüklenemedi: ' + escapeHtml(e.message) + '</div>';
+        }
+    }
+
+    /* ── Machines ── */
+    async function loadMachines() {
+        var grid = document.getElementById('machinesGrid');
+        grid.innerHTML = '<div class="loader"></div>';
+        try {
+            var r = await fetch('/Production/ShopFloor/Machines?locationId=' + encodeURIComponent(state.locationId), { credentials: 'same-origin' });
+            var list = await r.json();
+            if (!Array.isArray(list) || list.length === 0) {
+                grid.innerHTML = '<div class="empty"><div class="empty-icon">⚙️</div>Bu lokasyonda aktif makine yok.</div>';
+                return;
+            }
+            grid.innerHTML = list.map(function (m) {
+                var stats = '';
+                if (m.inProgressCount > 0) stats += '<span class="stat-pill is-busy">▶ ' + m.inProgressCount + ' devam</span>';
+                if (m.pendingCount > 0)    stats += '<span class="stat-pill is-pending">⏳ ' + m.pendingCount + ' bekleyen</span>';
+                if (!stats) stats = '<span class="stat-pill">Boş</span>';
+                return '<button class="shop-card" data-mch-id="' + m.id + '" data-mch-name="' + escapeHtml(m.name) + '">'
+                    + '<div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>'
+                    + '<div class="title">' + escapeHtml(m.name) + '</div>'
+                    + '<div class="subtitle">' + escapeHtml(m.code || '') + (m.machineType ? ' · ' + escapeHtml(m.machineType) : '') + '</div>'
+                    + '<div class="stats">' + stats + '</div>'
+                    + '</button>';
+            }).join('');
+            grid.querySelectorAll('[data-mch-id]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    state.machineId = Number(btn.dataset.mchId);
+                    state.machineName = btn.dataset.mchName;
+                    gotoScreen('queue');
+                });
+            });
+        } catch (e) {
+            grid.innerHTML = '<div class="empty">Yüklenemedi: ' + escapeHtml(e.message) + '</div>';
+        }
+    }
+
+    /* ── Queue + actions ── */
+    function statusLabel(s) {
+        s = Number(s) || 0;
+        if (s === 0) return { label: 'Bekliyor', cls: 'is-pending' };
+        if (s === 1) return { label: 'Devam ediyor', cls: 'is-progress' };
+        if (s === 2) return { label: 'Tamamlandı', cls: '' };
+        if (s === 3) return { label: 'Atlandı', cls: '' };
+        return { label: '?', cls: '' };
+    }
+    function fmtNum(v) { return Number(v || 0).toFixed(2); }
+    function fmtDur(d, unit) { if (d == null) return '—'; return Number(d).toFixed(2) + (unit === 2 ? ' sa' : ' dk'); }
+
+    async function loadQueue() {
+        var list = document.getElementById('queueList');
+        list.innerHTML = '<div class="loader"></div>';
+        try {
+            var r = await fetch('/Production/ShopFloor/Queue?machineId=' + encodeURIComponent(state.machineId), { credentials: 'same-origin' });
+            var arr = await r.json();
+            if (!Array.isArray(arr) || arr.length === 0) {
+                list.innerHTML = '<div class="empty"><div class="empty-icon">✓</div>Bu makinede bekleyen iş yok.</div>';
+                return;
+            }
+            list.innerHTML = arr.map(function (op) {
+                var s = statusLabel(op.status);
+                var isInProgress = (op.status || 0) === 1;
+                return '<div class="queue-row' + (isInProgress ? ' is-progress' : '') + '" data-id="' + op.id + '">'
+                    + '<div class="info">'
+                    +   '<div class="status-pill ' + s.cls + '">' + s.label + '</div>'
+                    +   '<div class="order">İŞ EMRİ #' + op.workOrderId + ' · Sıra ' + (op.sequence || 0) + ' — ' + escapeHtml(op.operationName || op.operationCode || ('Op#' + op.operationId)) + '</div>'
+                    +   '<div class="meta">'
+                    +     '<span><strong>Süre:</strong> ' + fmtDur(op.plannedDuration, op.durationUnit) + '</span>'
+                    +     '<span><strong>Üretilen:</strong> ' + fmtNum(op.producedQuantity) + '</span>'
+                    +     '<span><strong>Fire:</strong> ' + fmtNum(op.scrapQuantity) + '</span>'
+                    +     (op.startedByPersonnelName ? '<span><strong>Başlatan:</strong> ' + escapeHtml(op.startedByPersonnelName) + '</span>' : '')
+                    +   '</div>'
+                    + '</div>'
+                    + '<div class="actions">'
+                    +   (isInProgress ? '' : '<button class="shop-touch-btn start" data-act="start">▶ Başlat</button>')
+                    +   (isInProgress ? '<button class="shop-touch-btn partial" data-act="partial">+ Kısmi Bitir</button>' : '')
+                    +   (isInProgress ? '<button class="shop-touch-btn complete" data-act="complete">✓ Bitir</button>' : '')
+                    + '</div>'
+                    + '</div>';
+            }).join('');
+            list.querySelectorAll('.queue-row').forEach(function (row) {
+                var opId = Number(row.dataset.id);
+                row.querySelector('[data-act="start"]')?.addEventListener('click', function () { actStart(opId); });
+                row.querySelector('[data-act="partial"]')?.addEventListener('click', function () { actPartial(opId); });
+                row.querySelector('[data-act="complete"]')?.addEventListener('click', function () { actComplete(opId); });
+            });
+        } catch (e) {
+            list.innerHTML = '<div class="empty">Yüklenemedi: ' + escapeHtml(e.message) + '</div>';
+        }
+    }
+
+    function startQueueRefresh() {
+        stopQueueRefresh();
+        state.refreshTimer = setInterval(function () { if (state.screen === 'queue') loadQueue(); }, REFRESH_MS);
+    }
+    function stopQueueRefresh() { if (state.refreshTimer) { clearInterval(state.refreshTimer); state.refreshTimer = null; } }
+
+    async function actStart(opId) {
+        try {
+            var r = await fetch('/Production/ShopFloor/Start', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({ workOrderOperationId: opId, operatorPersonnelId: state.operator.id })
+            });
+            var d = await r.json();
+            if (!d.ok) { toast(d.error || 'Başlatılamadı.', false); return; }
+            toast('Başlatıldı.', true); loadQueue();
+        } catch (e) { toast('Hata: ' + e.message, false); }
+    }
+
+    function showQuantityModal(opts) {
+        return new Promise(function (resolve) {
+            var bd = document.createElement('div');
+            bd.className = 'modal-backdrop';
+            bd.innerHTML = '<div class="modal-card">'
+                + '<h2>' + escapeHtml(opts.title) + '</h2>'
+                + '<div class="modal-hint">' + escapeHtml(opts.hint || '') + '</div>'
+                + '<div class="modal-row"><label>' + escapeHtml(opts.qtyLabel || 'Miktar') + '</label><input type="number" inputmode="decimal" id="modalQty" step="0.01" min="0" value="' + (opts.defaultQty != null ? opts.defaultQty : '') + '" /></div>'
+                + (opts.showScrap ? '<div class="modal-row"><label>Fire (opsiyonel)</label><input type="number" inputmode="decimal" id="modalScrap" step="0.01" min="0" value="" /></div>' : '')
+                + '<div class="modal-actions">'
+                +   '<button class="shop-touch-btn is-secondary" id="modalCancel">Vazgeç</button>'
+                +   '<button class="shop-touch-btn is-action" id="modalOk">' + escapeHtml(opts.okLabel || 'Tamam') + '</button>'
+                + '</div></div>';
+            document.body.appendChild(bd);
+            var qtyEl = bd.querySelector('#modalQty');
+            var scrapEl = bd.querySelector('#modalScrap');
+            setTimeout(function () { qtyEl.focus(); qtyEl.select(); }, 50);
+            function close(val) { document.body.removeChild(bd); resolve(val); }
+            bd.querySelector('#modalCancel').addEventListener('click', function () { close(null); });
+            bd.querySelector('#modalOk').addEventListener('click', function () {
+                var q = parseFloat(qtyEl.value);
+                if (Number.isNaN(q)) { qtyEl.focus(); return; }
+                var s = scrapEl ? parseFloat(scrapEl.value) : NaN;
+                close({ quantity: q, scrap: Number.isNaN(s) ? null : s });
+            });
+            bd.addEventListener('click', function (e) { if (e.target === bd) close(null); });
+        });
+    }
+
+    async function actPartial(opId) {
+        var v = await showQuantityModal({
+            title: 'Kısmi Bitir',
+            hint: 'Bu seferki üretim miktarını ve varsa fireyi girin.',
+            qtyLabel: 'Üretilen Miktar', okLabel: 'Kısmi Bitir',
+            showScrap: true,
+        });
+        if (!v) return;
+        if (v.quantity <= 0) { toast('Miktar 0\'dan büyük olmalı.', false); return; }
+        try {
+            var r = await fetch('/Production/ShopFloor/PartialComplete', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({
+                    workOrderOperationId: opId, operatorPersonnelId: state.operator.id,
+                    quantity: v.quantity, scrapQuantity: v.scrap
+                })
+            });
+            var d = await r.json();
+            if (!d.ok) { toast(d.error || 'Hata.', false); return; }
+            toast('Kısmi bitiş kaydedildi.', true); loadQueue();
+        } catch (e) { toast('Hata: ' + e.message, false); }
+    }
+
+    async function actComplete(opId) {
+        var v = await showQuantityModal({
+            title: 'Operasyonu Bitir',
+            hint: 'Final üretim miktarını girin (boş bırakılırsa mevcut üretilen miktar kullanılır).',
+            qtyLabel: 'Final Miktar', okLabel: 'Bitir',
+            showScrap: false, defaultQty: '',
+        });
+        if (!v) return;
+        try {
+            var r = await fetch('/Production/ShopFloor/Complete', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({
+                    workOrderOperationId: opId, operatorPersonnelId: state.operator.id,
+                    finalQuantity: (v.quantity > 0 ? v.quantity : null)
+                })
+            });
+            var d = await r.json();
+            if (!d.ok) { toast(d.error || 'Hata.', false); return; }
+            toast('Operasyon tamamlandı.', true); loadQueue();
+        } catch (e) { toast('Hata: ' + e.message, false); }
+    }
+
+    /* ── Header navigation ── */
+    document.getElementById('btnBack').addEventListener('click', function () {
+        if (state.screen === 'queue') gotoScreen('machines');
+        else if (state.screen === 'machines') gotoScreen('locations');
+        else if (state.screen === 'locations') logout();
+    });
+    document.getElementById('btnExit').addEventListener('click', function () {
+        logout();
+    });
+
+    /* ── Fullscreen toggle ──
+       Tablet kiosk modu için tarayıcı kromunu gizler.
+       Workspace iframe içinde Fullscreen API kısıtlı olduğu için, ilk
+       tıklamada page top-window'a yönlendirilir (iframe shell'den çıkar),
+       sonraki istek native fullscreen olur. F11 her zaman çalışır. */
+    function isFullscreen() {
+        return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    }
+    function enterFullscreen() {
+        var el = document.documentElement;
+        var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (!req) return Promise.reject(new Error('Fullscreen API desteklenmiyor.'));
+        var p = req.call(el);
+        return (p && p.then) ? p : Promise.resolve();
+    }
+    function exitFullscreen() {
+        var fn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if (!fn) return Promise.reject(new Error('Fullscreen API desteklenmiyor.'));
+        var p = fn.call(document);
+        return (p && p.then) ? p : Promise.resolve();
+    }
+    function syncFullscreenIcon() {
+        var btn = document.getElementById('btnFullscreen');
+        var enter = document.getElementById('fsIconEnter');
+        var exitIcon = document.getElementById('fsIconExit');
+        if (!btn || !enter || !exitIcon) return;
+        var fs = isFullscreen();
+        btn.classList.toggle('is-active', fs);
+        enter.style.display = fs ? 'none' : '';
+        exitIcon.style.display = fs ? '' : 'none';
+        btn.title = fs ? 'Tam ekrandan çık (Esc)' : 'Tam ekran (F11)';
+    }
+    document.getElementById('btnFullscreen').addEventListener('click', function () {
+        // Workspace iframe `allow="fullscreen"` ile yetkilendirildi (Shell.jsx),
+        // doğrudan iframe içindeki document'i tam ekrana al — kullanıcı sol
+        // menüden kopmaz, normal Esc / butonla çıkınca shell hâlâ orada.
+        if (isFullscreen()) {
+            exitFullscreen().catch(function (e) {
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(e.message, 'warn');
+                else toast(e.message, false);
+            });
+        } else {
+            enterFullscreen().catch(function (e) {
+                var msg = (e && e.message) || 'Tam ekran başlatılamadı.';
+                if (msg.toLowerCase().indexOf('permission') !== -1 || msg.toLowerCase().indexOf('denied') !== -1) {
+                    msg = 'Tarayıcı tam ekrana izin vermedi. F11 tuşuna basabilirsiniz.';
+                }
+                toast(msg, false);
+            });
+        }
+    });
+    document.addEventListener('fullscreenchange', syncFullscreenIcon);
+    document.addEventListener('webkitfullscreenchange', syncFullscreenIcon);
+    syncFullscreenIcon();
+
+    /* Boot */
+    renderPinDisplay();
+    state.nfcSupported = ('NDEFReader' in window);
+})();
+</script>
+</body>
+</html>

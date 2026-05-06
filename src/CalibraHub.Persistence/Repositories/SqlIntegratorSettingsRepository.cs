@@ -29,7 +29,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [created_at], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
+            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [Created], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
             FROM {_tableName}
             ORDER BY [name];
             """;
@@ -50,7 +50,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [created_at], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
+            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [Created], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
             FROM {_tableName}
             WHERE [is_active] = 1
             ORDER BY [name];
@@ -70,7 +70,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [created_at], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
+            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [Created], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
             FROM {_tableName}
             WHERE [id] = @Id;
             """;
@@ -90,7 +90,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [created_at], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
+            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [Created], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
             FROM {_tableName}
             WHERE [company_id] = @CompanyId;
             """;
@@ -111,7 +111,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [schedule_enabled], [created_at], [updated_at], [app_str], [source], [app_version], [timeout_seconds], [lookback_days])
+                ([company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [schedule_enabled], [Created], [Updated], [app_str], [source], [app_version], [timeout_seconds], [lookback_days])
             VALUES
                 (@EntityCompanyId, @Provider, @Name, @BaseUrl, @CompanyTaxNumber, @Username, @Secret, @PollingIntervalSeconds, @MaxRecordsPerPull, @LogRetentionDays, @IncludeReceivedDocumentsInPull, @MarkDownloadedDocumentsAsReceived, @IncludeIssuedEInvoiceInPull, @IncludeIssuedEArchiveInPull, @IncludeIssuedEDispatchInPull, @IsActive, @ScheduleEnabled, @CreatedAt, @UpdatedAt, @AppStr, @Source, @AppVersion, @TimeoutSeconds, @LookbackDays);
             SELECT SCOPE_IDENTITY();
@@ -148,7 +148,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
                 [include_issued_edispatch_in_pull] = @IncludeIssuedEDispatchInPull,
                 [is_active] = @IsActive,
                 [schedule_enabled] = @ScheduleEnabled,
-                [updated_at] = @UpdatedAt,
+                [Updated] = @UpdatedAt,
                 [app_str] = @AppStr,
                 [source] = @Source,
                 [app_version] = @AppVersion,

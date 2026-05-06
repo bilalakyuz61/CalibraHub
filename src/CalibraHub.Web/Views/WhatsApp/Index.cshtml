@@ -1,0 +1,87 @@
+@{
+    ViewData["Title"] = "WhatsApp";
+    ViewData["FormCode"] = "WHATSAPP_MESSENGER";
+    ViewData["BodyClass"] = "page-whatsapp";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>wa_inbox</td><td style='padding:6px 8px;'>Bridge'ten poll'lanan birebir mesajlar (gelen + giden). UNIQUE bridge_msg_id ile dedup.</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>Contact (WaPhone, WaName)</td><td style='padding:6px 8px;'>Sohbet listesinde isim eslestirme — WaPhone numarasi DigitOnly ile karsilastirilir.</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+<style>
+    .page-whatsapp .workspace-action-bar { display: none !important; }
+    .page-whatsapp .integrator-dashboard,
+    .page-whatsapp .integrator-dashboard__content {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0;
+        padding: 12px !important;
+        margin: 0 !important;
+        overflow: hidden;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    .whatsapp-mount {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="whatsapp-mount" id="whatsappRoot"></div>
+</section>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script>
+    (function () {
+        var el = document.getElementById('whatsappRoot');
+        if (!el) return;
+
+        // Initial phone — query string'ten gelir, ContactEdit'ten "WhatsApp Gonder" butonuyla yonlendirme icin
+        var urlParams = new URLSearchParams(window.location.search);
+        var initialPhone = urlParams.get('phone') || null;
+        if (initialPhone) {
+            // Sadece rakamlari koru (URL'den gelen + isareti vs.)
+            initialPhone = initialPhone.replace(/[^\d]/g, '');
+            if (!initialPhone) initialPhone = null;
+        }
+
+        var csrfEl = document.querySelector('input[name="__RequestVerificationToken"]');
+        var csrfToken = csrfEl ? csrfEl.value : '';
+
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountWhatsAppMessenger) {
+                console.error('[WhatsApp] mount fonksiyonu bulunamadi'); return;
+            }
+            try {
+                window.CalibraHub.mountWhatsAppMessenger(el, {
+                    initialPhone: initialPhone,
+                    csrfToken: csrfToken,
+                });
+            } catch (ex) {
+                console.error('[WhatsApp] mount hatasi:', ex);
+            }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountWhatsAppMessenger) { doMount(); return; }
+        var tries = 0;
+        var timer = setInterval(function () {
+            tries++;
+            if (window.CalibraHub && window.CalibraHub.mountWhatsAppMessenger) { clearInterval(timer); doMount(); }
+            else if (tries >= 30) { clearInterval(timer); console.error('[WhatsApp] timeout'); }
+        }, 100);
+    })();
+</script>
+}

@@ -73,6 +73,8 @@ public sealed class FinanceService : IFinanceService
                 IsActive = request.IsActive,
                 PriceGroupId = request.PriceGroupId > 0 ? request.PriceGroupId : null,
                 SalesRepresentativeId = request.SalesRepresentativeId > 0 ? request.SalesRepresentativeId : null,
+                WaPhone = NullIfEmpty(request.WaPhone),
+                WaName = NullIfEmpty(request.WaName),
                 CreatedAt = existing.CreatedAt
             };
             await _repo.UpdateContactAsync(updated, cancellationToken);
@@ -102,6 +104,8 @@ public sealed class FinanceService : IFinanceService
                 IsActive = request.IsActive,
                 PriceGroupId = request.PriceGroupId > 0 ? request.PriceGroupId : null,
                 SalesRepresentativeId = request.SalesRepresentativeId > 0 ? request.SalesRepresentativeId : null,
+                WaPhone = NullIfEmpty(request.WaPhone),
+                WaName = NullIfEmpty(request.WaName),
                 CreatedAt = DateTime.Now
             };
             var newId = await _repo.AddContactAsync(entity, cancellationToken);
@@ -128,6 +132,8 @@ public sealed class FinanceService : IFinanceService
                 IsActive = entity.IsActive,
                 PriceGroupId = entity.PriceGroupId,
                 SalesRepresentativeId = entity.SalesRepresentativeId,
+                WaPhone = entity.WaPhone,
+                WaName = entity.WaName,
                 CreatedAt = entity.CreatedAt
             };
             return (true, null, ToDto(created));
@@ -144,11 +150,28 @@ public sealed class FinanceService : IFinanceService
         return (true, null);
     }
 
+    public async Task<(bool Success, string? Error)> SetContactPriceGroupAsync(int contactId, int? priceGroupId, CancellationToken cancellationToken)
+    {
+        if (contactId <= 0) return (false, "Geçersiz cari.");
+        var existing = await _repo.GetContactByIdAsync(contactId, cancellationToken);
+        if (existing is null) return (false, "Cari bulunamadı.");
+        await _repo.UpdateContactPriceGroupAsync(contactId, priceGroupId, cancellationToken);
+        return (true, null);
+    }
+
+    public async Task<IReadOnlyCollection<ContactDto>> GetContactsByPriceGroupAsync(int priceGroupId, CancellationToken cancellationToken)
+    {
+        if (priceGroupId <= 0) return Array.Empty<ContactDto>();
+        var contacts = await _repo.GetContactsByPriceGroupAsync(priceGroupId, cancellationToken);
+        return contacts.Select(ToDto).ToArray();
+    }
+
     private static ContactDto ToDto(Contact a) => new(
         a.Id, (byte)a.AccountType, a.AccountCode, a.AccountTitle,
         a.TaxNumber, a.IdentityNumber, a.TaxOffice, a.Phone, a.Email, a.Address, a.City, a.District,
         a.IsActive, a.PriceGroupId, a.CreatedAt, a.CountryCode,
-        a.Mobile, a.Website, a.PostalCode, a.ContactPerson, a.Neighborhood, a.SalesRepresentativeId);
+        a.Mobile, a.Website, a.PostalCode, a.ContactPerson, a.Neighborhood, a.SalesRepresentativeId,
+        a.WaPhone, a.WaName);
 
     private static string? NullIfEmpty(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();

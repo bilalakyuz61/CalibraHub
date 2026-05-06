@@ -18,7 +18,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus, Trash2, Eye, Lock, Calculator, Wrench, ChevronDown, Check, Palette, Sparkles } from 'lucide-react'
+import { X, Plus, Trash2, Eye, Lock, Calculator, Wrench, ChevronDown, Check, Palette, Sparkles, Asterisk } from 'lucide-react'
 
 // ─── Operatör listesi ────────────────────────────────────────────────
 var OPERATORS = [
@@ -39,6 +39,20 @@ function isNumericType(dataType) {
   return NUMERIC_TYPES.indexOf((dataType || '').toLowerCase()) !== -1
 }
 
+function isBooleanType(dataType) {
+  return String(dataType || '').toLowerCase() === 'boolean'
+}
+
+// Boolean degerini "true" | "false" string'ine normalize et — koşul value alanı
+// her zaman string saklar; runtime tarafa tirnaksiz literal cikis veriyoruz.
+function normalizeBoolValue(v) {
+  if (v === true || v === 1) return 'true'
+  if (v === false || v === 0) return 'false'
+  var s = String(v == null ? '' : v).trim().toLowerCase()
+  if (s === 'true' || s === '1' || s === 'evet' || s === 'yes' || s === 'on') return 'true'
+  return 'false'
+}
+
 // ─── Koşul dizisini string'e çevir ──────────────────────────────────
 function conditionsToString(conditions, junction) {
   var parts = []
@@ -54,6 +68,11 @@ function conditionsToString(conditions, junction) {
       // string fonksiyon formatı: w_field.includes('x') / w_field.startsWith('x')
       var fn = op === 'contains' ? 'includes' : 'startsWith'
       valStr = field + "." + fn + "('" + val.replace(/'/g, "\\'") + "')"
+      parts.push(valStr)
+    } else if (isBooleanType(c.dataType)) {
+      // Boolean: tirnaksiz literal — scope'taki widget degeri gercek bool, expr-eval
+      // strict tip kontrolu yaptigi icin 'true'/'false' string ile karsilastirma daima false doner.
+      valStr = field + ' ' + op + ' ' + normalizeBoolValue(val)
       parts.push(valStr)
     } else {
       // numeric ise tırnak yok, string ise tırnak var
@@ -527,6 +546,127 @@ function ArithmeticOperatorDropdown(props) {
 }
 
 // ─── Query Builder (visibleIf / disabledIf sekmeleri için) ───────────
+// Value editor — kondisyonu uretern kaynak alanin veri tipine gore farklilasir.
+// boolean → Evet/Hayır toggle; numeric → number input; date → date input;
+// dropdown/multi-select/lookup → kaynak alanin options listesinden select;
+// text/diger → text input.
+function renderValueInput(cond, updateCondition, availableWidgets) {
+  var dt = String(cond.dataType || '').toLowerCase()
+  var commonStyle = {
+    flex: 1,
+    height: '34px',
+    padding: '0 10px',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '8px',
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: '12px',
+    outline: 'none',
+    minWidth: '80px',
+    colorScheme: 'dark',
+  }
+
+  // Boolean — Evet/Hayır iki butonlu toggle (tirnaksiz literal cikis)
+  if (isBooleanType(dt)) {
+    return (
+      <div style={{
+        flex: 1, display: 'flex', gap: '4px',
+        padding: '3px',
+        background: 'rgba(255,255,255,0.05)',
+        border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: '8px',
+        minWidth: '120px',
+      }}>
+        {[
+          { v: 'true',  label: 'Evet',  onColor: '#10b981' },
+          { v: 'false', label: 'Hayır', onColor: '#ef4444' },
+        ].map(function(opt) {
+          var act = cond.value !== '' && normalizeBoolValue(cond.value) === opt.v
+          return (
+            <button
+              key={opt.v}
+              type="button"
+              onClick={function() { updateCondition(cond.id, { value: opt.v }) }}
+              style={{
+                flex: 1, height: '26px', padding: '0 10px',
+                background: act ? opt.onColor : 'transparent',
+                border: 'none', borderRadius: '6px',
+                color: act ? '#fff' : 'rgba(255,255,255,0.6)',
+                fontSize: '11px', fontWeight: '600',
+                cursor: 'pointer', transition: 'background 0.15s',
+              }}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Dropdown / multi-select / lookup — kaynak widget'in options listesi varsa select
+  var src = cond.field
+    ? (availableWidgets || []).find(function(w) { return w.widgetCode === cond.field })
+    : null
+  var hasOptions = src && Array.isArray(src.options) && src.options.length > 0
+  if ((dt === 'dropdown' || dt === 'multi-select' || dt === 'lookup') && hasOptions) {
+    return (
+      <select
+        value={cond.value}
+        onChange={function(e) { updateCondition(cond.id, { value: e.target.value }) }}
+        style={commonStyle}
+      >
+        <option value="" style={{ background: '#0a0e1a', color: '#fff' }}>— Seç —</option>
+        {src.options.map(function(o) {
+          var ov = typeof o === 'string' ? o : (o && (o.value != null ? o.value : o.label)) || ''
+          var ol = typeof o === 'string' ? o : (o && (o.label != null ? o.label : o.value)) || ''
+          return (
+            <option key={String(ov)} value={String(ov)} style={{ background: '#0a0e1a', color: '#fff' }}>
+              {String(ol)}
+            </option>
+          )
+        })}
+      </select>
+    )
+  }
+
+  // Numeric — number input
+  if (isNumericType(dt)) {
+    return (
+      <input
+        type="number"
+        value={cond.value}
+        onChange={function(e) { updateCondition(cond.id, { value: e.target.value }) }}
+        placeholder="0"
+        style={commonStyle}
+      />
+    )
+  }
+
+  // Date / datetime — date input
+  if (dt === 'date' || dt === 'datetime') {
+    return (
+      <input
+        type={dt === 'datetime' ? 'datetime-local' : 'date'}
+        value={cond.value}
+        onChange={function(e) { updateCondition(cond.id, { value: e.target.value }) }}
+        style={commonStyle}
+      />
+    )
+  }
+
+  // Text / lookup (options yoksa) / diger — text input
+  return (
+    <input
+      type="text"
+      value={cond.value}
+      onChange={function(e) { updateCondition(cond.id, { value: e.target.value }) }}
+      placeholder="değer..."
+      style={commonStyle}
+    />
+  )
+}
+
 function QueryBuilder(props) {
   var conditions = props.conditions
   var junction = props.junction
@@ -609,26 +749,7 @@ function QueryBuilder(props) {
                   updateCondition(cond.id, { operator: op })
                 }}
               />
-              <input
-                type="text"
-                value={cond.value}
-                onChange={function(e) {
-                  updateCondition(cond.id, { value: e.target.value })
-                }}
-                placeholder={isNumericType(cond.dataType) ? '0' : 'değer...'}
-                style={{
-                  flex: 1,
-                  height: '34px',
-                  padding: '0 10px',
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '8px',
-                  color: 'rgba(255,255,255,0.85)',
-                  fontSize: '12px',
-                  outline: 'none',
-                  minWidth: '80px',
-                }}
-              />
+              {renderValueInput(cond, updateCondition, availableWidgets)}
               <button
                 type="button"
                 onClick={function() { removeCondition(cond.id) }}
@@ -1091,6 +1212,10 @@ export default function RuleBuilderModal(props) {
   var [disabledConditions, setDisabledConditions] = useState([])
   var [disabledJunction, setDisabledJunction]     = useState('AND')
 
+  // requiredIf koşullar — true ise widget zorunlu (statik IsRequired'i override eder)
+  var [requiredConditions, setRequiredConditions] = useState([])
+  var [requiredJunction, setRequiredJunction]     = useState('AND')
+
   // formula — string olarak saklanir (backend kontrati).
   // Builder icin segments ve karmasik durumlar icin rawFallback state'leri.
   var [formula, setFormula] = useState('')
@@ -1118,6 +1243,10 @@ export default function RuleBuilderModal(props) {
     var diParsed = parseConditionsFromString(initialValues.disabledIf || '', availableWidgets)
     setDisabledConditions(diParsed.conditions)
     setDisabledJunction(diParsed.junction)
+
+    var riParsed = parseConditionsFromString(initialValues.requiredIf || '', availableWidgets)
+    setRequiredConditions(riParsed.conditions)
+    setRequiredJunction(riParsed.junction)
 
     var rawFormula = initialValues.formula || ''
     setFormula(rawFormula)
@@ -1167,6 +1296,7 @@ export default function RuleBuilderModal(props) {
 
   var visiblePreview  = conditionsToString(visibleConditions, visibleJunction)
   var disabledPreview = conditionsToString(disabledConditions, disabledJunction)
+  var requiredPreview = conditionsToString(requiredConditions, requiredJunction)
 
   // Varsayilan deger — save edilecek string. Formul modunda segment/fallback'ten
   // serialize; static modda dogrudan literal.
@@ -1181,6 +1311,7 @@ export default function RuleBuilderModal(props) {
     onSave({
       visibleIf:  visiblePreview  || '',
       disabledIf: disabledPreview || '',
+      requiredIf: requiredPreview || '',
       formula:    formula.trim()  || '',
       colorType:  colorType,
       colorValue: colorValue.trim() || null,
@@ -1205,18 +1336,18 @@ export default function RuleBuilderModal(props) {
       hasValue: disabledConditions.length > 0,
     },
     {
+      key: 'required',
+      label: 'Zorunluluk',
+      sublabel: 'requiredIf',
+      Icon: Asterisk,
+      hasValue: requiredConditions.length > 0,
+    },
+    {
       key: 'default',
       label: 'Varsayılan',
       sublabel: 'defaultValue',
       Icon: Sparkles,
       hasValue: dvHasValue,
-    },
-    {
-      key: 'formula',
-      label: 'Formül',
-      sublabel: 'formula',
-      Icon: Calculator,
-      hasValue: !!formula.trim(),
     },
     {
       key: 'color',
@@ -1427,6 +1558,28 @@ export default function RuleBuilderModal(props) {
                       onJunctionChange={setDisabledJunction}
                       availableWidgets={availableWidgets}
                       preview={disabledPreview}
+                    />
+                  </div>
+                )}
+
+                {activeTab === 'required' && (
+                  <div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: 'rgba(255,255,255,0.35)',
+                      marginBottom: '16px',
+                      lineHeight: '1.5',
+                    }}>
+                      Bu koşullar <strong style={{ color: '#fbbf24' }}>true</strong> olduğunda widget <strong style={{ color: 'rgba(255,255,255,0.7)' }}>zorunlu</strong> hale gelir. Koşul tanımlıysa formdaki "Zorunlu Alan" toggle'ı devre dışı kalır — koşul kuralı override eder. Koşul yoksa toggle'ın statik değeri geçerli olur.
+                    </div>
+                    <QueryBuilder
+                      tabKey="required"
+                      conditions={requiredConditions}
+                      junction={requiredJunction}
+                      onConditionsChange={setRequiredConditions}
+                      onJunctionChange={setRequiredJunction}
+                      availableWidgets={availableWidgets}
+                      preview={requiredPreview}
                     />
                   </div>
                 )}
@@ -1657,38 +1810,9 @@ export default function RuleBuilderModal(props) {
                   </div>
                 )}
 
-                {activeTab === 'formula' && (
-                  <div>
-                    <div style={{
-                      fontSize: '11px',
-                      color: 'rgba(255,255,255,0.35)',
-                      marginBottom: '16px',
-                      lineHeight: '1.5',
-                    }}>
-                      Formül tanımlandığında widget'ın değeri bu ifadeden <strong style={{ color: 'rgba(255,255,255,0.7)' }}>otomatik hesaplanır</strong> ve salt okunur olur.
-                      Operatörler: <code style={{ color: '#fbbf24', fontSize: '11px' }}>+ - * / % == != &gt; &lt; &amp;&amp; || ! ?:</code>
-                    </div>
-                    <FormulaBuilder
-                      segments={formulaSegments}
-                      onSegmentsChange={function(newSegs) {
-                        setFormulaSegments(newSegs)
-                        setFormula(formulaSegmentsToString(newSegs))
-                      }}
-                      availableWidgets={availableWidgets}
-                      preview={formula}
-                      rawFallback={formulaFallback}
-                      onRawFallbackChange={function(raw) {
-                        setFormulaFallback(raw)
-                        setFormula(raw)
-                      }}
-                      onClearFallback={function() {
-                        setFormulaFallback(null)
-                        setFormulaSegments([])
-                        setFormula('')
-                      }}
-                    />
-                  </div>
-                )}
+                {/* Formül sekmesi kaldirildi — Varsayilan'in formul modu zaten ayni
+                    isi yapiyor. Eski kayitli rules.formula kullanicinin "Kuralları
+                    Kaydet" demesiyle override edilmez (formula state'i korunur). */}
 
                 {activeTab === 'color' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

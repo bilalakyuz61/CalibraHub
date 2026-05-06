@@ -27,6 +27,7 @@ public sealed record WidgetDefinitionDto(
     bool IsActive,
     IReadOnlyDictionary<string, string>? Metadata = null,
     WidgetRulesDto? Rules = null,
+    // DEPRECATED: yerine LabelStyle = "inline" kullanin (DB kolonu korunuyor).
     bool IsPlainField = false,
     bool IsRequired = false,
     int? MinLength = null,
@@ -35,13 +36,14 @@ public sealed record WidgetDefinitionDto(
     decimal? MaxValue = null,
     int ColorType = 0,
     string? ColorValue = null,
-    int ColSpan = 6,
+    int ColSpan = 12,
     string LabelStyle = "standard");
 
 /// <summary>
 /// Faz G — Kural ve formul motoru payload'i. Tum alanlar opsiyonel string ifade.
 ///   visibleIf  : bool sonuclu ifade — false ise widget UI'da gizlenir
 ///   disabledIf : bool sonuclu ifade — true ise widget readonly
+///   requiredIf : bool sonuclu ifade — true ise widget zorunlu (statik IsRequired'i override eder)
 ///   formula    : deger sonuclu ifade — widget readonly, degeri bu ifadeden turer
 ///
 /// Ifadelerdeki tanimlayicilar (w_xxx) ayni form icindeki diger widget'larin
@@ -53,7 +55,8 @@ public sealed record WidgetDefinitionDto(
 public sealed record WidgetRulesDto(
     string? VisibleIf,
     string? DisabledIf,
-    string? Formula);
+    string? Formula,
+    string? RequiredIf = null);
 
 /// <summary>
 /// Tek widget icin schema + value birlestirilmis DTO. React'in dogrudan
@@ -89,6 +92,7 @@ public sealed record WidgetRenderDto(
     IReadOnlyDictionary<string, string>? Metadata = null,
     IReadOnlyCollection<GridRowDto>? GridRows = null,
     WidgetRulesDto? Rules = null,
+    // DEPRECATED: yerine LabelStyle = "inline" kullanin (DB kolonu korunuyor).
     bool IsPlainField = false,
     bool IsRequired = false,
     int? MaxLength = null,
@@ -98,7 +102,7 @@ public sealed record WidgetRenderDto(
     decimal? MaxValue = null,
     int ColorType = 0,
     string? ColorValue = null,
-    int ColSpan = 6,
+    int ColSpan = 12,
     string LabelStyle = "standard");
 
 /// <summary>
@@ -197,6 +201,7 @@ public sealed record UpsertWidgetRequest(
     IReadOnlyCollection<string>? Options,
     bool IsActive = true,
     WidgetRulesDto? Rules = null,
+    // DEPRECATED: yerine LabelStyle = "inline" kullanin (DB kolonu korunuyor).
     bool IsPlainField = false,
     bool IsRequired = false,
     int? MinLength = null,

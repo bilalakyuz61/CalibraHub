@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Configuration;
 using CalibraHub.Application.Services;
 using CalibraHub.Infrastructure.Integrations;
 using CalibraHub.Persistence.Database;
@@ -11,6 +12,29 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+// Servis modunda (LocalSystem) cwd = System32 — exe konumuna setle
+System.IO.Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+
+// Yakalanmamis exception'lari Event Viewer'a yaz
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+{
+    try
+    {
+        var ex = e.ExceptionObject as Exception;
+        if (OperatingSystem.IsWindows())
+        {
+            if (!System.Diagnostics.EventLog.SourceExists("CalibraHub Worker"))
+                System.Diagnostics.EventLog.CreateEventSource("CalibraHub Worker", "Application");
+            using var log = new System.Diagnostics.EventLog("Application") { Source = "CalibraHub Worker" };
+            log.WriteEntry(
+                $"FATAL UnhandledException: {ex}\r\n\r\nIsTerminating: {e.IsTerminating}\r\nCWD: {Environment.CurrentDirectory}",
+                System.Diagnostics.EventLogEntryType.Error);
+        }
+    }
+    catch { }
+};
 
 var host = Host.CreateDefaultBuilder(args)
     // ContentRoot'u binary dizinine cek — `dotnet run --project X` ile calistirildiginda
@@ -87,6 +111,18 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IDocumentImportService, DocumentImportService>();
         services.AddScoped<IAdminReadService, AdminReadService>();
         services.AddScoped<IAdminManagementService, AdminManagementService>();
+
+        // Grafana provisioning — Worker AdminManagementService kullaniyor, DI grafi
+        // icin gerekli. Worker normal kosulda Grafana cagrisi yapmaz; IsEnabled=false
+        // ise no-op. AdminPassword DPAPI ile sifrelenmistir, PostConfigure'da cozulur.
+        services.Configure<GrafanaOptions>(configuration.GetSection(GrafanaOptions.SectionName));
+        services.PostConfigure<GrafanaOptions>(opts =>
+        {
+            opts.AdminPassword = DecryptIfNeeded(opts.AdminPassword);
+        });
+        services.AddHttpClient<
+            CalibraHub.Application.Abstractions.Services.IGrafanaProvisioningService,
+            CalibraHub.Infrastructure.Grafana.GrafanaProvisioningService>();
         services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
         services.AddScoped<IPasswordHashService, Pbkdf2PasswordHashService>();
         services.AddScoped<CalibraDatabaseInitializer>();
@@ -94,6 +130,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<ISmtpProfileRepository, SqlSmtpProfileRepository>();
         services.AddScoped<IErpConnectionSettingsRepository, SqlErpConnectionSettingsRepository>();
         services.AddScoped<ICompanyRepository, SqlCompanyRepository>();
+        services.AddScoped<IIntegrationApiProfileRepository, SqlIntegrationApiProfileRepository>();
         services.AddScoped<IDepartmentRepository, SqlDepartmentRepository>();
         services.AddScoped<IUserProfileRepository, SqlUserProfileRepository>();
         services.AddScoped<IIncomingDocumentRepository, SqlIncomingDocumentRepository>();
@@ -104,6 +141,8 @@ var host = Host.CreateDefaultBuilder(args)
                            CalibraHub.Infrastructure.Notifications.SmtpReminderEmailSender>();
         services.AddScoped<IScheduledTaskRepository, SqlScheduledTaskRepository>();
         services.AddScoped<IScheduledTaskRunRepository, SqlScheduledTaskRunRepository>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskTokenResolver,
+                           CalibraHub.Application.Services.Scheduling.ScheduledTaskTokenResolver>();
 
         // Executor registry — her TaskType icin bir IScheduledTaskExecutor.
         // DI `IEnumerable<IScheduledTaskExecutor>` enjekte ettiginde tum kayitlari doner.
@@ -113,6 +152,10 @@ var host = Host.CreateDefaultBuilder(args)
                            CalibraHub.Infrastructure.Scheduling.HttpApiTaskExecutor>();
         services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
                            CalibraHub.Application.Services.Scheduling.CurrencyRefreshTaskExecutor>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Infrastructure.Scheduling.ViewReportTaskExecutor>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IEmailSender,
+                           CalibraHub.Infrastructure.Notifications.SmtpEmailSender>();
         services.AddHttpClient();
 
         services.AddScoped<CalibraHub.Application.Services.Scheduling.IScheduledTaskDispatcher,

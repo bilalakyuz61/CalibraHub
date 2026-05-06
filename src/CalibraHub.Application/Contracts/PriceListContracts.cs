@@ -1,53 +1,77 @@
 namespace CalibraHub.Application.Contracts;
 
 // ── Fiyat Grubu ──────────────────────────────────────────────────────────────
+// AllowsBuying / AllowsSelling / AllowsCost: bu gruba hangi fiyat tipi (b/s/m) girilebilir?
+// En az bir tane true olmali (servis tarafinda dogrulanir).
 public sealed record PriceGroupDto(
-    int Id, string GroupCode, string GroupName, string? Description, bool IsActive,
+    int Id, string Code, string Name, string? Description, bool IsActive,
+    bool AllowsBuying, bool AllowsSelling, bool AllowsCost,
     DateTime CreatedAt, DateTime UpdatedAt);
 
-public sealed record CreatePriceGroupRequest(string GroupCode, string GroupName, string? Description, bool IsActive);
-public sealed record UpdatePriceGroupRequest(int Id, string GroupCode, string GroupName, string? Description, bool IsActive);
+public sealed record CreatePriceGroupRequest(
+    string Code, string Name, string? Description, bool IsActive,
+    bool AllowsBuying = true, bool AllowsSelling = true, bool AllowsCost = true);
 
-// ── Fiyat Kalemi ─────────────────────────────────────────────────────────────
+public sealed record UpdatePriceGroupRequest(
+    int Id, string Code, string Name, string? Description, bool IsActive,
+    bool AllowsBuying = true, bool AllowsSelling = true, bool AllowsCost = true);
+
+// ── Fiyat Kalemi (her DB satiri = tek fiyat: PriceType + Price) ───────────────
+// UI'da her satir tek bir tip gosterir (Alis veya Satis); ayni urun icin ayri
+// satirlarla hem alis hem satis tanimlanir.
 public sealed record PriceListDto(
-    int Id, int PriceGroupId, int? ItemId,
-    string MaterialCode, string? MaterialName,
-    string? CombinationCode, string? CombinationName,
-    string Currency, decimal BuyingPrice, decimal SellingPrice,
+    int Id, int GroupId,
+    int ItemId, string ItemCode, string ItemName,
+    int? ConfigId, string? ConfigCode,
+    int CurrencyId, string CurrencyCode,
+    string PriceType, decimal Price,
     DateTime ValidFrom, DateTime? ValidTo, bool IsActive,
     DateTime CreatedAt, DateTime UpdatedAt);
 
 public sealed record SavePriceListRequest(
-    int? Id, int PriceGroupId,
-    int? ItemId, string MaterialCode, string? MaterialName,
-    string? CombinationCode, string? CombinationName,
-    string Currency, decimal BuyingPrice, decimal SellingPrice,
+    int? Id, int GroupId,
+    int ItemId, int? ConfigId,
+    int CurrencyId, string PriceType, decimal Price,
     DateTime ValidFrom, DateTime? ValidTo, bool IsActive);
 
-// Inline fiyat guncelleme (sadece alis/satis fiyati degistirir, diger alanlar korunur)
-public sealed record UpdatePriceEntryRequest(int Id, decimal BuyingPrice, decimal SellingPrice);
+// Inline fiyat guncelleme (sadece tek fiyati degistirir, diger alanlar korunur)
+public sealed record UpdatePriceEntryRequest(int Id, decimal Price);
 
 // ── Toplu Fiyat Girisi ──────────────────────────────────────────────────────
 public sealed record BulkPriceEntryLine(
-    int? ItemId, string MaterialCode, string? MaterialName,
-    string? CombinationCode, string? CombinationName,
-    decimal BuyingPrice, decimal SellingPrice);
+    int ItemId, int? ConfigId, decimal Price);
 
 public sealed record SaveBulkPriceEntriesRequest(
-    int PriceGroupId, string Currency,
+    int GroupId, int CurrencyId, string PriceType,
     DateTime ValidFrom, DateTime? ValidTo,
     IReadOnlyCollection<BulkPriceEntryLine> Lines);
 
 // ── Mevcut Fiyat Sorgusu ────────────────────────────────────────────────────
-public sealed record PriceEntryKey(int? ItemId, string MaterialCode, string? CombinationCode);
+public sealed record PriceEntryKey(int ItemId, int? ConfigId);
 
 public sealed record GetExistingPricesRequest(
-    int PriceGroupId, string Currency, DateTime ValidFrom,
+    int GroupId, int CurrencyId, string PriceType, DateTime ValidFrom,
     IReadOnlyCollection<PriceEntryKey> Keys);
 
 public sealed record ExistingPriceRow(
-    int? ItemId, string MaterialCode, string? CombinationCode,
-    decimal BuyingPrice, decimal SellingPrice);
+    int ItemId, int? ConfigId, decimal Price);
 
 // ── Upsert Sonucu ───────────────────────────────────────────────────────────
 public sealed record BulkUpsertResult(int Inserted, int Updated);
+
+// ── Liste / Pagination Filtre ────────────────────────────────────────────────
+public sealed record PriceListFilter(
+    string? Search,
+    int? CurrencyId,
+    string? PriceType,
+    DateTime? ValidFromMin,
+    DateTime? ValidToMax,
+    DateTime? ActiveOn,
+    int Page,
+    int PageSize);
+
+public sealed record PagedPriceListResult(
+    IReadOnlyCollection<PriceListDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);

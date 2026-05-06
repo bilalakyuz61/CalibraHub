@@ -21,13 +21,71 @@ public static class ScheduleEvaluator
 
         return task.ScheduleType switch
         {
-            ScheduleType.Interval => ComputeInterval(expr, fromUtc),
-            ScheduleType.DailyAt  => ComputeDailyAt(expr, fromUtc),
-            ScheduleType.Once     => ComputeOnce(expr, fromUtc),
-            ScheduleType.Cron     => ComputeCron(expr, fromUtc),
-            ScheduleType.Manual   => null,
-            _                     => null,
+            ScheduleType.Interval      => ComputeInterval(expr, fromUtc),
+            ScheduleType.DailyAt       => ComputeDailyAt(expr, fromUtc),
+            ScheduleType.Once          => ComputeOnce(expr, fromUtc),
+            ScheduleType.Cron          => ComputeCron(expr, fromUtc),
+            ScheduleType.WeeklyOnDays  => ComputeWeeklyOnDays(expr, fromUtc),
+            ScheduleType.MonthlyOnDays => ComputeMonthlyOnDays(expr, fromUtc),
+            ScheduleType.Manual        => null,
+            _                          => null,
         };
+    }
+
+    /// <summary>"HH:mm|d1,d2,..." formati. d=0..6 (DayOfWeek). Yerel saat olarak hesaplanir.</summary>
+    private static DateTime? ComputeWeeklyOnDays(string expr, DateTime fromUtc)
+    {
+        var (todOk, tod, days) = ParseTimeAndIntList(expr);
+        if (!todOk || days.Count == 0) return null;
+
+        var nowLocal = fromUtc.ToLocalTime();
+        // 14 gun forward arar; bugun de dahil
+        for (var i = 0; i < 14; i++)
+        {
+            var candidate = nowLocal.Date.AddDays(i).Add(tod);
+            if (candidate <= nowLocal) continue;
+            if (days.Contains((int)candidate.DayOfWeek))
+            {
+                return candidate.ToUniversalTime();
+            }
+        }
+        return null;
+    }
+
+    /// <summary>"HH:mm|d1,d2,..." formati. d=1..31. Bu ayda eslesme yoksa sonraki aylara ilerler.</summary>
+    private static DateTime? ComputeMonthlyOnDays(string expr, DateTime fromUtc)
+    {
+        var (todOk, tod, days) = ParseTimeAndIntList(expr);
+        if (!todOk || days.Count == 0) return null;
+
+        var nowLocal = fromUtc.ToLocalTime();
+        // 12 ay ileriye kadar bak (yine de bos donerse null)
+        var probe = new DateTime(nowLocal.Year, nowLocal.Month, 1, 0, 0, 0, DateTimeKind.Local);
+        for (var monthOffset = 0; monthOffset < 12; monthOffset++)
+        {
+            var month = probe.AddMonths(monthOffset);
+            var lastDay = DateTime.DaysInMonth(month.Year, month.Month);
+            foreach (var d in days.OrderBy(x => x))
+            {
+                if (d < 1 || d > lastDay) continue;
+                var candidate = new DateTime(month.Year, month.Month, d, 0, 0, 0, DateTimeKind.Local).Add(tod);
+                if (candidate > nowLocal) return candidate.ToUniversalTime();
+            }
+        }
+        return null;
+    }
+
+    private static (bool ok, TimeSpan tod, HashSet<int> days) ParseTimeAndIntList(string expr)
+    {
+        var parts = expr.Split('|', 2);
+        if (parts.Length != 2) return (false, TimeSpan.Zero, new HashSet<int>());
+        if (!TimeSpan.TryParse(parts[0].Trim(), out var tod)) return (false, TimeSpan.Zero, new HashSet<int>());
+        var set = new HashSet<int>();
+        foreach (var token in parts[1].Split(','))
+        {
+            if (int.TryParse(token.Trim(), out var v)) set.Add(v);
+        }
+        return (set.Count > 0, tod, set);
     }
 
     private static DateTime? ComputeInterval(string expr, DateTime fromUtc)

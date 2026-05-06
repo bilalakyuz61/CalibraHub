@@ -1,467 +1,130 @@
+@model CalibraHub.Web.Controllers.PriceGroupsViewModel
+@using System.Text.Json
 @{
-    ViewData["Title"] = "Fiyat Listesi";
+    ViewData["Title"]    = "Fiyat Gruplari";
     ViewData["FormCode"] = "PRICE_LIST";
-    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
-        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>price_groups</td><td style='padding:6px 8px;'>Fiyat grubu tanimlari (kod, ad, aciklama, durum)</td></tr>"
+    ViewData["BodyClass"] = "page-price-groups";
+    ViewData["DbInfo"]   = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>PriceGroup</td><td style='padding:6px 8px;'>Fiyat grubu master kayitlari (kod, ad, izin verilen tipler)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>Contact.PriceGroupId</td><td style='padding:6px 8px;'>Cari ↔ fiyat grubu eslestirme (1 cari → 0..1 grup)</td></tr>"
         + "</table>";
+
+    // Inline JSON: SmartBoard config (server-side hazirlandi)
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy   = JsonNamingPolicy.CamelCase,
+        WriteIndented          = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = Model.BoardConfig != null
+        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
+        : "null";
 }
 
 @section Styles {
 <style>
-    /* ═══ Page shell — ambient mesh ═══ */
-    .pg-shell {
-        display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden;
-        background: #0c0f1a;
-        background-image:
-            radial-gradient(at 12% 8%, rgba(99,102,241,.22) 0, transparent 50%),
-            radial-gradient(at 88% 12%, rgba(14,165,233,.14) 0, transparent 50%),
-            radial-gradient(at 50% 100%, rgba(168,85,247,.14) 0, transparent 50%),
-            radial-gradient(at 95% 85%, rgba(20,184,166,.1) 0, transparent 50%);
+    .page-price-groups .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
     }
-    body.app-theme-light .pg-shell {
-        background: #f8fafc;
-        background-image:
-            radial-gradient(at 12% 8%, rgba(99,102,241,.06) 0, transparent 50%),
-            radial-gradient(at 88% 12%, rgba(14,165,233,.04) 0, transparent 50%),
-            radial-gradient(at 50% 100%, rgba(168,85,247,.04) 0, transparent 50%);
+    .page-price-groups .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
     }
-
-    /* ═══ Action bar ═══ */
-    .pg-action-bar {
-        display: flex; align-items: center; gap: 8px;
-        padding: 8px 16px; flex-shrink: 0;
-        background: rgba(15,15,26,.85);
-        border-bottom: 1px solid rgba(255,255,255,.06);
-        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    .workspace-frame-body.page-price-groups .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
     }
-    body.app-theme-light .pg-action-bar {
-        background: rgba(248,250,252,.92);
-        border-bottom-color: #e2e8f0;
+    .workspace-frame-body.page-price-groups .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
     }
-    .pg-action-bar .pg-meta {
-        margin-left: auto; font-size: .72rem; color: rgba(255,255,255,.5);
-        display: flex; align-items: center; gap: 6px;
-    }
-    .pg-action-bar .pg-meta-val { font-weight: 700; color: rgba(255,255,255,.85); }
-    body.app-theme-light .pg-action-bar .pg-meta { color: #64748b; }
-    body.app-theme-light .pg-action-bar .pg-meta-val { color: #1e293b; }
-
-    /* Action bar buttons */
-    .pg-btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 16px; border-radius: 9px; font-size: .82rem; font-weight: 600; border: none; cursor: pointer; transition: all .15s; }
-    .pg-btn:disabled { opacity: .45; cursor: default; }
-    .pg-btn--primary { background: linear-gradient(135deg,#6366f1,#4f46e5); color: #fff; box-shadow: 0 2px 8px rgba(99,102,241,.3); }
-    .pg-btn--primary:hover:not(:disabled) { background: linear-gradient(135deg,#818cf8,#6366f1); }
-    .pg-btn--danger { background: rgba(239,68,68,.12); color: #f87171; border: 1px solid rgba(239,68,68,.2); }
-    .pg-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,.2); color: #fca5a5; }
-    .pg-btn--secondary { background: rgba(255,255,255,.06); color: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.1); }
-    .pg-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,.1); color: #fff; }
-    body.app-theme-light .pg-btn--danger { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
-    body.app-theme-light .pg-btn--secondary { background: #f1f5f9; color: #374151; border-color: #e2e8f0; }
-    body.app-theme-light .pg-btn--secondary:hover:not(:disabled) { background: #e2e8f0; }
-
-    /* ═══ Body — sol form + sag grid ═══ */
-    .pg-body { display: flex; gap: 16px; flex: 1; min-height: 0; overflow: hidden; padding: 16px; }
-
-    /* ═══ Form panel (glassmorphism) ═══ */
-    .pg-form-card {
-        width: 320px; flex-shrink: 0;
-        background: rgba(255,255,255,.06);
-        border: 1px solid rgba(255,255,255,.1);
-        border-radius: 14px; padding: 20px;
-        backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-        display: flex; flex-direction: column; gap: 16px;
-        overflow-y: auto;
-    }
-    body.app-theme-light .pg-form-card {
-        background: rgba(255,255,255,.85);
-        border-color: rgba(15,23,42,.08);
-        box-shadow: 0 2px 8px rgba(15,23,42,.04);
-    }
-
-    /* Form field */
-    .pg-field { display: flex; flex-direction: column; gap: 5px; }
-    .pg-label {
-        font-size: .72rem; font-weight: 600;
-        color: rgba(255,255,255,.65);
-        text-transform: uppercase; letter-spacing: .04em;
-    }
-    body.app-theme-light .pg-label { color: #64748b; }
-
-    .pg-input {
-        width: 100%; padding: 9px 12px; border-radius: 9px;
-        background: rgba(255,255,255,.04);
-        border: 1px solid rgba(255,255,255,.1);
-        color: rgba(255,255,255,.85);
-        font-size: .85rem; outline: none;
-        transition: border-color .15s, background .15s, box-shadow .15s;
-    }
-    .pg-input:focus {
-        border-color: #6366f1;
-        background: rgba(255,255,255,.06);
-        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
-    }
-    .pg-input::placeholder { color: rgba(255,255,255,.3); }
-    body.app-theme-light .pg-input {
-        background: #fff; border-color: #e2e8f0; color: #1e293b;
-    }
-    body.app-theme-light .pg-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.08); }
-    body.app-theme-light .pg-input::placeholder { color: #94a3b8; }
-
-    /* Toggle switch */
-    .pg-switch-row { display: flex; align-items: center; gap: 10px; }
-    .pg-switch {
-        position: relative; display: inline-block; width: 38px; height: 20px;
-    }
-    .pg-switch input { opacity: 0; width: 0; height: 0; }
-    .pg-switch-slider {
-        position: absolute; inset: 0; cursor: pointer;
-        background: rgba(255,255,255,.12); border-radius: 20px;
-        transition: background .2s;
-    }
-    .pg-switch-slider::before {
-        content: ''; position: absolute;
-        width: 16px; height: 16px; left: 2px; top: 2px;
-        background: #94a3b8; border-radius: 50%;
-        transition: transform .2s, background .2s;
-    }
-    .pg-switch input:checked + .pg-switch-slider { background: rgba(99,102,241,.5); }
-    .pg-switch input:checked + .pg-switch-slider::before { transform: translateX(18px); background: #818cf8; }
-    body.app-theme-light .pg-switch-slider { background: #e2e8f0; }
-    body.app-theme-light .pg-switch input:checked + .pg-switch-slider { background: rgba(99,102,241,.4); }
-    body.app-theme-light .pg-switch input:checked + .pg-switch-slider::before { background: #6366f1; }
-
-    /* Message */
-    .pg-msg { padding: 8px 12px; border-radius: 8px; font-size: .78rem; font-weight: 600; margin-top: 4px; }
-    .pg-msg.ok { background: rgba(16,185,129,.12); color: #34d399; border: 1px solid rgba(16,185,129,.2); }
-    .pg-msg.err { background: rgba(239,68,68,.12); color: #f87171; border: 1px solid rgba(239,68,68,.2); }
-    body.app-theme-light .pg-msg.ok { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
-    body.app-theme-light .pg-msg.err { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
-
-    /* ═══ Grid panel (glassmorphism) ═══ */
-    .pg-grid-card {
-        flex: 1; min-width: 0;
-        background: rgba(255,255,255,.04);
-        border: 1px solid rgba(255,255,255,.08);
-        border-radius: 14px;
-        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        display: flex; flex-direction: column; overflow: hidden;
-    }
-    body.app-theme-light .pg-grid-card {
-        background: rgba(255,255,255,.85);
-        border-color: rgba(15,23,42,.08);
-        box-shadow: 0 2px 8px rgba(15,23,42,.04);
-    }
-
-    /* Toolbar */
-    .pg-toolbar {
-        padding: 10px 14px; flex-shrink: 0;
-        border-bottom: 1px solid rgba(255,255,255,.06);
-    }
-    body.app-theme-light .pg-toolbar { border-bottom-color: #f1f5f9; }
-    .pg-toolbar .pg-search {
-        max-width: 260px; width: 100%; padding: 7px 12px; border-radius: 9px;
-        background: rgba(255,255,255,.04);
-        border: 1px solid rgba(255,255,255,.1);
-        color: rgba(255,255,255,.85);
-        font-size: .82rem; outline: none;
-        transition: border-color .15s;
-    }
-    .pg-toolbar .pg-search:focus { border-color: #6366f1; }
-    .pg-toolbar .pg-search::placeholder { color: rgba(255,255,255,.3); }
-    body.app-theme-light .pg-toolbar .pg-search { background: #fff; border-color: #e2e8f0; color: #1e293b; }
-    body.app-theme-light .pg-toolbar .pg-search::placeholder { color: #94a3b8; }
-
-    /* Table */
-    .pg-table-wrap { flex: 1; overflow: auto; }
-    .pg-grid { width: 100%; border-collapse: collapse; font-size: .8rem; }
-    .pg-grid thead th {
-        position: sticky; top: 0; z-index: 1;
-        text-align: left; padding: 8px 12px;
-        font-weight: 700; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
-        color: rgba(255,255,255,.5);
-        background: rgba(255,255,255,.04);
-        border-bottom: 1px solid rgba(255,255,255,.08);
-        white-space: nowrap;
-    }
-    body.app-theme-light .pg-grid thead th {
-        background: #f8fafc; color: #64748b; border-bottom-color: #e2e8f0;
-    }
-    .pg-grid tbody tr {
-        border-bottom: 1px solid rgba(255,255,255,.04);
-        cursor: pointer; transition: all .15s;
-    }
-    .pg-grid tbody tr:hover { background: rgba(99,102,241,.08); }
-    .pg-grid tbody tr.is-sel { background: rgba(99,102,241,.12); }
-    body.app-theme-light .pg-grid tbody tr { border-bottom-color: #f1f5f9; }
-    body.app-theme-light .pg-grid tbody tr:hover { background: rgba(99,102,241,.06); }
-    body.app-theme-light .pg-grid tbody tr.is-sel { background: #eff6ff; }
-    .pg-grid td { padding: 8px 12px; vertical-align: middle; color: rgba(255,255,255,.85); }
-    body.app-theme-light .pg-grid td { color: #1e293b; }
-    .pg-grid .pg-td-code { font-weight: 700; color: #a5b4fc; font-family: monospace; }
-    body.app-theme-light .pg-grid .pg-td-code { color: #4f46e5; }
-    .pg-grid .pg-td-muted { color: rgba(255,255,255,.5); font-size: .76rem; }
-    body.app-theme-light .pg-grid .pg-td-muted { color: #64748b; }
-    .pg-grid .pg-td-status { font-size: .72rem; font-weight: 600; }
-    .pg-grid .pg-td-status--on { color: #34d399; }
-    .pg-grid .pg-td-status--off { color: #f87171; }
-    body.app-theme-light .pg-grid .pg-td-status--on { color: #15803d; }
-    body.app-theme-light .pg-grid .pg-td-status--off { color: #dc2626; }
-
-    /* Row action buttons */
-    .pg-act-btn {
-        width: 26px; height: 26px; border-radius: 7px;
-        display: inline-flex; align-items: center; justify-content: center;
-        background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
-        color: rgba(255,255,255,.5); cursor: pointer; transition: all .12s;
-        text-decoration: none;
-    }
-    .pg-act-btn:hover { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.3); color: #a5b4fc; }
-    .pg-act-btn--price { background: rgba(16,185,129,.08); border-color: rgba(16,185,129,.2); color: #34d399; }
-    .pg-act-btn--price:hover { background: rgba(16,185,129,.18); border-color: rgba(16,185,129,.35); color: #6ee7b7; }
-    body.app-theme-light .pg-act-btn { background: #f8fafc; border-color: #e2e8f0; color: #64748b; }
-    body.app-theme-light .pg-act-btn:hover { background: rgba(99,102,241,.08); border-color: rgba(99,102,241,.25); color: #4f46e5; }
-    body.app-theme-light .pg-act-btn--price { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
-
-    /* Empty state */
-    .pg-empty { text-align: center; padding: 40px 20px; color: rgba(255,255,255,.4); font-size: .84rem; }
-    body.app-theme-light .pg-empty { color: #94a3b8; }
-
-    /* ═══ Silme onay modali ═══ */
-    .pg-confirm-backdrop {
-        display: none; position: fixed; inset: 0; z-index: 9999;
-        background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
-        align-items: center; justify-content: center; padding: 20px;
-    }
-    .pg-confirm-backdrop.is-open { display: flex; }
-    .pg-confirm {
-        background: #1e293b; border: 1px solid rgba(255,255,255,.12);
-        border-radius: 16px; padding: 32px 28px; max-width: 380px; width: 90vw;
-        text-align: center; display: flex; flex-direction: column;
-        align-items: center; gap: 12px;
-        box-shadow: 0 24px 64px rgba(0,0,0,.5);
-    }
-    body.app-theme-light .pg-confirm {
-        background: #fff; border-color: #e2e8f0;
-        box-shadow: 0 24px 64px rgba(0,0,0,.15);
-    }
-    .pg-confirm-ico { color: #ef4444; }
-    .pg-confirm-title { font-size: 1.05rem; font-weight: 700; color: #f1f5f9; margin: 0; }
-    body.app-theme-light .pg-confirm-title { color: #0f172a; }
-    .pg-confirm-text { font-size: .84rem; color: #94a3b8; margin: 0; line-height: 1.5; }
-    body.app-theme-light .pg-confirm-text { color: #64748b; }
-    .pg-confirm-btns { display: flex; gap: 10px; margin-top: 8px; }
 </style>
 }
 
-<div class="pg-shell">
-    <!-- Action Bar -->
-    <div class="pg-action-bar" data-no-proxy="1">
-        <button type="button" class="pg-btn pg-btn--primary" onclick="pgSave()">Kaydet</button>
-        <button type="button" class="pg-btn pg-btn--danger" id="pgBtnDelete" disabled onclick="pgDelete()">Sil</button>
-        <button type="button" class="pg-btn pg-btn--secondary" onclick="pgNew()">Yeni</button>
-        <div class="pg-meta">
-            <span id="pgMetaInfo"></span>
-        </div>
-    </div>
-
-    <!-- Silme onay modali -->
-    <div class="pg-confirm-backdrop" id="pgConfirmBackdrop" onclick="pgConfirmCancel()">
-        <div class="pg-confirm" onclick="event.stopPropagation()">
-            <div class="pg-confirm-ico">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-            </div>
-            <h3 class="pg-confirm-title">Fiyat Grubunu Sil</h3>
-            <p class="pg-confirm-text">Bu fiyat grubu ve tum fiyat kayitlari silinecek. Devam edilsin mi?</p>
-            <div class="pg-confirm-btns">
-                <button type="button" class="pg-btn pg-btn--secondary" onclick="pgConfirmCancel()">Iptal</button>
-                <button type="button" class="pg-btn pg-btn--danger" id="pgConfirmDeleteBtn" onclick="pgConfirmDelete()">Evet, Sil</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Body -->
-    <div class="pg-body">
-        <!-- Form Panel -->
-        <div class="pg-form-card">
-            <input type="hidden" id="pgId" value="" />
-            <div class="pg-field">
-                <label class="pg-label">Kod *</label>
-                <input id="pgCode" class="pg-input" maxlength="50" placeholder="Fiyat grubu kodu" />
-            </div>
-            <div class="pg-field">
-                <label class="pg-label">Ad *</label>
-                <input id="pgName" class="pg-input" maxlength="150" placeholder="Fiyat grubu adi" />
-            </div>
-            <div class="pg-field">
-                <label class="pg-label">Aciklama</label>
-                <input id="pgDesc" class="pg-input" maxlength="500" placeholder="Opsiyonel aciklama" />
-            </div>
-            <div class="pg-field">
-                <label class="pg-label">Durum</label>
-                <div class="pg-switch-row">
-                    <label class="pg-switch">
-                        <input id="pgIsActive" type="checkbox" checked />
-                        <span class="pg-switch-slider"></span>
-                    </label>
-                    <span id="pgStatusLabel" style="font-size:.78rem;color:rgba(255,255,255,.65);">Aktif</span>
-                </div>
-            </div>
-            <div id="pgMsg"></div>
-        </div>
-
-        <!-- Grid Panel -->
-        <div class="pg-grid-card">
-            <div class="pg-toolbar">
-                <input type="text" id="pgSearch" class="pg-search" placeholder="Kod veya ada gore ara..." oninput="pgLoad()" />
-            </div>
-            <div class="pg-table-wrap">
-                <table class="pg-grid">
-                    <thead><tr>
-                        <th style="width:70px;"></th>
-                        <th>Kod</th>
-                        <th>Ad</th>
-                        <th>Aciklama</th>
-                        <th>Durum</th>
-                    </tr></thead>
-                    <tbody id="pgBody"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
 
 @section Scripts {
 <script>
-(function() {
-    var API = function(a) { return '/PriceList/' + a; };
-    var selId = 0;
+(function () {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
 
-    // Status label sync
-    var statusCheckbox = document.getElementById('pgIsActive');
-    var statusLabel = document.getElementById('pgStatusLabel');
-    function syncStatusLabel() {
-        statusLabel.textContent = statusCheckbox.checked ? 'Aktif' : 'Pasif';
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[PG] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayi Yenile</button>'
+            + '</div>';
     }
-    statusCheckbox.addEventListener('change', syncStatusLabel);
 
-    window.pgLoad = function() {
-        var s = document.getElementById('pgSearch').value;
-        fetch(API('GetAllPriceGroups') + '?search=' + encodeURIComponent(s))
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                var body = document.getElementById('pgBody');
-                if (data.length === 0) { body.innerHTML = '<tr><td colspan="5" class="pg-empty">Kayit bulunamadi.</td></tr>'; return; }
-                body.innerHTML = data.map(function(d) {
-                    return '<tr class="' + (d.id === selId ? 'is-sel' : '') + '" onclick="pgSelect(' + d.id + ')">' +
-                        '<td onclick="event.stopPropagation()" style="display:flex;gap:4px;align-items:center;">' +
-                            '<button type="button" class="pg-act-btn" title="Duzelt" onclick="pgSelect(' + d.id + ')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
-                            '<a href="/PriceList/PriceList?groupId=' + d.id + '" class="pg-act-btn pg-act-btn--price" title="Fiyat Girisi"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>' +
-                        '</td>' +
-                        '<td class="pg-td-code">' + esc(d.groupCode) + '</td>' +
-                        '<td>' + esc(d.groupName) + '</td>' +
-                        '<td class="pg-td-muted">' + esc(d.description) + '</td>' +
-                        '<td class="pg-td-status ' + (d.isActive ? 'pg-td-status--on' : 'pg-td-status--off') + '">' + (d.isActive ? 'Aktif' : 'Pasif') + '</td></tr>';
-                }).join('');
-            });
-    };
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadi'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadi');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            console.log('[PG] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'grup');
+        } catch (ex) {
+            console.error('[PG] Mount exception:', ex);
+            showError('Mount hatasi: ' + (ex.message || ex));
+        }
+    }
 
-    window.pgSelect = function(id) {
-        selId = id;
-        fetch(API('GetPriceGroup') + '?id=' + id)
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                document.getElementById('pgId').value = d.id;
-                document.getElementById('pgCode').value = d.groupCode;
-                document.getElementById('pgName').value = d.groupName;
-                document.getElementById('pgDesc').value = d.description || '';
-                document.getElementById('pgIsActive').checked = d.isActive;
-                syncStatusLabel();
-                document.getElementById('pgBtnDelete').disabled = false;
-                document.getElementById('pgMetaInfo').innerHTML =
-                    '<span class="pg-meta-val">' + esc(d.groupCode) + '</span> — ' + esc(d.groupName);
-                pgLoad();
-            });
-    };
+    function loadCss() {
+        var prev = document.querySelector('link[data-pg-smartboard]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = CSS_URL;
+        link.setAttribute('data-pg-smartboard', '1');
+        document.head.appendChild(link);
+    }
 
-    window.pgNew = function() {
-        selId = 0;
-        document.getElementById('pgId').value = '';
-        document.getElementById('pgCode').value = '';
-        document.getElementById('pgName').value = '';
-        document.getElementById('pgDesc').value = '';
-        document.getElementById('pgIsActive').checked = true;
-        syncStatusLabel();
-        document.getElementById('pgBtnDelete').disabled = true;
-        document.getElementById('pgMetaInfo').innerHTML = '';
-        pgMsg('');
-        pgLoad();
-    };
-
-    window.pgSave = function() {
-        var payload = {
-            id: parseInt(document.getElementById('pgId').value) || null,
-            groupCode: document.getElementById('pgCode').value,
-            groupName: document.getElementById('pgName').value,
-            description: document.getElementById('pgDesc').value || null,
-            isActive: document.getElementById('pgIsActive').checked
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-pg-smartboard]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-pg-smartboard', '1');
+        script.onload = function () {
+            console.log('[PG] Bundle loaded, typeof window.CalibraHub =', typeof window.CalibraHub);
+            setTimeout(cb, 0);
         };
-        fetch(API('SavePriceGroupJson'), { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success) {
-                    pgMsg(d.message || 'Kaydedildi.', true);
-                    selId = d.id;
-                    document.getElementById('pgId').value = d.id;
-                    document.getElementById('pgBtnDelete').disabled = false;
-                    pgLoad();
-                }
-                else pgMsg(d.message || 'Hata', false);
-            });
-    };
-
-    window.pgDelete = function() {
-        var id = parseInt(document.getElementById('pgId').value);
-        if (!id || document.getElementById('pgBtnDelete').disabled) return;
-        document.getElementById('pgConfirmBackdrop').classList.add('is-open');
-    };
-
-    window.pgConfirmCancel = function() {
-        document.getElementById('pgConfirmBackdrop').classList.remove('is-open');
-    };
-
-    window.pgConfirmDelete = function() {
-        var id = parseInt(document.getElementById('pgId').value);
-        if (!id) return;
-        var btn = document.getElementById('pgConfirmDeleteBtn');
-        btn.disabled = true;
-        btn.textContent = 'Siliniyor...';
-        fetch(API('DeletePriceGroupJson') + '?id=' + id, { method: 'POST' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                document.getElementById('pgConfirmBackdrop').classList.remove('is-open');
-                btn.disabled = false;
-                btn.textContent = 'Evet, Sil';
-                if (d.success) { pgMsg('Silindi.', true); pgNew(); }
-                else pgMsg(d.message || 'Silinemedi', false);
-            })
-            .catch(function() {
-                document.getElementById('pgConfirmBackdrop').classList.remove('is-open');
-                btn.disabled = false;
-                btn.textContent = 'Evet, Sil';
-                pgMsg('Baglanti hatasi', false);
-            });
-    };
-
-    function pgMsg(msg, ok) {
-        var el = document.getElementById('pgMsg');
-        if (!msg) { el.innerHTML = ''; return; }
-        el.innerHTML = '<div class="pg-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
-        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+        script.onerror = function () {
+            console.error('[PG] Bundle script failed to load!');
+            showError('Bundle yuklenemedi (network hatasi)');
+        };
+        document.head.appendChild(script);
     }
 
-    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    loadCss();
 
-    pgLoad();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        console.log('[PG] Bundle already loaded, direct mount');
+        doMount();
+    } else {
+        console.log('[PG] Bundle not ready, loading dynamically');
+        loadScript(doMount);
+    }
+
+    // bfcache — geri dugmesi ile gelince reload
+    window.addEventListener('pageshow', function (e) {
+        if (e.persisted) {
+            console.log('[PG] bfcache detected, reloading');
+            location.reload();
+        }
+    });
 })();
 </script>
 }

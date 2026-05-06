@@ -24,7 +24,7 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [created_at], [updated_at]
+            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [Created], [Updated]
             FROM {_table}
             ORDER BY [type], [sub_type], [name];
             """;
@@ -40,7 +40,7 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [created_at], [updated_at]
+            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [Created], [Updated]
             FROM {_table}
             WHERE [type] = @Type
             ORDER BY [sub_type], [name];
@@ -58,7 +58,7 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [created_at], [updated_at]
+            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [Created], [Updated]
             FROM {_table}
             WHERE [type] = 'document' AND [sub_type] = @SubType
             ORDER BY [name];
@@ -75,7 +75,7 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [created_at], [updated_at]
+            SELECT [id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [Created], [Updated]
             FROM {_table}
             WHERE [id] = @Id;
             """;
@@ -105,9 +105,9 @@ public sealed class SqlDesignTemplateRepository : IDesignTemplateRepository
                     [gjs_data]     = @GjsData,
                     [jsr_content]  = @JsrContent,
                     [is_active]    = @IsActive,
-                    [updated_at]   = @UpdatedAt
+                    [Updated]   = @UpdatedAt
             WHEN NOT MATCHED THEN
-                INSERT ([id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [created_at], [updated_at])
+                INSERT ([id], [name], [type], [sub_type], [description], [html_content], [css_content], [gjs_data], [jsr_content], [is_active], [Created], [Updated])
                 VALUES (@Id, @Name, @Type, @SubType, @Description, @HtmlContent, @CssContent, @GjsData, @JsrContent, @IsActive, @CreatedAt, @UpdatedAt);
             """;
 

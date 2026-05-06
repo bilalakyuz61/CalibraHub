@@ -277,6 +277,8 @@ public sealed class WidgetService : IWidgetService
         if (string.IsNullOrWhiteSpace(request.WidgetCode)) throw new ArgumentException("WidgetCode bos olamaz.");
         if (string.IsNullOrWhiteSpace(request.Label)) throw new ArgumentException("Label bos olamaz.");
         if (string.IsNullOrWhiteSpace(request.DataType)) throw new ArgumentException("DataType bos olamaz.");
+        if (request.ColSpan.HasValue && (request.ColSpan.Value < 1 || request.ColSpan.Value > 24))
+            throw new ArgumentException($"ColSpan 1-24 arasinda olmali, alinan: {request.ColSpan.Value}");
 
         // Form var mi?
         var form = await _repository.GetFormByIdAsync(request.FormId, ct);
@@ -289,7 +291,7 @@ public sealed class WidgetService : IWidgetService
         var dataType = (request.DataType ?? string.Empty).Trim().ToLowerInvariant();
         if (!IsValidDataType(dataType))
         {
-            throw new ArgumentException($"Gecersiz DataType '{request.DataType}'. Izinli: text, numeric, date, boolean, dropdown, multi-select, group, link, lookup, grid.");
+            throw new ArgumentException($"Gecersiz DataType '{request.DataType}'. Izinli: text, numeric, date, boolean, dropdown, multi-select, group, link, lookup, grid, guide-list.");
         }
 
         // ParentId kontrolu — varsa gercekten grup olmali
@@ -334,20 +336,33 @@ public sealed class WidgetService : IWidgetService
             }
             optionsJson = JsonSerializer.Serialize(new[] { tpl });
         }
-        else if (dataType == "lookup")
+        else if (dataType == "lookup" || dataType == "guide-list")
         {
-            // Lookup tipi icin OptionsJSON object shape: {"guideCode":"CUSTOMERS"}
-            // React tarafi request.Options[0] olarak guideCode gonderir —
-            // backend burada object JSON'a cevirir.
-            var guideCode = request.Options?
-                .Where(o => !string.IsNullOrWhiteSpace(o))
-                .Select(o => o.Trim())
-                .FirstOrDefault();
+            // Lookup ve Guide-List tipi icin OptionsJSON object shape:
+            //   { "guideCode": "...", "guideConfig": "{...}" }
+            // React request.Options:
+            //   [0] = guideCode (zorunlu — her iki tipte de rehber olmadan widget anlamsiz)
+            //   [1] = guideConfig JSON string (opsiyonel — gorunur kolonlar/etiketler/SQL kisiti)
+            // Guide-List salt okunur akordion liste olsa da rehber tanimi metadata
+            // ayni formatta tutulur — Lookup ile ortak parsing.
+            var nf = request.Options?
+                .Select(o => o ?? string.Empty)
+                .ToList() ?? new List<string>();
+            var guideCode = nf.ElementAtOrDefault(0)?.Trim();
             if (string.IsNullOrWhiteSpace(guideCode))
             {
-                throw new ArgumentException("Rehber (lookup) tipi icin guideCode zorunludur.");
+                var humanLabel = dataType == "lookup" ? "Rehber (lookup)" : "Rehber Listesi";
+                throw new ArgumentException($"{humanLabel} tipi icin guideCode zorunludur.");
             }
             var obj = new Dictionary<string, string> { ["guideCode"] = guideCode };
+            // guideConfig opsiyonel; varsa JSON string olarak ekle (backend yorumlamaz, runtime React kullanir).
+            var cfg = nf.ElementAtOrDefault(1);
+            if (!string.IsNullOrWhiteSpace(cfg)) obj["guideConfig"] = cfg.Trim();
+            // displayScope (sadece guide-list) — 'form' | 'card' | 'both'. Lookup'ta da
+            // gelirse problem yok; runtime tarafi dataType-bazli kontrol eder.
+            var scope = nf.ElementAtOrDefault(2)?.Trim().ToLowerInvariant();
+            if (scope == "form" || scope == "card" || scope == "both")
+                obj["displayScope"] = scope;
             optionsJson = JsonSerializer.Serialize(obj);
         }
         else if (dataType == "grid")
@@ -394,21 +409,33 @@ public sealed class WidgetService : IWidgetService
         }
         else if (dataType == "text")
         {
-            // Text + opsiyonel rehber: Options[0]=guideCode, Options[1]=constraintsJson
+            // Text + opsiyonel rehber. Options[0]=guideCode, Options[1] iki sekilde gelebilir:
+            //   (a) Yeni format — guideConfig JSON object: '{"viewCode":"...","columns":[...],"constraint":"..."}'
+            //   (b) Legacy format — constraints array (token destekli WHERE): '[{...}, ...]' veya plain string
+            // JSON object ise guideConfig, degilse constraints olarak saklanir.
             var textOpts = request.Options?
                 .Select(o => o?.Trim() ?? "")
                 .ToArray() ?? [];
             var guideCode = textOpts.ElementAtOrDefault(0) ?? "";
-            var constraintsRaw = textOpts.ElementAtOrDefault(1) ?? "";
+            var secondRaw = textOpts.ElementAtOrDefault(1) ?? "";
             if (!string.IsNullOrWhiteSpace(guideCode))
             {
                 var obj = new Dictionary<string, object>
                 {
                     ["guideCode"] = guideCode,
                 };
-                if (!string.IsNullOrWhiteSpace(constraintsRaw))
+                if (!string.IsNullOrWhiteSpace(secondRaw))
                 {
-                    obj["constraints"] = constraintsRaw;
+                    var trimmed = secondRaw.TrimStart();
+                    // Object → guideConfig (yeni). Array veya plain → constraints (legacy).
+                    if (trimmed.StartsWith("{"))
+                    {
+                        obj["guideConfig"] = secondRaw;
+                    }
+                    else
+                    {
+                        obj["constraints"] = secondRaw;
+                    }
                 }
                 optionsJson = JsonSerializer.Serialize(obj);
             }
@@ -442,6 +469,16 @@ public sealed class WidgetService : IWidgetService
             throw new ArgumentException($"'{widgetCode}' WidgetCode bu formda zaten mevcut.");
         }
 
+        // LabelStyle whitelist: 'standard' (varsayilan) / 'modern' / 'inline'.
+        // Eski IsPlainField=true gelirse 'inline'a kopru — yeni clientlar artik
+        // sadece LabelStyle gonderir, eski clientlar ile geriye-donuk uyumlu.
+        var rawLabelStyle = (request.LabelStyle ?? string.Empty).Trim().ToLowerInvariant();
+        string normalizedLabelStyle;
+        if (rawLabelStyle == "modern") normalizedLabelStyle = "modern";
+        else if (rawLabelStyle == "inline") normalizedLabelStyle = "inline";
+        else if (request.IsPlainField) normalizedLabelStyle = "inline";  // legacy back-compat
+        else normalizedLabelStyle = "standard";
+
         var now = DateTime.Now;
         var widget = new WidgetDefinition
         {
@@ -459,15 +496,15 @@ public sealed class WidgetService : IWidgetService
             SortOrder = request.SortOrder,
             OptionsJson = optionsJson,
             RulesJson = rulesJson,
-            IsPlainField = request.IsPlainField,
+            // Eski DB okuyuculari icin senkronize: LabelStyle='inline' ↔ IsPlainField=true.
+            IsPlainField = normalizedLabelStyle == "inline",
             IsRequired = request.IsRequired,
             IsActive = request.IsActive,
             ColorType  = request.ColorType,
             ColorValue = string.IsNullOrWhiteSpace(request.ColorValue) ? null : request.ColorValue.Trim(),
-            // ColSpan — 1-12 arasi clamp; null/sifir gelirse varsayilan 6 (1/2 satir).
-            ColSpan = (request.ColSpan is int cs && cs >= 1 && cs <= 12) ? cs : 6,
-            // LabelStyle — whitelist: "standard" (varsayilan) veya "modern" (floating/outline).
-            LabelStyle = (request.LabelStyle == "modern") ? "modern" : "standard",
+            // ColSpan — 1-24 arasi clamp; null/sifir gelirse varsayilan 12 (1/2 satir).
+            ColSpan = (request.ColSpan is int cs && cs >= 1 && cs <= 24) ? cs : 12,
+            LabelStyle = normalizedLabelStyle,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -497,6 +534,8 @@ public sealed class WidgetService : IWidgetService
             .Where(w => w.IsActive
                 && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase))
+            // guide-list (salt okunur akordion liste) SmartCard'da da gosterilir;
+            // kullanici karttan dogrudan ozet liste gorebilsin diye filter dahili.
             .ToArray();
 
         if (displayWidgets.Length == 0) return result;
@@ -524,8 +563,9 @@ public sealed class WidgetService : IWidgetService
         var widgets = await _repository.GetWidgetsByFormAsync(form.Id, ct);
         var required = widgets
             .Where(w => w.IsActive && w.IsRequired
-                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(w.DataType, "group",      StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(w.DataType, "grid",       StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(w.DataType, "guide-list", StringComparison.OrdinalIgnoreCase))
             .ToArray();
         if (required.Length == 0) return empty;
 
@@ -653,7 +693,7 @@ public sealed class WidgetService : IWidgetService
     private static bool IsValidDataType(string dt) =>
         dt == "text" || dt == "numeric" || dt == "date" || dt == "boolean" ||
         dt == "dropdown" || dt == "multi-select" || dt == "group" ||
-        dt == "link" || dt == "lookup" || dt == "grid";
+        dt == "link" || dt == "lookup" || dt == "grid" || dt == "guide-list";
 
     // ══════════════════════════════════════════════════════════
     // Save values (Faz A — degisiklik yok)
@@ -679,11 +719,13 @@ public sealed class WidgetService : IWidgetService
                 continue;
             }
             if (!widget.IsActive
-                || string.Equals(widget.DataType, "group", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(widget.DataType, "grid",  StringComparison.OrdinalIgnoreCase))
+                || string.Equals(widget.DataType, "group",      StringComparison.OrdinalIgnoreCase)
+                || string.Equals(widget.DataType, "grid",       StringComparison.OrdinalIgnoreCase)
+                || string.Equals(widget.DataType, "guide-list", StringComparison.OrdinalIgnoreCase))
             {
-                // Grup ve grid satirlari WidgetTra'ya yazilmaz — grid child'lari
-                // ayri master-detail akisinda SaveRecordAsync tarafindan saglanir.
+                // Grup, grid ve guide-list (salt okunur akordion liste) WidgetTra'ya yazilmaz.
+                // Grid child satirlari SaveRecordAsync master-detail akisinda saglanir.
+                // Guide-list ise hic deger uretmez (sadece okuma widget'i).
                 continue;
             }
 
@@ -914,6 +956,7 @@ public sealed class WidgetService : IWidgetService
 
         AddIfValid("visibleIf",  rules.VisibleIf);
         AddIfValid("disabledIf", rules.DisabledIf);
+        AddIfValid("requiredIf", rules.RequiredIf);
         AddIfValid("formula",    rules.Formula);
 
         return dict.Count == 0 ? null : dict;
@@ -932,10 +975,12 @@ public sealed class WidgetService : IWidgetService
             if (dict == null || dict.Count == 0) return null;
             dict.TryGetValue("visibleIf",  out var vi);
             dict.TryGetValue("disabledIf", out var di);
+            dict.TryGetValue("requiredIf", out var ri);
             dict.TryGetValue("formula",    out var fm);
-            if (string.IsNullOrWhiteSpace(vi) && string.IsNullOrWhiteSpace(di) && string.IsNullOrWhiteSpace(fm))
+            if (string.IsNullOrWhiteSpace(vi) && string.IsNullOrWhiteSpace(di) &&
+                string.IsNullOrWhiteSpace(ri) && string.IsNullOrWhiteSpace(fm))
                 return null;
-            return new WidgetRulesDto(vi, di, fm);
+            return new WidgetRulesDto(vi, di, fm, ri);
         }
         catch (JsonException)
         {

@@ -4,365 +4,404 @@
  * Runtime'da mountFixedFieldLookups(formCode) cagrildiginda:
  *   1) /api/field-settings/runtime/{formCode} fetch edilir
  *   2) Her binding icin DOM'da input bulunur
- *   3) Input readonly yapilir, yanina arama butonu eklenir
- *   4) Bu bilesen her bir alan icin mount edilir
+ *   3) DOM input gizlenir (display:none) — sadece form submit icin kalir
+ *   4) Bu bilesen LookupCard'i mount eder; React state'i DOM input ile sync
  *
- * Mevcut LookupFieldInput'tan bagimsiz — kendi minimal modal UI'ini icerir.
- * guideSearch/guideSchema/guideResolve fonksiyonlari dynamicWidgetService'den gelir.
+ * Display name (Cari Isim gibi) kart icinde GOSTERILMEZ — caller (Razor sayfasi)
+ * disarida `<span id="cariIsim">` veya benzer bir element ile gosterir, fillMap
+ * bunu doldurur. Boylece kullanici elle kod yapistirsa bile cozumlemenin nereye
+ * gidecegi caller'da belli olur.
+ *
+ * Arama/secim modal'i icin birlesik `GuideLookupModal` kullanir — Tip 2
+ * (widget rehberi) ile ayni davranis ve goruntu setine sahiptir.
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
-import { Search, X, Loader2, Settings } from 'lucide-react'
-import { guideSchema, guideSearch, guideResolve } from '../DynamicWidgetRenderer/dynamicWidgetService'
+import { Settings } from 'lucide-react'
+import { guideResolve } from '../DynamicWidgetRenderer/dynamicWidgetService'
 import { getRuntimeBindings } from '../../services/fieldSettingService'
 import FieldSettingsForm from '../CalibraLineItemsGrid/FieldSettingsForm'
+import GuideLookupModal from '../GuideLookup/GuideLookupModal'
+import LookupCard from '../GuideLookup/LookupCard'
+import { adaptFormatJson, extractValueDisplay } from '../GuideLookup/guideLookupAdapters'
+import { resolveTokens as resolveAllTokens } from '../../utils/fieldTokens'
 
-var PAGE_SIZE = 50
+/**
+ * fillTargets — fillMap hedeflerini sender row.cells (veya bos) ile doldurur.
+ * INPUT/TEXTAREA/SELECT icin .value, diger elementler icin .textContent.
+ */
+function fillTargets(cells, fillMap, clear) {
+  if (!fillMap) return
+  Object.keys(fillMap).forEach(function (selector) {
+    var colName = fillMap[selector]
+    var target = document.querySelector(selector)
+    if (!target) return
+    var hasVal = !clear && cells && cells[colName] != null
+    var newVal = hasVal ? String(cells[colName]) : ''
+    var tag = (target.tagName || '').toUpperCase()
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      target.value = newVal
+      target.dispatchEvent(new Event('input', { bubbles: true }))
+      target.dispatchEvent(new Event('change', { bubbles: true }))
+    } else {
+      target.textContent = newVal
+    }
+  })
+}
 
 /**
  * Tek bir sabit alan icin lookup davranisi.
  *
  * Props:
- *   inputElement  — Mevcut DOM input elemani
+ *   inputElement  — Mevcut DOM input elemani (gizli, sadece form submit icin)
  *   fieldKey      — Alan anahtari
  *   guideCode     — Bagli rehber kodu
  *   filterJson    — Opsiyonel constraint JSON
+ *   formatJson    — Opsiyonel kolon konfigurasyonu (visibleColumns/columnLabels)
  *   isRequired    — Zorunlu mu
- *   fillMap       — { '#otherSelector': 'guideColumnName' } — secim sonrasi diger alanlara deger doldurur
+ *   formCode      — FieldSettingsForm icin
+ *   fillMap       — { '#otherSelector': 'guideColumnName' } — secim sonrasi doldur
+ *   size          — 'sm' | 'md' | 'lg'
  */
+/**
+ * resolveFilterTokens — FilterJson icindeki tum `{#...}` token'larini runtime degerleriyle
+ * replace eder. Sabit alan baglamı icin context bos — sadece DOM lookup
+ * (`{#sqCustomerId}`) yoluyla cozumler. Kalem grid'inden cagrildigında
+ * LineGridCell once `{#row.*}`/`{#row.combo.*}` token'larini kendi tarafinda cozer,
+ * geri kalan DOM token'lari da burada (modal tarafinda) ayrica cozulebilir.
+ *
+ * Backend'e giden constraint hep tam-resolved olur. Token format dokumani:
+ * src/CalibraHub.Web/ClientApp/src/utils/fieldTokens.js
+ */
+function resolveFilterTokens(filterJson) {
+  return resolveAllTokens(filterJson, {})
+}
+
 export default function FixedFieldLookupBridge(props) {
   var inputEl    = props.inputElement
-  var guideCode  = props.guideCode
+  var defaultGuideCode = props.guideCode
   var filterJson = props.filterJson || null
 
   var formCode   = props.formCode || null
   var fieldKey   = props.fieldKey || null
+  var isRequired = !!props.isRequired
+  var size       = props.size || 'md'
+  var resolveOnBlur = props.resolveOnBlur !== false  // varsayilan: true
 
-  var [modalOpen, setModalOpen] = useState(false)
+  var initialVal = (inputEl && inputEl.value) || ''
+  var initialDisp = (inputEl && inputEl.getAttribute('data-display')) || ''
+
+  var [value, setValue]               = useState(initialVal)
+  var [display, setDisplay]           = useState(initialDisp)
+  var [resolving, setResolving]       = useState(false)
+  var [error, setError]               = useState(false)
+  var [modalOpen, setModalOpen]       = useState(false)
   var [settingsOpen, setSettingsOpen] = useState(false)
-  var [schema, setSchema]       = useState(null)
-  var [formatJson, setFormatJson] = useState(props.formatJson || null)
-  var [search, setSearch]       = useState('')
-  var [rows, setRows]           = useState([])
-  var [page, setPage]           = useState(1)
-  var [hasMore, setHasMore]     = useState(false)
-  var [loading, setLoading]     = useState(false)
-  var [error, setError]         = useState(null)
+  var [formatJson, setFormatJson]     = useState(props.formatJson || null)
+  var [schemaVersion, setSchemaVersion] = useState(0)
+  // FldSet binding'i admin Alan Ayarlari'ndan farkli bir view'a baglandiysa,
+  // hardcoded prop guideCode'u override et. PR sonrasi: hatali bile baglansa
+  // admin'in tercihine saygi gosterilir (PR 5'te tag-based soft warning eklenecek).
+  var [guideCodeOverride, setGuideCodeOverride] = useState(null)
+  var guideCode = guideCodeOverride || defaultGuideCode
+  var lastResolvedRef = useRef(initialVal && initialDisp ? initialVal : null)
 
-  var sentinelRef = useRef(null)
-  var scrollRef   = useRef(null)
   // FieldSettingsForm column objesini mutate eder — ref ile referansi sabit tut
-  var settingsColumnRef = useRef({ key: fieldKey, label: fieldKey, formCode: formCode, guideCode: guideCode, filterJson: filterJson, formatJson: formatJson })
-  settingsColumnRef.current = { key: fieldKey, label: fieldKey, formCode: formCode, guideCode: guideCode, filterJson: filterJson, formatJson: formatJson }
+  var settingsColumnRef = useRef({
+    key: fieldKey, label: fieldKey, formCode: formCode,
+    guideCode: guideCode, filterJson: filterJson, formatJson: formatJson,
+  })
+  settingsColumnRef.current = {
+    key: fieldKey, label: fieldKey, formCode: formCode,
+    guideCode: guideCode, filterJson: filterJson, formatJson: formatJson,
+  }
 
-  // ── Sayfa yuklendiginde mevcut degeri resolve et ──
-  // Caller (ornek sqLoadQuote) data-display'i onceden set etmisse, onun istegine
-  // saygi gosteririz — input degerini ezmiyoruz. Ornek Cari Kod: kod gostermek
-  // isteniyor, isim degil.
+  // DOM input ile state senkronu — tum mutasyonlar bu fonksiyondan gecer
+  var syncToDom = useCallback(function (val, disp) {
+    if (!inputEl) return
+    inputEl.value = val || ''
+    if (val) {
+      inputEl.setAttribute('data-value', val)
+    } else {
+      inputEl.removeAttribute('data-value')
+    }
+    if (disp) {
+      inputEl.setAttribute('data-display', disp)
+    } else {
+      inputEl.removeAttribute('data-display')
+    }
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }))
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }))
+  }, [inputEl])
+
+  // ── Form reset support: caller `ffl-clear` custom event dispatch ederse
+  // bridge state'i temizler (DOM input.value=null tek basina React state'i
+  // resetlemiyor; dis kodun bu kanalla bridge'a sinyal vermesi gerekiyor).
+  useEffect(function () {
+    if (!inputEl) return
+    function onExternalClear() {
+      setValue('')
+      setDisplay('')
+      setError(false)
+      setResolving(false)
+      lastResolvedRef.current = null
+      try {
+        inputEl.value = ''
+        inputEl.removeAttribute('data-value')
+        inputEl.removeAttribute('data-display')
+      } catch (_) { /* ignore */ }
+    }
+    inputEl.addEventListener('ffl-clear', onExternalClear)
+    return function () { inputEl.removeEventListener('ffl-clear', onExternalClear) }
+  }, [inputEl])
+
+  // ── External SET support: caller DOM input.value/data-* attribute'larini
+  // programatik degistirdiyse (orn. sqLoadQuote async fetch sonrasi), bu event
+  // ile bridge React state'ini DOM'dan tazeler. Mount edildikten sonra DOM'a
+  // yazilan deger state'e yansimadigi icin Cari Kod input'u bos goruluyordu.
+  useEffect(function () {
+    if (!inputEl) return
+    function onExternalSync() {
+      var v  = inputEl.value || inputEl.getAttribute('data-value') || ''
+      var d  = inputEl.getAttribute('data-display') || ''
+      setValue(v)
+      setDisplay(d)
+      setError(false)
+      setResolving(false)
+      // Caller deger zaten resolved set ediyor → blur'da tekrar resolve etme
+      if (v) lastResolvedRef.current = v
+    }
+    inputEl.addEventListener('ffl-sync', onExternalSync)
+    return function () { inputEl.removeEventListener('ffl-sync', onExternalSync) }
+  }, [inputEl])
+
+  // ── Sayfa yuklendiginde mevcut kod icin display'i resolve et ──
+  // Caller data-display'i onceden set etmisse, ona saygi gosteririz.
   useEffect(function () {
     if (!inputEl || !guideCode) return
     var currentVal = inputEl.value
     if (!currentVal) return
-    if (inputEl.getAttribute('data-display')) return
+    if (initialDisp) return  // caller zaten doldurmus
     var alive = true
+    setResolving(true)
     guideResolve(guideCode, currentVal)
       .then(function (result) {
-        if (alive && result && result.display) {
+        if (!alive) return
+        if (result && result.display) {
           inputEl.setAttribute('data-display', result.display)
-          inputEl.value = result.display
           inputEl.setAttribute('data-value', currentVal)
+          lastResolvedRef.current = currentVal
+          setDisplay(result.display)
         }
       })
       .catch(function () { /* sessizce devam */ })
+      .finally(function () { if (alive) setResolving(false) })
     return function () { alive = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputEl, guideCode])
 
-  // ── Modal acildiginda DB'den formatJson yukle ──
+  // ── Mount/formCode degistiginde FldSet binding'i fetch et ──
+  // Admin Alan Ayarlari'nda farkli bir view'a baglamissa, prop'taki hardcoded
+  // guideCode override edilir. formatJson da binding'ten yuklenir.
   useEffect(function () {
-    if (!modalOpen || !formCode || !fieldKey) return
+    if (!formCode || !fieldKey) return
     var alive = true
     getRuntimeBindings(formCode)
       .then(function (bindings) {
         if (!alive) return
         var binding = (bindings || []).find(function (b) { return b.fieldKey === fieldKey })
-        if (binding && binding.formatJson) {
+        if (!binding) return
+        // FormatJson her zaman uygulanir (gorunur kolonlar, label override, vs.)
+        if (binding.formatJson) {
           setFormatJson(binding.formatJson)
+        }
+        // ViewName/GuideCode override: admin baska bir view secmisse
+        var override = binding.viewName || (binding.guideCode && binding.guideCode !== '' ? binding.guideCode : null)
+        if (override && override !== defaultGuideCode) {
+          setGuideCodeOverride(override)
         }
       })
       .catch(function () { /* sessizce devam */ })
     return function () { alive = false }
-  }, [modalOpen, formCode, fieldKey])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formCode, fieldKey])
 
-  // ── Schema fetch ──
-  useEffect(function () {
-    if (!modalOpen || schema || !guideCode) return
-    var alive = true
-    guideSchema(guideCode)
-      .then(function (s) { if (alive) setSchema(s) })
-      .catch(function (e) { if (alive) setError('Schema yuklenemedi: ' + e.message) })
-    return function () { alive = false }
-  }, [modalOpen, guideCode, schema])
-
-  // ── Debounced search ──
-  useEffect(function () {
-    if (!modalOpen || !guideCode) return
-    var handle = setTimeout(function () {
-      setPage(1)
-      loadPage(1, search, true)
-    }, 300)
-    return function () { clearTimeout(handle) }
-  }, [search, modalOpen, guideCode])
-
-  // ── Infinite scroll ──
-  useEffect(function () {
-    if (!modalOpen || !hasMore || loading) return
-    var el = sentinelRef.current
-    if (!el) return
-    var observer = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          var next = page + 1
-          setPage(next)
-          loadPage(next, search, false)
-        }
-      })
-    }, { root: scrollRef.current, threshold: 0.1 })
-    observer.observe(el)
-    return function () { observer.disconnect() }
-  }, [modalOpen, hasMore, loading, page, search])
-
-  var loadPage = useCallback(function (pageNumber, searchTerm, replace) {
-    if (!guideCode) return
-    setLoading(true)
-    setError(null)
-    guideSearch(guideCode, {
-      search: searchTerm,
-      page: pageNumber,
-      pageSize: PAGE_SIZE,
-      constraints: filterJson || undefined,
-    })
-      .then(function (result) {
-        if (!result) {
-          setRows([])
-          setHasMore(false)
-          setError('Rehber bulunamadi: ' + guideCode)
-          return
-        }
-        if (replace) {
-          setRows(result.rows || [])
-        } else {
-          setRows(function (prev) { return prev.concat(result.rows || []) })
-        }
-        setHasMore(!!result.hasMore)
-      })
-      .catch(function (e) {
-        setError('Arama basarisiz: ' + e.message)
-        if (replace) setRows([])
-        setHasMore(false)
-      })
-      .finally(function () { setLoading(false) })
-  }, [guideCode, filterJson])
+  var columnsAdapter = useCallback(function (schemaCols) {
+    return adaptFormatJson(formatJson, schemaCols)
+  }, [formatJson])
 
   function openModal() {
     if (!guideCode) return
-    setSearch('')
-    setRows([])
-    setPage(1)
-    setHasMore(false)
-    setError(null)
     setModalOpen(true)
   }
   function closeModal() {
     setModalOpen(false)
+    // Modal kapaninca odagi LookupCard'in visible input'una geri al — pickRow icinde
+    // degil, closeModal'de yapiyoruz cunku modal hala mount iken focus trap aktif.
+    // setTimeout(0) re-render sonrasi, modal unmount edildikten sonra calisir.
+    // LookupCard forwardRef kullanmadigi icin ref erisemiyoruz; data-field-key ile bul.
+    setTimeout(function() {
+      try {
+        var node = fieldKey
+          ? document.querySelector('input[data-field-key="' + String(fieldKey).replace(/"/g, '\\"') + '"]')
+          : null
+        if (node && typeof node.focus === 'function') node.focus()
+      } catch (_) {}
+    }, 0)
   }
 
-  // ESC ile kapanma
-  useEffect(function () {
-    if (!modalOpen) return
-    function handleKeyDown(e) {
-      if (e.key === 'Escape') closeModal()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return function () { document.removeEventListener('keydown', handleKeyDown) }
-  }, [modalOpen])
-  function pickRow(row) {
-    if (inputEl) {
-      inputEl.setAttribute('data-value', row.value || '')
-      inputEl.setAttribute('data-display', row.display || '')
-      // Input alanina value (kod) yaz, display (isim) fillMap ile ayri alana gider
-      inputEl.value = row.value || ''
-      // Native event dispatch — mevcut JS listener'lari tetiklemek icin
-      inputEl.dispatchEvent(new Event('input', { bubbles: true }))
-      inputEl.dispatchEvent(new Event('change', { bubbles: true }))
-    }
-    // fillMap: secim sonrasi diger alanlara deger doldur.
-    // Input/textarea/select icin .value; span/div icin .textContent yazar.
-    var fillMap = props.fillMap
-    if (fillMap && row.cells) {
-      Object.keys(fillMap).forEach(function(selector) {
-        var colName = fillMap[selector]
-        var target = document.querySelector(selector)
-        if (target && row.cells[colName] != null) {
-          var val = String(row.cells[colName])
-          var tag = (target.tagName || '').toUpperCase()
-          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-            target.value = val
-            target.dispatchEvent(new Event('input', { bubbles: true }))
-            target.dispatchEvent(new Event('change', { bubbles: true }))
-          } else {
-            target.textContent = val
-          }
+  // Manuel yazim — kullanici karta klavyeden kod giriyor.
+  // Display ve fillMap target'leri temizlenir (cozumleme blur'da yapilir).
+  function handleChange(newVal) {
+    setValue(newVal)
+    setDisplay('')
+    setError(false)
+    syncToDom(newVal, '')
+    fillTargets(null, props.fillMap, true)
+  }
+
+  // Blur'da: kullanici elle bir kod yapistirdiysa cozumle (rehberden secim degil).
+  // Cozumlenirse display set edilir + fillMap doldurulur. Bulunamazsa error state.
+  function handleBlur() {
+    if (!resolveOnBlur || !guideCode) return
+    var trimmed = (value || '').trim()
+    if (!trimmed) { setError(false); return }
+    if (lastResolvedRef.current === trimmed) return  // tekrar resolve etme
+    setResolving(true)
+    var alive = true
+    guideResolve(guideCode, trimmed)
+      .then(function (result) {
+        if (!alive) return
+        if (result && result.display) {
+          setError(false)
+          setDisplay(result.display)
+          lastResolvedRef.current = trimmed
+          syncToDom(trimmed, result.display)
+          if (result.cells) fillTargets(result.cells, props.fillMap, false)
+        } else {
+          setError(true)
+          setDisplay('')
+          lastResolvedRef.current = null
+          // Hatali kod → odak geri ver, kullanici alandan cikamasin
+          forceFocusBackToCard()
         }
       })
-    }
-    closeModal()
-  }
-  function clearValue(e) {
-    e.stopPropagation()
-    if (inputEl) {
-      inputEl.removeAttribute('data-value')
-      inputEl.removeAttribute('data-display')
-      inputEl.value = ''
-      inputEl.dispatchEvent(new Event('input', { bubbles: true }))
-      inputEl.dispatchEvent(new Event('change', { bubbles: true }))
-    }
+      .catch(function () {
+        if (alive) {
+          setError(true)
+          forceFocusBackToCard()
+        }
+      })
+      .finally(function () { if (alive) setResolving(false) })
   }
 
-  // formatJson'dan column labels ve visible columns parse et
-  var parsedFormat = (function () {
-    if (!formatJson) return { visibleColumns: null, columnLabels: {} }
-    try {
-      var p = typeof formatJson === 'string' ? JSON.parse(formatJson) : formatJson
-      return { visibleColumns: p.visibleColumns || null, columnLabels: p.columnLabels || {} }
-    } catch (e) { return { visibleColumns: null, columnLabels: {} } }
-  })()
-
-  var allColumns = (schema && schema.columns) || []
-  var columns = parsedFormat.visibleColumns
-    ? allColumns.filter(function (c) { return parsedFormat.visibleColumns.indexOf(c) !== -1 })
-    : allColumns
-
-  function colLabel(colName) {
-    return parsedFormat.columnLabels[colName] || colName
+  // Hatali kod sonrasi LookupCard'in input'una odagi geri al — kullanici alandan
+  // cikip diger islemleri yapamasin (sabit alanlar form submit'i bloklayacak ama
+  // yine de odak korumasi yapiyoruz UX icin).
+  function forceFocusBackToCard() {
+    setTimeout(function () {
+      try {
+        var node = fieldKey
+          ? document.querySelector('input[data-field-key="' + String(fieldKey).replace(/"/g, '\\"') + '"]')
+          : null
+        if (node && typeof node.focus === 'function') {
+          node.focus()
+          if (typeof node.select === 'function') node.select()
+        }
+      } catch (_) { /* ignore */ }
+    }, 0)
   }
 
-  var hasValue = inputEl && inputEl.value && inputEl.value.length > 0
+  function pickRow(row) {
+    var override = extractValueDisplay(formatJson)
+    var val = (override.valueColumn && row.cells && row.cells[override.valueColumn] != null)
+      ? String(row.cells[override.valueColumn])
+      : (row.value || '')
+    var disp = (override.displayColumn && row.cells && row.cells[override.displayColumn] != null)
+      ? String(row.cells[override.displayColumn])
+      : (row.display || '')
+
+    setValue(val)
+    setDisplay(disp)
+    setError(false)
+    lastResolvedRef.current = val
+    syncToDom(val, disp)
+    fillTargets(row.cells, props.fillMap, false)
+    // Odak yonetimi closeModal'de yapiliyor (modal-mount iken focus trap aktif).
+  }
+
+  function clearValue() {
+    setValue('')
+    setDisplay('')
+    setError(false)
+    lastResolvedRef.current = null
+    syncToDom('', '')
+    fillTargets(null, props.fillMap, true)
+  }
+
+  // GuideLookupModal'a header'a sigdirilan ek buton — Alan Ayarlari
+  var headerActions = formCode ? (
+    <button
+      type="button"
+      onClick={function () { setSettingsOpen(true) }}
+      title="Alan Ayarları"
+      className="gl-settings-btn"
+    >
+      <Settings size={15} strokeWidth={2} />
+    </button>
+  ) : null
 
   return (
     <>
-      <button
-        type="button"
-        className="ffl-lookup-btn"
-        onClick={openModal}
-        title="Rehber ac"
-      >
-        <Search size={14} strokeWidth={2} />
-      </button>
-      {hasValue && (
-        <button
-          type="button"
-          className="ffl-clear-btn"
-          onClick={clearValue}
-          title="Temizle"
-        >
-          <X size={14} strokeWidth={2.2} />
-        </button>
-      )}
+      <LookupCard
+        value={value}
+        display={display}
+        displayInline={false}
+        onChange={handleChange}
+        onOpen={openModal}
+        onClear={clearValue}
+        required={isRequired}
+        loading={resolving}
+        error={error}
+        size={size}
+        inputProps={{
+          'data-field-key': fieldKey || undefined,
+          onBlur: handleBlur,
+        }}
+      />
 
-      {modalOpen && createPortal(
-        <div
-          className="ffl-modal-backdrop"
-          onClick={function (e) { if (e.target === e.currentTarget) closeModal() }}
-        >
-          <div className="ffl-modal">
-            <header className="ffl-modal-header">
-              <Search size={16} strokeWidth={2} />
-              <input
-                type="text"
-                autoFocus
-                value={search}
-                onChange={function (e) { setSearch(e.target.value) }}
-                placeholder={schema ? ('Ara: ' + (schema.guideLabel || schema.guideCode)) : 'Ara...'}
-              />
-              {formCode && (
-                <button type="button" onClick={function () { setSettingsOpen(true) }} title="Alan Ayarlari" className="ffl-settings-btn">
-                  <Settings size={15} strokeWidth={2} />
-                </button>
-              )}
-              <button type="button" onClick={closeModal} title="Kapat" className="ffl-close-btn">
-                <X size={16} strokeWidth={2.2} />
-              </button>
-            </header>
+      <GuideLookupModal
+        guideCode={guideCode}
+        columnsAdapter={columnsAdapter}
+        open={modalOpen}
+        onClose={closeModal}
+        onPick={pickRow}
+        staticConstraint={resolveFilterTokens(filterJson)}
+        schemaVersion={schemaVersion}
+        headerActions={headerActions}
+      />
 
-            {formCode && (
-              <FieldSettingsForm
-                column={settingsColumnRef.current}
-                isOpen={settingsOpen}
-                onClose={function () {
-                  setSettingsOpen(false)
-                  // formatJson guncellenmis olabilir — state'e yansit
-                  if (settingsColumnRef.current.formatJson !== formatJson) {
-                    setFormatJson(settingsColumnRef.current.formatJson)
-                  }
-                  // Schema'yi temizle — yeniden yuklenecek, guncel etiketler uygulanacak
-                  setSchema(null)
-                  setRows([])
-                  setPage(1)
-                }}
-              />
-            )}
-
-            {error && <div className="ffl-error">{error}</div>}
-
-            <div className="ffl-scroll" ref={scrollRef}>
-              <table className="ffl-table">
-                <thead>
-                  <tr>
-                    {columns.length > 0
-                      ? columns.map(function (c) { return <th key={c}>{colLabel(c)}</th> })
-                      : <th>Yukleniyor...</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.length === 0 && !loading && (
-                    <tr><td colSpan={Math.max(columns.length, 1)} className="ffl-empty">
-                      Kayit bulunamadi
-                    </td></tr>
-                  )}
-                  {rows.map(function (row, idx) {
-                    return (
-                      <tr key={(row.value || '') + '_' + idx} onDoubleClick={function () { pickRow(row) }}>
-                        {columns.map(function (c) {
-                          var cell = row.cells ? row.cells[c] : null
-                          return <td key={c}>{cell != null ? String(cell) : ''}</td>
-                        })}
-                      </tr>
-                    )
-                  })}
-                  {hasMore && (
-                    <tr ref={sentinelRef}>
-                      <td colSpan={Math.max(columns.length, 1)} className="ffl-sentinel">
-                        {loading ? <span><Loader2 size={14} className="spin" /> Yukleniyor...</span> : 'Daha fazla...'}
-                      </td>
-                    </tr>
-                  )}
-                  {loading && !hasMore && rows.length === 0 && (
-                    <tr>
-                      <td colSpan={Math.max(columns.length, 1)} className="ffl-sentinel">
-                        <span><Loader2 size={14} className="spin" /> Yukleniyor...</span>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <footer className="ffl-footer">
-              <span>{rows.length} kayit{hasMore ? '+' : ''}</span>
-            </footer>
-          </div>
-        </div>,
-        document.body
+      {formCode && (
+        <FieldSettingsForm
+          column={settingsColumnRef.current}
+          isOpen={settingsOpen}
+          onClose={function () {
+            setSettingsOpen(false)
+            // FormatJson refresh — gorunur kolonlar/label'lar
+            if (settingsColumnRef.current.formatJson !== formatJson) {
+              setFormatJson(settingsColumnRef.current.formatJson)
+            }
+            // GuideCode/ViewName refresh — admin farkli view sectiyse override guncellenir,
+            // ayni default'a dondurduyse override sifirlanir. Iframe yenileme gerekmez.
+            var newCode = settingsColumnRef.current.viewName || settingsColumnRef.current.guideCode
+            if (newCode && newCode !== defaultGuideCode) {
+              setGuideCodeOverride(newCode)
+            } else {
+              setGuideCodeOverride(null)
+            }
+            // Schema cache'i sifirla — modal bir sonraki acilista yeni view'in schema'sini cekecek
+            setSchemaVersion(function (v) { return v + 1 })
+          }}
+        />
       )}
     </>
   )

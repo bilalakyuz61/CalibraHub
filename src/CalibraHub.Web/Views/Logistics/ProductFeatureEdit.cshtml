@@ -118,6 +118,13 @@
         font-size: 0.6rem; font-weight: 700; font-family: monospace;
         background: rgba(99,102,241,0.12); color: #a5b4fc;
         border: 1px solid rgba(99,102,241,0.25); flex-shrink: 0;
+        min-width: 22px; text-align: center;             /* genislik degisimi yok */
+        transition: opacity .12s, background .12s;
+    }
+    /* Sayi 0 ise: layout'ta yer kaplamaya devam — kayma engellenir */
+    .pfe-nav-count.is-empty {
+        opacity: 0;
+        pointer-events: none;
     }
     body.app-theme-light .pfe-nav-count { background: rgba(99,102,241,0.08); color: #4f46e5; }
 
@@ -145,6 +152,9 @@
     .pfe-section[data-section="general"],
     .pfe-section[data-section="stocks"] {
         overflow-y: auto;
+        /* Scrollbar açılıp kapanmasından dolayı workspace-tabs/aksiyon barı kaymaması icin
+           scrollbar yeri her zaman ayrılı. Modern tarayıcılar destekler. */
+        scrollbar-gutter: stable;
     }
 
     /* ── Glass card ───────────────────────────────────────────────────── */
@@ -186,7 +196,31 @@
     }
     .pfe-action-bar.is-success { animation: pfeSuccessFlash 1.4s ease-out; }
 
-    /* ── Form grid & fields ───────────────────────────────────────────── */
+    /* ── Row-based form layout (her satirda tek alan) ─────────────────── */
+    .pfe-rows { display: flex; flex-direction: column; gap: 0; }
+    .pfe-row {
+        display: flex; align-items: center; gap: 14px;
+        padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .pfe-row:last-child { border-bottom: none; }
+    body.app-theme-light .pfe-row { border-bottom-color: rgba(15,23,42,0.06); }
+    .pfe-row__label {
+        width: 160px; min-width: 160px; flex-shrink: 0;
+        font-size: 0.82rem; font-weight: 600; color: rgba(255,255,255,0.65);
+        letter-spacing: 0.02em; text-align: right; padding-right: 4px;
+    }
+    body.app-theme-light .pfe-row__label { color: #64748b; }
+    .pfe-row .pfe-input,
+    .pfe-row .pfe-select { flex: 1 1 auto; min-width: 0; }
+    .pfe-required::after { content: ' *'; color: #f87171; font-weight: 700; }
+    /* Row icindeki switchkey: minimal goruntu (track-only, padding/bg/border yok) */
+    .pfe-row .pfe-switchkey {
+        background: transparent; border: none; padding: 0;
+        gap: 0; cursor: pointer;
+    }
+    body.app-theme-light .pfe-row .pfe-switchkey { background: transparent; border: none; }
+
+    /* ── Form grid & fields (legacy — diger sectionlar icin) ──────────── */
     .pfe-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
     .pfe-field { display: flex; flex-direction: column; gap: 5px; }
     .pfe-field--full { grid-column: 1 / -1; }
@@ -391,7 +425,9 @@
         15%,45%,75% { transform: translateX(-5px); }
         30%,60%,90% { transform: translateX(5px); }
     }
-    .pfe-input.is-duplicate {
+    .pfe-input.is-duplicate,
+    .pfe-input.is-invalid,
+    .pfe-select.is-invalid {
         border-color: #ef4444 !important;
         background: rgba(239,68,68,0.08) !important;
         box-shadow: 0 0 0 3px rgba(239,68,68,0.18) !important;
@@ -444,6 +480,19 @@
         background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.5);
     }
     body.app-theme-light .pfe-stock-row__unlink { color: #dc2626; }
+
+    /* ── Stock row: degerler rehber tetikleyici buton ─────────────────── */
+    .pfe-stock-row__values-btn {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 5px 10px; border-radius: 7px; font-size: 0.74rem; font-weight: 600;
+        background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.25);
+        color: #67e8f9; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+    }
+    .pfe-stock-row__values-btn:hover {
+        background: rgba(6,182,212,0.18); border-color: rgba(6,182,212,0.5);
+    }
+    body.app-theme-light .pfe-stock-row__values-btn { color: #0e7490; background: #ecfeff; border-color: #a5f3fc; }
+    body.app-theme-light .pfe-stock-row__values-btn:hover { background: #cffafe; border-color: #06b6d4; }
 
     /* ── Delete confirm modal ─────────────────────────────────────────── */
     .pfe-del-backdrop {
@@ -704,53 +753,52 @@
             <button type="button" class="pfe-nav-btn" data-nav-section="values">
                 <span class="pfe-nav-dot"></span>
                 Degerler
-                <span class="pfe-nav-count" id="pfeNavValuesCount" style="display:none">0</span>
+                <span class="pfe-nav-count is-empty" id="pfeNavValuesCount">0</span>
             </button>
             <button type="button" class="pfe-nav-btn" data-nav-section="stocks">
                 <span class="pfe-nav-dot"></span>
                 Bagli Stoklar
-                <span class="pfe-nav-count" id="pfeNavStocksCount" style="display:none">0</span>
+                <span class="pfe-nav-count is-empty" id="pfeNavStocksCount">0</span>
             </button>
         </nav>
 
         <!-- Sag Icerik -->
         <div class="pfe-content" id="pfeContent">
 
-            <!-- BOLUM: Genel Bilgiler -->
+            <!-- BOLUM: Genel Bilgiler — her satirda tek alan -->
             <div class="pfe-card pfe-section" data-section="general">
                 <p class="pfe-card-title">Genel Bilgiler</p>
-                <div class="pfe-grid">
-                    <div class="pfe-field">
-                        <label>Ozellik Kodu</label>
-                        <input id="pfeCode" type="text" class="pfe-input" readonly placeholder="Kaydedildiginde olusturulur" />
-                    </div>
-                    <div class="pfe-field">
-                        <label>Ozellik Adi *</label>
+                <div class="pfe-rows">
+                    <div class="pfe-row">
+                        <label for="pfeName" class="pfe-row__label pfe-required">Ozellik Adi</label>
                         <input id="pfeName" type="text" class="pfe-input" placeholder="Orn: Renk, Beden, Malzeme" maxlength="255" />
                     </div>
-                    <div class="pfe-field">
-                        <label>Veri Tipi *</label>
-                        <select id="pfeDataType" class="pfe-select">
+                    <div class="pfe-row">
+                        <label for="pfeDataType" class="pfe-row__label pfe-required">Veri Tipi</label>
+                        <select id="pfeDataType" class="pfe-select" style="max-width:240px;">
                             <option value="Text">Metin</option>
                             <option value="Numeric">Sayisal</option>
                             <option value="Date">Tarih</option>
                         </select>
                     </div>
-                    <div class="pfe-field">
-                        <label>Olcu Birimi</label>
-                        <input id="pfeUnitOfMeasure" type="text" class="pfe-input" placeholder="Orn: cm, kg (sayisal icin)" maxlength="20" />
+                    <div class="pfe-row" id="pfeUnitOfMeasureRow">
+                        <label for="pfeUnitOfMeasure" class="pfe-row__label">Olcu Birimi</label>
+                        <select id="pfeUnitOfMeasure" class="pfe-select" style="max-width:240px;">
+                            <option value="">Seciniz</option>
+                        </select>
                     </div>
-                    <div class="pfe-field pfe-field--full">
-                        <label class="pfe-toggle">
+                    <div class="pfe-row">
+                        <label for="pfeIsActive" class="pfe-row__label">Aktif</label>
+                        <label class="pfe-switchkey" for="pfeIsActive">
                             <input type="checkbox" id="pfeIsActive" checked />
-                            <span>Aktif</span>
+                            <span class="pfe-switchkey__track"></span>
                         </label>
                     </div>
-                    <div class="pfe-field pfe-field--full">
-                        <label class="pfe-switchkey">
+                    <div class="pfe-row">
+                        <label for="pfeVisibleInDesign" class="pfe-row__label">Dizaynda Gorunsun</label>
+                        <label class="pfe-switchkey" for="pfeVisibleInDesign">
                             <input type="checkbox" id="pfeVisibleInDesign" checked />
                             <span class="pfe-switchkey__track"></span>
-                            <span>Dizaynda gorunsun</span>
                         </label>
                     </div>
                 </div>
@@ -813,6 +861,30 @@
         </div>
     </div>
 
+    <!-- Deger Rehber Modali (per-stock allowed values) -->
+    <div id="pfeValuesGuideBackdrop" class="pfe-del-backdrop" style="display:none;" onclick="pfeCloseValuesGuide()">
+        <div class="pfe-guide" onclick="event.stopPropagation()">
+            <div class="pfe-guide-header">
+                <div class="pfe-guide-header__left">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    <span class="pfe-guide-title">Deger Rehberi — <span id="pfeValuesGuideStockLabel"></span></span>
+                </div>
+                <button type="button" class="pfe-guide-close" onclick="pfeCloseValuesGuide()">&times;</button>
+            </div>
+            <div class="pfe-guide-search">
+                <svg class="pfe-guide-search__ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="pfeValuesGuideSearch" class="pfe-guide-search__input" placeholder="Deger ara..." autocomplete="off" />
+            </div>
+            <div class="pfe-guide-body" id="pfeValuesGuideBody">
+                <div class="pfe-guide-empty">Deger yok</div>
+            </div>
+            <div class="pfe-guide-footer">
+                <span class="pfe-guide-footer__count" id="pfeValuesGuideCount">0 deger secili</span>
+                <button type="button" class="pfe-confirm-btn pfe-confirm-btn--ghost" onclick="pfeCloseValuesGuide()">Kapat</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Deger Sil Onay Modali -->
     <div id="pfeValueConfirmBackdrop" class="pfe-confirm-backdrop" style="display:none;">
         <div class="pfe-confirm-box" onclick="event.stopPropagation()">
@@ -862,7 +934,8 @@
 (function () {
     var editId = @editId;
     var currentId = editId > 0 ? editId : 0;
-    var linkedStocks = [];
+    var linkedStocks = [];   // [{ code, name, allowedValueIds:[int], printDescriptionInDesign:bool }]
+    var availableValues = []; // [{ id, code, description, value }] — bu feature'in degerleri
     var currentUom = '';
     var currentDataType = 'Text';
 
@@ -946,8 +1019,14 @@
     function updateNavCount(elemId, count) {
         var el = $(elemId);
         if (!el) return;
-        el.textContent = count;
-        el.style.display = count > 0 ? '' : 'none';
+        var n = count || 0;
+        var newText = String(n);
+        var newEmpty = n <= 0;
+        var curEmpty = el.classList.contains('is-empty');
+        // No-op: degisiklik yoksa DOM'a dokunma (kayma engelli)
+        if (el.textContent === newText && curEmpty === newEmpty) return;
+        if (el.textContent !== newText) el.textContent = newText;
+        el.classList.toggle('is-empty', newEmpty);
     }
 
     function pfeUpdateValuesCount() {
@@ -961,7 +1040,15 @@
 
     // ── Stocks list render ────────────────────────────────────────────────
     function renderStocksList(stocks) {
-        linkedStocks = Array.isArray(stocks) ? stocks.slice() : [];
+        // Normalize: code, name, allowedValueIds[], printDescriptionInDesign
+        linkedStocks = (Array.isArray(stocks) ? stocks : []).map(function (s) {
+            return {
+                code: s.code,
+                name: s.name || s.code,
+                allowedValueIds: Array.isArray(s.allowedValueIds) ? s.allowedValueIds.slice() : [],
+                printDescriptionInDesign: s.printDescriptionInDesign !== false,
+            };
+        });
         var list = $('pfeStockList');
         if (!list) return;
         list.innerHTML = '';
@@ -972,27 +1059,188 @@
             var rows = document.createElement('div');
             rows.className = 'pfe-stock-rows';
             linkedStocks.forEach(function (s, idx) {
-                var row = document.createElement('div');
-                row.className = 'pfe-stock-row';
-                row.innerHTML =
-                    '<span class="pfe-stock-row__idx">' + (idx + 1) + '</span>' +
-                    '<span class="pfe-stock-row__code">' + escHtml(s.code) + '</span>' +
-                    '<span class="pfe-stock-row__name">' + escHtml(s.name || s.code) + '</span>';
-                var unlinkBtn = document.createElement('button');
-                unlinkBtn.type = 'button';
-                unlinkBtn.className = 'pfe-stock-row__unlink';
-                unlinkBtn.innerHTML =
-                    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
-                    ' Kaldir';
-                unlinkBtn.addEventListener('click', function () { pfeUnlinkStock(s.code); });
-                row.appendChild(unlinkBtn);
-                rows.appendChild(row);
+                rows.appendChild(buildStockRow(s, idx));
             });
             list.appendChild(rows);
         }
 
         pfeUpdateStocksCount();
         pfeUpdateGuideCount();
+    }
+
+    function buildStockRow(s, idx) {
+        var row = document.createElement('div');
+        row.className = 'pfe-stock-row';
+        row.dataset.code = s.code;
+
+        var idxEl = document.createElement('span');
+        idxEl.className = 'pfe-stock-row__idx';
+        idxEl.textContent = (idx + 1);
+        row.appendChild(idxEl);
+
+        var codeEl = document.createElement('span');
+        codeEl.className = 'pfe-stock-row__code';
+        codeEl.textContent = s.code;
+        row.appendChild(codeEl);
+
+        var nameEl = document.createElement('span');
+        nameEl.className = 'pfe-stock-row__name';
+        nameEl.textContent = s.name || s.code;
+        row.appendChild(nameEl);
+
+        // Degerler rehber tetikleyici (yalniz feature'in tanimli degeri varsa)
+        var hasValues = Array.isArray(availableValues) && availableValues.length > 0;
+        if (hasValues) {
+            var valBtn = document.createElement('button');
+            valBtn.type = 'button';
+            valBtn.className = 'pfe-stock-row__values-btn';
+            var allowedCount = (s.allowedValueIds || []).length;
+            valBtn.innerHTML =
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' +
+                ' Degerler' + (allowedCount > 0 ? ' (' + allowedCount + ')' : '');
+            valBtn.addEventListener('click', function () { pfeOpenValuesGuide(s.code); });
+            row.appendChild(valBtn);
+        }
+
+        var unlinkBtn = document.createElement('button');
+        unlinkBtn.type = 'button';
+        unlinkBtn.className = 'pfe-stock-row__unlink';
+        unlinkBtn.innerHTML =
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>' +
+            ' Kaldir';
+        unlinkBtn.addEventListener('click', function () { pfeUnlinkStock(s.code); });
+        row.appendChild(unlinkBtn);
+
+        return row;
+    }
+
+    // ── Deger Rehberi (per-stock allowed values) ──────────────────────────
+    var pfeValuesGuideStockCode = null;
+    var pfeValuesGuideSearchTimer = null;
+
+    window.pfeOpenValuesGuide = function (stockCode) {
+        var s = linkedStocks.find(function (x) { return x.code === stockCode; });
+        if (!s) return;
+        pfeValuesGuideStockCode = stockCode;
+        var label = $('pfeValuesGuideStockLabel');
+        if (label) label.textContent = (s.code + (s.name && s.name !== s.code ? ' — ' + s.name : ''));
+        $('pfeValuesGuideBackdrop').style.display = '';
+        $('pfeValuesGuideSearch').value = '';
+        pfeRenderValuesGuide('');
+        setTimeout(function () { $('pfeValuesGuideSearch').focus(); }, 80);
+    };
+
+    window.pfeCloseValuesGuide = function () {
+        $('pfeValuesGuideBackdrop').style.display = 'none';
+        pfeValuesGuideStockCode = null;
+    };
+
+    function pfeRenderValuesGuide(query) {
+        var body = $('pfeValuesGuideBody');
+        if (!body) return;
+        body.innerHTML = '';
+
+        var s = linkedStocks.find(function (x) { return x.code === pfeValuesGuideStockCode; });
+        if (!s) { body.innerHTML = '<div class="pfe-guide-empty">Stok bulunamadi</div>'; return; }
+
+        var q = (query || '').trim().toLowerCase();
+        var values = (availableValues || []).filter(function (v) {
+            if (!q) return true;
+            return ((v.description || '') + ' ' + (v.value || '') + ' ' + (v.code || ''))
+                .toLowerCase().indexOf(q) !== -1;
+        });
+
+        if (values.length === 0) {
+            body.innerHTML = '<div class="pfe-guide-empty">' + (q ? 'Eslesme bulunamadi' : 'Deger yok') + '</div>';
+            pfeUpdateValuesGuideCount();
+            return;
+        }
+
+        var allowedSet = (s.allowedValueIds || []).slice();
+        var sel = [];
+        var unsel = [];
+        values.forEach(function (v) {
+            if (allowedSet.indexOf(v.id) !== -1) sel.push(v); else unsel.push(v);
+        });
+
+        if (sel.length > 0) {
+            var sep1 = document.createElement('div');
+            sep1.className = 'pfe-guide-sep';
+            sep1.textContent = 'Secili degerler (' + sel.length + ')';
+            body.appendChild(sep1);
+            sel.forEach(function (v) { body.appendChild(pfeValuesGuideRow(v, true)); });
+        }
+        if (unsel.length > 0) {
+            var sep2 = document.createElement('div');
+            sep2.className = 'pfe-guide-sep';
+            sep2.textContent = 'Diger degerler (' + unsel.length + ')';
+            body.appendChild(sep2);
+            unsel.forEach(function (v) { body.appendChild(pfeValuesGuideRow(v, false)); });
+        }
+        pfeUpdateValuesGuideCount();
+    }
+
+    function pfeValuesGuideRow(v, isSelected) {
+        var row = document.createElement('div');
+        row.className = 'pfe-guide-row';
+
+        var code = document.createElement('span');
+        code.className = 'pfe-guide-row__code';
+        code.textContent = v.code || '-';
+
+        var name = document.createElement('span');
+        name.className = 'pfe-guide-row__name';
+        name.textContent = v.description || v.value || '';
+
+        var sw = document.createElement('label');
+        sw.className = 'pfe-guide-row__switch';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = isSelected;
+        var track = document.createElement('span');
+        track.className = 'pfe-switch-track';
+        sw.appendChild(cb); sw.appendChild(track);
+
+        cb.addEventListener('change', function () { pfeToggleAllowedValue(v.id, cb.checked); });
+        row.addEventListener('click', function (e) {
+            if (e.target === cb || e.target === track) return;
+            cb.checked = !cb.checked; pfeToggleAllowedValue(v.id, cb.checked);
+        });
+
+        row.appendChild(code);
+        row.appendChild(name);
+        row.appendChild(sw);
+        return row;
+    }
+
+    function pfeToggleAllowedValue(valueId, checked) {
+        var s = linkedStocks.find(function (x) { return x.code === pfeValuesGuideStockCode; });
+        if (!s) return;
+        if (!Array.isArray(s.allowedValueIds)) s.allowedValueIds = [];
+        var ix = s.allowedValueIds.indexOf(valueId);
+        if (checked && ix === -1) s.allowedValueIds.push(valueId);
+        else if (!checked && ix !== -1) s.allowedValueIds.splice(ix, 1);
+        pfeUpdateValuesGuideCount();
+        // Stok satirindaki "Degerler (n)" badge'i yenile
+        var rows = document.querySelectorAll('#pfeStockList .pfe-stock-row');
+        rows.forEach(function (r) {
+            if (r.dataset.code !== s.code) return;
+            var btn = r.querySelector('.pfe-stock-row__values-btn');
+            if (!btn) return;
+            var cnt = (s.allowedValueIds || []).length;
+            btn.innerHTML =
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' +
+                ' Degerler' + (cnt > 0 ? ' (' + cnt + ')' : '');
+        });
+        saveStocks();
+    }
+
+    function pfeUpdateValuesGuideCount() {
+        var el = $('pfeValuesGuideCount');
+        if (!el) return;
+        var s = linkedStocks.find(function (x) { return x.code === pfeValuesGuideStockCode; });
+        var cnt = s && Array.isArray(s.allowedValueIds) ? s.allowedValueIds.length : 0;
+        el.textContent = cnt + ' deger secili' + (cnt === 0 ? ' (kisitlama yok — tum degerler gecerli)' : '');
     }
 
     window.pfeUnlinkStock = function (code) {
@@ -1269,22 +1517,30 @@
     function normalizeDataType(raw) {
         if (!raw) return 'Text';
         var u = String(raw).trim().toUpperCase();
-        if (u === 'NUMBER' || u === 'NUMERIC') return 'Numeric';
-        if (u === 'DATE') return 'Date';
-        return raw;
+        switch (u) {
+            case 'TEXT':                       return 'Text';
+            case 'NUMBER': case 'NUMERIC':     return 'Numeric';
+            case 'DATE':                       return 'Date';
+            default:                           return 'Text';
+        }
     }
 
     // ── Populate ──────────────────────────────────────────────────────────
     function populate(data) {
         currentUom = data.unitOfMeasure || '';
         currentDataType = normalizeDataType(data.dataType);
-        $('pfeCode').value = data.code || '';
         $('pfeName').value = data.name || '';
         $('pfeDataType').value = normalizeDataType(data.dataType);
         var hasValues = Array.isArray(data.values) && data.values.length > 0;
+        // Deger girilmis ozellikte hem ad hem veri tipi salt-okunur
         $('pfeDataType').disabled = hasValues;
         $('pfeDataType').title = hasValues ? 'Deger girilen ozelligin veri tipi degistirilemez' : '';
-        $('pfeUnitOfMeasure').value = data.unitOfMeasure || '';
+        $('pfeName').readOnly = hasValues;
+        $('pfeName').title = hasValues ? 'Deger girilen ozelligin adi degistirilemez' : '';
+        // UnitOfMeasure dropdown — pfeLoadUnits ile populate edildi; mevcut deger varsa set et
+        var uomEl = $('pfeUnitOfMeasure');
+        if (uomEl) uomEl.value = data.unitOfMeasure || '';
+        pfeUpdateUomVisibility();
         $('pfeIsActive').checked = data.isActive !== false;
         $('pfeVisibleInDesign').checked = data.visibleInDesign !== false;
 
@@ -1297,11 +1553,12 @@
         if ($('pfeDeleteModalCode')) $('pfeDeleteModalCode').textContent = data.code || data.name || '';
 
         renderValuesList(data.values);
+        availableValues = Array.isArray(data.values) ? data.values.slice() : [];
 
         if (Array.isArray(data.linkedStocks)) {
             renderStocksList(data.linkedStocks);
         } else if (Array.isArray(data.stockCodes)) {
-            renderStocksList(data.stockCodes.map(function (c) { return { code: c, name: c }; }));
+            renderStocksList(data.stockCodes.map(function (c) { return { code: c, name: c, allowedValueIds: [], printDescriptionInDesign: true }; }));
         } else {
             renderStocksList([]);
         }
@@ -1322,12 +1579,21 @@
         }
     }
 
+    // ── Helper: shake input red ───────────────────────────────────────────
+    function pfeShakeInvalid(el) {
+        if (!el) return;
+        el.classList.remove('is-invalid');
+        void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 600);
+    }
+
     // ── Save ──────────────────────────────────────────────────────────────
     window.pfeSave = async function () {
         var nameEl = $('pfeName');
         var name   = nameEl.value.trim();
         if (!name) {
-            showMsg('Ozellik adi bos olamaz', false);
+            pfeShakeInvalid(nameEl);
             nameEl.focus();
             return;
         }
@@ -1410,7 +1676,7 @@
         var acikEl   = $('pfeNewAciklamaInput');
         var rawValue = (input.value || '').trim();
         var aciklama = acikEl ? (acikEl.value || '').trim() : '';
-        if (!rawValue) { input.focus(); return; }
+        if (!rawValue) { pfeShakeInvalid(input); input.focus(); return; }
 
         var existingRows = $('pfeValuesList').querySelectorAll('.pfe-val-row');
         for (var i = 0; i < existingRows.length; i++) {
@@ -1551,7 +1817,8 @@
         var body   = $('pfeGuideBody');
         body.innerHTML = '';
         var q      = (query || '').trim().toLowerCase();
-        var stocks = (allStocksCache || []);
+        // Sadece kombinasyon takibi acik (Items.Combinations=1) stoklar listelenir
+        var stocks = (allStocksCache || []).filter(function (s) { return s.hasConfig === true; });
         if (q) {
             stocks = stocks.filter(function (s) {
                 return (s.code || '').toLowerCase().indexOf(q) !== -1 ||
@@ -1612,7 +1879,7 @@
     function pfeToggleStock(stock, checked) {
         if (checked) {
             if (!linkedStocks.some(function (s) { return s.code === stock.code; })) {
-                linkedStocks.push({ code: stock.code, name: stock.name || stock.code });
+                linkedStocks.push({ code: stock.code, name: stock.name || stock.code, allowedValueIds: [], printDescriptionInDesign: true });
             }
         } else {
             linkedStocks = linkedStocks.filter(function (s) { return s.code !== stock.code; });
@@ -1628,11 +1895,18 @@
     }
 
     function saveStocks(onSuccess, onError) {
+        var payloadStocks = linkedStocks.map(function (s) {
+            return {
+                stockCode: s.code,
+                printDescriptionInDesign: s.printDescriptionInDesign !== false,
+                allowedValueIds: Array.isArray(s.allowedValueIds) ? s.allowedValueIds : [],
+            };
+        });
         fetch('/Logistics/SaveProductFeatureStocksJson', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ featureId: currentId, stockCodes: linkedStocks.map(function (s) { return s.code; }) }),
+            body: JSON.stringify({ featureId: currentId, stocks: payloadStocks }),
         })
             .then(function (r) { return r.json(); })
             .then(function (data) {
@@ -1642,11 +1916,52 @@
             .catch(function (e) { showMsg('Kayit hatasi: ' + e.message, false); if (onError) onError(); });
     }
 
+    // ── Olcu Birimi (UnitOfMeasure) — sadece Numeric icin aktif, dropdown ──
+    function pfeUpdateUomVisibility() {
+        var row = $('pfeUnitOfMeasureRow');
+        var dt  = ($('pfeDataType') && $('pfeDataType').value) || 'Text';
+        if (!row) return;
+        if (dt === 'Numeric') {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+            var uom = $('pfeUnitOfMeasure');
+            if (uom) uom.value = ''; // numerik degilse temizle
+        }
+    }
+
+    function pfeLoadUnits() {
+        var sel = $('pfeUnitOfMeasure');
+        if (!sel) return;
+        fetch('/Logistics/GetAllMeasureUnits', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (units) {
+                if (!Array.isArray(units)) return;
+                var prev = sel.value;
+                var opts = '<option value="">Seciniz</option>';
+                units.forEach(function (u) {
+                    if (u.isActive === false) return;
+                    var code = u.unitCode || u.UnitCode || '';
+                    var name = u.unitName || u.UnitName || '';
+                    if (!code) return;
+                    opts += '<option value="' + code + '">' + code + ' — ' + name + '</option>';
+                });
+                sel.innerHTML = opts;
+                if (prev) sel.value = prev;
+            })
+            .catch(function (e) { console.warn('[PFE] unit load:', e); });
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', function () {
         var dtSelect = $('pfeDataType');
-        if (dtSelect) dtSelect.addEventListener('change', pfeUpdateValueInputType);
+        if (dtSelect) {
+            dtSelect.addEventListener('change', pfeUpdateValueInputType);
+            dtSelect.addEventListener('change', pfeUpdateUomVisibility);
+        }
         pfeUpdateValueInputType();
+        pfeLoadUnits();
+        pfeUpdateUomVisibility();
 
         var guideSearch = $('pfeGuideSearch');
         if (guideSearch) {
@@ -1656,9 +1971,18 @@
             });
         }
 
+        var valSearch = $('pfeValuesGuideSearch');
+        if (valSearch) {
+            valSearch.addEventListener('input', function () {
+                if (pfeValuesGuideSearchTimer) clearTimeout(pfeValuesGuideSearchTimer);
+                pfeValuesGuideSearchTimer = setTimeout(function () { pfeRenderValuesGuide(valSearch.value); }, 180);
+            });
+        }
+
         // ESC ile modalleri kapat
         document.addEventListener('keydown', function (e) {
             if (e.key !== 'Escape') return;
+            if ($('pfeValuesGuideBackdrop').style.display !== 'none') { pfeCloseValuesGuide(); return; }
             if ($('pfeStockGuideBackdrop').style.display !== 'none') { pfeCloseStockGuide(); return; }
             if ($('pfeDeleteModal').style.display !== 'none') { pfeDeleteCancel(); }
         });

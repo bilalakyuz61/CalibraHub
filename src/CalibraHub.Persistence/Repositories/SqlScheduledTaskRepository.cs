@@ -20,11 +20,11 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
     }
 
     private const string Columns =
-        "[id],[code],[name],[description],[task_type],[parameters_json]," +
+        "[id],[name],[description],[task_type],[parameters_json]," +
         "[schedule_type],[schedule_expression],[schedule_description]," +
         "[is_enabled],[is_running]," +
         "[last_run_at],[last_run_status],[last_run_message],[last_run_duration_ms]," +
-        "[next_run_at],[created_at],[updated_at]";
+        "[next_run_at],[Created],[Updated],[company_id],[PrerequisiteTaskId]";
 
     public async Task<IReadOnlyList<ScheduledTask>> GetAllAsync(CancellationToken cancellationToken)
     {
@@ -37,22 +37,27 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         return list;
     }
 
-    public async Task<ScheduledTask?> GetByCodeAsync(string code, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT {Columns} FROM {_table} WHERE [code] = @Code;";
-        cmd.Parameters.Add(new SqlParameter("@Code", code));
-        await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
-        return await r.ReadAsync(cancellationToken) ? Map(r) : null;
-    }
-
     public async Task<ScheduledTask?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"SELECT {Columns} FROM {_table} WHERE [id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
+        return await r.ReadAsync(cancellationToken) ? Map(r) : null;
+    }
+
+    /// <summary>
+    /// UpsertRegistrationAsync built-in tasklarin (Worker startup'inda) idempotent
+    /// kaydi icin Name'e gore lookup yapar. UI tarafinda kullaniciya benzer name'li
+    /// gorev olustururken uniqueness sorumlulugu yoktur.
+    /// </summary>
+    public async Task<ScheduledTask?> GetByNameAsync(string name, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT TOP 1 {Columns} FROM {_table} WHERE [name] = @Name ORDER BY [id];";
+        cmd.Parameters.Add(new SqlParameter("@Name", name));
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         return await r.ReadAsync(cancellationToken) ? Map(r) : null;
     }
@@ -83,31 +88,33 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
+        // Built-in tasklar Name uniqueness icin idempotent — ayni isimde 1 row tutar.
         cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_table} WHERE [code] = @Code)
+            IF EXISTS (SELECT 1 FROM {_table} WHERE [name] = @Name)
             BEGIN
                 UPDATE {_table}
-                   SET [name] = @Name,
-                       [description] = @Description,
+                   SET [description] = @Description,
                        [task_type] = @TaskType,
                        [parameters_json] = @ParametersJson,
                        [schedule_type] = @ScheduleType,
                        [schedule_expression] = @ScheduleExpression,
                        [schedule_description] = @ScheduleDescription,
                        [is_enabled] = @IsEnabled,
-                       [updated_at] = GETUTCDATE()
-                 WHERE [code] = @Code;
+                       [company_id] = @CompanyId,
+                       [PrerequisiteTaskId] = @PrerequisiteTaskId,
+                       [Updated] = GETUTCDATE()
+                 WHERE [name] = @Name;
             END
             ELSE
             BEGIN
                 INSERT INTO {_table}
-                    ([code],[name],[description],[task_type],[parameters_json],
+                    ([name],[description],[task_type],[parameters_json],
                      [schedule_type],[schedule_expression],[schedule_description],
-                     [is_enabled],[is_running],[created_at],[updated_at])
+                     [is_enabled],[is_running],[company_id],[PrerequisiteTaskId],[Created],[Updated])
                 VALUES
-                    (@Code,@Name,@Description,@TaskType,@ParametersJson,
+                    (@Name,@Description,@TaskType,@ParametersJson,
                      @ScheduleType,@ScheduleExpression,@ScheduleDescription,
-                     @IsEnabled,0,GETUTCDATE(),GETUTCDATE());
+                     @IsEnabled,0,@CompanyId,@PrerequisiteTaskId,GETUTCDATE(),GETUTCDATE());
             END;
             """;
         AddParams(cmd, task);
@@ -123,8 +130,7 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         {
             cmd.CommandText = $"""
                 UPDATE {_table}
-                   SET [code] = @Code,
-                       [name] = @Name,
+                   SET [name] = @Name,
                        [description] = @Description,
                        [task_type] = @TaskType,
                        [parameters_json] = @ParametersJson,
@@ -132,8 +138,10 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
                        [schedule_expression] = @ScheduleExpression,
                        [schedule_description] = @ScheduleDescription,
                        [is_enabled] = @IsEnabled,
+                       [company_id] = @CompanyId,
+                       [PrerequisiteTaskId] = @PrerequisiteTaskId,
                        [next_run_at] = @NextRunAt,
-                       [updated_at] = GETUTCDATE()
+                       [Updated] = GETUTCDATE()
                  WHERE [id] = @Id;
                 SELECT @Id;
                 """;
@@ -143,13 +151,13 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         {
             cmd.CommandText = $"""
                 INSERT INTO {_table}
-                    ([code],[name],[description],[task_type],[parameters_json],
+                    ([name],[description],[task_type],[parameters_json],
                      [schedule_type],[schedule_expression],[schedule_description],
-                     [is_enabled],[is_running],[next_run_at],[created_at],[updated_at])
+                     [is_enabled],[is_running],[company_id],[PrerequisiteTaskId],[next_run_at],[Created],[Updated])
                 VALUES
-                    (@Code,@Name,@Description,@TaskType,@ParametersJson,
+                    (@Name,@Description,@TaskType,@ParametersJson,
                      @ScheduleType,@ScheduleExpression,@ScheduleDescription,
-                     @IsEnabled,0,@NextRunAt,GETUTCDATE(),GETUTCDATE());
+                     @IsEnabled,0,@CompanyId,@PrerequisiteTaskId,@NextRunAt,GETUTCDATE(),GETUTCDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
         }
@@ -160,7 +168,7 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         return Convert.ToInt32(result);
     }
 
-    public async Task ReportRunAsync(string code, int status, string? message, int? durationMs,
+    public async Task ReportRunAsync(int taskId, int status, string? message, int? durationMs,
         DateTime? nextRunAt, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
@@ -172,10 +180,10 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
                    [last_run_message] = @Message,
                    [last_run_duration_ms] = @DurationMs,
                    [next_run_at] = @NextRunAt,
-                   [updated_at] = GETUTCDATE()
-             WHERE [code] = @Code;
+                   [Updated] = GETUTCDATE()
+             WHERE [id] = @Id;
             """;
-        cmd.Parameters.Add(new SqlParameter("@Code",       code));
+        cmd.Parameters.Add(new SqlParameter("@Id",         taskId));
         cmd.Parameters.Add(new SqlParameter("@Status",     status));
         cmd.Parameters.Add(new SqlParameter("@Message",    (object?)message ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DurationMs", (object?)durationMs ?? DBNull.Value));
@@ -183,37 +191,37 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<bool> TryAcquireLockAsync(string code, CancellationToken cancellationToken)
+    public async Task<bool> TryAcquireLockAsync(int taskId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         // Atomic UPDATE — is_running'i 0→1'e cevirir yalnizca mevcut 0 ise; rowcount=1 ise acquired.
         cmd.CommandText = $"""
             UPDATE {_table}
-               SET [is_running] = 1, [updated_at] = GETUTCDATE()
-             WHERE [code] = @Code AND [is_running] = 0;
+               SET [is_running] = 1, [Updated] = GETUTCDATE()
+             WHERE [id] = @Id AND [is_running] = 0;
             SELECT @@ROWCOUNT;
             """;
-        cmd.Parameters.Add(new SqlParameter("@Code", code));
+        cmd.Parameters.Add(new SqlParameter("@Id", taskId));
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result) == 1;
     }
 
-    public async Task ReleaseLockAsync(string code, CancellationToken cancellationToken)
+    public async Task ReleaseLockAsync(int taskId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [is_running] = 0, [updated_at] = GETUTCDATE() WHERE [code] = @Code;";
-        cmd.Parameters.Add(new SqlParameter("@Code", code));
+        cmd.CommandText = $"UPDATE {_table} SET [is_running] = 0, [Updated] = GETUTCDATE() WHERE [id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id", taskId));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task SetEnabledAsync(string code, bool enabled, CancellationToken cancellationToken)
+    public async Task SetEnabledAsync(int taskId, bool enabled, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [is_enabled] = @Enabled, [updated_at] = GETUTCDATE() WHERE [code] = @Code;";
-        cmd.Parameters.Add(new SqlParameter("@Code",    code));
+        cmd.CommandText = $"UPDATE {_table} SET [is_enabled] = @Enabled, [Updated] = GETUTCDATE() WHERE [id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id",      taskId));
         cmd.Parameters.Add(new SqlParameter("@Enabled", enabled));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -229,7 +237,6 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
 
     private static void AddParams(SqlCommand cmd, ScheduledTask task)
     {
-        cmd.Parameters.Add(new SqlParameter("@Code",                task.Code));
         cmd.Parameters.Add(new SqlParameter("@Name",                task.Name));
         cmd.Parameters.Add(new SqlParameter("@Description",         (object?)task.Description ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@TaskType",            (int)task.TaskType));
@@ -238,27 +245,30 @@ public sealed class SqlScheduledTaskRepository : IScheduledTaskRepository
         cmd.Parameters.Add(new SqlParameter("@ScheduleExpression",  (object?)task.ScheduleExpression ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@ScheduleDescription", (object?)task.ScheduleDescription ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@IsEnabled",           task.IsEnabled));
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",           (object?)task.CompanyId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@PrerequisiteTaskId",  (object?)task.PrerequisiteTaskId ?? DBNull.Value));
     }
 
     private static ScheduledTask Map(SqlDataReader r) => new()
     {
         Id                  = r.GetInt32(0),
-        Code                = r.GetString(1),
-        Name                = r.GetString(2),
-        Description         = r.IsDBNull(3) ? null : r.GetString(3),
-        TaskType            = (ScheduledTaskType)r.GetInt32(4),
-        ParametersJson      = r.IsDBNull(5) ? null : r.GetString(5),
-        ScheduleType        = (ScheduleType)r.GetInt32(6),
-        ScheduleExpression  = r.IsDBNull(7) ? null : r.GetString(7),
-        ScheduleDescription = r.IsDBNull(8) ? null : r.GetString(8),
-        IsEnabled           = r.GetBoolean(9),
-        IsRunning           = r.GetBoolean(10),
-        LastRunAt           = r.IsDBNull(11) ? null : r.GetDateTime(11),
-        LastRunStatus       = r.IsDBNull(12) ? null : r.GetInt32(12),
-        LastRunMessage      = r.IsDBNull(13) ? null : r.GetString(13),
-        LastRunDurationMs   = r.IsDBNull(14) ? null : r.GetInt32(14),
-        NextRunAt           = r.IsDBNull(15) ? null : r.GetDateTime(15),
-        CreatedAt           = r.GetDateTime(16),
-        UpdatedAt           = r.GetDateTime(17),
+        Name                = r.GetString(1),
+        Description         = r.IsDBNull(2) ? null : r.GetString(2),
+        TaskType            = (ScheduledTaskType)r.GetInt32(3),
+        ParametersJson      = r.IsDBNull(4) ? null : r.GetString(4),
+        ScheduleType        = (ScheduleType)r.GetInt32(5),
+        ScheduleExpression  = r.IsDBNull(6) ? null : r.GetString(6),
+        ScheduleDescription = r.IsDBNull(7) ? null : r.GetString(7),
+        IsEnabled           = r.GetBoolean(8),
+        IsRunning           = r.GetBoolean(9),
+        LastRunAt           = r.IsDBNull(10) ? null : r.GetDateTime(10),
+        LastRunStatus       = r.IsDBNull(11) ? null : r.GetInt32(11),
+        LastRunMessage      = r.IsDBNull(12) ? null : r.GetString(12),
+        LastRunDurationMs   = r.IsDBNull(13) ? null : r.GetInt32(13),
+        NextRunAt           = r.IsDBNull(14) ? null : r.GetDateTime(14),
+        CreatedAt           = r.GetDateTime(15),
+        UpdatedAt           = r.IsDBNull(16) ? r.GetDateTime(15) : r.GetDateTime(16),
+        CompanyId           = r.IsDBNull(17) ? null : r.GetInt32(17),
+        PrerequisiteTaskId  = r.IsDBNull(18) ? null : r.GetInt32(18),
     };
 }

@@ -12,20 +12,22 @@ public interface IPriceListRepository
     Task UpdateGroupAsync(PriceGroup group, CancellationToken ct);
     Task DeleteGroupAsync(int id, CancellationToken ct);
 
-    // Fiyat Kalemleri
-    Task<IReadOnlyCollection<PriceList>> GetEntriesByGroupAsync(int groupId, CancellationToken ct);
+    // Fiyat Kalemleri — enriched (Item/Config/Currency JOIN ile)
+    // Server-side pagination + filter (frontend tum kayitlari cekmiyor; bellek korumasi).
+    Task<PagedPriceListResult> GetEntriesByGroupAsync(
+        int groupId, PriceListFilter filter, CancellationToken ct);
     Task<PriceList?> GetEntryByIdAsync(int id, CancellationToken ct);
     Task<int> AddEntryAsync(PriceList entry, CancellationToken ct);
     Task AddBulkEntriesAsync(IReadOnlyCollection<PriceList> entries, CancellationToken ct);
     Task UpdateEntryAsync(PriceList entry, CancellationToken ct);
     Task DeleteEntryAsync(int id, CancellationToken ct);
 
-    // Upsert (bulk) — Ayni grup+stok+kombinasyon+tarih varsa guncelle, yoksa ekle
+    // Upsert (bulk) — Ayni grup+item+config+tarih varsa guncelle, yoksa ekle
     Task<BulkUpsertResult> UpsertBulkEntriesAsync(
         IReadOnlyCollection<PriceList> entries, CancellationToken ct);
 
-    // Mevcut fiyat sorgusu — toplu anahtarla
+    // Mevcut fiyat sorgusu — secilen PriceType (Buying/Selling) icin toplu anahtarla
     Task<IReadOnlyCollection<ExistingPriceRow>> GetExistingPricesAsync(
-        int priceGroupId, string currency, DateTime validFrom,
+        int groupId, int currencyId, string priceType, DateTime validFrom,
         IReadOnlyCollection<PriceEntryKey> keys, CancellationToken ct);
 }

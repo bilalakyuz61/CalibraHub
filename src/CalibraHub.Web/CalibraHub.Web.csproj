@@ -15,12 +15,22 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>CalibraHub.Web-30fd9770-bd8b-4a42-a002-8bc7f236fbaf</UserSecretsId>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <!-- TOTP (Time-based One-Time Password — RFC 6238) — Gate kilidi icin.
+         Google Authenticator / Microsoft Authenticator ile uyumlu. -->
+    <PackageReference Include="Otp.NET" Version="1.4.0" />
+    <!-- QR kod uretimi — admin ilk setup'ta telefonu ile tarar -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <!-- YARP reverse proxy — /grafana/* path'ini Grafana OSS servisine forward eder -->
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
   </ItemGroup>
 
 </Project>

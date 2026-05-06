@@ -118,8 +118,13 @@ export async function deleteField(id) {
  * @param {number} formId
  * @returns {Promise<string[]>}
  */
-export async function discoverFields(formId) {
-  var resp = await fetch(API + '/discover/' + formId, {
+export async function discoverFields(formId, opts) {
+  // opts.includeMapped=true → FldSet'e eslesmis kolonlar da dahil edilir
+  // (Alan Rehberi widget tanimlama akisi tum kolonlari ister; FldSet
+  // eslestirme sayfasi default false ile sadece eslesmemisleri ister).
+  var qs = ''
+  if (opts && opts.includeMapped === true) qs = '?includeMapped=true'
+  var resp = await fetch(API + '/discover/' + formId + qs, {
     method: 'GET',
     credentials: 'same-origin',
     headers: { 'Accept': 'application/json' },

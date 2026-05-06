@@ -1,0 +1,456 @@
+@{
+    ViewData["Title"] = "Şirket Parametreleri";
+    ViewData["BodyClass"] = "page-admin-parameters";
+    var isEDocApproval = (ViewData["IsEDocumentApprovalEnabled"] is bool b) && b;
+}
+
+@section Styles {
+<style>
+/* ── Layout wrapper resetleri (diger admin sayfalariyla ayni pattern) ── */
+.page-admin-parameters .integrator-dashboard {
+    height: 100% !important; min-height: 0 !important;
+    padding: 0 !important; max-width: none !important;
+    background: transparent !important; box-shadow: none !important;
+    border: none !important; border-radius: 0 !important;
+}
+.page-admin-parameters .integrator-dashboard__content {
+    display: flex !important; flex-direction: column !important;
+    width: 100% !important; max-width: none !important;
+    min-height: 0 !important; padding: 0 !important;
+    margin: 0 !important; overflow: hidden !important;
+    height: 100% !important;
+}
+
+/* ── Tema değişkenleri (açık) ── */
+.ap-wrapper {
+    --ap-bg:           #f8fafc;
+    --ap-surface:      #ffffff;
+    --ap-surface2:     #f1f5f9;
+    --ap-border:       #e2e8f0;
+    --ap-border-light: #f1f5f9;
+    --ap-text:         #1e293b;
+    --ap-text-muted:   #64748b;
+    --ap-input-bg:     #f8fafc;
+    --ap-accent:       var(--theme-accent, #2563eb);
+    --ap-accent-soft:  var(--theme-accent-soft, rgba(37,99,235,.12));
+    --ap-actionbar-bg: rgba(248,250,252,0.92);
+    --ap-toast-ok-bg:  #d1fae5;
+    --ap-toast-ok-tx:  #065f46;
+    --ap-toast-er-bg:  #fee2e2;
+    --ap-toast-er-tx:  #991b1b;
+}
+
+/* ── Tema değişkenleri (koyu) ── */
+body.app-theme-dark .ap-wrapper {
+    --ap-bg:           #080c17;
+    --ap-surface:      #0d1323;
+    --ap-surface2:     #111827;
+    --ap-border:       rgba(255,255,255,.09);
+    --ap-border-light: rgba(255,255,255,.04);
+    --ap-text:         #e2e8f0;
+    --ap-text-muted:   #94a3b8;
+    --ap-input-bg:     rgba(255,255,255,.07);
+    --ap-accent:       var(--theme-accent, #6366f1);
+    --ap-accent-soft:  var(--theme-accent-soft, rgba(99,102,241,.18));
+    --ap-actionbar-bg: rgba(15,15,26,0.85);
+    --ap-toast-ok-bg:  rgba(34,197,94,.18);
+    --ap-toast-ok-tx:  #4ade80;
+    --ap-toast-er-bg:  rgba(239,68,68,.18);
+    --ap-toast-er-tx:  #f87171;
+}
+
+/* ── Wrapper (action bar + body) ───────────────────────── */
+.ap-wrapper {
+    display:flex; flex-direction:column;
+    height:100%; min-height:0;
+    background: var(--ap-bg); color: var(--ap-text);
+}
+
+/* ── Aksiyon şeridi ───────────────────────────────────── */
+.ap-action-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px; flex-shrink: 0;
+    background: var(--ap-actionbar-bg);
+    border-bottom: 1px solid var(--ap-border);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    position: relative; overflow: hidden;
+}
+.ap-action-bar .ap-meta {
+    margin-right: auto; font-size: .85rem; font-weight: 500;
+    color: var(--ap-text-muted);
+}
+.ap-action-bar .ap-meta strong {
+    color: var(--ap-text); font-weight: 700;
+}
+.ap-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px;
+    border: 1px solid var(--ap-border);
+    background: var(--ap-surface); color: var(--ap-text);
+    font-size: .78rem; font-weight: 600; cursor: pointer;
+    transition: all .12s ease;
+}
+.ap-btn:hover:not(:disabled) {
+    background: var(--ap-surface2);
+    border-color: var(--ap-accent);
+}
+.ap-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ap-btn--primary {
+    background: var(--ap-accent); color: #fff;
+    border-color: var(--ap-accent);
+}
+.ap-btn--primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+    border-color: var(--ap-accent);
+}
+
+/* ── KITT (yesil tarayici) — kaydet sirasinda aksiyon seridi alti ── */
+.ap-action-bar::before {
+    content: ''; position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg,
+        rgba(0, 60, 20, 0) 0%,
+        rgba(10, 120, 40, .55) 50%,
+        rgba(0, 60, 20, 0) 100%);
+}
+.ap-action-bar::after {
+    content: ''; position: absolute;
+    left: 0; bottom: -1px;
+    width: 18%; height: 4px;
+    pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(34, 197, 94, .35) 18%,
+        rgba(74, 255, 140, 1) 50%,
+        rgba(34, 197, 94, .35) 82%,
+        transparent 100%);
+    box-shadow:
+        0 0 10px 2px rgba(34, 197, 94, .95),
+        0 0 22px 6px rgba(34, 197, 94, .55),
+        0 0 40px 12px rgba(34, 197, 94, .22);
+    border-radius: 50%;
+}
+.ap-action-bar.is-save-flash::before { animation: apKittBg   1800ms ease-out forwards; }
+.ap-action-bar.is-save-flash::after  { animation: apKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+@@keyframes apKittBg {
+    0%, 100% { opacity: 0; }
+    10%, 90% { opacity: 1; }
+}
+@@keyframes apKittScan {
+    0%   { opacity: 0; left: 0; }
+    8%   { opacity: 1; }
+    48%  { opacity: 1; left: 82%; }
+    52%  { opacity: 1; left: 82%; }
+    92%  { opacity: 1; left: 0; }
+    100% { opacity: 0; left: 0; }
+}
+
+/* ── Body (tabs + content) ───────────────────────────── */
+.ap-body {
+    display: flex; flex: 1 1 auto; min-height: 0;
+}
+
+/* ── Sol form/modul listesi ── */
+.ap-tabs {
+    width: 220px; flex-shrink: 0;
+    border-right: 1px solid var(--ap-border);
+    background: var(--ap-surface2);
+    padding: 12px 0; overflow-y: auto;
+    display:flex; flex-direction:column; min-height:0;
+}
+.ap-tabs h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--ap-text-muted);
+    padding: 6px 14px 8px; margin: 0;
+}
+.ap-tab {
+    display: block; width: 100%;
+    padding: 9px 14px;
+    background: none; border: none; cursor: pointer;
+    text-align: left; font-size: 13px;
+    color: var(--ap-text);
+    border-left: 3px solid transparent;
+    transition: background .12s, color .12s;
+}
+.ap-tab:hover { background: var(--ap-accent-soft); }
+.ap-tab.is-active {
+    background: var(--ap-accent-soft);
+    border-left-color: var(--ap-accent);
+    font-weight: 600;
+}
+
+/* ── Sag icerik ── */
+.ap-content {
+    flex: 1 1 auto; min-width: 0;
+    padding: 18px 24px; overflow-y: auto;
+    background: var(--ap-bg);
+}
+.ap-content h2 { margin: 0 0 4px; font-size: 17px; color: var(--ap-text); font-weight:700; }
+.ap-content .ap-hint { color: var(--ap-text-muted); font-size: 12px; margin-bottom: 18px; }
+
+/* ── Pane'ler ── */
+.ap-pane { display:none; }
+.ap-pane.is-active { display:block; }
+
+/* ── Form satiri (switch / input / select) ── */
+.ap-row {
+    display:flex; align-items:flex-start; gap:12px;
+    padding:10px 0;
+    border-bottom: 1px solid var(--ap-border-light);
+}
+.ap-row:last-child { border-bottom:none; }
+.ap-row-main { flex: 1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.ap-row-title { font-size: 13px; font-weight: 600; color: var(--ap-text); }
+.ap-row-desc  { font-size: 11.5px; color: var(--ap-text-muted); line-height: 1.4; }
+.ap-row-control { flex-shrink: 0; padding-top: 2px; }
+
+/* ── Switch ── */
+.ap-switch { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+.ap-switch input { display:none; }
+.ap-switch-track {
+    width:36px; height:20px; border-radius:10px;
+    background: var(--ap-border);
+    position:relative; transition:background .15s;
+}
+.ap-switch-track.is-on { background: var(--ap-accent); }
+.ap-switch-thumb {
+    position:absolute; top:3px; left:3px;
+    width:14px; height:14px; border-radius:50%;
+    background:#fff; transition:transform .15s;
+    box-shadow:0 1px 3px rgba(0,0,0,.3);
+}
+.ap-switch-track.is-on .ap-switch-thumb { transform:translateX(16px); }
+.ap-switch-label { font-size: 12px; font-weight:500; color: var(--ap-text-muted); }
+.ap-switch-label.is-active { color: var(--ap-accent); }
+
+/* ── Bos state ── */
+.ap-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ap-text-muted);
+    border: 1px dashed var(--ap-border);
+    border-radius: 12px;
+    background: var(--ap-surface2);
+}
+.ap-empty-icon  { font-size: 32px; margin-bottom: 10px; opacity:.4; }
+.ap-empty-title { font-size: 13.5px; font-weight: 600; color: var(--ap-text); margin-bottom: 4px; }
+.ap-empty-desc  { font-size: 12px; line-height: 1.5; }
+
+/* ── Toast ── */
+#ap-flash {
+    position: fixed; top: 16px; right: 16px; z-index: 9999;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    display: none; max-width: 360px;
+}
+#ap-flash.ok  { background: var(--ap-toast-ok-bg); color: var(--ap-toast-ok-tx); }
+#ap-flash.err { background: var(--ap-toast-er-bg); color: var(--ap-toast-er-tx); }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+<div class="ap-wrapper">
+
+    @* ── Aksiyon Şeridi ─────────────────────────────────────── *@
+    <div class="ap-action-bar" id="ap-action-bar">
+        <button type="button" class="ap-btn ap-btn--primary" id="ap-save-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Kaydet
+        </button>
+        <span class="ap-meta" id="ap-meta">
+            Aktif sekme: <strong id="ap-active-label">Genel</strong>
+        </span>
+    </div>
+
+    @* ── Body (tabs + content) ──────────────────────────────── *@
+    <div class="ap-body">
+        <aside class="ap-tabs">
+            <h3>Form / Modül</h3>
+            <button type="button" class="ap-tab is-active" data-pane="general"   data-label="Genel">Genel</button>
+            <button type="button" class="ap-tab"           data-pane="approval"  data-label="Onay İşlemleri">Onay İşlemleri</button>
+            <button type="button" class="ap-tab"           data-pane="workorder" data-label="İş Emri">İş Emri</button>
+            <button type="button" class="ap-tab"           data-pane="salesquote" data-label="Satış Teklifi">Satış Teklifi</button>
+        </aside>
+
+        <main class="ap-content">
+
+            @* ── Genel ─────────────────────────────────── *@
+            <section class="ap-pane is-active" id="ap-pane-general">
+                <h2>Genel</h2>
+                <div class="ap-hint">Şirket genelini etkileyen parametreler.</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">E-Belge Onay Sistemi</div>
+                        <div class="ap-row-desc">
+                            Açıkken gelen e-Faturalar/e-Arşivler "Onay İşlemleri" akışına düşer ve
+                            ilgili onaycı tarafından kabul/red edilmeden ERP'ye işlenmez.
+                            Kapatıldığında belgeler doğrudan kabul edilmiş sayılır.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-edoc-approval" @(isEDocApproval ? "checked" : null) />
+                            <span class="ap-switch-track @(isEDocApproval ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(isEDocApproval ? "is-active" : "")"
+                                  id="ap-edoc-approval-label">@(isEDocApproval ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            @* ── Onay İşlemleri ─────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-approval">
+                <h2>Onay İşlemleri</h2>
+                <div class="ap-hint">Onay akışı (e-Fatura, e-Arşiv, e-İrsaliye) parametreleri.</div>
+
+                <div class="ap-empty">
+                    <div class="ap-empty-icon">⚙</div>
+                    <div class="ap-empty-title">Henüz parametre tanımlanmadı</div>
+                    <div class="ap-empty-desc">
+                        Onay süreçleri için ihtiyaç duyduğunuz davranış (otomatik onay eşiği,<br/>
+                        onaycı seviyeleri, bildirim ayarları vb.) burada gömülü olarak yer alacak.
+                    </div>
+                </div>
+            </section>
+
+            @* ── İş Emri ────────────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-workorder">
+                <h2>İş Emri</h2>
+                <div class="ap-hint">Üretim iş emri modülü parametreleri.</div>
+
+                <div class="ap-empty">
+                    <div class="ap-empty-icon">⚙</div>
+                    <div class="ap-empty-title">Henüz parametre tanımlanmadı</div>
+                    <div class="ap-empty-desc">
+                        Numaralandırma maskesi, default planlama günü, otomatik release gibi<br/>
+                        iş emri davranışları burada gömülü olarak yer alacak.
+                    </div>
+                </div>
+            </section>
+
+            @* ── Satış Teklifi ──────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-salesquote">
+                <h2>Satış Teklifi</h2>
+                <div class="ap-hint">Satış teklifi modülü parametreleri.</div>
+
+                <div class="ap-empty">
+                    <div class="ap-empty-icon">⚙</div>
+                    <div class="ap-empty-title">Henüz parametre tanımlanmadı</div>
+                    <div class="ap-empty-desc">
+                        Geçerlilik süresi, default vade günü, numaralandırma maskesi gibi<br/>
+                        satış teklifi davranışları burada gömülü olarak yer alacak.
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+</section>
+
+<div id="ap-flash"></div>
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    'use strict';
+
+    var activePane = 'general';
+    var saveBtn   = document.getElementById('ap-save-btn');
+    var metaLabel = document.getElementById('ap-active-label');
+    var actionBar = document.getElementById('ap-action-bar');
+
+    // ── Tab gecisi + Kaydet butonunun aktif/pasif durumu ────
+    function syncSaveButton() {
+        // Su an sadece "general" tab'inda kaydedilebilir parametre var.
+        // Diger tab'lar bos -> Kaydet pasif.
+        var hasParams = (activePane === 'general');
+        saveBtn.disabled = !hasParams;
+        saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
+    }
+
+    var tabs = document.querySelectorAll('.ap-tab');
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function () {
+            activePane = t.dataset.pane;
+            tabs.forEach(function (x) { x.classList.toggle('is-active', x === t); });
+            document.querySelectorAll('.ap-pane').forEach(function (p) {
+                p.classList.toggle('is-active', p.id === 'ap-pane-' + activePane);
+            });
+            metaLabel.textContent = t.dataset.label || t.textContent.trim();
+            syncSaveButton();
+        });
+    });
+    syncSaveButton();
+
+    // ── Flash + helpers ────────────────────────────────────
+    function flash(msg, ok) {
+        var el = document.getElementById('ap-flash');
+        el.textContent = msg;
+        el.className = ok ? 'ok' : 'err';
+        el.style.display = 'block';
+        clearTimeout(window.__apFlashTm);
+        window.__apFlashTm = setTimeout(function () { el.style.display = 'none'; }, 3000);
+    }
+    function token() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    // ── KITT animasyonu — basari aninda aksiyon seridi alti ─
+    function flashSuccess() {
+        actionBar.classList.remove('is-save-flash');
+        void actionBar.offsetWidth;          // reflow → animasyonu yeniden tetikle
+        actionBar.classList.add('is-save-flash');
+        setTimeout(function () { actionBar.classList.remove('is-save-flash'); }, 1850);
+    }
+
+    // ── E-Belge Onay switch'i — visual sync ────────────────
+    var edocCheckbox = document.getElementById('ap-edoc-approval');
+    edocCheckbox.addEventListener('change', function () {
+        var on = edocCheckbox.checked;
+        edocCheckbox.closest('.ap-switch')
+            .querySelector('.ap-switch-track').classList.toggle('is-on', on);
+        var lbl = document.getElementById('ap-edoc-approval-label');
+        lbl.textContent = on ? 'Aktif' : 'Pasif';
+        lbl.classList.toggle('is-active', on);
+    });
+
+    // ── Aksiyon seridi Kaydet handler ──────────────────────
+    saveBtn.addEventListener('click', async function () {
+        if (saveBtn.disabled) return;
+        saveBtn.disabled = true;
+        try {
+            var ok = false;
+            if (activePane === 'general') {
+                var r = await fetch('/Admin/SaveGeneralParametersJson', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ isEDocumentApprovalEnabled: edocCheckbox.checked })
+                });
+                var data = await r.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!data.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(data.error || 'Kaydetme basarisiz.', false);
+            }
+            // Yeni sekmeler eklendiginde buraya else if blogu ile bagla
+            if (ok) flashSuccess();
+        } catch (e) {
+            flash('Ag hatasi: ' + e.message, false);
+        } finally {
+            syncSaveButton();
+        }
+    });
+})();
+</script>
+}

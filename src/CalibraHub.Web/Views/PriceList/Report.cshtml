@@ -1,0 +1,816 @@
+@{
+    ViewData["Title"] = "Fiyat Listesi Düzenleme";
+    ViewData["FormCode"] = "PRICE_LIST";
+    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>price_list_entries</td><td style='padding:6px 8px;'>Fiyat listesi kayitlari (filtreli liste + inline duzenleme)</td></tr>"
+        + "</table>";
+}
+
+@section Styles {
+<style>
+    /* Layout — PriceList.cshtml ile uyumlu glassmorphism */
+    .plr-shell {
+        display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden;
+        background: #0c0f1a;
+        background-image:
+            radial-gradient(at 15% 25%, rgba(99,102,241,.10) 0, transparent 55%),
+            radial-gradient(at 85% 15%, rgba(14,165,233,.07) 0, transparent 50%);
+    }
+    body.app-theme-light .plr-shell { background: #f8fafc; background-image: none; }
+
+    /* Action bar */
+    .plr-action-bar {
+        display: flex; align-items: center; gap: 8px; padding: 8px 18px; flex-shrink: 0;
+        background: rgba(15,15,26,.88); border-bottom: 1px solid rgba(255,255,255,.06);
+        backdrop-filter: blur(16px);
+    }
+    body.app-theme-light .plr-action-bar { background: rgba(248,250,252,.95); border-bottom-color: #e2e8f0; }
+
+    .plr-meta { font-size: .76rem; color: rgba(255,255,255,.55); margin-right: auto; }
+    body.app-theme-light .plr-meta { color: #475569; }
+    .plr-meta strong { color: rgba(255,255,255,.85); font-weight: 700; }
+    body.app-theme-light .plr-meta strong { color: #1e293b; }
+
+    .plr-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 14px; border-radius: 8px; border: 1px solid;
+        font-size: .78rem; font-weight: 600; cursor: pointer;
+        transition: all .12s ease; background: transparent; white-space: nowrap;
+    }
+    .plr-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .plr-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
+    .plr-btn--primary:hover:not(:disabled) { background: #4f46e5; }
+    .plr-btn--secondary {
+        background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.10); color: rgba(255,255,255,.65);
+    }
+    body.app-theme-light .plr-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
+    .plr-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,.10); color: #fff; }
+    body.app-theme-light .plr-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
+
+    /* Filter bar */
+    .plr-filters {
+        display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 10px;
+        padding: 12px 18px; flex-shrink: 0;
+        background: rgba(255,255,255,.025); border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    body.app-theme-light .plr-filters { background: rgba(255,255,255,.9); border-bottom-color: #e2e8f0; }
+    .plr-filter { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .plr-filter label {
+        font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+        color: rgba(255,255,255,.45);
+    }
+    body.app-theme-light .plr-filter label { color: #64748b; }
+    .plr-input, .plr-select {
+        padding: 6px 10px; border-radius: 7px; font-size: 12.5px; outline: none;
+        background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); color: #e2e8f0;
+        font-family: inherit; box-sizing: border-box; width: 100%;
+    }
+    body.app-theme-light .plr-input,
+    body.app-theme-light .plr-select { background: #fff; border-color: #cbd5e1; color: #0f172a; }
+    .plr-input:focus, .plr-select:focus { border-color: #6366f1; }
+
+    /* Dropdown secenek tema rengi — browser default'u koyu temada gri/beyaz karisimi
+       oluyor. Solid arka plan + light text ile sayfayla uyumlu yap. NOT: Razor 'opt'
+       kelimesini tag helper olarak yorumluyor; selector'de kullanmamak icin > * pattern. */
+    .plr-select > *,
+    .plr-pg-size > * {
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 6px 10px;
+    }
+    .plr-select > *:checked,
+    .plr-pg-size > *:checked {
+        background: #6366f1;
+        color: #fff;
+    }
+    body.app-theme-light .plr-select > *,
+    body.app-theme-light .plr-pg-size > * {
+        background: #fff;
+        color: #0f172a;
+    }
+    body.app-theme-light .plr-select > *:checked,
+    body.app-theme-light .plr-pg-size > *:checked {
+        background: #eef2ff;
+        color: #4338ca;
+    }
+
+    /* Result table */
+    .plr-content { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; }
+    .plr-summary {
+        display: flex; align-items: center; gap: 16px; padding: 8px 12px; margin-bottom: 12px;
+        background: rgba(255,255,255,.04); border-radius: 8px;
+        font-size: 11.5px; color: rgba(255,255,255,.65);
+    }
+    body.app-theme-light .plr-summary { background: #f1f5f9; color: #475569; }
+    .plr-summary strong { color: rgba(255,255,255,.95); font-weight: 700; }
+    body.app-theme-light .plr-summary strong { color: #0f172a; }
+
+    .plr-table {
+        width: 100%; border-collapse: collapse; font-size: 12.5px;
+        background: rgba(255,255,255,.02); border-radius: 8px; overflow: hidden;
+    }
+    body.app-theme-light .plr-table { background: #fff; border: 1px solid #e2e8f0; }
+    .plr-table thead th {
+        position: sticky; top: 0; z-index: 1;
+        padding: 8px 10px; text-align: left; font-size: 10.5px; font-weight: 700;
+        color: rgba(255,255,255,.65); text-transform: uppercase; letter-spacing: .04em;
+        background: rgba(15,23,42,.95); border-bottom: 1px solid rgba(255,255,255,.10);
+    }
+    body.app-theme-light .plr-table thead th {
+        background: #f8fafc; color: #475569; border-bottom-color: #e2e8f0;
+    }
+    .plr-table tbody td {
+        padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,.05);
+        color: rgba(255,255,255,.85);
+    }
+    body.app-theme-light .plr-table tbody td { border-bottom-color: #f1f5f9; color: #1e293b; }
+    .plr-table tbody tr:hover { background: rgba(99,102,241,.06); }
+    body.app-theme-light .plr-table tbody tr:hover { background: rgba(99,102,241,.04); }
+
+    .plr-num { text-align: right; font-family: 'JetBrains Mono','Consolas',monospace; }
+    .plr-chip {
+        display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 700;
+    }
+    .plr-chip--buy   { background: rgba(99,102,241,.18); color: #a5b4fc; }
+    .plr-chip--sell  { background: rgba(16,185,129,.18); color: #6ee7b7; }
+    .plr-chip--cost  { background: rgba(245,158,11,.18); color: #fcd34d; }
+    body.app-theme-light .plr-chip--buy   { background: #e0e7ff; color: #4338ca; }
+    body.app-theme-light .plr-chip--sell  { background: #d1fae5; color: #047857; }
+    body.app-theme-light .plr-chip--cost  { background: #fef3c7; color: #92400e; }
+
+    .plr-empty {
+        padding: 30px; text-align: center; font-size: 13px; color: rgba(255,255,255,.45); font-style: italic;
+    }
+    body.app-theme-light .plr-empty { color: #94a3b8; }
+    .plr-loading { padding: 20px; text-align: center; color: rgba(255,255,255,.55); font-size: 12px; }
+    body.app-theme-light .plr-loading { color: #64748b; }
+
+    /* Row action buttons */
+    .plr-row-actions { display: inline-flex; gap: 4px; }
+    .plr-icon-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 6px; border: 1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.04); color: rgba(255,255,255,.65); cursor: pointer;
+        transition: all .12s ease;
+    }
+    .plr-icon-btn:hover { background: rgba(99,102,241,.18); color: #a5b4fc; border-color: rgba(99,102,241,.4); }
+    .plr-icon-btn--danger:hover { background: rgba(239,68,68,.18); color: #fca5a5; border-color: rgba(239,68,68,.4); }
+    body.app-theme-light .plr-icon-btn { background: #fff; border-color: #e2e8f0; color: #64748b; }
+    body.app-theme-light .plr-icon-btn:hover { background: #eef2ff; color: #4f46e5; border-color: #c7d2fe; }
+    body.app-theme-light .plr-icon-btn--danger:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+
+    .plr-edit-input {
+        width: 100px; padding: 4px 6px; border-radius: 5px;
+        background: rgba(99,102,241,.10); border: 1px solid rgba(99,102,241,.5); color: #e2e8f0;
+        font-family: 'JetBrains Mono','Consolas',monospace; font-size: 12px; text-align: right;
+        /* number input spinner ok'larini kaldir (Chrome/Safari + Firefox) */
+        -moz-appearance: textfield; appearance: textfield;
+    }
+    .plr-edit-input::-webkit-outer-spin-button,
+    .plr-edit-input::-webkit-inner-spin-button {
+        -webkit-appearance: none; margin: 0;
+    }
+    body.app-theme-light .plr-edit-input { background: #eef2ff; border-color: #818cf8; color: #1e293b; }
+    .plr-edit-input:focus { outline: none; border-color: #6366f1; }
+    .plr-edit-input.is-invalid { border-color: #ef4444; background: rgba(239,68,68,.10); }
+
+    /* Pagination */
+    .plr-pagination {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 10px 4px; margin-top: 12px;
+        font-size: 12px; color: rgba(255,255,255,.65);
+    }
+    body.app-theme-light .plr-pagination { color: #475569; }
+    .plr-pg-info strong { color: rgba(255,255,255,.95); font-weight: 700; }
+    body.app-theme-light .plr-pg-info strong { color: #0f172a; }
+    .plr-pg-controls { display: inline-flex; gap: 4px; align-items: center; }
+    .plr-pg-btn {
+        min-width: 30px; height: 28px; padding: 0 8px; border-radius: 6px;
+        border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.04);
+        color: rgba(255,255,255,.75); cursor: pointer; font-size: 12px; font-weight: 600;
+        transition: all .12s ease;
+    }
+    .plr-pg-btn:hover:not(:disabled) { background: rgba(99,102,241,.20); color: #fff; border-color: rgba(99,102,241,.5); }
+    .plr-pg-btn:disabled { opacity: .35; cursor: not-allowed; }
+    .plr-pg-btn--active { background: #6366f1 !important; color: #fff !important; border-color: #4f46e5 !important; }
+    body.app-theme-light .plr-pg-btn { background: #fff; border-color: #e2e8f0; color: #475569; }
+    body.app-theme-light .plr-pg-btn:hover:not(:disabled) { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
+    .plr-pg-size {
+        padding: 5px 10px; border-radius: 6px; font-size: 12px;
+        background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); color: #e2e8f0;
+    }
+    body.app-theme-light .plr-pg-size { background: #fff; border-color: #cbd5e1; color: #0f172a; }
+
+    /* Onay modali — ekran ortasinda, silme/destruktif islemler icin
+       (CLAUDE.md: 'Silme onay standardi' — referans uygulama bu blok). */
+    .plr-modal-backdrop {
+        position: fixed; inset: 0; z-index: 1100;
+        background: rgba(0,0,0,.55);
+        display: flex; align-items: center; justify-content: center;
+        backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+        animation: plrFadeIn .14s ease;
+    }
+    .plr-modal-backdrop[hidden] { display: none; }
+    @@keyframes plrFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .plr-modal {
+        width: 380px; max-width: 92vw;
+        background: #1e293b; color: #e2e8f0;
+        border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0,0,0,.6);
+        padding: 22px 24px 18px; text-align: center;
+        animation: plrPopIn .18s cubic-bezier(.2,.9,.3,1.2);
+    }
+    @@keyframes plrPopIn {
+        from { opacity: 0; transform: translateY(8px) scale(.96); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    body.app-theme-light .plr-modal {
+        background: #fff; color: #0f172a; border-color: #e2e8f0;
+        box-shadow: 0 20px 60px rgba(15,23,42,.25);
+    }
+    .plr-modal-icon {
+        width: 48px; height: 48px; margin: 0 auto 12px;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(239,68,68,.14); color: #ef4444; border-radius: 50%;
+    }
+    body.app-theme-light .plr-modal-icon { background: #fef2f2; color: #dc2626; }
+    .plr-modal-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .plr-modal-message { font-size: 13px; opacity: .8; margin-bottom: 18px; line-height: 1.5; white-space: pre-line; }
+    .plr-modal-actions { display: flex; gap: 8px; justify-content: center; }
+    .plr-btn--danger {
+        background: #ef4444; border-color: #dc2626; color: #fff;
+    }
+    .plr-btn--danger:hover:not(:disabled) { background: #dc2626; }
+
+    /* Toast — kucuk alt-sag bilgi mesaji (silme/guncelleme sonrasi) */
+    .plr-toast {
+        position: fixed; bottom: 18px; right: 18px; z-index: 1000;
+        padding: 10px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+        background: rgba(15,23,42,.95); color: #e2e8f0; border: 1px solid rgba(99,102,241,.4);
+        box-shadow: 0 6px 20px rgba(0,0,0,.35); opacity: 0; transform: translateY(8px);
+        transition: opacity .2s, transform .2s; pointer-events: none;
+    }
+    .plr-toast--ok    { border-color: rgba(16,185,129,.5); }
+    .plr-toast--err   { border-color: rgba(239,68,68,.5); }
+    .plr-toast--show  { opacity: 1; transform: translateY(0); }
+    body.app-theme-light .plr-toast { background: #fff; color: #0f172a; box-shadow: 0 6px 20px rgba(15,23,42,.18); }
+</style>
+}
+
+<div class="plr-shell">
+
+    <!-- Action bar -->
+    <div class="plr-action-bar">
+        <div class="plr-meta">
+            <strong id="plrGroupName">Fiyat Grubu</strong>
+            <span style="opacity:.6; margin-left:8px;">— Düzenleme</span>
+        </div>
+        <a href="/PriceList/PriceGroups" class="plr-btn plr-btn--secondary" title="Fiyat grup tanımlamaları ekranına dön">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Fiyat Grupları
+        </a>
+        <a id="plrExportBtn" href="#" class="plr-btn plr-btn--secondary" title="Filtrelenen kayıtları Excel'e aktar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Excel
+        </a>
+        <a id="plrNewEntryBtn" href="#" class="plr-btn plr-btn--primary">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            Yeni Fiyat Girişi
+        </a>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="plr-filters">
+        <div class="plr-filter">
+            <label>Stok (kod / ad)</label>
+            <input id="plrFltStock" type="search" class="plr-input" placeholder="Filtrelemek için yazın…" />
+        </div>
+        <div class="plr-filter">
+            <label>Döviz</label>
+            <select id="plrFltCurrency" class="plr-select">
+                <option value="">— Tümü —</option>
+            </select>
+        </div>
+        <div class="plr-filter">
+            <label>Fiyat Tipi</label>
+            <select id="plrFltType" class="plr-select">
+                <option value="">— Tümü —</option>
+                <option value="m">Maliyet</option>
+                <option value="b">Alış</option>
+                <option value="s">Satış</option>
+            </select>
+        </div>
+        <div class="plr-filter">
+            <label>Başlangıç ≥</label>
+            <input id="plrFltStart" type="date" class="plr-input" />
+        </div>
+        <div class="plr-filter">
+            <label>Bitiş ≤</label>
+            <input id="plrFltEnd" type="date" class="plr-input" />
+        </div>
+        <div class="plr-filter">
+            <label>Baz Tarih</label>
+            <input id="plrFltBase" type="date" class="plr-input" title="Bu tarihte yürürlükte olan fiyatları göster (ValidFrom ≤ Baz ≤ ValidTo)" />
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="plr-content">
+        <div class="plr-summary">
+            <span>Toplam <strong id="plrSumTotal">0</strong> kayıt</span>
+            <span style="opacity:.6;">·</span>
+            <span>Bu sayfada <strong id="plrSumPage">0</strong></span>
+            <span style="opacity:.6;">·</span>
+            <span>Sayfa <strong id="plrSumPageNo">1</strong> / <strong id="plrSumPageTotal">1</strong></span>
+        </div>
+
+        <div id="plrTableWrap">
+            <table class="plr-table">
+                <thead>
+                    <tr>
+                        <th style="width:90px;">İşlem</th>
+                        <th>Stok Kodu</th>
+                        <th>Stok Adı</th>
+                        <th>Kombinasyon</th>
+                        <th>Döviz</th>
+                        <th>Tip</th>
+                        <th class="plr-num">Fiyat</th>
+                        <th>Başlangıç</th>
+                        <th>Bitiş</th>
+                    </tr>
+                </thead>
+                <tbody id="plrTableBody">
+                    <tr><td colspan="9" class="plr-loading">Yükleniyor…</td></tr>
+                </tbody>
+            </table>
+
+            <div class="plr-pagination">
+                <div class="plr-pg-info">
+                    <span id="plrPgRange">—</span>
+                </div>
+                <div class="plr-pg-controls" id="plrPgControls"></div>
+                <div>
+                    <label style="font-size:11px;opacity:.7;margin-right:6px;">Sayfa boyutu</label>
+                    <select id="plrPgSize" class="plr-pg-size">
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="250">250</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="plrToast" class="plr-toast" role="status"></div>
+
+    <!-- Onay modali (silme vb. — CLAUDE.md 'Silme onay standardi') -->
+    <div id="plrConfirmBackdrop" class="plr-modal-backdrop" hidden>
+        <div class="plr-modal" role="dialog" aria-modal="true" aria-labelledby="plrConfirmTitle">
+            <div class="plr-modal-icon" id="plrConfirmIcon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+            </div>
+            <div class="plr-modal-title"   id="plrConfirmTitle">Silme onayı</div>
+            <div class="plr-modal-message" id="plrConfirmMessage">Bu kayıt silinecek. Devam edilsin mi?</div>
+            <div class="plr-modal-actions">
+                <button type="button" id="plrConfirmCancel" class="plr-btn plr-btn--secondary">Vazgeç</button>
+                <button type="button" id="plrConfirmOk"     class="plr-btn plr-btn--danger">Sil</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var groupId = parseInt(new URLSearchParams(window.location.search).get('groupId')) || 0;
+    if (!groupId) {
+        document.getElementById('plrTableBody').innerHTML =
+            '<tr><td colspan="9" class="plr-empty">Geçersiz URL — fiyat grubu seçilmemiş. <a href="/PriceList/PriceGroups">Gruplara dön</a></td></tr>';
+        return;
+    }
+
+    // "Yeni Fiyat Girişi" butonunu aynı groupId ile wizard'a yönlendir
+    document.getElementById('plrNewEntryBtn').href = '/PriceList/PriceList?groupId=' + groupId;
+
+    // "Excel" butonu — aktif filtrelerle (sayfalama hariç) export endpoint'ine gider.
+    document.getElementById('plrExportBtn').addEventListener('click', function (e) {
+        e.preventDefault();
+        var p = new URLSearchParams();
+        p.set('groupId', String(groupId));
+        var v;
+        v = (document.getElementById('plrFltStock').value || '').trim();
+        if (v) p.set('search', v);
+        v = document.getElementById('plrFltCurrency').value;
+        if (v) p.set('currencyId', v);
+        v = document.getElementById('plrFltType').value;
+        if (v) p.set('priceType', v);
+        v = document.getElementById('plrFltStart').value;
+        if (v) p.set('validFromMin', v);
+        v = document.getElementById('plrFltEnd').value;
+        if (v) p.set('validToMax', v);
+        v = document.getElementById('plrFltBase').value;
+        if (v) p.set('activeOn', v);
+        window.location.href = '/PriceList/ExportExcel?' + p.toString();
+    });
+
+    var COL_COUNT  = 9;
+    var state      = { page: 1, pageSize: 50, totalCount: 0, items: [], inflight: null };
+    var debounceT  = 0;
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function fmtMoney(n) {
+        if (n == null || isNaN(n)) return '—';
+        return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function typeLabel(t) {
+        var k = String(t == null ? '' : t).trim().toLowerCase();
+        if (k === 'b') return ['Alış','plr-chip--buy'];
+        if (k === 's') return ['Satış','plr-chip--sell'];
+        if (k === 'm') return ['Maliyet','plr-chip--cost'];
+        return [t || '?','plr-chip--buy'];
+    }
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? (m[3] + '.' + m[2] + '.' + m[1]) : String(iso);
+    }
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+    function toast(msg, kind) {
+        var el = document.getElementById('plrToast');
+        el.textContent = msg;
+        el.className = 'plr-toast plr-toast--show plr-toast--' + (kind || 'ok');
+        clearTimeout(toast._t);
+        toast._t = setTimeout(function () { el.className = 'plr-toast plr-toast--' + (kind || 'ok'); }, 2400);
+    }
+
+    // Ekran ortasi onay modali — CLAUDE.md 'Silme onay standardi' referans uygulamasi.
+    // Kullanim: showConfirm({ title, message, okLabel }).then(function(ok) { ... })
+    function showConfirm(opts) {
+        opts = opts || {};
+        return new Promise(function (resolve) {
+            var bd      = document.getElementById('plrConfirmBackdrop');
+            var titleEl = document.getElementById('plrConfirmTitle');
+            var msgEl   = document.getElementById('plrConfirmMessage');
+            var okBtn   = document.getElementById('plrConfirmOk');
+            var cnclBtn = document.getElementById('plrConfirmCancel');
+            titleEl.textContent = opts.title   || 'Onay';
+            msgEl.textContent   = opts.message || 'Bu işlem geri alınamaz. Devam edilsin mi?';
+            okBtn.textContent   = opts.okLabel || 'Sil';
+            cnclBtn.textContent = opts.cancelLabel || 'Vazgeç';
+            bd.hidden = false;
+
+            function close(result) {
+                bd.hidden = true;
+                okBtn.removeEventListener('click', onOk);
+                cnclBtn.removeEventListener('click', onCancel);
+                bd.removeEventListener('mousedown', onBackdrop);
+                document.removeEventListener('keydown', onKey);
+                resolve(result);
+            }
+            function onOk()      { close(true); }
+            function onCancel()  { close(false); }
+            function onBackdrop(e) { if (e.target === bd) close(false); }
+            function onKey(e) {
+                if (e.key === 'Escape') { e.preventDefault(); close(false); }
+                else if (e.key === 'Enter')  { e.preventDefault(); close(true); }
+            }
+            okBtn.addEventListener('click', onOk);
+            cnclBtn.addEventListener('click', onCancel);
+            bd.addEventListener('mousedown', onBackdrop);
+            document.addEventListener('keydown', onKey);
+            setTimeout(function () { okBtn.focus(); }, 0);
+        });
+    }
+
+    // ── Grup adı + Döviz dropdown ────────────────────────────────────────────
+    fetch('/PriceList/GetPriceGroup?id=' + groupId, { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (g) {
+            if (g && g.code) {
+                document.getElementById('plrGroupName').textContent = g.code + ' · ' + g.name;
+            }
+            // Tip filtre dropdown'unu gruba gore kisitla — izin verilmeyen tipleri kaldir.
+            var sel = document.getElementById('plrFltType');
+            if (sel && g) {
+                var allowed = { 'b': g.allowsBuying !== false, 's': g.allowsSelling !== false, 'm': g.allowsCost !== false };
+                Array.prototype.slice.call(sel.options).forEach(function (opt) {
+                    if (opt.value && allowed[opt.value] === false) opt.remove();
+                });
+                // Aktif filtre kaldirilan bir tip ise sifirla.
+                if (sel.value && allowed[sel.value] === false) {
+                    sel.value = '';
+                    state.page = 1;
+                    loadPage();
+                }
+            }
+        }).catch(function () {});
+
+    fetch('/PriceList/GetCurrencies', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (list) {
+            var sel = document.getElementById('plrFltCurrency');
+            (Array.isArray(list) ? list : []).forEach(function (c) {
+                var opt = document.createElement('option');
+                opt.value = String(c.id);
+                opt.textContent = c.code + (c.symbol ? ' (' + c.symbol + ')' : '');
+                sel.appendChild(opt);
+            });
+        });
+
+    // ── Filtreleri URL'e cevir ───────────────────────────────────────────────
+    function buildQuery() {
+        var p = new URLSearchParams();
+        p.set('groupId', String(groupId));
+        p.set('page', String(state.page));
+        p.set('pageSize', String(state.pageSize));
+        var v;
+        v = (document.getElementById('plrFltStock').value || '').trim();
+        if (v) p.set('search', v);
+        v = document.getElementById('plrFltCurrency').value;
+        if (v) p.set('currencyId', v);
+        v = document.getElementById('plrFltType').value;
+        if (v) p.set('priceType', v);
+        v = document.getElementById('plrFltStart').value;
+        if (v) p.set('validFromMin', v);
+        v = document.getElementById('plrFltEnd').value;
+        if (v) p.set('validToMax', v);
+        v = document.getElementById('plrFltBase').value;
+        if (v) p.set('activeOn', v);
+        return p.toString();
+    }
+
+    // ── Sunucudan sayfayi yukle ──────────────────────────────────────────────
+    function loadPage() {
+        if (state.inflight) state.inflight.abort();
+        var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+        state.inflight = ctrl;
+
+        document.getElementById('plrTableBody').innerHTML =
+            '<tr><td colspan="' + COL_COUNT + '" class="plr-loading">Yükleniyor…</td></tr>';
+
+        var qs = buildQuery();
+        fetch('/PriceList/GetPriceListEntries?' + qs, {
+            credentials: 'same-origin',
+            signal: ctrl ? ctrl.signal : undefined
+        })
+            .then(function (r) { return r.text().then(function (t) { return { status: r.status, text: t }; }); })
+            .then(function (resp) {
+                var data;
+                try { data = JSON.parse(resp.text); }
+                catch (e) { throw new Error('HTTP ' + resp.status + ' — yanıt JSON değil'); }
+                if (data && data.success === false) throw new Error(data.message || 'Bilinmeyen sunucu hatası');
+
+                state.items      = Array.isArray(data.items) ? data.items : [];
+                state.totalCount = Number(data.totalCount) || 0;
+                state.page       = Number(data.page) || state.page;
+                state.pageSize   = Number(data.pageSize) || state.pageSize;
+                renderTable();
+                renderPagination();
+            })
+            .catch(function (err) {
+                if (err && err.name === 'AbortError') return;
+                var msg = (err && err.message) ? err.message : 'bilinmeyen hata';
+                document.getElementById('plrTableBody').innerHTML =
+                    '<tr><td colspan="' + COL_COUNT + '" class="plr-empty">Veri alınamadı: ' + escHtml(msg) + '</td></tr>';
+            });
+    }
+
+    // ── Tablo render ─────────────────────────────────────────────────────────
+    function renderTable() {
+        var total = state.totalCount;
+        var pageCount = Math.max(1, Math.ceil(total / state.pageSize));
+        document.getElementById('plrSumTotal').textContent     = String(total);
+        document.getElementById('plrSumPage').textContent      = String(state.items.length);
+        document.getElementById('plrSumPageNo').textContent    = String(state.page);
+        document.getElementById('plrSumPageTotal').textContent = String(pageCount);
+
+        var body = document.getElementById('plrTableBody');
+        if (state.items.length === 0) {
+            body.innerHTML = '<tr><td colspan="' + COL_COUNT + '" class="plr-empty">Bu filtrelere uyan kayıt yok.</td></tr>';
+            return;
+        }
+
+        var html = state.items.map(function (e) {
+            var t = typeLabel(e.priceType);
+            return '<tr data-id="' + e.id + '" data-price="' + e.price + '">'
+                + '<td>'
+                +   '<div class="plr-row-actions">'
+                +     '<button type="button" class="plr-icon-btn" data-act="edit" title="Fiyatı düzenle">'
+                +       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>'
+                +     '</button>'
+                +     '<button type="button" class="plr-icon-btn plr-icon-btn--danger" data-act="del" title="Sil">'
+                +       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>'
+                +     '</button>'
+                +   '</div>'
+                + '</td>'
+                + '<td><strong>' + escHtml(e.itemCode) + '</strong></td>'
+                + '<td>' + escHtml(e.itemName) + '</td>'
+                + '<td style="font-family:monospace;font-size:11.5px;color:#94a3b8;">' + escHtml(e.configCode || '—') + '</td>'
+                + '<td>' + escHtml(e.currencyCode || '—') + '</td>'
+                + '<td><span class="plr-chip ' + t[1] + '">' + t[0] + '</span></td>'
+                + '<td class="plr-num" data-price-cell="1"><strong>' + fmtMoney(e.price) + '</strong></td>'
+                + '<td>' + fmtDate(e.validFrom) + '</td>'
+                + '<td>' + fmtDate(e.validTo) + '</td>'
+                + '</tr>';
+        }).join('');
+        body.innerHTML = html;
+    }
+
+    // ── Pagination kontrolleri ───────────────────────────────────────────────
+    function renderPagination() {
+        var total     = state.totalCount;
+        var pageSize  = state.pageSize;
+        var page      = state.page;
+        var pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+        var rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+        var rangeEnd   = Math.min(total, page * pageSize);
+        document.getElementById('plrPgRange').innerHTML =
+            '<strong>' + rangeStart + '–' + rangeEnd + '</strong> / <strong>' + total + '</strong>';
+
+        var ctr = document.getElementById('plrPgControls');
+        ctr.innerHTML = '';
+        function btn(label, target, opts) {
+            opts = opts || {};
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'plr-pg-btn' + (opts.active ? ' plr-pg-btn--active' : '');
+            b.textContent = label;
+            if (opts.disabled) b.disabled = true;
+            else b.addEventListener('click', function () { state.page = target; loadPage(); });
+            ctr.appendChild(b);
+        }
+        btn('«', 1,           { disabled: page <= 1 });
+        btn('‹', page - 1,    { disabled: page <= 1 });
+
+        // Sayfa numaralari (max 7 buton)
+        var span = 2;
+        var first = Math.max(1, page - span);
+        var last  = Math.min(pageCount, page + span);
+        if (first > 1) {
+            btn('1', 1);
+            if (first > 2) {
+                var dot = document.createElement('span');
+                dot.textContent = '…'; dot.style.padding = '0 4px'; dot.style.opacity = '.5';
+                ctr.appendChild(dot);
+            }
+        }
+        for (var i = first; i <= last; i++) btn(String(i), i, { active: i === page });
+        if (last < pageCount) {
+            if (last < pageCount - 1) {
+                var dot2 = document.createElement('span');
+                dot2.textContent = '…'; dot2.style.padding = '0 4px'; dot2.style.opacity = '.5';
+                ctr.appendChild(dot2);
+            }
+            btn(String(pageCount), pageCount);
+        }
+        btn('›', page + 1,    { disabled: page >= pageCount });
+        btn('»', pageCount,   { disabled: page >= pageCount });
+    }
+
+    // ── Inline edit (Price) ─────────────────────────────────────────────────
+    function startEdit(tr) {
+        var cell = tr.querySelector('[data-price-cell]');
+        if (!cell) return;
+        var orig = Number(tr.getAttribute('data-price'));
+        // min=0.0001 — HTML5 hint olsun; gercek validasyon JS'te 0/negatif reddediyor.
+        cell.innerHTML = '<input type="number" min="0.0001" step="0.0001" inputmode="decimal" class="plr-edit-input" value="' + orig + '" />';
+        var input = cell.querySelector('input');
+        input.focus(); input.select();
+
+        // Enter: validate + (gecersizse) input acik kalsin; Blur: sessiz iptal (eski deger).
+        // strict: 0 ve negatif degerler reddedilir.
+        var isCancelling = false;
+        function tryCommit() {
+            var newVal = parseFloat(input.value);
+            if (isNaN(newVal) || newVal <= 0) {
+                input.classList.add('is-invalid');
+                toast('Fiyat 0\'dan büyük olmalı', 'err');
+                input.focus(); input.select();
+                return false;
+            }
+            if (newVal === orig) { cancel(); return true; }
+            saveEdit(tr, newVal, orig);
+            return true;
+        }
+        function cancel() {
+            isCancelling = true;
+            // Eger tablo bu sirada re-render edildiyse cell DOM'dan ayrilmis olabilir;
+            // innerHTML setter NotFoundError firlatir. Once isConnected kontrol et.
+            if (cell.isConnected) {
+                cell.innerHTML = '<strong>' + fmtMoney(orig) + '</strong>';
+            }
+        }
+        // Negatif/sifir yazilirken anlik gorsel uyari kalksin.
+        input.addEventListener('input', function () {
+            var v = parseFloat(input.value);
+            if (!isNaN(v) && v > 0) input.classList.remove('is-invalid');
+        });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter')  { e.preventDefault(); tryCommit(); }
+            else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+            // Yukari/asagi ok ile spinner artisini engelle.
+            else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault();
+        });
+        // Blur: focus baska yere giderse sessizce iptal et (eski degeri koru).
+        input.addEventListener('blur', function () {
+            if (isCancelling) return;
+            cancel();
+        });
+    }
+    function saveEdit(tr, newVal, orig) {
+        var id = parseInt(tr.getAttribute('data-id'));
+        fetch('/PriceList/UpdatePriceListJson', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id, price: newVal })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) {
+                if (resp && resp.success) {
+                    tr.setAttribute('data-price', String(newVal));
+                    tr.querySelector('[data-price-cell]').innerHTML = '<strong>' + fmtMoney(newVal) + '</strong>';
+                    toast('Fiyat güncellendi', 'ok');
+                } else {
+                    tr.querySelector('[data-price-cell]').innerHTML = '<strong>' + fmtMoney(orig) + '</strong>';
+                    toast(resp && resp.message ? resp.message : 'Güncelleme başarısız', 'err');
+                }
+            })
+            .catch(function () {
+                tr.querySelector('[data-price-cell]').innerHTML = '<strong>' + fmtMoney(orig) + '</strong>';
+                toast('Sunucu hatası', 'err');
+            });
+    }
+    function deleteRow(tr) {
+        var id   = parseInt(tr.getAttribute('data-id'));
+        // Modal mesajinda kayit ozetini goster (stok kodu + tip + fiyat)
+        var cells    = tr.querySelectorAll('td');
+        var itemCode = (cells[1] && cells[1].textContent || '').trim();
+        var itemName = (cells[2] && cells[2].textContent || '').trim();
+        var typeTxt  = (cells[5] && cells[5].textContent || '').trim();
+        var priceTxt = (cells[6] && cells[6].textContent || '').trim();
+        var summary  = itemCode
+            ? itemCode + (itemName ? ' · ' + itemName : '') +
+              (typeTxt ? '\n' + typeTxt : '') + (priceTxt ? ' — ' + priceTxt : '')
+            : 'Bu fiyat kaydı';
+
+        showConfirm({
+            title:   'Fiyat kaydı silinecek',
+            message: summary + '\n\nBu işlem geri alınamaz. Devam edilsin mi?',
+            okLabel: 'Sil'
+        }).then(function (ok) {
+            if (!ok) return;
+            fetch('/PriceList/DeletePriceListJson?id=' + id, {
+                method: 'POST', credentials: 'same-origin'
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (resp) {
+                    if (resp && resp.success) {
+                        toast('Kayıt silindi', 'ok');
+                        loadPage(); // yeniden yukle (pagination doğru kalsın)
+                    } else {
+                        toast(resp && resp.message ? resp.message : 'Silme başarısız', 'err');
+                    }
+                })
+                .catch(function () { toast('Sunucu hatası', 'err'); });
+        });
+    }
+
+    // Tablo body click delegation
+    document.getElementById('plrTableBody').addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        var tr = btn.closest('tr[data-id]');
+        if (!tr) return;
+        var act = btn.getAttribute('data-act');
+        if (act === 'edit') startEdit(tr);
+        else if (act === 'del') deleteRow(tr);
+    });
+
+    // ── Filtre değişince → page=1 + debounced reload ────────────────────────
+    function onFilterChange() {
+        clearTimeout(debounceT);
+        debounceT = setTimeout(function () { state.page = 1; loadPage(); }, 280);
+    }
+    ['plrFltStock','plrFltCurrency','plrFltType','plrFltStart','plrFltEnd','plrFltBase'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', onFilterChange);
+        el.addEventListener('change', onFilterChange);
+    });
+    document.getElementById('plrPgSize').addEventListener('change', function (e) {
+        state.pageSize = parseInt(e.target.value) || 50;
+        state.page = 1;
+        loadPage();
+    });
+
+    // İlk yükleme
+    loadPage();
+})();
+</script>
+}

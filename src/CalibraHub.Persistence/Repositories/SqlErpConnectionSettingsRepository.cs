@@ -27,7 +27,7 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [created_at]
+            SELECT [id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [Created]
             FROM {_tableName}
             ORDER BY [company], [business], [branch];
             """;
@@ -46,7 +46,7 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [created_at]
+            SELECT [id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [Created]
             FROM {_tableName}
             WHERE [id] = @Id;
             """;
@@ -67,7 +67,7 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [created_at], [updated_at])
+                ([id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [Created], [Updated])
             VALUES
                 (@Id, @EntityCompanyId, @Provider, @Company, @Business, @Branch, @Username, @Password, @IsActive, @CreatedAt, @UpdatedAt);
             """;
@@ -93,7 +93,7 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
                 [username] = @Username,
                 [password] = @Password,
                 [is_active] = @IsActive,
-                [updated_at] = @UpdatedAt
+                [Updated] = @UpdatedAt
             WHERE [id] = @Id;
             """;
 

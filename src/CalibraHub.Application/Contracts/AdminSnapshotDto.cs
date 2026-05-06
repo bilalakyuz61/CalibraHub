@@ -97,4 +97,5 @@ public sealed record UserProfileDto(
     string? SupervisorName,
     string Role,
     IReadOnlyCollection<string> Permissions,
-    bool IsActive);
+    bool IsActive,
+    string? GrafanaRole);

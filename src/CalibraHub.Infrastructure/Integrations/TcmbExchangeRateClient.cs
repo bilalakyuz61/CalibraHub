@@ -54,7 +54,7 @@ public sealed class TcmbExchangeRateClient : ITcmbExchangeRateClient
                 rates.Add(new ExchangeRate
                 {
                     CurrencyCode = code.ToUpperInvariant(),
-                    RateDate = today,
+                    Date = today,
                     BuyingRate = buy,
                     SellingRate = sell,
                     EffectiveBuyingRate = effBuy,

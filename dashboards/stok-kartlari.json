@@ -1,0 +1,159 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_CALIBRA",
+      "label": "CalibraHub MSSQL",
+      "description": "Sirketinizin SQL Server datasource'unu secin (login sirasinda otomatik provision edildi).",
+      "type": "datasource",
+      "pluginId": "mssql",
+      "pluginName": "Microsoft SQL Server"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.0.0" },
+    { "type": "datasource", "id": "mssql", "name": "Microsoft SQL Server", "version": "1.0.0" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "" },
+    { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" },
+    { "type": "panel", "id": "barchart", "name": "Bar chart", "version": "" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "" }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Toplam Stok Karti",
+      "type": "stat",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "blue" } ] }, "unit": "none" } },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "justifyMode": "center", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS [Toplam] FROM dbo.Items;" } ]
+    },
+    {
+      "id": 2,
+      "title": "Aktif Kartlar",
+      "type": "stat",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green" } ] }, "unit": "none" } },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "justifyMode": "center", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS [Aktif] FROM dbo.Items WHERE IsActive = 1;" } ]
+    },
+    {
+      "id": 3,
+      "title": "Pasif Kartlar",
+      "type": "stat",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "red" } ] }, "unit": "none" } },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "justifyMode": "center", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS [Pasif] FROM dbo.Items WHERE IsActive = 0;" } ]
+    },
+    {
+      "id": 4,
+      "title": "Bu Ay Eklenen",
+      "type": "stat",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "purple" } ] }, "unit": "none" } },
+      "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto", "justifyMode": "center", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS [BuAy] FROM dbo.Items WHERE CreateDate >= DATEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1);" } ]
+    },
+
+    {
+      "id": 5,
+      "title": "Aktif / Pasif Dagilimi",
+      "type": "piechart",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 4 },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "values": [ "value", "percent" ] }, "pieType": "donut", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false } },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "hideFrom": { "legend": false, "tooltip": false, "viz": false } } } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT CASE WHEN IsActive = 1 THEN 'Aktif' ELSE 'Pasif' END AS [Durum], COUNT(*) AS [Adet] FROM dbo.Items GROUP BY IsActive;" } ]
+    },
+    {
+      "id": 6,
+      "title": "KDV Oranina Gore Kart Sayisi",
+      "type": "barchart",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 4 },
+      "options": { "orientation": "horizontal", "showValue": "always", "stacking": "none", "groupWidth": 0.7, "barWidth": 0.7, "legend": { "displayMode": "hidden", "placement": "bottom", "showLegend": false }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisPlacement": "auto", "axisLabel": "", "fillOpacity": 80, "lineWidth": 1, "gradientMode": "none" } } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT CAST(TaxRate AS NVARCHAR(20)) + '%' AS [KDV], COUNT(*) AS [Adet] FROM dbo.Items GROUP BY TaxRate ORDER BY TaxRate;" } ]
+    },
+    {
+      "id": 7,
+      "title": "Aylik Eklenen Stok Karti",
+      "type": "timeseries",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 4 },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": [] }, "tooltip": { "mode": "single", "sort": "none" } },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "barAlignment": 0, "showPoints": "never", "axisPlacement": "auto" }, "unit": "short" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "time_series", "rawQuery": true, "rawSql": "SELECT DATEFROMPARTS(YEAR(CreateDate), MONTH(CreateDate), 1) AS [time], COUNT(*) AS [Yeni Kart] FROM dbo.Items WHERE CreateDate IS NOT NULL GROUP BY DATEFROMPARTS(YEAR(CreateDate), MONTH(CreateDate), 1) ORDER BY 1;" } ]
+    },
+
+    {
+      "id": 8,
+      "title": "Ortalama KDV (Aktif Kartlar)",
+      "type": "stat",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 8, "w": 4, "x": 0, "y": 13 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "orange" } ] }, "unit": "percent", "decimals": 2 } },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "auto", "justifyMode": "center", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT AVG(CAST(TaxRate AS DECIMAL(10,4))) AS [OrtKDV] FROM dbo.Items WHERE IsActive = 1;" } ]
+    },
+    {
+      "id": 9,
+      "title": "Birime Gore Stok Karti Sayisi",
+      "type": "barchart",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 8, "w": 10, "x": 4, "y": 13 },
+      "options": { "orientation": "horizontal", "showValue": "always", "stacking": "none", "groupWidth": 0.7, "barWidth": 0.7, "legend": { "displayMode": "hidden", "placement": "bottom", "showLegend": false }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisPlacement": "auto", "axisLabel": "", "fillOpacity": 80, "lineWidth": 1, "gradientMode": "none" } } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT ISNULL(u.UnitName, '(Birimsiz)') AS [Birim], COUNT(*) AS [Adet] FROM dbo.Items i LEFT JOIN dbo.Unit u ON i.UnitId = u.Id WHERE i.IsActive = 1 GROUP BY u.UnitName ORDER BY [Adet] DESC;" } ]
+    },
+    {
+      "id": 10,
+      "title": "En Cok Stok Karti Olan 15 Grup",
+      "type": "barchart",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 13 },
+      "options": { "orientation": "horizontal", "showValue": "always", "stacking": "none", "groupWidth": 0.7, "barWidth": 0.7, "legend": { "displayMode": "hidden", "placement": "bottom", "showLegend": false }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisPlacement": "auto", "axisLabel": "", "fillOpacity": 80, "lineWidth": 1, "gradientMode": "none" } } },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT TOP 15 mg.GroupCode + ' - ' + ISNULL(mg.GroupDescription, '') AS [Grup], COUNT(DISTINCT mgm.ItemId) AS [Kart Sayisi] FROM dbo.MaterialGroupMappings mgm LEFT JOIN dbo.MaterialGroups mg ON mg.GroupCode = mgm.GroupCode GROUP BY mg.GroupCode, mg.GroupDescription ORDER BY [Kart Sayisi] DESC;" } ]
+    },
+
+    {
+      "id": 11,
+      "title": "Son Eklenen 20 Stok Karti",
+      "type": "table",
+      "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 21 },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false, "reducer": [ "sum" ], "fields": "" } },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "displayMode": "auto", "filterable": true, "inspect": false }, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green" } ] } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Durum" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "color-text" } }, { "id": "mappings", "value": [ { "type": "value", "options": { "Aktif": { "color": "green", "index": 0 }, "Pasif": { "color": "red", "index": 1 } } } ] } ] },
+          { "matcher": { "id": "byName", "options": "Eklenme" }, "properties": [ { "id": "unit", "value": "dateTimeAsIso" } ] }
+        ]
+      },
+      "targets": [ { "refId": "A", "datasource": { "type": "mssql", "uid": "${DS_CALIBRA}" }, "format": "table", "rawQuery": true, "rawSql": "SELECT TOP 20 i.Code AS [Kod], i.Name AS [Adi], ISNULL(u.UnitName, '-') AS [Birim], CAST(i.TaxRate AS NVARCHAR(10)) + '%' AS [KDV], CASE WHEN i.IsActive = 1 THEN 'Aktif' ELSE 'Pasif' END AS [Durum], i.CreateDate AS [Eklenme] FROM dbo.Items i LEFT JOIN dbo.Unit u ON i.UnitId = u.Id ORDER BY i.CreateDate DESC;" } ]
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "tags": [ "calibrahub", "stok", "items" ],
+  "templating": { "list": [] },
+  "time": { "from": "now-1y", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Stok Kartlari",
+  "uid": "calibra-stok-kartlari",
+  "version": 2,
+  "weekStart": ""
+}

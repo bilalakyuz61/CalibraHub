@@ -56,13 +56,17 @@ function OrgTreeNode(props) {
   var childMap = props.childMap
   var userMap = props.userMap
   var deptMap = props.deptMap
+  var users = props.users
+  var existingUserIds = props.existingUserIds
   var onRemove = props.onRemove
+  var onAddChild = props.onAddChild
 
   var user = userMap[node.userId]
   var dept = user ? deptMap[user.departmentId] : null
   var children = childMap[node.userId] || []
 
   var [expanded, setExpanded] = useState(true)
+  var [pickerOpen, setPickerOpen] = useState(false)
 
   if (!user) return null
 
@@ -83,6 +87,23 @@ function OrgTreeNode(props) {
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </button>
         )}
+        {/* Alt kullanici ekle — bu kartin cocuklarini artirir */}
+        <div style={{ position: 'relative' }}>
+          <button className="oc-card-add-child" onClick={function () { setPickerOpen(!pickerOpen) }} title="Bu kullanicinin altina ekle">
+            <UserPlus size={12} />
+          </button>
+          {pickerOpen && (
+            <UserPicker
+              users={users}
+              existingUserIds={existingUserIds}
+              onSelect={function (picked) {
+                setPickerOpen(false)
+                onAddChild(user.id, picked)
+              }}
+              onClose={function () { setPickerOpen(false) }}
+            />
+          )}
+        </div>
         <button className="oc-card-remove" onClick={function () { onRemove(node.id) }} title="Cikar">
           <X size={12} />
         </button>
@@ -99,7 +120,10 @@ function OrgTreeNode(props) {
                 childMap={childMap}
                 userMap={userMap}
                 deptMap={deptMap}
+                users={users}
+                existingUserIds={existingUserIds}
                 onRemove={onRemove}
+                onAddChild={onAddChild}
               />
             )
           })}
@@ -267,6 +291,7 @@ export default function OrgChartWorkspace() {
   }, [])
 
   var handleAddUser = useCallback(function (user) {
+    // Toolbar'daki "Kullanici Ekle" → ROOT seviyede eklenir (en ust)
     setPickerOpen(false)
     var newNode = {
       id: crypto.randomUUID ? crypto.randomUUID() : 'n-' + Date.now(),
@@ -274,6 +299,19 @@ export default function OrgChartWorkspace() {
       parentUserId: null,
       positionTitle: user.role || '',
       sortOrder: nodes.length,
+    }
+    setNodes(function (prev) { return prev.concat([newNode]) })
+    setDirty(true)
+  }, [nodes])
+
+  var handleAddChild = useCallback(function (parentUserId, user) {
+    // Kart icindeki "+ Alt Bagla" → belirtilen node'un ALTINA eklenir
+    var newNode = {
+      id: crypto.randomUUID ? crypto.randomUUID() : 'n-' + Date.now(),
+      userId: user.id,
+      parentUserId: parentUserId,
+      positionTitle: user.role || '',
+      sortOrder: nodes.filter(function (n) { return n.parentUserId === parentUserId }).length,
     }
     setNodes(function (prev) { return prev.concat([newNode]) })
     setDirty(true)
@@ -420,7 +458,10 @@ export default function OrgChartWorkspace() {
                         childMap={tree.childMap}
                         userMap={tree.userMap}
                         deptMap={deptMap}
+                        users={users}
+                        existingUserIds={existingUserIds}
                         onRemove={handleRemoveNode}
+                        onAddChild={handleAddChild}
                       />
                     )
                   })}

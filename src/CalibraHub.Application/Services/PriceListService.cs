@@ -27,15 +27,20 @@ public sealed class PriceListService : IPriceListService
 
     public async Task<(bool Success, string? Error, int? Id)> CreateGroupAsync(CreatePriceGroupRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.GroupCode))  return (false, "Grup kodu zorunludur.", null);
-        if (string.IsNullOrWhiteSpace(req.GroupName))  return (false, "Grup adi zorunludur.", null);
+        if (string.IsNullOrWhiteSpace(req.Code))  return (false, "Grup kodu zorunludur.", null);
+        if (string.IsNullOrWhiteSpace(req.Name))  return (false, "Grup adi zorunludur.", null);
+        if (!req.AllowsBuying && !req.AllowsSelling && !req.AllowsCost)
+            return (false, "En az bir fiyat tipi (Alis/Satis/Maliyet) izinli olmali.", null);
 
         var entity = new PriceGroup
         {
-            GroupCode   = req.GroupCode.Trim(),
-            GroupName   = req.GroupName.Trim(),
-            Description = req.Description?.Trim(),
-            IsActive    = req.IsActive
+            Code          = req.Code.Trim(),
+            Name          = req.Name.Trim(),
+            Description   = req.Description?.Trim(),
+            IsActive      = req.IsActive,
+            AllowsBuying  = req.AllowsBuying,
+            AllowsSelling = req.AllowsSelling,
+            AllowsCost    = req.AllowsCost
         };
         var id = await _repo.AddGroupAsync(entity, ct);
         return (true, null, id);
@@ -43,17 +48,22 @@ public sealed class PriceListService : IPriceListService
 
     public async Task<(bool Success, string? Error)> UpdateGroupAsync(UpdatePriceGroupRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.GroupCode)) return (false, "Grup kodu zorunludur.");
-        if (string.IsNullOrWhiteSpace(req.GroupName)) return (false, "Grup adi zorunludur.");
+        if (string.IsNullOrWhiteSpace(req.Code)) return (false, "Grup kodu zorunludur.");
+        if (string.IsNullOrWhiteSpace(req.Name)) return (false, "Grup adi zorunludur.");
+        if (!req.AllowsBuying && !req.AllowsSelling && !req.AllowsCost)
+            return (false, "En az bir fiyat tipi (Alis/Satis/Maliyet) izinli olmali.");
 
         var entity = await _repo.GetGroupByIdAsync(req.Id, ct);
         if (entity is null) return (false, "Grup bulunamadi.");
 
-        entity.GroupCode   = req.GroupCode.Trim();
-        entity.GroupName   = req.GroupName.Trim();
-        entity.Description = req.Description?.Trim();
-        entity.IsActive    = req.IsActive;
-        entity.UpdatedAt   = DateTime.Now;
+        entity.Code          = req.Code.Trim();
+        entity.Name          = req.Name.Trim();
+        entity.Description   = req.Description?.Trim();
+        entity.IsActive      = req.IsActive;
+        entity.AllowsBuying  = req.AllowsBuying;
+        entity.AllowsSelling = req.AllowsSelling;
+        entity.AllowsCost    = req.AllowsCost;
+        entity.UpdatedAt     = DateTime.Now;
 
         await _repo.UpdateGroupAsync(entity, ct);
         return (true, null);
@@ -65,34 +75,39 @@ public sealed class PriceListService : IPriceListService
         return (true, null);
     }
 
-    // ── Fiyat Kalemleri ──────────────────────────────────────────────────────
+    // ── Fiyat Kalemleri (her satir TEK fiyat: PriceType + Price) ──────────────
 
-    public async Task<IReadOnlyCollection<PriceListDto>> GetEntriesByGroupAsync(int groupId, CancellationToken ct)
-    {
-        var entries = await _repo.GetEntriesByGroupAsync(groupId, ct);
-        return entries.Select(MapEntry).ToArray();
-    }
+    public async Task<PagedPriceListResult> GetEntriesByGroupAsync(
+        int groupId, PriceListFilter filter, CancellationToken ct)
+        => await _repo.GetEntriesByGroupAsync(groupId, filter, ct);
 
     public async Task<(bool Success, string? Error, int? Id)> SaveEntryAsync(SavePriceListRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.MaterialCode)) return (false, "Malzeme kodu zorunludur.", null);
+        if (req.GroupId <= 0)    return (false, "Fiyat grubu secilmedi.", null);
+        if (req.ItemId <= 0)     return (false, "Malzeme secilmedi.", null);
+        if (req.CurrencyId <= 0) return (false, "Doviz secilmedi.", null);
+        if (!IsValidPriceType(req.PriceType)) return (false, "Fiyat tipi 'b' (alış), 's' (satış) veya 'm' (maliyet) olmali.", null);
+
+        // Grup-tipi kisidi: bu grup bu tipe izin veriyor mu?
+        var groupCheck = await _repo.GetGroupByIdAsync(req.GroupId, ct);
+        if (groupCheck is null) return (false, "Fiyat grubu bulunamadi.", null);
+        var typeAllowedErr = AssertTypeAllowed(groupCheck, NormalizePriceType(req.PriceType));
+        if (typeAllowedErr is not null) return (false, typeAllowedErr, null);
 
         if (req.Id.HasValue && req.Id.Value > 0)
         {
             var existing = await _repo.GetEntryByIdAsync(req.Id.Value, ct);
             if (existing is null) return (false, "Kayit bulunamadi.", null);
 
-            existing.MaterialCode     = req.MaterialCode.Trim();
-            existing.MaterialName     = req.MaterialName?.Trim();
-            existing.CombinationCode  = req.CombinationCode?.Trim();
-            existing.CombinationName  = req.CombinationName?.Trim();
-            existing.Currency         = req.Currency;
-            existing.BuyingPrice      = req.BuyingPrice;
-            existing.SellingPrice     = req.SellingPrice;
-            existing.ValidFrom        = req.ValidFrom;
-            existing.ValidTo          = req.ValidTo;
-            existing.IsActive         = req.IsActive;
-            existing.UpdatedAt        = DateTime.Now;
+            existing.ItemId     = req.ItemId;
+            existing.ConfigId   = req.ConfigId;
+            existing.CurrencyId = req.CurrencyId;
+            existing.PriceType  = NormalizePriceType(req.PriceType);
+            existing.Price      = req.Price;
+            existing.ValidFrom  = req.ValidFrom;
+            existing.ValidTo    = req.ValidTo;
+            existing.IsActive   = req.IsActive;
+            existing.UpdatedAt  = DateTime.Now;
 
             await _repo.UpdateEntryAsync(existing, ct);
             return (true, null, existing.Id);
@@ -101,18 +116,15 @@ public sealed class PriceListService : IPriceListService
         {
             var entity = new PriceList
             {
-                PriceGroupId     = req.PriceGroupId,
-                ItemId      = req.ItemId,
-                MaterialCode     = req.MaterialCode.Trim(),
-                MaterialName     = req.MaterialName?.Trim(),
-                CombinationCode  = req.CombinationCode?.Trim(),
-                CombinationName  = req.CombinationName?.Trim(),
-                Currency         = req.Currency,
-                BuyingPrice      = req.BuyingPrice,
-                SellingPrice     = req.SellingPrice,
-                ValidFrom        = req.ValidFrom,
-                ValidTo          = req.ValidTo,
-                IsActive         = req.IsActive
+                GroupId    = req.GroupId,
+                ItemId     = req.ItemId,
+                ConfigId   = req.ConfigId,
+                CurrencyId = req.CurrencyId,
+                PriceType  = NormalizePriceType(req.PriceType),
+                Price      = req.Price,
+                ValidFrom  = req.ValidFrom,
+                ValidTo    = req.ValidTo,
+                IsActive   = req.IsActive
             };
             var id = await _repo.AddEntryAsync(entity, ct);
             return (true, null, id);
@@ -123,9 +135,8 @@ public sealed class PriceListService : IPriceListService
     {
         var existing = await _repo.GetEntryByIdAsync(req.Id, ct);
         if (existing is null) return (false, "Kayit bulunamadi.");
-        existing.BuyingPrice  = req.BuyingPrice;
-        existing.SellingPrice = req.SellingPrice;
-        existing.UpdatedAt    = DateTime.Now;
+        existing.Price     = req.Price;
+        existing.UpdatedAt = DateTime.Now;
         await _repo.UpdateEntryAsync(existing, ct);
         return (true, null);
     }
@@ -136,28 +147,33 @@ public sealed class PriceListService : IPriceListService
         return (true, null);
     }
 
-    // ── Toplu Fiyat Girisi (Upsert) ─────────────────────────────────────────
+    // ── Toplu Fiyat Girisi (Upsert) — wizard'da secilen PriceType ile ────────
 
     public async Task<(bool Success, string? Error, int Inserted, int Updated)> SaveBulkEntriesAsync(SaveBulkPriceEntriesRequest req, CancellationToken ct)
     {
-        if (req.PriceGroupId <= 0) return (false, "Fiyat grubu secilmedi.", 0, 0);
+        if (req.GroupId <= 0) return (false, "Fiyat grubu secilmedi.", 0, 0);
         if (req.Lines == null || req.Lines.Count == 0) return (false, "En az bir malzeme secilmelidir.", 0, 0);
-        if (string.IsNullOrWhiteSpace(req.Currency)) return (false, "Doviz tipi secilmedi.", 0, 0);
+        if (req.CurrencyId <= 0) return (false, "Doviz tipi secilmedi.", 0, 0);
+        if (!IsValidPriceType(req.PriceType)) return (false, "Fiyat tipi 'b' (alış), 's' (satış) veya 'm' (maliyet) olmali.", 0, 0);
 
+        // Grup-tipi kisidi
+        var grpCheck = await _repo.GetGroupByIdAsync(req.GroupId, ct);
+        if (grpCheck is null) return (false, "Fiyat grubu bulunamadi.", 0, 0);
+        var bulkTypeErr = AssertTypeAllowed(grpCheck, NormalizePriceType(req.PriceType));
+        if (bulkTypeErr is not null) return (false, bulkTypeErr, 0, 0);
+
+        var normalizedType = NormalizePriceType(req.PriceType);
         var entities = req.Lines.Select(line => new PriceList
         {
-            PriceGroupId    = req.PriceGroupId,
+            GroupId    = req.GroupId,
             ItemId     = line.ItemId,
-            MaterialCode    = line.MaterialCode.Trim(),
-            MaterialName    = line.MaterialName?.Trim(),
-            CombinationCode = string.IsNullOrWhiteSpace(line.CombinationCode) ? null : line.CombinationCode.Trim(),
-            CombinationName = string.IsNullOrWhiteSpace(line.CombinationName) ? null : line.CombinationName.Trim(),
-            Currency        = req.Currency,
-            BuyingPrice     = line.BuyingPrice,
-            SellingPrice    = line.SellingPrice,
-            ValidFrom       = req.ValidFrom,
-            ValidTo         = req.ValidTo,
-            IsActive        = true
+            ConfigId   = line.ConfigId,
+            CurrencyId = req.CurrencyId,
+            PriceType  = normalizedType,
+            Price      = line.Price,
+            ValidFrom  = req.ValidFrom,
+            ValidTo    = req.ValidTo,
+            IsActive   = true
         }).ToArray();
 
         var result = await _repo.UpsertBulkEntriesAsync(entities, ct);
@@ -168,23 +184,40 @@ public sealed class PriceListService : IPriceListService
 
     public async Task<IReadOnlyCollection<ExistingPriceRow>> GetExistingPricesAsync(GetExistingPricesRequest req, CancellationToken ct)
     {
-        if (req.PriceGroupId <= 0 || req.Keys == null || req.Keys.Count == 0)
+        if (req.GroupId <= 0 || req.CurrencyId <= 0 || req.Keys == null || req.Keys.Count == 0)
+            return Array.Empty<ExistingPriceRow>();
+        if (!IsValidPriceType(req.PriceType))
             return Array.Empty<ExistingPriceRow>();
 
         return await _repo.GetExistingPricesAsync(
-            req.PriceGroupId, req.Currency ?? "TRY", req.ValidFrom, req.Keys, ct);
+            req.GroupId, req.CurrencyId, req.PriceType, req.ValidFrom, req.Keys, ct);
     }
 
-    // ── Mapper'lar ────────────────────────────────────────────────────────────
+    // ── Helpers ─────────────────────────────────────────────────────────────
+
+    // Tek harf kod: "b" (buying / alis), "s" (selling / satis), "m" (maliyet / cost).
+    // Case-insensitive kabul: kullanici/UI 'B' gondermis olsa bile 'b' olarak normalize ediyoruz
+    // — DB'de tutarsiz buyuk/kucuk harf birikmesin diye PriceType'i hep lowercase saklamali.
+    private static bool IsValidPriceType(string? pt) =>
+        NormalizePriceType(pt) is "b" or "s" or "m";
+
+    private static string NormalizePriceType(string? pt) =>
+        string.IsNullOrWhiteSpace(pt) ? string.Empty : pt.Trim().ToLowerInvariant();
 
     private static PriceGroupDto MapGroup(PriceGroup g) => new(
-        g.Id, g.GroupCode, g.GroupName, g.Description, g.IsActive, g.CreatedAt, g.UpdatedAt);
+        g.Id, g.Code, g.Name, g.Description, g.IsActive,
+        g.AllowsBuying, g.AllowsSelling, g.AllowsCost,
+        g.CreatedAt, g.UpdatedAt);
 
-    private static PriceListDto MapEntry(PriceList e) => new(
-        e.Id, e.PriceGroupId, e.ItemId,
-        e.MaterialCode, e.MaterialName,
-        e.CombinationCode, e.CombinationName,
-        e.Currency, e.BuyingPrice, e.SellingPrice,
-        e.ValidFrom, e.ValidTo, e.IsActive,
-        e.CreatedAt, e.UpdatedAt);
+    /// <summary>
+    /// Bu grup verilen fiyat tipini (lowercase 'b'/'s'/'m') kabul ediyor mu?
+    /// Reddederse kullaniciya gosterilecek hata mesajini doner; kabul ediyorsa null doner.
+    /// </summary>
+    private static string? AssertTypeAllowed(PriceGroup g, string normalizedType) => normalizedType switch
+    {
+        "b" when !g.AllowsBuying  => $"'{g.Code}' grubu Alis fiyatini kabul etmiyor.",
+        "s" when !g.AllowsSelling => $"'{g.Code}' grubu Satis fiyatini kabul etmiyor.",
+        "m" when !g.AllowsCost    => $"'{g.Code}' grubu Maliyet fiyatini kabul etmiyor.",
+        _ => null
+    };
 }

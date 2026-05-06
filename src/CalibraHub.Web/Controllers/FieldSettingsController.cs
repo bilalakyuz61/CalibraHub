@@ -32,7 +32,7 @@ public sealed class FieldSettingsController : ControllerBase
         var items = await _repo.GetByFormIdAsync(formId, ct);
         return Ok(items.Select(f => new FieldSettingDto(
             f.Id, f.FormId, f.FieldKey, f.FieldLabel,
-            f.GuideCode, f.FilterJson, f.IsRequired,
+            f.GuideCode, f.ViewName, f.FilterJson, f.IsRequired,
             f.FormatJson, f.IsActive, f.SortOrder)));
     }
 
@@ -45,7 +45,7 @@ public sealed class FieldSettingsController : ControllerBase
         var items = await _repo.GetByGuideCodeAsync(guideCode, ct);
         return Ok(items.Select(f => new FieldSettingDto(
             f.Id, f.FormId, f.FieldKey, f.FieldLabel,
-            f.GuideCode, f.FilterJson, f.IsRequired,
+            f.GuideCode, f.ViewName, f.FilterJson, f.IsRequired,
             f.FormatJson, f.IsActive, f.SortOrder)));
     }
 
@@ -141,13 +141,15 @@ public sealed class FieldSettingsController : ControllerBase
     }
 
     [HttpGet("discover/{formId:int}")]
-    public async Task<IActionResult> DiscoverFields(int formId, CancellationToken ct)
+    public async Task<IActionResult> DiscoverFields(int formId, [FromQuery] bool includeMapped, CancellationToken ct)
     {
         if (formId <= 0) return BadRequest(new { success = false, message = "Gecersiz formId." });
 
         try
         {
-            var columns = await _repo.DiscoverFieldsAsync(formId, ct);
+            // includeMapped=true: FldSet'te eslesmis kolonlar da dahil (widget tanimlamada).
+            // includeMapped=false (default): sadece henuz eslesmemis kolonlar (FldSet sayfasi).
+            var columns = await _repo.DiscoverFieldsAsync(formId, includeMapped, ct);
             return Ok(columns);
         }
         catch (Exception ex)

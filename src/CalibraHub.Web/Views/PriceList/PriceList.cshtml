@@ -139,9 +139,11 @@
     body.app-theme-light .pl-price-type-btn:hover { background: #f1f5f9; color: #334155; }
     .pl-price-type-btn.is-buy.is-active  { background: rgba(59,130,246,.15); border-color: rgba(59,130,246,.4); color: #93c5fd; }
     .pl-price-type-btn.is-sell.is-active { background: rgba(16,185,129,.13); border-color: rgba(16,185,129,.4); color: #6ee7b7; }
+    .pl-price-type-btn.is-cost.is-active { background: rgba(245,158,11,.15); border-color: rgba(245,158,11,.4); color: #fbbf24; }
     .pl-price-type-btn.is-both.is-active { background: rgba(99,102,241,.14); border-color: rgba(99,102,241,.4); color: #a5b4fc; }
     body.app-theme-light .pl-price-type-btn.is-buy.is-active  { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
     body.app-theme-light .pl-price-type-btn.is-sell.is-active { background: #ecfdf5; border-color: #6ee7b7; color: #059669; }
+    body.app-theme-light .pl-price-type-btn.is-cost.is-active { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
     body.app-theme-light .pl-price-type-btn.is-both.is-active { background: #eff6ff; border-color: #a5b4fc; color: #4338ca; }
     .pl-field { display: flex; flex-direction: column; gap: 5px; }
     .pl-field label { font-size: .72rem; font-weight: 600; color: rgba(255,255,255,.55); letter-spacing: .02em; }
@@ -320,6 +322,27 @@
     }
     body.app-theme-light .pl-status--update { background: #fef3c7; color: #b45309; border-color: #fde68a; }
 
+    /* ── Tip badge (mevcut fiyat kayitlari tablosu) ── */
+    .pl-type-badge {
+        display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-size: .7rem; font-weight: 700; white-space: nowrap;
+    }
+    .pl-type-buy {
+        background: rgba(99,102,241,.16); color: #a5b4fc;
+        border: 1px solid rgba(99,102,241,.3);
+    }
+    body.app-theme-light .pl-type-buy { background: #e0e7ff; color: #4f46e5; border-color: #c7d2fe; }
+    .pl-type-sell {
+        background: rgba(20,184,166,.16); color: #5eead4;
+        border: 1px solid rgba(20,184,166,.3);
+    }
+    body.app-theme-light .pl-type-sell { background: #ccfbf1; color: #0d9488; border-color: #99f6e4; }
+    .pl-type-cost {
+        background: rgba(245,158,11,.16); color: #fbbf24;
+        border: 1px solid rgba(245,158,11,.3);
+    }
+    body.app-theme-light .pl-type-cost { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
+
     /* ── Price table (step 3) ── */
     .pl-price-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255,255,255,.08); }
     body.app-theme-light .pl-price-wrap { border-color: #e2e8f0; }
@@ -423,15 +446,56 @@
     }
     body.app-theme-light .pl-footer { background: rgba(248,250,252,.95); border-top-color: #e2e8f0; }
 
-    /* ── Message ── */
-    .pl-msg-bar {
-        padding: 8px 14px; border-radius: 9px; font-size: .78rem; font-weight: 600;
-        display: none; margin-bottom: 4px;
+    /* ── Toast bildirim — sag alt kose, slide-in/fade-out ── */
+    .pl-toast-container {
+        position: fixed; bottom: 22px; right: 22px;
+        z-index: 10000;
+        display: flex; flex-direction: column-reverse; gap: 10px;
+        pointer-events: none; max-width: 420px;
     }
-    .pl-msg-bar.is-ok  { display: block; background: rgba(22,163,74,.12); color: #4ade80; border: 1px solid rgba(22,163,74,.25); }
-    .pl-msg-bar.is-err { display: block; background: rgba(239,68,68,.1); color: #f87171; border: 1px solid rgba(239,68,68,.2); }
-    body.app-theme-light .pl-msg-bar.is-ok  { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
-    body.app-theme-light .pl-msg-bar.is-err { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .pl-toast {
+        pointer-events: auto;
+        background: #1f2937; color: rgba(255,255,255,.92);
+        border-radius: 10px;
+        padding: 12px 14px;
+        display: flex; align-items: flex-start; gap: 10px;
+        box-shadow: 0 10px 28px rgba(0,0,0,.4);
+        border-left: 4px solid #6366f1;
+        min-width: 280px;
+        transform: translateX(20px); opacity: 0;
+        transition: transform .25s ease, opacity .25s ease;
+    }
+    .pl-toast.is-in  { transform: translateX(0); opacity: 1; }
+    .pl-toast.is-out { transform: translateX(20px); opacity: 0; }
+    .pl-toast--success { border-left-color: #22c55e; }
+    .pl-toast--error   { border-left-color: #ef4444; }
+    .pl-toast--warning { border-left-color: #f59e0b; }
+    .pl-toast--info    { border-left-color: #6366f1; }
+    .pl-toast__icon {
+        width: 26px; height: 26px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: .9rem; flex-shrink: 0;
+    }
+    .pl-toast--success .pl-toast__icon { background: rgba(34,197,94,.18);  color: #4ade80; }
+    .pl-toast--error   .pl-toast__icon { background: rgba(239,68,68,.18);  color: #f87171; }
+    .pl-toast--warning .pl-toast__icon { background: rgba(245,158,11,.18); color: #fbbf24; }
+    .pl-toast--info    .pl-toast__icon { background: rgba(99,102,241,.18); color: #a5b4fc; }
+    .pl-toast__msg { flex: 1; font-size: .85rem; line-height: 1.45; padding-top: 2px; word-break: break-word; }
+    .pl-toast__close {
+        background: transparent; border: none; cursor: pointer;
+        color: rgba(255,255,255,.55); font-size: 1.25rem; line-height: 1;
+        padding: 0; width: 22px; height: 22px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 4px; flex-shrink: 0;
+    }
+    .pl-toast__close:hover { background: rgba(255,255,255,.1); color: rgba(255,255,255,.95); }
+
+    body.app-theme-light .pl-toast {
+        background: #ffffff; color: #1e293b;
+        border: 1px solid #e2e8f0; box-shadow: 0 10px 28px rgba(15,23,42,.18);
+    }
+    body.app-theme-light .pl-toast__close        { color: #64748b; }
+    body.app-theme-light .pl-toast__close:hover  { background: #f1f5f9; color: #1e293b; }
 
     /* ── Empty state ── */
     .pl-empty {
@@ -470,6 +534,14 @@
         <span class="pl-action-bar__meta">
             Fiyat Grubu: &nbsp;<strong id="plGroupName">Yükleniyor…</strong>
         </span>
+        <a id="plNavToReport" href="#" class="pl-btn pl-btn--secondary" title="Fiyat listesi düzenleme ekranına dön">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Düzenleme
+        </a>
+        <a href="/PriceList/PriceGroups" class="pl-btn pl-btn--secondary" title="Fiyat grup tanımlamaları">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            Fiyat Grupları
+        </a>
     </div>
 
     <!-- Stepper -->
@@ -492,7 +564,6 @@
 
     <!-- Content -->
     <div class="pl-content">
-        <div id="plMsg" class="pl-msg-bar"></div>
 
         <!-- Step 1 -->
         <div class="pl-pane is-active" id="plStep1">
@@ -502,9 +573,9 @@
                     <div class="pl-field">
                         <label>Fiyat Tipi *</label>
                         <div class="pl-price-type-group">
-                            <button type="button" class="pl-price-type-btn is-buy is-active" id="plPtBuy"   onclick="plSetPriceType('buy')">Alış</button>
-                            <button type="button" class="pl-price-type-btn is-sell"           id="plPtSell"  onclick="plSetPriceType('sell')">Satış</button>
-                            <button type="button" class="pl-price-type-btn is-both"           id="plPtBoth"  onclick="plSetPriceType('both')">İkisi</button>
+                            <button type="button" class="pl-price-type-btn is-buy is-active" id="plPtBuy"  onclick="plSetPriceType('buy')">Alış</button>
+                            <button type="button" class="pl-price-type-btn is-sell"          id="plPtSell" onclick="plSetPriceType('sell')">Satış</button>
+                            <button type="button" class="pl-price-type-btn is-cost"          id="plPtCost" onclick="plSetPriceType('cost')">Maliyet</button>
                         </div>
                     </div>
                     <div class="pl-field">
@@ -538,8 +609,8 @@
                                 <th>Malzeme Adı</th>
                                 <th>Kombinasyon</th>
                                 <th>Döviz</th>
-                                <th class="num">Alış</th>
-                                <th class="num">Satış</th>
+                                <th>Tip</th>
+                                <th class="num">Fiyat</th>
                                 <th>Başlangıç</th>
                                 <th>Bitiş</th>
                                 <th style="width:100px;"></th>
@@ -555,8 +626,11 @@
         <div class="pl-pane" id="plStep2">
             <div class="pl-card">
                 <div class="pl-card-title">Stok Seçimi</div>
-                <div class="pl-stock-toolbar" style="margin-bottom:10px;">
-                    <input id="plStockSearch" type="search" class="pl-input" placeholder="Malzeme kodu veya adı ile filtrele…" />
+                <div class="pl-stock-toolbar" style="margin-bottom:10px; display:flex; gap:8px; align-items:center;">
+                    <input id="plStockSearch" type="search" class="pl-input" placeholder="Malzeme kodu veya adı ile filtrele…" style="flex:1; min-width:0;" />
+                    <select id="plStockGroupFilter" class="pl-input" title="Stok grup koduna göre filtrele" style="width:auto; min-width:170px; flex-shrink:0;">
+                        <option value="">— Tüm gruplar —</option>
+                    </select>
                     <button type="button" class="pl-btn pl-btn--secondary" onclick="plSelectAllFiltered()" style="white-space:nowrap;">Tümünü Seç</button>
                     <button type="button" class="pl-btn pl-btn--ghost" onclick="plClearSelection()">Temizle</button>
                     <span class="pl-sel-count" id="plSelCount"></span>
@@ -578,8 +652,7 @@
                                 <th style="width:32px;">#</th>
                                 <th>Malzeme Kodu</th>
                                 <th>Malzeme Adı</th>
-                                <th class="num" id="plThBuy">Alış Fiyatı</th>
-                                <th class="num" id="plThSell">Satış Fiyatı</th>
+                                <th class="num" id="plThPrice">Fiyat</th>
                                 <th style="width:40px;"></th>
                             </tr>
                         </thead>
@@ -622,6 +695,15 @@
     var STEPS = 3;
     var step = 1;
     var groupId = parseInt(new URLSearchParams(window.location.search).get('groupId')) || 0;
+
+    // Navigation: "Düzenleme" butonu groupId varsa Report ekranına, yoksa PriceGroups'a gider.
+    var navBtn = document.getElementById('plNavToReport');
+    if (navBtn) {
+        navBtn.href = groupId
+            ? ('/PriceList/Report?groupId=' + groupId)
+            : '/PriceList/PriceGroups';
+    }
+
     // Sunucu tarafli sayfalama state
     var serverStocks = [];        // yuklenmis stok listesi (page by page)
     var serverTotal = 0;          // toplam kayit sayisi (backend'den)
@@ -629,18 +711,34 @@
     var serverHasMore = false;    // daha fazla sayfa var mi
     var serverLoading = false;    // aktif yukleme var mi
     var currentSearch = '';       // aktif arama terimi
+    var currentGroupCode = '';    // aktif grup kodu filtresi (bos = tum gruplar)
     var PAGE_SIZE = 50;
-    var combosByMat = {};         // { materialCode: [{ code, name, featureValues }] }
+    var combosByMat = {};         // { materialCode: [{ configId, code, name, featureValues }] }
     var expandedMats = new Set(); // genisletilmis material code'lar
+    var currenciesById = {};      // { id: { code, name, symbol } }
+    var currenciesByCode = {};    // { code: { id, name, symbol } }
 
-    // selectedStocks — her satir: { id:stockCardId, materialCode, materialName, combinationCode, combinationName, buyingPrice, sellingPrice, existingBuying?, existingSelling?, isUpdate? }
+    // selectedStocks — her satir: { id:itemId, materialCode, materialName, configId, combinationCode, combinationName, price, existingPrice?, isUpdate? }
+    // Not: materialCode/combinationCode/combinationName UI-only display; backend'e itemId/configId gonderilir.
     var selectedStocks = [];
     var pendingDeleteId = null;
-    var priceType = 'buy'; // 'buy' | 'sell' | 'both'
+    var priceType = 'buy'; // 'buy' / 'sell' / 'cost' — wizard step 1'de secilir, save'de 'b'/'s'/'m' kisaltmasi olarak gonderilir
+    function priceTypeCode()  {
+        if (priceType === 'buy')  return 'b';
+        if (priceType === 'sell') return 's';
+        if (priceType === 'cost') return 'm';
+        return 'b';
+    }
+    function priceTypeLabel() {
+        if (priceType === 'buy')  return 'Alış';
+        if (priceType === 'sell') return 'Satış';
+        if (priceType === 'cost') return 'Maliyet';
+        return 'Alış';
+    }
 
-    // Selected key: stok+kombinasyon (kombinasyon yoksa sadece stok)
+    // Selected key: stok+kombinasyon (kombinasyon yoksa sadece stok) — DOM lookup icin combinationCode kullan
     function keyOf(s) {
-        return String(s.id || s.stockCardId || '') + '|' + (s.combinationCode || '');
+        return String(s.id || '') + '|' + (s.combinationCode || '');
     }
 
     function esc(s) {
@@ -650,12 +748,43 @@
         return (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
     }
 
+    // ── Grup tipi kisidlari ──
+    // Bu grup hangi fiyat tipini kabul ediyor? Default true (mevcut DB kayitlari icin
+    // backward compat) — fetch /GetPriceGroup yanitinda guncellenir.
+    var groupAllows = { b: true, s: true, m: true };
+    function applyGroupTypeRestriction() {
+        var map     = { 'plPtBuy': 'b', 'plPtSell': 's', 'plPtCost': 'm' };
+        var allows  = { 'b': groupAllows.b, 's': groupAllows.s, 'm': groupAllows.m };
+        var labels  = { 'b': 'Alış', 's': 'Satış', 'm': 'Maliyet' };
+        var nameMap = { 'b': 'buy', 's': 'sell', 'm': 'cost' };
+        Object.keys(map).forEach(function (id) {
+            var btn = document.getElementById(id);
+            if (!btn) return;
+            var t = map[id];
+            if (allows[t]) {
+                btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; btn.title = '';
+            } else {
+                btn.disabled = true;  btn.style.opacity = '0.35'; btn.style.cursor = 'not-allowed';
+                btn.title = 'Bu fiyat grubu ' + labels[t] + ' tipini kabul etmiyor';
+                if (btn.classList.contains('is-active')) {
+                    var fallback = ['b', 's', 'm'].filter(function (k) { return allows[k]; })[0];
+                    if (fallback && typeof window.plSetPriceType === 'function')
+                        window.plSetPriceType(nameMap[fallback]);
+                }
+            }
+        });
+    }
+
     // ── Group banner ──
     if (groupId) {
         fetch(API('GetPriceGroup') + '?id=' + groupId)
             .then(function(r) { return r.json(); })
             .then(function(d) {
-                document.getElementById('plGroupName').textContent = d.groupCode + ' \u2014 ' + d.groupName;
+                document.getElementById('plGroupName').textContent = d.code + ' \u2014 ' + d.name;
+                groupAllows.b = d.allowsBuying  !== false;
+                groupAllows.s = d.allowsSelling !== false;
+                groupAllows.m = d.allowsCost    !== false;
+                applyGroupTypeRestriction();
                 loadExistingEntries(groupId);
             });
     } else {
@@ -709,12 +838,48 @@
         plMsg('');
     };
 
+    // Sag alt kosede toast bildirim — eski plMsg API'si korunur (msg, ok bool).
     function plMsg(msg, ok) {
-        var el = document.getElementById('plMsg');
-        if (!msg) { el.className = 'pl-msg-bar'; el.textContent = ''; return; }
-        el.className = 'pl-msg-bar ' + (ok ? 'is-ok' : 'is-err');
-        el.textContent = msg;
-        if (ok) setTimeout(function() { plMsg(''); }, 4000);
+        if (!msg) return; // eski "temizle" cagrilari no-op
+        plShowToast(msg, ok ? 'success' : 'error');
+    }
+    function plShowToast(msg, kind) {
+        kind = kind || 'info';
+        var icons = { success: '✓', error: '✕', warning: '!', info: 'i' };
+        var icon = icons[kind] || 'i';
+
+        var container = document.getElementById('plToastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'plToastContainer';
+            container.className = 'pl-toast-container';
+            document.body.appendChild(container);
+        }
+
+        var toast = document.createElement('div');
+        toast.className = 'pl-toast pl-toast--' + kind;
+        toast.innerHTML =
+            '<div class="pl-toast__icon">' + icon + '</div>' +
+            '<div class="pl-toast__msg">' + esc(msg) + '</div>' +
+            '<button type="button" class="pl-toast__close" aria-label="Kapat">×</button>';
+        container.appendChild(toast);
+
+        // Slide-in (next frame — display kaydedildikten sonra transition tetiklensin)
+        requestAnimationFrame(function () { toast.classList.add('is-in'); });
+
+        var dismissed = false;
+        function dismiss() {
+            if (dismissed) return; dismissed = true;
+            toast.classList.add('is-out');
+            setTimeout(function () {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 280);
+        }
+
+        toast.querySelector('.pl-toast__close').addEventListener('click', dismiss);
+        // Hata/uyari biraz daha uzun kalsin
+        var timeout = (kind === 'error' || kind === 'warning') ? 5500 : 3500;
+        setTimeout(dismiss, timeout);
     }
 
     // ── Step 1: currencies ──
@@ -722,23 +887,37 @@
         fetch(API('GetCurrencies'))
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                currenciesById = {};
+                currenciesByCode = {};
+                (data || []).forEach(function(c) {
+                    currenciesById[c.id] = c;
+                    currenciesByCode[c.code] = c;
+                });
                 var sel = document.getElementById('plCurrency');
                 sel.innerHTML = '<option value="">— Döviz Seçiniz —</option>' +
                     data.map(function(c) {
-                        return '<option value="' + esc(c.code) + '">' + esc(c.code) + ' \u2014 ' + esc(c.name) + (c.symbol ? ' (' + esc(c.symbol) + ')' : '') + '</option>';
+                        return '<option value="' + c.id + '">' + esc(c.code) + ' \u2014 ' + esc(c.name) + (c.symbol ? ' (' + esc(c.symbol) + ')' : '') + '</option>';
                     }).join('');
-                sel.value = 'TRY';
+                // Default secim: TRY varsa onun ID'si
+                var tryC = currenciesByCode['TRY'];
+                if (tryC) sel.value = String(tryC.id);
                 validateStep();
             });
         document.getElementById('plValidFrom').value = new Date().toISOString().split('T')[0];
     }
-    // ── Price type toggle ──
+    // ── Price type toggle (Alış / Satış / Maliyet — sadece tek tip secilir) ──
     window.plSetPriceType = function(type) {
+        if (type !== 'buy' && type !== 'sell' && type !== 'cost') return;
         priceType = type;
-        ['buy','sell','both'].forEach(function(t) {
+        ['buy','sell','cost'].forEach(function(t) {
             var btn = document.getElementById('plPt' + t.charAt(0).toUpperCase() + t.slice(1));
             if (btn) btn.classList.toggle('is-active', t === type);
         });
+        // Step 3 baslik + tablo basligi tip degisince guncellenmeli (henuz Step 3'e gelmediyse zarar yok)
+        var th = document.getElementById('plThPrice');
+        if (th) th.textContent = priceTypeLabel() + ' Fiyatı';
+        var t3title = document.getElementById('plStep3Title');
+        if (t3title) t3title.textContent = priceTypeLabel() + ' Fiyat Girişi';
     };
 
     document.getElementById('plCurrency').addEventListener('change', validateStep);
@@ -753,6 +932,28 @@
             resetAndLoad();
         }, 300);
     });
+
+    // Grup filtresi: degisince stok listesi sifirdan yuklenir.
+    var groupSel = document.getElementById('plStockGroupFilter');
+    if (groupSel) {
+        groupSel.addEventListener('change', function () {
+            currentGroupCode = groupSel.value || '';
+            resetAndLoad();
+        });
+        // Grup listesini bir kez doldur (sayfa acilirken).
+        fetch(API('GetMaterialGroups'))
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                if (!Array.isArray(list)) return;
+                list.forEach(function (g) {
+                    var opt = document.createElement('option');
+                    opt.value = g.code;
+                    opt.textContent = g.code + (g.description ? ' — ' + g.description : '');
+                    groupSel.appendChild(opt);
+                });
+            })
+            .catch(function () { /* sessiz: combobox bos kalir */ });
+    }
 
     // Step 2'ye ilk giriste tetiklenir
     function loadStocks() {
@@ -773,7 +974,8 @@
         if (serverLoading || (serverOffset > 0 && !serverHasMore)) return;
         serverLoading = true;
         var qParam = currentSearch ? '&q=' + encodeURIComponent(currentSearch) : '';
-        fetch(API('SearchStocks') + '?offset=' + serverOffset + '&pageSize=' + PAGE_SIZE + qParam)
+        var gParam = currentGroupCode ? '&groupCode=' + encodeURIComponent(currentGroupCode) : '';
+        fetch(API('SearchStocks') + '?offset=' + serverOffset + '&pageSize=' + PAGE_SIZE + qParam + gParam)
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 serverLoading = false;
@@ -840,8 +1042,8 @@
                             var cKey = String(s.id) + '|' + c.code;
                             var cChk = selSet.has(cKey);
                             var label = (c.featureValues || []).map(function(fv) { return fv.feature + ': ' + fv.value; }).join(' · ');
-                            html += '<div class="pl-combo-row' + (cChk ? ' is-checked' : '') + '" onclick="plToggleCombo(' + s.id + ',\'' + esc(s.materialCode) + '\',\'' + esc(s.materialName) + '\',\'' + esc(c.code) + '\',\'' + esc(c.name || label) + '\')">'
-                                +   '<label class="pl-switch" onclick="event.stopPropagation();plToggleCombo(' + s.id + ',\'' + esc(s.materialCode) + '\',\'' + esc(s.materialName) + '\',\'' + esc(c.code) + '\',\'' + esc(c.name || label) + '\')">'
+                            html += '<div class="pl-combo-row' + (cChk ? ' is-checked' : '') + '" onclick="plToggleCombo(' + s.id + ',\'' + esc(s.materialCode) + '\',\'' + esc(s.materialName) + '\',\'' + esc(c.code) + '\',\'' + esc(c.name || label) + '\',' + (c.configId || 'null') + ')">'
+                                +   '<label class="pl-switch" onclick="event.stopPropagation();plToggleCombo(' + s.id + ',\'' + esc(s.materialCode) + '\',\'' + esc(s.materialName) + '\',\'' + esc(c.code) + '\',\'' + esc(c.name || label) + '\',' + (c.configId || 'null') + ')">'
                                 +     '<input type="checkbox"' + (cChk ? ' checked' : '') + ' onclick="event.stopPropagation()" readonly />'
                                 +     '<span class="pl-switch-track"></span>'
                                 +   '</label>'
@@ -894,20 +1096,21 @@
             if (s) selectedStocks.push({
                 id: s.id, materialCode: s.materialCode, materialName: s.materialName,
                 combinationCode: null, combinationName: null,
-                buyingPrice: 0, sellingPrice: 0
+                price: 0
             });
         }
         renderStockList(); validateStep();
     };
 
-    window.plToggleCombo = function(stockId, matCode, matName, comboCode, comboName) {
+    window.plToggleCombo = function(stockId, matCode, matName, comboCode, comboName, configId) {
         var k = String(stockId) + '|' + comboCode;
         var idx = selectedStocks.findIndex(function(s) { return keyOf(s) === k; });
         if (idx >= 0) selectedStocks.splice(idx, 1);
         else selectedStocks.push({
             id: stockId, materialCode: matCode, materialName: matName,
+            configId: configId || null,
             combinationCode: comboCode, combinationName: comboName,
-            buyingPrice: 0, sellingPrice: 0
+            price: 0
         });
         renderStockList(); validateStep();
     };
@@ -937,8 +1140,9 @@
             if (!selSet.has(k)) {
                 selectedStocks.push({
                     id: s.id, materialCode: s.materialCode, materialName: s.materialName,
+                    configId: c.configId || null,
                     combinationCode: c.code, combinationName: c.name || label || c.code,
-                    buyingPrice: 0, sellingPrice: 0
+                    price: 0
                 });
             }
         });
@@ -970,7 +1174,7 @@
                     selectedStocks.push({
                         id: s.id, materialCode: s.materialCode, materialName: s.materialName,
                         combinationCode: null, combinationName: null,
-                        buyingPrice: 0, sellingPrice: 0
+                        price: 0
                     });
                 }
             }
@@ -1013,12 +1217,8 @@
         cnt.textContent = (selectedStocks.length ? selectedStocks.length + ' seçildi' : '') + totalTxt;
     }
 
-    // ── Step 3: fiyat girisi + onceki fiyat + durum ──
+    // ── Step 3: fiyat girisi + onceki fiyat + durum (tek tip — wizard secimi) ─
     function renderPriceTable() {
-        var showBuy  = priceType === 'buy'  || priceType === 'both';
-        var showSell = priceType === 'sell' || priceType === 'both';
-
-        // Tablo head'u dinamik — kombinasyon/önceki/durum kolonlarıyla
         var theadEl = document.getElementById('plPriceHead');
         if (theadEl) {
             theadEl.innerHTML =
@@ -1027,32 +1227,28 @@
                 + '<th>Malzeme Kodu</th>'
                 + '<th>Malzeme Adı</th>'
                 + '<th>Kombinasyon</th>'
-                + (showBuy  ? '<th class="num">Önceki Alış</th>'  : '')
-                + (showSell ? '<th class="num">Önceki Satış</th>' : '')
-                + (showBuy  ? '<th class="num">Alış Fiyatı</th>'  : '')
-                + (showSell ? '<th class="num">Satış Fiyatı</th>' : '')
+                + '<th class="num">Önceki ' + priceTypeLabel() + '</th>'
+                + '<th class="num">' + priceTypeLabel() + ' Fiyatı</th>'
                 + '<th style="width:110px;">Durum</th>'
                 + '<th style="width:40px;"></th>'
                 + '</tr>';
         }
 
-        // Kart başlığı
-        var title = priceType === 'buy' ? 'Alış Fiyatı Girişi' : priceType === 'sell' ? 'Satış Fiyatı Girişi' : 'Alış &amp; Satış Fiyatı Girişi';
         var titleEl = document.getElementById('plStep3Title');
-        if (titleEl) titleEl.innerHTML = title;
+        if (titleEl) titleEl.textContent = priceTypeLabel() + ' Fiyatı Girişi';
 
-        // Önce mevcut fiyatlari yukle, sonra render et
-        loadExistingForSelection().finally(function() { renderPriceRows(showBuy, showSell); });
+        loadExistingForSelection().finally(function() { renderPriceRows(); });
     }
 
     function loadExistingForSelection() {
         if (!selectedStocks.length) return Promise.resolve();
         var payload = {
-            priceGroupId: groupId,
-            currency: document.getElementById('plCurrency').value,
-            validFrom: document.getElementById('plValidFrom').value,
+            groupId:    groupId,
+            currencyId: parseInt(document.getElementById('plCurrency').value) || 0,
+            priceType:  priceTypeCode(),
+            validFrom:  document.getElementById('plValidFrom').value,
             keys: selectedStocks.map(function(s) {
-                return { stockCardId: s.id, materialCode: s.materialCode, combinationCode: s.combinationCode || null };
+                return { itemId: s.id, configId: s.configId || null };
             })
         };
         return fetch(API('GetExistingPrices'), {
@@ -1061,47 +1257,39 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            // Mevcut fiyatlari selectedStocks'e iliskilendir
             var map = {};
             (data || []).forEach(function(row) {
-                var k = String(row.stockCardId || '') + '|' + (row.combinationCode || '');
+                var k = String(row.itemId || '') + '|' + (row.configId || '');
                 map[k] = row;
             });
             selectedStocks.forEach(function(s) {
-                var k = String(s.id) + '|' + (s.combinationCode || '');
+                var k = String(s.id) + '|' + (s.configId || '');
                 var ex = map[k];
                 if (ex) {
-                    s.existingBuying  = ex.buyingPrice;
-                    s.existingSelling = ex.sellingPrice;
+                    s.existingPrice = ex.price;
                     s.isUpdate = true;
-                    // Ilk giriste onceki fiyatla prefill (kullanici uzerine yazar)
-                    if (!s.buyingPrice)  s.buyingPrice  = ex.buyingPrice;
-                    if (!s.sellingPrice) s.sellingPrice = ex.sellingPrice;
+                    if (!s.price) s.price = ex.price;
                 } else {
-                    s.existingBuying = null;
-                    s.existingSelling = null;
+                    s.existingPrice = null;
                     s.isUpdate = false;
                 }
             });
         })
-        .catch(function() { /* sessiz — mevcut fiyatlar bos gider */ });
+        .catch(function() { /* sessiz */ });
     }
 
-    function renderPriceRows(showBuy, showSell) {
+    function renderPriceRows() {
         document.getElementById('plPriceBody').innerHTML = selectedStocks.map(function(s, i) {
             var comboCell = s.combinationCode
                 ? '<td><span class="pl-combo-chip" title="' + esc(s.combinationName || '') + '">' + esc(s.combinationCode) + '</span></td>'
                 : '<td><span class="pl-combo-chip pl-combo-chip--none">—</span></td>';
 
-            var prevBuyCell  = showBuy  ? '<td class="num pl-prev">' + (s.existingBuying  != null ? fmt(s.existingBuying)  : '<span class="pl-prev-empty">—</span>') + '</td>' : '';
-            var prevSellCell = showSell ? '<td class="num pl-prev">' + (s.existingSelling != null ? fmt(s.existingSelling) : '<span class="pl-prev-empty">—</span>') + '</td>' : '';
+            var prevCell = '<td class="num pl-prev">' +
+                (s.existingPrice != null ? fmt(s.existingPrice) : '<span class="pl-prev-empty">—</span>') +
+                '</td>';
 
-            var buyCel  = showBuy
-                ? '<td class="num"><input type="number" class="pl-input" step="0.01" min="0" value="' + (s.buyingPrice || 0) + '" oninput="plUpdatePrice(' + i + ',\'buy\',this.value)" /></td>'
-                : '';
-            var sellCel = showSell
-                ? '<td class="num"><input type="number" class="pl-input" step="0.01" min="0" value="' + (s.sellingPrice || 0) + '" oninput="plUpdatePrice(' + i + ',\'sell\',this.value)" /></td>'
-                : '';
+            var priceCell = '<td class="num"><input type="number" class="pl-input" step="0.01" min="0" value="' +
+                (s.price || 0) + '" oninput="plUpdatePrice(' + i + ',this.value)" /></td>';
 
             var statusCell = s.isUpdate
                 ? '<td><span class="pl-status pl-status--update">🔄 Güncelleme</span></td>'
@@ -1112,19 +1300,15 @@
                 + '<td class="pl-code-cell">' + esc(s.materialCode) + '</td>'
                 + '<td class="pl-name-cell">' + esc(s.materialName) + '</td>'
                 + comboCell
-                + prevBuyCell + prevSellCell
-                + buyCel + sellCel
-                + statusCell
+                + prevCell + priceCell + statusCell
                 + '<td><button type="button" class="pl-btn pl-btn--danger-ghost" onclick="plRemoveFromTable(' + i + ')" title="Çıkar">'
                 + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
                 + '</button></td>'
                 + '</tr>';
         }).join('');
     }
-    window.plUpdatePrice = function(idx, type, val) {
-        var v = parseFloat(val) || 0;
-        if (type === 'buy') selectedStocks[idx].buyingPrice = v;
-        else selectedStocks[idx].sellingPrice = v;
+    window.plUpdatePrice = function(idx, val) {
+        selectedStocks[idx].price = parseFloat(val) || 0;
     };
     window.plRemoveFromTable = function(idx) {
         selectedStocks.splice(idx, 1);
@@ -1132,22 +1316,19 @@
         if (selectedStocks.length === 0) { step = 2; updateStepper(); }
     };
 
-    // ── Save bulk ──
+    // ── Save bulk (tek tip — wizard'daki secime gore) ──
     function savePrices() {
         var payload = {
-            priceGroupId: groupId,
-            currency: document.getElementById('plCurrency').value,
-            validFrom: document.getElementById('plValidFrom').value,
-            validTo:   document.getElementById('plValidTo').value || null,
+            groupId:    groupId,
+            currencyId: parseInt(document.getElementById('plCurrency').value) || 0,
+            priceType:  priceTypeCode(),
+            validFrom:  document.getElementById('plValidFrom').value,
+            validTo:    document.getElementById('plValidTo').value || null,
             lines: selectedStocks.map(function(s) {
                 return {
-                    stockCardId:     s.id,
-                    materialCode:    s.materialCode,
-                    materialName:    s.materialName,
-                    combinationCode: s.combinationCode || null,
-                    combinationName: s.combinationName || null,
-                    buyingPrice:     s.buyingPrice  || 0,
-                    sellingPrice:    s.sellingPrice || 0
+                    itemId:   s.id,
+                    configId: s.configId || null,
+                    price:    s.price || 0
                 };
             })
         };
@@ -1186,24 +1367,32 @@
                 sec.style.display = '';
                 cnt.textContent = data.length;
                 body.innerHTML = data.map(function(e) {
-                    var comboTd = e.combinationCode
-                        ? '<td><span class="pl-combo-chip" title="' + esc(e.combinationName || '') + '">' + esc(e.combinationCode) + '</span></td>'
+                    var comboTd = e.configCode
+                        ? '<td><span class="pl-combo-chip" title="' + esc(e.configCode) + '">' + esc(e.configCode) + '</span></td>'
                         : '<td><span class="pl-combo-chip pl-combo-chip--none">—</span></td>';
+                    var typeLabel = e.priceType === 'b' ? 'Alış'
+                                  : e.priceType === 's' ? 'Satış'
+                                  : e.priceType === 'm' ? 'Maliyet'
+                                  : '—';
+                    var typeCls   = e.priceType === 'b' ? 'pl-type-buy'
+                                  : e.priceType === 's' ? 'pl-type-sell'
+                                  : e.priceType === 'm' ? 'pl-type-cost'
+                                  : '';
                     return '<tr id="plRow' + e.id + '">'
-                        + '<td class="pl-entry-code">' + esc(e.materialCode) + '</td>'
-                        + '<td class="pl-entry-name">' + esc(e.materialName) + '</td>'
+                        + '<td class="pl-entry-code">' + esc(e.itemCode) + '</td>'
+                        + '<td class="pl-entry-name">' + esc(e.itemName) + '</td>'
                         + comboTd
-                        + '<td><span class="pl-entry-cur">' + esc(e.currency) + '</span></td>'
-                        + '<td class="num" id="plBuyDisp' + e.id + '">' + fmt(e.buyingPrice) + '</td>'
-                        + '<td class="num" id="plSellDisp' + e.id + '">' + fmt(e.sellingPrice) + '</td>'
+                        + '<td><span class="pl-entry-cur">' + esc(e.currencyCode) + '</span></td>'
+                        + '<td><span class="pl-type-badge ' + typeCls + '">' + typeLabel + '</span></td>'
+                        + '<td class="num" id="plPriceDisp' + e.id + '">' + fmt(e.price) + '</td>'
                         + '<td class="pl-entry-date">' + esc(e.validFrom || '—') + '</td>'
                         + '<td class="pl-entry-date">' + esc(e.validTo || '—') + '</td>'
                         + '<td>'
                         +   '<div class="pl-edit-actions" id="plRowBtns' + e.id + '">'
-                        +     '<button type="button" class="pl-btn pl-btn--ghost" style="padding:4px 8px;" onclick="plStartEdit(' + e.id + ',' + (e.buyingPrice||0) + ',' + (e.sellingPrice||0) + ')" title="Düzenle">'
+                        +     '<button type="button" class="pl-btn pl-btn--ghost" style="padding:4px 8px;" onclick="plStartEdit(' + e.id + ',' + (e.price||0) + ')" title="Düzenle">'
                         +       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
                         +     '</button>'
-                        +     '<button type="button" class="pl-btn pl-btn--danger-ghost" style="padding:4px 8px;" onclick="plDeleteEntry(' + e.id + ',\'' + esc(e.materialCode) + '\')" title="Sil">'
+                        +     '<button type="button" class="pl-btn pl-btn--danger-ghost" style="padding:4px 8px;" onclick="plDeleteEntry(' + e.id + ',\'' + esc(e.itemCode) + '\')" title="Sil">'
                         +       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>'
                         +     '</button>'
                         +   '</div>'
@@ -1213,34 +1402,31 @@
             });
     }
 
-    // ── Inline edit ──
-    window.plStartEdit = function(id, buyOrig, sellOrig) {
+    // ── Inline edit (tek fiyat) ──
+    window.plStartEdit = function(id, priceOrig) {
         var row = document.getElementById('plRow' + id);
         var btns = document.getElementById('plRowBtns' + id);
         if (!row || row.classList.contains('is-editing')) return;
         row.classList.add('is-editing');
 
-        document.getElementById('plBuyDisp' + id).innerHTML =
-            '<input type="number" class="pl-input" step="0.01" min="0" id="plBuyInput' + id + '" value="' + buyOrig + '" />';
-        document.getElementById('plSellDisp' + id).innerHTML =
-            '<input type="number" class="pl-input" step="0.01" min="0" id="plSellInput' + id + '" value="' + sellOrig + '" />';
+        document.getElementById('plPriceDisp' + id).innerHTML =
+            '<input type="number" class="pl-input" step="0.01" min="0" id="plPriceInput' + id + '" value="' + priceOrig + '" />';
 
         btns.innerHTML =
             '<button type="button" class="pl-save-inline" onclick="plSaveInline(' + id + ')">'
             + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Kaydet'
             + '</button>'
-            + '<button type="button" class="pl-cancel-inline" onclick="plCancelEdit(' + id + ',' + buyOrig + ',' + sellOrig + ')">İptal</button>';
+            + '<button type="button" class="pl-cancel-inline" onclick="plCancelEdit(' + id + ',' + priceOrig + ')">İptal</button>';
 
-        document.getElementById('plBuyInput' + id).focus();
+        document.getElementById('plPriceInput' + id).focus();
     };
 
-    window.plCancelEdit = function(id, buyOrig, sellOrig) {
+    window.plCancelEdit = function(id, priceOrig) {
         var row = document.getElementById('plRow' + id);
         row.classList.remove('is-editing');
-        document.getElementById('plBuyDisp' + id).textContent  = fmt(buyOrig);
-        document.getElementById('plSellDisp' + id).textContent = fmt(sellOrig);
+        document.getElementById('plPriceDisp' + id).textContent = fmt(priceOrig);
         document.getElementById('plRowBtns' + id).innerHTML =
-            '<button type="button" class="pl-btn pl-btn--ghost" style="padding:4px 8px;" onclick="plStartEdit(' + id + ',' + buyOrig + ',' + sellOrig + ')" title="Düzenle">'
+            '<button type="button" class="pl-btn pl-btn--ghost" style="padding:4px 8px;" onclick="plStartEdit(' + id + ',' + priceOrig + ')" title="Düzenle">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
             + '</button>'
             + '<button type="button" class="pl-btn pl-btn--danger-ghost" style="padding:4px 8px;" onclick="plDeleteEntry(' + id + ')" title="Sil">'
@@ -1249,16 +1435,14 @@
     };
 
     window.plSaveInline = function(id) {
-        var buyEl  = document.getElementById('plBuyInput' + id);
-        var sellEl = document.getElementById('plSellInput' + id);
-        var buy  = parseFloat(buyEl.value)  || 0;
-        var sell = parseFloat(sellEl.value) || 0;
+        var priceEl = document.getElementById('plPriceInput' + id);
+        var price = parseFloat(priceEl.value) || 0;
         var btn = document.querySelector('#plRowBtns' + id + ' .pl-save-inline');
         if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
         fetch(API('UpdatePriceListJson'), {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id, buyingPrice: buy, sellingPrice: sell })
+            body: JSON.stringify({ id: id, price: price })
         })
         .then(function(r) { return r.json(); })
         .then(function(d) {

@@ -13,5 +13,15 @@ public enum UserPermission
     ManageCompanySettings = 9,
     ViewReports = 10,
     DesignReports = 11,
-    ManageReports = 12
+    ManageReports = 12,
+    ViewDashboards = 13,
+    DesignDashboards = 14,
+
+    // Faz 1: Uretim Is Emri
+    ManageWorkOrders = 15,
+    ReleaseWorkOrders = 16,
+
+    // Faz 3a: Üretim sahası operatörü
+    ReportProduction = 17,
+    OperateMachine = 18,
 }

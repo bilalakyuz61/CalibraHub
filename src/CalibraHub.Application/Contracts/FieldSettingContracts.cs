@@ -2,6 +2,7 @@ namespace CalibraHub.Application.Contracts;
 
 /// <summary>
 /// FldSet tablosundan okunan alan ayari — admin UI liste/duzenleme icin.
+/// PR 1+: ViewName primary; GuideCode geriye uyumluluk (PR 3'te dusurulecek).
 /// </summary>
 public sealed record FieldSettingDto(
     int Id,
@@ -9,6 +10,7 @@ public sealed record FieldSettingDto(
     string FieldKey,
     string FieldLabel,
     string? GuideCode,
+    string? ViewName,
     string? FilterJson,
     bool IsRequired,
     string? FormatJson,
@@ -25,6 +27,7 @@ public sealed record UpsertFieldSettingRequest(
     string FieldKey,
     string FieldLabel,
     string? GuideCode,
+    string? ViewName,
     string? FilterJson,
     bool IsRequired,
     string? FormatJson,
@@ -34,6 +37,8 @@ public sealed record UpsertFieldSettingRequest(
 /// <summary>
 /// Toplu rehber eslestirme istegi — eslestirme modali "Kaydet" butonu.
 /// Bir rehber icin belirli bir formun alanlarina toplu eslestirme/kaldir.
+/// PR 1: GuideCode'tan ViewName cikarsama otomatik (GuideMas'a bakilir);
+/// PR 3'te imza ViewName'e gecirilecek.
 /// </summary>
 public sealed record BulkMapGuideRequest(
     string GuideCode,
@@ -54,12 +59,14 @@ public sealed record FieldMappingItem(
 
 /// <summary>
 /// Runtime: form sayfasinin yüklendiginde ihtiyac duydugu alan-rehber baglantisi.
-/// FormatJson: kolon gorunurlugu — {"visibleColumns":["col1","col2"]}
+/// FormatJson schema: { visibleColumns: [], columnLabels: {}, valueColumn, displayColumn, sortColumn?, distinctTextual? }
+/// PR 1+: GuideCode geriye uyumluluk icin doldurulur; runtime ViewName'i tercih edebilir.
 /// </summary>
 public sealed record FieldGuideBindingDto(
     string FieldKey,
     string FieldLabel,
     string GuideCode,
+    string? ViewName,
     string? FilterJson,
     bool IsRequired,
     string? FormatJson);
@@ -73,6 +80,7 @@ public sealed record UpsertFieldSettingByFormCodeRequest(
     string FieldKey,
     string FieldLabel,
     string? GuideCode,
+    string? ViewName,
     string? FilterJson,
     bool IsRequired,
     string? FormatJson);

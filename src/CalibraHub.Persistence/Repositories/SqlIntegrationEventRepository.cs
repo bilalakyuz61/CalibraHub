@@ -28,7 +28,7 @@ public sealed class SqlIntegrationEventRepository : IIntegrationEventRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [id],[company_id],[name],[event_source],[event_type],[event_detail],
-                   [sql_command],[stop_on_error],[is_active],[execution_order],[created_at],[updated_at],
+                   [sql_command],[stop_on_error],[is_active],[execution_order],[Created],[Updated],
                    [action_type],[procedure_name],[parameters_json],[api_config_json]
             FROM {_defTable}
             WHERE [company_id] = @CompanyId
@@ -49,7 +49,7 @@ public sealed class SqlIntegrationEventRepository : IIntegrationEventRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [id],[company_id],[name],[event_source],[event_type],[event_detail],
-                   [sql_command],[stop_on_error],[is_active],[execution_order],[created_at],[updated_at],
+                   [sql_command],[stop_on_error],[is_active],[execution_order],[Created],[Updated],
                    [action_type],[procedure_name],[parameters_json],[api_config_json]
             FROM {_defTable}
             WHERE [company_id] = @CompanyId AND [event_source] = @EventSource
@@ -71,7 +71,7 @@ public sealed class SqlIntegrationEventRepository : IIntegrationEventRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [id],[company_id],[name],[event_source],[event_type],[event_detail],
-                   [sql_command],[stop_on_error],[is_active],[execution_order],[created_at],[updated_at],
+                   [sql_command],[stop_on_error],[is_active],[execution_order],[Created],[Updated],
                    [action_type],[procedure_name],[parameters_json],[api_config_json]
             FROM {_defTable}
             WHERE [id] = @Id;
@@ -91,14 +91,14 @@ public sealed class SqlIntegrationEventRepository : IIntegrationEventRepository
                     [name] = @Name, [event_source] = @EventSource, [event_type] = @EventType,
                     [event_detail] = @EventDetail, [sql_command] = @SqlCommand,
                     [stop_on_error] = @StopOnError, [is_active] = @IsActive,
-                    [execution_order] = @ExecutionOrder, [updated_at] = @UpdatedAt,
+                    [execution_order] = @ExecutionOrder, [Updated] = @UpdatedAt,
                     [action_type] = @ActionType, [procedure_name] = @ProcedureName,
                     [parameters_json] = @ParametersJson, [api_config_json] = @ApiConfigJson
                 WHERE [id] = @Id
             ELSE
                 INSERT INTO {_defTable}
                     ([id],[company_id],[name],[event_source],[event_type],[event_detail],
-                     [sql_command],[stop_on_error],[is_active],[execution_order],[created_at],[updated_at],
+                     [sql_command],[stop_on_error],[is_active],[execution_order],[Created],[Updated],
                      [action_type],[procedure_name],[parameters_json],[api_config_json])
                 VALUES
                     (@Id, @CompanyId, @Name, @EventSource, @EventType, @EventDetail,
@@ -260,8 +260,8 @@ public sealed class SqlIntegrationEventRepository : IIntegrationEventRepository
             StopOnError = r.GetBoolean(r.GetOrdinal("stop_on_error")),
             IsActive = r.GetBoolean(r.GetOrdinal("is_active")),
             ExecutionOrder = r.GetInt32(r.GetOrdinal("execution_order")),
-            CreatedAt = r.GetDateTime(r.GetOrdinal("created_at")),
-            UpdatedAt = r.GetDateTime(r.GetOrdinal("updated_at")),
+            CreatedAt = r.GetDateTime(r.GetOrdinal("Created")),
+            UpdatedAt = r.GetDateTime(r.GetOrdinal("Updated")),
             ActionType = ordActionType >= 0 && !r.IsDBNull(ordActionType) ? r.GetString(ordActionType) : "SqlCommand",
             ProcedureName = ordProcName >= 0 && !r.IsDBNull(ordProcName) ? r.GetString(ordProcName) : null,
             ParametersJson = ordParamsJson >= 0 && !r.IsDBNull(ordParamsJson) ? r.GetString(ordParamsJson) : null,

@@ -20,19 +20,28 @@ public sealed class LogisticsController : Controller
     private readonly IIntegrationEventService _integrationEventService;
     private readonly IFinanceService _financeService;
     private readonly IWidgetService _widgetService;
+    private readonly IPriceListService _priceListService;
+    private readonly ICurrencyService _currencyService;
+    private readonly Application.Abstractions.Persistence.ICardGroupRepository _cardGroupRepo;
 
     public LogisticsController(
         ILogisticsConfigurationService logisticsConfigurationService,
         IUiConfigurationService uiConfigurationService,
         IIntegrationEventService integrationEventService,
         IFinanceService financeService,
-        IWidgetService widgetService)
+        IWidgetService widgetService,
+        IPriceListService priceListService,
+        ICurrencyService currencyService,
+        Application.Abstractions.Persistence.ICardGroupRepository cardGroupRepo)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
         _uiConfigurationService = uiConfigurationService;
         _integrationEventService = integrationEventService;
         _financeService = financeService;
         _widgetService = widgetService;
+        _priceListService = priceListService;
+        _currencyService = currencyService;
+        _cardGroupRepo = cardGroupRepo;
     }
 
     private int GetCompanyId()
@@ -166,10 +175,6 @@ public sealed class LogisticsController : Controller
         var entities = new List<object>();
         foreach (var card in cards)
         {
-            string? cardImageUrl = (card.ImageData != null && card.ImageData.Length > 0 && !string.IsNullOrWhiteSpace(card.ImageMimeType))
-                ? $"data:{card.ImageMimeType};base64,{Convert.ToBase64String(card.ImageData)}"
-                : null;
-
             var cardWidgets = new List<object>();
             var recordId = card.Id.ToString();
             if (batchWidgets.TryGetValue(recordId, out var renderDtos))
@@ -178,10 +183,14 @@ public sealed class LogisticsController : Controller
                 {
                     cardWidgets.Add(new {
                         id             = w.WidgetId,
+                        widgetId       = w.WidgetId,
                         type           = "data",
                         dataType       = w.DataType.ToLowerInvariant(),
                         label          = w.Label,
                         value          = w.Value,
+                        // Metadata — guide-list / lookup widget'lari icin guideCode + guideConfig.
+                        // SmartWidget guide-list popup'inda metadata.guideCode ile rehber acar.
+                        metadata       = w.Metadata,
                         isPlainField   = w.IsPlainField,
                         minLength      = w.MinLength,
                         expectedLength = w.ExpectedLength,
@@ -194,13 +203,31 @@ public sealed class LogisticsController : Controller
                 }
             }
 
+            // Record values — Items tablosu kolon adlariyla (snake_case). SmartCard
+            // widget'larina (ozellikle guide-list popup'una) dogrudan erisim icin.
+            // Token resolve liste sayfasinda DOM olmadigi icin bu dictionary'yi kullanir.
+            var recordValues = new Dictionary<string, object?>
+            {
+                ["id"]          = card.Id,
+                ["code"]        = card.Code,
+                ["name"]        = card.Name,
+                ["type_id"]     = card.TypeId,
+                ["unit"]        = card.UnitId,
+                ["tax_rate"]    = card.TaxRate,
+                ["combinations"]= card.Combinations,
+                ["is_active"]   = card.IsActive,
+                ["create_date"] = card.CreateDate,
+                ["modify_date"] = card.ModifyDate,
+            };
+
             entities.Add(new {
                 id = card.Id,
                 title = card.Name ?? "(adsiz)",
                 subtitle = card.Code ?? string.Empty,
-                description = card.Description ?? string.Empty,
-                imageUrl = cardImageUrl,
+                description = string.Empty,
+                imageUrl = (string?)null,
                 statusBadge = (object?)null,
+                recordValues = recordValues,
                 widgets = cardWidgets,
                 primaryAction = new {
                     label = "Duzenle",
@@ -228,11 +255,181 @@ public sealed class LogisticsController : Controller
 
         return View();
     }
+
+    /* ── Urun Agaci (BOM/Recete) liste — SmartBoard pattern ────────────── */
+
+    private const int BomPageSize = 50;
+
+    private async Task<object> BuildBomsBoardConfigAsync(CancellationToken ct)
+    {
+        var allBoms = await _logisticsConfigurationService.GetBOMsAsync(ct);
+        var totalCount = allBoms.Count;
+        var pageItems = allBoms.Take(BomPageSize).ToList();
+        var masterWidgets = await BuildBomsMasterWidgetsAsync(ct);
+        var entities = BuildBomEntities(pageItems);
+
+        return new
+        {
+            boardKey = "logistics-boms",
+            title = "Urun Agaci (Receteler)",
+            subtitle = totalCount.ToString("N0") + " recete",
+            icon = "GitBranch",
+            iconColor = "emerald",
+            searchPlaceholder = "Recete ara... (mamul kodu, adi)",
+            emptyText = "Henuz recete tanimlanmamis",
+            apiUrl = "/Logistics/GetBOMsPage",
+            totalCount,
+            pageSize = BomPageSize,
+            actions = new[]
+            {
+                new
+                {
+                    id = "new",
+                    label = "Yeni Recete",
+                    icon = "Plus",
+                    variant = "primary",
+                    url = "/Logistics/BOMEdit"
+                }
+            },
+            masterWidgets,
+            entities
+        };
+    }
+
+    private async Task<List<object>> BuildBomsMasterWidgetsAsync(CancellationToken ct)
+    {
+        var masterWidgets = new List<object>();
+        var schema = await _widgetService.GetFormSchemaByCodeAsync("PRODUCT_TREES", ct);
+        if (schema != null)
+        {
+            foreach (var w in schema.Widgets.Where(w => w.IsActive
+                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
+            {
+                masterWidgets.Add(new
+                {
+                    id           = w.WidgetCode,
+                    dbId         = w.Id,
+                    isPlainField = w.IsPlainField,
+                    type         = "data",
+                    dataType     = w.DataType.ToLowerInvariant(),
+                    label        = w.Label,
+                });
+            }
+        }
+        return masterWidgets;
+    }
+
+    private static List<object> BuildBomEntities(IEnumerable<BOMDto> boms) =>
+        boms.Select(b => (object)new
+        {
+            id          = b.Id,
+            title       = string.IsNullOrEmpty(b.ItemName) ? b.ItemCode : b.ItemName,
+            // Aynı mamulün birden fazla kombinasyonu için kart üzerinde
+            // ItemCode · ConfigCode formatında ayırt edici alt başlık.
+            subtitle    = string.IsNullOrWhiteSpace(b.ConfigCode)
+                          ? b.ItemCode
+                          : $"{b.ItemCode} · {b.ConfigCode}",
+            description = string.IsNullOrEmpty(b.Description)
+                          ? $"{b.Lines.Count} bilesen"
+                          : b.Description,
+            imageUrl    = b.ImageData != null && !string.IsNullOrEmpty(b.ImageMimeType)
+                          ? $"data:{b.ImageMimeType};base64,{Convert.ToBase64String(b.ImageData)}"
+                          : (string?)null,
+            // Kombinasyon varsa görsel pill — uzaktan ayırt etmek için.
+            statusBadge = string.IsNullOrWhiteSpace(b.ConfigCode)
+                          ? (object?)null
+                          : new { label = b.ConfigCode, color = "violet" },
+            widgets     = Array.Empty<object>(),
+            primaryAction = new
+            {
+                label = "Duzenle",
+                icon  = "Edit",
+                url   = $"/Logistics/BOMEdit?id={b.Id}"
+            },
+            secondaryAction = new
+            {
+                label   = "Sil",
+                icon    = "Trash2",
+                apiUrl  = $"/Logistics/DeleteBOMJson?id={b.Id}",
+                confirm = "Bu receteyi silmek istediginizden emin misiniz?"
+            }
+        }).ToList();
+
+    // GET /Logistics/GetBOMsPage?page=2&pageSize=50&search=abc
+    [HttpGet]
+    public async Task<IActionResult> GetBOMsPage(
+        int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 10) pageSize = 10;
+        if (pageSize > 200) pageSize = 200;
+
+        try
+        {
+            var allBoms = await _logisticsConfigurationService.GetBOMsAsync(ct);
+            IEnumerable<BOMDto> filtered = allBoms;
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var q = search.Trim();
+                filtered = allBoms.Where(b =>
+                    (b.ItemCode != null && b.ItemCode.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+                    (b.ItemName != null && b.ItemName.Contains(q, StringComparison.OrdinalIgnoreCase)));
+            }
+            var list = filtered.ToList();
+            var totalCount = list.Count;
+            var pageItems = list.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            var entities = BuildBomEntities(pageItems);
+            return Json(new { entities, totalCount, page, pageSize });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { error = ex.Message });
+        }
+    }
     
     [HttpGet]
-    public async Task<IActionResult> BOMs(CancellationToken cancellationToken)
+    public async Task<IActionResult> BOMs(string? mat = null, string? cfg = null, CancellationToken cancellationToken = default)
     {
-        ViewBag.Title = "ÃœrÃ¼n AÄŸacÄ±";
+        // Backwards-compat: eski URL formatina (BOMs?mat=X&cfg=Y) gelen kullaniciyi
+        // yeni edit ekranina yonlendir. Mevcut consumer'lar (MaterialCardEdit "Recete Ac"
+        // butonu, OptionsModal admin link'i) kirilmaz.
+        if (!string.IsNullOrWhiteSpace(mat))
+        {
+            var bom = await _logisticsConfigurationService.GetBOMByCodeAsync(mat, cfg, cancellationToken);
+            if (bom is not null)
+                return RedirectToAction(nameof(BOMEdit), new { id = bom.Id });
+            return RedirectToAction(nameof(BOMEdit));
+        }
+
+        var boardConfig = await BuildBomsBoardConfigAsync(cancellationToken);
+
+        var viewModel = new BomsViewModel
+        {
+            Boms = [],
+            ListState = new BomListStateViewModel
+            {
+                GridKey = "logistics-boms",
+                Page = 1,
+                PageSize = BomPageSize,
+                TotalCount = 0,
+                TotalPages = 0,
+                ItemLabel = "recete",
+                PageSizeOptions = BuildPageSizeOptions(BomPageSize)
+            },
+            AvailableColumns = [],
+            VisibleColumns = [],
+            BoardConfig = boardConfig
+        };
+        return View(viewModel);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> BOMEdit(int? id, CancellationToken cancellationToken)
+    {
+        ViewData["BOMEditId"] = id ?? 0;
+        ViewBag.Title = "Ürün Ağacı / Reçete Düzenle";
+        ViewBag.BOMId = id is > 0 ? id.Value.ToString() : string.Empty;
         return View();
     }
 
@@ -253,18 +450,222 @@ public sealed class LogisticsController : Controller
         {
             found         = true,
             id            = tree.Id,
+            itemId        = tree.ItemId,
+            itemCode      = tree.ItemCode,
+            itemName      = tree.ItemName,
+            configId      = tree.ConfigId,
+            configCode    = tree.ConfigCode,
             description   = tree.Description,
             imageBase64   = tree.ImageData   != null ? Convert.ToBase64String(tree.ImageData) : null,
             imageMimeType = tree.ImageMimeType,
             imageFitMode  = tree.ImageFitMode ?? "square",
+            imageRotation = tree.ImageRotation,
             lines         = tree.Lines.Select(l => new
             {
+                itemId                = l.ItemId,
                 componentMaterialCode = l.ComponentMaterialCode,
                 componentMaterialName = l.ComponentMaterialName,
+                configId              = l.ConfigId,
                 componentConfigCode   = l.ComponentConfigCode,
                 quantity              = l.Quantity,
                 scrapRatio            = l.ScrapRatio
             })
+        });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteBOMJson(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _logisticsConfigurationService.DeleteBOMAsync(id, cancellationToken);
+            return Json(new { success = true });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetBOMById(int id, CancellationToken cancellationToken)
+    {
+        if (id <= 0) return BadRequest(new { found = false });
+
+        var tree = await _logisticsConfigurationService.GetBOMByIdAsync(id, cancellationToken);
+        if (tree is null) return Ok(new { found = false });
+
+        return Ok(new
+        {
+            found         = true,
+            id            = tree.Id,
+            itemId        = tree.ItemId,
+            itemCode      = tree.ItemCode,
+            itemName      = tree.ItemName,
+            configId      = tree.ConfigId,
+            configCode    = tree.ConfigCode,
+            description   = tree.Description,
+            imageBase64   = tree.ImageData   != null ? Convert.ToBase64String(tree.ImageData) : null,
+            imageMimeType = tree.ImageMimeType,
+            imageFitMode  = tree.ImageFitMode ?? "square",
+            imageRotation = tree.ImageRotation,
+            lines         = tree.Lines.Select(l => new
+            {
+                itemId                = l.ItemId,
+                componentMaterialCode = l.ComponentMaterialCode,
+                componentMaterialName = l.ComponentMaterialName,
+                configId              = l.ConfigId,
+                componentConfigCode   = l.ComponentConfigCode,
+                quantity              = l.Quantity,
+                scrapRatio            = l.ScrapRatio
+            })
+        });
+    }
+
+    /// <summary>
+    /// Standart Maliyet Goruntuleme endpoint'i — bir malzemenin recetesindeki bilesenleri
+    /// secilen fiyat grubundan fiyatlandirir, satir ve toplam maliyetleri doner.
+    ///
+    /// Request: materialCode (zorunlu), configCode (ops.), priceGroupId (zorunlu),
+    ///          currencyId (zorunlu), priceType (varsayilan "Buy"), quantity (varsayilan 1)
+    ///
+    /// Response: { found, parent, components: [{ code, name, qty, scrapRatio, unitPrice, lineCost }],
+    ///             totalCost, currency }
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetMaterialCost(
+        string materialCode,
+        string? configCode,
+        int priceGroupId,
+        int currencyId,
+        string? priceType,
+        decimal quantity = 1m,
+        // validOn: ISO 'yyyy-MM-dd'. Bos ise bugunun tarihi (UtcNow). Geriye doniik
+        // tekliflerde frontend BELGE TARIHINI gonderir → gecmis fiyatlar dogru lookup.
+        string? validOn = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(materialCode))
+            return BadRequest(new { found = false, message = "Malzeme kodu zorunlu." });
+        if (priceGroupId <= 0 || currencyId <= 0)
+            return BadRequest(new { found = false, message = "Fiyat grubu ve para birimi zorunlu." });
+
+        DateTime priceDate = DateTime.UtcNow.Date;
+        if (!string.IsNullOrWhiteSpace(validOn) && DateTime.TryParse(validOn,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeLocal, out var parsedDate))
+        {
+            priceDate = parsedDate.Date;
+        }
+
+        var bom = await _logisticsConfigurationService.GetBOMByCodeAsync(materialCode, configCode, cancellationToken);
+        if (bom is null || bom.Lines is null || bom.Lines.Count == 0)
+            return Ok(new { found = false, message = "Bu malzeme icin recete tanimli degil." });
+
+        // BOMLineWithName artik dogrudan ItemId/ConfigId tasiyor (FK-based BOM refactor sonrasi)
+        // — ekstra Items.code lookup gerekmiyor.
+        var keys = new List<PriceEntryKey>();
+        var compMeta = new List<(string Code, string Name, string? CfgCode, decimal Qty, decimal Scrap, int ItemId, int? ConfigId)>();
+        foreach (var l in bom.Lines)
+        {
+            keys.Add(new PriceEntryKey(l.ItemId, l.ConfigId));
+            compMeta.Add((l.ComponentMaterialCode, l.ComponentMaterialName, l.ComponentConfigCode, l.Quantity, l.ScrapRatio, l.ItemId, l.ConfigId));
+        }
+
+        // DEBUG: maliyet teshisi (gecici)
+        Console.WriteLine($"[CostView] material='{materialCode}' configCode='{configCode}' priceGroup={priceGroupId} currency={currencyId} priceType='{priceType}' validOn={priceDate:yyyy-MM-dd}");
+        foreach (var l in bom.Lines)
+            Console.WriteLine($"[CostView]   BOM bilesen: code='{l.ComponentMaterialCode}' itemId={l.ItemId} configId={(l.ConfigId?.ToString() ?? "NULL")} qty={l.Quantity}");
+
+        // PriceType DB konvansiyonu: 'b'/'s'/'m'. Bos ise varsayilan 'm' (Maliyet).
+        var pType = string.IsNullOrWhiteSpace(priceType) ? "m" : priceType.Trim();
+        var prices = keys.Count == 0
+            ? Array.Empty<ExistingPriceRow>()
+            : (await _priceListService.GetExistingPricesAsync(
+                new GetExistingPricesRequest(priceGroupId, currencyId, pType, priceDate, keys),
+                cancellationToken)).ToArray();
+
+        var priceByKey = prices.ToDictionary(p => (p.ItemId, p.ConfigId), p => p.Price);
+        var currencies = await _currencyService.GetAllAsync(cancellationToken);
+        var currency = currencies.FirstOrDefault(c => c.Id == currencyId);
+
+        // Stok grup kodlari (card_group_mappings — entityType=1=Item) — paralel batch.
+        // Her bilesen icin level=1 ve level=2 grup kodlari eklenir; UI'da
+        // gruplama opsiyonu ile bu kodlara gore kirilim yapar.
+        var groupTasks = compMeta
+            .Select(c => c.ItemId)
+            .Distinct()
+            .Select(async id =>
+            {
+                try
+                {
+                    var ms = await _cardGroupRepo.GetEntityMappingsAsync(1, id.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+                    return (ItemId: id, Map: ms.ToDictionary(m => (int)m.Level, m => (Code: m.Code, Desc: m.Description)));
+                }
+                catch
+                {
+                    return (ItemId: id, Map: new Dictionary<int, (string Code, string? Desc)>());
+                }
+            })
+            .ToArray();
+        var groupResults = await Task.WhenAll(groupTasks);
+        var groupsByItem = groupResults.ToDictionary(t => t.ItemId, t => t.Map);
+
+        decimal total = 0m;
+        var components = compMeta.Select(c =>
+        {
+            decimal price = priceByKey.TryGetValue((c.ItemId, c.ConfigId), out var p) ? p : 0m;
+            // Fire ratio dahil edilmis efektif miktar — recete bileseninin gercek tuketim adedi
+            decimal effQty = c.Qty * quantity * (1m + c.Scrap);
+            decimal lineCost = effQty * price;
+            total += lineCost;
+            // Grup kodlari — tum seviyeler (level 1, 2, 3, ...) dinamik olarak doner.
+            // Frontend her bilesen icin gormekte oldugu seviyeleri toplar ve checkbox
+            // listesini ona gore uretir; sabit g1/g2 sayisi kalmadi.
+            var groupsObj = new Dictionary<string, object>();
+            if (groupsByItem.TryGetValue(c.ItemId, out var gmap))
+            {
+                foreach (var kv in gmap)
+                    groupsObj[kv.Key.ToString(System.Globalization.CultureInfo.InvariantCulture)] = new { code = kv.Value.Code, name = kv.Value.Desc };
+            }
+            return new
+            {
+                code = c.Code,
+                name = c.Name,
+                configCode = c.CfgCode,
+                qty = c.Qty,
+                scrapRatio = c.Scrap,
+                effectiveQty = effQty,
+                unitPrice = price,
+                lineCost = lineCost,
+                hasPrice = price > 0m,
+                groups = groupsObj,   // { "1": {code,name}, "2": {code,name}, "3": {code,name}, ... }
+            };
+        }).ToArray();
+
+        return Ok(new
+        {
+            found = true,
+            parent = new
+            {
+                itemId       = bom.ItemId,
+                materialCode = bom.ItemCode,
+                materialName = bom.ItemName,
+                configId     = bom.ConfigId,
+                configCode   = bom.ConfigCode,
+                description  = bom.Description,
+            },
+            quantity = quantity,
+            components,
+            totalCost = total,
+            currency = new
+            {
+                id = currency?.Id ?? currencyId,
+                code = currency?.Code,
+                name = currency?.Name,
+                symbol = currency?.Symbol,
+            },
+            priceType = pType,
         });
     }
 
@@ -300,12 +701,19 @@ public sealed class LogisticsController : Controller
         if (!string.IsNullOrEmpty(query))
             filtered = filtered.Take(50);
 
+        // Unit lookup — UnitId varsa UnitCode'u resolve et (single fetch + dictionary)
+        var units = await _logisticsConfigurationService.GetUnitsAsync(cancellationToken);
+        var unitMap = units.ToDictionary(u => u.Id, u => u.UnitCode);
+
         var results = filtered
             .Select(s => new
             {
+                id        = s.Id,                    // Items.Id — frontend itemId hidden alana yazar
                 code      = s.Code.Trim(),
                 name      = s.Name,
-                hasConfig = s.TrackCombinations
+                hasConfig = s.Combinations,
+                unitId    = s.UnitId,                // mamulun ana birim FK (Items.UnitId)
+                unitCode  = s.UnitId.HasValue && unitMap.TryGetValue(s.UnitId.Value, out var uc) ? uc : null
             });
         return Json(results);
     }
@@ -321,7 +729,7 @@ public sealed class LogisticsController : Controller
             configId = c.ConfigId,
             code   = c.Code,
             name   = c.Name,
-            features = c.FeatureValues.Select(fv => new { feature = fv.Feature, value = fv.Value }).ToArray()
+            features = c.FeatureValues.Select(fv => new { feature = fv.Feature, value = fv.Value, valueCode = fv.ValueCode }).ToArray()
         }));
     }
 
@@ -662,6 +1070,140 @@ public sealed class LogisticsController : Controller
         }
     }
 
+    // ── Makine Tanımlamaları ─────────────────────────────────────────────
+    // Sayfa render — Locations sayfası ile ayni desen, FK olarak LocationId tasiyor.
+    [HttpGet]
+    public IActionResult Machines() => View();
+
+    [HttpGet]
+    public async Task<IActionResult> GetAllMachines(string? search, CancellationToken ct)
+    {
+        var rows = await _logisticsConfigurationService.GetMachinesAsync(ct);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLowerInvariant();
+            rows = rows.Where(m =>
+                (m.MachineCode ?? "").ToLowerInvariant().Contains(q) ||
+                (m.MachineName ?? "").ToLowerInvariant().Contains(q) ||
+                (m.MachineType ?? "").ToLowerInvariant().Contains(q) ||
+                (m.LocationCode ?? "").ToLowerInvariant().Contains(q) ||
+                (m.LocationName ?? "").ToLowerInvariant().Contains(q)).ToArray();
+        }
+        return Json(rows);
+    }
+
+    public sealed class MachineInput
+    {
+        public int? Id { get; set; }
+        public int LocationId { get; set; }
+        public string MachineCode { get; set; } = string.Empty;
+        public string? MachineName { get; set; }
+        public string? MachineType { get; set; }
+        public decimal? HourlyCapacity { get; set; }
+        public int SortOrder { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveMachineJson([FromBody] MachineInput input, CancellationToken ct)
+    {
+        if (input is null)
+            return Json(new { success = false, message = "Gecersiz istek." });
+        // MachineCode UI'da gosterilmiyor — Service tarafinda otomatik uretiliyor.
+        // Bos gelirse Create akisinda 'MAC-{6-hex}' olarak uretilir, Update'te mevcut korunur.
+        if (input.LocationId <= 0)
+            return Json(new { success = false, message = "Lokasyon secimi zorunludur." });
+
+        try
+        {
+            if (input.Id.HasValue && input.Id.Value > 0)
+            {
+                await _logisticsConfigurationService.UpdateMachineAsync(
+                    new UpdateMachineRequest(input.Id.Value, input.LocationId, input.MachineCode,
+                        input.MachineName, input.MachineType, input.HourlyCapacity,
+                        input.SortOrder, input.IsActive), ct);
+                return Json(new { success = true, id = input.Id.Value });
+            }
+            else
+            {
+                var newId = await _logisticsConfigurationService.CreateMachineAsync(
+                    new CreateMachineRequest(input.LocationId, input.MachineCode,
+                        input.MachineName, input.MachineType, input.HourlyCapacity,
+                        input.SortOrder, input.IsActive), ct);
+                return Json(new { success = true, id = newId });
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteMachineJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            await _logisticsConfigurationService.DeleteMachineAsync(id, ct);
+            return Json(new { success = true });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    // Makine tipi referans verisi (9 built-in + ozel tipler).
+    // Description alani UI'da tooltip/hint olarak gosterilir — Logo Netsis dokumanindan
+    // turetilen kritik planlama davranisi/parametreleri orada anlatilir.
+    [HttpGet]
+    public async Task<IActionResult> GetAllMachineTypes(CancellationToken ct)
+    {
+        var rows = await _logisticsConfigurationService.GetMachineTypesAsync(ct);
+        return Json(rows);
+    }
+
+    public sealed class MachineTypeInput
+    {
+        public int? Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public int SortOrder { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveMachineTypeJson([FromBody] MachineTypeInput input, CancellationToken ct)
+    {
+        if (input is null) return Json(new { success = false, message = "Gecersiz istek." });
+        try
+        {
+            var id = await _logisticsConfigurationService.SaveMachineTypeAsync(
+                new SaveMachineTypeRequest(input.Id, input.Code, input.Name,
+                    input.Description, input.SortOrder, input.IsActive), ct);
+            return Json(new { success = true, id });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteMachineTypeJson(int id, CancellationToken ct)
+    {
+        try
+        {
+            await _logisticsConfigurationService.DeleteMachineTypeAsync(id, ct);
+            return Json(new { success = true });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
     /* â"€â"€ Malzeme GruplarÄ± â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 
     [HttpGet]
@@ -761,7 +1303,6 @@ public sealed class LogisticsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveMaterialCard(
         [Bind(Prefix = "StockInput")] MaterialCardCreateInput stockInput,
-        IFormFile? ProductImage,
         CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -790,23 +1331,6 @@ public sealed class LogisticsController : Controller
             var isUpdate = stockInput.ItemId.HasValue && stockInput.ItemId.Value != 0;
             var currentUserName = User.FindFirstValue(System.Security.Claims.ClaimTypes.Name);
 
-            byte[]? imageData = null;
-            string? imageMimeType = null;
-            
-            if (!string.IsNullOrEmpty(stockInput.ProductImageBase64))
-            {
-                var base64Data = stockInput.ProductImageBase64.Substring(stockInput.ProductImageBase64.IndexOf(",") + 1);
-                imageData = Convert.FromBase64String(base64Data);
-                imageMimeType = "image/jpeg";
-            }
-            else if (ProductImage != null && ProductImage.Length > 0)
-            {
-                using var memoryStream = new MemoryStream();
-                await ProductImage.CopyToAsync(memoryStream, cancellationToken);
-                imageData = memoryStream.ToArray();
-                imageMimeType = ProductImage.ContentType;
-            }
-
             var companyId = GetCompanyId();
             var placeholders = new Dictionary<string, string>
             {
@@ -814,7 +1338,6 @@ public sealed class LogisticsController : Controller
                 ["UserName"] = User.FindFirstValue(System.Security.Claims.ClaimTypes.Name) ?? "system",
                 ["Code"] = stockInput.Code ?? "",
                 ["Name"] = stockInput.Name ?? "",
-                ["Description"] = stockInput.Description ?? "",
                 ["TypeId"] = stockInput.TypeId?.ToString() ?? "",
                 ["IsActive"] = "1"
             };
@@ -829,11 +1352,9 @@ public sealed class LogisticsController : Controller
                         ItemId: stockInput.ItemId!.Value,
                         Code: stockInput.Code,
                         Name: stockInput.Name,
-                        Description: stockInput.Description,
                         TypeId: stockInput.TypeId,
-                        TrackCombinations: stockInput.TrackCombinations,
-                        ImageData: imageData,
-                        ImageMimeType: imageMimeType),
+                        UnitId: stockInput.UnitId,
+                        Combinations: stockInput.Combinations),
                     cancellationToken);
 
                 _integrationEventService.FireAfterEvent(companyId, "Item", "AfterUpdate", placeholders);
@@ -846,11 +1367,9 @@ public sealed class LogisticsController : Controller
                     new CreateItemRequest(
                         Code: stockInput.Code,
                         Name: stockInput.Name,
-                        Description: stockInput.Description,
                         TypeId: stockInput.TypeId,
-                        TrackCombinations: stockInput.TrackCombinations,
-                        ImageData: imageData,
-                        ImageMimeType: imageMimeType),
+                        UnitId: stockInput.UnitId,
+                        Combinations: stockInput.Combinations),
                     cancellationToken);
 
                 _integrationEventService.FireAfterEvent(companyId, "Item", "AfterCreate", placeholders);
@@ -909,7 +1428,6 @@ public sealed class LogisticsController : Controller
                 ["UserName"] = User.FindFirstValue(System.Security.Claims.ClaimTypes.Name) ?? "system",
                 ["Code"] = card?.Code ?? "",
                 ["Name"] = card?.Name ?? "",
-                ["Description"] = card?.Description ?? "",
                 ["TypeId"] = card?.TypeId?.ToString() ?? "",
                 ["IsActive"] = card?.IsActive == true ? "1" : "0"
             };
@@ -968,7 +1486,7 @@ public sealed class LogisticsController : Controller
     public async Task<IActionResult> ConfigureMaterialCard(
         int stockCardId,
         bool isConfigurable,
-        List<Guid>? propertyIds,
+        List<int>? propertyIds,
         CancellationToken cancellationToken)
     {
         try
@@ -977,7 +1495,7 @@ public sealed class LogisticsController : Controller
                 new ConfigureItemRequest(
                     stockCardId,
                     isConfigurable,
-                    (propertyIds ?? new List<Guid>()).ToArray()),
+                    (propertyIds ?? new List<int>()).ToArray()),
                 cancellationToken);
 
             TempData["AdminSuccess"] = "Malzeme karti yapilandirma ayarlari guncellendi.";
@@ -1266,8 +1784,14 @@ public sealed class LogisticsController : Controller
             })
             .ToArray();
 
-        var stockCodes = snapshot.FeatureStockLinks
+        // Bu feature icin tum stok-link'leri (her link'in AllowedValueIds[] var)
+        var featureLinks = snapshot.FeatureStockLinks
             .Where(l => l.FeatureId == id && !string.IsNullOrWhiteSpace(l.StockCode))
+            .GroupBy(l => l.StockCode, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First()) // her stockCode tekil olmali (header satir)
+            .ToArray();
+
+        var stockCodes = featureLinks
             .Select(l => l.StockCode)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -1278,12 +1802,14 @@ public sealed class LogisticsController : Controller
             .GroupBy(s => (s.Code ?? string.Empty).ToUpperInvariant())
             .ToDictionary(g => g.Key, g => g.First().Name ?? g.First().Code);
 
-        var linkedStocks = stockCodes
-            .Where(code => stockByCode.ContainsKey((code ?? string.Empty).ToUpperInvariant()))
-            .Select(code => new
+        var linkedStocks = featureLinks
+            .Where(l => stockByCode.ContainsKey((l.StockCode ?? string.Empty).ToUpperInvariant()))
+            .Select(l => new
             {
-                code = code.Trim(),
-                name = stockByCode.TryGetValue((code ?? string.Empty).ToUpperInvariant(), out var n) ? n : code,
+                code = (l.StockCode ?? string.Empty).Trim(),
+                name = stockByCode.TryGetValue((l.StockCode ?? string.Empty).ToUpperInvariant(), out var n) ? n : l.StockCode,
+                printDescriptionInDesign = l.PrintDescriptionInDesign,
+                allowedValueIds = (l.AllowedValueIds ?? Array.Empty<int>()).ToArray(),
             })
             .ToArray();
 
@@ -1485,10 +2011,25 @@ public sealed class LogisticsController : Controller
 
         try
         {
+            // Yeni payload oncelikli: Stocks[] (StockCode + AllowedValueIds + Print)
+            // Geriye donuk uyumluluk: yalniz StockCodes[] geldiyse kisitlamasiz, Print=true
+            var stocks = (input.Stocks ?? Array.Empty<SaveProductFeatureStockInput>())
+                .Where(x => !string.IsNullOrWhiteSpace(x.StockCode))
+                .Select(x => new SaveProductConfigurationFeatureStockItem(
+                    x.StockCode!.Trim(),
+                    x.PrintDescriptionInDesign ?? true,
+                    x.AllowedValueIds ?? Array.Empty<int>()))
+                .ToList();
+
+            if (stocks.Count == 0 && input.StockCodes is not null && input.StockCodes.Count > 0)
+            {
+                stocks.AddRange(input.StockCodes
+                    .Where(c => !string.IsNullOrWhiteSpace(c))
+                    .Select(c => new SaveProductConfigurationFeatureStockItem(c.Trim(), true, Array.Empty<int>())));
+            }
+
             await _logisticsConfigurationService.SaveProductConfigurationFeatureStocksAsync(
-                new SaveProductConfigurationFeatureStocksRequest(
-                    input.FeatureId,
-                    input.StockCodes ?? Array.Empty<string>()),
+                new SaveProductConfigurationFeatureStocksRequest(input.FeatureId, stocks),
                 ct);
             return Json(new { success = true });
         }
@@ -1500,7 +2041,13 @@ public sealed class LogisticsController : Controller
 
     public sealed record SaveProductFeatureStocksJsonInput(
         int FeatureId,
-        IReadOnlyCollection<string>? StockCodes);
+        IReadOnlyCollection<string>? StockCodes,
+        IReadOnlyCollection<SaveProductFeatureStockInput>? Stocks);
+
+    public sealed record SaveProductFeatureStockInput(
+        string? StockCode,
+        bool? PrintDescriptionInDesign,
+        IReadOnlyCollection<int>? AllowedValueIds);
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -1875,10 +2422,14 @@ public sealed class LogisticsController : Controller
 
         try
         {
+            var stockItems = (selectedStockCodes ?? Array.Empty<string>())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => new SaveProductConfigurationFeatureStockItem(c.Trim(), true, Array.Empty<int>()))
+                .ToArray();
             await _logisticsConfigurationService.SaveProductConfigurationFeatureStocksAsync(
                 new SaveProductConfigurationFeatureStocksRequest(
                     featureId ?? 0,
-                    selectedStockCodes ?? Array.Empty<string>()),
+                    stockItems),
                 cancellationToken);
 
             TempData["AdminSuccess"] = "Ozellige gecerli stok eslestirmesi kaydedildi.";
@@ -2079,10 +2630,17 @@ public sealed class LogisticsController : Controller
 
         var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(cancellationToken);
 
-        var linkedFeatureIds = snapshot.FeatureStockLinks
+        // Bu stok'a bagli her feature icin AllowedValueIds[] (kisitlamali deger seti).
+        // Bos set → kisitlama yok, tum aktif degerler izinli.
+        var stockLinks = snapshot.FeatureStockLinks
             .Where(x => string.Equals(x.StockCode, stockCode, StringComparison.OrdinalIgnoreCase))
-            .Select(x => x.FeatureId)
-            .ToHashSet();
+            .ToArray();
+        var linkedFeatureIds = stockLinks.Select(x => x.FeatureId).ToHashSet();
+        var allowedByFeature = stockLinks
+            .GroupBy(x => x.FeatureId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.SelectMany(x => x.AllowedValueIds ?? Array.Empty<int>()).ToHashSet());
 
         var featureVms = snapshot.Features
             .Where(f => linkedFeatureIds.Contains(f.Id) && f.IsActive)
@@ -2101,12 +2659,24 @@ public sealed class LogisticsController : Controller
             })
             .ToList();
 
-        var featuresResult = featureVms.Select(f => new
+        var featuresResult = featureVms.Select(f =>
         {
-            id     = f.Id,
-            code   = f.Code,
-            name   = f.Name,
-            values = f.Values.Select(v => new { id = v.Id, code = v.Code, description = v.Description }).ToArray()
+            var allowedSet = allowedByFeature.TryGetValue(f.Id, out var s) ? s : new HashSet<int>();
+            var hasRestriction = allowedSet.Count > 0;
+            return new
+            {
+                id     = f.Id,
+                code   = f.Code,
+                name   = f.Name,
+                values = f.Values.Select(v => new
+                {
+                    id          = v.Id,
+                    code        = v.Code,
+                    description = v.Description,
+                    // Kisitlama yoksa hepsi izinli; varsa yalniz set'tekiler
+                    allowed     = !hasRestriction || allowedSet.Contains(v.Id),
+                }).ToArray()
+            };
         }).ToArray();
 
         // Mevcut kombinasyonlarÄ± doÄŸrudan dÃ¶ndÃ¼r (cross-product client-side Ã¼retilir)
@@ -2164,7 +2734,7 @@ public sealed class LogisticsController : Controller
         var stockSnapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
 
         var allStockCodes = stockSnapshot.Items
-            .Where(x => x.TrackCombinations)
+            .Where(x => x.Combinations)
             .Select(x => x.Code)
             .Concat(snapshot.FeatureStockLinks.Select(x => x.StockCode))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -2665,7 +3235,7 @@ public sealed class LogisticsController : Controller
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var featureStockOptions = stockSnapshot.Items
-            .Where(x => x.IsActive && x.TrackCombinations)
+            .Where(x => x.IsActive && x.Combinations)
             .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
             .Select(x => new ProductFeatureStockOptionViewModel
             {
@@ -3036,7 +3606,6 @@ public sealed class LogisticsController : Controller
                 Id = x.Id,
                 Code = x.Code,
                 Name = x.Name,
-                Description = x.Description,
                 TypeId = x.TypeId,
                 IsActive = x.IsActive
             })
@@ -3116,10 +3685,10 @@ public sealed class LogisticsController : Controller
                     .Where(x => x.Id == stockInput.ItemId.Value)
                     .Select(x => new MaterialCardMetaViewModel
                     {
-                        CreatedByUserId = x.CreatedByUserId,
-                        CreatedDate = x.CreatedDate,
-                        ModifiedByUserId = x.ModifiedByUserId,
-                        ModifiedDate = x.ModifiedDate
+                        CreatedByUserId = null,
+                        CreatedDate = x.CreateDate,
+                        ModifiedByUserId = null,
+                        ModifiedDate = x.ModifyDate
                     })
                     .FirstOrDefault()
                 : null,
@@ -3200,7 +3769,7 @@ public sealed class LogisticsController : Controller
 
         var searchBlob = string.Join(
             ' ',
-            new[] { row.Code, row.Name, row.Description }
+            new[] { row.Code, row.Name }
                 .Where(x => !string.IsNullOrWhiteSpace(x)));
 
         return searchBlob.Contains(searchTerm, StringComparison.OrdinalIgnoreCase);
@@ -3257,12 +3826,9 @@ public sealed class LogisticsController : Controller
             ItemId = stockCard.Id,
             Code = stockCard.Code,
             Name = stockCard.Name,
-            Description = stockCard.Description,
             TypeId = stockCard.TypeId,
-            TrackCombinations = stockCard.TrackCombinations,
-            ExistingImageUrl = stockCard.ImageData != null && stockCard.ImageMimeType != null
-                ? $"data:{stockCard.ImageMimeType};base64,{Convert.ToBase64String(stockCard.ImageData)}"
-                : null
+            UnitId = stockCard.UnitId,
+            Combinations = stockCard.Combinations
         };
     }
 
@@ -3554,7 +4120,6 @@ public sealed class LogisticsController : Controller
     [
         new() { Key = "MaterialCode",        Label = "Malzeme Kodu" },
         new() { Key = "MaterialName",        Label = "Malzeme Adi" },
-        new() { Key = "MaterialDescription", Label = "Aciklama" },
         new() { Key = "UnitName",            Label = "Olcu Birimi" },
         new() { Key = "IsActive",            Label = "Durum" },
         new() { Key = "CreatedDate",         Label = "Kayit Tarihi" },
@@ -3562,7 +4127,7 @@ public sealed class LogisticsController : Controller
     ];
 
     private static readonly string[] DefaultMaterialCardColumns =
-        ["MaterialCode", "MaterialName", "MaterialDescription"];
+        ["MaterialCode", "MaterialName", "UnitName"];
 
     private async Task<IReadOnlyCollection<string>> GetMaterialCardVisibleColumnsAsync(CancellationToken ct)
     {
@@ -3592,14 +4157,18 @@ public sealed class LogisticsController : Controller
         var listQuery = NormalizeMaterialCardListQuery(search, sortBy, sortDirection, page, resolvedPageSize);
 
         var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
+        var units = await _logisticsConfigurationService.GetUnitsAsync(ct);
+        var unitNameById = units.ToDictionary(u => u.Id, u => u.UnitName);
+
         var allRows = snapshot.Items
             .Select(x => new MaterialCardRowViewModel
             {
                 Id = x.Id,
                 Code = x.Code,
                 Name = x.Name,
-                Description = x.Description,
                 TypeId = x.TypeId,
+                UnitId = x.UnitId,
+                UnitName = x.UnitId.HasValue && unitNameById.TryGetValue(x.UnitId.Value, out var n) ? n : null,
                 IsActive = x.IsActive
             })
             .ToArray();
@@ -3619,8 +4188,8 @@ public sealed class LogisticsController : Controller
                 i.Id,
                 MaterialCode = i.Code,
                 MaterialName = i.Name,
-                MaterialDescription = i.Description,
-                unitName = (string?)null,
+                unitId = i.UnitId,
+                unitName = i.UnitName,
                 i.IsActive,
                 MaterialTypeId = i.TypeId
             }),
@@ -3639,13 +4208,9 @@ public sealed class LogisticsController : Controller
         var card = snapshot.Items.FirstOrDefault(x => x.Id == id);
         if (card is null) return NotFound();
 
-        string? imageUrl = card.ImageData != null && card.ImageMimeType != null
-            ? $"data:{card.ImageMimeType};base64,{Convert.ToBase64String(card.ImageData)}"
-            : null;
-
         // Kombinasyonlar
         var combinations = new List<object>();
-        if (card.TrackCombinations)
+        if (card.Combinations)
         {
             var productSnapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
             var stockCombinations = productSnapshot.Configurations
@@ -3695,17 +4260,14 @@ public sealed class LogisticsController : Controller
             stockCardId = card.Id,
             materialCode = card.Code,
             materialName = card.Name,
-            materialDescription = card.Description,
             materialTypeId = card.TypeId,
-            trackCombinations = card.TrackCombinations,
+            unitId = card.UnitId,
+            trackCombinations = card.Combinations,
             taxRate = card.TaxRate,
-            existingImageUrl = imageUrl,
             meta = new
             {
-                createdDate = card.CreatedDate,
-                createdByUserId = card.CreatedByUserId,
-                modifiedDate = card.ModifiedDate,
-                modifiedByUserId = card.ModifiedByUserId
+                createdDate = card.CreateDate,
+                modifiedDate = card.ModifyDate
             },
             combinations
         });
@@ -3794,21 +4356,6 @@ public sealed class LogisticsController : Controller
 
             var isUpdate = input.ItemId.HasValue && input.ItemId.Value != 0;
 
-            // Resim islemleri
-            byte[]? imageData = null;
-            string? imageMimeType = null;
-            if (string.Equals(input.ProductImageBase64, "CLEAR", StringComparison.OrdinalIgnoreCase))
-            {
-                imageData = Array.Empty<byte>();
-                imageMimeType = "CLEAR";
-            }
-            else if (!string.IsNullOrEmpty(input.ProductImageBase64) && input.ProductImageBase64.Contains(","))
-            {
-                var base64Data = input.ProductImageBase64.Substring(input.ProductImageBase64.IndexOf(",") + 1);
-                imageData = Convert.FromBase64String(base64Data);
-                imageMimeType = "image/jpeg";
-            }
-
             var companyId = GetCompanyId();
             var placeholders = new Dictionary<string, string>
             {
@@ -3816,7 +4363,6 @@ public sealed class LogisticsController : Controller
                 ["UserName"] = User.FindFirstValue(ClaimTypes.Name) ?? "system",
                 ["Code"] = input.Code ?? "",
                 ["Name"] = input.Name ?? "",
-                ["Description"] = input.Description ?? "",
                 ["TypeId"] = input.TypeId?.ToString() ?? "",
                 ["IsActive"] = "1"
             };
@@ -3831,12 +4377,10 @@ public sealed class LogisticsController : Controller
                         ItemId: input.ItemId!.Value,
                         Code: input.Code,
                         Name: input.Name,
-                        Description: input.Description,
                         TypeId: input.TypeId,
-                        TrackCombinations: input.TrackCombinations,
-                        TaxRate: input.TaxRate,
-                        ImageData: imageData,
-                        ImageMimeType: imageMimeType),
+                        UnitId: input.UnitId,
+                        Combinations: input.Combinations,
+                        TaxRate: input.TaxRate),
                     ct);
 
                 _integrationEventService.FireAfterEvent(companyId, "Item", "AfterUpdate", placeholders);
@@ -3849,12 +4393,10 @@ public sealed class LogisticsController : Controller
                     new CreateItemRequest(
                         Code: input.Code,
                         Name: input.Name,
-                        Description: input.Description,
                         TypeId: input.TypeId,
-                        TrackCombinations: input.TrackCombinations,
-                        TaxRate: input.TaxRate,
-                        ImageData: imageData,
-                        ImageMimeType: imageMimeType),
+                        UnitId: input.UnitId,
+                        Combinations: input.Combinations,
+                        TaxRate: input.TaxRate),
                     ct);
 
                 _integrationEventService.FireAfterEvent(companyId, "Item", "AfterCreate", placeholders);
@@ -3901,7 +4443,6 @@ public sealed class LogisticsController : Controller
                 ["UserName"] = User.FindFirstValue(ClaimTypes.Name) ?? "system",
                 ["Code"] = card?.Code ?? "",
                 ["Name"] = card?.Name ?? "",
-                ["Description"] = card?.Description ?? "",
                 ["TypeId"] = card?.TypeId?.ToString() ?? "",
                 ["IsActive"] = card?.IsActive == true ? "1" : "0"
             };
@@ -3934,36 +4475,41 @@ public sealed class LogisticsController : Controller
     // ── Ölçü Birimi Dönüşümleri (Stok Kartı bazlı) ──
 
     [HttpGet]
-    public async Task<IActionResult> GetStockUnitConversions(int stockCardId, CancellationToken ct)
+    public async Task<IActionResult> GetItemUnits(int itemId, CancellationToken ct)
     {
-        var items = await _logisticsConfigurationService.GetStockUnitConversionsAsync(stockCardId, ct);
+        var items = await _logisticsConfigurationService.GetItemUnitsAsync(itemId, ct);
         var units = await _logisticsConfigurationService.GetUnitsAsync(ct);
         return Json(new
         {
-            conversions = items.Select(x => new { x.LineNo, x.UnitCode, x.Multiplier }),
-            availableUnits = units.Where(u => u.IsActive)
-                .OrderBy(u => u.SortOrder).ThenBy(u => u.UnitCode)
-                .Select(u => new { u.UnitCode, u.UnitName }),
+            // Master birim Items.UnitId'de — bu liste sadece alternat birimler (lineNo>=1).
+            conversions = items.Where(x => x.LineNo >= 1).Select(x => new { x.LineNo, x.UnitId, x.Multiplier }),
+            // Tum birimler donulur — inactive olanlar frontend'de strikethrough/disabled gosterilir
+            // ki mevcut secimini koruyup pasif olanlar kullaniciya belli olsun.
+            availableUnits = units
+                .OrderBy(u => u.IsActive ? 0 : 1)
+                .ThenBy(u => u.SortOrder)
+                .ThenBy(u => u.UnitCode)
+                .Select(u => new { u.Id, u.UnitCode, u.UnitName, u.IsActive }),
         });
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveStockUnitConversions([FromBody] SaveStockUnitConversionsInput input, CancellationToken ct)
+    public async Task<IActionResult> SaveItemUnits([FromBody] SaveItemUnitsInput input, CancellationToken ct)
     {
         if (input.ItemId <= 0)
             return Json(new { success = false, message = "Stok karti ID gerekli." });
 
         var items = (input.Items ?? [])
-            .Where(x => !string.IsNullOrWhiteSpace(x.UnitCode) && x.Multiplier > 0)
-            .Select(x => new Application.Contracts.SaveStockUnitConversionItem(x.UnitCode.Trim(), x.Multiplier))
+            .Where(x => x.UnitId > 0 && x.Multiplier > 0)
+            .Select(x => new Application.Contracts.SaveItemUnitItem(x.UnitId, x.Multiplier))
             .ToList();
 
         // Tekrar eden birim kontrolü
-        var codes = items.Select(x => x.UnitCode.ToUpperInvariant()).ToList();
-        if (codes.Distinct().Count() != codes.Count)
+        var ids = items.Select(x => x.UnitId).ToList();
+        if (ids.Distinct().Count() != ids.Count)
             return Json(new { success = false, message = "Ayni olcu birimi birden fazla tanimlanamaz." });
 
-        await _logisticsConfigurationService.SaveStockUnitConversionsAsync(input.ItemId, items, ct);
+        await _logisticsConfigurationService.SaveItemUnitsAsync(input.ItemId, items, ct);
         return Json(new { success = true });
     }
 
@@ -4106,30 +4652,66 @@ public sealed class LogisticsController : Controller
         if (card is null) return NotFound(new { success = false, message = "Stok karti bulunamadi." });
 
         var productCfg = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
+        // Bu stoğun aktif kombinasyonlarda kullandığı feature ID'leri — switchkey'i kilitleyecek
+        var usedFeatureIdsInCombinations = await _logisticsConfigurationService
+            .GetUsedFeatureIdsInCombinationsAsync(stockCardId, ct);
+        var usedFeatureValuePairs = await _logisticsConfigurationService
+            .GetUsedFeatureValueIdsInCombinationsAsync(stockCardId, ct);
+        var combinationCount = await _logisticsConfigurationService
+            .GetCombinationCountForItemAsync(stockCardId, ct);
+        // Feature -> ValueIds (kombinasyonda kullanilan, kilitli)
+        var usedValueIdsByFeature = usedFeatureValuePairs
+            .GroupBy(x => x.FeatureId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.ValueId).Distinct().ToArray());
 
-        var linkedMap = productCfg.FeatureStockLinks
+        // Bu stok'a baglanmis (header) feature linkleri — her birinde AllowedValueIds[] var
+        var stockLinks = productCfg.FeatureStockLinks
             .Where(l => string.Equals(l.StockCode, card.Code.Trim(), StringComparison.OrdinalIgnoreCase))
             .GroupBy(l => l.FeatureId)
-            .ToDictionary(g => g.Key, g => g.First().PrintDescriptionInDesign);
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // Tum feature degerleri (her feature'in dropdown chip'leri icin)
+        var valuesByFeature = productCfg.Values
+            .Where(v => v.IsActive)
+            .GroupBy(v => v.FeatureId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(v => v.Description).Select(v => new
+                {
+                    id = v.Id,
+                    code = v.Code,
+                    description = v.Description,
+                    value = v.Value,
+                }).ToArray());
 
         var allFeatures = productCfg.Features
             .Where(f => f.IsActive)
             .OrderBy(f => f.Name)
-            .Select(f => new
+            .Select(f =>
             {
-                id = f.Id,
-                code = f.Code,
-                name = f.Name,
-                dataType = f.DataType,
-                unitOfMeasure = f.UnitOfMeasure,
-                linked = linkedMap.ContainsKey(f.Id),
-                printDescription = linkedMap.TryGetValue(f.Id, out var pd) ? pd : true
+                var hasLink = stockLinks.TryGetValue(f.Id, out var link);
+                var usedValueIds = usedValueIdsByFeature.TryGetValue(f.Id, out var uv) ? uv : Array.Empty<int>();
+                return new
+                {
+                    id = f.Id,
+                    code = f.Code,
+                    name = f.Name,
+                    dataType = f.DataType,
+                    unitOfMeasure = f.UnitOfMeasure,
+                    linked = hasLink,
+                    printDescription = hasLink ? link!.PrintDescriptionInDesign : true,
+                    allowedValueIds = hasLink ? (link!.AllowedValueIds ?? Array.Empty<int>()).ToArray() : Array.Empty<int>(),
+                    availableValues = valuesByFeature.TryGetValue(f.Id, out var vs) ? vs : Array.Empty<object>().Select(_ => new { id = 0, code = string.Empty, description = string.Empty, value = string.Empty }).ToArray(),
+                    inUseInCombination = usedFeatureIdsInCombinations.Contains(f.Id),
+                    usedValueIds = usedValueIds,
+                };
             })
             .ToArray();
 
         return Json(new
         {
             materialCode = card.Code,
+            combinationCount = combinationCount,
             features = allFeatures,
         });
     }
@@ -4146,11 +4728,24 @@ public sealed class LogisticsController : Controller
             var card = snapshot.Items.FirstOrDefault(s => s.Id == input.ItemId);
             if (card is null) return Json(new { success = false, message = "Stok karti bulunamadi." });
 
-            // Yeni format: Items[{featureId, printDescriptionInDesign}]; eski istekler (sadece featureIds)
-            // icin geri uyumluluk — PrintDescriptionInDesign default true.
-            var tuples = input.Items != null && input.Items.Length > 0
-                ? input.Items.Select(x => (x.FeatureId, x.PrintDescriptionInDesign)).ToArray()
-                : (input.FeatureIds ?? Array.Empty<int>()).Select(id => (FeatureId: id, PrintDescriptionInDesign: true)).ToArray();
+            // Yeni format: Items[{featureId, printDescriptionInDesign, allowedValueIds[]}]
+            // Geri uyumluluk: yalniz FeatureIds[] geldiyse kisitlamasiz, Print=true
+            (int FeatureId, bool PrintDescriptionInDesign, int[] AllowedValueIds)[] tuples;
+            if (input.Items != null && input.Items.Length > 0)
+            {
+                tuples = input.Items
+                    .Select(x => (
+                        x.FeatureId,
+                        x.PrintDescriptionInDesign,
+                        AllowedValueIds: (x.AllowedValueIds ?? Array.Empty<int>()).Where(v => v > 0).Distinct().ToArray()))
+                    .ToArray();
+            }
+            else
+            {
+                tuples = (input.FeatureIds ?? Array.Empty<int>())
+                    .Select(id => (FeatureId: id, PrintDescriptionInDesign: true, AllowedValueIds: Array.Empty<int>()))
+                    .ToArray();
+            }
 
             await _logisticsConfigurationService.SetFeaturesForItemAsync(
                 card.Code,
@@ -4170,10 +4765,10 @@ public sealed class LogisticsController : Controller
     }
 }
 
-public sealed record SaveStockUnitConversionsInput(int ItemId, SaveStockUnitConversionLineInput[]? Items);
-public sealed record SaveStockUnitConversionLineInput(string UnitCode, decimal Multiplier);
+public sealed record SaveItemUnitsInput(int ItemId, SaveItemUnitLineInput[]? Items);
+public sealed record SaveItemUnitLineInput(int UnitId, decimal Multiplier);
 public sealed record SaveStockFeaturesInput(int ItemId, SaveStockFeatureItem[]? Items, int[]? FeatureIds);
-public sealed record SaveStockFeatureItem(int FeatureId, bool PrintDescriptionInDesign);
+public sealed record SaveStockFeatureItem(int FeatureId, bool PrintDescriptionInDesign, int[]? AllowedValueIds);
 
 public sealed record SaveItemLocationsInput(int ItemId, SaveItemLocationLineInput[]? Items);
 public sealed record SaveItemLocationLineInput(int LocationId, bool IsDefault);

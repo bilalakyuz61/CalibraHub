@@ -4,6 +4,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
+using CalibraHub.Web.Infrastructure.Security;
 using CalibraHub.Web.Models.Setup;
 using CalibraHub.Web.Models.Shared;
 using Microsoft.AspNetCore.Authorization;
@@ -12,7 +13,12 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace CalibraHub.Web.Controllers;
 
+/// <summary>
+/// Ilk kurulum + sirket/kullanici tanimi + baglantilar. Artik tamami Sistem Ayarlari
+/// gate'i arkasinda (TOTP ile dogrulanmis oturum gerekli) — anonim acik degil.
+/// </summary>
 [AllowAnonymous]
+[GateProtected]
 public sealed class SetupController : Controller
 {
     private readonly ICompanyRepository _companyDefinitionRepository;
@@ -466,8 +472,26 @@ public sealed class SetupController : Controller
         }
         return Json(items.Select(x => new
         {
-            x.Id, x.FullName, x.Email, x.CompanyName, x.CompanyId, x.Role, x.IsActive
+            x.Id, x.FullName, x.Email, x.CompanyName, x.CompanyId, x.Role, x.IsActive,
+            grafanaRole = x.GrafanaRole, // "Viewer"/"Designer"/"Admin"/null — frontend Düzenle akisi icin
+            // CalibraHub yetkisi UI'da 3 grubun radio butonu — backend 5 enum degerini bunlara map'ler.
+            //   SystemAdmin            → "SistemAdmin"
+            //   DepartmentManager      → "Admin"
+            //   Approver/Operator/Auditor → "User"
+            uiRole = MapUserRoleToUiRole(x.Role)
         }).ToArray());
+    }
+
+    // UserRole enum stringinden UI radio button degerine donusum.
+    private static string MapUserRoleToUiRole(string? roleString)
+    {
+        if (string.IsNullOrWhiteSpace(roleString)) return "User";
+        if (string.Equals(roleString, nameof(UserRole.SystemAdmin), StringComparison.OrdinalIgnoreCase))
+            return "SistemAdmin";
+        if (string.Equals(roleString, nameof(UserRole.DepartmentManager), StringComparison.OrdinalIgnoreCase))
+            return "Admin";
+        // Approver / Operator / Auditor → User
+        return "User";
     }
 
     [HttpPost]
@@ -482,11 +506,54 @@ public sealed class SetupController : Controller
             return Json(new { success = false, message = "Ad Soyad zorunludur." });
         if (string.IsNullOrWhiteSpace(input.Email))
             return Json(new { success = false, message = "E-posta zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Password))
+
+        // Yeni kayit ise sifre zorunlu, edit ise bos birakilirsa mevcut sifre korunur.
+        var isUpdate = input.Id.HasValue;
+        if (!isUpdate && string.IsNullOrWhiteSpace(input.Password))
             return Json(new { success = false, message = "Sifre zorunludur." });
+
+        // Grafana yetki seviyesi parse — bos/null = Grafana'ya eklenmez/cikartilir,
+        // "Viewer"/"Designer"/"Admin" = ilgili rol.
+        CalibraHub.Domain.Enums.GrafanaRole? grafanaRole = null;
+        if (!string.IsNullOrWhiteSpace(input.GrafanaRole))
+        {
+            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out CalibraHub.Domain.Enums.GrafanaRole parsed))
+                grafanaRole = parsed;
+            else
+                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Designer/Admin/bos)." });
+        }
+
+        // CalibraHub rol parse — UI 3 secenek, enum 5 deger.
+        // Default (Role bos / tanimsiz / yeni kayit) = "User" → Operator.
+        var uiRole = string.IsNullOrWhiteSpace(input.Role) ? "User" : input.Role.Trim();
+        UserRole calibraRole = uiRole.ToLowerInvariant() switch
+        {
+            "admin"        => UserRole.DepartmentManager,
+            "sistemadmin"  => UserRole.SystemAdmin,
+            "user"         => UserRole.Operator,
+            _              => UserRole.Operator
+        };
+        var calibraPermissions = UserAuthorizationCatalog.GetAllowedPermissions(calibraRole);
 
         try
         {
+            if (isUpdate)
+            {
+                await _adminManagementService.UpdateUserAsync(
+                    new UpdateUserRequest(
+                        input.Id!.Value,
+                        input.CompanyId.Value,
+                        input.FullName,
+                        input.Email,
+                        Password: string.IsNullOrWhiteSpace(input.Password) ? null : input.Password,
+                        SetGrafanaRole: true,        // Form'dan her zaman uygulanir (bos = cikar, dolu = ekle/update)
+                        GrafanaRole: grafanaRole,
+                        SetRole: true,               // Form'dan rol her zaman uygulanir
+                        Role: calibraRole),
+                    cancellationToken);
+                return Json(new { success = true, message = "Kullanici guncellendi." });
+            }
+
             var allDepts = await _departmentRepository.GetAllAsync(cancellationToken);
             var dept = allDepts.FirstOrDefault(x => x.CompanyId == input.CompanyId.Value);
             if (dept is null)
@@ -506,9 +573,10 @@ public sealed class SetupController : Controller
                     $"USR-{Guid.NewGuid().ToString()[..6].ToUpperInvariant()}",
                     dept.Id,
                     null,
-                    UserRole.SystemAdmin,
-                    UserAuthorizationCatalog.GetAllowedPermissions(UserRole.SystemAdmin),
-                    input.Password),
+                    calibraRole,
+                    calibraPermissions,
+                    Password: input.Password,
+                    GrafanaRole: grafanaRole),
                 cancellationToken);
 
             return Json(new { success = true, message = "Kullanici olusturuldu." });

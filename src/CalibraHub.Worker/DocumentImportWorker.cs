@@ -9,7 +9,7 @@ namespace CalibraHub.Worker;
 
 public sealed class DocumentImportWorker : BackgroundService
 {
-    private const string TaskCode = "DOC_IMPORT";
+    private const string TaskName = "Belge Ice Aktarim";
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DocumentImportWorker> _logger;
 
@@ -30,8 +30,7 @@ public sealed class DocumentImportWorker : BackgroundService
             var repo = regScope.ServiceProvider.GetRequiredService<IScheduledTaskRepository>();
             await repo.UpsertRegistrationAsync(new ScheduledTask
             {
-                Code                = TaskCode,
-                Name                = "Belge Ice Aktarim",
+                Name                = TaskName,
                 Description         = "Aktif entegratorlerden belgeleri cekip DB'ye aktarir.",
                 ScheduleDescription = "Entegrator polling interval'ine gore",
                 IsEnabled           = true,
@@ -60,10 +59,12 @@ public sealed class DocumentImportWorker : BackgroundService
 
                 try
                 {
-                    await taskRepo.ReportRunAsync(TaskCode, 0,
-                        $"{result.ImportedCount} eklendi, {result.SkippedCount} atlandi.",
-                        null,
-                        DateTime.UtcNow.Add(nextDelay), stoppingToken);
+                    var t = await taskRepo.GetByNameAsync(TaskName, stoppingToken);
+                    if (t is not null)
+                        await taskRepo.ReportRunAsync(t.Id, 0,
+                            $"{result.ImportedCount} eklendi, {result.SkippedCount} atlandi.",
+                            null,
+                            DateTime.UtcNow.Add(nextDelay), stoppingToken);
                 }
                 catch { /* swallow */ }
 
@@ -78,8 +79,10 @@ public sealed class DocumentImportWorker : BackgroundService
                 _logger.LogError(ex, "Belge ice aktarma worker'inda hata olustu.");
                 try
                 {
-                    await taskRepo.ReportRunAsync(TaskCode, 1, ex.Message, null,
-                        DateTime.UtcNow.AddSeconds(30), stoppingToken);
+                    var t = await taskRepo.GetByNameAsync(TaskName, stoppingToken);
+                    if (t is not null)
+                        await taskRepo.ReportRunAsync(t.Id, 1, ex.Message, null,
+                            DateTime.UtcNow.AddSeconds(30), stoppingToken);
                 }
                 catch { /* swallow */ }
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);

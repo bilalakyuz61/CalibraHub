@@ -7,12 +7,41 @@ using CalibraHub.Infrastructure.Reporting;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Persistence.Repositories;
+using CalibraHub.Application.Configuration;
 using CalibraHub.Web.Infrastructure.Collaboration;
 using CalibraHub.Web.Infrastructure.Ui;
 using CalibraHub.Web.Infrastructure.Workspace;
+using CalibraHub.Web.Middleware;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.SqlClient;
+using Yarp.ReverseProxy.Configuration;
+
+// ─── SERVICE STARTUP HARDENING ────────────────────────────────────────────
+// Servis modunda (LocalSystem) cwd = C:\Windows\System32 olur — relative path
+// kullanan herhangi bir kod fail eder. Exe konumuna SETLEDIK.
+System.IO.Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+
+// Erken yakalanmamis exception'lari Event Viewer'a yaz — installer'in inkjr
+// loglari yetmezse Application Event Log'da CalibraHub.Web kaynagi altinda gorunur.
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+{
+    try
+    {
+        var ex = e.ExceptionObject as Exception;
+        if (OperatingSystem.IsWindows())
+        {
+            using var log = new System.Diagnostics.EventLog("Application") { Source = "CalibraHub Web" };
+            if (!System.Diagnostics.EventLog.SourceExists("CalibraHub Web"))
+                System.Diagnostics.EventLog.CreateEventSource("CalibraHub Web", "Application");
+            log.WriteEntry(
+                $"FATAL UnhandledException: {ex}\r\n\r\nIsTerminating: {e.IsTerminating}\r\nCWD: {Environment.CurrentDirectory}",
+                System.Diagnostics.EventLogEntryType.Error);
+        }
+    }
+    catch { /* swallow — daha kötü hale getirmesin */ }
+};
+// ──────────────────────────────────────────────────────────────────────────
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService(options =>
@@ -23,6 +52,14 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
+// Servis modunda Event Viewer'a da yaz — UseWindowsService eklemiyor, manuel ekledik
+if (OperatingSystem.IsWindows())
+{
+    builder.Logging.AddEventLog(settings =>
+    {
+        settings.SourceName = "CalibraHub Web";
+    });
+}
 
 var simulatedDocumentsPerPull = builder.Configuration.GetValue<int>("Integrator:SimulatedDocumentsPerPull", 2);
 var useMockIntegratorClient = builder.Configuration.GetValue<bool?>("Integrator:UseMockClient") ?? false;
@@ -54,13 +91,53 @@ builder.Services.AddScoped<IDocumentGenerationService, DocumentGenerationService
 builder.Services.AddScoped<IDocumentTypeRepository, SqlDocumentTypeRepository>();
 builder.Services.AddScoped<IReportTemplateRepository, SqlReportTemplateRepository>();
 builder.Services.AddScoped<IReportTemplateSourceRepository, SqlReportTemplateSourceRepository>();
+// Sistem Ayarlari gate + lisans dogrulama
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IGateCredentialsRepository,
+                           CalibraHub.Persistence.Repositories.SqlGateCredentialsRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IGatePasswordService,
+                           CalibraHub.Application.Services.Gate.GatePasswordService>();
+
+// WhatsApp Cloud API + Safety Layer (rate limit, ban koruma)
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWhatsAppConfigRepository,
+                           CalibraHub.Persistence.Repositories.SqlWhatsAppConfigRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWhatsAppSendLogRepository,
+                           CalibraHub.Persistence.Repositories.SqlWhatsAppSendLogRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWhatsAppSafetyRulesRepository,
+                           CalibraHub.Persistence.Repositories.SqlWhatsAppSafetyRulesRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWaInboxRepository,
+                           CalibraHub.Persistence.Repositories.SqlWaInboxRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Messaging.WhatsAppSafetyChecker>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWhatsAppService,
+                           CalibraHub.Application.Services.Messaging.WhatsAppService>();
+builder.Services.AddHostedService<CalibraHub.Application.Services.Messaging.WhatsAppInboxPollingService>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IMachineIdProvider,
+                              CalibraHub.Infrastructure.Security.WindowsMachineIdProvider>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILicenseRepository,
+                           CalibraHub.Persistence.Repositories.SqlLicenseRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ILicenseService,
+                           CalibraHub.Application.Services.Licensing.LicenseService>();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.Cookie.Name        = ".CalibraHub.Session";
+    options.Cookie.HttpOnly    = true;
+    options.Cookie.IsEssential = true;
+    options.IdleTimeout        = TimeSpan.FromMinutes(60);
+});
 builder.Services.AddScoped<IScheduledTaskRepository, SqlScheduledTaskRepository>();
 builder.Services.AddScoped<IScheduledTaskRunRepository, SqlScheduledTaskRunRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskTokenResolver,
+                           CalibraHub.Application.Services.Scheduling.ScheduledTaskTokenResolver>();
 // Executor registry — her TaskType icin bir IScheduledTaskExecutor
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
                            CalibraHub.Persistence.Scheduling.SqlProcedureTaskExecutor>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
                            CalibraHub.Infrastructure.Scheduling.HttpApiTaskExecutor>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Infrastructure.Scheduling.ViewReportTaskExecutor>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IEmailSender,
+                           CalibraHub.Infrastructure.Notifications.SmtpEmailSender>();
 builder.Services.AddScoped<CalibraHub.Application.Services.Scheduling.IScheduledTaskDispatcher,
                            CalibraHub.Application.Services.Scheduling.ScheduledTaskDispatcher>();
 builder.Services.AddScoped<IReportDataRepository, SqlReportDataRepository>();
@@ -98,6 +175,7 @@ builder.Services.AddScoped<CalibraHub.Web.Infrastructure.Reporting.ReportSchemaP
 builder.Services.AddScoped<ILogisticsConfigurationRepository, SqlLogisticsConfigurationRepository>();
 builder.Services.AddScoped<IFinanceRepository, SqlFinanceRepository>();
 builder.Services.AddScoped<IAddressRepository, SqlAddressRepository>();
+builder.Services.AddScoped<IContactItemRepository, SqlContactItemRepository>();
 builder.Services.AddScoped<IDbSchemaRepository, SqlDbSchemaRepository>();
 builder.Services.AddScoped<IDbSchemaService, DbSchemaService>();
 builder.Services.AddScoped<ICardGroupRepository, SqlCardGroupRepository>();
@@ -108,6 +186,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IIntegrationEventService, IntegrationEventService>();
 builder.Services.AddScoped<IDocumentRepository, SqlDocumentRepository>();
+builder.Services.AddScoped<IDocumentSourceRepository, SqlDocumentSourceRepository>();
 builder.Services.AddScoped<IUserSettingRepository, SqlUserSettingRepository>();
 builder.Services.AddScoped<ISalesRepresentativeRepository, SqlSalesRepresentativeRepository>();
 builder.Services.AddScoped<ISalesRepresentativeService, SalesRepresentativeService>();
@@ -126,12 +205,61 @@ builder.Services.AddScoped<IFormRepository, SqlFormRepository>();
 // Sabit alan ayarlari (FldSet — rehber eslestirme)
 builder.Services.AddScoped<IFieldSettingRepository, SqlFieldSettingRepository>();
 
+// Faz 0: Sirket Parametreleri + Numerator (sayac altyapisi)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ICompanyParameterRepository,
+    CalibraHub.Persistence.Repositories.SqlCompanyParameterRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ICompanyParameterService,
+    CalibraHub.Application.Services.CompanyParameterService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.INumeratorRepository,
+    CalibraHub.Persistence.Repositories.SqlNumeratorRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.INumeratorService,
+    CalibraHub.Application.Services.NumeratorService>();
+
+// Faz 1: Uretim Is Emri
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderRepository,
+    CalibraHub.Persistence.Repositories.SqlWorkOrderRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWorkOrderService,
+    CalibraHub.Application.Services.WorkOrderService>();
+
+// Operasyon Tanımlamaları (Faz 3 routing/operasyon temel sözlüğü)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IOperationRepository,
+    CalibraHub.Persistence.Repositories.SqlOperationRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IOperationService,
+    CalibraHub.Application.Services.OperationService>();
+
+// Routing + Operasyon-Makine Süreleri
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IRoutingRepository,
+    CalibraHub.Persistence.Repositories.SqlRoutingRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IRoutingService,
+    CalibraHub.Application.Services.RoutingService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IOperationMachineTimeRepository,
+    CalibraHub.Persistence.Repositories.SqlOperationMachineTimeRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IOperationMachineTimeService,
+    CalibraHub.Application.Services.OperationMachineTimeService>();
+
+// Is Emri Operasyonlari (Faz 3a — shop-floor temel)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderOperationRepository,
+    CalibraHub.Persistence.Repositories.SqlWorkOrderOperationRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWorkOrderOperationService,
+    CalibraHub.Application.Services.WorkOrderOperationService>();
+
+// Personnel — uretim personneli kartlari (User tablosundan ayri, Faz 3a revize)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPersonnelRepository,
+    CalibraHub.Persistence.Repositories.SqlPersonnelRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IPersonnelService,
+    CalibraHub.Application.Services.PersonnelService>();
+
 // Dinamik Raporlama Modulu (RptView / RptDef / ReportEngine)
 builder.Services.AddScoped<IRptViewRepository, SqlRptViewRepository>();
 builder.Services.AddScoped<IRptDefinitionRepository, SqlRptDefinitionRepository>();
 builder.Services.AddScoped<IRptRunLogRepository, SqlRptRunLogRepository>();
 builder.Services.AddScoped<IReportQueryExecutor, SqlReportQueryExecutor>();
 builder.Services.AddScoped<IReportEngineService, ReportEngineService>();
+
+// Document Designer (Belge Tasarımcısı)
+builder.Services.AddScoped<IDocLayoutRepository, SqlDocLayoutRepository>();
+builder.Services.AddScoped<IDocLayoutRenderer, DocLayoutRenderer>();
+builder.Services.AddScoped<IDocDesignerService, DocDesignerService>();
 
 // EAV widget sistemi
 builder.Services.AddScoped<IWidgetRepository, SqlWidgetRepository>();
@@ -193,6 +321,54 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 builder.Services.AddAuthorization();
+
+// ─── Grafana entegrasyonu ─────────────────────────────────────────────────
+// Options + YARP reverse proxy + provisioning service. Servis 127.0.0.1:61005'te
+// calisir (CalibraHub 61xxx port konvansiyonu), /grafana path'i YARP ile
+// Grafana'ya forward edilir. Auth: cookie -> X-WEBAUTH-* (auth.proxy mode).
+// AdminPassword DPAPI ile sifreli gelir.
+builder.Services.Configure<GrafanaOptions>(
+    builder.Configuration.GetSection(GrafanaOptions.SectionName));
+
+builder.Services.PostConfigure<GrafanaOptions>(opts =>
+{
+    opts.AdminPassword = DecryptIfNeeded(opts.AdminPassword);
+});
+
+builder.Services.AddHttpClient<
+    CalibraHub.Application.Abstractions.Services.IGrafanaProvisioningService,
+    CalibraHub.Infrastructure.Grafana.GrafanaProvisioningService>();
+
+var grafanaEnabled = builder.Configuration.GetValue<bool>($"{GrafanaOptions.SectionName}:Enabled");
+var grafanaUrl = builder.Configuration[$"{GrafanaOptions.SectionName}:Url"] ?? "http://127.0.0.1:61005";
+
+if (grafanaEnabled)
+{
+    var grafanaRoutes = new[]
+    {
+        new RouteConfig
+        {
+            RouteId = "grafana-route",
+            ClusterId = "grafana-cluster",
+            Match = new RouteMatch { Path = "/grafana/{**catch-all}" }
+        }
+    };
+
+    var grafanaClusters = new[]
+    {
+        new ClusterConfig
+        {
+            ClusterId = "grafana-cluster",
+            Destinations = new Dictionary<string, DestinationConfig>
+            {
+                ["primary"] = new DestinationConfig { Address = grafanaUrl }
+            }
+        }
+    };
+
+    builder.Services.AddReverseProxy().LoadFromMemory(grafanaRoutes, grafanaClusters);
+}
+// ──────────────────────────────────────────────────────────────────────────
 var mvcBuilder = builder.Services.AddControllersWithViews();
 mvcBuilder.AddJsonOptions(options =>
 {
@@ -221,6 +397,18 @@ using (var scope = app.Services.CreateScope())
         var dbInitializer = scope.ServiceProvider.GetRequiredService<CalibraDatabaseInitializer>();
         await dbInitializer.InitializeAsync(CancellationToken.None);
 
+        // Sistem Ayarlari (Gate) sifresi — DB'de yoksa appsettings'ten/random uretip seed et
+        try
+        {
+            var gatePwdService = scope.ServiceProvider
+                .GetRequiredService<CalibraHub.Application.Abstractions.Services.IGatePasswordService>();
+            await gatePwdService.EnsureSeededAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "[Gate] Initial password seed basarisiz");
+        }
+
         // Faz H — Flattened View otomasyonu: sistem DB'sinde mevcut tum BaseTable'li
         // formlar icin v_Flat_{FormCode} view'larini yeniden olustur. Widget
         // degisiklikleri sonrasi da WidgetService tarafindan tetiklenir; bu burada
@@ -239,14 +427,22 @@ using (var scope = app.Services.CreateScope())
         // Faz F+ — Guide auto-discovery: sys.views uzerinden v_Guide% pattern'ine
         // uyan view'lari GuideMas'a otomatik kaydet. Yeni bir rehber eklemek icin
         // admin'in sadece SSMS'te 'CREATE VIEW v_GuideXxx ...' yapmasi + restart
-        // yetiyor. Heuristic: 1. kolon=Value, 2. kolon=Display. Kullanici elle
-        // GuideMas'i duzenleyerek override edebilir (idempotent).
+        // yetiyor. Heuristic: Code/Name kolonlari ValueColumn/DisplayColumn olarak
+        // oncelikli; aksi halde 1./2. kolon. Kullanici elle GuideMas'i duzenleyerek
+        // override edebilir, ancak NormalizeStandardColumnsAsync her startup'ta
+        // standart kurali yeniden uygular (Code/Name → Value/Display).
         try
         {
             var guideRepo = scope.ServiceProvider.GetRequiredService<IGuideRepository>();
             var addedGuides = await guideRepo.DiscoverAndRegisterGuidesAsync(CancellationToken.None);
             if (addedGuides > 0)
                 app.Logger.LogInformation("[Guide Discovery] Otomatik {Count} yeni rehber kaydedildi", addedGuides);
+
+            // Standart kural: tum mevcut kayitlarda Code/Name kolonlari varsa
+            // ValueColumn=Code, DisplayColumn=Name olarak normalize edilir.
+            var normalized = await guideRepo.NormalizeStandardColumnsAsync(CancellationToken.None);
+            if (normalized > 0)
+                app.Logger.LogInformation("[Guide Normalize] {Count} kayit standart kolon kurali ile guncellendi", normalized);
         }
         catch (Exception ex)
         {
@@ -329,6 +525,7 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.UseRouting();
+app.UseSession();  // GateController'in Session'a erisimi icin
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<WorkspaceRedirectPreservationMiddleware>();
@@ -351,6 +548,17 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapHub<CollaborationHub>("/hubs/collaboration");
+
+// Grafana reverse proxy — yalnizca Grafana:Enabled=true ise haritalanir.
+// Pipeline: cookie auth challenge (RequireAuthorization), header injection
+// (GrafanaAuthProxyMiddleware), ve YARP forward.
+if (grafanaEnabled)
+{
+    app.MapReverseProxy(proxyPipeline =>
+    {
+        proxyPipeline.UseMiddleware<GrafanaAuthProxyMiddleware>();
+    }).RequireAuthorization();
+}
 
 app.Run();
 

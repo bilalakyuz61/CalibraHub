@@ -51,7 +51,7 @@
         background: rgba(248,250,252,0.92); border-bottom-color: #e2e8f0;
     }
     .mce-action-bar .mce-meta {
-        margin-right: auto; font-size: 0.72rem; color: rgba(255,255,255,0.55);
+        margin-right: auto; font-size: 0.85rem; color: rgba(255,255,255,0.65);
         font-weight: 500;
     }
     body.app-theme-light .mce-action-bar .mce-meta { color: #94a3b8; }
@@ -120,152 +120,44 @@
     .mce-row .mce-input,
     .mce-row .mce-select { flex: 1 1 auto; min-width: 0; }
 
-    /* Legacy grid (widget'lar kullanabilir) */
+    /* Legacy grid (Razor template'leri icin — widget renderer artik wf-grid kullanir) */
     .mce-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
     .mce-grid--full > .mce-field { grid-column: 1 / -1; }
-    .mce-field { display: flex; flex-direction: column; gap: 5px; }
-    .mce-field--full { grid-column: 1 / -1; }
-    .mce-field label {
-        font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.65);
-        letter-spacing: 0.02em;
-    }
-    body.app-theme-light .mce-field label { color: #64748b; }
-    .mce-input, .mce-select, .mce-textarea {
-        padding: 9px 12px; border-radius: 9px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.1);
-        color: rgba(255,255,255,0.85); font-size: 0.85rem;
-        transition: border-color 0.15s, background 0.15s;
-    }
-    body.app-theme-light .mce-input,
-    body.app-theme-light .mce-select,
-    body.app-theme-light .mce-textarea {
-        background: #fff; border-color: #e2e8f0; color: #1e293b;
-    }
-    .mce-input:focus, .mce-select:focus, .mce-textarea:focus {
-        outline: none; border-color: #6366f1;
-        background: rgba(255,255,255,0.06);
-        box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
-    }
-    body.app-theme-light .mce-input:focus,
-    body.app-theme-light .mce-select:focus,
-    body.app-theme-light .mce-textarea:focus { background: #fff; }
-    .mce-input::placeholder { color: rgba(255,255,255,0.4); }
-    body.app-theme-light .mce-input::placeholder { color: #94a3b8; }
-    .mce-input.is-invalid, .mce-select.is-invalid {
-        border-color: #ef4444 !important;
-        box-shadow: 0 0 0 3px rgba(239,68,68,0.18) !important;
-        background: rgba(239,68,68,0.06) !important;
-    }
+
+    /* NOT: .mce-input, .mce-select, .mce-textarea, .mce-field, .mce-multicheck,
+       .mce-link-group, .mce-link-btn, .mce-lookup-group, .mce-required ve
+       .mce-grid-2:has(.calibra-modern-wrap) hizalama kurallari widgetField.css'e
+       (DynamicWidgetRenderer/widgetField.css) tasindi. Tek nokta tasarim sistemi
+       ile Razor template'lerindeki sabit form alanlari ve React widget renderer
+       ayni gorunume sahip. Burada sadece sayfa-bazli chrome (mce-card, mce-row,
+       mce-grid-modal*) ve disabled-row legacy mantigi tutulmaktadir. */
+
     /* Ardisik aktiflik: onceki satir doldurulmadan sonraki pasif */
     .mce-row-disabled { opacity: 0.45; pointer-events: none; }
     .mce-row-disabled .mce-input,
     .mce-row-disabled .mce-select { cursor: not-allowed; }
-    .mce-textarea { resize: vertical; min-height: 80px; font-family: inherit; }
-    .mce-required::after { content: ' *'; color: #f87171; }
 
-    /* Sayisal alanlar — saga yasli, spinner yok */
-    .mce-input[type="number"] {
-        text-align: right;
-        -moz-appearance: textfield;
-    }
-    .mce-input[type="number"]::-webkit-outer-spin-button,
-    .mce-input[type="number"]::-webkit-inner-spin-button {
-        -webkit-appearance: none; margin: 0;
-    }
+    /* NOT: .mce-multicheck*, .mce-select option, .mce-link-group/.mce-link-btn,
+       .mce-lookup-group widgetField.css'e tasindi — tek nokta tasarim sistemi.
+       .mce-lookup-btn / .mce-lookup-clear / .mce-lookup-modal* legacy
+       (FixedFieldLookupBridge / Razor inline lookup) icin burada kalir. */
 
-    /* Coklu secim — checkbox listesi */
-    .mce-multicheck {
-        display: flex; flex-wrap: wrap; gap: 6px;
-        padding: 8px; border-radius: 9px;
-        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
-    }
-    body.app-theme-light .mce-multicheck {
-        background: #f8fafc; border-color: #e2e8f0;
-    }
-    .mce-multicheck-item {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 5px 10px; border-radius: 6px; cursor: pointer;
-        font-size: 0.8rem; color: rgba(255,255,255,0.65);
-        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-        transition: all 0.12s; user-select: none;
-    }
-    body.app-theme-light .mce-multicheck-item {
-        color: #475569; background: #fff; border-color: #e2e8f0;
-    }
-    .mce-multicheck-item:hover {
-        background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.2);
-    }
-    .mce-multicheck-item.is-checked {
-        background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.35);
-        color: #a5b4fc;
-    }
-    body.app-theme-light .mce-multicheck-item.is-checked {
-        background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.3);
-        color: #4f46e5;
-    }
-    .mce-multicheck-item input[type="checkbox"] {
-        accent-color: #6366f1; width: 14px; height: 14px; cursor: pointer;
-    }
-    .mce-multicheck-empty {
-        font-size: 0.76rem; color: rgba(255,255,255,0.5); font-style: italic; padding: 4px;
-    }
-    body.app-theme-light .mce-multicheck-empty { color: #94a3b8; }
-    /* Select option temasi — dropdown popup icerigi (Chrome/Edge/Firefox on Win) */
-    .mce-select option { background: #0d1117; color: rgba(255,255,255,0.85); }
-    body.app-theme-light .mce-select option { background: #ffffff; color: #1e293b; }
-
-    /* Link widget — input + "Git" buton grubu (EAV link dataType) */
-    .mce-link-group { display: flex; align-items: stretch; gap: 8px; }
-    .mce-link-group > .mce-input { flex: 1 1 auto; min-width: 0; }
-    .mce-link-btn {
-        display: inline-flex; align-items: center; justify-content: center;
-        gap: 6px; padding: 0 14px; min-height: 34px;
-        border-radius: 10px; font-size: 0.78rem; font-weight: 600;
-        color: #c4b5fd; text-decoration: none;
-        background: rgba(139, 92, 246, 0.14);
-        border: 1px solid rgba(139, 92, 246, 0.45);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        transition: all 0.18s ease; cursor: pointer; flex-shrink: 0;
-    }
-    .mce-link-btn:hover:not(.is-disabled) {
-        background: rgba(139, 92, 246, 0.25);
-        border-color: rgba(139, 92, 246, 0.65);
-        color: #e9d5ff; transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
-    }
-    .mce-link-btn.is-disabled {
-        opacity: 0.35; cursor: not-allowed; pointer-events: none;
-    }
-    body.app-theme-light .mce-link-btn {
-        color: #6d28d9;
-        background: rgba(139, 92, 246, 0.12);
-        border-color: rgba(139, 92, 246, 0.4);
-    }
-    body.app-theme-light .mce-link-btn:hover:not(.is-disabled) {
-        background: rgba(139, 92, 246, 0.22);
-        color: #5b21b6;
-    }
-
-    /* Lookup widget — readonly input + ara butonu + modal (EAV lookup dataType) */
-    .mce-lookup-group { display: flex; align-items: stretch; gap: 8px; position: relative; }
-    .mce-lookup-group > .mce-input { flex: 1 1 auto; min-width: 0; }
+    /* Lookup widget legacy buton + modal (FixedFieldLookupBridge / sabit alan) */
     .mce-lookup-btn, .mce-lookup-clear {
         display: inline-flex; align-items: center; justify-content: center;
         min-width: 34px; min-height: 34px; padding: 0 10px;
         border-radius: 10px; cursor: pointer; flex-shrink: 0;
-        border: 1px solid rgba(245, 158, 11, 0.45);
-        background: rgba(245, 158, 11, 0.14);
+        border: 1px solid rgba(99, 102, 241, 0.45);
+        background: rgba(99, 102, 241, 0.14);
         color: #fcd34d;
         backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
         transition: all 0.18s ease;
     }
     .mce-lookup-btn:hover:not(:disabled) {
-        background: rgba(245, 158, 11, 0.25);
-        border-color: rgba(245, 158, 11, 0.65);
+        background: rgba(99, 102, 241, 0.25);
+        border-color: rgba(99, 102, 241, 0.65);
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
     }
     .mce-lookup-btn:disabled { opacity: 0.35; cursor: not-allowed; }
     .mce-lookup-clear {
@@ -277,7 +169,7 @@
         background: rgba(244, 63, 94, 0.2);
         border-color: rgba(244, 63, 94, 0.6);
     }
-    body.app-theme-light .mce-lookup-btn { color: #b45309; }
+    body.app-theme-light .mce-lookup-btn { color: #4f46e5; }
     body.app-theme-light .mce-lookup-clear { color: #be123c; }
 
     /* Modal backdrop + container */
@@ -309,10 +201,10 @@
     .mce-lookup-modal header {
         padding: 14px 18px; display: flex; align-items: center; gap: 10px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        color: #fbbf24;
+        color: #a5b4fc;
     }
     body.app-theme-light .mce-lookup-modal header {
-        border-bottom-color: #e2e8f0; color: #d97706;
+        border-bottom-color: #e2e8f0; color: #6366f1;
     }
     .mce-lookup-modal header input {
         flex: 1; min-width: 0;
@@ -323,8 +215,8 @@
         outline: none;
     }
     .mce-lookup-modal header input:focus {
-        border-color: rgba(245, 158, 11, 0.5);
-        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+        border-color: rgba(99, 102, 241, 0.5);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
     }
     body.app-theme-light .mce-lookup-modal header input {
         background: #f8fafc; border-color: #e2e8f0; color: #1e293b;
@@ -353,11 +245,11 @@
         text-align: left; padding: 10px 14px;
         font-weight: 700;
         font-size: 0.78rem;
-        color: #fbbf24;
+        color: #a5b4fc;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
     body.app-theme-light .mce-lookup-table thead th {
-        background: #f8fafc; color: #b45309; border-bottom-color: #e2e8f0;
+        background: #f8fafc; color: #4f46e5; border-bottom-color: #e2e8f0;
     }
     .mce-lookup-table tbody tr {
         cursor: pointer;
@@ -365,10 +257,10 @@
         transition: background 0.12s;
     }
     .mce-lookup-table tbody tr:hover {
-        background: rgba(245, 158, 11, 0.1);
+        background: rgba(99, 102, 241, 0.1);
     }
     body.app-theme-light .mce-lookup-table tbody tr { border-bottom-color: #f1f5f9; }
-    body.app-theme-light .mce-lookup-table tbody tr:hover { background: rgba(245, 158, 11, 0.08); }
+    body.app-theme-light .mce-lookup-table tbody tr:hover { background: rgba(99, 102, 241, 0.08); }
     .mce-lookup-table td {
         padding: 9px 14px; color: var(--app-text, #e2e8f0);
     }
@@ -389,6 +281,177 @@
         border-top: 1px solid rgba(255, 255, 255, 0.06);
     }
     body.app-theme-light .mce-lookup-footer { border-top-color: #e2e8f0; }
+
+    /* ── Kolon basligi (distinct filtre ikonu icerebilir) ── */
+    .mce-lookup-th-inner { display: flex; align-items: center; gap: 6px; }
+    .mce-lookup-th-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .mce-lookup-col-filter {
+        background: transparent; border: none; cursor: pointer;
+        padding: 3px; border-radius: 4px;
+        color: rgba(255, 255, 255, 0.40);
+        display: inline-flex; align-items: center; gap: 3px;
+        transition: all .12s;
+    }
+    body.app-theme-light .mce-lookup-col-filter { color: rgba(0,0,0,0.35); }
+    .mce-lookup-col-filter:hover {
+        background: rgba(165, 180, 252, 0.14); color: #a5b4fc;
+    }
+    body.app-theme-light .mce-lookup-col-filter:hover {
+        background: rgba(99, 102, 241, 0.12); color: #4f46e5;
+    }
+    .mce-lookup-col-filter--active {
+        background: rgba(165, 180, 252, 0.18) !important; color: #a5b4fc !important;
+    }
+    body.app-theme-light .mce-lookup-col-filter--active {
+        background: rgba(99, 102, 241, 0.18) !important; color: #4f46e5 !important;
+    }
+    .mce-lookup-col-filter-count {
+        font-size: .58rem; font-weight: 700;
+        background: #6366f1; color: #fff;
+        padding: 1px 5px; border-radius: 999px;
+        line-height: 1.1; min-width: 12px; text-align: center;
+    }
+    .mce-lookup-footer-filter { margin-left: auto; font-size: .68rem; font-weight: 600; color: #a5b4fc; }
+    body.app-theme-light .mce-lookup-footer-filter { color: #6366f1; }
+
+    /* ── Excel-tarzi kolon filtre acilir popover'i ──
+       Modal ile ayni surface tonu (var(--app-surface)). */
+    .mce-lookup-popover {
+        background: var(--app-surface, #1a1f2e);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 12px;
+        box-shadow: 0 22px 64px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.02);
+        overflow: hidden;
+        display: flex; flex-direction: column;
+        animation: mceLookupPopIn .12s ease-out;
+        font-size: .75rem;
+        color: rgba(255, 255, 255, 0.85);
+    }
+    body.app-theme-light .mce-lookup-popover {
+        background: #ffffff; border-color: #e2e8f0; color: #334155;
+        box-shadow: 0 22px 64px rgba(0, 0, 0, 0.20);
+    }
+    @@keyframes mceLookupPopIn {
+        from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .mce-lookup-popover-title {
+        display: flex; align-items: center; gap: 6px;
+        padding: 9px 12px 8px;
+        font-size: .68rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .55px;
+        color: rgba(255, 255, 255, 0.82);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    body.app-theme-light .mce-lookup-popover-title {
+        color: #475569; border-bottom-color: #e2e8f0;
+    }
+    .mce-lookup-popover-title svg { color: #a5b4fc; opacity: .9; }
+    body.app-theme-light .mce-lookup-popover-title svg { color: #6366f1; }
+    .mce-lookup-popover-search-wrap { position: relative; padding: 8px 10px 4px; }
+    .mce-lookup-popover-search-ico {
+        position: absolute; left: 18px; top: 50%; transform: translateY(-30%);
+        opacity: .45; pointer-events: none;
+    }
+    .mce-lookup-popover-search {
+        width: 100%; padding: 6px 8px 6px 26px;
+        font-size: .72rem;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        color: inherit; outline: none;
+    }
+    body.app-theme-light .mce-lookup-popover-search {
+        background: #f8fafc; border-color: #e2e8f0;
+    }
+    .mce-lookup-popover-search:focus {
+        border-color: rgba(165, 180, 252, 0.55);
+        box-shadow: 0 0 0 2px rgba(165, 180, 252, 0.15);
+    }
+    .mce-lookup-popover-actions {
+        display: flex; align-items: center; gap: 6px;
+        padding: 4px 12px 6px; font-size: .68rem;
+    }
+    .mce-lookup-popover-actions button {
+        background: transparent; border: none; cursor: pointer;
+        color: #a5b4fc; font-weight: 600;
+        padding: 2px 4px; border-radius: 4px;
+        transition: background .12s;
+    }
+    body.app-theme-light .mce-lookup-popover-actions button { color: #6366f1; }
+    .mce-lookup-popover-actions button:hover { background: rgba(165, 180, 252, 0.12); }
+    body.app-theme-light .mce-lookup-popover-actions button:hover { background: rgba(99, 102, 241, 0.12); }
+    .mce-lookup-popover-divider { opacity: .35; }
+    .mce-lookup-popover-count { margin-left: auto; opacity: .55; font-weight: 500; }
+    .mce-lookup-popover-list {
+        flex: 1; overflow-y: auto;
+        max-height: 240px; padding: 2px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    body.app-theme-light .mce-lookup-popover-list { border-color: #e2e8f0; }
+    .mce-lookup-popover-empty {
+        text-align: center; padding: 16px 8px;
+        font-size: .7rem; opacity: .55;
+    }
+    .mce-lookup-popover-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 5px 12px; cursor: pointer;
+        transition: background .1s; font-size: .72rem;
+        user-select: none;
+    }
+    .mce-lookup-popover-row:hover { background: rgba(165, 180, 252, 0.10); }
+    body.app-theme-light .mce-lookup-popover-row:hover { background: rgba(99, 102, 241, 0.10); }
+    .mce-lookup-popover-row--checked {
+        background: rgba(165, 180, 252, 0.18);
+        color: #c7d2fe;
+        font-weight: 600;
+    }
+    body.app-theme-light .mce-lookup-popover-row--checked {
+        background: rgba(99, 102, 241, 0.15);
+        color: #4f46e5;
+    }
+    .mce-lookup-popover-row--checked:hover { background: rgba(165, 180, 252, 0.26) !important; }
+    body.app-theme-light .mce-lookup-popover-row--checked:hover { background: rgba(99, 102, 241, 0.22) !important; }
+    .mce-lookup-popover-checkbox {
+        width: 14px; height: 14px;
+        border: 1.5px solid rgba(255, 255, 255, 0.20);
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.04);
+        display: inline-flex; align-items: center; justify-content: center;
+        flex-shrink: 0; color: #fff; transition: all .1s;
+    }
+    body.app-theme-light .mce-lookup-popover-checkbox {
+        background: #ffffff; border-color: #cbd5e1;
+    }
+    .mce-lookup-popover-row--checked .mce-lookup-popover-checkbox {
+        background: #6366f1; border-color: #6366f1;
+    }
+    .mce-lookup-popover-row-label {
+        flex: 1; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mce-lookup-popover-footer {
+        display: flex; gap: 6px; justify-content: flex-end;
+        padding: 8px 10px;
+    }
+    .mce-lookup-popover-btn {
+        padding: 5px 12px; border-radius: 6px; cursor: pointer;
+        font-size: .72rem; font-weight: 600;
+        border: 1px solid transparent; transition: all .12s;
+    }
+    .mce-lookup-popover-btn--ghost {
+        background: transparent;
+        border-color: rgba(255, 255, 255, 0.10);
+        color: inherit;
+    }
+    body.app-theme-light .mce-lookup-popover-btn--ghost { border-color: #e2e8f0; }
+    .mce-lookup-popover-btn--ghost:hover { background: rgba(255, 255, 255, 0.05); }
+    body.app-theme-light .mce-lookup-popover-btn--ghost:hover { background: #f1f5f9; }
+    .mce-lookup-popover-btn--primary {
+        background: #6366f1; color: #fff; border-color: #6366f1;
+    }
+    .mce-lookup-popover-btn--primary:hover { background: #4f46e5; border-color: #4f46e5; }
 
     /* ══════════════════════════════════════════════════════════
        Grid (Alt Tablo / Master-Detail) widget — Faz E
@@ -729,9 +792,9 @@
     }
     body.app-theme-light .mce-dyn-group__title { color: #475569; }
 
+    /* .mce-grid-2: React inline olarak 24-col grid + gap uygular (colSpan feature).
+       !important yok — inline style'in calismasi icin. */
     .mce-grid-2 {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
         gap: 14px;
     }
 
@@ -866,6 +929,182 @@
     body.app-theme-light .mce-switch input:checked + .mce-switch-track {
         background: #10b981; border-color: #059669; box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
     }
+    /* Kombinasyonda kullaniliyor — kilitli switch (toggle off edilemez) */
+    .mce-switch.is-locked { cursor: not-allowed; }
+    .mce-switch.is-locked input:disabled + .mce-switch-track {
+        background: rgba(251,191,36,0.20); border-color: rgba(251,191,36,0.45);
+        box-shadow: 0 0 0 3px rgba(251,191,36,0.10);
+    }
+    .mce-switch.is-locked input:checked:disabled + .mce-switch-track {
+        background: #d97706; border-color: #b45309; box-shadow: 0 0 0 3px rgba(217,119,6,0.20);
+    }
+
+    /* ── Deger Rehberi Modali (per-feature allowed values) ─────────────── */
+    .mce-vguide-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        display: none; align-items: center; justify-content: center;
+        padding: 20px;
+    }
+    .mce-vguide-backdrop.is-open { display: flex; }
+    .mce-vguide-modal {
+        width: min(640px, 95vw); max-height: 80vh;
+        display: flex; flex-direction: column;
+        background: #1e293b;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        box-shadow: 0 24px 72px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+    }
+    body.app-theme-light .mce-vguide-modal {
+        background: #ffffff; border-color: #e2e8f0;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.12);
+    }
+    .mce-vguide-header {
+        padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        color: #a5b4fc; background: rgba(255, 255, 255, 0.02);
+    }
+    body.app-theme-light .mce-vguide-header {
+        border-bottom-color: #e2e8f0; color: #6366f1; background: #f8fafc;
+    }
+    .mce-vguide-header__title {
+        font-weight: 700; font-size: 0.9rem;
+        color: #f1f5f9;
+        flex: 1; min-width: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.app-theme-light .mce-vguide-header__title { color: #0f172a; }
+    .mce-vguide-header__title strong { color: #a5b4fc; font-weight: 700; }
+    body.app-theme-light .mce-vguide-header__title strong { color: #6366f1; }
+    .mce-vguide-close {
+        margin-left: auto; background: transparent; border: none;
+        color: #94a3b8; cursor: pointer; padding: 6px; border-radius: 6px;
+        font-size: 1.4rem; line-height: 1;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: background 0.15s, color 0.15s;
+    }
+    .mce-vguide-close:hover { background: rgba(255, 255, 255, 0.08); color: #f1f5f9; }
+    body.app-theme-light .mce-vguide-close { color: #64748b; }
+    body.app-theme-light .mce-vguide-close:hover { background: #f1f5f9; color: #1e293b; }
+    .mce-vguide-search {
+        padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    body.app-theme-light .mce-vguide-search { border-bottom-color: #e2e8f0; }
+    .mce-vguide-search__ico { color: #64748b; flex-shrink: 0; }
+    .mce-vguide-search__input {
+        flex: 1; min-width: 0;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px; padding: 8px 12px;
+        color: #f1f5f9; font-size: 0.85rem;
+        outline: none;
+    }
+    .mce-vguide-search__input::placeholder { color: #64748b; }
+    .mce-vguide-search__input:focus {
+        border-color: rgba(99, 102, 241, 0.5);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+    }
+    body.app-theme-light .mce-vguide-search__input {
+        background: #f8fafc; border-color: #e2e8f0; color: #0f172a;
+    }
+    .mce-vguide-body {
+        flex: 1; overflow-y: auto; min-height: 200px;
+        background: #1e293b;
+    }
+    body.app-theme-light .mce-vguide-body { background: #ffffff; }
+    .mce-vguide-empty {
+        padding: 24px; text-align: center;
+        color: rgba(255, 255, 255, 0.45); font-size: 0.82rem; font-style: italic;
+    }
+    body.app-theme-light .mce-vguide-empty { color: #94a3b8; }
+    .mce-vguide-sep {
+        padding: 8px 18px;
+        font-size: 0.7rem; font-weight: 700;
+        letter-spacing: 0.04em; text-transform: uppercase;
+        color: #94a3b8;
+        background: rgba(255, 255, 255, 0.03);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    body.app-theme-light .mce-vguide-sep {
+        color: #64748b; background: #f8fafc; border-bottom-color: #e2e8f0;
+    }
+    .mce-vguide-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 18px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        cursor: pointer; transition: background 0.12s;
+        background: transparent;
+    }
+    .mce-vguide-row:hover { background: rgba(255, 255, 255, 0.05); }
+    body.app-theme-light .mce-vguide-row { border-bottom-color: #f1f5f9; }
+    body.app-theme-light .mce-vguide-row:hover { background: #f8fafc; }
+    .mce-vguide-row__code {
+        font-family: ui-monospace, monospace;
+        font-weight: 700; font-size: 0.78rem;
+        color: #a5b4fc; min-width: 80px;
+    }
+    body.app-theme-light .mce-vguide-row__code { color: #6366f1; }
+    .mce-vguide-row__name {
+        flex: 1; font-size: 0.82rem;
+        color: rgba(255, 255, 255, 0.78);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.app-theme-light .mce-vguide-row__name { color: #475569; }
+    .mce-vguide-footer {
+        padding: 10px 14px;
+        display: flex; align-items: center; justify-content: space-between;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.02);
+    }
+    body.app-theme-light .mce-vguide-footer {
+        border-top-color: #e2e8f0; background: #f8fafc;
+    }
+    .mce-vguide-footer__count {
+        font-size: 0.78rem; color: #94a3b8;
+    }
+    body.app-theme-light .mce-vguide-footer__count { color: #64748b; }
+    .mce-vguide-footer__close {
+        padding: 7px 18px; border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        color: #f1f5f9;
+        cursor: pointer; font-size: 0.8rem; font-weight: 600;
+        transition: background 0.15s, border-color 0.15s;
+    }
+    .mce-vguide-footer__close:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.20);
+    }
+    body.app-theme-light .mce-vguide-footer__close {
+        background: #ffffff; border-color: #cbd5e1; color: #1e293b;
+    }
+    body.app-theme-light .mce-vguide-footer__close:hover {
+        background: #f1f5f9; border-color: #94a3b8;
+    }
+
+    /* Tetikleyici buton — yesil ton (mce-switch checked rengiyle uyumlu) */
+    .mce-feat-values-btn {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 5px 10px; border-radius: 7px;
+        font-size: 0.72rem; font-weight: 600;
+        background: rgba(16, 185, 129, 0.10);
+        border: 1px solid rgba(16, 185, 129, 0.30);
+        color: #34d399; cursor: pointer; flex-shrink: 0;
+        transition: background 0.15s, border-color 0.15s;
+    }
+    .mce-feat-values-btn:hover {
+        background: rgba(16, 185, 129, 0.20);
+        border-color: rgba(16, 185, 129, 0.55);
+    }
+    body.app-theme-light .mce-feat-values-btn {
+        background: #d1fae5; border-color: #6ee7b7; color: #047857;
+    }
+    body.app-theme-light .mce-feat-values-btn:hover {
+        background: #a7f3d0; border-color: #10b981;
+    }
 
     /* Mesaj barı: formun üstünde yukarıdan aşağı belirir, formu itmez (absolute) */
     .mce-message {
@@ -972,14 +1211,33 @@
     body.app-theme-light .mce-sidenav-label { color: #94a3b8; }
     /* Widget gruplarini varsayilan olarak gizle — JS activateSection onlari acacak */
     .mce-content [data-dyn-group-id] { display: none; }
+
+    /* Sidenav skeleton — dinamik widget gruplari yuklenene kadar */
+    .mce-nav-skeleton-row {
+        height: 32px; margin: 4px 0; border-radius: 8px;
+        background: linear-gradient(90deg,
+            rgba(255,255,255,0.04) 0%,
+            rgba(255,255,255,0.10) 50%,
+            rgba(255,255,255,0.04) 100%);
+        background-size: 200% 100%;
+        animation: mceSkeletonShimmer 1.4s ease-in-out infinite;
+    }
+    body.app-theme-light .mce-nav-skeleton-row {
+        background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+        background-size: 200% 100%;
+    }
+    @@keyframes mceSkeletonShimmer {
+        0%   { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
     .mce-nav-btn {
         display: flex; align-items: center; gap: 8px;
-        width: 100%; padding: 8px 12px;
+        width: 100%; padding: 9px 12px;
         background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
         border-radius: 8px;
         color: rgba(255,255,255,0.6);
-        font-size: 0.76rem; font-weight: 500; text-align: left;
-        cursor: pointer; transition: all 0.15s; line-height: 1.35;
+        font-size: 0.85rem; font-weight: 500; text-align: left;
+        cursor: pointer; transition: all 0.15s; line-height: 1.4;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     body.app-theme-light .mce-nav-btn {
@@ -1012,6 +1270,13 @@
         font-size: 0.6rem; font-weight: 700; font-family: monospace;
         background: rgba(16,185,129,0.12); color: #34d399;
         border: 1px solid rgba(16,185,129,0.25); flex-shrink: 0;
+        min-width: 22px; text-align: center;            /* rakam degisirken genislik kaymasin */
+        transition: opacity .12s, background .12s;       /* yumusak gecis */
+    }
+    /* Sayi 0 ise: layout'ta yer kaplamaya devam etsin ama "pasif" gorunsun (kayma engellenir) */
+    .mce-nav-count.is-empty {
+        opacity: 0;
+        pointer-events: none;
     }
     body.app-theme-light .mce-nav-count { background: rgba(16,185,129,0.08); color: #059669; }
 
@@ -1115,11 +1380,11 @@
     body.app-theme-light .mce-del-text { color: #64748b; }
     .mce-del-code {
         font-family: monospace; font-size: .88rem; font-weight: 700;
-        color: #fbbf24; background: rgba(245,158,11,.1);
+        color: #a5b4fc; background: rgba(245,158,11,.1);
         border: 1px solid rgba(245,158,11,.25);
         border-radius: 8px; padding: 4px 12px;
     }
-    body.app-theme-light .mce-del-code { color: #d97706; background: rgba(245,158,11,.08); }
+    body.app-theme-light .mce-del-code { color: #6366f1; background: rgba(245,158,11,.08); }
     .mce-del-name {
         font-size: .84rem; font-weight: 500;
         color: #cbd5e1;
@@ -1149,10 +1414,110 @@
     .mce-del-confirm:hover:not(:disabled) { background: linear-gradient(135deg,#f87171,#ef4444); }
     @@keyframes mceDelSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
+    /* ── Custom Combobox (mce-cbx) — dark tema uyumlu select replacement ── */
+    .mce-cbx { position: relative; flex: 1 1 auto; min-width: 0; }
+    .mce-cbx__trigger {
+        width: 100%;
+        height: 36px;
+        padding: 0 32px 0 12px;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.10);
+        color: rgba(255,255,255,0.92);
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-align: left;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: border-color .12s, background .12s, box-shadow .12s;
+        outline: none;
+        box-sizing: border-box;
+    }
+    .mce-cbx__trigger:hover:not([disabled]) { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+    .mce-cbx__trigger.is-open { border-color: rgba(99,102,241,0.55); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+    .mce-cbx__trigger.is-invalid { border-color: rgba(239,68,68,0.7); box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
+    .mce-cbx__trigger[disabled] { opacity: .5; cursor: not-allowed; }
+    .mce-cbx__label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mce-cbx__label--placeholder { color: rgba(255,255,255,0.35); font-weight: 400; }
+    .mce-cbx__arrow {
+        position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+        font-size: 0.65rem; opacity: .55; transition: transform .15s, opacity .15s;
+        pointer-events: none;
+    }
+    .mce-cbx__trigger.is-open .mce-cbx__arrow { transform: translateY(-50%) rotate(180deg); opacity: .85; }
+
+    .mce-cbx__panel {
+        position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+        max-height: 240px; overflow-y: auto;
+        background: rgba(17,24,39,0.98);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.3);
+        z-index: 1000;
+        padding: 4px;
+        backdrop-filter: blur(6px);
+    }
+    .mce-cbx__panel::-webkit-scrollbar { width: 8px; }
+    .mce-cbx__panel::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 4px; }
+    .mce-cbx__panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+    .mce-cbx__panel::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); }
+
+    .mce-cbx__option {
+        padding: 7px 10px;
+        font-size: 0.825rem;
+        cursor: pointer;
+        color: rgba(255,255,255,0.85);
+        border-radius: 6px;
+        transition: background .08s, color .08s;
+        user-select: none;
+    }
+    .mce-cbx__option:hover { background: rgba(99,102,241,0.18); color: #fff; }
+    .mce-cbx__option.is-selected { background: rgba(99,102,241,0.28); color: #fff; font-weight: 600; }
+    .mce-cbx__option.is-placeholder { color: rgba(255,255,255,0.40); font-style: italic; }
+    .mce-cbx__option.is-used {
+        color: rgba(255,255,255,0.32);
+        text-decoration: line-through;
+        cursor: not-allowed;
+        background: rgba(239,68,68,0.06);
+    }
+    .mce-cbx__option.is-used:hover { background: rgba(239,68,68,0.10); color: rgba(255,255,255,0.40); }
+    .mce-cbx__option.is-used::after {
+        content: ' (kullaniliyor)';
+        font-size: 0.70rem; font-style: italic; opacity: .65;
+    }
+    .mce-cbx__option.is-inactive {
+        color: rgba(248,113,113,0.65);
+        text-decoration: line-through;
+        cursor: not-allowed;
+        background: rgba(239,68,68,0.04);
+    }
+    .mce-cbx__option.is-inactive::after {
+        content: ' (pasif)';
+        font-size: 0.70rem; font-style: italic; opacity: .75;
+    }
+    .mce-cbx__option.is-inactive:hover { background: rgba(239,68,68,0.08); }
+
+    /* Light tema */
+    body.app-theme-light .mce-cbx__trigger {
+        background: #fff; border-color: rgba(15,23,42,0.10); color: #1e293b;
+    }
+    body.app-theme-light .mce-cbx__trigger:hover:not([disabled]) { border-color: rgba(15,23,42,0.20); background: #f8fafc; }
+    body.app-theme-light .mce-cbx__label--placeholder { color: rgba(15,23,42,0.40); }
+    body.app-theme-light .mce-cbx__panel { background: #fff; border-color: rgba(15,23,42,0.12); box-shadow: 0 10px 30px rgba(0,0,0,0.12); }
+    body.app-theme-light .mce-cbx__option { color: #1e293b; }
+    body.app-theme-light .mce-cbx__option:hover { background: rgba(99,102,241,0.10); color: #4f46e5; }
+    body.app-theme-light .mce-cbx__option.is-selected { background: rgba(99,102,241,0.15); color: #4f46e5; }
+    body.app-theme-light .mce-cbx__option.is-used { color: rgba(15,23,42,0.40); background: rgba(239,68,68,0.04); }
+    body.app-theme-light .mce-cbx__option.is-inactive { color: rgba(220,38,38,0.65); background: rgba(239,68,68,0.04); }
+
 </style>
 }
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+
+@Html.AntiForgeryToken()
 
     <!-- Aksiyon Seridi — tabsheet altinda sabit -->
     <div class="mce-action-bar" data-no-proxy>
@@ -1184,21 +1549,39 @@
                 <span class="mce-nav-dot"></span>
                 Ölçü Birimleri
             </button>
+            <button type="button" class="mce-nav-btn" id="mceNavGroups">
+                <span class="mce-nav-dot"></span>
+                Gruplar
+                <span class="mce-nav-count is-empty" id="mceGroupCount">0</span>
+            </button>
             <button type="button" class="mce-nav-btn" id="mceNavLocations">
                 <span class="mce-nav-dot"></span>
                 Lokasyonlar
-                <span class="mce-nav-count" id="mceLocCount" style="display:none;">0</span>
+                <span class="mce-nav-count is-empty" id="mceLocCount">0</span>
             </button>
             <button type="button" class="mce-nav-btn" id="mceNavFeatures" style="display:none;">
                 <span class="mce-nav-dot"></span>
                 Özellikler
-                <span class="mce-nav-count" id="mceFeatCount">0</span>
+                <span class="mce-nav-count is-empty" id="mceFeatCount">0</span>
             </button>
             <button type="button" class="mce-nav-btn" id="mceNavCombinations" style="display:none;">
                 <span class="mce-nav-dot"></span>
                 Kombinasyonlar
-                <span class="mce-nav-count" id="mceCombCount">0</span>
+                <span class="mce-nav-count is-empty" id="mceCombCount">0</span>
             </button>
+            <button type="button" class="mce-nav-btn" id="mceNavRecipe" style="display:none;">
+                <span class="mce-nav-dot"></span>
+                Reçete
+                <span class="mce-nav-count is-empty" id="mceRecipeCount">0</span>
+            </button>
+
+            <!-- Skeleton: dinamik widget gruplari yuklenene kadar layout shift'i onler -->
+            <div id="mceSideNavSkeleton" data-skeleton="1">
+                <span class="mce-sidenav-label">Ek Sahalar</span>
+                <div class="mce-nav-skeleton-row"></div>
+                <div class="mce-nav-skeleton-row"></div>
+                <div class="mce-nav-skeleton-row" style="width:75%;"></div>
+            </div>
             <!-- Widget grup butonlari JS tarafindan dinamik olarak eklenir -->
         </nav>
 
@@ -1212,15 +1595,15 @@
                 <div class="mce-rows">
                     <div class="mce-row">
                         <label for="mceMaterialCode" class="mce-required">Malzeme Kodu</label>
-                        <input type="text" id="mceMaterialCode" class="mce-input" placeholder="ornegin: MTZ-001" maxlength="64" />
+                        <input type="text" id="mceMaterialCode" data-field-key="code" class="mce-input" placeholder="ornegin: MTZ-001" maxlength="64" />
                     </div>
                     <div class="mce-row">
                         <label for="mceMaterialName" class="mce-required">Malzeme Adi</label>
-                        <input type="text" id="mceMaterialName" class="mce-input" placeholder="ornegin: Celik Cubuk 12mm" maxlength="255" />
+                        <input type="text" id="mceMaterialName" data-field-key="name" class="mce-input" placeholder="ornegin: Celik Cubuk 12mm" maxlength="255" />
                     </div>
                     <div class="mce-row">
                         <label for="mceMaterialTypeId">Malzeme Tipi</label>
-                        <select id="mceMaterialTypeId" class="mce-select" style="max-width:200px;"
+                        <select id="mceMaterialTypeId" data-field-key="type_id" class="mce-select" style="max-width:200px;">
                             <option value="">Seciniz</option>
                             <option value="1">Hammadde</option>
                             <option value="2">Yari Mamul</option>
@@ -1230,31 +1613,30 @@
                         </select>
                     </div>
                     <div class="mce-row">
+                        <label for="mceUnitId" class="mce-required">Ana Birim</label>
+                        <select id="mceUnitId" data-field-key="unit" class="mce-select" style="max-width:200px;">
+                            <option value="">Seciniz</option>
+                        </select>
+                    </div>
+                    <div class="mce-row">
                         <label for="mceTrackCombinations">Kombinasyon Takibi</label>
                         <label class="mce-switch" for="mceTrackCombinations">
-                            <input type="checkbox" id="mceTrackCombinations" />
+                            <input type="checkbox" id="mceTrackCombinations" data-field-key="combinations" />
                             <span class="mce-switch-track"></span>
                         </label>
                     </div>
                     <div class="mce-row">
                         <label for="mceTaxRate">KDV Orani (%)</label>
-                        <input type="number" id="mceTaxRate" class="mce-input mce-no-negative" value="20" min="0" max="100" step="0.01" style="max-width:80px;text-align:center;" />
+                        <input type="number" id="mceTaxRate" data-field-key="tax_rate" class="mce-input mce-no-negative" value="20" min="0" max="100" step="0.01" style="max-width:80px;text-align:center;" />
                     </div>
                 </div>
-                <textarea id="mceMaterialDescription" style="display:none;"></textarea>
             </div>
 
             <!-- Ölçü Birimleri -->
             <div class="mce-card mce-section-anchor" id="mceUnitsCard" style="display:none;">
                 <p class="mce-card-title">Ölçü Birimleri</p>
                 <div class="mce-rows" id="mceUnitRows">
-                    <!-- Satır 0: Master birim -->
-                    <div class="mce-row">
-                        <label>Ana Birim <span style="color:#f87171">*</span></label>
-                        <select id="mceUnitMaster" class="mce-select" style="max-width:200px;">
-                            <option value="">Seciniz</option>
-                        </select>
-                    </div>
+                    <!-- Ana Birim "Genel Bilgiler" tabinda; bu tab sadece alternat birimler. -->
                     <!-- Satır 1–5: Dönüşüm birimleri -->
                     <div class="mce-row" data-unit-line="1">
                         <label>Birim 1</label>
@@ -1288,9 +1670,34 @@
                     </div>
                 </div>
                 <div id="mceUnitError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
-                <div style="margin-top:10px;font-size:.72rem;color:rgba(255,255,255,.45);">
-                    Yaptığınız değişiklikler malzeme kartı kaydedildiğinde otomatik güncellenir.
+            </div>
+
+            <!-- Gruplar (5 seviyeli hiyerarsik gruplama: Grup 1 -> Grup 2 -> ... -> Grup 5) -->
+            <div class="mce-card mce-section-anchor" id="mceGroupsCard" style="display:none;">
+                <p class="mce-card-title">Gruplar</p>
+                <div class="mce-rows" id="mceGroupRows">
+                    <div class="mce-row" data-group-level="1">
+                        <label>Grup 1</label>
+                        <select class="mce-select mce-group-sel" data-level="1" style="max-width:260px;"><option value="">Seciniz</option></select>
+                    </div>
+                    <div class="mce-row" data-group-level="2">
+                        <label>Grup 2</label>
+                        <select class="mce-select mce-group-sel" data-level="2" style="max-width:260px;"><option value="">Seciniz</option></select>
+                    </div>
+                    <div class="mce-row" data-group-level="3">
+                        <label>Grup 3</label>
+                        <select class="mce-select mce-group-sel" data-level="3" style="max-width:260px;"><option value="">Seciniz</option></select>
+                    </div>
+                    <div class="mce-row" data-group-level="4">
+                        <label>Grup 4</label>
+                        <select class="mce-select mce-group-sel" data-level="4" style="max-width:260px;"><option value="">Seciniz</option></select>
+                    </div>
+                    <div class="mce-row" data-group-level="5">
+                        <label>Grup 5</label>
+                        <select class="mce-select mce-group-sel" data-level="5" style="max-width:260px;"><option value="">Seciniz</option></select>
+                    </div>
                 </div>
+                <div id="mceGroupError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
             </div>
 
             <!-- Lokasyonlar -->
@@ -1376,6 +1783,40 @@
                 <div id="mceCombBody"></div>
             </div>
 
+            <!-- Reçete (BOM) — yalniz Mamul (3) / Yari Mamul (2) icin -->
+            <div class="mce-card mce-section-anchor" id="mceRecipeCard" style="display:none;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;">
+                    <p class="mce-card-title" style="margin:0;">Reçete</p>
+                    <span id="mceRecipeHint" style="font-size:.74rem;color:rgba(255,255,255,.5);font-style:italic;">Reçeteyi Düzenle butonu ile detaylı reçete ekranında bileşen ekleyebilirsiniz.</span>
+                </div>
+                <div id="mceRecipeBody">
+                    <div id="mceRecipeEmpty" style="padding:18px;text-align:center;color:rgba(255,255,255,.4);font-size:.82rem;font-style:italic;display:none;">
+                        Once malzeme kartini kaydedin, ardindan recete duzenlenebilir hale gelir.
+                    </div>
+                    <div id="mceRecipeSingle" style="display:none;">
+                        <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);">
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-size:.85rem;font-weight:600;color:rgba(255,255,255,.85);">Tek Reçete</div>
+                                <div style="font-size:.72rem;color:rgba(255,255,255,.5);margin-top:3px;">
+                                    Bu malzeme icin standart bir recete tanimi.
+                                    <span id="mceRecipeSingleStatus" style="margin-left:6px;"></span>
+                                </div>
+                            </div>
+                            <button type="button" class="mce-btn mce-btn--secondary" onclick="mceOpenRecipe(null)" style="font-size:.78rem;padding:7px 14px;flex-shrink:0;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                Reçeteyi Düzenle
+                            </button>
+                        </div>
+                    </div>
+                    <div id="mceRecipeCombosWrap" style="display:none;">
+                        <div style="font-size:.78rem;color:rgba(255,255,255,.6);margin-bottom:10px;">
+                            Kombinasyon takibi acik — her kombinasyon icin ayri bir recete tanimlayabilirsiniz.
+                        </div>
+                        <div id="mceRecipeCombosList" style="display:flex;flex-direction:column;gap:8px;"></div>
+                    </div>
+                </div>
+            </div>
+
             @* Ek Alanlar — DynamicWidgetRenderer grupları buraya render edilir. *@
             <div id="mceDynamicWidgetsCard" style="display:none">
                 <div id="mceDynamicWidgets"
@@ -1408,6 +1849,50 @@
                     </svg>
                     Evet, Sil
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Yeni Ozellik Ekleme Uyari Modali (kombinasyon varken) -->
+    <div id="mceFeatAddWarnBackdrop" class="mce-vguide-backdrop" onclick="mceFeatAddWarnCancel()">
+        <div class="mce-vguide-modal" onclick="event.stopPropagation()" style="width:min(480px,95vw);">
+            <div class="mce-vguide-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span class="mce-vguide-header__title">Yeni ozellik ekleniyor</span>
+                <button type="button" class="mce-vguide-close" onclick="mceFeatAddWarnCancel()">&times;</button>
+            </div>
+            <div style="padding:18px 22px;font-size:.86rem;color:#cbd5e1;line-height:1.55;">
+                <p style="margin:0 0 12px 0;">Bu stok kartinin <strong id="mceFeatAddWarnCount" style="color:#fbbf24;">0</strong> aktif kombinasyonu var.</p>
+                <p style="margin:0 0 12px 0;">Yeni eklenen <strong id="mceFeatAddWarnName" style="color:#a5b4fc;"></strong> ozelligi mevcut kombinasyonlara <em>otomatik islenmez</em>.</p>
+                <p style="margin:0;color:#94a3b8;font-size:.8rem;font-style:italic;">Devam ederseniz mevcut kombinasyonlari Ozellik & Kombinasyon ekranindan tek tek guncellemeniz gerekecek.</p>
+            </div>
+            <div class="mce-vguide-footer">
+                <button type="button" class="mce-vguide-footer__close" onclick="mceFeatAddWarnCancel()">Vazgec</button>
+                <button type="button" id="mceFeatAddWarnConfirm" style="padding:7px 18px;border-radius:8px;background:#10b981;border:1px solid #34d399;color:#fff;cursor:pointer;font-size:.8rem;font-weight:600;">Devam Et</button>
+            </div>
+        </div>
+    </div>
+    <style>
+        body.app-theme-light #mceFeatAddWarnBackdrop > div > div:nth-child(2) { color:#475569 !important; }
+        body.app-theme-light #mceFeatAddWarnBackdrop > div > div:nth-child(2) p:last-child { color:#94a3b8 !important; }
+    </style>
+
+    <!-- Deger Rehber Modali (per-feature allowed values for this stock) -->
+    <div id="mceValuesGuideBackdrop" class="mce-vguide-backdrop" onclick="mceCloseValuesGuide()">
+        <div class="mce-vguide-modal" onclick="event.stopPropagation()">
+            <div class="mce-vguide-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span class="mce-vguide-header__title">Deger Rehberi — <strong id="mceValuesGuideFeatureLabel"></strong></span>
+                <button type="button" class="mce-vguide-close" onclick="mceCloseValuesGuide()">&times;</button>
+            </div>
+            <div class="mce-vguide-search">
+                <svg class="mce-vguide-search__ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="mceValuesGuideSearch" class="mce-vguide-search__input" placeholder="Deger ara..." autocomplete="off" />
+            </div>
+            <div id="mceValuesGuideBody" class="mce-vguide-body"></div>
+            <div class="mce-vguide-footer">
+                <span id="mceValuesGuideCount" class="mce-vguide-footer__count">0 deger secili</span>
+                <button type="button" class="mce-vguide-footer__close" onclick="mceCloseValuesGuide()">Kapat</button>
             </div>
         </div>
     </div>
@@ -1460,32 +1945,65 @@
     // ── populate() — Master alanlari doldurur ──
     // Dinamik alanlar artik yeni EAV renderer (DynamicWidgetRenderer) tarafindan
     // kendi API'si (/api/widgets/forms/ITEMS/records/{materialCode}) ile yuklenir.
+    // Null guard: degistirilmis sayfa duzeninde bazi sabit alanlar (Eski "Aciklama"
+    // textarea gibi) artik widget olarak tanimlanmis olabilir → eleman DOM'da
+    // bulunmayinca sessizce atla, throw etme.
+    function _setHTML(id, html)  { var el = $(id); if (el) el.innerHTML = html; }
+    function _setVal(id, val)    { var el = $(id); if (el) el.value = val; }
+    function _setChk(id, val)    { var el = $(id); if (el) el.checked = !!val; }
+    function _setDisp(id, val)   { var el = $(id); if (el) el.style.display = val; }
     function populate(data) {
-        $('mceMeta').innerHTML = mceFormatMeta(data.stockCardId, data.materialCode, data.materialName);
-        $('mceMaterialCode').value = data.materialCode || '';
-        $('mceMaterialName').value = data.materialName || '';
-        $('mceMaterialDescription').value = data.materialDescription || '';
-        $('mceMaterialTypeId').value = data.materialTypeId != null ? String(data.materialTypeId) : '';
-        $('mceTrackCombinations').checked = !!data.trackCombinations;
-        $('mceTaxRate').value = data.taxRate != null ? data.taxRate : 20;
-        $('mceDeleteBtn').style.display = 'inline-flex';
+        // Defansif sarma: widget config tutarsizliklari (orn. ColSpan/field referans
+        // degisiklikleri sonrasi) populate icinde beklenmeyen DOM hatalarina yol acabilir;
+        // bunlari yutup console'a logla, "Yuklenirken hata" toast'unu kullaniciya gosterme.
+        try {
+            _setHTML('mceMeta', mceFormatMeta(data.stockCardId, data.materialCode, data.materialName));
+            _setVal('mceMaterialCode',         data.materialCode || '');
+            _setVal('mceMaterialName',         data.materialName || '');
+            _setVal('mceMaterialTypeId',       data.materialTypeId != null ? String(data.materialTypeId) : '');
+            _setChk('mceTrackCombinations',    !!data.trackCombinations);
+            _setVal('mceTaxRate',              data.taxRate != null ? data.taxRate : 20);
+            _setDisp('mceDeleteBtn',           'inline-flex');
 
-        // Kombinasyonlar
-        var combos = data.combinations || [];
-        renderCombinations(combos);
-        updateCombNav(!!data.trackCombinations, combos.length);
+            // Ana Birim — dropdown options mceUnitLoad sirasinda dolduruluyor; secilenler
+            // hazir olur olmaz set etsin diye deferred set yapiyoruz.
+            var pendingUnitId = data.unitId != null ? String(data.unitId) : '';
+            window._mceApplyUnitId = function() {
+                var el = $('mceUnitId');
+                if (!el) return;
+                el.value = pendingUnitId;
+                // Programatik value degisimi change event uretmiyor — combobox UI label
+                // ve selected state'i manuel olarak yenile, yoksa "Seciniz" placeholder'i kalir.
+                if (typeof mceCbxRebuild === 'function') mceCbxRebuild(el);
+                // Ana Birim degistiyse alternat satirlarda ayni birimin secilebilirligi yenilenmeli.
+                if (typeof mceUnitRefreshSelects === 'function') mceUnitRefreshSelects();
+            };
+            if (window._mceUnitsLoaded) window._mceApplyUnitId();
 
-        // Eski sayfa kayitlari icin renderer recordId'yi reload et (integer Id ile)
-        if (window._mceDynRenderer && data.stockCardId) {
-            try { window._mceDynRenderer.reload({ recordId: String(data.stockCardId) }); }
-            catch (e) { console.warn('[MCE] dyn renderer reload hatasi:', e); }
-        }
+            // Kombinasyonlar
+            var combos = data.combinations || [];
+            renderCombinations(combos);
+            updateCombNav(!!data.trackCombinations, combos.length);
 
-        // Ozellik Eslestirme sayim rozetini sayfa acilisinda dogru goster — trackCombinations
-        // acikken ve kart kayitliyken feature listesini eager olarak yukleyip rozete yansitir.
-        if (!!data.trackCombinations && data.stockCardId && data.stockCardId > 0
-            && typeof window.mceFeatureLoad === 'function') {
-            try { window.mceFeatureLoad(); } catch (e) { /* ignore */ }
+            // Recete nav buton gorunurlugu (Mamul/Yari Mamul ise goster)
+            if (typeof window.mceRecipeSyncVisibility === 'function') {
+                window.mceRecipeSyncVisibility();
+            }
+
+            // Eski sayfa kayitlari icin renderer recordId'yi reload et (integer Id ile)
+            if (window._mceDynRenderer && data.stockCardId) {
+                try { window._mceDynRenderer.reload({ recordId: String(data.stockCardId) }); }
+                catch (e) { console.warn('[MCE] dyn renderer reload hatasi:', e); }
+            }
+
+            // Ozellik Eslestirme sayim rozetini sayfa acilisinda dogru goster — trackCombinations
+            // acikken ve kart kayitliyken feature listesini eager olarak yukleyip rozete yansitir.
+            if (!!data.trackCombinations && data.stockCardId && data.stockCardId > 0
+                && typeof window.mceFeatureLoad === 'function') {
+                try { window.mceFeatureLoad(); } catch (e) { /* ignore */ }
+            }
+        } catch (e) {
+            console.error('[MCE] populate icinde DOM hatasi (yutuldu):', e);
         }
     }
 
@@ -1498,8 +2016,10 @@
 
     // Kombinasyon detayi popup icin cache.
     // combNameById[id]      = "Motor Gucu: 100 | ..." (metin ozet)
+    // combCodeById[id]      = "1500 2339-CRM-12" (kombinasyon kodu)
     // combFeaturesById[id]  = [{ featureId, featureName, visibleInDesign, valueId, valueName, aciklama }, ...]
     var combNameById = {};
+    var combCodeById = {};
     var combFeaturesById = {};
 
     function renderCombinations(combos) {
@@ -1516,6 +2036,7 @@
         }
 
         combNameById = {};
+        combCodeById = {};
         combFeaturesById = {};
         combos.forEach(function (c) {
             if (Array.isArray(c.features)) combFeaturesById[c.id] = c.features;
@@ -1528,6 +2049,7 @@
         for (var i = 0; i < combos.length; i++) {
             var c = combos[i];
             combNameById[c.id] = c.combinationName || '';
+            combCodeById[c.id] = c.combinationCode || '';
             html += '<tr>' +
                 '<td class="mce-comb-td" style="width:40px;opacity:0.4;">' + (i + 1) + '</td>' +
                 '<td class="mce-comb-td mce-comb-code">' +
@@ -1633,15 +2155,17 @@
         if (features.length === 0) {
             body.innerHTML = '<div style="color:rgba(255,255,255,.45);padding:12px 4px;font-size:.86rem;">Bu kombinasyon icin ozellik detayi bulunamadi.</div>';
         } else {
+            // Ozellik bazli aciklama girisi kaldirildi — aciklama Ozellik
+            // Tanimlama (ProductFeatureEdit) sayfasinda yoneten 1 yere indirgendi.
+            // Burada kullanici sadece feature gorunurlugunu (Dizaynda) toggle eder.
             var tbl = '<table style="width:100%;border-collapse:collapse;font-size:.82rem;table-layout:fixed;">'
                 + '<colgroup>'
-                + '<col style="width:22%;"><col style="width:14%;"><col style="width:12%;"><col style="width:52%;">'
+                + '<col style="width:50%;"><col style="width:34%;"><col style="width:16%;">'
                 + '</colgroup>'
                 + '<thead><tr style="color:rgba(165,180,252,.85);font-weight:600;">'
                 + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08);">Ozellik</th>'
                 + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08);">Deger</th>'
                 + '<th style="text-align:center;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08);white-space:nowrap;">Dizaynda</th>'
-                + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08);">Aciklama</th>'
                 + '</tr></thead><tbody>';
             features.forEach(function (f, i) {
                 var vis = f.visibleInDesign === true;
@@ -1653,9 +2177,6 @@
                         + '<input type="checkbox" class="js-feat-vis" data-feature-id="' + f.featureId + '" ' + (vis ? 'checked' : '') + ' />'
                         + '<span class="mcp-track"></span>'
                         + '</label>'
-                    + '</td>'
-                    + '<td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top;">'
-                        + '<textarea class="js-val-acik mcp-textarea" data-value-id="' + f.valueId + '" rows="2" placeholder="Aciklama...">' + escHtml(f.aciklama || '') + '</textarea>'
                     + '</td>'
                     + '</tr>';
             });
@@ -1730,37 +2251,107 @@
             });
         });
 
-        // Auto-save — aciklama input blur/change
-        body.querySelectorAll('.js-val-acik').forEach(function (inp) {
-            var original = inp.value;
-            inp.addEventListener('blur', function () {
-                if (inp.value === original) return;
-                var valueId = parseInt(inp.getAttribute('data-value-id'), 10);
-                setStatus('Kaydediliyor...');
-                fetch('/Logistics/UpdateValueAciklamaJson', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ valueId: valueId, aciklama: inp.value })
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    if (!data.success) {
-                        setStatus('Hata: ' + (data.message || 'bilinmeyen'), false);
-                    } else {
-                        original = inp.value;
-                        Object.keys(combFeaturesById).forEach(function (cid) {
-                            (combFeaturesById[cid] || []).forEach(function (f) {
-                                if (f.valueId === valueId) f.aciklama = inp.value;
-                            });
-                        });
-                        setStatus('Kaydedildi', true);
-                    }
-                })
-                .catch(function (err) { setStatus('Hata: ' + err.message, false); });
-            });
-            inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') inp.blur(); });
+        // Aciklama input handler kaldirildi — popup'ta artik sadece Dizaynda
+        // toggle var. Aciklama yonetimi ProductFeatureEdit sayfasinda merkezilesti.
+    };
+
+    // ── "Kombinasyonda" badge'ine tiklaninca: bu ozellik bu stok karti icinde
+    // hangi kombinasyon(lar)da kullaniliyor gosteren popup. Server'a yeni cagri
+    // YAPILMAZ — combFeaturesById/combCodeById/combNameById frontend cache'leri
+    // populate(data) sirasinda dolduruluyor; reverse lookup ile filtre cekiyoruz.
+    window.mceShowFeatureCombinationsPopup = function(featureId, featureName, ev) {
+        if (ev) ev.preventDefault();
+        if (ev) ev.stopPropagation();
+        featureId = parseInt(featureId, 10);
+        if (!featureId) return;
+
+        // Bu feature'i iceren kombinasyonlari topla — { combId, code, name, valueName }
+        var matches = [];
+        Object.keys(combFeaturesById).forEach(function(cid) {
+            var arr = combFeaturesById[cid] || [];
+            var hit = null;
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i].featureId === featureId) { hit = arr[i]; break; }
+            }
+            if (hit) {
+                matches.push({
+                    combId: parseInt(cid, 10),
+                    code: combCodeById[cid] || '',
+                    name: combNameById[cid] || '',
+                    valueName: hit.valueName || ''
+                });
+            }
         });
+
+        // Eski overlay temizle
+        var old = document.getElementById('__mce_feat_combs_popup__');
+        if (old) old.remove();
+
+        var hostDoc = document;
+        try { if (window.top && window.top.document) hostDoc = window.top.document; } catch (e) { /* cross-origin */ }
+
+        var overlay = hostDoc.createElement('div');
+        overlay.id = '__mce_feat_combs_popup__';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:20px;';
+
+        var box = hostDoc.createElement('div');
+        box.style.cssText = 'min-width:560px;max-width:780px;width:92vw;background:#1e293b;color:#e2e8f0;border:1px solid rgba(255,255,255,.12);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden;';
+
+        // Baslik
+        var head = hostDoc.createElement('div');
+        head.style.cssText = 'padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px;';
+        var safeName = (featureName || '').replace(/[<>&"]/g, function(c) { return ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' })[c]; });
+        head.innerHTML = '<span style="font-size:1rem;font-weight:700;">"' + safeName + '" Ozelligi Hangi Kombinasyonlarda?</span>'
+            + '<span style="margin-left:auto;font-size:.72rem;color:rgba(255,255,255,.45);">' + matches.length + ' kombinasyon</span>';
+        box.appendChild(head);
+
+        // Govde
+        var body = hostDoc.createElement('div');
+        body.style.cssText = 'padding:12px 20px;max-height:60vh;overflow-y:auto;';
+        if (matches.length === 0) {
+            body.innerHTML = '<div style="color:rgba(255,255,255,.45);padding:14px 4px;font-size:.86rem;">Bu ozellik su an aktif kombinasyonlarda kullanilmiyor gorunuyor.</div>';
+        } else {
+            var tbl = '<table style="width:100%;border-collapse:collapse;font-size:.82rem;table-layout:fixed;">'
+                + '<colgroup><col style="width:34%;"><col style="width:30%;"><col style="width:36%;"></colgroup>'
+                + '<thead><tr style="color:rgba(165,180,252,.85);font-weight:600;">'
+                + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08);">Kombinasyon Kodu</th>'
+                + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08);">Bu Ozellige Verilen Deger</th>'
+                + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.08);">Ozet</th>'
+                + '</tr></thead><tbody>';
+            matches.forEach(function(m) {
+                tbl += '<tr>'
+                    + '<td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.05);color:rgba(255,255,255,.88);font-weight:600;word-break:break-word;">' + escHtml(m.code) + '</td>'
+                    + '<td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.05);color:#34d399;word-break:break-word;">' + escHtml(m.valueName) + '</td>'
+                    + '<td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.05);color:rgba(255,255,255,.55);font-size:.78rem;word-break:break-word;">' + escHtml(m.name) + '</td>'
+                    + '</tr>';
+            });
+            tbl += '</tbody></table>';
+            body.innerHTML = tbl;
+        }
+        box.appendChild(body);
+
+        // Footer
+        var foot = hostDoc.createElement('div');
+        foot.style.cssText = 'padding:12px 20px;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:flex-end;align-items:center;gap:10px;';
+        var closeBtn = hostDoc.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.textContent = 'Kapat';
+        closeBtn.style.cssText = 'padding:8px 18px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;cursor:pointer;font-weight:600;font-size:.86rem;';
+        foot.appendChild(closeBtn);
+        box.appendChild(foot);
+
+        overlay.appendChild(box);
+        hostDoc.body.appendChild(overlay);
+
+        function close() {
+            hostDoc.removeEventListener('keydown', onKey);
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }
+        function onKey(e) { if (e.key === 'Escape') close(); }
+        closeBtn.addEventListener('click', close);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+        hostDoc.addEventListener('keydown', onKey);
+        closeBtn.focus();
     };
 
     function updateCombNav(trackEnabled, count) {
@@ -1768,7 +2359,12 @@
         var badge = $('mceCombCount');
         if (btn) {
             btn.style.display = trackEnabled ? '' : 'none';
-            if (badge) badge.textContent = String(count || 0);
+            if (badge) {
+                var n = count || 0;
+                var newText = String(n);
+                if (badge.textContent !== newText) badge.textContent = newText;
+                badge.classList.toggle('is-empty', n <= 0);
+            }
             if (!trackEnabled && btn.classList.contains('is-active')) {
                 if (window.mceNavigateToSection) window.mceNavigateToSection('general');
             }
@@ -1846,6 +2442,8 @@
         var invalid = [];
         if (!code) { invalid.push('mceMaterialCode'); allValid = false; }
         if (!name) { invalid.push('mceMaterialName'); allValid = false; }
+        var unitIdRaw = $('mceUnitId') ? $('mceUnitId').value : '';
+        if (!unitIdRaw) { invalid.push('mceUnitId'); allValid = false; }
         if (invalid.length > 0) markInvalid(invalid);
 
         // Ek alan (widget) zorunlu + kisitlama kontrolu — ANA FORM ILE AYNI ANDA
@@ -1887,11 +2485,10 @@
             itemId: currentId > 0 ? currentId : null,
             code: code,
             name: name,
-            description: $('mceMaterialDescription').value.trim() || null,
             typeId: $('mceMaterialTypeId').value ? parseInt($('mceMaterialTypeId').value) : null,
-            trackCombinations: $('mceTrackCombinations').checked,
-            taxRate: parseFloat($('mceTaxRate').value || '20'),
-            productImageBase64: null
+            unitId: unitIdRaw ? parseInt(unitIdRaw) : null,
+            combinations: $('mceTrackCombinations').checked,
+            taxRate: parseFloat($('mceTaxRate').value || '20')
         };
 
         $('mceSaveBtn').disabled = true;
@@ -1918,8 +2515,8 @@
                     if (location.search.indexOf('workspace=1') !== -1) newUrl += '&workspace=1';
                     history.replaceState({}, '', newUrl);
                 }
-                $('mceDeleteBtn').style.display = 'inline-flex';
-                $('mceMeta').innerHTML = mceFormatMeta(data.id, code, name);
+                _setDisp('mceDeleteBtn', 'inline-flex');
+                _setHTML('mceMeta', mceFormatMeta(data.id, code, name));
             }
 
             // ── Ek alanlari (WidgetMas/WidgetTra) kaydet ──
@@ -1944,6 +2541,15 @@
                         console.warn('[MCE] olcu birimi kaydi basarisiz:', res.message);
                     }
                 }).catch(function(err) { console.warn('[MCE] unit save hatasi:', err); });
+            }
+
+            // ── Grup eslestirmelerini de kaydet (Gruplar tab acildiysa) ──
+            if (typeof window.mceGroupsSave === 'function' && currentId > 0) {
+                window.mceGroupsSave(currentId).then(function(res) {
+                    if (res && res.success === false && !res.skipped) {
+                        console.warn('[MCE] grup eslestirme kaydi basarisiz:', res.message);
+                    }
+                }).catch(function(err) { console.warn('[MCE] group save hatasi:', err); });
             }
 
             // ── Lokasyon eslestirmelerini de ayni save akisinda kaydet ──
@@ -2137,6 +2743,10 @@
             var unitsCard = document.getElementById('mceUnitsCard');
             if (unitsCard) unitsCard.style.display = (key === 'units') ? '' : 'none';
 
+            // Gruplar karti
+            var groupsCard = document.getElementById('mceGroupsCard');
+            if (groupsCard) groupsCard.style.display = (key === 'groups') ? '' : 'none';
+
             // Lokasyonlar karti
             var locCard = document.getElementById('mceLocationsCard');
             if (locCard) locCard.style.display = (key === 'locations') ? '' : 'none';
@@ -2148,6 +2758,10 @@
             // Kombinasyonlar karti
             var combCard = document.getElementById('mceCombinationsCard');
             if (combCard) combCard.style.display = (key === 'combinations') ? '' : 'none';
+
+            // Recete karti
+            var recipeCard = document.getElementById('mceRecipeCard');
+            if (recipeCard) recipeCard.style.display = (key === 'recipe') ? '' : 'none';
 
             // Her dinamik grup karti
             content.querySelectorAll('[data-dyn-group-id]').forEach(function(d) {
@@ -2175,6 +2789,16 @@
                 // birimlerini onceden secip sonra Kaydet ile kalici hale getirebilsin.
                 // stockCardId=0 sorgusu bile availableUnits'i doldurur.
                 mceUnitLoad();
+            });
+        }
+
+        // Gruplar butonu
+        var navGroups = document.getElementById('mceNavGroups');
+        if (navGroups) {
+            navGroups.addEventListener('click', function() {
+                setActive(navGroups);
+                activateSection('groups');
+                mceGroupsEnsureLoaded();
             });
         }
 
@@ -2207,12 +2831,26 @@
             });
         }
 
+        // Recete butonu (yalniz Mamul/Yari Mamul'da gorunur)
+        var navRecipe = document.getElementById('mceNavRecipe');
+        if (navRecipe) {
+            navRecipe.addEventListener('click', function() {
+                setActive(navRecipe);
+                activateSection('recipe');
+                if (typeof window.mceRecipeRender === 'function') window.mceRecipeRender();
+            });
+        }
+
         // Widget gruplarini tarayip nav butonlari olustur
         function buildGroupNav() {
             sidenav.querySelectorAll('[data-group-nav]').forEach(function(el) { el.remove(); });
 
             var groups = content.querySelectorAll('[data-dyn-group-id]');
             if (!groups.length) return;
+
+            // Skeleton placeholder'i kaldir — gercek butonlar geldi
+            var sk = document.getElementById('mceSideNavSkeleton');
+            if (sk) sk.remove();
 
             var lbl = document.createElement('span');
             lbl.className = 'mce-sidenav-label';
@@ -2266,7 +2904,12 @@
                     } else {
                         var tries = (scheduleScan._n = (scheduleScan._n || 0) + 1);
                         if (tries < 80) scheduleScan();
-                        else scheduleScan._n = 0;
+                        else {
+                            scheduleScan._n = 0;
+                            // Hic widget grup gelmedi — skeleton'u kaldir (sonsuz shimmer onlenir)
+                            var sk = document.getElementById('mceSideNavSkeleton');
+                            if (sk) sk.remove();
+                        }
                     }
                 }, 50);
             }
@@ -2284,12 +2927,14 @@
 
         // Baslangic: Genel Bilgiler aktif
         setActive(navGeneral);
+        // (Ana Birim eager load, mceUnitLoad tanimindan sonra direkt cagriliyor)
 
         // Dis erisim: mceSave() hata bolumune gidebilsin
         window.mceNavigateToSection = function(gid) {
             var navBtn;
             if (gid === 'general') navBtn = navGeneral;
             else if (gid === 'units') navBtn = navUnits;
+            else if (gid === 'groups') navBtn = navGroups;
             else if (gid === 'features') navBtn = navFeatures;
             else if (gid === 'combinations') navBtn = navComb;
             else navBtn = sidenav.querySelector('[data-group-nav="' + gid + '"]');
@@ -2363,15 +3008,149 @@
     var _availableUnits = [];
 
     function mceUnitPopulateSelects() {
+        // Tek opsiyon listesi — hem Ana Birim (Genel Bilgiler) hem alternat (Olcu Birimleri)
+        // dropdown'lari UnitId (int) ile bind edilir.
+        // Pasif (isActive=false) birimler data-inactive="true" attribute aliyor — combobox
+        // bunu strikethrough/disabled olarak gosterir.
         var opts = '<option value="">Seciniz</option>';
         _availableUnits.forEach(function(u) {
-            opts += '<option value="' + u.unitCode + '">' + u.unitCode + ' — ' + u.unitName + '</option>';
+            var inactiveAttr = (u.isActive === false) ? ' data-inactive="true"' : '';
+            opts += '<option value="' + u.id + '"' + inactiveAttr + '>' + u.unitCode + ' — ' + u.unitName + '</option>';
         });
-        var master = document.getElementById('mceUnitMaster');
-        if (master) { var v = master.value; master.innerHTML = opts; master.value = v; }
+
+        var masterEl = document.getElementById('mceUnitId');
+        if (masterEl) { var mv = masterEl.value; masterEl.innerHTML = opts; masterEl.value = mv; }
+
         document.querySelectorAll('.mce-unit-code').forEach(function(sel) {
             var v = sel.value; sel.innerHTML = opts; sel.value = v;
         });
+
+        // Native select'leri custom combobox'a yukselt (idempotent — bir kez yapilir)
+        if (masterEl) mceUpgradeCombobox(masterEl);
+        document.querySelectorAll('.mce-unit-code').forEach(function(sel) { mceUpgradeCombobox(sel); });
+
+        // Mevcut combobox UI'lari yenile (option icerikleri degisti)
+        if (masterEl) mceCbxRebuild(masterEl);
+        document.querySelectorAll('.mce-unit-code').forEach(function(sel) { mceCbxRebuild(sel); });
+    }
+
+    /**
+     * Native <select> elementini custom combobox UI'a sarar (idempotent).
+     * Native select gizli kalir (form value icin), ustunde stillenebilir trigger + panel olusur.
+     * Kullanim sonrasi sel.value'yu degistirmek istiyorsan mceCbxRebuild(sel) cagir.
+     */
+    function mceUpgradeCombobox(sel) {
+        if (!sel || sel.dataset.cbxUpgraded === '1') return;
+        sel.dataset.cbxUpgraded = '1';
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'mce-cbx';
+        // Inherit width/style from select
+        if (sel.style.maxWidth) wrapper.style.maxWidth = sel.style.maxWidth;
+        sel.parentNode.insertBefore(wrapper, sel);
+        wrapper.appendChild(sel);
+        sel.style.display = 'none';
+        sel.setAttribute('aria-hidden', 'true');
+
+        var trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'mce-cbx__trigger';
+        trigger.innerHTML = '<span class="mce-cbx__label"></span><span class="mce-cbx__arrow">▾</span>';
+        wrapper.appendChild(trigger);
+
+        var panel = document.createElement('div');
+        panel.className = 'mce-cbx__panel';
+        panel.style.display = 'none';
+        wrapper.appendChild(panel);
+
+        function close() { panel.style.display = 'none'; trigger.classList.remove('is-open'); }
+        function open() {
+            // Onceki acik comboboxlari kapat
+            document.querySelectorAll('.mce-cbx__trigger.is-open').forEach(function(t) {
+                if (t !== trigger) {
+                    t.classList.remove('is-open');
+                    var sib = t.nextElementSibling;
+                    if (sib && sib.classList.contains('mce-cbx__panel')) sib.style.display = 'none';
+                }
+            });
+            mceCbxRebuild(sel);
+            panel.style.display = 'block';
+            trigger.classList.add('is-open');
+        }
+
+        trigger.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (trigger.disabled) return;
+            if (panel.style.display === 'block') close(); else open();
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!wrapper.contains(e.target)) close();
+        });
+
+        // ESC ile kapat
+        wrapper.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') { close(); trigger.focus(); }
+        });
+
+        // Native select degistiginde label'i guncelle (programatik set destekli)
+        sel.addEventListener('change', function() { mceCbxUpdateLabel(sel); });
+
+        // is-invalid sinifi senkron tut
+        var classObserver = new MutationObserver(function() {
+            if (sel.classList.contains('is-invalid')) trigger.classList.add('is-invalid');
+            else trigger.classList.remove('is-invalid');
+        });
+        classObserver.observe(sel, { attributes: true, attributeFilter: ['class'] });
+
+        wrapper.dataset.cbxRoot = '1';
+        mceCbxUpdateLabel(sel);
+    }
+
+    function mceCbxUpdateLabel(sel) {
+        var wrapper = sel.parentElement;
+        if (!wrapper || !wrapper.classList.contains('mce-cbx')) return;
+        var label = wrapper.querySelector('.mce-cbx__label');
+        if (!label) return;
+        var opt = sel.options[sel.selectedIndex];
+        var hasValue = opt && opt.value;
+        label.textContent = hasValue ? opt.text : (sel.options[0] ? sel.options[0].text : 'Seciniz');
+        if (hasValue) label.classList.remove('mce-cbx__label--placeholder');
+        else label.classList.add('mce-cbx__label--placeholder');
+    }
+
+    /**
+     * Combobox panelini yeniden cizer — option durumlari (used/inactive/selected) degistiyse
+     * cagrilir (mceUnitRefreshSelects sonrasi vb.).
+     */
+    function mceCbxRebuild(sel) {
+        var wrapper = sel.parentElement;
+        if (!wrapper || !wrapper.classList.contains('mce-cbx')) return;
+        var panel = wrapper.querySelector('.mce-cbx__panel');
+        if (!panel) return;
+        panel.innerHTML = '';
+        Array.prototype.forEach.call(sel.options, function(opt) {
+            var item = document.createElement('div');
+            item.className = 'mce-cbx__option';
+            if (!opt.value) item.classList.add('is-placeholder');
+            if (opt.value === sel.value) item.classList.add('is-selected');
+            // Native disabled = baska bir satir kullaniyor
+            if (opt.disabled) item.classList.add('is-used');
+            // Pasif birim
+            if (opt.dataset && opt.dataset.inactive === 'true') item.classList.add('is-inactive');
+            item.textContent = opt.text;
+            item.addEventListener('click', function() {
+                if (item.classList.contains('is-used') || item.classList.contains('is-inactive')) return;
+                sel.value = opt.value;
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                mceCbxUpdateLabel(sel);
+                var trigger = wrapper.querySelector('.mce-cbx__trigger');
+                if (trigger) trigger.classList.remove('is-open');
+                panel.style.display = 'none';
+            });
+            panel.appendChild(item);
+        });
+        mceCbxUpdateLabel(sel);
     }
 
     function mceShowUnitWarning(msg) {
@@ -2387,14 +3166,16 @@
      * option'lari (kendi secimi haric) disabled yapar.
      */
     function mceUnitRefreshSelects() {
-        var usedCodes = new Set();
-        var master = document.getElementById('mceUnitMaster');
-        if (master && master.value) usedCodes.add(master.value);
+        // Tum dropdown'lar UnitId (int) ile bind edildi — Ana Birim ve alternatler arasi
+        // duplicate prevention yapilabilir.
+        var usedIds = new Set();
+        var masterEl = document.getElementById('mceUnitId');
+        if (masterEl && masterEl.value) usedIds.add(masterEl.value);
         for (var i = 1; i <= 5; i++) {
             var row = document.querySelector('[data-unit-line="' + i + '"]');
             if (!row) continue;
             var sel = row.querySelector('.mce-unit-code');
-            if (sel && sel.value) usedCodes.add(sel.value);
+            if (sel && sel.value) usedIds.add(sel.value);
         }
 
         function updateSelect(sel) {
@@ -2402,11 +3183,13 @@
             var own = sel.value;
             Array.prototype.forEach.call(sel.options, function(opt) {
                 if (!opt.value) { opt.disabled = false; return; }
-                opt.disabled = (opt.value !== own) && usedCodes.has(opt.value);
+                opt.disabled = (opt.value !== own) && usedIds.has(opt.value);
             });
+            // Custom combobox panel'ini de yenile (disabled state degisti)
+            if (typeof mceCbxRebuild === 'function') mceCbxRebuild(sel);
         }
 
-        updateSelect(master);
+        updateSelect(masterEl);
         for (var j = 1; j <= 5; j++) {
             var r2 = document.querySelector('[data-unit-line="' + j + '"]');
             if (!r2) continue;
@@ -2472,8 +3255,8 @@
     window.mceUnitLoad = function() {
         // Kaydedilmis kayit varsa conversions da gelir; yeni kartta sadece availableUnits cekilir
         var url = currentId && currentId > 0
-            ? '/Logistics/GetStockUnitConversions?stockCardId=' + currentId
-            : '/Logistics/GetStockUnitConversions?stockCardId=0';
+            ? '/Logistics/GetItemUnits?itemId=' + currentId
+            : '/Logistics/GetItemUnits?itemId=0';
         fetch(url, { credentials: 'same-origin' })
             .then(function(r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2491,20 +3274,22 @@
                     mceShowUnitWarning('');
                 }
 
+                // Master Items.UnitId'den geliyor — bu tab artik master row icermez.
+                // Alternat satirlar UnitId (int) ile bind edilir.
                 var conversions = data.conversions || [];
-                // Satır 0 (line_no=0) → master birim
-                var master = conversions.find(function(c) { return c.lineNo === 0; });
-                if (master) document.getElementById('mceUnitMaster').value = master.unitCode;
-
-                // Satır 1–5 — scope cakismasini onlemek icin yerel ad
                 for (var i = 1; i <= 5; i++) {
                     var row = document.querySelector('[data-unit-line="' + i + '"]');
                     if (!row) continue;
                     var conv = conversions.find(function(c) { return c.lineNo === i; });
-                    row.querySelector('.mce-unit-code').value = conv ? conv.unitCode : '';
+                    row.querySelector('.mce-unit-code').value = conv ? String(conv.unitId) : '';
                     row.querySelector('.mce-unit-mult').value = conv ? conv.multiplier : '';
                 }
                 _unitLoaded = true;
+
+                // Genel Bilgiler tab'indaki Ana Birim dropdown'i artik populate edildi —
+                // populate() unitId set edilmek icin bekliyorsa simdi uygulansin.
+                window._mceUnitsLoaded = true;
+                if (window._mceApplyUnitId) { window._mceApplyUnitId(); window._mceApplyUnitId = null; }
 
                 // Dropdown'larda tekrari engelle + change listener'lari bagla (bir kez)
                 mceUnitRefreshSelects();
@@ -2513,16 +3298,22 @@
             .catch(function(e) { console.error('[MCE] unit load error:', e); });
     };
 
+    // Eager: sayfa acildiginda Ana Birim dropdown'i hemen dolsun
+    // (Olcu Birimleri tab'ina tiklamayi beklemeden).
+    console.log('[MCE] eager unit load triggered');
+    window.mceUnitLoad();
+
     var _unitListenersBound = false;
     function mceUnitBindListenersOnce() {
         if (_unitListenersBound) return;
         _unitListenersBound = true;
 
-        // Ana birim degistiginde refresh
-        var master = document.getElementById('mceUnitMaster');
-        if (master) {
-            master.addEventListener('change', function() { mceUnitRefreshSelects(); });
+        // Ana Birim degistiginde alternatlerin disabled state'ini yenile
+        var masterEl = document.getElementById('mceUnitId');
+        if (masterEl) {
+            masterEl.addEventListener('change', function() { mceUnitRefreshSelects(); });
         }
+
         // Her satir: kod degistiginde dropdown'lari yenile + carpana odaklan.
         // Anlik kirmizi uyari / titresim YOK — dogrulama Kaydet'te yapilir.
         for (var i = 1; i <= 5; i++) {
@@ -2578,43 +3369,42 @@
             return Promise.resolve({ success: false, message: msg0 });
         }
 
-        // Birim satirlarindan data topla
+        // Birim satirlarindan data topla — master Items.UnitId'de tutuluyor, burada sadece alternatler.
+        // Dropdown value'lari UnitId (int).
         var items = [];
-        var masterEl = document.getElementById('mceUnitMaster');
-        var masterCode = masterEl ? masterEl.value : '';
-        if (masterCode) items.push({ unitCode: masterCode, multiplier: 1 });
-
-        var usedCodes = masterCode ? [masterCode.toUpperCase()] : [];
+        var usedIds = [];
 
         for (var i = 1; i <= 5; i++) {
             var row = document.querySelector('[data-unit-line="' + i + '"]');
             if (!row) continue;
-            var code = row.querySelector('.mce-unit-code').value;
+            var unitIdRaw = row.querySelector('.mce-unit-code').value;
             var mult = parseFloat(row.querySelector('.mce-unit-mult').value) || 0;
-            if (!code) continue;
-            var upper = code.toUpperCase();
-            if (usedCodes.indexOf(upper) !== -1) {
-                var msg1 = 'Ayni olcu birimi birden fazla tanimlanamaz: ' + code;
+            if (!unitIdRaw) continue;
+            var unitId = parseInt(unitIdRaw);
+            if (usedIds.indexOf(unitId) !== -1) {
+                var dupUnit = (_availableUnits.find(function(u) { return u.id === unitId; }) || {});
+                var msg1 = 'Ayni olcu birimi birden fazla tanimlanamaz: ' + (dupUnit.unitCode || unitId);
                 if (errDiv) { errDiv.textContent = msg1; errDiv.style.display = 'block'; }
                 return Promise.resolve({ success: false, message: msg1 });
             }
-            usedCodes.push(upper);
+            usedIds.push(unitId);
             if (mult <= 0) {
-                var msg2 = '"' + code + '" icin carpan degeri sifirdan buyuk olmalidir.';
+                var unitForMsg = (_availableUnits.find(function(u) { return u.id === unitId; }) || {});
+                var msg2 = '"' + (unitForMsg.unitCode || unitId) + '" icin carpan degeri sifirdan buyuk olmalidir.';
                 if (errDiv) { errDiv.textContent = msg2; errDiv.style.display = 'block'; }
                 return Promise.resolve({ success: false, message: msg2 });
             }
-            items.push({ unitCode: code, multiplier: mult });
+            items.push({ unitId: unitId, multiplier: mult });
         }
 
         // Hic birim tanimlanmamissa sunucuya gitme (mevcut kayit varsa temizle:
         // yine de sunucuya bos items gonderip temizlenmesini saglayalim)
         var payload = {
             itemId: currentId,
-            items: items.map(function(it) { return { unitCode: it.unitCode, multiplier: it.multiplier }; })
+            items: items.map(function(it) { return { unitId: it.unitId, multiplier: it.multiplier }; })
         };
 
-        return fetch('/Logistics/SaveStockUnitConversions', {
+        return fetch('/Logistics/SaveItemUnits', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
@@ -2634,6 +3424,177 @@
             return { success: false, message: msg };
         });
     };
+
+    // ── Gruplar (5 seviyeli hiyerarsik gruplama) ───────────────────
+    // entityType=1 (malzeme), level 1..5, parent_id ile cascade.
+    // Endpoint'ler:
+    //   GET /Definitions/GetCardGroups?cardType=1&level=N&parentId=P
+    //   GET /Definitions/GetCardGroupMappings?entityType=1&entityId={itemId}
+    //   POST /Definitions/SaveCardGroupMappings { entityType:1, entityId:itemId, mappings:[{level, cardGroupId}] }
+
+    var _mceGroupsLoaded = false;
+    var _mceGroupsState = {}; // { 1: [{id,code,description}], 2: [], ... }
+
+    function mceGroupSelByLevel(level) {
+        return document.querySelector('.mce-group-sel[data-level="' + level + '"]');
+    }
+
+    function mceGroupBuildOptions(level, items) {
+        var sel = mceGroupSelByLevel(level);
+        if (!sel) return;
+        var prevValue = sel.value;
+        var opts = '<option value="">Seciniz</option>';
+        (items || []).forEach(function(g) {
+            opts += '<option value="' + g.id + '">' + (g.code || '') + (g.description ? ' — ' + g.description : '') + '</option>';
+        });
+        sel.innerHTML = opts;
+        // Mevcut secim listede varsa korunsun
+        if (prevValue && Array.prototype.some.call(sel.options, function(o) { return o.value === prevValue; })) {
+            sel.value = prevValue;
+        }
+        if (typeof mceUpgradeCombobox === 'function') mceUpgradeCombobox(sel);
+        if (typeof mceCbxRebuild === 'function') mceCbxRebuild(sel);
+    }
+
+    function mceGroupClearLevels(fromLevel) {
+        for (var lv = fromLevel; lv <= 5; lv++) {
+            var sel = mceGroupSelByLevel(lv);
+            if (!sel) continue;
+            sel.innerHTML = '<option value="">Seciniz</option>';
+            sel.value = '';
+            _mceGroupsState[lv] = [];
+            if (typeof mceCbxRebuild === 'function') mceCbxRebuild(sel);
+        }
+    }
+
+    /**
+     * Belirli bir level icin gruplari yukler. parentId null ise root level (1).
+     */
+    function mceGroupFetchLevel(level, parentId) {
+        var url = '/Definitions/GetCardGroups?cardType=1&level=' + level;
+        if (parentId) url += '&parentId=' + parentId;
+        return fetch(url, { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : []; })
+            .then(function(data) {
+                var items = Array.isArray(data) ? data : (data.items || []);
+                _mceGroupsState[level] = items;
+                mceGroupBuildOptions(level, items);
+                return items;
+            })
+            .catch(function(e) { console.error('[MCE] group fetch level=' + level + ':', e); return []; });
+    }
+
+    /**
+     * Sayfa acilisinda Grup 1'i yukler ve mevcut mapping varsa cascade ile altlari da doldurur.
+     */
+    window.mceGroupsEnsureLoaded = function() {
+        if (_mceGroupsLoaded) return;
+        _mceGroupsLoaded = true;
+
+        // Once Grup 1'i yukle
+        mceGroupFetchLevel(1, null).then(function() {
+            // Mevcut malzemenin atanmis gruplarini cek
+            if (currentId && currentId > 0) {
+                mceGroupLoadExistingMappings();
+            }
+        });
+    };
+
+    function mceGroupLoadExistingMappings() {
+        var url = '/Definitions/GetCardGroupMappings?entityType=1&entityId=' + currentId;
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(r) { return r.ok ? r.json() : []; })
+            .then(function(data) {
+                var mappings = Array.isArray(data) ? data : (data.items || data.mappings || []);
+                // mappings: [{level, cardGroupId}, ...]
+                var byLevel = {};
+                mappings.forEach(function(m) { byLevel[m.level] = m.cardGroupId; });
+
+                // Sirayla level 1..5 set et + bir sonraki level'i fetch et
+                function applyLevel(lv) {
+                    if (lv > 5) return Promise.resolve();
+                    var sel = mceGroupSelByLevel(lv);
+                    if (!sel) return Promise.resolve();
+                    var val = byLevel[lv];
+                    if (val) {
+                        sel.value = String(val);
+                        if (typeof mceCbxRebuild === 'function') mceCbxRebuild(sel);
+                        // Bir sonraki level'i bu deger uzerinden fetch et
+                        return mceGroupFetchLevel(lv + 1, val).then(function() { return applyLevel(lv + 1); });
+                    }
+                    return Promise.resolve();
+                }
+
+                applyLevel(1);
+            })
+            .catch(function(e) { console.error('[MCE] group mappings load:', e); });
+    }
+
+    // Grup dropdown'larina change listener bagla — cascade
+    function mceGroupBindCascadeOnce() {
+        if (window._mceGroupCascadeBound) return;
+        window._mceGroupCascadeBound = true;
+        for (var lv = 1; lv <= 5; lv++) {
+            (function(level) {
+                var sel = mceGroupSelByLevel(level);
+                if (!sel) return;
+                sel.addEventListener('change', function() {
+                    var val = sel.value;
+                    // Alt level'lari sifirla
+                    mceGroupClearLevels(level + 1);
+                    // Yeni level'i (level+1) fetch et
+                    if (val && level < 5) {
+                        mceGroupFetchLevel(level + 1, val);
+                    }
+                });
+            })(lv);
+        }
+    }
+
+    /**
+     * Malzeme kartiyla birlikte secilen grup mapping'lerini kaydeder.
+     * mceSave icinden cagrilir; itemId kayit sonrasi bilinir oluyorsa o degeri kullan.
+     */
+    window.mceGroupsSave = function(itemIdOverride) {
+        var entityId = itemIdOverride || currentId;
+        if (!entityId || entityId <= 0) return Promise.resolve({ success: true, skipped: true });
+
+        // Eger Gruplar tab hic acilmadiysa (loaded false) gondermeye gerek yok —
+        // mevcut mapping korunsun.
+        if (!_mceGroupsLoaded) return Promise.resolve({ success: true, skipped: true });
+
+        // Tum 5 level'i gonder (CardGroupId null = o seviyede secim yok = mevcut esleme silinir)
+        var levels = [];
+        for (var lv = 1; lv <= 5; lv++) {
+            var sel = mceGroupSelByLevel(lv);
+            if (!sel) continue;
+            var v = sel.value;
+            levels.push({ level: lv, cardGroupId: v ? parseInt(v) : null });
+        }
+
+        // CSRF token (AntiForgeryToken) — endpoint [ValidateAntiForgeryToken] ile korunuyor
+        var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+        var token = tokenEl ? tokenEl.value : '';
+
+        var payload = { entityType: 1, entityId: String(entityId), levels: levels };
+        return fetch('/Definitions/SaveCardGroupMappings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': token
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json().catch(function() { return { success: r.ok }; }); })
+        .catch(function(e) {
+            console.error('[MCE] group save error:', e);
+            return { success: false, message: e.message };
+        });
+    };
+
+    // Cascade listener'lari sayfa acilisinda tek seferlik bagla
+    mceGroupBindCascadeOnce();
 
     // ── Lokasyonlar ────────────────────────────────────────────────
     var _mceLocState = { links: [], available: [] };
@@ -2691,8 +3652,10 @@
         if (!body || !empty || !table) return;
         var links = _mceLocState.links;
         if (count) {
-            if (links.length > 0) { count.textContent = String(links.length); count.style.display = ''; }
-            else count.style.display = 'none';
+            var n = links.length;
+            var newText = String(n);
+            if (count.textContent !== newText) count.textContent = newText;
+            count.classList.toggle('is-empty', n <= 0);
         }
         if (links.length === 0) {
             body.innerHTML = '';
@@ -2970,6 +3933,13 @@
         return d.innerHTML;
     }
 
+    // Per-feature allowedValueIds state — DOM'dan bagimsiz tutar
+    window.__mceFeatureAllowed = window.__mceFeatureAllowed || {};
+    // Per-feature usedValueIds (aktif kombinasyonda kullanilan, kilitli) — server'dan
+    window.__mceFeatureUsedValueIds = window.__mceFeatureUsedValueIds || {};
+    // Stogun aktif kombinasyon sayisi — yeni ozellik eklerken uyari icin
+    window.__mceCombinationCount = 0;
+
     window.mceFeatureLoad = function() {
         if (!currentId || currentId <= 0) return;
         var listEl = document.getElementById('mceFeaturesList');
@@ -2989,7 +3959,7 @@
                 var features = (data && data.features) || [];
                 var headerEl = document.getElementById('mceFeaturesHeader');
                 if (features.length === 0) {
-                    listEl.innerHTML = '';
+                    if (listEl) listEl.innerHTML = '';
                     if (emptyEl) emptyEl.style.display = '';
                     if (headerEl) headerEl.style.display = 'none';
                     updateFeatureCount(0, 0);
@@ -2997,6 +3967,15 @@
                 }
                 if (emptyEl) emptyEl.style.display = 'none';
                 if (headerEl) headerEl.style.display = 'flex';
+
+                // Allowed degerleri ve kombinasyon-kilitli value'lari local state'e yaz
+                window.__mceFeatureAllowed = {};
+                window.__mceFeatureUsedValueIds = {};
+                features.forEach(function (f) {
+                    window.__mceFeatureAllowed[f.id] = (f.allowedValueIds || []).slice();
+                    window.__mceFeatureUsedValueIds[f.id] = (f.usedValueIds || []).slice();
+                });
+                window.__mceCombinationCount = parseInt(data.combinationCount || 0, 10);
 
                 // Veri tipi Turkcelestirme: server'dan gelen "TEXT/NUMBER/DATE" -> "Metin/Sayisal/Tarih"
                 function mceDataTypeTr(dt) {
@@ -3006,29 +3985,53 @@
                     if (v === 'DATE')   return 'Tarih';
                     return dt || '';
                 }
-                listEl.innerHTML = features.map(function(f) {
+                var featuresHtml = features.map(function(f) {
                     var checked = f.linked ? 'checked' : '';
                     var chkId = 'mceFeatChk_' + f.id;
                     var printId = 'mceFeatPrint_' + f.id;
-                    // printDescription: server'dan bagli olmayan ozellik icin true default gelir —
-                    // ilk kez baglandiginda da "dizaynda aciklama bas" varsayilan olarak acik olsun.
                     var printChecked = (f.printDescription !== false) ? 'checked' : '';
-                    // Baglanmamissa (linked=false) print switch pasif (disabled + soluk)
                     var printDisabled = f.linked ? '' : 'disabled';
                     var printWrapOpacity = f.linked ? '1' : '0.35';
+                    var lockDueToCombo = f.inUseInCombination === true;
+                    var linkDisabled = lockDueToCombo ? 'disabled' : '';
+                    var linkTitle = lockDueToCombo ? 'Bu ozellik aktif kombinasyon(lar)da kullaniliyor — kaldirilamaz' : '';
+                    var lockBadge = lockDueToCombo
+                        ? '<span class="mce-feat-comb-badge" data-feature-id="' + f.id + '" role="button" tabindex="0" style="margin-left:8px;font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fbbf24;background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.25);padding:2px 6px;border-radius:999px;cursor:pointer;user-select:none;transition:background .12s,border-color .12s;" title="Tikla: bu ozellik hangi kombinasyon(lar)da kullaniliyor?">🔒 Kombinasyonda</span>'
+                        : '';
+                    var availVals = Array.isArray(f.availableValues) ? f.availableValues : [];
+                    // Bu feature'in available value'larini local cache'e koy (rehber acildiginda kullanilacak)
+                    window.__mceFeatureValues = window.__mceFeatureValues || {};
+                    window.__mceFeatureValues[f.id] = availVals;
+                    var allowed = window.__mceFeatureAllowed[f.id] || [];
+                    var allowedCnt = allowed.length;
+                    var hasValues = availVals.length > 0;
+                    // "Degerler" butonu yalnizca "Secili" toggle ON iken aktif olmali — kapaliyken
+                    // atanan degerler zaten mceFeatureSave tarafindan gonderilmiyor (sadece :checked
+                    // feature'lar siralanir). Kullaniciyi yanlis his vermesin diye disable ediyoruz.
+                    var valuesDisabled = !f.linked;
+                    var valuesBtnAttrs = valuesDisabled
+                        ? ' disabled aria-disabled="true" title="Once \'Secili\' anahtarini aciniz" style="opacity:.4;cursor:not-allowed;"'
+                        : '';
+                    var valuesBtnHtml = hasValues
+                        ? ('<button type="button" class="mce-feat-values-btn" data-feature-id="' + f.id + '"' + valuesBtnAttrs + '>' +
+                            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' +
+                            ' Degerler' + (allowedCnt > 0 ? ' (' + allowedCnt + ')' : '') +
+                            '</button>')
+                        : '';
                     return '' +
                         '<div class="mce-feature-row" style="display:flex;align-items:center;gap:14px;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .12s;">' +
                             '<div style="flex:1;min-width:0;">' +
-                                '<div style="font-size:.86rem;font-weight:600;color:rgba(255,255,255,.85);">' + featureEsc(f.name) + '</div>' +
+                                '<div style="font-size:.86rem;font-weight:600;color:rgba(255,255,255,.85);display:flex;align-items:center;flex-wrap:wrap;">' + featureEsc(f.name) + lockBadge + '</div>' +
                                 '<div style="font-size:.7rem;color:rgba(255,255,255,.4);margin-top:2px;">' +
                                     featureEsc(f.code || '') +
                                     (f.dataType ? ' · <span style="color:#a5b4fc;">' + featureEsc(mceDataTypeTr(f.dataType)) + '</span>' : '') +
                                     (f.unitOfMeasure ? ' · ' + featureEsc(f.unitOfMeasure) : '') +
                                 '</div>' +
                             '</div>' +
-                            '<div style="width:80px;display:flex;align-items:center;justify-content:center;">' +
-                                '<label class="mce-switch" for="' + chkId + '">' +
-                                    '<input type="checkbox" id="' + chkId + '" class="mce-feature-chk" data-feature-id="' + f.id + '" ' + checked + ' />' +
+                            valuesBtnHtml +
+                            '<div style="width:80px;display:flex;align-items:center;justify-content:center;" title="' + linkTitle + '">' +
+                                '<label class="mce-switch' + (lockDueToCombo ? ' is-locked' : '') + '" for="' + chkId + '">' +
+                                    '<input type="checkbox" id="' + chkId + '" class="mce-feature-chk" data-feature-id="' + f.id + '" ' + checked + ' ' + linkDisabled + ' />' +
                                     '<span class="mce-switch-track"></span>' +
                                 '</label>' +
                             '</div>' +
@@ -3040,17 +4043,109 @@
                             '</div>' +
                         '</div>';
                 }).join('');
+                if (listEl) listEl.innerHTML = featuresHtml;
 
-                // "Bagli" toggle'u ile "Dizaynda Aciklama" switch'ini sync et:
-                // bagli kapandiginda print pasif gorunsun + disabled olsun.
                 document.querySelectorAll('#mceFeaturesList .mce-feature-chk').forEach(function(linkChk) {
+                    // wasLinked: server'dan gelen baslangic durumu — toggle ON ise "yeni ekleme" sayilmaz
+                    linkChk.dataset.wasLinked = linkChk.checked ? '1' : '0';
+
+                    // "Degerler" butonu da Secili toggle'a bagli enable/disable olmali —
+                    // print-toggle ile ayni paterni izleyelim.
+                    function syncValuesBtn(enabled) {
+                        var id = linkChk.getAttribute('data-feature-id');
+                        var valBtn = document.querySelector('#mceFeaturesList .mce-feat-values-btn[data-feature-id="' + id + '"]');
+                        if (!valBtn) return;
+                        valBtn.disabled = !enabled;
+                        valBtn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+                        if (enabled) {
+                            valBtn.style.opacity = '';
+                            valBtn.style.cursor = '';
+                            valBtn.removeAttribute('title');
+                        } else {
+                            valBtn.style.opacity = '.4';
+                            valBtn.style.cursor = 'not-allowed';
+                            valBtn.title = 'Once \'Secili\' anahtarini aciniz';
+                        }
+                    }
+
                     linkChk.addEventListener('change', function() {
                         var id = linkChk.getAttribute('data-feature-id');
                         var printChk = document.getElementById('mceFeatPrint_' + id);
                         var wrap = document.querySelector('[data-print-wrap="' + id + '"]');
-                        if (!printChk || !wrap) return;
-                        printChk.disabled = !linkChk.checked;
-                        wrap.style.opacity = linkChk.checked ? '1' : '0.35';
+
+                        // Yeni ozellik ekleme uyarisi: zaten kombinasyon varsa + bu yeni ekleme ise (was=0 → check=1)
+                        var wasLinked = linkChk.dataset.wasLinked === '1';
+                        var isNewLink = !wasLinked && linkChk.checked;
+                        if (isNewLink && (window.__mceCombinationCount || 0) > 0) {
+                            var fname = (linkChk.closest('.mce-feature-row') || {}).querySelector
+                                ? linkChk.closest('.mce-feature-row').querySelector('div > div').textContent
+                                : ('#' + id);
+                            mceFeatAddWarnShow(window.__mceCombinationCount, fname.trim(),
+                                function() {
+                                    // Devam Et — toggle aciyor kalmasin
+                                    linkChk.dataset.wasLinked = '1';
+                                    if (printChk && wrap) {
+                                        printChk.disabled = false;
+                                        wrap.style.opacity = '1';
+                                    }
+                                    syncValuesBtn(true);
+                                },
+                                function() {
+                                    // Vazgec — toggle'i geri al
+                                    linkChk.checked = false;
+                                    if (printChk && wrap) {
+                                        printChk.disabled = true;
+                                        wrap.style.opacity = '0.35';
+                                    }
+                                    syncValuesBtn(false);
+                                });
+                            return;
+                        }
+
+                        if (printChk && wrap) {
+                            printChk.disabled = !linkChk.checked;
+                            wrap.style.opacity = linkChk.checked ? '1' : '0.35';
+                        }
+                        syncValuesBtn(linkChk.checked);
+                    });
+                });
+
+                // Degerler rehber butonu — modal ac (Secili toggle ON ise)
+                document.querySelectorAll('#mceFeaturesList .mce-feat-values-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        if (btn.disabled) return; // Secili kapaliyken degerler atanamaz
+                        var fid = parseInt(btn.getAttribute('data-feature-id'), 10);
+                        if (!fid) return;
+                        var fname = features.find(function (x) { return x.id === fid; });
+                        if (typeof window.mceOpenValuesGuide === 'function') {
+                            window.mceOpenValuesGuide(fid, fname ? fname.name : '');
+                        }
+                    });
+                });
+
+                // "Kombinasyonda" badge — tiklayinca hangi kombinasyon(lar)da kullaniliyor popup'i ac
+                document.querySelectorAll('#mceFeaturesList .mce-feat-comb-badge').forEach(function(badge) {
+                    var openPopup = function(ev) {
+                        var fid = parseInt(badge.getAttribute('data-feature-id'), 10);
+                        if (!fid) return;
+                        var f = features.find(function (x) { return x.id === fid; });
+                        if (typeof window.mceShowFeatureCombinationsPopup === 'function') {
+                            window.mceShowFeatureCombinationsPopup(fid, f ? f.name : '', ev);
+                        }
+                    };
+                    badge.addEventListener('click', openPopup);
+                    // Klavye erisilebilirligi: Enter / Space
+                    badge.addEventListener('keydown', function(ev) {
+                        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openPopup(ev); }
+                    });
+                    // Hover feedback
+                    badge.addEventListener('mouseenter', function() {
+                        badge.style.background = 'rgba(251,191,36,0.20)';
+                        badge.style.borderColor = 'rgba(251,191,36,0.45)';
+                    });
+                    badge.addEventListener('mouseleave', function() {
+                        badge.style.background = 'rgba(251,191,36,0.10)';
+                        badge.style.borderColor = 'rgba(251,191,36,0.25)';
                     });
                 });
 
@@ -3058,7 +4153,7 @@
                 updateFeatureCount(linkedCount, features.length);
             })
             .catch(function(e) {
-                listEl.innerHTML = '';
+                if (listEl) listEl.innerHTML = '';
                 if (errEl) {
                     errEl.textContent = 'Yukleme hatasi: ' + e.message;
                     errEl.style.display = 'block';
@@ -3068,7 +4163,14 @@
 
     function updateFeatureCount(linked, total) {
         var badge = document.getElementById('mceFeatCount');
-        if (badge) badge.textContent = String(linked);
+        if (!badge) return;
+        var newText = String(linked);
+        var newEmpty = (linked || 0) <= 0;
+        // No-op: degisiklik yoksa DOM'a dokunma (kayma engelli)
+        var curEmpty = badge.classList.contains('is-empty');
+        if (badge.textContent === newText && curEmpty === newEmpty) return;
+        if (badge.textContent !== newText) badge.textContent = newText;
+        badge.classList.toggle('is-empty', newEmpty);
     }
 
     window.mceFeatureSave = function(opts) {
@@ -3077,15 +4179,17 @@
         var errEl = document.getElementById('mceFeaturesError');
         if (errEl) errEl.style.display = 'none';
 
-        // Her bagli (checked) feature icin {featureId, printDescriptionInDesign} topla.
+        // Her bagli (checked) feature icin {featureId, printDescriptionInDesign, allowedValueIds[]} topla.
         var items = [];
         document.querySelectorAll('#mceFeaturesList .mce-feature-chk:checked').forEach(function(cb) {
             var id = parseInt(cb.getAttribute('data-feature-id'), 10);
             if (id > 0) {
                 var printChk = document.getElementById('mceFeatPrint_' + id);
+                var allowed = (window.__mceFeatureAllowed && window.__mceFeatureAllowed[id]) || [];
                 items.push({
                     featureId: id,
-                    printDescriptionInDesign: printChk ? !!printChk.checked : true
+                    printDescriptionInDesign: printChk ? !!printChk.checked : true,
+                    allowedValueIds: allowed
                 });
             }
         });
@@ -3119,6 +4223,431 @@
                 return { success: false, message: e.message };
             });
     };
+
+    // ── Recete (BOM) sekmesi ─────────────────────────────────────────────
+    // Mamul (3) ve Yari Mamul (2) icin kombinasyonlu/kombinasyonsuz recete kart yonetimi.
+
+    function mceRecipeIsApplicable() {
+        var typeIdStr = ($('mceMaterialTypeId') && $('mceMaterialTypeId').value) || '';
+        var typeId = parseInt(typeIdStr, 10);
+        return typeId === 2 || typeId === 3; // Yari Mamul / Mamul
+    }
+
+    /**
+     * Nav butonu gorunurlugu: TypeId Mamul/Yari Mamul ise goster, degilse gizle.
+     * Aktif sekme Recete iken tip degisip uygulanamaz hale gelirse Genel Bilgiler'e don.
+     */
+    window.mceRecipeSyncVisibility = function () {
+        var navBtn = document.getElementById('mceNavRecipe');
+        if (!navBtn) return;
+        var applicable = mceRecipeIsApplicable();
+        navBtn.style.display = applicable ? '' : 'none';
+        if (!applicable && navBtn.classList.contains('is-active') && typeof window.mceNavigateToSection === 'function') {
+            window.mceNavigateToSection('general');
+        }
+    };
+
+    /** Recete sekmesi icerigi: kombinasyonsuz=tek kart, kombinasyonlu=combo listesi. */
+    window.mceRecipeRender = function () {
+        var emptyEl = document.getElementById('mceRecipeEmpty');
+        var singleEl = document.getElementById('mceRecipeSingle');
+        var combosWrap = document.getElementById('mceRecipeCombosWrap');
+        var combosList = document.getElementById('mceRecipeCombosList');
+        var hint = document.getElementById('mceRecipeHint');
+        var statusEl = document.getElementById('mceRecipeSingleStatus');
+        if (!emptyEl || !singleEl || !combosWrap || !combosList) return;
+
+        if (!currentId || currentId <= 0) {
+            emptyEl.style.display = '';
+            singleEl.style.display = 'none';
+            combosWrap.style.display = 'none';
+            mceRecipeUpdateCount(0);
+            return;
+        }
+        emptyEl.style.display = 'none';
+
+        var trackChk = document.getElementById('mceTrackCombinations');
+        var hasCombos = trackChk ? !!trackChk.checked : false;
+        var code = ($('mceMaterialCode') && $('mceMaterialCode').value || '').trim();
+
+        if (!hasCombos) {
+            singleEl.style.display = '';
+            combosWrap.style.display = 'none';
+            if (hint) hint.textContent = 'Reçeteyi Düzenle butonu ile detaylı reçete ekranında bileşen ekleyebilirsiniz.';
+            // Status bilgisini fetch et — recete tanimli mi degil mi
+            mceRecipeFetchStatus(code, null, statusEl);
+            mceRecipeUpdateCount(1);
+            return;
+        }
+
+        // Kombinasyonlu — combos listele
+        singleEl.style.display = 'none';
+        combosWrap.style.display = '';
+        if (hint) hint.textContent = 'Her kombinasyon icin ayri bir recete tanimi yapabilirsiniz.';
+        combosList.innerHTML = '<div style="padding:14px;color:rgba(255,255,255,.4);font-size:.78rem;font-style:italic;">Yukleniyor...</div>';
+
+        if (!code) {
+            combosList.innerHTML = '<div style="padding:14px;color:rgba(255,255,255,.45);font-size:.8rem;">Once stok kodu girin ve kaydedin.</div>';
+            mceRecipeUpdateCount(0);
+            return;
+        }
+        fetch('/Logistics/CombinationsDataJson?stockCode=' + encodeURIComponent(code), { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : { combos: [] }; })
+            .then(function (data) {
+                var combos = (data && data.combos) || [];
+                if (combos.length === 0) {
+                    combosList.innerHTML = '<div style="padding:14px;color:rgba(255,255,255,.45);font-size:.8rem;font-style:italic;">Henuz kombinasyon yok. Onceki sekmeden kombinasyon olusturun.</div>';
+                    mceRecipeUpdateCount(0);
+                    return;
+                }
+                combosList.innerHTML = '';
+                combos.forEach(function (combo) {
+                    combosList.appendChild(mceRecipeBuildComboRow(combo));
+                });
+                mceRecipeUpdateCount(combos.length);
+            })
+            .catch(function (e) {
+                combosList.innerHTML = '<div style="padding:14px;color:#f87171;font-size:.78rem;">Kombinasyonlar yuklenemedi: ' + (e.message || 'hata') + '</div>';
+                mceRecipeUpdateCount(0);
+            });
+    };
+
+    function mceRecipeBuildComboRow(combo) {
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);';
+
+        var codeEl = document.createElement('span');
+        codeEl.style.cssText = 'font-family:ui-monospace,monospace;font-size:.78rem;font-weight:700;color:#a5b4fc;min-width:90px;flex-shrink:0;';
+        codeEl.textContent = combo.code || '-';
+        row.appendChild(codeEl);
+
+        var descEl = document.createElement('span');
+        descEl.style.cssText = 'flex:1;min-width:0;font-size:.82rem;color:rgba(255,255,255,.78);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        descEl.textContent = combo.description || '-';
+        row.appendChild(descEl);
+
+        var statusEl = document.createElement('span');
+        statusEl.style.cssText = 'font-size:.7rem;color:rgba(255,255,255,.45);font-style:italic;flex-shrink:0;';
+        statusEl.textContent = '...';
+        row.appendChild(statusEl);
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mce-btn mce-btn--secondary';
+        btn.style.cssText = 'font-size:.74rem;padding:5px 11px;flex-shrink:0;';
+        btn.innerHTML =
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+            ' Reçeteyi Düzenle';
+        btn.addEventListener('click', function () { mceOpenRecipe(combo.code); });
+        row.appendChild(btn);
+
+        // Async: bu kombo icin recete var mi?
+        var code = ($('mceMaterialCode') && $('mceMaterialCode').value || '').trim();
+        if (code && combo.code) {
+            mceRecipeFetchStatus(code, combo.code, statusEl);
+        }
+        return row;
+    }
+
+    function mceRecipeFetchStatus(materialCode, configCode, targetEl) {
+        if (!targetEl || !materialCode) return;
+        var url = '/Logistics/GetBOM?materialCode=' + encodeURIComponent(materialCode);
+        if (configCode) url += '&configCode=' + encodeURIComponent(configCode);
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : { found: false }; })
+            .then(function (data) {
+                if (data && data.found) {
+                    var n = (data.lines && data.lines.length) || 0;
+                    targetEl.textContent = n + ' bileşen';
+                    targetEl.style.color = '#34d399';
+                } else {
+                    targetEl.textContent = 'Tanımsız';
+                    targetEl.style.color = 'rgba(255,255,255,.45)';
+                }
+            })
+            .catch(function () {
+                targetEl.textContent = '';
+            });
+    }
+
+    function mceRecipeUpdateCount(n) {
+        var badge = document.getElementById('mceRecipeCount');
+        if (!badge) return;
+        var newText = String(n || 0);
+        var newEmpty = (n || 0) <= 0;
+        var curEmpty = badge.classList.contains('is-empty');
+        if (badge.textContent === newText && curEmpty === newEmpty) return;
+        if (badge.textContent !== newText) badge.textContent = newText;
+        badge.classList.toggle('is-empty', newEmpty);
+    }
+
+    /** Recete duzenleme ekranina yonlendirir (BOMs sayfasi). */
+    window.mceOpenRecipe = function (configCode) {
+        var code = ($('mceMaterialCode') && $('mceMaterialCode').value || '').trim();
+        if (!code) {
+            if (typeof showMsg === 'function') showMsg('Once stok kodunu girin ve kaydedin.', false);
+            return;
+        }
+        var url = '/Logistics/BOMs?mat=' + encodeURIComponent(code);
+        if (configCode) url += '&cfg=' + encodeURIComponent(configCode);
+        // Workspace iframe icindeyse parent'a navigate ettir, degilse dogrudan
+        try {
+            if (window.parent && window.parent !== window && typeof window.parent.location !== 'undefined') {
+                window.parent.location.href = url;
+                return;
+            }
+        } catch (e) { /* cross-origin — fallback */ }
+        window.location.href = url;
+    };
+
+    // TypeId secimi degisirse nav buton gorunurlugunu sync et
+    (function initRecipeTypeSync() {
+        var sel = document.getElementById('mceMaterialTypeId');
+        if (!sel) return;
+        sel.addEventListener('change', function () {
+            if (typeof window.mceRecipeSyncVisibility === 'function') window.mceRecipeSyncVisibility();
+        });
+    })();
+
+    // TrackCombinations toggle degisirse Recete sekmesi yenilenmeli (tek kart <-> liste)
+    (function initRecipeCombosSync() {
+        var cb = document.getElementById('mceTrackCombinations');
+        if (!cb) return;
+        cb.addEventListener('change', function () {
+            // Sadece sekme aktifse re-render (gereksiz fetch'i engelle)
+            var navBtn = document.getElementById('mceNavRecipe');
+            if (navBtn && navBtn.classList.contains('is-active') && typeof window.mceRecipeRender === 'function') {
+                window.mceRecipeRender();
+            }
+        });
+    })();
+
+    // ── Yeni Ozellik Ekleme Uyari Modali ─────────────────────────────────
+    var _mceFeatAddWarnOnConfirm = null;
+    var _mceFeatAddWarnOnCancel = null;
+
+    function mceFeatAddWarnShow(count, featureName, onConfirm, onCancel) {
+        var bd = document.getElementById('mceFeatAddWarnBackdrop');
+        if (!bd) { onConfirm && onConfirm(); return; }
+        document.getElementById('mceFeatAddWarnCount').textContent = count;
+        document.getElementById('mceFeatAddWarnName').textContent = featureName || '';
+        _mceFeatAddWarnOnConfirm = onConfirm;
+        _mceFeatAddWarnOnCancel = onCancel;
+        bd.classList.add('is-open');
+    }
+    window.mceFeatAddWarnCancel = function () {
+        var bd = document.getElementById('mceFeatAddWarnBackdrop');
+        if (bd) bd.classList.remove('is-open');
+        if (typeof _mceFeatAddWarnOnCancel === 'function') {
+            try { _mceFeatAddWarnOnCancel(); } catch (e) { /* ignore */ }
+        }
+        _mceFeatAddWarnOnConfirm = null;
+        _mceFeatAddWarnOnCancel = null;
+    };
+    document.addEventListener('DOMContentLoaded', function () {
+        var btn = document.getElementById('mceFeatAddWarnConfirm');
+        if (btn) {
+            btn.addEventListener('click', function () {
+                var bd = document.getElementById('mceFeatAddWarnBackdrop');
+                if (bd) bd.classList.remove('is-open');
+                var fn = _mceFeatAddWarnOnConfirm;
+                _mceFeatAddWarnOnConfirm = null;
+                _mceFeatAddWarnOnCancel = null;
+                if (typeof fn === 'function') {
+                    try { fn(); } catch (e) { /* ignore */ }
+                }
+            });
+        }
+    });
+
+    // ── Deger Rehberi (per-feature allowed values) ────────────────────────
+    var mceValuesGuideFeatureId = null;
+    var mceValuesGuideSearchTimer = null;
+
+    window.mceOpenValuesGuide = function (featureId, featureName) {
+        if (!featureId) return;
+        mceValuesGuideFeatureId = featureId;
+        var label = document.getElementById('mceValuesGuideFeatureLabel');
+        if (label) label.textContent = featureName || ('#' + featureId);
+        var bd = document.getElementById('mceValuesGuideBackdrop');
+        if (!bd) return;
+        bd.classList.add('is-open');
+        var srch = document.getElementById('mceValuesGuideSearch');
+        if (srch) srch.value = '';
+        mceRenderValuesGuide('');
+        setTimeout(function () { if (srch) srch.focus(); }, 80);
+    };
+
+    window.mceCloseValuesGuide = function () {
+        var bd = document.getElementById('mceValuesGuideBackdrop');
+        if (bd) bd.classList.remove('is-open');
+        mceValuesGuideFeatureId = null;
+    };
+
+    function mceRenderValuesGuide(query) {
+        var body = document.getElementById('mceValuesGuideBody');
+        if (!body) return;
+        body.innerHTML = '';
+
+        if (!mceValuesGuideFeatureId) {
+            body.innerHTML = '<div class="mce-vguide-empty">Ozellik secimi yok</div>';
+            return;
+        }
+        var allValues = (window.__mceFeatureValues && window.__mceFeatureValues[mceValuesGuideFeatureId]) || [];
+        var allowed = (window.__mceFeatureAllowed && window.__mceFeatureAllowed[mceValuesGuideFeatureId]) || [];
+        var usedInCombo = (window.__mceFeatureUsedValueIds && window.__mceFeatureUsedValueIds[mceValuesGuideFeatureId]) || [];
+
+        var q = (query || '').trim().toLowerCase();
+        var values = allValues.filter(function (v) {
+            if (!q) return true;
+            return ((v.description || '') + ' ' + (v.value || '') + ' ' + (v.code || '')).toLowerCase().indexOf(q) !== -1;
+        });
+
+        if (values.length === 0) {
+            body.innerHTML = '<div class="mce-vguide-empty">' + (q ? 'Eslesme bulunamadi' : 'Deger yok') + '</div>';
+            mceUpdateValuesGuideCount();
+            return;
+        }
+
+        var sel = []; var unsel = [];
+        values.forEach(function (v) {
+            if (allowed.indexOf(v.id) !== -1) sel.push(v); else unsel.push(v);
+        });
+
+        function buildRow(v, isSel) {
+            var isLocked = usedInCombo.indexOf(v.id) !== -1; // kombinasyonda kullanilan = kilitli
+            var row = document.createElement('div');
+            row.className = 'mce-vguide-row';
+            if (isLocked) row.style.background = 'rgba(251,191,36,0.04)';
+
+            var code = document.createElement('span');
+            code.className = 'mce-vguide-row__code';
+            code.textContent = v.code || '-';
+
+            var name = document.createElement('span');
+            name.className = 'mce-vguide-row__name';
+            name.textContent = v.description || v.value || '';
+
+            // Kilit badge'i (kombinasyonda kullanilan deger)
+            if (isLocked) {
+                var badge = document.createElement('span');
+                badge.style.cssText = 'font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fbbf24;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.25);padding:2px 6px;border-radius:999px;flex-shrink:0;';
+                badge.title = 'Bu deger aktif kombinasyon(lar)da kullaniliyor — kaldirilamaz';
+                badge.textContent = '🔒 Kombinasyonda';
+                row.appendChild(code);
+                row.appendChild(name);
+                row.appendChild(badge);
+            } else {
+                row.appendChild(code);
+                row.appendChild(name);
+            }
+
+            // Tema-uyumlu yesil switchkey (.mce-switch standart class)
+            var sw = document.createElement('label');
+            sw.className = 'mce-switch' + (isLocked ? ' is-locked' : '');
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = isSel || isLocked; // kilitliyse her zaman acik gorunsun
+            if (isLocked) cb.disabled = true;
+            var track = document.createElement('span');
+            track.className = 'mce-switch-track';
+            sw.appendChild(cb); sw.appendChild(track);
+
+            if (!isLocked) {
+                cb.addEventListener('change', function () { mceToggleAllowedValue(v.id, cb.checked); });
+                row.addEventListener('click', function (e) {
+                    if (e.target === cb || e.target === track) return;
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change'));
+                });
+            } else {
+                row.style.cursor = 'not-allowed';
+            }
+
+            row.appendChild(sw);
+            return row;
+        }
+
+        if (sel.length > 0) {
+            var sep1 = document.createElement('div');
+            sep1.className = 'mce-vguide-sep';
+            sep1.textContent = 'Secili degerler (' + sel.length + ')';
+            body.appendChild(sep1);
+            sel.forEach(function (v) { body.appendChild(buildRow(v, true)); });
+        }
+        if (unsel.length > 0) {
+            var sep2 = document.createElement('div');
+            sep2.className = 'mce-vguide-sep';
+            sep2.textContent = 'Diger degerler (' + unsel.length + ')';
+            body.appendChild(sep2);
+            unsel.forEach(function (v) { body.appendChild(buildRow(v, false)); });
+        }
+        mceUpdateValuesGuideCount();
+    }
+
+    function mceToggleAllowedValue(valueId, checked) {
+        if (!mceValuesGuideFeatureId) return;
+        // Kombinasyonda kullanilan deger ise — kaldirilamaz
+        var usedInCombo = (window.__mceFeatureUsedValueIds && window.__mceFeatureUsedValueIds[mceValuesGuideFeatureId]) || [];
+        if (!checked && usedInCombo.indexOf(valueId) !== -1) {
+            if (typeof showMsg === 'function') {
+                showMsg('Bu deger aktif kombinasyon(lar)da kullaniliyor — kaldirilamaz.', false);
+            }
+            // UI'da geri al — render'i tetikle
+            var sb = document.getElementById('mceValuesGuideSearch');
+            mceRenderValuesGuide(sb ? sb.value : '');
+            return;
+        }
+        if (!window.__mceFeatureAllowed) window.__mceFeatureAllowed = {};
+        var arr = window.__mceFeatureAllowed[mceValuesGuideFeatureId] || [];
+        var ix = arr.indexOf(valueId);
+        if (checked && ix === -1) arr.push(valueId);
+        else if (!checked && ix !== -1) arr.splice(ix, 1);
+        window.__mceFeatureAllowed[mceValuesGuideFeatureId] = arr;
+        // Feature satirindaki "Degerler (n)" badge guncelle
+        var fid = mceValuesGuideFeatureId;
+        var btn = document.querySelector('.mce-feat-values-btn[data-feature-id="' + fid + '"]');
+        if (btn) {
+            var cnt = arr.length;
+            btn.innerHTML =
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>' +
+                ' Degerler' + (cnt > 0 ? ' (' + cnt + ')' : '');
+        }
+        mceUpdateValuesGuideCount();
+        // Otomatik kaydet
+        if (typeof window.mceFeatureSave === 'function') {
+            window.mceFeatureSave({ silent: true });
+        }
+    }
+
+    function mceUpdateValuesGuideCount() {
+        var el = document.getElementById('mceValuesGuideCount');
+        if (!el) return;
+        var cnt = 0;
+        if (mceValuesGuideFeatureId && window.__mceFeatureAllowed) {
+            var arr = window.__mceFeatureAllowed[mceValuesGuideFeatureId] || [];
+            cnt = arr.length;
+        }
+        el.textContent = cnt + ' deger secili' + (cnt === 0 ? ' (kisitlama yok — tum degerler gecerli)' : '');
+    }
+
+    // Search input + ESC handler
+    document.addEventListener('DOMContentLoaded', function () {
+        var srch = document.getElementById('mceValuesGuideSearch');
+        if (srch) {
+            srch.addEventListener('input', function () {
+                if (mceValuesGuideSearchTimer) clearTimeout(mceValuesGuideSearchTimer);
+                mceValuesGuideSearchTimer = setTimeout(function () { mceRenderValuesGuide(srch.value); }, 180);
+            });
+        }
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape') return;
+            var bd = document.getElementById('mceValuesGuideBackdrop');
+            if (bd && bd.classList.contains('is-open')) {
+                window.mceCloseValuesGuide();
+            }
+        });
+    });
 
 })();
 </script>

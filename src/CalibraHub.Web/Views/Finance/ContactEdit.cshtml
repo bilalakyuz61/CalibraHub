@@ -171,8 +171,8 @@ body.app-theme-light .ca-quote-row:hover { background: #f8fafc; border-color: #8
 body.app-theme-light .ca-quote-no { color: #1e293b; }
 .ca-quote-date { font-size: .78rem; color: rgba(255,255,255,.6); font-variant-numeric: tabular-nums; }
 body.app-theme-light .ca-quote-date { color: #64748b; }
-.ca-quote-total { font-size: .86rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: #fbbf24; }
-body.app-theme-light .ca-quote-total { color: #b45309; }
+.ca-quote-total { font-size: .86rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; color: #a5b4fc; }
+body.app-theme-light .ca-quote-total { color: #4f46e5; }
 .ca-quote-status {
     font-size: .72rem; font-weight: 600; padding: 3px 10px; border-radius: 999px;
     border: 1px solid; text-align: center; white-space: nowrap;
@@ -300,42 +300,12 @@ body.app-theme-light .ca-row .ca-label { color: #64748b; }
 .ca-row .ca-input,
 .ca-row .ca-select { flex: 1 1 auto; min-width: 0; }
 
-/* Eski grid uyumluluğu (widget'lar kullanabilir) */
-.ca-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.ca-grid-1 { display: grid; grid-template-columns: 1fr; gap: 14px; }
-@@media (max-width: 580px) { .ca-grid-2 { grid-template-columns: 1fr; } }
-
-/* ── Field (fallback) ────────────────────────────────────────── */
-.ca-field { display: flex; flex-direction: column; gap: 5px; }
-.ca-field--full { grid-column: 1 / -1; }
-.ca-label {
-    font-size: .72rem; font-weight: 600; color: rgba(255,255,255,0.65);
-    letter-spacing: .02em;
-}
-body.app-theme-light .ca-label { color: #64748b; }
-.ca-label span.required { color: #f87171; margin-left: 2px; }
-.ca-input, .ca-select {
-    background: rgba(255,255,255,.04);
-    border: 1px solid rgba(255,255,255,.1);
-    border-radius: 9px; padding: 9px 12px;
-    font-size: .85rem; color: rgba(255,255,255,.85);
-    width: 100%; outline: none; transition: border-color .15s, background .15s;
-}
-body.app-theme-light .ca-input,
-body.app-theme-light .ca-select {
-    background: #fff; border-color: #e2e8f0; color: #1e293b;
-}
-.ca-input::placeholder { color: rgba(255,255,255,.2); }
-body.app-theme-light .ca-input::placeholder { color: #94a3b8; }
-.ca-input:focus, .ca-select:focus {
-    border-color: #6366f1;
-    background: rgba(255,255,255,.06);
-    box-shadow: 0 0 0 3px rgba(99,102,241,.12);
-}
-body.app-theme-light .ca-input:focus,
-body.app-theme-light .ca-select:focus { background: #fff; }
-.ca-select option { background: #0d1117; color: rgba(255,255,255,.85); }
-body.app-theme-light .ca-select option { background: #ffffff; color: #1e293b; }
+/* NOT: .ca-grid-2 / .ca-grid-1 / .ca-field / .ca-input / .ca-select / .ca-label
+   widgetField.css'e tasindi (DynamicWidgetRenderer/widgetField.css). React widget
+   renderer artik wf-grid, wf-field, wf-input, wf-select, wf-label emit ediyor.
+   .ca-row legacy form-row layout (yukaridaki .ca-rows/.ca-row + .ca-row .ca-input
+   flex override) burada kalir; widgetField.css base seviye .ca-input stillerini
+   sundugu icin tek nokta tasarim sistemi calisiyor. */
 
 /* Toggle (IsActive) */
 .ca-toggle-row {
@@ -363,31 +333,12 @@ body.app-theme-light .ca-toggle-label { color: #475569; }
     transform: translateX(18px); background: #fff;
 }
 
-/* Link widget */
-.ca-link-group { display: flex; align-items: stretch; gap: 8px; }
-.ca-link-group > .ca-input { flex: 1 1 auto; min-width: 0; }
-.ca-link-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    gap: 6px; padding: 0 14px; min-height: 34px;
-    border-radius: 10px; font-size: .78rem; font-weight: 600;
-    color: #c4b5fd; text-decoration: none;
-    background: rgba(139,92,246,.14);
-    border: 1px solid rgba(139,92,246,.45);
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    transition: all .18s ease; cursor: pointer; flex-shrink: 0;
-}
-.ca-link-btn:hover:not(.is-disabled) {
-    background: rgba(139,92,246,.25); border-color: rgba(139,92,246,.65);
-    color: #e9d5ff; transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(139,92,246,.2);
-}
-.ca-link-btn.is-disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
-body.app-theme-light .ca-link-btn { color: #6d28d9; background: rgba(139,92,246,.12); border-color: rgba(139,92,246,.4); }
-body.app-theme-light .ca-link-btn:hover:not(.is-disabled) { background: rgba(139,92,246,.22); color: #5b21b6; }
+/* NOT: .ca-link-group / .ca-link-btn / .ca-lookup-group widgetField.css'e
+   tasindi. Renderer artik wf-link-group, wf-link-btn, wf-lookup-group emit ediyor.
+   Asagidaki .ca-lookup-btn / .ca-lookup-clear / .ca-lookup-modal* legacy
+   (FixedFieldLookupBridge / Razor inline lookup) icin burada kalir. */
 
-/* Lookup widget */
-.ca-lookup-group { display: flex; align-items: stretch; gap: 8px; position: relative; }
-.ca-lookup-group > .ca-input { flex: 1 1 auto; min-width: 0; }
+/* Lookup widget legacy buton (FixedFieldLookupBridge / sabit alan) */
 .ca-lookup-btn, .ca-lookup-clear {
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 34px; min-height: 34px; padding: 0 10px;
@@ -406,7 +357,7 @@ body.app-theme-light .ca-link-btn:hover:not(.is-disabled) { background: rgba(139
     background: rgba(244,63,94,.1); border-color: rgba(244,63,94,.4); color: #fda4af;
 }
 .ca-lookup-clear:hover { background: rgba(244,63,94,.2); border-color: rgba(244,63,94,.6); }
-body.app-theme-light .ca-lookup-btn { color: #b45309; }
+body.app-theme-light .ca-lookup-btn { color: #4f46e5; }
 body.app-theme-light .ca-lookup-clear { color: #be123c; }
 
 .ca-lookup-modal-backdrop {
@@ -432,9 +383,9 @@ body.app-theme-light .ca-lookup-clear { color: #be123c; }
 body.app-theme-light .ca-lookup-modal { background: #fff; border-color: #e2e8f0; }
 .ca-lookup-modal header {
     padding: 14px 18px; display: flex; align-items: center; gap: 10px;
-    border-bottom: 1px solid rgba(255,255,255,.08); color: #fbbf24;
+    border-bottom: 1px solid rgba(255,255,255,.08); color: #a5b4fc;
 }
-body.app-theme-light .ca-lookup-modal header { border-bottom-color: #e2e8f0; color: #d97706; }
+body.app-theme-light .ca-lookup-modal header { border-bottom-color: #e2e8f0; color: #6366f1; }
 .ca-lookup-modal header input {
     flex: 1; min-width: 0;
     background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
@@ -465,11 +416,11 @@ body.app-theme-light .ca-lookup-modal header input {
     background: var(--app-surface, #1a1f2e);
     text-align: left; padding: 10px 14px;
     font-weight: 700;
-    font-size: .78rem; color: #fbbf24;
+    font-size: .78rem; color: #a5b4fc;
     border-bottom: 1px solid rgba(255,255,255,.08);
 }
 body.app-theme-light .ca-lookup-table thead th {
-    background: #f8fafc; color: #b45309; border-bottom-color: #e2e8f0;
+    background: #f8fafc; color: #4f46e5; border-bottom-color: #e2e8f0;
 }
 .ca-lookup-table tbody tr {
     cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04);
@@ -492,6 +443,159 @@ body.app-theme-light .ca-lookup-table td { color: #334155; }
     border-top: 1px solid rgba(255,255,255,.06);
 }
 body.app-theme-light .ca-lookup-footer { border-top-color: #e2e8f0; }
+
+/* ── Kolon basligi (distinct filtre ikonu icerebilir) ── */
+.ca-lookup-th-inner { display: flex; align-items: center; gap: 6px; }
+.ca-lookup-th-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ca-lookup-col-filter {
+    background: transparent; border: none; cursor: pointer;
+    padding: 3px; border-radius: 4px;
+    color: rgba(255, 255, 255, 0.40);
+    display: inline-flex; align-items: center; gap: 3px;
+    transition: all .12s;
+}
+body.app-theme-light .ca-lookup-col-filter { color: rgba(0,0,0,0.35); }
+.ca-lookup-col-filter:hover { background: rgba(165, 180, 252, 0.14); color: #a5b4fc; }
+body.app-theme-light .ca-lookup-col-filter:hover { background: rgba(99, 102, 241, 0.12); color: #4f46e5; }
+.ca-lookup-col-filter--active { background: rgba(165, 180, 252, 0.18) !important; color: #a5b4fc !important; }
+body.app-theme-light .ca-lookup-col-filter--active { background: rgba(99, 102, 241, 0.18) !important; color: #4f46e5 !important; }
+.ca-lookup-col-filter-count {
+    font-size: .58rem; font-weight: 700;
+    background: #6366f1; color: #fff;
+    padding: 1px 5px; border-radius: 999px;
+    line-height: 1.1; min-width: 12px; text-align: center;
+}
+.ca-lookup-footer-filter { margin-left: auto; font-size: .68rem; font-weight: 600; color: #a5b4fc; }
+body.app-theme-light .ca-lookup-footer-filter { color: #6366f1; }
+
+/* ── Excel-tarzi kolon filtre acilir popover'i —
+   Modal ile ayni surface tonu (var(--app-surface)). */
+.ca-lookup-popover {
+    background: var(--app-surface, #1a1f2e);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 12px;
+    box-shadow: 0 22px 64px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.02);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    animation: caLookupPopIn .12s ease-out;
+    font-size: .75rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+body.app-theme-light .ca-lookup-popover {
+    background: #ffffff; border-color: #e2e8f0; color: #334155;
+    box-shadow: 0 22px 64px rgba(0, 0, 0, 0.20);
+}
+@@keyframes caLookupPopIn {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ca-lookup-popover-title {
+    display: flex; align-items: center; gap: 6px;
+    padding: 9px 12px 8px;
+    font-size: .68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .55px;
+    color: rgba(255, 255, 255, 0.82);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+body.app-theme-light .ca-lookup-popover-title {
+    color: #475569; border-bottom-color: #e2e8f0;
+}
+.ca-lookup-popover-title svg { color: #a5b4fc; opacity: .9; }
+body.app-theme-light .ca-lookup-popover-title svg { color: #6366f1; }
+.ca-lookup-popover-search-wrap { position: relative; padding: 8px 10px 4px; }
+.ca-lookup-popover-search-ico {
+    position: absolute; left: 18px; top: 50%; transform: translateY(-30%);
+    opacity: .45; pointer-events: none;
+}
+.ca-lookup-popover-search {
+    width: 100%; padding: 6px 8px 6px 26px;
+    font-size: .72rem;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit; outline: none;
+}
+body.app-theme-light .ca-lookup-popover-search { background: #f8fafc; border-color: #e2e8f0; }
+.ca-lookup-popover-search:focus {
+    border-color: rgba(165, 180, 252, 0.55);
+    box-shadow: 0 0 0 2px rgba(165, 180, 252, 0.15);
+}
+.ca-lookup-popover-actions {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px 6px; font-size: .68rem;
+}
+.ca-lookup-popover-actions button {
+    background: transparent; border: none; cursor: pointer;
+    color: #a5b4fc; font-weight: 600;
+    padding: 2px 4px; border-radius: 4px;
+    transition: background .12s;
+}
+body.app-theme-light .ca-lookup-popover-actions button { color: #6366f1; }
+.ca-lookup-popover-actions button:hover { background: rgba(165, 180, 252, 0.12); }
+body.app-theme-light .ca-lookup-popover-actions button:hover { background: rgba(99, 102, 241, 0.12); }
+.ca-lookup-popover-divider { opacity: .35; }
+.ca-lookup-popover-count { margin-left: auto; opacity: .55; font-weight: 500; }
+.ca-lookup-popover-list {
+    flex: 1; overflow-y: auto;
+    max-height: 240px; padding: 2px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+body.app-theme-light .ca-lookup-popover-list { border-color: #e2e8f0; }
+.ca-lookup-popover-empty { text-align: center; padding: 16px 8px; font-size: .7rem; opacity: .55; }
+.ca-lookup-popover-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px; cursor: pointer;
+    transition: background .1s; font-size: .72rem;
+    user-select: none;
+}
+.ca-lookup-popover-row:hover { background: rgba(165, 180, 252, 0.10); }
+body.app-theme-light .ca-lookup-popover-row:hover { background: rgba(99, 102, 241, 0.10); }
+.ca-lookup-popover-row--checked {
+    background: rgba(165, 180, 252, 0.18);
+    color: #c7d2fe;
+    font-weight: 600;
+}
+body.app-theme-light .ca-lookup-popover-row--checked {
+    background: rgba(99, 102, 241, 0.15);
+    color: #4f46e5;
+}
+.ca-lookup-popover-row--checked:hover { background: rgba(165, 180, 252, 0.26) !important; }
+body.app-theme-light .ca-lookup-popover-row--checked:hover { background: rgba(99, 102, 241, 0.22) !important; }
+.ca-lookup-popover-checkbox {
+    width: 14px; height: 14px;
+    border: 1.5px solid rgba(255, 255, 255, 0.20);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.04);
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; color: #fff; transition: all .1s;
+}
+body.app-theme-light .ca-lookup-popover-checkbox { background: #ffffff; border-color: #cbd5e1; }
+.ca-lookup-popover-row--checked .ca-lookup-popover-checkbox {
+    background: #6366f1; border-color: #6366f1;
+}
+.ca-lookup-popover-row-label {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ca-lookup-popover-footer { display: flex; gap: 6px; justify-content: flex-end; padding: 8px 10px; }
+.ca-lookup-popover-btn {
+    padding: 5px 12px; border-radius: 6px; cursor: pointer;
+    font-size: .72rem; font-weight: 600;
+    border: 1px solid transparent; transition: all .12s;
+}
+.ca-lookup-popover-btn--ghost {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.10);
+    color: inherit;
+}
+body.app-theme-light .ca-lookup-popover-btn--ghost { border-color: #e2e8f0; }
+.ca-lookup-popover-btn--ghost:hover { background: rgba(255, 255, 255, 0.05); }
+body.app-theme-light .ca-lookup-popover-btn--ghost:hover { background: #f1f5f9; }
+.ca-lookup-popover-btn--primary {
+    background: #6366f1; color: #fff; border-color: #6366f1;
+}
+.ca-lookup-popover-btn--primary:hover { background: #4f46e5; border-color: #4f46e5; }
 
 /* ── Grid (Alt Tablo / Master-Detail) widget ────────────────── */
 .ca-field--grid { grid-column: 1 / -1; }
@@ -725,6 +829,106 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
 }
 .ca-message.ok { background: rgba(16,185,129,0.1); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); display: block; }
 .ca-message.err { background: rgba(239,68,68,0.1); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); display: block; }
+
+/* ── Stok Eslestirme grid ───────────────────────────────────── */
+.ca-item-grid { table-layout: fixed; }
+.ca-item-grid__th {
+    text-align: left;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.65);
+    font-weight: 600;
+    font-size: 0.74rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    position: sticky; top: 0; z-index: 5;
+}
+body.app-theme-light .ca-item-grid__th {
+    background: #f1f5f9; color: #475569; border-bottom-color: #e2e8f0;
+}
+.ca-item-grid tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background .12s;
+}
+.ca-item-grid tbody tr:hover { background: rgba(99,102,241,0.06); }
+.ca-item-grid tbody tr.is-dirty { background: rgba(245,158,11,0.05); }
+.ca-item-grid tbody tr.is-saving { background: rgba(99,102,241,0.10); }
+.ca-item-grid tbody tr.is-error { background: rgba(239,68,68,0.06); }
+body.app-theme-light .ca-item-grid tbody tr { border-bottom-color: #f1f5f9; }
+body.app-theme-light .ca-item-grid tbody tr:hover { background: rgba(99,102,241,0.05); }
+
+.ca-item-grid td {
+    padding: 4px 6px;
+    vertical-align: middle;
+    font-variant-numeric: tabular-nums;
+}
+.ca-item-grid td.ca-item-grid__index {
+    color: rgba(148,163,184,0.65); font-size: .72rem; text-align: center;
+}
+.ca-item-grid input[type="text"] {
+    width: 100%;
+    padding: 6px 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: rgba(255,255,255,0.92);
+    font-size: .82rem;
+    transition: border-color .12s, background .12s;
+}
+.ca-item-grid input[type="text"]:hover {
+    border-color: rgba(255,255,255,0.10);
+}
+.ca-item-grid input[type="text"]:focus {
+    outline: none;
+    border-color: rgba(99,102,241,0.55);
+    background: rgba(99,102,241,0.06);
+}
+.ca-item-grid input[readonly] {
+    color: rgba(255,255,255,0.55);
+    cursor: default;
+}
+.ca-item-grid input[readonly]:hover { border-color: transparent; }
+body.app-theme-light .ca-item-grid input[type="text"] { color: #1e293b; }
+body.app-theme-light .ca-item-grid input[type="text"]:hover { border-color: #cbd5e1; }
+body.app-theme-light .ca-item-grid input[type="text"]:focus {
+    border-color: #6366f1; background: rgba(99,102,241,0.04);
+}
+body.app-theme-light .ca-item-grid input[readonly] { color: #64748b; }
+
+.ca-item-grid__row-del {
+    background: transparent;
+    border: 1px solid rgba(239,68,68,0.25);
+    color: #f87171;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: .72rem;
+    transition: all .12s;
+}
+.ca-item-grid__row-del:hover {
+    background: rgba(239,68,68,0.18);
+    border-color: rgba(239,68,68,0.5);
+}
+.ca-item-grid__row-del:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Stok kodu hucresinin "secili" hali — kullanici secim yapana kadar uyarici */
+.ca-item-grid td.ca-item-grid__needs-pick input { color: #fca5a5; }
+body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b91c1c; }
+
+/* Inline status badge (saved/saving/error) */
+.ca-item-grid__status {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-left: 4px; vertical-align: middle;
+}
+.ca-item-grid__status.is-dirty  { background: #f59e0b; }
+.ca-item-grid__status.is-saving { background: #6366f1; animation: caItemPulse 1s ease-in-out infinite; }
+.ca-item-grid__status.is-saved  { background: #10b981; }
+.ca-item-grid__status.is-error  { background: #ef4444; }
+@@keyframes caItemPulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
 </style>
 }
 
@@ -764,6 +968,11 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
                 <span class="ca-nav-dot"></span>
                 Teslim Adresleri
                 <span class="ca-nav-count" id="caAddressCount" style="display:none;">0</span>
+            </button>
+            <button type="button" class="ca-nav-btn" data-nav-key="items" id="caNavItems">
+                <span class="ca-nav-dot"></span>
+                Stok Eşleştirmeleri
+                <span class="ca-nav-count" id="caItemCount" style="display:none;">0</span>
             </button>
             <button type="button" class="ca-nav-btn" data-nav-key="movements" id="caNavMovements">
                 <span class="ca-nav-dot"></span>
@@ -864,6 +1073,35 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
                         <input id="mobile" name="mobile" type="tel" class="ca-input"
                                placeholder="0532 000 00 00" maxlength="30"
                                value="@(existing?.Mobile ?? "")" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="waPhone">
+                            <span style="display:inline-flex; align-items:center; gap:6px;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="#25d366" aria-hidden="true">
+                                    <path d="M20.5 3.5a11.7 11.7 0 0 0-16.6 0 11.6 11.6 0 0 0-2 13.2L1 23l6.5-1.7a11.7 11.7 0 0 0 5.5 1.4h.01a11.7 11.7 0 0 0 8.27-3.42 11.6 11.6 0 0 0-.78-15.78ZM13 20.7a9.7 9.7 0 0 1-4.95-1.36l-.36-.21-3.86 1 1.03-3.76-.23-.38a9.65 9.65 0 0 1 14.62-12.3 9.6 9.6 0 0 1-6.25 16.99Zm5.55-7.21c-.3-.15-1.78-.88-2.06-.98s-.48-.15-.68.15-.78.98-.95 1.18-.36.22-.66.07a8 8 0 0 1-2.36-1.46 8.84 8.84 0 0 1-1.63-2.03c-.17-.3 0-.46.13-.6.13-.13.3-.34.45-.51.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.51-.07-.15-.68-1.64-.93-2.24-.24-.59-.49-.5-.68-.51l-.58-.01a1.12 1.12 0 0 0-.81.38 3.4 3.4 0 0 0-1.07 2.53c0 1.5 1.1 2.94 1.25 3.14.15.2 2.16 3.3 5.24 4.62 1.84.78 2.54.85 3.45.71.55-.08 1.78-.73 2.03-1.43.25-.7.25-1.3.18-1.43-.07-.13-.27-.2-.57-.35Z"/>
+                                </svg>
+                                WhatsApp Numarası
+                            </span>
+                        </label>
+                        <span style="display:flex; gap:8px; align-items:center;">
+                            <input id="waPhone" name="waPhone" type="tel" class="ca-input"
+                                   placeholder="+905321234567 (cep telefonundan farklı olabilir)" maxlength="30"
+                                   value="@(existing?.WaPhone ?? "")" style="flex:1;" />
+                            <button type="button" id="waOpenChat" class="btn btn-sm"
+                                    style="background:linear-gradient(135deg,#25d366,#128c7e); color:#fff; border:none; padding:6px 14px; border-radius:6px; font-weight:600; white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; gap:6px;"
+                                    title="Bu numarayla WhatsApp sohbetini aç">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d="M20.5 3.5a11.7 11.7 0 0 0-16.6 0 11.6 11.6 0 0 0-2 13.2L1 23l6.5-1.7a11.7 11.7 0 0 0 5.5 1.4h.01a11.7 11.7 0 0 0 8.27-3.42 11.6 11.6 0 0 0-.78-15.78ZM13 20.7a9.7 9.7 0 0 1-4.95-1.36l-.36-.21-3.86 1 1.03-3.76-.23-.38a9.65 9.65 0 0 1 14.62-12.3 9.6 9.6 0 0 1-6.25 16.99Z"/>
+                                </svg>
+                                Sohbeti Aç
+                            </button>
+                        </span>
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="waName">WhatsApp Görünen Adı</label>
+                        <input id="waName" name="waName" type="text" class="ca-input"
+                               placeholder="Sohbet listesinde gösterilecek ad (boş bırakılırsa cari unvanı kullanılır)" maxlength="150"
+                               value="@(existing?.WaName ?? "")" />
                     </div>
                     <div class="ca-row">
                         <label class="ca-label" for="email">E-Posta</label>
@@ -1006,6 +1244,44 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
                 </div>
             </div>
 
+            <!-- Stok Eşleştirmeleri -->
+            <div class="ca-card" id="caCardItems" data-section="items" style="display:none;">
+                <div class="ca-card__title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <span>Stok Eşleştirmeleri</span>
+                    <button type="button" class="ca-btn ca-btn--primary" id="caItemAddRowBtn" style="font-size:.75rem;padding:6px 12px;">+ Yeni Satır</button>
+                </div>
+                <div style="padding:6px 14px 4px 14px;font-size:.78rem;color:rgba(148,163,184,.85);">
+                    Bu cariden satın alınan / cariye satılan stoklarımız ve cari'nin bu stoklara verdiği özel kod / ad eşleşmeleri.
+                    <span style="color:rgba(148,163,184,.6);">Satır içinde düzenleme — alan dışına tıkladığınızda otomatik kaydedilir.</span>
+                </div>
+
+                <div id="caItemGridWrap" style="padding:8px 14px 0 14px;overflow:auto;">
+                    <table class="ca-item-grid" style="width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem;">
+                        <thead>
+                            <tr>
+                                <th class="ca-item-grid__th" style="width:36px;">#</th>
+                                <th class="ca-item-grid__th" style="width:160px;">Stok Kodu *</th>
+                                <th class="ca-item-grid__th">Stok Adı</th>
+                                <th class="ca-item-grid__th" style="width:160px;">Cari Stok Kodu</th>
+                                <th class="ca-item-grid__th" style="width:240px;">Cari Stok Adı</th>
+                                <th class="ca-item-grid__th" style="width:240px;">Not</th>
+                                <th class="ca-item-grid__th" style="width:60px;text-align:center;">Aktif</th>
+                                <th class="ca-item-grid__th" style="width:60px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="caItemRows"></tbody>
+                    </table>
+                </div>
+
+                <div id="caItemEmpty" style="padding:18px;text-align:center;color:rgba(148,163,184,.7);font-size:.84rem;font-style:italic;">
+                    Henüz stok eşleştirmesi yok. "+ Yeni Satır" ile ekleyebilirsiniz.
+                </div>
+
+                <div id="caItemNoContact" style="display:none;margin:12px 14px;padding:10px 12px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:#f59e0b;font-size:.78rem;">
+                    Önce cari kart bilgilerini kaydediniz — eşleştirme satırları cari kayıt edildikten sonra eklenebilir.
+                </div>
+            </div>
+
             <!-- Cari Hareket -->
             <div class="ca-card" id="caCardMovements" data-section="movements" style="display:none;">
                 <div class="ca-card__title">Cari Hareket</div>
@@ -1115,6 +1391,27 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
         return el ? el.value.trim() : '';
     }
 
+    // WhatsApp "Sohbeti Aç" butonu — waPhone alanını WhatsApp sayfasına query string olarak gönderir
+    var waOpenBtn = document.getElementById('waOpenChat');
+    if (waOpenBtn) {
+        waOpenBtn.addEventListener('click', function () {
+            var raw = getVal('waPhone');
+            if (!raw) {
+                alert('Önce WhatsApp Numarası alanını doldur ve kaydet.');
+                var waInp = document.getElementById('waPhone');
+                if (waInp) waInp.focus();
+                return;
+            }
+            var digits = raw.replace(/[^\d]/g, '');
+            if (digits.length < 10) {
+                alert('WhatsApp numarası en az 10 rakam içermeli (ülke kodu dahil).');
+                return;
+            }
+            // Yeni sekmede aç ki müşteri kartı kaybolmasın
+            window.open('/Whatsapp?phone=' + encodeURIComponent(digits), '_blank', 'noopener');
+        });
+    }
+
     saveBtn.addEventListener('click', function () {
         var accountCode  = getVal('accountCode');
         var accountTitle = getVal('accountTitle');
@@ -1161,6 +1458,8 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
             contactPerson:  getVal('contactPerson')  || null,
             phone:          getVal('phone')          || null,
             mobile:         getVal('mobile')         || null,
+            waPhone:        getVal('waPhone')        || null,
+            waName:         getVal('waName')         || null,
             email:          getVal('email')          || null,
             website:        getVal('website')        || null,
             address:        getVal('address')        || null,
@@ -1777,6 +2076,342 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
 
         // Ilk yuklemede (contact varsa) listeyi getir
         if (caAddrContactId > 0) caAddrLoadList();
+    });
+
+    // ══════════════════════════════════════════════════════════════
+    // Stok Eslestirmeleri — inline editable grid (satis teklif gibi)
+    // Her satir bagimsiz: stok secimi + cari kod/ad/not duzenleme + blur'da
+    // otomatik save (Save endpoint, contactId+itemId UNIQUE oldugundan upsert).
+    // (qs/escapeHtml helper'lari adresler bolumunde tanimli — paylasilir.)
+    // ══════════════════════════════════════════════════════════════
+    var caItemContactId = parseInt(document.getElementById('caId').value || '0', 10) || 0;
+    var CA_ITEM_GUIDE_CODE = 'ITEMS_FINISHED'; // TypeId=1 mamul rehberi (kullanici karari: tip 1 rehber)
+
+    function caItemEmptyToggle() {
+        var rows = qs('caItemRows').children.length;
+        qs('caItemEmpty').style.display = (rows === 0) ? '' : 'none';
+        qs('caItemCount').textContent = String(rows);
+        qs('caItemCount').style.display = (rows === 0) ? 'none' : '';
+        // Index'leri yenile
+        Array.prototype.forEach.call(qs('caItemRows').children, function (tr, i) {
+            var cell = tr.querySelector('.ca-item-grid__index');
+            if (cell) cell.textContent = String(i + 1);
+        });
+    }
+
+    /**
+     * Yeni bir <tr> uretir. row null ise bos (yeni eklenen, henuz save'siz) satir.
+     */
+    function caItemBuildRow(row) {
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-id', row && row.id ? String(row.id) : '0');
+        tr.setAttribute('data-item-id', row && row.itemId ? String(row.itemId) : '0');
+
+        var html = ''
+            + '<td class="ca-item-grid__index"></td>'
+            + '<td class="ca-item-grid__cell-code' + ((row && row.itemId) ? '' : ' ca-item-grid__needs-pick') + '">'
+            +   '<input type="text" data-field="itemCode" autocomplete="off" placeholder="Stok kodu ile ara..." maxlength="60" value="' + escapeHtml(row && row.itemCode ? row.itemCode : '') + '" />'
+            + '</td>'
+            + '<td><input type="text" data-field="itemName" readonly value="' + escapeHtml(row && row.itemName ? row.itemName : '') + '" placeholder="(otomatik dolar)" /></td>'
+            + '<td><input type="text" data-field="vendorCode" maxlength="60" value="' + escapeHtml(row && row.vendorCode ? row.vendorCode : '') + '" placeholder="—" /></td>'
+            + '<td><input type="text" data-field="vendorName" maxlength="200" value="' + escapeHtml(row && row.vendorName ? row.vendorName : '') + '" placeholder="—" /></td>'
+            + '<td><input type="text" data-field="notes" maxlength="500" value="' + escapeHtml(row && row.notes ? row.notes : '') + '" placeholder="—" /></td>'
+            + '<td style="text-align:center;">'
+            +   '<label class="ca-toggle" title="Aktif" style="vertical-align:middle;">'
+            +     '<input type="checkbox" data-field="isActive"' + ((!row || row.isActive !== false) ? ' checked' : '') + ' />'
+            +     '<span class="ca-toggle-track"></span>'
+            +   '</label>'
+            +   '<span class="ca-item-grid__status" data-status style="margin-left:6px;"></span>'
+            + '</td>'
+            + '<td style="text-align:center;">'
+            +   '<button type="button" class="ca-item-grid__row-del" title="Sil">Sil</button>'
+            + '</td>';
+        tr.innerHTML = html;
+        caItemBindRow(tr);
+        return tr;
+    }
+
+    function caItemMarkStatus(tr, kind) {
+        tr.classList.remove('is-dirty', 'is-saving', 'is-error');
+        var s = tr.querySelector('[data-status]');
+        if (s) {
+            s.classList.remove('is-dirty', 'is-saving', 'is-saved', 'is-error');
+        }
+        if (kind === 'dirty')  { tr.classList.add('is-dirty');  if (s) s.classList.add('is-dirty');  }
+        if (kind === 'saving') { tr.classList.add('is-saving'); if (s) s.classList.add('is-saving'); }
+        if (kind === 'saved')  { if (s) s.classList.add('is-saved'); }
+        if (kind === 'error')  { tr.classList.add('is-error');  if (s) s.classList.add('is-error');  }
+    }
+
+    function caItemRowReadable(tr) {
+        return {
+            id:         parseInt(tr.getAttribute('data-id') || '0', 10) || 0,
+            itemId:     parseInt(tr.getAttribute('data-item-id') || '0', 10) || 0,
+            itemCode:   tr.querySelector('[data-field="itemCode"]').value.trim(),
+            itemName:   tr.querySelector('[data-field="itemName"]').value.trim(),
+            vendorCode: tr.querySelector('[data-field="vendorCode"]').value.trim(),
+            vendorName: tr.querySelector('[data-field="vendorName"]').value.trim(),
+            notes:      tr.querySelector('[data-field="notes"]').value.trim(),
+            isActive:   tr.querySelector('[data-field="isActive"]').checked,
+        };
+    }
+
+    async function caItemSaveRow(tr) {
+        if (caItemContactId <= 0) return;
+        var data = caItemRowReadable(tr);
+        if (data.itemId <= 0) {
+            // Stok secilmemis — kaydetme; "needs-pick" gosterimi zaten var.
+            caItemMarkStatus(tr, 'dirty');
+            return;
+        }
+        caItemMarkStatus(tr, 'saving');
+        try {
+            var r = await fetch('/ContactItem/Save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    id: data.id > 0 ? data.id : null,
+                    contactId: caItemContactId,
+                    itemId: data.itemId,
+                    vendorCode: data.vendorCode || null,
+                    vendorName: data.vendorName || null,
+                    notes:      data.notes      || null,
+                    isActive:   data.isActive,
+                })
+            });
+            var resp = await r.json();
+            if (!resp.success) {
+                caItemMarkStatus(tr, 'error');
+                if (window.CalibraAlert) CalibraAlert.error(resp.message || 'Kaydedilemedi');
+                return;
+            }
+            if (resp.id && data.id <= 0) {
+                tr.setAttribute('data-id', String(resp.id));
+            }
+            caItemMarkStatus(tr, 'saved');
+            // Kisa sure sonra status nokta'sini sondur
+            setTimeout(function () {
+                var s = tr.querySelector('[data-status]');
+                if (s) s.classList.remove('is-saved');
+            }, 1400);
+        } catch (e) {
+            caItemMarkStatus(tr, 'error');
+            if (window.CalibraAlert) CalibraAlert.error('Kaydetme hatası: ' + e.message);
+        }
+    }
+
+    async function caItemDeleteRow(tr) {
+        var id = parseInt(tr.getAttribute('data-id') || '0', 10) || 0;
+        if (id <= 0) {
+            // Sadece DOM'dan kaldir (henuz kaydedilmemis)
+            tr.remove();
+            caItemEmptyToggle();
+            return;
+        }
+        if (window.CalibraAlert && CalibraAlert.confirm) {
+            var ok = await CalibraAlert.confirm('Bu stok eşleştirmesi silinsin mi?', { title: 'Eşleştirme Sil', okText: 'Evet, Sil', cancelText: 'İptal', danger: true });
+            if (!ok) return;
+        }
+        try {
+            var r = await fetch('/ContactItem/Delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ id: id })
+            });
+            var data = await r.json();
+            if (!data.success) {
+                if (window.CalibraAlert) CalibraAlert.error(data.message || 'Silinemedi');
+                return;
+            }
+            tr.remove();
+            caItemEmptyToggle();
+        } catch (e) {
+            if (window.CalibraAlert) CalibraAlert.error('Silme hatası: ' + e.message);
+        }
+    }
+
+    function caItemBindRow(tr) {
+        var codeInput  = tr.querySelector('[data-field="itemCode"]');
+        var nameInput  = tr.querySelector('[data-field="itemName"]');
+        var vCodeInput = tr.querySelector('[data-field="vendorCode"]');
+        var vNameInput = tr.querySelector('[data-field="vendorName"]');
+        var notesInput = tr.querySelector('[data-field="notes"]');
+        var activeChk  = tr.querySelector('[data-field="isActive"]');
+        var delBtn     = tr.querySelector('.ca-item-grid__row-del');
+
+        // Stok kodu hucresine ITEMS_FINISHED rehberi (LookupCard modal) mount et.
+        // Mevcut input value'su varsa LookupCard initial display'i icin data-display
+        // attribute'unu set ediyoruz (server'dan ItemName geldi zaten).
+        if (nameInput.value && !codeInput.getAttribute('data-display')) {
+            codeInput.setAttribute('data-display', nameInput.value);
+        }
+
+        caItemMountLookup(codeInput);
+
+        // LookupCard secim yapinca input.value (Code) ve data-display (Name) set eder
+        // ve change/input event dispatch eder. Code geldiyse Items.Id'yi resolve et.
+        codeInput.addEventListener('change', async function () {
+            var code = (codeInput.value || '').trim();
+            var disp = codeInput.getAttribute('data-display') || '';
+            if (!code) {
+                // Kod silindi — stok secimi sifirlandi
+                tr.setAttribute('data-item-id', '0');
+                nameInput.value = '';
+                tr.querySelector('.ca-item-grid__cell-code').classList.add('ca-item-grid__needs-pick');
+                caItemMarkStatus(tr, 'dirty');
+                return;
+            }
+            // Display'i hemen yansit (LookupCard zaten data-display set etti)
+            if (disp) nameInput.value = disp;
+
+            // Items.Id'yi resolve et — /api/guides/{guide}/resolve?value={code}
+            try {
+                var url = '/api/guides/' + encodeURIComponent(CA_ITEM_GUIDE_CODE)
+                        + '/resolve?value=' + encodeURIComponent(code);
+                var r = await fetch(url, { credentials: 'same-origin' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                var data = await r.json();
+                var cells = (data && data.cells) || {};
+                var id = cells.Id != null ? cells.Id : cells.id;
+                if (id == null) {
+                    // Code rehberde yok — kullanici manuel yazmis
+                    tr.setAttribute('data-item-id', '0');
+                    tr.querySelector('.ca-item-grid__cell-code').classList.add('ca-item-grid__needs-pick');
+                    caItemMarkStatus(tr, 'dirty');
+                    return;
+                }
+                tr.setAttribute('data-item-id', String(id));
+                tr.querySelector('.ca-item-grid__cell-code').classList.remove('ca-item-grid__needs-pick');
+                // Display gecmediyse resolve'dan al
+                if (!nameInput.value && data && data.display) nameInput.value = data.display;
+                caItemMarkStatus(tr, 'dirty');
+                // Otomatik save tetikle — yeni stok secildi
+                caItemSaveRow(tr);
+                // Bir sonraki alana focus
+                vCodeInput.focus();
+            } catch (e) {
+                console.warn('[CA] Stok ID resolve hatasi:', e);
+                caItemMarkStatus(tr, 'error');
+            }
+        });
+
+        // Diger alanlar — change/blur'da save
+        function bindBlurSave(input) {
+            var lastSnapshot = input.value;
+            input.addEventListener('input', function () {
+                if (input.value !== lastSnapshot) {
+                    caItemMarkStatus(tr, 'dirty');
+                }
+            });
+            input.addEventListener('blur', function () {
+                if (input.value !== lastSnapshot) {
+                    lastSnapshot = input.value;
+                    caItemSaveRow(tr);
+                }
+            });
+        }
+        bindBlurSave(vCodeInput);
+        bindBlurSave(vNameInput);
+        bindBlurSave(notesInput);
+
+        // Aktif checkbox — anlik save
+        activeChk.addEventListener('change', function () {
+            caItemMarkStatus(tr, 'dirty');
+            caItemSaveRow(tr);
+        });
+
+        // Sil butonu
+        delBtn.addEventListener('click', function () {
+            // LookupCard wrapper'ini DOM'dan kaldirmadan once unmount et
+            try {
+                var lookupRef = tr._caLookupRef;
+                if (lookupRef && lookupRef.unmount) lookupRef.unmount();
+            } catch (e) { /* ignore */ }
+            caItemDeleteRow(tr);
+        });
+    }
+
+    /**
+     * Stok kodu input'una ITEMS_FINISHED rehberini (modal lookup) mount eder.
+     * Bundle (calibrahub-widgets.js) henuz yuklenmemisse 100ms interval ile bekler.
+     * Aktif rehber kodu = CA_ITEM_GUIDE_CODE — kullanici karari "tip 1 rehber" (mamul).
+     */
+    function caItemMountLookup(input) {
+        if (!input || input.dataset.lookupMounted === '1') return;
+        function tryMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountLookupForInput) return false;
+            try {
+                var ref = window.CalibraHub.mountLookupForInput({
+                    inputElement: input,
+                    formCode: 'CONTACTS',
+                    fieldKey: 'contactItem.itemCode',
+                    guideCode: CA_ITEM_GUIDE_CODE,
+                    isRequired: true,
+                });
+                input.dataset.lookupMounted = '1';
+                // Sil butonunda unmount edilmek icin tr'ye iliskilendir
+                var tr = input.closest('tr');
+                if (tr) tr._caLookupRef = ref;
+                return true;
+            } catch (e) {
+                console.warn('[CA] Stok lookup mount hatasi:', e);
+                return true; // bir daha denememek icin
+            }
+        }
+        if (tryMount()) return;
+        var tries = 0;
+        var t = setInterval(function () {
+            tries++;
+            if (tryMount() || tries >= 50) clearInterval(t);
+        }, 100);
+    }
+
+    async function caItemLoadList() {
+        var tbody = qs('caItemRows');
+        tbody.innerHTML = '';
+        if (caItemContactId <= 0) {
+            caItemEmptyToggle();
+            return;
+        }
+        try {
+            var r = await fetch('/ContactItem/ByContact?contactId=' + caItemContactId, { credentials: 'same-origin' });
+            var rows = await r.json();
+            if (!Array.isArray(rows)) rows = [];
+            rows.forEach(function (it) {
+                tbody.appendChild(caItemBuildRow(it));
+            });
+        } catch (e) {
+            console.warn('[CA] Stok eslestirme listesi yuklenemedi:', e);
+        }
+        caItemEmptyToggle();
+    }
+
+    function caItemAddRow() {
+        if (caItemContactId <= 0) {
+            qs('caItemNoContact').style.display = '';
+            if (window.CalibraAlert) CalibraAlert.warning('Önce cari kartı kaydediniz.');
+            return;
+        }
+        qs('caItemNoContact').style.display = 'none';
+        var tr = caItemBuildRow(null);
+        qs('caItemRows').appendChild(tr);
+        caItemEmptyToggle();
+        var input = tr.querySelector('[data-field="itemCode"]');
+        if (input) input.focus();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var addBtn = qs('caItemAddRowBtn');
+        if (addBtn) addBtn.addEventListener('click', caItemAddRow);
+
+        if (caItemContactId > 0) {
+            caItemLoadList();
+        } else {
+            qs('caItemNoContact').style.display = '';
+            caItemEmptyToggle();
+        }
     });
 })();
 </script>

@@ -130,6 +130,19 @@
             location.reload();
         }
     });
+
+    // Alan Rehberi sayfasinda widget eklenince/silinince/aktif degisince
+    // localStorage'a 'calibra:widget-schema-changed' yazilir + custom event
+    // dispatch edilir. Hem ayni tab'daki workspace icindeki Alan Rehberi'nden
+    // hem de farkli tab'lardan gelen invalidasyonu yakalar.
+    function onWidgetSchemaChanged() {
+        console.log('[MC] widget schema changed → reloading');
+        location.reload();
+    }
+    window.addEventListener('storage', function(e) {
+        if (e && e.key === 'calibra:widget-schema-changed') onWidgetSchemaChanged();
+    });
+    window.addEventListener('calibra:widget-schema-changed', onWidgetSchemaChanged);
 })();
 
 </script>

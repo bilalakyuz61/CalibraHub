@@ -191,7 +191,11 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
   }
 
   /* ── Tile seçim toggle ── */
-  function toggleTile(featureId, valueId) {
+  function toggleTile(featureId, valueId, disabled) {
+    if (disabled) {
+      showToast('Bu deger bu stok icin haric tutulmus', 'warning')
+      return
+    }
     setSelectedValues(prev => {
       const set = new Set(prev[featureId] || [])
       if (set.has(valueId)) set.delete(valueId)
@@ -535,14 +539,16 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
                         }}>
                           {feature.values.map(val => {
                             const { isSelected, isHighlighted } = getTileState(feature.id, val.id)
+                            const isDisabled = val.allowed === false
                             return (
                               <Tile
                                 key={val.id}
                                 label={val.description}
                                 isSelected={isSelected}
                                 isHighlighted={isHighlighted}
+                                isDisabled={isDisabled}
                                 c={c}
-                                onClick={() => toggleTile(feature.id, val.id)}
+                                onClick={() => toggleTile(feature.id, val.id, isDisabled)}
                               />
                             )
                           })}
@@ -705,14 +711,23 @@ export default function ProductCombinations({ csrfToken, initialStockCode }) {
 /* ─────────────────────────────────────────────────────────────────
    Tile bileşeni
 ───────────────────────────────────────────────────────────────── */
-function Tile({ label, isSelected, isHighlighted, c, onClick }) {
+function Tile({ label, isSelected, isHighlighted, isDisabled, c, onClick }) {
   const [hov, setHov] = useState(false)
 
   // Hem mevcut kombinasyona ait (mor) hem de yeni seçime dahil (mavi) ise çift durum
   const isBoth = isSelected && isHighlighted
 
   let colorSet
-  if (isBoth) {
+  if (isDisabled) {
+    // Hariç tutulmuş (stok kartında bu özellik için izinli liste dışında bırakılmış)
+    colorSet = {
+      bg: 'transparent',
+      bd: c.faint,
+      tx: c.muted,
+      sh: undefined,
+    }
+  }
+  else if (isBoth) {
     colorSet = {
       bg: `linear-gradient(135deg, ${c.tileHi.bg} 0%, ${c.tileHi.bg} 48%, ${c.tileSel.bg} 52%, ${c.tileSel.bg} 100%)`,
       bd: c.tileSel.bd,
@@ -728,18 +743,21 @@ function Tile({ label, isSelected, isHighlighted, c, onClick }) {
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => setHov(true)}
+      onMouseEnter={() => !isDisabled && setHov(true)}
       onMouseLeave={() => setHov(false)}
+      title={isDisabled ? 'Bu deger bu stok icin haric tutulmus' : undefined}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '6px 8px', borderRadius: 7,
-        border: `1px solid ${colorSet.bd}`,
+        border: isDisabled ? `1px dashed ${colorSet.bd}` : `1px solid ${colorSet.bd}`,
         background: colorSet.bg, color: colorSet.tx,
         fontSize: 11.5, fontWeight: 500,
-        cursor: 'pointer',
+        cursor: isDisabled ? 'not-allowed' : 'pointer',
+        opacity: isDisabled ? 0.45 : 1,
         userSelect: 'none', textAlign: 'center',
         minHeight: 34, lineHeight: 1.3,
         transition: 'all .12s ease',
+        textDecoration: isDisabled ? 'line-through' : undefined,
         boxShadow: ((isHighlighted || isBoth) && colorSet.sh) ? colorSet.sh : undefined,
       }}
     >

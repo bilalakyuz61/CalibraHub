@@ -18,7 +18,7 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         _table = $"[{schema}].[report_templates]";
     }
 
-    private const string Columns = "[id],[name],[document_type_id],[frx_file_path],[description],[is_default],[is_active],[created_at],[updated_at],[frx_content],[sql_view_name],[key_column],[output_options_json],[order_column],[order_direction]";
+    private const string Columns = "[id],[name],[document_type_id],[frx_file_path],[description],[is_default],[is_active],[Created],[Updated],[frx_content],[sql_view_name],[key_column],[output_options_json],[order_column],[order_direction]";
 
     public async Task<IReadOnlyCollection<ReportTemplate>> GetAllAsync(CancellationToken cancellationToken)
     {
@@ -77,7 +77,7 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
                         [description]=@Description,[is_default]=@IsDefault,[is_active]=@IsActive,
                         [sql_view_name]=@SqlViewName,[key_column]=@KeyColumn,[output_options_json]=@OutputOptionsJson,
                         [order_column]=@OrderColumn,[order_direction]=@OrderDirection,
-                        [updated_at]=GETDATE()
+                        [Updated]=GETDATE()
                     WHERE [id]=@Id;
                 SELECT @Id;
                 """;
@@ -86,7 +86,7 @@ public sealed class SqlReportTemplateRepository : IReportTemplateRepository
         else
         {
             command.CommandText = $"""
-                INSERT INTO {_table} ([name],[document_type_id],[frx_file_path],[frx_content],[description],[is_default],[is_active],[sql_view_name],[key_column],[output_options_json],[order_column],[order_direction],[created_at],[updated_at])
+                INSERT INTO {_table} ([name],[document_type_id],[frx_file_path],[frx_content],[description],[is_default],[is_active],[sql_view_name],[key_column],[output_options_json],[order_column],[order_direction],[Created],[Updated])
                 VALUES (@Name,@DocTypeId,@FrxFilePath,@FrxContent,@Description,@IsDefault,@IsActive,@SqlViewName,@KeyColumn,@OutputOptionsJson,@OrderColumn,@OrderDirection,GETDATE(),GETDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;

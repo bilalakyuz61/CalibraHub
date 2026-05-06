@@ -9,4 +9,8 @@ public interface IFinanceService
     Task<ContactDto?> GetContactByIdAsync(int id, CancellationToken cancellationToken);
     Task<(bool Success, string? Error, ContactDto? Account)> UpsertContactAsync(SaveContactRequest request, CancellationToken cancellationToken);
     Task<(bool Success, string? Error)> DeleteContactAsync(int id, CancellationToken cancellationToken);
+
+    // Cari ↔ Fiyat Grubu eslestirme (1 cari → 0..1 fiyat grubu).
+    Task<(bool Success, string? Error)> SetContactPriceGroupAsync(int contactId, int? priceGroupId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ContactDto>> GetContactsByPriceGroupAsync(int priceGroupId, CancellationToken cancellationToken);
 }

@@ -570,8 +570,8 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         cmd.Parameters.Add(new SqlParameter("@IsActive", w.IsActive));
         cmd.Parameters.Add(new SqlParameter("@ColorType",  w.ColorType));
         cmd.Parameters.Add(new SqlParameter("@ColorValue", (object?)w.ColorValue ?? DBNull.Value));
-        // ColSpan — 1-12 arasi clamp; disinda bir deger gelirse varsayilan 6.
-        var safeCol = (w.ColSpan >= 1 && w.ColSpan <= 12) ? w.ColSpan : 6;
+        // ColSpan — 1-24 arasi clamp; disinda bir deger gelirse varsayilan 12.
+        var safeCol = (w.ColSpan >= 1 && w.ColSpan <= 24) ? w.ColSpan : 12;
         cmd.Parameters.Add(new SqlParameter("@ColSpan", safeCol));
         // LabelStyle — whitelist: sadece "standard" veya "modern"; digerleri standart kabul.
         var safeStyle = (w.LabelStyle == "modern") ? "modern" : "standard";

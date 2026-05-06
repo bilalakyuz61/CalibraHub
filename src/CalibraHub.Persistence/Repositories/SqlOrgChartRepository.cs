@@ -30,7 +30,7 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id], [company_id], [name], [is_default], [created_at], [updated_at]
+            SELECT [id], [company_id], [name], [is_default], [Created], [Updated]
             FROM {_chartsTable}
             WHERE [company_id] = @CompanyId
             ORDER BY [is_default] DESC, [name];
@@ -58,7 +58,7 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id], [company_id], [name], [is_default], [created_at], [updated_at]
+            SELECT [id], [company_id], [name], [is_default], [Created], [Updated]
             FROM {_chartsTable}
             WHERE [id] = @Id;
             """;
@@ -85,10 +85,10 @@ public sealed class SqlOrgChartRepository : IOrgChartRepository
         cmd.CommandText = $"""
             IF EXISTS (SELECT 1 FROM {_chartsTable} WHERE [id] = @Id)
                 UPDATE {_chartsTable}
-                SET [name] = @Name, [is_default] = @IsDefault, [updated_at] = @UpdatedAt
+                SET [name] = @Name, [is_default] = @IsDefault, [Updated] = @UpdatedAt
                 WHERE [id] = @Id;
             ELSE
-                INSERT INTO {_chartsTable} ([id], [company_id], [name], [is_default], [created_at], [updated_at])
+                INSERT INTO {_chartsTable} ([id], [company_id], [name], [is_default], [Created], [Updated])
                 VALUES (@Id, @CompanyId, @Name, @IsDefault, @CreatedAt, @UpdatedAt);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", chart.Id));

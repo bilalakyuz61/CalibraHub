@@ -55,7 +55,7 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | user_id | UNIQUEIDENTIFIER | NOT NULL | |
 | setting_key | NVARCHAR(200) | NOT NULL | |
 | setting_value | NVARCHAR(MAX) | NULL | |
-| updated_at | DATETIME2(0) | NOT NULL | |
+| Updated | DATETIME2(0) | NOT NULL | |
 
 **Indexler:**
 - `ux_user_settings_user_key` UNIQUE (user_id, setting_key)
@@ -76,8 +76,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | tax_number | NVARCHAR(20) | NOT NULL | |
 | is_e_document_approval_enabled | BIT | NOT NULL | DEFAULT(0) `df_company_is_e_document_approval_enabled` |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_company_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 | connection_string | NVARCHAR(500) | NULL | (eklendi) |
 | city | NVARCHAR(100) | NULL | (eklendi) |
 | district | NVARCHAR(100) | NULL | (eklendi) |
@@ -134,11 +134,11 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | track_combinations | BIT | NOT NULL | DEFAULT(0) |
 | tax_rate | DECIMAL(5,2) | NOT NULL | DEFAULT(20) |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_Items_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
 | created_by_user_id | INT | NULL | |
 | modified_at | DATETIME2 | NULL | |
 | modified_by_user_id | INT | NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 | created_by | NVARCHAR(100) | NULL | |
 | updated_by | NVARCHAR(100) | NULL | |
 | image_data | VARBINARY(MAX) | NULL | |
@@ -215,8 +215,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | name | NVARCHAR(120) | NOT NULL | |
 | data_type | NVARCHAR(30) | NOT NULL | |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_configuration_properties_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ux_configuration_properties_code` UNIQUE (code)
@@ -232,8 +232,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | value | NVARCHAR(160) | NOT NULL | |
 | sort_order | INT | NOT NULL | DEFAULT(0) `df_configuration_property_values_sort_order` |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_configuration_property_values_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ux_configuration_property_values_property_id_value` UNIQUE (feature_id, value)
@@ -250,8 +250,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | group_label | NVARCHAR(120) | NOT NULL | |
 | display_order | INT | NOT NULL | DEFAULT(0) `df_material_card_field_groups_display_order` |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_material_card_field_groups_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 | screen_code | NVARCHAR(60) | NOT NULL | DEFAULT(N'MaterialCards') (eklendi) |
 | layer_key | NVARCHAR(32) | NULL | (eklendi) |
 
@@ -276,8 +276,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | column_span | INT | NOT NULL | DEFAULT(1) `df_material_card_field_settings_column_span` |
 | is_system | BIT | NOT NULL | DEFAULT(0) `df_material_card_field_settings_is_system` |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_material_card_field_settings_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 | screen_code | NVARCHAR(60) | NOT NULL | DEFAULT(N'MaterialCards') (eklendi) |
 | layer_key | NVARCHAR(32) | NULL | (eklendi) |
 
@@ -294,8 +294,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | option_label | NVARCHAR(160) | NOT NULL | |
 | sort_order | INT | NOT NULL | DEFAULT(0) `df_material_card_field_options_sort_order` |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_material_card_field_options_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ux_material_card_field_options_field_definition_option_key` UNIQUE (field_definition_id, option_key)
@@ -329,8 +329,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | id | INT | NOT NULL | IDENTITY(1,1), PK `pk_screen_layout_definitions` |
 | screen_code | NVARCHAR(80) | NOT NULL | |
 | layout_json | NVARCHAR(MAX) | NOT NULL | |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ux_screen_layout_definitions_screen_code` UNIQUE (screen_code)
@@ -348,8 +348,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | numeric_value | DECIMAL(18,4) | NULL | |
 | date_value | DATE | NULL | |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_stock_card_property_mappings_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ix_stock_card_property_mappings_stock_card_id` (stock_card_id)
@@ -447,8 +447,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | parent_document_id | INT | NULL | |
 | notes | NVARCHAR(MAX) | NULL | |
 | created_by | NVARCHAR(120) | NULL | |
-| created_at | DATETIME2(0) | NOT NULL | |
-| updated_at | DATETIME2(0) | NOT NULL | |
+| Created | DATETIME2(0) | NOT NULL | |
+| Updated | DATETIME2(0) | NOT NULL | |
 | is_active | BIT | NOT NULL | DEFAULT(1) |
 
 **Indexler:**
@@ -520,8 +520,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | rep_code | NVARCHAR(20) | NOT NULL | |
 | rep_name | NVARCHAR(200) | NOT NULL | |
 | is_active | BIT | NOT NULL | DEFAULT(1) |
-| created_at | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
-| updated_at | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
+| Created | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
+| Updated | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
 
 **Indexler:**
 - `ux_sales_representatives_code` UNIQUE (rep_code)
@@ -537,41 +537,40 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | Kolon | Tip | Null | Default / Not |
 |-------|-----|------|---------------|
 | id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
-| group_code | NVARCHAR(50) | NOT NULL | |
-| group_name | NVARCHAR(150) | NOT NULL | |
+| CompanyId | INT | NOT NULL | Tenant ayrımı |
+| Code | NVARCHAR(50) | NOT NULL | |
+| Name | NVARCHAR(150) | NOT NULL | |
 | description | NVARCHAR(500) | NULL | |
-| is_active | BIT | NOT NULL | DEFAULT(1) `df_price_groups_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| IsActive | BIT | NOT NULL | DEFAULT(1) `df_price_groups_is_active` |
+| Created | DATETIME2 | NOT NULL | Kayıt tarihi |
+| Updated | DATETIME2 | NOT NULL | Son güncelleme |
 
 **Indexler:**
-- `ux_price_groups_code` UNIQUE (group_code)
+- `ux_price_groups_company_code` UNIQUE (CompanyId, Code)
 
 ### `PriceList`
 
-> Fiyat listesi satırları (grup × stok × kombinasyon × tarih → alış/satış fiyatı).
+> Fiyat listesi satırları. **Her satır TEK bir fiyat tutar** — `PriceType` tek harf kod: `'b'` (alış), `'s'` (satış). İleride `'m'` (maliyet) eklenebilir. Aynı (GroupId × ItemId × ConfigId × CurrencyId × ValidFrom) kombinasyonu için her tip ayrı bir satırdır.
 
 | Kolon | Tip | Null | Default / Not |
 |-------|-----|------|---------------|
 | id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
-| price_group_id | INT | NOT NULL | FK `fk_price_list_entries_price_groups` → `PriceGroup(id)` |
-| item_id | INT | NULL | |
-| material_code | NVARCHAR(60) | NOT NULL | |
-| material_name | NVARCHAR(200) | NULL | |
-| combination_code | NVARCHAR(100) | NULL | (eklendi) |
-| combination_name | NVARCHAR(300) | NULL | (eklendi) |
-| currency | NVARCHAR(10) | NOT NULL | DEFAULT(N'TRY') `df_price_list_entries_currency` |
-| buying_price | DECIMAL(18,4) | NOT NULL | DEFAULT(0) `df_price_list_entries_buying_price` |
-| selling_price | DECIMAL(18,4) | NOT NULL | DEFAULT(0) `df_price_list_entries_selling_price` |
-| valid_from | DATE | NOT NULL | |
-| valid_to | DATE | NULL | |
-| is_active | BIT | NOT NULL | DEFAULT(1) `df_price_list_entries_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| GroupId | INT | NOT NULL | FK `fk_pricelist_pricegroup` → `PriceGroup(id)` |
+| ItemId | INT | NOT NULL | FK → `Items(id)` |
+| ConfigId | INT | NULL | FK → `ItemConfiguration(Id)` (varyantlı ürünler için) |
+| CurrencyId | INT | NOT NULL | FK → `currencies(id)` |
+| PriceType | NVARCHAR(10) | NOT NULL | Tek harf kod: `'b'` (alış), `'s'` (satış). İleride `'m'` (maliyet) gibi yeni tipler eklenebilir |
+| Price | DECIMAL(18,4) | NOT NULL | DEFAULT(0) `df_pricelist_price` |
+| ValidFrom | DATE | NOT NULL | Fiyatın geçerli olmaya başladığı gün |
+| ValidTo | DATE | NULL | Bitiş; null = açık uçlu |
+| IsActive | BIT | NOT NULL | DEFAULT(1) `df_pricelist_is_active` |
+| Created | DATETIME2 | NOT NULL | Kayıt tarihi |
+| Updated | DATETIME2 | NOT NULL | Son güncelleme |
 
 **Indexler:**
-- `ix_price_list_entries_group_mat` (price_group_id, material_code)
-- `ix_price_list_entries_lookup` (price_group_id, item_id, combination_code, valid_from)
+- `ix_pricelist_lookup` (GroupId, ItemId, ConfigId, PriceType, ValidFrom)
+
+**Migration notu:** Eski şema `buying_price + selling_price + valid_from + valid_to` (tek satırda iki fiyat) idi. Migration eski satırları `Selling` olarak etiketler ve her biri için paralel `Buying` satırı ekler. UI artık her satırı bağımsız olarak gösterir: tabloda `Tip` (Alış/Satış) sütunu + tek `Fiyat` sütunu; tanımlama sırasında kullanıcı önce Alış veya Satış seçer, sonra ilgili tip için tek fiyat girer.
 
 ### `currencies`
 
@@ -582,28 +581,33 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | name | NVARCHAR(100) | NOT NULL | |
 | symbol | NVARCHAR(5) | NULL | |
 | is_active | BIT | NOT NULL | DEFAULT(1) |
-| created_at | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
-| updated_at | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
+| Created | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
+| Updated | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
 
 **Indexler:**
 - `ux_currencies_code` UNIQUE (code)
 
-### `exchange_rates`
+### `Exchange`
 
 | Kolon | Tip | Null | Default / Not |
 |-------|-----|------|---------------|
 | id | INT | NOT NULL | IDENTITY(1,1), PRIMARY KEY |
-| currency_code | NVARCHAR(5) | NOT NULL | |
-| rate_date | DATE | NOT NULL | |
+| CurrencyId | INT | NOT NULL | FK → currencies(id) |
+| date | DATE | NOT NULL | |
 | buying_rate | DECIMAL(18,6) | NOT NULL | |
 | selling_rate | DECIMAL(18,6) | NOT NULL | |
-| effective_buying_rate | DECIMAL(18,6) | NOT NULL | DEFAULT(0) (eklendi) |
-| effective_selling_rate | DECIMAL(18,6) | NOT NULL | DEFAULT(0) (eklendi) |
+| effective_buying_rate | DECIMAL(18,6) | NOT NULL | DEFAULT(0) |
+| effective_selling_rate | DECIMAL(18,6) | NOT NULL | DEFAULT(0) |
 | source | NVARCHAR(20) | NOT NULL | DEFAULT(N'TCMB') |
-| created_at | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
+| Created | DATETIME2(0) | NOT NULL | DEFAULT(GETDATE()) |
 
 **Indexler:**
-- `ux_exchange_rates_code_date` UNIQUE (currency_code, rate_date)
+- `ux_exchange_currency_date` UNIQUE (CurrencyId, date)
+
+**Foreign Keys:**
+- `fk_exchange_currency` (CurrencyId → currencies.id)
+
+**Migration notu:** Eski `currency_code` (NVARCHAR) + `rate_date` kolonları, `currencies` JOIN ile backfill edilip drop edildi (idempotent migration `CalibraDatabaseInitializer`'da).
 
 ---
 
@@ -623,8 +627,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | gjs_data | NVARCHAR(MAX) | NULL | |
 | jsr_content | NVARCHAR(MAX) | NULL | (eklendi — frx_content yerine) |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_design_templates_is_active` |
-| created_at | DATETIME2(0) | NOT NULL | |
-| updated_at | DATETIME2(0) | NOT NULL | |
+| Created | DATETIME2(0) | NOT NULL | |
+| Updated | DATETIME2(0) | NOT NULL | |
 
 **Indexler:**
 - `ix_design_templates_type` (type)
@@ -640,8 +644,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | sql_view_name | NVARCHAR(128) | NULL | |
 | description | NVARCHAR(500) | NULL | |
 | is_active | BIT | NOT NULL | DEFAULT(1) |
-| created_at | DATETIME2(0) | NOT NULL | |
-| updated_at | DATETIME2(0) | NOT NULL | |
+| Created | DATETIME2(0) | NOT NULL | |
+| Updated | DATETIME2(0) | NOT NULL | |
 
 **Indexler:**
 - `ux_document_types_code` UNIQUE (code)
@@ -658,8 +662,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | description | NVARCHAR(500) | NULL | |
 | is_default | BIT | NOT NULL | DEFAULT(0) |
 | is_active | BIT | NOT NULL | DEFAULT(1) |
-| created_at | DATETIME2(0) | NOT NULL | |
-| updated_at | DATETIME2(0) | NOT NULL | |
+| Created | DATETIME2(0) | NOT NULL | |
+| Updated | DATETIME2(0) | NOT NULL | |
 
 **Indexler:**
 - `ix_report_templates_document_type` (document_type_id)
@@ -721,7 +725,7 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | user_id | UNIQUEIDENTIFIER | NOT NULL | |
 | name | NVARCHAR(200) | NOT NULL | |
 | parent_folder_id | UNIQUEIDENTIFIER | NULL | |
-| created_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
 | is_deleted | BIT | NOT NULL | DEFAULT(0) `df_note_folders_is_deleted` |
 
 **Indexler:**
@@ -766,8 +770,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | user_id | UNIQUEIDENTIFIER | NOT NULL | |
 | title | NVARCHAR(200) | NOT NULL | |
 | content | NVARCHAR(MAX) | NULL | |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 | is_deleted | BIT | NOT NULL | DEFAULT(0) `df_notes_is_deleted` |
 | is_fully_encrypted | BIT | NOT NULL | DEFAULT(0) `df_notes_is_fully_encrypted` |
 | encryption_hint | NVARCHAR(300) | NULL | |
@@ -885,8 +889,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | numeric_value | DECIMAL(18,4) | NULL | |
 | date_value | DATETIME2 | NULL | |
 | boolean_value | BIT | NULL | |
-| created_at | DATETIME2(0) | NOT NULL | |
-| updated_at | DATETIME2(0) | NOT NULL | |
+| Created | DATETIME2(0) | NOT NULL | |
+| Updated | DATETIME2(0) | NOT NULL | |
 
 **Indexler:**
 - `ix_dfv_entity` (screen_code, entity_id)
@@ -941,8 +945,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | company_id | INT | NOT NULL | |
 | name | NVARCHAR(200) | NOT NULL | |
 | is_default | BIT | NOT NULL | DEFAULT(0) `df_org_charts_is_default` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ix_org_charts_company` (company_id)
@@ -964,8 +968,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | username | NVARCHAR(160) | NOT NULL | |
 | password | NVARCHAR(300) | NOT NULL | |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_erp_connection_settings_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ux_erp_connection_settings_provider_company_business_branch` UNIQUE (provider, company, business, branch)
@@ -1004,8 +1008,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | base_url | NVARCHAR(500) | NOT NULL | |
 | auth_config_json | NVARCHAR(MAX) | NULL | |
 | is_active | BIT | NOT NULL | DEFAULT 1 |
-| created_at | DATETIME2 | NOT NULL | DEFAULT GETDATE() |
-| updated_at | DATETIME2 | NOT NULL | DEFAULT GETDATE() |
+| Created | DATETIME2 | NOT NULL | DEFAULT GETDATE() |
+| Updated | DATETIME2 | NOT NULL | DEFAULT GETDATE() |
 
 ### `integration_event_definitions`
 
@@ -1021,8 +1025,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | stop_on_error | BIT | NOT NULL | DEFAULT(1) |
 | is_active | BIT | NOT NULL | DEFAULT(1) |
 | execution_order | INT | NOT NULL | DEFAULT(0) |
-| created_at | DATETIME2(0) | NOT NULL | |
-| updated_at | DATETIME2(0) | NOT NULL | |
+| Created | DATETIME2(0) | NOT NULL | |
+| Updated | DATETIME2(0) | NOT NULL | |
 | action_type | NVARCHAR(50) | NOT NULL | DEFAULT 'SqlCommand' (eklendi) |
 | procedure_name | NVARCHAR(200) | NULL | (eklendi) |
 | parameters_json | NVARCHAR(MAX) | NULL | (eklendi) |
@@ -1074,8 +1078,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | include_issued_earchive_in_pull | BIT | NOT NULL | DEFAULT(0) |
 | include_issued_edispatch_in_pull | BIT | NOT NULL | DEFAULT(0) |
 | is_active | BIT | NOT NULL | DEFAULT(1) |
-| created_at | DATETIME2 | NOT NULL | DEFAULT(GETDATE()) |
-| updated_at | DATETIME2 | NOT NULL | DEFAULT(GETDATE()) |
+| Created | DATETIME2 | NOT NULL | DEFAULT(GETDATE()) |
+| Updated | DATETIME2 | NOT NULL | DEFAULT(GETDATE()) |
 | app_str | NVARCHAR(100) | NULL | (eklendi) |
 | source | NVARCHAR(20) | NULL | (eklendi) |
 | app_version | NVARCHAR(20) | NULL | (eklendi) |
@@ -1107,8 +1111,8 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | oauth2_refresh_token | NVARCHAR(500) | NULL | (eklendi) |
 | use_ssl | BIT | NOT NULL | DEFAULT(1) `df_smtp_profiles_use_ssl` |
 | is_active | BIT | NOT NULL | DEFAULT(1) `df_smtp_profiles_is_active` |
-| created_at | DATETIME2 | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Created | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ux_smtp_profiles_name` UNIQUE (name)
@@ -1191,7 +1195,7 @@ Toplam tablo: 63 (mevcut projede kullanılan tüm tablolar)
 | label_key | NVARCHAR(120) | NOT NULL | |
 | language_code | NVARCHAR(20) | NOT NULL | |
 | label_text | NVARCHAR(500) | NOT NULL | |
-| updated_at | DATETIME2 | NOT NULL | |
+| Updated | DATETIME2 | NOT NULL | |
 
 **Indexler:**
 - `ux_ui_label_translations_form_label_language` UNIQUE (form_key, label_key, language_code)

@@ -22,4 +22,14 @@ public sealed class DocumentEditViewModel
     /// View bunu inline olarak window.__CALIBRA_SALES_QUOTE_LINE_GRID__'e yazar.
     /// </summary>
     public string LineGridConfigJson { get; set; } = "null";
+
+    /// <summary>
+    /// Belge tipi kodu (satis_teklifi / satis_siparisi). View baslik + SaveDocument
+    /// body'sine documentTypeId injection icin kullanilir. Yeni belgede ?type=order
+    /// parametresi ile geliyorsa siparis modu; mevcut belgede DB'den okunan deger.
+    /// </summary>
+    public string DocumentTypeCode { get; set; } = "satis_teklifi";
+
+    /// <summary>Belge tipi DB ID'si — SaveDocument body'sinde gonderilir.</summary>
+    public int? DocumentTypeId { get; set; }
 }

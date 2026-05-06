@@ -1,0 +1,51 @@
+{
+  "uid": "calibra-sales",
+  "title": "Satis Performansi",
+  "tags": ["calibra", "sales"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5m",
+  "time": { "from": "now-90d", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Top 10 Musteri (90 Gun)",
+      "datasource": null,
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT TOP 10 c.Name AS Musteri, COUNT(d.Id) AS BelgeSayisi, SUM(ISNULL(d.TotalAmount, 0)) AS ToplamTutar FROM Documents d INNER JOIN Contact c ON d.ContactId = c.Id WHERE $__timeFilter(d.CreatedAt) GROUP BY c.Name ORDER BY ToplamTutar DESC;"
+        }
+      ],
+      "options": { "showHeader": true },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Aylik Belge Sayisi",
+      "datasource": null,
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT FORMAT(CreatedAt, 'yyyy-MM') AS Ay, COUNT(*) AS BelgeSayisi FROM Documents WHERE $__timeFilter(CreatedAt) GROUP BY FORMAT(CreatedAt, 'yyyy-MM') ORDER BY Ay;"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    }
+  ]
+}

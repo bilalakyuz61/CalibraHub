@@ -1,7 +1,14 @@
 @model CalibraHub.Web.Models.Sales.DocumentEditViewModel
 @{
-    ViewData["Title"] = Model.DocumentId.HasValue ? "Teklif Duzenle" : "Yeni Teklif";
-    ViewData["FormCode"] = "SALES_QUOTE_EDIT";
+    var isOrder = string.Equals(Model.DocumentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase);
+    var entityLabel = isOrder ? "Siparis" : "Teklif";
+    // Form kodu: belge tipine göre — Satış Teklifi vs Satış Siparişi.
+    // Widget tanımları, alan rehberi binding'leri ve DynamicWidgetRenderer
+    // bu form kodları üzerinden ayrı ayrı yönetilir.
+    var headerFormCode = isOrder ? "SALES_ORDER_EDIT" : "SALES_QUOTE_EDIT";
+    var lineFormCode   = isOrder ? "SALES_ORDER_LINES" : "SALES_QUOTE_LINES";
+    ViewData["Title"] = Model.DocumentId.HasValue ? entityLabel + " Duzenle" : "Yeni " + entityLabel;
+    ViewData["FormCode"] = headerFormCode;
     ViewData["BodyClass"] = "page-sales-quote-edit";
     ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
         + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quotes</td><td style='padding:6px 8px;'>Satis teklifi master bilgileri (belge no, tarih, cari hesap, temsilci, durum)</td></tr>"
@@ -12,6 +19,7 @@
 }
 
 @section Styles {
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
 <style>
     /* Sayfa genelinde number input spinner'larini gizle (yukari/asagi ok tuslari) */
     .page-sales-quote-edit input[type="number"]::-webkit-outer-spin-button,
@@ -103,56 +111,27 @@
     }
     .sqe-card__body { padding: 16px 18px; }
 
-    /* Link widget — input + "Git" buton grubu (EAV link dataType) */
-    .sqe-link-group { display: flex; align-items: stretch; gap: 8px; }
-    .sqe-link-group > .sqe-input,
-    .sqe-link-group > input[type="text"] { flex: 1 1 auto; min-width: 0; }
-    .sqe-link-btn {
-        display: inline-flex; align-items: center; justify-content: center;
-        gap: 6px; padding: 0 14px; min-height: 34px;
-        border-radius: 10px; font-size: .78rem; font-weight: 600;
-        color: #7c3aed; text-decoration: none;
-        background: rgba(139, 92, 246, 0.12);
-        border: 1px solid rgba(139, 92, 246, 0.4);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        transition: all .18s ease; cursor: pointer; flex-shrink: 0;
-    }
-    .sqe-link-btn:hover:not(.is-disabled) {
-        background: rgba(139, 92, 246, 0.22);
-        border-color: rgba(139, 92, 246, 0.6);
-        color: #5b21b6; transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.18);
-    }
-    .sqe-link-btn.is-disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
-    body.app-theme-dark .sqe-link-btn {
-        color: #c4b5fd;
-        background: rgba(139, 92, 246, 0.14);
-        border-color: rgba(139, 92, 246, 0.45);
-    }
-    body.app-theme-dark .sqe-link-btn:hover:not(.is-disabled) {
-        background: rgba(139, 92, 246, 0.25);
-        color: #e9d5ff;
-    }
+    /* NOT: .sqe-link-group / .sqe-link-btn / .sqe-lookup-group widgetField.css'e
+       tasindi (DynamicWidgetRenderer/widgetField.css). Renderer artik wf-link-group,
+       wf-link-btn, wf-lookup-group emit ediyor — tek nokta tasarim sistemi. Asagidaki
+       .sqe-lookup-btn / .sqe-lookup-clear / .sqe-lookup-modal* legacy buton + modal
+       (FixedFieldLookupBridge / Razor inline lookup) icin burada kalir. */
 
-    /* Lookup widget (EAV lookup dataType) */
-    .sqe-lookup-group { display: flex; align-items: stretch; gap: 8px; position: relative; }
-    .sqe-lookup-group > .sqe-input,
-    .sqe-lookup-group > input[type="text"] { flex: 1 1 auto; min-width: 0; }
+    /* Lookup widget legacy buton (FixedFieldLookupBridge / sabit alan) */
     .sqe-lookup-btn, .sqe-lookup-clear {
         display: inline-flex; align-items: center; justify-content: center;
         min-width: 34px; min-height: 34px; padding: 0 10px;
         border-radius: 10px; cursor: pointer; flex-shrink: 0;
-        border: 1px solid rgba(245, 158, 11, 0.45);
-        background: rgba(245, 158, 11, 0.12);
-        color: #d97706;
+        border: 1px solid rgba(99, 102, 241, 0.45);
+        background: rgba(99, 102, 241, 0.12);
+        color: #6366f1;
         backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
         transition: all .18s ease;
     }
     .sqe-lookup-btn:hover:not(:disabled) {
-        background: rgba(245, 158, 11, 0.22);
-        border-color: rgba(245, 158, 11, 0.65);
-        transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+        background: rgba(99, 102, 241, 0.22);
+        border-color: rgba(99, 102, 241, 0.65);
+        transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
     }
     .sqe-lookup-btn:disabled { opacity: .35; cursor: not-allowed; }
     .sqe-lookup-clear {
@@ -166,7 +145,7 @@
     }
     body.app-theme-dark .sqe-lookup-btn {
         color: #fcd34d;
-        background: rgba(245, 158, 11, 0.14);
+        background: rgba(99, 102, 241, 0.14);
     }
     body.app-theme-dark .sqe-lookup-clear { color: #fda4af; }
 
@@ -195,7 +174,7 @@
     .sqe-lookup-modal header {
         padding: 14px 18px; display: flex; align-items: center; gap: 10px;
         border-bottom: 1px solid var(--app-border, #e2e8f0);
-        color: #d97706;
+        color: #6366f1;
     }
     .sqe-lookup-modal header input {
         flex: 1; min-width: 0;
@@ -205,8 +184,8 @@
         font-size: .85rem; outline: none;
     }
     .sqe-lookup-modal header input:focus {
-        border-color: rgba(245, 158, 11, 0.55);
-        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+        border-color: rgba(99, 102, 241, 0.55);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
     }
     .sqe-lookup-close {
         background: transparent; border: none; color: inherit; cursor: pointer;
@@ -226,7 +205,7 @@
         background: var(--app-muted-surface, #f8fafc);
         text-align: left; padding: 10px 14px;
         font-weight: 700;
-        font-size: .78rem; color: #b45309;
+        font-size: .78rem; color: #4f46e5;
         border-bottom: 1px solid var(--app-border, #e2e8f0);
     }
     .sqe-lookup-table tbody tr {
@@ -234,7 +213,7 @@
         border-bottom: 1px solid var(--app-border, #f1f5f9);
         transition: background .12s;
     }
-    .sqe-lookup-table tbody tr:hover { background: rgba(245, 158, 11, 0.09); }
+    .sqe-lookup-table tbody tr:hover { background: rgba(99, 102, 241, 0.09); }
     .sqe-lookup-table td { padding: 9px 14px; color: var(--app-text, #334155); }
     .sqe-lookup-empty, .sqe-lookup-sentinel {
         text-align: center; padding: 20px;
@@ -247,6 +226,212 @@
         padding: 10px 18px; font-size: .7rem; opacity: .6;
         border-top: 1px solid var(--app-border, #e2e8f0);
     }
+    /* ── Kolon basligi (distinct filtre ikonu icerebilir) ── */
+    .sqe-lookup-th-inner { display: flex; align-items: center; gap: 6px; }
+    .sqe-lookup-th-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .sqe-lookup-col-filter {
+        background: transparent; border: none; cursor: pointer;
+        padding: 3px; border-radius: 4px;
+        color: rgba(0,0,0,0.35);
+        display: inline-flex; align-items: center; gap: 3px;
+        transition: all .12s;
+    }
+    .sqe-lookup-col-filter:hover {
+        background: rgba(99, 102, 241, 0.12);
+        color: #4f46e5;
+    }
+    .sqe-lookup-col-filter--active {
+        background: rgba(99, 102, 241, 0.18) !important;
+        color: #4f46e5 !important;
+    }
+    .sqe-lookup-col-filter-count {
+        font-size: .58rem; font-weight: 700;
+        background: #6366f1; color: #fff;
+        padding: 1px 5px; border-radius: 999px;
+        line-height: 1.1; min-width: 12px; text-align: center;
+    }
+    body.app-theme-dark .sqe-lookup-col-filter { color: rgba(255,255,255,0.40); }
+    body.app-theme-dark .sqe-lookup-col-filter:hover {
+        background: rgba(165, 180, 252, 0.14); color: #a5b4fc;
+    }
+    body.app-theme-dark .sqe-lookup-col-filter--active {
+        background: rgba(165, 180, 252, 0.18) !important; color: #a5b4fc !important;
+    }
+    .sqe-lookup-footer-filter {
+        margin-left: auto;
+        font-size: .68rem; font-weight: 600;
+        color: #6366f1;
+    }
+    body.app-theme-dark .sqe-lookup-footer-filter { color: #a5b4fc; }
+
+    /* ── Excel-tarzi kolon filtre acilir popover'i ──
+       NOT: body.app-theme-dark CSS degiskenleri (--app-surface vb.) tanimlamiyor;
+       o yuzden dark icin explicit override gerekli (yoksa fallback #ffffff kalir). */
+    .sqe-lookup-popover {
+        background: var(--app-surface, #ffffff);
+        border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 12px;
+        box-shadow: 0 22px 64px rgba(0, 0, 0, 0.20);
+        overflow: hidden;
+        display: flex; flex-direction: column;
+        animation: sqeLookupPopIn .12s ease-out;
+        font-size: .75rem;
+        color: var(--app-text, #334155);
+    }
+    body.app-theme-dark .sqe-lookup-popover {
+        background: #1a1f2e;
+        border-color: rgba(255, 255, 255, 0.10);
+        box-shadow: 0 22px 64px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.02);
+        color: rgba(255, 255, 255, 0.85);
+    }
+    @@keyframes sqeLookupPopIn {
+        from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .sqe-lookup-popover-title {
+        display: flex; align-items: center; gap: 6px;
+        padding: 9px 12px 8px;
+        font-size: .68rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .55px;
+        color: #475569;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    body.app-theme-dark .sqe-lookup-popover-title {
+        color: rgba(255, 255, 255, 0.82);
+        border-bottom-color: rgba(255, 255, 255, 0.06);
+    }
+    .sqe-lookup-popover-title svg { color: #6366f1; opacity: .9; }
+    body.app-theme-dark .sqe-lookup-popover-title svg { color: #a5b4fc; }
+    .sqe-lookup-popover-search-wrap {
+        position: relative;
+        padding: 8px 10px 4px;
+    }
+    .sqe-lookup-popover-search-ico {
+        position: absolute;
+        left: 18px; top: 50%; transform: translateY(-30%);
+        opacity: .45; pointer-events: none;
+    }
+    .sqe-lookup-popover-search {
+        width: 100%; padding: 6px 8px 6px 26px;
+        font-size: .72rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fafc;
+        color: inherit; outline: none;
+    }
+    .sqe-lookup-popover-search:focus {
+        border-color: rgba(99, 102, 241, 0.55);
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+    }
+    body.app-theme-dark .sqe-lookup-popover-search {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.10);
+        color: rgba(255, 255, 255, 0.85);
+    }
+    .sqe-lookup-popover-actions {
+        display: flex; align-items: center; gap: 6px;
+        padding: 4px 12px 6px;
+        font-size: .68rem;
+    }
+    .sqe-lookup-popover-actions button {
+        background: transparent; border: none; cursor: pointer;
+        color: #6366f1; font-weight: 600;
+        padding: 2px 4px; border-radius: 4px;
+        transition: background .12s;
+    }
+    .sqe-lookup-popover-actions button:hover { background: rgba(99, 102, 241, 0.12); }
+    body.app-theme-dark .sqe-lookup-popover-actions button { color: #a5b4fc; }
+    body.app-theme-dark .sqe-lookup-popover-actions button:hover { background: rgba(165, 180, 252, 0.12); }
+    .sqe-lookup-popover-divider { opacity: .35; }
+    .sqe-lookup-popover-count {
+        margin-left: auto; opacity: .55; font-weight: 500;
+    }
+    .sqe-lookup-popover-list {
+        flex: 1; overflow-y: auto;
+        max-height: 240px;
+        padding: 2px 0;
+        border-top: 1px solid #e2e8f0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    body.app-theme-dark .sqe-lookup-popover-list {
+        border-top-color: rgba(255, 255, 255, 0.06);
+        border-bottom-color: rgba(255, 255, 255, 0.06);
+    }
+    .sqe-lookup-popover-empty {
+        text-align: center; padding: 16px 8px;
+        font-size: .7rem; opacity: .55;
+    }
+    .sqe-lookup-popover-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 5px 12px;
+        cursor: pointer;
+        transition: background .1s;
+        font-size: .72rem;
+        user-select: none;
+    }
+    .sqe-lookup-popover-row:hover { background: rgba(99, 102, 241, 0.10); }
+    body.app-theme-dark .sqe-lookup-popover-row:hover { background: rgba(165, 180, 252, 0.10); }
+    .sqe-lookup-popover-row--checked {
+        background: rgba(99, 102, 241, 0.15);
+        font-weight: 600;
+        color: #4f46e5;
+    }
+    body.app-theme-dark .sqe-lookup-popover-row--checked {
+        background: rgba(165, 180, 252, 0.18);
+        color: #c7d2fe;
+    }
+    .sqe-lookup-popover-row--checked:hover { background: rgba(99, 102, 241, 0.22) !important; }
+    body.app-theme-dark .sqe-lookup-popover-row--checked:hover { background: rgba(165, 180, 252, 0.26) !important; }
+    .sqe-lookup-popover-checkbox {
+        width: 14px; height: 14px;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 3px;
+        background: #ffffff;
+        display: inline-flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        color: #fff;
+        transition: all .1s;
+    }
+    .sqe-lookup-popover-row--checked .sqe-lookup-popover-checkbox {
+        background: #6366f1;
+        border-color: #6366f1;
+    }
+    body.app-theme-dark .sqe-lookup-popover-checkbox {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.25);
+    }
+    .sqe-lookup-popover-row-label {
+        flex: 1; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .sqe-lookup-popover-footer {
+        display: flex; gap: 6px; justify-content: flex-end;
+        padding: 8px 10px;
+    }
+    .sqe-lookup-popover-btn {
+        padding: 5px 12px; border-radius: 6px; cursor: pointer;
+        font-size: .72rem; font-weight: 600;
+        border: 1px solid transparent;
+        transition: all .12s;
+    }
+    .sqe-lookup-popover-btn--ghost {
+        background: transparent;
+        border-color: #e2e8f0;
+        color: inherit;
+    }
+    .sqe-lookup-popover-btn--ghost:hover {
+        background: #f1f5f9;
+    }
+    body.app-theme-dark .sqe-lookup-popover-btn--ghost {
+        border-color: rgba(255, 255, 255, 0.10);
+    }
+    body.app-theme-dark .sqe-lookup-popover-btn--ghost:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+    .sqe-lookup-popover-btn--primary {
+        background: #6366f1; color: #fff; border-color: #6366f1;
+    }
+    .sqe-lookup-popover-btn--primary:hover { background: #4f46e5; border-color: #4f46e5; }
 
     /* ══════════════════════════════════════════════════════════
        Grid (Alt Tablo / Master-Detail) widget — Faz E
@@ -516,26 +701,26 @@
 
     /* ── Horizontal form (etiket yanında alan) ── */
     .sqe-hform {
-        display: flex; flex-direction: column; gap: 8px;
-        padding: 16px 20px; max-width: 600px;
+        display: flex; flex-direction: column; gap: 10px;
+        padding: 16px 20px; max-width: 720px;
     }
     .sqe-hrow {
-        display: flex; align-items: center; gap: 12px; min-height: 32px;
+        display: flex; align-items: center; gap: 12px; min-height: 38px;
     }
     .sqe-hlabel {
-        flex: 0 0 120px; text-align: left;
-        font-size: 0.75rem; font-weight: 600;
+        flex: 0 0 150px; text-align: left;
+        font-size: 0.86rem; font-weight: 600;
         color: var(--app-text-muted, #64748b);
         white-space: nowrap; user-select: none;
     }
     body.app-theme-dark .sqe-hlabel {
-        color: rgba(255,255,255,.7);
+        color: rgba(255,255,255,.78);
     }
     /* Cari Isim: input degil, salt-okunur etiket (span) */
     .sqe-hlabel-value {
         display: inline-block;
         padding: 4px 0;
-        font-size: 0.86rem;
+        font-size: 0.9rem;
         font-weight: 600;
         color: #1e293b;
         min-height: 1.4em;
@@ -552,8 +737,95 @@
     body.app-theme-dark .sqe-hlabel-value:empty::before {
         color: rgba(255,255,255,.35);
     }
+    /* Cari Isim — Cari Kod kartinin yaninda, hafif indigo-tinted badge */
+    .sqe-customer-name.sqe-hlabel-value {
+        display: inline-block;
+        margin-left: 4px;
+        padding: 0;
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: #4f46e5;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 320px;
+        min-height: 0;
+    }
+    .sqe-customer-name.sqe-hlabel-value:empty { display: none; }
+    body.app-theme-dark .sqe-customer-name.sqe-hlabel-value {
+        color: #c7d2fe;
+    }
     .sqe-hinput {
         flex: 1; max-width: 280px;
+    }
+    /* ── Yumusak hat alani: form-control-sm / form-select-sm Bootstrap defaultlarini
+       sadece bu sayfaya ozgu olarak premium hisse cevirir (LookupCard ile uyumlu) ── */
+    .sqe-hform .form-control,
+    .sqe-hform .form-select,
+    .sqe-tab-pane.is-active input.form-control,
+    .sqe-tab-pane.is-active select.form-select,
+    .sqe-tab-pane.is-active textarea.form-control {
+        height: 38px;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        box-shadow: 0 1px 2px rgba(15,23,42,.04);
+        padding: 0 12px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #0f172a;
+        transition: border-color .12s, box-shadow .12s, background .12s;
+    }
+    .sqe-tab-pane.is-active textarea.form-control {
+        height: auto;
+        min-height: 96px;
+        padding: 10px 12px;
+        line-height: 1.45;
+    }
+    .sqe-hform .form-control:hover:not(:disabled):not([readonly]),
+    .sqe-hform .form-select:hover:not(:disabled),
+    .sqe-tab-pane.is-active input.form-control:hover:not(:disabled):not([readonly]),
+    .sqe-tab-pane.is-active select.form-select:hover:not(:disabled),
+    .sqe-tab-pane.is-active textarea.form-control:hover:not(:disabled):not([readonly]) {
+        border-color: #c7d2fe;
+    }
+    .sqe-hform .form-control:focus,
+    .sqe-hform .form-select:focus,
+    .sqe-tab-pane.is-active input.form-control:focus,
+    .sqe-tab-pane.is-active select.form-select:focus,
+    .sqe-tab-pane.is-active textarea.form-control:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.18);
+        outline: none;
+    }
+    body.app-theme-dark .sqe-hform .form-control,
+    body.app-theme-dark .sqe-hform .form-select,
+    body.app-theme-dark .sqe-tab-pane.is-active input.form-control,
+    body.app-theme-dark .sqe-tab-pane.is-active select.form-select,
+    body.app-theme-dark .sqe-tab-pane.is-active textarea.form-control {
+        background: rgba(255,255,255,.04);
+        border-color: rgba(255,255,255,.08);
+        color: #f1f5f9;
+        box-shadow: none;
+    }
+    body.app-theme-dark .sqe-hform .form-control:hover:not(:disabled):not([readonly]),
+    body.app-theme-dark .sqe-tab-pane.is-active input.form-control:hover:not(:disabled):not([readonly]),
+    body.app-theme-dark .sqe-tab-pane.is-active select.form-select:hover:not(:disabled),
+    body.app-theme-dark .sqe-tab-pane.is-active textarea.form-control:hover:not(:disabled):not([readonly]) {
+        border-color: rgba(165,180,252,.35);
+    }
+    body.app-theme-dark .sqe-hform .form-control:focus,
+    body.app-theme-dark .sqe-tab-pane.is-active input.form-control:focus,
+    body.app-theme-dark .sqe-tab-pane.is-active select.form-select:focus,
+    body.app-theme-dark .sqe-tab-pane.is-active textarea.form-control:focus {
+        border-color: #a5b4fc;
+        box-shadow: 0 0 0 3px rgba(99,102,241,.25);
+        background: rgba(255,255,255,.06);
+    }
+    /* Date input takvim ikonu: yumusak hat icinde nefes alabilsin */
+    .sqe-hform .form-control[type="date"],
+    .sqe-tab-pane.is-active input.form-control[type="date"] {
+        padding-right: 8px;
     }
     .sqe-hinput.is-locked {
         background: rgba(148, 163, 184, 0.12) !important;
@@ -576,8 +848,33 @@
         font-weight: 600;
     }
     .sqe-customer-warn.is-visible { display: block; }
-    .sqe-hinput[type="date"] {
-        max-width: 160px;
+    /* ── Cari Kod (LookupCard) wrapper: React .gl-wrapper'a 280px genislik ver ki
+       diger alanlarla ayni hizada bitsin. Bos birakilirsa icerige gore daralir. ── */
+    .sqe-hform .sqe-hrow .gl-wrapper {
+        flex: 0 0 280px;
+        max-width: 280px;
+        min-width: 0;
+    }
+
+    /* ── Sure + Tarih combo: tek satirda 280px paylasiyorlar (diger alanlarla hizali) ── */
+    .sqe-hform .sqe-hcombo {
+        flex: 0 0 280px;
+        max-width: 280px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+    }
+    .sqe-hform .sqe-hcombo > input.sqe-hinput,
+    .sqe-hform .sqe-hcombo > input.flatpickr-input,
+    .sqe-hform .sqe-hcombo > input.sqe-fp-input {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: none !important;
+    }
+    .sqe-hform .sqe-hcombo > input.sqe-fp-days {
+        flex: 0 0 72px;
+        max-width: 72px !important;
+        text-align: center;
     }
     .sqe-hlabel--link {
         cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
@@ -820,11 +1117,11 @@
         font-variant-numeric: tabular-nums;
     }
     body.app-theme-dark .sqe-grand-total {
-        color: #fbbf24;
+        color: #a5b4fc;
         font-size: 1.05rem;
     }
     body.app-theme-dark .sqe-grand-total .sqe-total-value {
-        color: #fbbf24;
+        color: #a5b4fc;
     }
 
     /* Status badges — dark tema */
@@ -988,27 +1285,71 @@
         background: rgba(99,102,241,0.08); color: #4338ca; border-color: rgba(99,102,241,0.25);
     }
 
+    /* Has-sub item — saga ok bayragi gosterir */
+    .sqe-actions-item--has-sub.is-open {
+        background: rgba(99,102,241,0.10);
+        color: #c7d2fe;
+        border-color: rgba(99,102,241,0.22);
+    }
+    body.app-theme-light .sqe-actions-item--has-sub.is-open {
+        background: rgba(99,102,241,0.08);
+        color: #4338ca;
+        border-color: rgba(99,102,241,0.25);
+    }
+
+    /* Sub-popup (Durum Degistir liste) */
+    .sqe-status-sub {
+        display: none; flex-direction: column; gap: 2px;
+        position: fixed; min-width: 180px; padding: 6px;
+        background: linear-gradient(180deg, rgba(28,32,48,0.97) 0%, rgba(20,24,38,0.97) 100%);
+        border: 1px solid rgba(99,102,241,0.18);
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.55), 0 6px 20px rgba(99,102,241,0.18);
+        backdrop-filter: blur(18px) saturate(140%);
+        -webkit-backdrop-filter: blur(18px) saturate(140%);
+        z-index: 4001;  /* actions dropdown z-index'inin uzerinde */
+    }
+    body.app-theme-light .sqe-status-sub {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border-color: rgba(99,102,241,0.20);
+        box-shadow: 0 12px 36px rgba(15,23,42,0.14), 0 4px 14px rgba(99,102,241,0.10);
+    }
+    .sqe-status-sub.is-open { display: flex; }
+
+    .sqe-actions-item__dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        flex-shrink: 0; margin-right: 4px;
+        box-shadow: 0 0 0 2px rgba(255,255,255,0.06);
+    }
+    body.app-theme-light .sqe-actions-item__dot { box-shadow: 0 0 0 2px #f8fafc; }
+    .sqe-status-dot--draft     { background: #94a3b8; }
+    .sqe-status-dot--sent      { background: #38bdf8; }
+    .sqe-status-dot--approved  { background: #34d399; }
+    .sqe-status-dot--rejected  { background: #f87171; }
+    .sqe-status-dot--cancelled { background: #fb923c; }
+
     /* ── Sol tab + sag icerik body ── */
     .sqe-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
     .sqe-tab-nav {
-        width: 180px; flex-shrink: 0;
+        width: 200px; flex-shrink: 0;
         border-right: 1px solid var(--app-border,#dde3ee);
         background: var(--app-surface,#fff);
-        padding: 10px 8px;
+        padding: 10px 10px;
         display: flex; flex-direction: column;
-        padding: 8px 0; overflow-y: auto;
+        overflow-y: auto;
     }
     body.app-theme-dark .sqe-tab-nav {
         background: rgba(255,255,255,.02); border-right-color: rgba(255,255,255,.06);
     }
     .sqe-tab-btn {
         display: block; width: 100%; text-align: left;
-        padding: 8px 14px; font-size: 0.8rem; font-weight: 600;
+        padding: 10px 16px; font-size: 0.92rem; font-weight: 600;
         color: var(--app-text-muted,#64748b); background: none;
         border: 1px solid transparent; border-radius: 8px;
-        margin-bottom: 2px;
+        margin-bottom: 4px;
         border-left: 3px solid transparent; cursor: pointer;
         transition: color .12s, background .12s, border-color .12s;
+        letter-spacing: .005em;
     }
     .sqe-tab-btn:hover {
         background: var(--app-muted-surface,#f3f5f7); color: var(--app-text,#333);
@@ -1248,7 +1589,7 @@
         align-items: start;
     }
     .sqe-widget-wrap .sqe-grid-2:has(.calibra-modern-wrap) .sqe-field {
-        padding-top: 12px;
+        padding-top: 14px;
     }
     .sqe-widget-wrap .sqe-input,
     .sqe-widget-wrap .sqe-select,
@@ -1537,6 +1878,94 @@
         line-height: 1.6;
         transition: min-height 0.1s;
     }
+
+    /* ── flatpickr CalibraHub temasi — kurumsal yumusak hat ── */
+    .flatpickr-calendar {
+        border-radius: 14px !important;
+        box-shadow: 0 16px 48px rgba(15,23,42,.16), 0 4px 12px rgba(15,23,42,.06) !important;
+        border: 1px solid rgba(99,102,241,.16) !important;
+        padding: 8px !important;
+        font-family: inherit !important;
+        background: #ffffff !important;
+    }
+    .flatpickr-calendar.arrowTop:before { border-bottom-color: rgba(99,102,241,.16) !important; }
+    .flatpickr-calendar.arrowTop:after { border-bottom-color: #ffffff !important; }
+    .flatpickr-months .flatpickr-month { background: transparent !important; height: 38px !important; color: #1e293b !important; }
+    .flatpickr-current-month {
+        color: #1e293b !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+        padding-top: 5px !important;
+    }
+    .flatpickr-current-month input.cur-year { color: #1e293b !important; font-weight: 700 !important; }
+    .flatpickr-monthDropdown-months { color: #1e293b !important; font-weight: 700 !important; }
+    .flatpickr-weekdays, .flatpickr-weekdaycontainer { background: transparent !important; }
+    span.flatpickr-weekday {
+        color: #94a3b8 !important; font-weight: 600 !important;
+        background: transparent !important; font-size: 0.75rem !important;
+    }
+    .dayContainer { padding: 4px 0 !important; }
+    .flatpickr-day {
+        border-radius: 9px !important;
+        color: #334155 !important;
+        font-weight: 500 !important;
+        height: 36px !important;
+        line-height: 36px !important;
+        margin: 1px !important;
+        max-width: 36px !important;
+        transition: background .15s, color .15s, transform .12s !important;
+        border-color: transparent !important;
+    }
+    .flatpickr-day:hover, .flatpickr-day:focus {
+        background: rgba(99,102,241,.10) !important;
+        border-color: transparent !important;
+        color: #4f46e5 !important;
+    }
+    .flatpickr-day.today {
+        border-color: #6366f1 !important;
+        color: #6366f1 !important;
+        font-weight: 700 !important;
+    }
+    .flatpickr-day.today:hover { background: rgba(99,102,241,.16) !important; color: #4f46e5 !important; border-color: #6366f1 !important; }
+    .flatpickr-day.selected, .flatpickr-day.selected:hover {
+        background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+        border-color: #4f46e5 !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        box-shadow: 0 4px 12px rgba(79,70,229,.32) !important;
+    }
+    .flatpickr-day.flatpickr-disabled, .flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay { color: #cbd5e1 !important; }
+    .flatpickr-prev-month svg, .flatpickr-next-month svg { fill: #6366f1 !important; }
+    .flatpickr-prev-month:hover svg, .flatpickr-next-month:hover svg { fill: #4f46e5 !important; }
+    .numInputWrapper:hover { background: rgba(99,102,241,.06) !important; }
+    .numInputWrapper span.arrowUp:after { border-bottom-color: #6366f1 !important; }
+    .numInputWrapper span.arrowDown:after { border-top-color: #6366f1 !important; }
+
+    /* Dark mode */
+    body.app-theme-dark .flatpickr-calendar {
+        background: #1e293b !important;
+        border-color: rgba(165,180,252,.20) !important;
+        box-shadow: 0 16px 48px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.3) !important;
+    }
+    body.app-theme-dark .flatpickr-calendar.arrowTop:after { border-bottom-color: #1e293b !important; }
+    body.app-theme-dark .flatpickr-calendar.arrowTop:before { border-bottom-color: rgba(165,180,252,.20) !important; }
+    body.app-theme-dark .flatpickr-months .flatpickr-month,
+    body.app-theme-dark .flatpickr-current-month,
+    body.app-theme-dark .flatpickr-current-month input.cur-year,
+    body.app-theme-dark .flatpickr-monthDropdown-months { color: #f1f5f9 !important; }
+    body.app-theme-dark span.flatpickr-weekday { color: rgba(255,255,255,.55) !important; }
+    body.app-theme-dark .flatpickr-day { color: #cbd5e1 !important; }
+    body.app-theme-dark .flatpickr-day:hover, body.app-theme-dark .flatpickr-day:focus {
+        background: rgba(165,180,252,.20) !important; color: #c7d2fe !important;
+    }
+    body.app-theme-dark .flatpickr-day.today { border-color: #a5b4fc !important; color: #c7d2fe !important; }
+    body.app-theme-dark .flatpickr-day.flatpickr-disabled,
+    body.app-theme-dark .flatpickr-day.prevMonthDay,
+    body.app-theme-dark .flatpickr-day.nextMonthDay { color: #475569 !important; }
+    body.app-theme-dark .flatpickr-monthDropdown-months,
+    body.app-theme-dark .flatpickr-monthDropdown-months option { background: #1e293b !important; }
+    body.app-theme-dark .flatpickr-prev-month svg,
+    body.app-theme-dark .flatpickr-next-month svg { fill: #a5b4fc !important; }
 </style>
 }
 
@@ -1556,7 +1985,9 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
             Sil
         </button>
-        <select id="sqStatusSelect" class="form-select form-select-sm" style="max-width:140px;display:none;" onchange="sqChangeStatus()">
+        <!-- Status select gizli — UI uzerinden direkt degistirilmiyor; sqActionStatus
+             (Islemler dropdown'undan) deger atayip change tetikliyor. Badge gorunur kaldi. -->
+        <select id="sqStatusSelect" class="form-select form-select-sm" style="display:none;" onchange="sqChangeStatus()">
             <option value="Draft">Taslak</option>
             <option value="Sent">Gonderildi</option>
             <option value="Approved">Onaylandi</option>
@@ -1602,14 +2033,55 @@
             </svg>
             <span>Yazdir</span>
         </button>
-        <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionChangeType(event)">
+        <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionShowAllCosts(event)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="17 1 21 5 17 9"/>
-                <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-                <polyline points="7 23 3 19 7 15"/>
-                <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                <rect x="4" y="2" width="16" height="20" rx="2"/>
+                <line x1="8" y1="6" x2="16" y2="6"/>
+                <line x1="8" y1="10" x2="16" y2="10"/>
+                <line x1="8" y1="14" x2="16" y2="14"/>
+                <line x1="8" y1="18" x2="13" y2="18"/>
             </svg>
-            <span>Tur Degistir</span>
+            <span>Tüm Ürünlerin Maliyeti</span>
+        </button>
+        <!-- Durum Degistir — tek item, hover/click ile yan acilan sub-popup -->
+        <button type="button" role="menuitem"
+                class="sqe-actions-item sqe-actions-item--has-sub"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                onclick="sqToggleStatusSubmenu(event)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/>
+                <polyline points="12 7 12 12 15 14"/>
+            </svg>
+            <span style="flex:1;">Durum Değiştir</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Durum Degistir alt-popup — actions dropdown'unun yan tarafinda acilir.
+         JS pozisyonu sqStatusSubBtn (yukaridaki has-sub item) referans alir. -->
+    <div class="sqe-status-sub" role="menu" id="sqStatusSubmenu">
+        <button type="button" role="menuitem" class="sqe-actions-item" data-status="Draft"     onclick="sqActionStatus('Draft', event)">
+            <span class="sqe-actions-item__dot sqe-status-dot--draft"></span>
+            <span>Taslak</span>
+        </button>
+        <button type="button" role="menuitem" class="sqe-actions-item" data-status="Sent"      onclick="sqActionStatus('Sent', event)">
+            <span class="sqe-actions-item__dot sqe-status-dot--sent"></span>
+            <span>Gonderildi</span>
+        </button>
+        <button type="button" role="menuitem" class="sqe-actions-item" data-status="Approved"  onclick="sqActionStatus('Approved', event)">
+            <span class="sqe-actions-item__dot sqe-status-dot--approved"></span>
+            <span>Onaylandi</span>
+        </button>
+        <button type="button" role="menuitem" class="sqe-actions-item" data-status="Rejected"  onclick="sqActionStatus('Rejected', event)">
+            <span class="sqe-actions-item__dot sqe-status-dot--rejected"></span>
+            <span>Reddedildi</span>
+        </button>
+        <button type="button" role="menuitem" class="sqe-actions-item" data-status="Cancelled" onclick="sqActionStatus('Cancelled', event)">
+            <span class="sqe-actions-item__dot sqe-status-dot--cancelled"></span>
+            <span>Iptal</span>
         </button>
     </div>
 
@@ -1636,31 +2108,43 @@
         <div class="sqe-tab-pane is-active" data-sqe-pane="general">
             <div class="sqe-hform">
                 <div class="sqe-hrow">
-                    <label class="sqe-hlabel">Teklif No</label>
-                    <input id="sqQuoteNumber" class="form-control form-control-sm sqe-hinput" readonly placeholder="Kaydedildiginde olusturulur" />
+                    <label class="sqe-hlabel">@(isOrder ? "Siparis No" : "Teklif No")</label>
+                    <div class="sqe-hcombo" style="align-items:center;gap:6px;">
+                        <input id="sqQuoteNumber" class="form-control form-control-sm sqe-hinput" readonly placeholder="Kaydedildiginde olusturulur" style="font-size:1rem; font-weight:600;" />
+                        @if (isOrder)
+                        {
+                            <button type="button" id="sqOrderLookupBtn" class="sqe-lookup-btn" title="Tekliften olusturulan siparislerden sec" onclick="openOrderLookup()" style="flex-shrink:0;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <circle cx="11" cy="11" r="7"></circle>
+                                    <path d="m21 21-4.3-4.3"></path>
+                                </svg>
+                            </button>
+                        }
+                    </div>
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel">Tarih</label>
-                    <input id="sqQuoteDate" type="date" class="form-control form-control-sm sqe-hinput" />
+                    <input id="sqQuoteDate" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcValidFromDays()" />
                 </div>
                 <div class="sqe-hrow">
-                    <label class="sqe-hlabel">Gecerlilik</label>
-                    <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" />
+                    <label class="sqe-hlabel">Gecerlilik Gun/Tarih</label>
+                    <div class="sqe-hcombo">
+                        <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" oninput="sqRecalcValidFromDays()" />
+                        <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
+                    </div>
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel">Para Birimi</label>
-                    <select id="sqCurrency" class="form-select form-select-sm sqe-hinput" style="max-width:120px;">
+                    <select id="sqCurrency" class="form-select form-select-sm sqe-hinput" style="max-width:72px;"
+                            onchange="(function(el){ try { window.dispatchEvent(new CustomEvent('sq:currency', { detail: { code: el.value || 'TRY' } })); } catch(e) {} })(this)">
                         <option value="TRY">TRY</option><option value="USD">USD</option><option value="EUR">EUR</option>
                     </select>
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel sqe-hlabel--link" title="Cari karta gitmek icin cift tiklayin" ondblclick="sqGoToCustomerCard()">Cari Kod</label>
-                    <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput" readonly placeholder="Rehberden seciniz" style="max-width:140px;" />
+                    <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput" readonly placeholder="Rehberden seciniz" />
                     <input type="hidden" id="sqCustomerId" />
-                </div>
-                <div class="sqe-hrow">
-                    <label class="sqe-hlabel">Cari Isim</label>
-                    <span id="sqCustomerName" class="sqe-hlabel-value" data-placeholder="Cari secildiginde otomatik dolar"></span>
+                    <span id="sqCustomerName" class="sqe-hlabel-value sqe-customer-name" data-placeholder="Cari secildiginde otomatik dolar"></span>
                 </div>
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel">Temsilci</label>
@@ -1727,7 +2211,7 @@
                  basilir, her biri kendi section header'i ile (sqe-widget-wrap CSS). -->
             <div id="sqWidgetCardWrap" class="sqe-widget-wrap">
                 <div id="sqDynamicWidgets"
-                     data-form-code="SALES_QUOTE_EDIT"
+                     data-form-code="@headerFormCode"
                      data-record-id="">
                 </div>
             </div>
@@ -1765,6 +2249,50 @@
 </section>
 
 @section Scripts {
+<!-- flatpickr — kurumsal date picker (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/tr.js"></script>
+<script>
+    /* sqSetDateValue: programatik deger atamada flatpickr-uyumlu helper.
+       Flatpickr binding varsa setDate() kullanir; yoksa native value. */
+    window.sqSetDateValue = function (id, isoValue) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (el._flatpickr) el._flatpickr.setDate(isoValue || null, false);
+        else el.value = isoValue || '';
+    };
+
+    /* Tarih inputlarinda flatpickr'i aktive et (TR locale + altInput d.m.Y) */
+    (function () {
+        function initSqPickers() {
+            if (typeof flatpickr === 'undefined') return;
+            var locale = (flatpickr.l10ns && flatpickr.l10ns.tr) || 'default';
+            var common = {
+                locale: locale,
+                dateFormat: 'Y-m-d',
+                altInput: true,
+                altFormat: 'd.m.Y',
+                altInputClass: 'form-control form-control-sm sqe-hinput sqe-fp-input',
+                allowInput: true,
+                disableMobile: true
+            };
+            var dateEl = document.getElementById('sqQuoteDate');
+            var validEl = document.getElementById('sqValidUntil');
+            if (dateEl && !dateEl._flatpickr) {
+                flatpickr(dateEl, Object.assign({}, common, {
+                    onChange: function () { if (typeof window.sqRecalcValidFromDays === 'function') window.sqRecalcValidFromDays(); }
+                }));
+            }
+            if (validEl && !validEl._flatpickr) {
+                flatpickr(validEl, Object.assign({}, common, {
+                    onChange: function () { if (typeof window.sqRecalcDaysFromValid === 'function') window.sqRecalcDaysFromValid(); }
+                }));
+            }
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSqPickers);
+        else initSqPickers();
+    })();
+</script>
 <script>
     // ══════════════════════════════════════════════════════════════
     // CalibraLineItemsGrid inline config — server-side hazirlandi
@@ -1772,6 +2300,13 @@
     // meta bilgi tamamen C#'tan gelir — React bileseni hardcode yapmaz.
     // ══════════════════════════════════════════════════════════════
     window.__CALIBRA_SALES_QUOTE_LINE_GRID__ = @Html.Raw(Model.LineGridConfigJson);
+    // Belge tipi server-side resolve — SaveDocument body'sine documentTypeId set etmek
+    // ve UI label/davranis ayrimlari icin (teklif vs siparis).
+    window.__CALIBRA_DOC_TYPE__ = {
+        id: @(Model.DocumentTypeId?.ToString() ?? "null"),
+        code: '@Model.DocumentTypeCode',
+        isOrder: @(string.Equals(Model.DocumentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase) ? "true" : "false")
+    };
 </script>
 <script>
 (function () {
@@ -1858,7 +2393,7 @@
         }
         listEl.innerHTML = '<div class="sqe-att-empty">Yukleniyor...</div>';
         try {
-            var resp = await fetch('/Sales/GetQuoteAttachments?quoteId=' + encodeURIComponent(currentQuoteId));
+            var resp = await fetch('/Sales/GetDocumentAttachments?documentId=' + encodeURIComponent(currentQuoteId));
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             var data = await resp.json();
             sqAttRender(data || []);
@@ -1878,8 +2413,8 @@
             return '<div class="sqe-att-item">' +
                 '<span class="sqe-att-item__name" title="' + a.fileName.replace(/"/g,'&quot;') + '">' + a.fileName + '</span>' +
                 '<span class="sqe-att-item__meta">' + sqFormatBytes(a.fileSize) + '</span>' +
-                '<a class="sqe-att-item__btn" href="/Sales/DownloadQuoteAttachment?id=' + a.id + '" target="_blank" rel="noopener">Indir</a>' +
-                '<button type="button" class="sqe-att-item__btn is-danger" onclick="sqAttDelete(\'' + a.id + '\')">Sil</button>' +
+                '<a class="sqe-att-item__btn" href="/Sales/DownloadDocumentAttachment?id=' + a.id + '" target="_blank" rel="noopener">Indir</a>' +
+                '<button type="button" class="sqe-att-item__btn is-danger" onclick="sqAttDelete(' + a.id + ')">Sil</button>' +
                 '</div>';
         }).join('');
     }
@@ -1892,10 +2427,10 @@
         }
         if (!files || files.length === 0) return;
         var fd = new FormData();
-        fd.append('quoteId', currentQuoteId);
+        fd.append('documentId', currentQuoteId);
         for (var i = 0; i < files.length; i++) fd.append('files', files[i]);
         try {
-            var resp = await fetch('/Sales/UploadQuoteAttachment', { method: 'POST', body: fd });
+            var resp = await fetch('/Sales/UploadDocumentAttachment', { method: 'POST', body: fd });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
         } catch (e) {
             CalibraAlert.error('Yukleme hatasi: ' + (e.message||e));
@@ -1909,10 +2444,10 @@
     window.sqAttDelete = async function(id) {
         if (!confirm('Dosya silinecek. Emin misiniz?')) return;
         try {
-            await fetch('/Sales/DeleteQuoteAttachment', {
+            await fetch('/Sales/DeleteDocumentAttachment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
+                body: JSON.stringify({ id: Number(id) })
             });
         } catch (e) { CalibraAlert.error('Silme hatasi: ' + (e.message||e)); }
         sqAttLoad();
@@ -2084,22 +2619,39 @@
         // Katlanir kart persist — markup hazir oldugunda baglan
         initCollapsiblePersistence();
 
-        // Veri yukleme — uc baslangic fetch'i birbirinden bagimsiz, paralel cek.
-        // loadCustomers rehber React bundle'ini beklemeyi icerir (attach ile birlikte).
-        // Tum ustu tamamlandiktan sonra sqLoadQuote alanlari tek seferde doldurur ve
-        // maske kalkar. Bu sayede kullanici field'lari "sonradan dolma" gormez.
+        // Veri yukleme — 4 fetch (3 lookup + 1 belge) toplamda paralel.
+        // GetQuote network'u lookup'larla ayni anda tetiklenir; processing materials'a
+        // ihtiyac duydugu icin lookup tamamlandiktan sonra prefetch sonucu kullanilir.
+        // Boylece toplam bekleme = max(lookup, GetQuote) — once series'di (max + GetQuote).
         (async function () {
+            var quotePrefetch = currentQuoteId
+                ? fetch('/Sales/GetQuote?id=' + currentQuoteId).then(function (r) {
+                    if (!r.ok) throw new Error('GetQuote HTTP ' + r.status);
+                    return r.json();
+                  }).catch(function (e) {
+                    console.error('GetQuote prefetch hatasi (sqLoadQuote icindeki fallback fetch devreye girecek):', e);
+                    return null;
+                  })
+                : null;
+
+            // loadCustomers SADECE picker (Cari Kod rehber butonu) icin gerekli — degeri
+            // gostermek icin sqLoadQuote zaten data-value/data-display attribute'larini set
+            // eder, picker attach sonrasi degeri okur. Bu yuzden kritik yoldan cikariyoruz:
+            // background'da calissin, kullanici beklesin diye degil.
+            loadCustomers().catch(function(e) { console.error('loadCustomers hatasi:', e); });
+
             try {
                 await Promise.all([
-                    loadCustomers().catch(function(e) { console.error('loadCustomers hatasi:', e); }),
                     loadSalesReps().catch(function(e) { console.error('loadSalesReps hatasi:', e); }),
                     loadMaterials().catch(function(e) { console.error('loadMaterials hatasi:', e); }),
                 ]);
             } catch (e) { console.error('Paralel yukleme hatasi:', e); }
 
             if (currentQuoteId) {
-                try { await sqLoadQuote(currentQuoteId); }
-                catch (e) { console.error('sqLoadQuote hatasi:', e); }
+                try {
+                    var data = await quotePrefetch;
+                    await sqLoadQuote(currentQuoteId, data);
+                } catch (e) { console.error('sqLoadQuote hatasi:', e); }
             } else {
                 sqInitNew();
             }
@@ -2113,21 +2665,73 @@
         })();
     });
 
+    // Cari karta git — satis teklif tab'i acik kalmali, cari kart varsa onu switch et,
+    // yoksa yeni workspace tab'i ac (tabsheet). window.location.href tum iframe'i
+    // navigate ediyordu → satis teklif kapaniyordu; workspace API uzerinden gidip
+    // calisma alani sekmesinde yan-yana acariz.
     window.sqGoToCustomerCard = function () {
-        var custId = document.getElementById('sqCustomerId').value
-        if (!custId) return
-        window.location.href = '/Finance/ContactEdit?id=' + custId
+        var custId = document.getElementById('sqCustomerId').value;
+        if (!custId) return;
+        var custName = (document.getElementById('sqCustomerName') || {}).textContent || '';
+        var url = '/Finance/ContactEdit?id=' + encodeURIComponent(custId);
+        var title = custName ? ('Cari Kart — ' + custName) : 'Cari Kart';
+        try {
+            var topWin = window.top || window;
+            if (topWin && topWin.CalibraHub && typeof topWin.CalibraHub.openWorkspaceTab === 'function') {
+                topWin.CalibraHub.openWorkspaceTab({
+                    url:       url,
+                    title:     title,
+                    matchPath: '/Finance/ContactEdit'  // bu path'li tab acik ise onu switch
+                });
+                return;
+            }
+        } catch (_) { /* cross-origin → fallback */ }
+        // Fallback: parent shell yoksa yeni sekmede ac (mevcut tab'i bozma)
+        window.open(url, '_blank');
     }
 
     function attachCustomerGuide() {
         if (window.CalibraHub && window.CalibraHub.attachGuide) {
             window.CalibraHub.attachGuide('#sqCustomerDisplay', 'CUSTOMERS', {
-                formCode: 'SALES_QUOTE_EDIT',
-                fillMap: { '#sqCustomerId': 'Id', '#sqCustomerName': 'AccountTitle' }
+                formCode: '@headerFormCode',
+                // SalesRepId — cari kart uzerinde tanimliysa otomatik dolar; bos gelen
+                // (cari icin temsilci atanmamis) durumda mevcut deger korunur cunku
+                // attachGuide bos string yazmaz.
+                fillMap: {
+                    '#sqCustomerId': 'Id',
+                    '#sqCustomerName': 'AccountTitle',
+                    '#sqSalesRepId': 'SalesRepId'
+                }
             });
             return true;
         }
         return false;
+    }
+
+    /**
+     * openOrderLookup — Sipariş modu (window.__CALIBRA_DOC_TYPE__.isOrder) iken,
+     * sipariş no'nun yanındaki rehber butonu tarafından çağrılır.
+     * SALES_ORDERS standart rehberini (cbv_Guide_SalesOrders) açar; secilen
+     * sipariş için DocumentEdit'e ?id= ile yonlendirir.
+     */
+    function openOrderLookup() {
+        if (!window.CalibraHub || !window.CalibraHub.openGuideLookup) {
+            console.warn('[SQE] openGuideLookup hazir degil');
+            return;
+        }
+        window.CalibraHub.openGuideLookup('SALES_ORDERS', {
+            guideLabel: 'Tekliften Olusturulan Siparisler',
+            onPick: function (row) {
+                var id = row && row.cells && row.cells.Id;
+                if (!id) {
+                    console.warn('[SQE] order lookup: secilen satirda Id yok', row);
+                    return;
+                }
+                // currentQuoteId ayni ise tekrar yukleme
+                if (typeof currentQuoteId !== 'undefined' && Number(id) === Number(currentQuoteId)) return;
+                window.location.href = '/Sales/DocumentEdit?id=' + id;
+            }
+        });
     }
 
     async function loadCustomers() {
@@ -2208,10 +2812,55 @@
         }
     };
 
+    /**
+     * Gecerlilik sure (gun) <-> tarih senkronu.
+     * Tarih veya gun degistiginde otomatik gecerlilik tarihi hesaplar.
+     */
+    function sqRecalcValidFromDays() {
+        var dateEl = document.getElementById('sqQuoteDate');
+        var daysEl = document.getElementById('sqValidDays');
+        var validEl = document.getElementById('sqValidUntil');
+        if (!dateEl || !daysEl || !validEl) return;
+        var dateStr = dateEl.value;
+        var daysVal = daysEl.value;
+        if (!dateStr || daysVal === '' || daysVal == null) return;
+        var days = parseInt(daysVal, 10);
+        if (isNaN(days) || days < 0) return;
+        var d = new Date(dateStr + 'T00:00:00');
+        if (isNaN(d.getTime())) return;
+        d.setDate(d.getDate() + days);
+        var yyyy = d.getFullYear();
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        var dd = String(d.getDate()).padStart(2, '0');
+        var newVal = yyyy + '-' + mm + '-' + dd;
+        if (validEl._flatpickr) validEl._flatpickr.setDate(newVal, false);
+        else validEl.value = newVal;
+    }
+
+    function sqRecalcDaysFromValid() {
+        var dateEl = document.getElementById('sqQuoteDate');
+        var validEl = document.getElementById('sqValidUntil');
+        var daysEl = document.getElementById('sqValidDays');
+        if (!dateEl || !daysEl || !validEl) return;
+        var dateStr = dateEl.value;
+        var validStr = validEl.value;
+        if (!dateStr || !validStr) { daysEl.value = ''; return; }
+        var d1 = new Date(dateStr + 'T00:00:00');
+        var d2 = new Date(validStr + 'T00:00:00');
+        if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return;
+        var diffMs = d2.getTime() - d1.getTime();
+        var days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        daysEl.value = days >= 0 ? days : 0;
+    }
+    /* Inline oninput="..." attribute'larinin global scope'ta gormesi icin window'a bagla */
+    window.sqRecalcValidFromDays = sqRecalcValidFromDays;
+    window.sqRecalcDaysFromValid = sqRecalcDaysFromValid;
+
     async function sqInitNew() {
         window.applyCustomerLock(false);
-        document.getElementById('sqQuoteDate').value = new Date().toISOString().split('T')[0];
-        document.getElementById('sqValidUntil').value = '';
+        window.sqSetDateValue('sqQuoteDate', new Date().toISOString().split('T')[0]);
+        window.sqSetDateValue('sqValidUntil', '');
+        document.getElementById('sqValidDays').value = '';
         document.getElementById('sqCustomerId').value = '';
         document.getElementById('sqCustomerDisplay').value = '';
         document.getElementById('sqCustomerDisplay').removeAttribute('data-value');
@@ -2219,6 +2868,9 @@
         document.getElementById('sqCustomerName').textContent = '';
         document.getElementById('sqSalesRepId').value = '';
         document.getElementById('sqCurrency').value = 'TRY';
+        // Programatik set 'change' event tetiklemez — kalem grid'i ve diger
+        // dinleyiciler icin custom event firlat.
+        try { window.dispatchEvent(new CustomEvent('sq:currency', { detail: { code: 'TRY' } })); } catch (e) {}
         document.getElementById('sqDiscountRate').value = '0';
         document.getElementById('sqPaymentTerms').value = '';
         document.getElementById('sqDeliveryTerms').value = '';
@@ -2243,28 +2895,39 @@
         document.getElementById('sqQuoteNumber').value = '';
     }
 
-    async function sqLoadQuote(id) {
+    async function sqLoadQuote(id, prefetchedData) {
         try {
-            var resp = await fetch('/Sales/GetQuote?id=' + id);
-            if (!resp.ok) throw new Error('GetQuote HTTP ' + resp.status + ' — id: ' + id);
-            var data = await resp.json();
+            var data = prefetchedData;
+            if (!data) {
+                var resp = await fetch('/Sales/GetQuote?id=' + id);
+                if (!resp.ok) throw new Error('GetQuote HTTP ' + resp.status + ' — id: ' + id);
+                data = await resp.json();
+            }
             if (!data || !data.quote) throw new Error('GetQuote bos veya gecersiz yanit dondu.');
             var q = data.quote;
             currentQuoteId = q.id;
             document.getElementById('sqQuoteNumber').value = q.documentNumber || '';
             var docDate = q.documentDate || q.quoteDate;
-            document.getElementById('sqQuoteDate').value = docDate ? docDate.split('T')[0] : '';
-            document.getElementById('sqValidUntil').value = q.validUntil ? q.validUntil.split('T')[0] : '';
+            window.sqSetDateValue('sqQuoteDate', docDate ? docDate.split('T')[0] : '');
+            window.sqSetDateValue('sqValidUntil', q.validUntil ? q.validUntil.split('T')[0] : '');
+            sqRecalcDaysFromValid();
             document.getElementById('sqCustomerId').value = q.contactId != null ? q.contactId : '';
             // Rehber display alanını doldur — Cari Kod + Cari İsim
             var custDisp = document.getElementById('sqCustomerDisplay');
             // Cari Kod alani yalnizca AccountCode'u gosterir; isim ayri alanda
             custDisp.value = q.contactCode || '';
             custDisp.setAttribute('data-value', q.contactCode || '');
-            custDisp.setAttribute('data-display', q.contactCode || '');
+            // data-display: bridge initial display state'i icin — adres/baslik gosterimi
+            custDisp.setAttribute('data-display', q.contactName || q.contactCode || '');
+            // FixedFieldLookupBridge mount edildikten SONRA bu satir async olarak deger yaziyor;
+            // ffl-sync event'i bridge'a "DOM degisti, state'i tazele" sinyali verir. Aksi halde
+            // bridge React state'i bos kaliyor ve kullanici Cari Kod input'unu bos goruyor.
+            try { custDisp.dispatchEvent(new CustomEvent('ffl-sync', { bubbles: true })); } catch (_) {}
             document.getElementById('sqCustomerName').textContent = q.contactName || '';
             document.getElementById('sqSalesRepId').value = q.salesRepId != null ? q.salesRepId : '';
             document.getElementById('sqCurrency').value = q.currency || 'TRY';
+            // Programatik set sonrasi kalem grid sembolu yenilesin.
+            try { window.dispatchEvent(new CustomEvent('sq:currency', { detail: { code: q.currency || 'TRY' } })); } catch (e) {}
             document.getElementById('sqDiscountRate').value = q.discountRate ?? 0;
             document.getElementById('sqPaymentTerms').value = q.paymentTerms || '';
             document.getElementById('sqDeliveryTerms').value = q.deliveryTerms || '';
@@ -2273,7 +2936,8 @@
             sqNotesEl2.value = q.notes || '';
             autoResizeTextarea(sqNotesEl2);
             document.getElementById('sqBtnDelete').disabled = false;
-            document.getElementById('sqStatusSelect').style.display = '';
+            // sqStatusSelect kalici sekilde gizli — durum degisikligi Islemler dropdown'undan
+            // (sqActionStatus) yapiliyor; eskiden inline acilan select kaldirildi.
             document.getElementById('sqStatusSelect').value = q.status;
             document.getElementById('sqStatusBadge').innerHTML = '<span class="sqe-status-badge sqe-status-' + q.status + '">' + statusLabel(q.status) + '</span>';
 
@@ -2656,6 +3320,9 @@
 
         var payload  = {
             id: currentQuoteId,
+            // Belge tipi: yeni belge ise server-side resolved id (window.__CALIBRA_DOC_TYPE__),
+            // mevcut belgede null gonderilir (server existing.DocumentTypeId'i korur).
+            documentTypeId:  (window.__CALIBRA_DOC_TYPE__ && window.__CALIBRA_DOC_TYPE__.id) || null,
             documentDate:    document.getElementById('sqQuoteDate').value,
             validUntil:      document.getElementById('sqValidUntil').value || null,
             contactId:       parseInt(custIdVal) || null,
@@ -2752,7 +3419,7 @@
             }
             document.getElementById('sqQuoteNumber').value = data.quote.documentNumber;
             document.getElementById('sqBtnDelete').disabled = false;
-            document.getElementById('sqStatusSelect').style.display = '';
+            // Status select kalici gizli — durum degisikligi Islemler dropdown'undan yapiliyor.
             document.getElementById('sqStatusSelect').value = data.quote.status;
             document.getElementById('sqStatusBadge').innerHTML = '<span class="sqe-status-badge sqe-status-' + data.quote.status + '">' + statusLabel(data.quote.status) + '</span>';
 
@@ -2784,7 +3451,7 @@
                             var targetId = refLines[i].id;
                             if (!(targetId > 0)) continue;
                             try {
-                                await fetch('/api/widgets/forms/SALES_QUOTE_LINES/records/' + encodeURIComponent(String(targetId)), {
+                                await fetch('/api/widgets/forms/@(lineFormCode)/records/' + encodeURIComponent(String(targetId)), {
                                     method: 'POST',
                                     credentials: 'same-origin',
                                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -2948,22 +3615,62 @@
         if (drop) drop.classList.remove('is-open');
         if (menu) menu.classList.remove('is-open');
         if (btn) btn.setAttribute('aria-expanded', 'false');
+        // Sub-menu'yu de kapat
+        sqCloseStatusSubmenu();
+    }
+    // ── Durum Degistir alt-popup ─────────────────────────────────────
+    function sqPositionStatusSubmenu() {
+        var btn = document.querySelector('.sqe-actions-item--has-sub');
+        var sub = document.getElementById('sqStatusSubmenu');
+        if (!btn || !sub) return;
+        var r = btn.getBoundingClientRect();
+        var sw = sub.offsetWidth || 200;
+        var sh = sub.offsetHeight || 240;
+        var vw = window.innerWidth, vh = window.innerHeight;
+        // Once saga ac (item'in saginda); sigmiyorsa sola
+        var left = r.right + 6;
+        if (left + sw > vw - 8) left = Math.max(8, r.left - sw - 6);
+        var top  = r.top;
+        if (top + sh > vh - 8) top = Math.max(8, vh - sh - 8);
+        sub.style.left = left + 'px';
+        sub.style.top  = top  + 'px';
+    }
+    window.sqToggleStatusSubmenu = function (ev) {
+        if (ev) ev.stopPropagation();
+        var btn = ev && ev.currentTarget ? ev.currentTarget : document.querySelector('.sqe-actions-item--has-sub');
+        var sub = document.getElementById('sqStatusSubmenu');
+        if (!sub || !btn) return;
+        var willOpen = !sub.classList.contains('is-open');
+        sub.classList.toggle('is-open', willOpen);
+        btn.classList.toggle('is-open', willOpen);
+        btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        if (willOpen) requestAnimationFrame(sqPositionStatusSubmenu);
+    };
+    function sqCloseStatusSubmenu() {
+        var btn = document.querySelector('.sqe-actions-item--has-sub');
+        var sub = document.getElementById('sqStatusSubmenu');
+        if (sub) sub.classList.remove('is-open');
+        if (btn) { btn.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); }
     }
     document.addEventListener('click', function (e) {
         var drop = document.getElementById('sqActionsDropdown');
         if (!drop || !drop.classList.contains('is-open')) return;
         var menu = document.getElementById('sqActionsMenu');
+        var sub  = document.getElementById('sqStatusSubmenu');
         if (menu && menu.contains(e.target)) return; // buton veya cevresi
         if (drop.contains(e.target)) return;          // dropdown item'lari
+        if (sub  && sub.contains(e.target))  return;  // sub-menu item'lari
         sqCloseActionsMenu();
     });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') sqCloseActionsMenu();
     });
-    // Scroll / resize'ta acik menunun pozisyonunu yeniden hesapla
+    // Scroll / resize'ta acik menunun pozisyonunu yeniden hesapla (alt-popup dahil)
     window.addEventListener('scroll', function () {
         var drop = document.getElementById('sqActionsDropdown');
         if (drop && drop.classList.contains('is-open')) sqPositionActionsDropdown();
+        var sub = document.getElementById('sqStatusSubmenu');
+        if (sub && sub.classList.contains('is-open')) sqPositionStatusSubmenu();
     }, true);
     window.addEventListener('resize', function () {
         var drop = document.getElementById('sqActionsDropdown');
@@ -3137,8 +3844,11 @@
                         '</span>' +
                     '</label>' +
                     '<div class="opt-mail" id="sqOptMailFields">' +
-                        '<div style="font-size:11.5px; color:#1d4ed8; padding:6px 10px; background:#eff6ff; border-left:3px solid #3b82f6; border-radius:4px;">' +
-                            'Alici e-postasi teklife ait <strong>cari kart</strong>tan otomatik alinir.' +
+                        '<div><label for="sqOptMailTo">Alıcı(lar) ' +
+                            '<span style="font-weight:400;color:#94a3b8;">— virgül veya noktalı virgülle çoklu alıcı</span>' +
+                        '</label>' +
+                        '<input type="text" id="sqOptMailTo" placeholder="ornek@firma.com, ek@adres.com" />' +
+                        '<div id="sqOptMailToHint" style="font-size:11px;color:#94a3b8;margin-top:4px;">Cari karttan alınıyor…</div>' +
                         '</div>' +
                         '<div><label for="sqOptMailSubject">Konu</label>' +
                         '<input type="text" id="sqOptMailSubject" placeholder="Satis Teklifi" /></div>' +
@@ -3162,6 +3872,31 @@
         var mailFields  = overlay.querySelector('#sqOptMailFields');
         var runBtn      = overlay.querySelector('#sqOptRun');
 
+        var mailToInput = overlay.querySelector('#sqOptMailTo');
+        var mailToHint  = overlay.querySelector('#sqOptMailToHint');
+        var mailToFetched = false; // Bir kez baska bir cariye gore yenilenmesi yeterli
+        function fetchRecipientEmail() {
+            if (mailToFetched || !recordId) return;
+            mailToFetched = true;
+            mailToHint.textContent = 'Cari karttan alınıyor…';
+            mailToHint.style.color = '#94a3b8';
+            fetch('/Document/GetEmailRecipient?recordId=' + encodeURIComponent(recordId), { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (j) {
+                    if (j && j.success && j.email) {
+                        mailToInput.value = j.email;
+                        mailToHint.textContent = 'Cari karttan alındı: ' + (j.contactName || j.contactCode || '') + ' — düzenleyebilir veya yeni alıcı ekleyebilirsiniz.';
+                        mailToHint.style.color = '#16a34a';
+                    } else {
+                        mailToHint.textContent = (j && j.message) || 'Cari kartta e-posta tanımlı değil — alıcı manuel girilmeli.';
+                        mailToHint.style.color = '#b45309';
+                    }
+                })
+                .catch(function () {
+                    mailToHint.textContent = 'Alıcı e-postası alınamadı — manuel girin.';
+                    mailToHint.style.color = '#b45309';
+                });
+        }
         function refresh() {
             if (optPdf.checked) {
                 optPreview.checked = false;
@@ -3174,6 +3909,8 @@
             rowMail.classList.toggle('is-checked',    optMail.checked);
             mailFields.classList.toggle('is-open',    optMail.checked);
             runBtn.disabled = !(optPreview.checked || optPdf.checked || optMail.checked);
+            // Mail secildiyse cari email'ini ilk kez fetch et
+            if (optMail.checked) fetchRecipientEmail();
         }
         [optPreview, optPdf, optMail].forEach(function (cb) {
             cb.addEventListener('change', refresh);
@@ -3207,9 +3944,15 @@
             }
 
             if (optMail.checked) {
+                var toRaw   = (mailToInput.value || '').trim();
                 var subject = (overlay.querySelector('#sqOptMailSubject').value || '').trim();
                 var body    = (overlay.querySelector('#sqOptMailBody').value || '').trim();
                 if (!subject) subject = 'Satis Teklifi';
+                if (!toRaw) {
+                    if (window.CalibraAlert && CalibraAlert.warn) CalibraAlert.warn('Alıcı e-postası gerekli.'); else alert('Alici e-postasi gerekli.');
+                    mailToInput.focus();
+                    return;
+                }
                 runBtn.disabled = true;
                 runBtn.textContent = 'Gonderiliyor...';
                 try {
@@ -3220,7 +3963,7 @@
                         body: JSON.stringify({
                             templateId: templateId,
                             recordId:   recordId,
-                            toEmail:    null,
+                            toEmail:    toRaw,
                             subject:    subject,
                             bodyText:   body,
                             bodyHtml:   null
@@ -3332,25 +4075,64 @@
         document.body.appendChild(overlay);
     }
 
-    // ── Islemler: Tur Degistir ──
-    // Belge turunu (SalesQuote → Order/Proforma vb.) degistirmek icin stub.
-    // Backend donusturme endpoint'i henuz yoksa kullaniciya bilgi mesaji doner.
-    window.sqActionChangeType = function (ev) {
+    // ── Islemler: Durum Degistir ──
+    // Toolbar'daki gizli sqStatusSelect'in degerini set eder ve change event'ini
+    // tetikler. sqChangeStatus zaten POST yapip badge'i gunceller.
+    window.sqActionStatus = function (newStatus, ev) {
         if (ev) ev.stopPropagation();
         sqCloseActionsMenu();
         if (!currentQuoteId) {
             if (window.CalibraAlert && CalibraAlert.warn) {
-                CalibraAlert.warn('Tur degistirmek icin once teklifi kaydedin.');
+                CalibraAlert.warn('Durumu degistirmek icin once teklifi kaydedin.');
             } else {
-                alert('Tur degistirmek icin once teklifi kaydedin.');
+                alert('Durumu degistirmek icin once teklifi kaydedin.');
             }
             return;
         }
-        if (window.CalibraAlert && CalibraAlert.info) {
-            CalibraAlert.info('Belge turu donusumu yakinda aktiflestirilecek.');
-        } else {
-            alert('Belge turu donusumu yakinda aktiflestirilecek.');
+        var sel = document.getElementById('sqStatusSelect');
+        if (!sel) return;
+        if (sel.value === newStatus) return;
+        sel.value = newStatus;
+        // sqChangeStatus tetikleyecek (onchange handler)
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    // ── Islemler: Tum Urunlerin Maliyeti ──
+    // Mevcut belgenin tum kalem satirlarinin recetelerini fiyatlandirip toplar.
+    // Modal acilis: window.dispatchEvent(quote:open-cost-summary, { lines })
+    // QuoteCostSummaryModal React bileseni listener kuruyor (mount.jsx).
+    window.sqActionShowAllCosts = function (ev) {
+        if (ev) ev.stopPropagation();
+        sqCloseActionsMenu();
+        // Kalem satirlarini React grid bridge'inden al — sqSave ile ayni pattern
+        var rawRows = window.__SQ_LINES__ || [];
+        if (window.CalibraHub && window.CalibraHub.salesLineGrid && typeof window.CalibraHub.salesLineGrid.getRows === 'function') {
+            try { rawRows = window.CalibraHub.salesLineGrid.getRows() || rawRows; } catch (_) {}
         }
+        var lines = (rawRows || [])
+            .filter(function (r) { return r && r.materialCode })
+            .map(function (r) {
+                return {
+                    materialCode: r.materialCode,
+                    materialName: r.materialName || '',
+                    configCode:   r.combinationCode || null,
+                    quantity:     Number(r.quantity) || 1,
+                    unitId:       r.unitId || null,
+                };
+            });
+        if (lines.length === 0) {
+            if (window.CalibraAlert && CalibraAlert.warn) {
+                CalibraAlert.warn('Maliyet hesaplamak icin en az bir kalem ekleyin.');
+            } else {
+                alert('Maliyet hesaplamak icin en az bir kalem ekleyin.');
+            }
+            return;
+        }
+        // Belge tarihi → fiyat lookup'unda kullanilir; modal default olarak da #sqQuoteDate'i okur.
+        var validOn = (document.getElementById('sqQuoteDate') || {}).value || '';
+        try {
+            window.dispatchEvent(new CustomEvent('quote:open-cost-summary', { detail: { lines: lines, validOn: validOn } }));
+        } catch (_) {}
     };
 
     window.sqDelete = async function () {
@@ -3495,7 +4277,7 @@
             if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return false;
             try {
                 window._sqDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
-                    formCode: el.getAttribute('data-form-code') || 'SALES_QUOTE_EDIT',
+                    formCode: el.getAttribute('data-form-code') || '@headerFormCode',
                     recordId: el.getAttribute('data-record-id') || '',
                     classPrefix: 'sqe'
                 });
@@ -3529,7 +4311,7 @@
         var msgEl = document.getElementById('sqWidgetEmptyMsg');
         var emptyEl = document.getElementById('sqWidgetEmpty');
         if (!el) return;
-        var formCode = el.getAttribute('data-form-code') || 'SALES_QUOTE_EDIT';
+        var formCode = el.getAttribute('data-form-code') || '@headerFormCode';
         var recordId = el.getAttribute('data-record-id') || '';
         var probeUrl = '/api/widgets/forms/' + encodeURIComponent(formCode)
             + '/records/' + encodeURIComponent(recordId || '-');
@@ -3628,7 +4410,7 @@
                     if (ch && typeof ch.mountDynamicWidgetRenderer === 'function') {
                         try {
                             window._sqDynRenderer = ch.mountDynamicWidgetRenderer(rendererRoot, {
-                                formCode: rendererRoot.getAttribute('data-form-code') || 'SALES_QUOTE_EDIT',
+                                formCode: rendererRoot.getAttribute('data-form-code') || '@headerFormCode',
                                 recordId: rendererRoot.getAttribute('data-record-id') || '',
                                 classPrefix: 'sqe'
                             });
@@ -3760,6 +4542,7 @@
     })();
 })();
 </script>
+
 }
 
 <!-- Kombinasyon Secim Modal -->

@@ -353,25 +353,29 @@ public sealed class NotesController : Controller
         if (file.Length > MaxAttachmentBytes)
             return Json(new { success = false, error = "Dosya boyutu 20 MB sınırını aşıyor." });
 
-        var ext         = Path.GetExtension(file.FileName);
-        var storedName  = Guid.NewGuid().ToString("N") + ext;
-        var attachment  = new NoteAttachment
+        // Dosya icerigini DB'ye yaz (binary_content varbinary(max)). File system'e
+        // yazmiyoruz — multi-server senkronizasyon ve backup tutarliligi icin
+        // tek dogruluk kaynagi: DB.
+        byte[] bytes;
+        await using (var ms = new MemoryStream())
         {
-            NoteId      = noteId,
-            FileName    = Path.GetFileName(file.FileName),
-            StoredName  = storedName,
-            ContentType = file.ContentType,
-            FileSize    = file.Length,
-            UploadedAt  = DateTime.Now,
-            Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim()
+            await file.CopyToAsync(ms, cancellationToken);
+            bytes = ms.ToArray();
+        }
+
+        var ext        = Path.GetExtension(file.FileName);
+        var storedName = Guid.NewGuid().ToString("N") + ext;
+        var attachment = new NoteAttachment
+        {
+            NoteId        = noteId,
+            FileName      = Path.GetFileName(file.FileName),
+            StoredName    = storedName,
+            ContentType   = file.ContentType,
+            FileSize      = file.Length,
+            UploadedAt    = DateTime.Now,
+            Description   = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+            BinaryContent = bytes
         };
-
-        var dir  = AttachmentDir(noteId);
-        Directory.CreateDirectory(dir);
-        var path = Path.Combine(dir, storedName);
-
-        await using (var fs = System.IO.File.Create(path))
-            await file.CopyToAsync(fs, cancellationToken);
 
         await _noteRepository.AddAttachmentAsync(attachment, cancellationToken);
         return Json(new
@@ -398,10 +402,17 @@ public sealed class NotesController : Controller
         var note = await _noteRepository.GetByIdAsync(attachment.NoteId, cancellationToken);
         if (!IsOwner(note, companyId, userId)) return Forbid();
 
-        var path = Path.Combine(AttachmentDir(attachment.NoteId), attachment.StoredName);
-        if (!System.IO.File.Exists(path)) return NotFound();
+        // 1. Once DB'den binary'yi cek (yeni upload'lar burada).
+        var bytes = await _noteRepository.GetAttachmentBinaryAsync(id, cancellationToken);
+        if (bytes is { Length: > 0 })
+            return File(bytes, attachment.ContentType ?? "application/octet-stream", attachment.FileName);
 
-        return PhysicalFile(path, attachment.ContentType ?? "application/octet-stream", attachment.FileName);
+        // 2. Legacy fallback — eski upload'lar file system'de.
+        var path = Path.Combine(AttachmentDir(attachment.NoteId), attachment.StoredName);
+        if (System.IO.File.Exists(path))
+            return PhysicalFile(path, attachment.ContentType ?? "application/octet-stream", attachment.FileName);
+
+        return NotFound();
     }
 
     [HttpPost]
@@ -416,6 +427,7 @@ public sealed class NotesController : Controller
         if (!IsOwner(note, companyId, userId))
             return Json(new { success = false, error = "Erişim reddedildi." });
 
+        // Legacy file system temizligi (yeni upload'larda dosya zaten yok)
         var path = Path.Combine(AttachmentDir(attachment.NoteId), attachment.StoredName);
         if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
 
@@ -614,9 +626,9 @@ public sealed class NotesController : Controller
 
         var reminders = await _noteRepository.GetRemindersAsync(noteId, cancellationToken);
 
-        // Target user display ismini cekmek icin tek seferlik sirket user map'i
+        // Target display isimlerini cekmek icin tek seferlik sirket user map'i
         var userMap = new Dictionary<Guid, string>();
-        if (reminders.Any(r => r.TargetUserId.HasValue))
+        if (reminders.Any(r => r.TargetUserIds.Count > 0))
         {
             var users = await _userProfileRepository.GetAllAsync(cancellationToken);
             foreach (var u in users)
@@ -639,8 +651,12 @@ public sealed class NotesController : Controller
                     recurrenceType  = (int)r.RecurrenceType,
                     recurrenceData  = r.RecurrenceData,
                     deliveryChannel = (int)r.DeliveryChannel,
-                    targetUserId    = r.TargetUserId,
-                    targetUserName  = r.TargetUserId.HasValue && userMap.TryGetValue(r.TargetUserId.Value, out var nm) ? nm : null,
+                    targets         = r.TargetUserIds
+                        .Select(tid => new
+                        {
+                            id       = tid,
+                            fullName = userMap.TryGetValue(tid, out var nm) ? nm : tid.ToString(),
+                        }),
                 })
         });
     }
@@ -674,16 +690,21 @@ public sealed class NotesController : Controller
         if (input.RemindAt <= DateTime.Now)
             return Json(new { success = false, message = "Hatirlatma zamani gelecekte olmali." });
 
-        // Hedef kullanici kontrolu — sirket icindeki aktif bir kullanici olmali
-        Guid? targetUserId = null;
-        string? targetUserName = null;
-        if (input.TargetUserId.HasValue && input.TargetUserId.Value != Guid.Empty)
+        // Hedef kullanicilar — her biri sirket icinde ve aktif olmali
+        var validTargets = new List<(Guid Id, string FullName)>();
+        if (input.TargetUserIds is not null && input.TargetUserIds.Count > 0)
         {
-            var target = await _userProfileRepository.GetByIdAsync(input.TargetUserId.Value, cancellationToken);
-            if (target is null || target.CompanyId != companyId || !target.IsActive)
-                return Json(new { success = false, message = "Hedef kullanici gecersiz." });
-            targetUserId   = target.Id;
-            targetUserName = target.FullName;
+            var allUsers = await _userProfileRepository.GetAllAsync(cancellationToken);
+            var userLookup = allUsers
+                .Where(u => u.CompanyId == companyId && u.IsActive)
+                .ToDictionary(u => u.Id, u => u.FullName);
+            foreach (var tid in input.TargetUserIds.Distinct())
+            {
+                if (tid == Guid.Empty) continue;
+                if (!userLookup.TryGetValue(tid, out var fn))
+                    return Json(new { success = false, message = "Gecersiz hedef kullanici." });
+                validTargets.Add((tid, fn));
+            }
         }
 
         var reminder = new NoteReminder
@@ -693,7 +714,7 @@ public sealed class NotesController : Controller
             RecurrenceType  = input.RecurrenceType,
             RecurrenceData  = string.IsNullOrWhiteSpace(input.RecurrenceData) ? null : input.RecurrenceData.Trim(),
             DeliveryChannel = input.DeliveryChannel,
-            TargetUserId    = targetUserId,
+            TargetUserIds   = validTargets.Select(v => v.Id).ToArray(),
         };
         await _noteRepository.AddReminderAsync(reminder, cancellationToken);
 
@@ -709,8 +730,7 @@ public sealed class NotesController : Controller
                 recurrenceType  = (int)reminder.RecurrenceType,
                 recurrenceData  = reminder.RecurrenceData,
                 deliveryChannel = (int)reminder.DeliveryChannel,
-                targetUserId    = reminder.TargetUserId,
-                targetUserName  = targetUserName,
+                targets         = validTargets.Select(v => new { id = v.Id, fullName = v.FullName }),
             }
         });
     }

@@ -14,10 +14,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLookup } from './useLookup'
-import { guideSchema, guideSearch, guideResolve } from '../DynamicWidgetRenderer/dynamicWidgetService'
+import { guideSearch } from '../DynamicWidgetRenderer/dynamicWidgetService'
 import FieldSettingsForm from './FieldSettingsForm'
 import CombinationPickerModal from './CombinationPickerModal'
-import { Shuffle, Lock } from 'lucide-react'
+import GuideLookupModal from '../GuideLookup/GuideLookupModal'
+import { adaptFormatJson, extractValueDisplay } from '../GuideLookup/guideLookupAdapters'
+import { buildLineExtraOptions, resolveTokens } from '../../utils/fieldTokens'
+import { Shuffle, Lock, Search, Settings } from 'lucide-react'
 
 /**
  * Bir obje'den verilen key ile deger oku — case-insensitive.
@@ -65,6 +68,8 @@ function enrichMaterialPatch(patch, materialCode) {
   fillIfMissing('trackCombinations', readCaseInsensitive(m, 'trackCombinations'))
   fillIfMissing('locationId',        readCaseInsensitive(m, 'defaultLocationId'))
   fillIfMissing('materialName',      readCaseInsensitive(m, 'materialName'))
+  // Stok kartindaki master birim — kullanici malzeme secince Olcu Birimi alani otomatik dolar
+  fillIfMissing('unitId',            readCaseInsensitive(m, 'unitId'))
   return patch
 }
 
@@ -106,6 +111,9 @@ export default function LineGridCell(props) {
   var row = props.row
   var value = props.value
   var onChange = props.onChange
+  // siblingColumns: parent grid'in tum kolon listesi — rehber kisitlarinda
+  // @ dropdown'i icin "Kalem Bilgileri" grubunu uretmek icin kullanilir.
+  var siblingColumns = Array.isArray(props.siblingColumns) ? props.siblingColumns : null
   var isReadonly = column.readonly === true || column.computed === true
 
   var alignClass =
@@ -146,7 +154,7 @@ export default function LineGridCell(props) {
   if (column.type === 'text-lookup') {
     // guideCode varsa tam modal deneyimi (buton + tum kolonlar)
     if (column.guideCode) {
-      return <GuideLookupCell column={column} row={row} value={value} onChange={onChange} baseInputClass={baseInputClass} />
+      return <GuideLookupCell column={column} row={row} value={value} onChange={onChange} baseInputClass={baseInputClass} siblingColumns={siblingColumns} />
     }
     return <TextLookupCell column={column} row={row} value={value} onChange={onChange} baseInputClass={baseInputClass} alignClass={alignClass} />
   }
@@ -509,18 +517,60 @@ function NumericCell(props) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   GuideLookupCell — guideCode ile tam modal rehber deneyimi
-   (FixedFieldLookupBridge'in grid-cell versiyonu)
+   GuideLookupCell — guideCode ile tam modal rehber deneyimi.
+   Modal UI'i ortak `GuideLookupModal`'a delege edilir; bu hucre
+   yalnizca grid-spesifik input shell'i + lookupFillMap + auto-open
+   chain + guided workflow event'lerini yonetir.
    ══════════════════════════════════════════════════════════════ */
-var GUIDE_PAGE_SIZE = 50
 
 function GuideLookupCell(props) {
-  var column   = props.column
-  var row      = props.row  // row reference — auto-open chain icin
-  var value    = props.value
-  var onChange = props.onChange
+  var column         = props.column
+  var row            = props.row  // row reference — auto-open chain icin
+  var value          = props.value
+  var onChange       = props.onChange
+  var siblingColumns = Array.isArray(props.siblingColumns) ? props.siblingColumns : []
 
   var isLight = useIsLight()
+
+  // Alan Ayarlari modal'inda @ dropdown'una eklenecek extra alan secenekleri:
+  // kalem grid'indeki diger kolonlar + secili satirin kombinasyon attribute'lari.
+  // siblingColumns/row degisince yeniden hesaplanir.
+  var extraFieldOptions = useMemo(function () {
+    return buildLineExtraOptions(siblingColumns, row)
+  }, [siblingColumns, row])
+
+  // Rehber arama icin runtime token context — `{#row.fieldKey}` ve
+  // `{#row.combo.attr}` token'lari mevcut satirin canli verisinden cozulur.
+  var tokenContext = useMemo(function () {
+    var combo = {}
+    if (row && Array.isArray(row.combinationDetails)) {
+      row.combinationDetails.forEach(function (d) {
+        if (!d) return
+        var c = d.attributeCode || d.AttributeCode || d.code || d.Code
+        if (!c) return
+        combo[c] = d.value != null ? d.value
+                  : d.Value != null ? d.Value
+                  : d.attributeValue || d.AttributeValue || ''
+      })
+    }
+    return { row: row || {}, combo: combo }
+  }, [row])
+
+  // staticConstraint hazirlanirken filterJson icindeki row/combo token'lari
+  // canli degerlerle replace edilir. {#fieldId} (DOM) token'lari GuideLookupModal/
+  // FixedFieldLookupBridge tarafinda da resolve edilir; biz burada nokta-prefiksli
+  // token'lari erkenden gercek degerle dolduruyoruz (modal acilirken).
+  var resolvedConstraint = useMemo(function () {
+    if (!column.filterJson) return null
+    return resolveTokens(column.filterJson, tokenContext)
+  }, [column.filterJson, tokenContext])
+
+  var [displayVal, setDisplayVal]     = useState('')
+  var [modalOpen, setModalOpen]       = useState(false)
+  var [settingsOpen, setSettingsOpen] = useState(false)
+  var [schemaVersion, setSchemaVersion] = useState(0)
+  var [isShaking, setIsShaking]       = useState(false)
+  var inputElRef = useRef(null)
 
   // ── Auto-open (guided new-line workflow) ──
   // Grid 'material' stage event firlattiginda modal'i otomatik ac — rehber
@@ -531,7 +581,6 @@ function GuideLookupCell(props) {
       if (d.stage !== 'material') return
       if (d.rowUid !== (row && row._uid)) return
       if (column.key !== 'materialCode') return
-      // Modal'i ac
       setModalOpen(true)
     }
     window.addEventListener('lineGrid:autoOpenStage', onAutoOpen)
@@ -539,93 +588,47 @@ function GuideLookupCell(props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row && row._uid, column.key])
 
-  var [displayVal, setDisplayVal] = useState('')
-  var [modalOpen, setModalOpen]   = useState(false)
-  var [settingsOpen, setSettingsOpen] = useState(false)
-  var [schema, setSchema]         = useState(null)
-  var [search, setSearch]         = useState('')
-  var [rows, setRows]             = useState([])
-  var [page, setPage]             = useState(1)
-  var [hasMore, setHasMore]       = useState(false)
-  var [loading, setLoading]       = useState(false)
-  var [error, setError]           = useState(null)
-
-  // formatJson'dan görünür kolon listesi ve kolon etiketleri
-  var parsedFormat = useMemo(function() {
-    if (!column.formatJson) return {}
-    try { return JSON.parse(column.formatJson) || {} }
-    catch (e) { return {} }
-  }, [column.formatJson])
-  var parsedVisible = parsedFormat.visibleColumns || null
-  var colLabels     = parsedFormat.columnLabels   || {}
-
-  var sentinelRef = useRef(null)
-  var scrollRef   = useRef(null)
-
   // Sayfa yüklenince mevcut değeri göster (value = kod, display gösterme)
-  useEffect(function() {
+  useEffect(function () {
     if (!value || !column.guideCode) { setDisplayVal(''); return }
     setDisplayVal(String(value))
   }, [value, column.guideCode])
 
-  // Modal açılınca schema yükle
-  useEffect(function() {
-    if (!modalOpen || schema || !column.guideCode) return undefined
-    var alive = true
-    guideSchema(column.guideCode)
-      .then(function(s) { if (alive) setSchema(s) })
-      .catch(function(e) { if (alive) setError('Schema yüklenemedi: ' + e.message) })
-    return function() { alive = false }
-  }, [modalOpen, column.guideCode, schema])
-
-  // Debounced arama
-  useEffect(function() {
-    if (!modalOpen || !column.guideCode) return undefined
-    var handle = setTimeout(function() { setPage(1); loadPage(1, search, true) }, 300)
-    return function() { clearTimeout(handle) }
-  }, [search, modalOpen, column.guideCode])
-
-  // Infinite scroll
-  useEffect(function() {
-    if (!modalOpen || !hasMore || loading) return undefined
-    var el = sentinelRef.current
-    if (!el) return undefined
-    var observer = new IntersectionObserver(function(entries) {
-      if (entries[0].isIntersecting) {
-        var next = page + 1
-        setPage(next)
-        loadPage(next, search, false)
-      }
-    }, { root: scrollRef.current, threshold: 0.1 })
-    observer.observe(el)
-    return function() { observer.disconnect() }
-  }, [modalOpen, hasMore, loading, page, search])
-
-  var loadPage = useCallback(function(pageNum, searchTerm, replace) {
-    if (!column.guideCode) return
-    setLoading(true)
-    setError(null)
-    guideSearch(column.guideCode, { search: searchTerm, page: pageNum, pageSize: GUIDE_PAGE_SIZE })
-      .then(function(result) {
-        if (!result) { setRows([]); setHasMore(false); setError('Rehber bulunamadı: ' + column.guideCode); return }
-        if (replace) setRows(result.rows || [])
-        else setRows(function(prev) { return prev.concat(result.rows || []) })
-        setHasMore(!!result.hasMore)
-      })
-      .catch(function(e) { setError('Arama başarısız: ' + e.message); if (replace) setRows([]); setHasMore(false) })
-      .finally(function() { setLoading(false) })
-  }, [column.guideCode])
+  // Adapter — Tip 1 (sabit alan) ile ayni: formatJson → birlesik columns
+  var columnsAdapter = useCallback(function (schemaCols) {
+    return adaptFormatJson(column.formatJson, schemaCols)
+  }, [column.formatJson])
 
   function openModal() { setModalOpen(true) }
   function closeModal() {
-    setModalOpen(false); setSearch(''); setRows([]); setPage(1); setHasMore(false); setSchema(null)
+    setModalOpen(false)
+    // Modal kapanis akisi:
+    //   handlePick → onPick(pickRow) → onClose(closeModal)
+    //     - pickRow: setDisplayVal/onChange + requestAnimationFrame(chain dispatch)
+    //     - closeModal: setModalOpen(false) + setTimeout(0) [bu blok]
+    //   Sync flow biter, React re-render → modal unmount.
+    //   setTimeout(0) RAF'tan ONCE calisir → input'a odak verilir.
+    //   Chain modal (combo/extras) RAF'ta acilir, odagi alir.
+    //   Chain bittiginde modal kapanir, browser odagi son aktif elemana (input)
+    //   geri yansitir → kullanici materialCode alaninda kalir.
+    setTimeout(function() {
+      if (inputElRef.current && typeof inputElRef.current.focus === 'function') {
+        try { inputElRef.current.focus() } catch (_) {}
+      }
+    }, 0)
   }
 
   function pickRow(guideRow) {
+    // Per-field valueColumn override (column.formatJson). Yoksa row.value (rehber default).
+    var override = extractValueDisplay(column.formatJson)
+    var pickedVal = (override.valueColumn && guideRow.cells && guideRow.cells[override.valueColumn] != null)
+      ? String(guideRow.cells[override.valueColumn])
+      : (guideRow.value || '')
+
     var patch = {}
-    patch[column.key] = guideRow.value
+    patch[column.key] = pickedVal
     if (column.lookupFillMap && guideRow.cells) {
-      Object.keys(column.lookupFillMap).forEach(function(gridKey) {
+      Object.keys(column.lookupFillMap).forEach(function (gridKey) {
         var cellKey = column.lookupFillMap[gridKey]
         var val = readCaseInsensitive(guideRow.cells, cellKey)
         if (val != null) patch[gridKey] = val
@@ -633,18 +636,19 @@ function GuideLookupCell(props) {
     }
     // Rehber view'i taxRate/stockCardId/trackCombinations barindirmayabilir —
     // satis teklifi sayfasinin yukledigi global materials snapshot'undan tamamla.
-    enrichMaterialPatch(patch, guideRow.value)
-    setDisplayVal(guideRow.value || '')
-    onChange(column.key, guideRow.value, patch)
-    closeModal()
+    enrichMaterialPatch(patch, pickedVal)
+    setDisplayVal(pickedVal)
+    onChange(column.key, pickedVal, patch)
     // Rehberden basarili secim → sessiz satir kaydi (KITT yok)
     if (column.saveOnResolve !== false && typeof window !== 'undefined' && typeof window.sqSave === 'function') {
-      setTimeout(function() {
+      setTimeout(function () {
         try { window.sqSave({ silent: true }) } catch (e) { /* ignore */ }
       }, 150)
     }
     // Guided workflow chain: material secildikten sonra trackCombinations=true
     // ise kombinasyon modal'ini ac; degilse direkt ek alanlar modal'ini ac.
+    // Odak yonetimi closeModal'de — chain modal acilmadan once input'a odaklanilir,
+    // chain modal kapaninca browser odagi input'a geri verir.
     if (column.key === 'materialCode' && row && row._uid) {
       var tracks = patch.trackCombinations === true
       var nextStage = tracks ? 'combo' : 'extras'
@@ -671,9 +675,6 @@ function GuideLookupCell(props) {
   // Manuel kod yazma/paste sonrasi blur'da: kod gecerli mi kontrol et,
   // gecerliyse tum alanlari (lookupFillMap'e gore) otomatik doldur,
   // gecerli degilse kirmizi titrese (shake) animasyonu ile uyari ver.
-  var [isShaking, setIsShaking] = useState(false)
-  var inputElRef = useRef(null)
-
   function triggerShake() {
     setIsShaking(true)
     setTimeout(function () { setIsShaking(false) }, 550)
@@ -700,13 +701,29 @@ function GuideLookupCell(props) {
         pickRow(exact)
       } else {
         triggerShake()
-        // Degeri eski haline don
         setDisplayVal(currentVal)
+        forceFocusBack()
       }
     } catch (e) {
       triggerShake()
       setDisplayVal(currentVal)
+      forceFocusBack()
     }
+  }
+
+  // Hatali kod sonrasi: kullanici alandan cikamasin, odak geri verilsin + yazi secilsin.
+  // Bu sayede ek alan / kombinasyon ekranlarina hatali kod ile gecilemez.
+  function forceFocusBack() {
+    setTimeout(function () {
+      if (inputElRef.current && typeof inputElRef.current.focus === 'function') {
+        try {
+          inputElRef.current.focus()
+          if (typeof inputElRef.current.select === 'function') {
+            inputElRef.current.select()
+          }
+        } catch (_) { /* ignore */ }
+      }
+    }, 0)
   }
 
   function handleInputKeyDown(e) {
@@ -720,27 +737,24 @@ function GuideLookupCell(props) {
     }
   }
 
-  var schemaColumns  = (schema && schema.columns) || []
-  var displayColumns = parsedVisible
-    ? schemaColumns.filter(function(c) { return parsedVisible.includes(c) })
-    : schemaColumns
-
-  // ── Stiller ──
+  // ── Stiller (sadece input shell + butonlar; modal kendi gl-* CSS'ini kullanir) ──
   var inputBg    = isLight ? '#fff'                : 'transparent'
   var inputBdr   = isLight ? '1px solid #e2e8f0'  : '1px solid rgba(255,255,255,0.12)'
   var inputColor = isLight ? '#1e293b'             : 'rgba(255,255,255,0.85)'
   var btnBg      = isLight ? '#f1f5f9'             : 'rgba(255,255,255,0.07)'
   var btnColor   = isLight ? '#6366f1'             : '#818cf8'
-  var modalBg    = isLight
-    ? { background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 24px 64px rgba(0,0,0,0.18)' }
-    : { background: 'rgba(13,17,27,0.98)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', backdropFilter: 'blur(24px)' }
-  var headerBg   = isLight ? '#f8fafc' : 'rgba(255,255,255,0.04)'
-  var rowHover   = isLight ? '#f1f5f9' : 'rgba(255,255,255,0.05)'
-  var thColor    = isLight ? '#64748b' : 'rgba(255,255,255,0.4)'
-  var tdColor    = isLight ? '#334155' : 'rgba(255,255,255,0.75)'
-  var searchBg   = isLight ? '#f8fafc' : 'rgba(255,255,255,0.06)'
-  var searchBdr  = isLight ? '1px solid #e2e8f0'  : '1px solid rgba(255,255,255,0.12)'
-  var divBdr     = isLight ? '1px solid #e2e8f0'  : '1px solid rgba(255,255,255,0.08)'
+
+  // GuideLookupModal'a header'a sigdirilan ek buton — Alan Ayarlari
+  var headerActions = column.formCode ? (
+    <button
+      type="button"
+      onClick={function () { setSettingsOpen(true) }}
+      title="Alan Ayarları"
+      className="gl-settings-btn"
+    >
+      <Settings size={15} strokeWidth={2} />
+    </button>
+  ) : null
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '100%', gap: 2 }}>
@@ -749,7 +763,7 @@ function GuideLookupCell(props) {
         ref={inputElRef}
         type="text"
         value={displayVal}
-        onChange={function(e) {
+        onChange={function (e) {
           // Sadece local state'i guncelle — parent'a gonderme henuz.
           // Boylece elle kod yazarken materialName/unit/stockCardId gibi alanlar silinmez.
           setDisplayVal(e.target.value)
@@ -796,139 +810,34 @@ function GuideLookupCell(props) {
           fontSize: 14,
         }}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
+        <Search size={13} strokeWidth={2.2} />
       </button>
 
       {/* Alan Ayarları formu */}
       <FieldSettingsForm
         column={column}
         isOpen={settingsOpen}
-        onClose={function() { setSettingsOpen(false); setSchema(null) }}
+        onClose={function () {
+          setSettingsOpen(false)
+          // Kullanici kolon konfigurasyonunu degistirmis olabilir → modal schema'sini yenile
+          setSchemaVersion(function (v) { return v + 1 })
+        }}
+        extraFieldOptions={extraFieldOptions}
       />
 
-      {/* ── Rehber Arama Modalı ── */}
-      {modalOpen && createPortal(
-        <div
-          onClick={function(e) { if (e.target === e.currentTarget) closeModal() }}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, padding: 16,
-          }}
-        >
-          <div style={Object.assign({ borderRadius: 12, width: '90%', maxWidth: 760, maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }, modalBg)}>
-
-            {/* Başlık + arama */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: divBdr, background: headerBg, flexShrink: 0 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={btnColor} strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0 }}>
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-              </svg>
-              <input
-                autoFocus
-                type="text"
-                value={search}
-                onChange={function(e) { setSearch(e.target.value) }}
-                placeholder={schema ? ('Ara: ' + (schema.guideLabel || column.guideCode)) : 'Yükleniyor...'}
-                style={{
-                  flex: 1, background: searchBg, border: searchBdr, borderRadius: 6,
-                  padding: '6px 10px', fontSize: 13, color: inputColor, outline: 'none',
-                }}
-              />
-              {column.formCode && (
-                <button
-                  type="button"
-                  onClick={function() { setSettingsOpen(true) }}
-                  title="Alan Ayarları"
-                  style={{ background: 'none', border: 'none', color: thColor, cursor: 'pointer', padding: '0 4px', display: 'flex', alignItems: 'center' }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                  </svg>
-                </button>
-              )}
-              <button type="button" onClick={closeModal}
-                style={{ background: 'none', border: 'none', color: thColor, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
-            </div>
-
-            {error && (
-              <div style={{ padding: '8px 16px', fontSize: 12, color: '#f87171', background: 'rgba(239,68,68,0.08)', flexShrink: 0 }}>{error}</div>
-            )}
-
-            {/* Tablo */}
-            <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead style={{ position: 'sticky', top: 0, background: headerBg, zIndex: 1 }}>
-                  <tr>
-                    {displayColumns.length > 0
-                      ? displayColumns.map(function(c) {
-                          return (
-                            <th key={c} style={{ padding: '7px 12px', textAlign: 'left', color: thColor, fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.05em', borderBottom: divBdr, whiteSpace: 'nowrap' }}>
-                              {colLabels[c] || c}
-                            </th>
-                          )
-                        })
-                      : <th style={{ padding: '7px 12px', color: thColor }}>Yükleniyor...</th>
-                    }
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.length === 0 && !loading && (
-                    <tr>
-                      <td colSpan={Math.max(displayColumns.length, 1)} style={{ padding: '24px', textAlign: 'center', color: thColor, fontSize: 12 }}>
-                        Kayıt bulunamadı
-                      </td>
-                    </tr>
-                  )}
-                  {rows.map(function(guideRow, idx) {
-                    return (
-                      <tr
-                        key={(guideRow.value || '') + '_' + idx}
-                        onClick={function() { pickRow(guideRow) }}
-                        style={{ cursor: 'pointer', borderBottom: '1px solid ' + (isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)') }}
-                        onMouseEnter={function(e) { e.currentTarget.style.background = rowHover }}
-                        onMouseLeave={function(e) { e.currentTarget.style.background = '' }}
-                      >
-                        {displayColumns.map(function(c) {
-                          var cell = guideRow.cells ? guideRow.cells[c] : null
-                          return (
-                            <td key={c} style={{ padding: '7px 12px', color: tdColor, whiteSpace: 'nowrap' }}>
-                              {cell != null ? String(cell) : ''}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    )
-                  })}
-                  {hasMore && (
-                    <tr ref={sentinelRef}>
-                      <td colSpan={Math.max(displayColumns.length, 1)} style={{ padding: '8px 12px', textAlign: 'center', color: thColor, fontSize: 11 }}>
-                        {loading ? 'Yükleniyor...' : 'Daha fazla...'}
-                      </td>
-                    </tr>
-                  )}
-                  {loading && !hasMore && rows.length === 0 && (
-                    <tr>
-                      <td colSpan={Math.max(displayColumns.length, 1)} style={{ padding: '16px', textAlign: 'center', color: thColor, fontSize: 11 }}>
-                        Yükleniyor...
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Alt bilgi */}
-            <div style={{ padding: '6px 16px', borderTop: divBdr, background: headerBg, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10.5, color: thColor }}>{rows.length} kayıt{hasMore ? '+' : ''}</span>
-              <span style={{ flex: 1 }} />
-              <span style={{ fontSize: 10.5, color: thColor, fontFamily: 'monospace' }}>{column.guideCode}</span>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* Birlesik rehber arama modal'i — Tip 1 / Tip 2 / GuideLookupCell hep ayni.
+          staticConstraint icindeki {#row.*} ve {#row.combo.*} token'lari mevcut
+          satirin canli verisi ile replace edildi (resolvedConstraint). */}
+      <GuideLookupModal
+        guideCode={column.guideCode}
+        columnsAdapter={columnsAdapter}
+        open={modalOpen}
+        onClose={closeModal}
+        onPick={pickRow}
+        staticConstraint={resolvedConstraint}
+        schemaVersion={schemaVersion}
+        headerActions={headerActions}
+      />
     </div>
   )
 }
@@ -1018,6 +927,7 @@ function CombinationLookupCell(props) {
           <CombinationPickerModal
             materialCode={materialCode}
             currentCode={value}
+            currentId={row.combinationId || null}
             currentDetails={row.combinationDetails || []}
             onApply={function(configId, code, details) {
               // combinationId — DB'deki FK; combinationCode — display; details — ozellik listesi
@@ -1083,6 +993,7 @@ function CombinationLookupCell(props) {
         <CombinationPickerModal
           materialCode={materialCode}
           currentCode={value}
+          currentId={row.combinationId || null}
           currentDetails={row.combinationDetails || []}
           onApply={function(configId, code, details) {
             // fillPatch kullanarak combinationId + combinationCode + combinationDetails'i tek state update'te set et

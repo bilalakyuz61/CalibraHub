@@ -28,7 +28,9 @@ public sealed record DocumentLineDto(
     IReadOnlyList<DocumentLineDetailDto>? CombinationDetails = null,
     bool NotesPinned = false,
     // Revize zinciri — NULL ise orijinal satir, aksi halde revize edildigi satirin Id'si.
-    int? RevisedFromId = null);
+    int? RevisedFromId = null,
+    // Kalem bazli kaynak iz — bu satir hangi kaynak satirdan turetildi (siparis clone'u).
+    int? SourceLineId = null);
 
 public sealed record DocumentLineDetailDto(
     int Id, int QuoteLineId,
@@ -82,3 +84,31 @@ public sealed record SaveQuoteLineDetailItem(
     string ValueName,
     string? Description,
     int LineOrder);
+
+/// <summary>
+/// Tekliften siparis olusturma istegi. QuoteIds icindeki teklifler cari bazinda
+/// gruplanir ve her cari icin tek bir siparis (Document, type=satis_siparisi) uretilir.
+/// Kaynak teklifin durumu Converted'a geciler ve document_source koprusu ile baglanir.
+/// </summary>
+public sealed record CreateOrdersFromQuotesRequest(
+    IReadOnlyCollection<int> QuoteIds,
+    DateTime OrderDate);
+
+public sealed record CreateOrdersFromQuotesResult(
+    bool Success,
+    string? Error,
+    int OrdersCreated,
+    IReadOnlyList<int> OrderIds);
+
+/// <summary>Tek bir teklifi siparise donusturen request. CreateWorkOrders=true ise
+/// olusan siparişin her satiri icin yeni bir is emri (WorkOrder) acilir.</summary>
+public sealed record ConvertSingleQuoteToOrderRequest(
+    int QuoteId,
+    DateTime OrderDate,
+    bool CreateWorkOrders);
+
+public sealed record ConvertSingleQuoteToOrderResult(
+    bool Success,
+    string? Error,
+    int? OrderId,
+    IReadOnlyList<int>? WorkOrderIds);

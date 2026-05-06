@@ -1,12 +1,12 @@
 using System.ComponentModel;
-using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
-[Description("Feature tablosundaki ozelliklere ait secilebilir degerler (ornegin 'Renk' ozelligi icin Kirmizi/Mavi/Yesil). FeatureId FK -> Feature.Id.")]
-public sealed class FeatureValue : Entity
+[Description("ItemFeature tablosundaki ozelliklere ait secilebilir degerler (ornegin 'Renk' ozelligi icin Kirmizi/Mavi/Yesil). PropertyId FK -> ItemFeature.Id (INT).")]
+public sealed class FeatureValue
 {
-    public Guid PropertyId { get; init; }
+    public int Id { get; init; }
+    public int PropertyId { get; init; }
     public required string Code { get; init; }
     public required string Description { get; init; }
     public required string Value { get; init; }

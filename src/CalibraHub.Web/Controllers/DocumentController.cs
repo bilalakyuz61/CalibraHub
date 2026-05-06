@@ -695,6 +695,253 @@ public sealed class DocumentController : Controller
     }
 
     // ── Sifirdan Satis Teklifi Sablonu Olustur + Tasarim Uygula ────────────
+    // ── Ocaksan stili teklif tasarimi ────────────────────────────────────────
+    // OTS26-04xxx PDF'inden esinlenilen yapi: ust banner (logo + sirket bilgileri
+    // + TEKLIF kutusu), musteri blogu, border'li kalem tablosu (SiraNo/Aciklama/
+    // Adet/BirimFiyat/Tutar), TOPLAM + GENEL TOPLAM, alt notlar + banka + kase.
+    // Kullanim: GET /Document/CreateAndApplyOcaksanDesign?name=Ocaksan-Teklif
+    [AllowAnonymous]
+    [HttpGet("/Document/CreateAndApplyOcaksanDesign")]
+    public async Task<IActionResult> CreateAndApplyOcaksanDesign(string? name, CancellationToken ct)
+    {
+        var docType = await _docTypeRepo.GetByCodeAsync("satis_teklifi", ct);
+        if (docType is null)
+            return Json(new { success = false, message = "'satis_teklifi' belge tipi bulunamadi." });
+
+        var finalName = string.IsNullOrWhiteSpace(name) ? "Ocaksan-Teklif" : name.Trim();
+
+        var existing = await _templateRepo.GetByDocumentTypeIdAsync(docType.Id, ct);
+        var sameName = existing
+            .Where(x => string.Equals(x.Name, finalName, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.Id).ToList();
+
+        int newId;
+        if (sameName.Count > 0)
+        {
+            newId = sameName[0].Id;
+            foreach (var dup in sameName.Skip(1))
+                await _templateRepo.DeleteAsync(dup.Id, ct);
+        }
+        else
+        {
+            var blank = new Domain.Entities.ReportTemplate
+            {
+                Name           = finalName,
+                DocumentTypeId = docType.Id,
+                FrxContent     = Array.Empty<byte>(),
+                SqlViewName    = "vw_ReportDocument",
+                KeyColumn      = "BelgeId",
+                IsDefault      = true,
+                IsActive       = true,
+            };
+            newId = await _templateRepo.SaveAsync(blank, ct);
+        }
+        foreach (var e in existing.Where(x => x.Id != newId && x.IsDefault))
+        {
+            e.IsDefault = false;
+            await _templateRepo.SaveAsync(e, ct);
+        }
+
+        var sources = new List<Domain.Entities.ReportTemplateSource>
+        {
+            new()
+            {
+                TemplateId = newId,
+                SourceName = "vw_ReportDocument",
+                ViewName   = "vw_ReportDocument",
+                KeyColumn  = "BelgeId",
+                IsPrimary  = true,
+                DisplayOrder = 0,
+                SortColumn = "SiraNo",
+                SortDirection = "ASC",
+            },
+        };
+        await _sourceRepo.ReplaceAllAsync(newId, sources, ct);
+
+        var t = await _templateRepo.GetByIdAsync(newId, ct)!;
+        var frx = BuildOcaksanQuoteFrx(t!.Name);
+
+        var updated = new Domain.Entities.ReportTemplate
+        {
+            Id                = t.Id,
+            Name              = t.Name,
+            DocumentTypeId    = t.DocumentTypeId,
+            FrxFilePath       = t.FrxFilePath,
+            FrxContent        = Encoding.UTF8.GetBytes(frx),
+            Description       = t.Description,
+            IsDefault         = t.IsDefault,
+            IsActive          = t.IsActive,
+            SqlViewName       = "vw_ReportDocument",
+            KeyColumn         = "BelgeId",
+            OutputOptionsJson = t.OutputOptionsJson,
+            CreatedAt         = t.CreatedAt,
+        };
+        await _templateRepo.SaveAsync(updated, ct);
+
+        return Json(new
+        {
+            success = true,
+            templateId = newId,
+            message = "Ocaksan teklif tasarimi uygulandi.",
+        });
+    }
+
+    private static string BuildOcaksanQuoteFrx(string name)
+    {
+        var safeName = System.Security.SecurityElement.Escape(name) ?? "Ocaksan Teklif";
+        var now = DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss");
+        var stamp = $"v1-ocaksan · {DateTime.Now:dd.MM.yyyy HH:mm:ss}";
+        return $$"""
+<?xml version="1.0" encoding="utf-8"?>
+<Report ScriptLanguage="CSharp" ReportInfo.Name="{{safeName}}" ReportInfo.Created="{{now}}" ReportInfo.Modified="{{now}}" ReportInfo.CreatorVersion="2026.1.8">
+  <Dictionary>
+    <TableDataSource Name="vw_ReportDocument" Enabled="true">
+      <Column Name="BelgeId" DataType="System.Int32"/>
+      <Column Name="BelgeNo" DataType="System.String"/>
+      <Column Name="BelgeTarihi" DataType="System.DateTime"/>
+      <Column Name="GecerlilikTarihi" DataType="System.DateTime"/>
+      <Column Name="ParaBirimi" DataType="System.String"/>
+      <Column Name="AraToplam" DataType="System.Decimal"/>
+      <Column Name="KdvTutari" DataType="System.Decimal"/>
+      <Column Name="GenelToplam" DataType="System.Decimal"/>
+      <Column Name="CariUnvani" DataType="System.String"/>
+      <Column Name="CariAdres" DataType="System.String"/>
+      <Column Name="CariSehir" DataType="System.String"/>
+      <Column Name="CariIlce" DataType="System.String"/>
+      <Column Name="CariVergiNo" DataType="System.String"/>
+      <Column Name="TemsilciAdi" DataType="System.String"/>
+      <Column Name="BelgeNotu" DataType="System.String"/>
+      <Column Name="SirketAdi" DataType="System.String"/>
+      <Column Name="SirketTamAdres" DataType="System.String"/>
+      <Column Name="SirketVergiSatiri" DataType="System.String"/>
+      <Column Name="KalemId" DataType="System.Int32"/>
+      <Column Name="SiraNo" DataType="System.Int32"/>
+      <Column Name="MalzemeAdi" DataType="System.String"/>
+      <Column Name="MalzemeKodu" DataType="System.String"/>
+      <Column Name="MalzemeAciklamasi" DataType="System.String"/>
+      <Column Name="Miktar" DataType="System.Decimal"/>
+      <Column Name="BirimKodu" DataType="System.String"/>
+      <Column Name="BirimFiyat" DataType="System.Decimal"/>
+      <Column Name="SatirToplami" DataType="System.Decimal"/>
+      <Column Name="KombinasyonDetay" DataType="System.String"/>
+    </TableDataSource>
+  </Dictionary>
+  <ReportPage Name="Page1" Landscape="false" PaperWidth="210" PaperHeight="297" MarginLeft="10" MarginRight="10" MarginTop="10" MarginBottom="10">
+
+    <!-- ============ ÜST BANNER (logo + sirket + TEKLIF kutusu) ============ -->
+    <ReportTitleBand Name="ReportTitle1" Top="0" Width="718.2" Height="200">
+      <!-- SOL: logo placeholder + sirket -->
+      <PictureObject Name="LogoPic" Left="0" Top="0" Width="120" Height="80" Border.Lines="All" Border.Width="1" Border.Color="220,220,220" SizeMode="Center"/>
+      <TextObject Name="LblLogoHint" Left="0" Top="60" Width="120" Height="20" Text="LOGO" Font="Arial, 8pt, style=Italic" HorzAlign="Center" VertAlign="Bottom" TextColor="180,180,180"/>
+      <TextObject Name="SirketAdi" Left="0" Top="84" Width="380" Height="22" Text="[vw_ReportDocument.SirketAdi]" Font="Arial, 14pt, style=Bold"/>
+      <TextObject Name="SirketUnvan" Left="0" Top="106" Width="380" Height="14" Text="" Font="Arial, 7pt, style=Bold"/>
+      <TextObject Name="SirketAdres" Left="0" Top="120" Width="380" Height="14" Text="[vw_ReportDocument.SirketTamAdres]" Font="Arial, 8pt"/>
+      <TextObject Name="SirketTel" Left="0" Top="138" Width="380" Height="14" Text="TEL :" Font="Arial, 8pt, style=Bold"/>
+      <TextObject Name="SirketFax" Left="0" Top="152" Width="380" Height="14" Text="FAX:" Font="Arial, 8pt, style=Bold"/>
+
+      <!-- SAĞ: TEKLIF kutusu -->
+      <ShapeObject Name="TklfBox" Left="540" Top="0" Width="178" Height="32" Shape="Rectangle" Border.Lines="All" Border.Width="2" FillColor="245,245,245"/>
+      <TextObject Name="TklfBoxLbl" Left="540" Top="0" Width="178" Height="32" Text="TEKLİF" Font="Arial, 18pt, style=Bold" HorzAlign="Center" VertAlign="Center"/>
+      <TextObject Name="LblTarih" Left="540" Top="40" Width="80" Height="16" Text="TARİH :" Font="Arial, 9pt, style=Bold"/>
+      <TextObject Name="ValTarih" Left="620" Top="40" Width="98" Height="16" Text="[vw_ReportDocument.BelgeTarihi]" Font="Arial, 9pt, style=Bold" HorzAlign="Right" Format="Date" Format.Format="d"/>
+      <TextObject Name="LblTeklifNo" Left="540" Top="58" Width="80" Height="16" Text="TEKLİF NO:" Font="Arial, 9pt, style=Bold"/>
+      <TextObject Name="ValTeklifNo" Left="620" Top="58" Width="98" Height="16" Text="[vw_ReportDocument.BelgeNo]" Font="Arial, 9pt, style=Bold" HorzAlign="Right"/>
+
+      <!-- MUSTERI BLOGU (border'li 3 satir) -->
+      <ShapeObject Name="MusBoxF" Left="0" Top="172" Width="80" Height="20" Shape="Rectangle" Border.Lines="All" Border.Width="1" FillColor="245,245,245"/>
+      <TextObject Name="LblFirma" Left="0" Top="172" Width="80" Height="20" Text="FİRMA ADI :" Font="Arial, 8pt, style=Bold" VertAlign="Center" HorzAlign="Center"/>
+      <ShapeObject Name="MusBoxFV" Left="80" Top="172" Width="638" Height="20" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="ValFirma" Left="84" Top="172" Width="630" Height="20" Text="[vw_ReportDocument.CariUnvani]" Font="Arial, 9pt, style=Bold" VertAlign="Center"/>
+    </ReportTitleBand>
+
+    <!-- Musteri devami: Proje + Adres -->
+    <PageHeaderBand Name="PageHeader1" Top="204" Width="718.2" Height="44">
+      <ShapeObject Name="ProjBoxL" Left="0" Top="0" Width="80" Height="20" Shape="Rectangle" Border.Lines="All" Border.Width="1" FillColor="245,245,245"/>
+      <TextObject Name="LblProje" Left="0" Top="0" Width="80" Height="20" Text="PROJE ADI :" Font="Arial, 8pt, style=Bold" VertAlign="Center" HorzAlign="Center"/>
+      <ShapeObject Name="ProjBoxV" Left="80" Top="0" Width="638" Height="20" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="ValProje" Left="84" Top="0" Width="630" Height="20" Text="[vw_ReportDocument.BelgeNotu]" Font="Arial, 9pt, style=Bold" VertAlign="Center"/>
+
+      <ShapeObject Name="AdrBoxL" Left="0" Top="20" Width="80" Height="20" Shape="Rectangle" Border.Lines="All" Border.Width="1" FillColor="245,245,245"/>
+      <TextObject Name="LblAdres" Left="0" Top="20" Width="80" Height="20" Text="ADRES :" Font="Arial, 8pt, style=Bold" VertAlign="Center" HorzAlign="Center"/>
+      <ShapeObject Name="AdrBoxV" Left="80" Top="20" Width="638" Height="20" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="ValAdres" Left="84" Top="20" Width="630" Height="20" Text="[vw_ReportDocument.CariAdres]" Font="Arial, 9pt" VertAlign="Center"/>
+    </PageHeaderBand>
+
+    <!-- KOLON BASLIK -->
+    <ColumnHeaderBand Name="ColumnHeader1" Top="252" Width="718.2" Height="26" FillColor="245,245,245">
+      <ShapeObject Name="HdrBg" Left="0" Top="0" Width="718" Height="26" Shape="Rectangle" Border.Lines="All" Border.Width="1" FillColor="245,245,245"/>
+      <TextObject Name="HdrSira" Left="0" Top="0" Width="50" Height="26" Text="SIRA NO" Font="Arial, 8pt, style=Bold" HorzAlign="Center" VertAlign="Center" Border.Lines="Right" Border.Width="1"/>
+      <TextObject Name="HdrAck"  Left="50" Top="0" Width="380" Height="26" Text="AÇIKLAMA" Font="Arial, 8pt, style=Bold" HorzAlign="Center" VertAlign="Center" Border.Lines="Right" Border.Width="1"/>
+      <TextObject Name="HdrAdet" Left="430" Top="0" Width="60" Height="26" Text="ADET" Font="Arial, 8pt, style=Bold" HorzAlign="Center" VertAlign="Center" Border.Lines="Right" Border.Width="1"/>
+      <TextObject Name="HdrFyt"  Left="490" Top="0" Width="100" Height="26" Text="BİRİM FİYAT" Font="Arial, 8pt, style=Bold" HorzAlign="Center" VertAlign="Center" Border.Lines="Right" Border.Width="1"/>
+      <TextObject Name="HdrTtr"  Left="590" Top="0" Width="128" Height="26" Text="TUTAR" Font="Arial, 8pt, style=Bold" HorzAlign="Center" VertAlign="Center"/>
+    </ColumnHeaderBand>
+
+    <!-- KALEM SATIRI (border'li, alt italik aciklama) -->
+    <DataBand Name="Data1" Top="282" Width="718.2" Height="48" DataSource="vw_ReportDocument" CanGrow="true">
+      <ShapeObject Name="RowBg" Left="0" Top="0" Width="718" Height="48" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="RowSira" Left="0" Top="2" Width="50" Height="20" Text="[vw_ReportDocument.SiraNo]" Font="Arial, 9pt, style=Bold" HorzAlign="Center" VertAlign="Center" Border.Lines="Right" Border.Width="1"/>
+
+      <TextObject Name="RowAdName" Left="54" Top="4" Width="372" Height="18" Text="[vw_ReportDocument.MalzemeAdi]" Font="Arial, 9pt, style=Bold" VertAlign="Top"/>
+      <TextObject Name="RowAdSize" Left="54" Top="22" Width="372" Height="14" Text="[vw_ReportDocument.MalzemeAciklamasi]" Font="Arial, 8pt, style=Italic" TextColor="80,80,80" VertAlign="Top" CanGrow="true" WordWrap="true"/>
+      <TextObject Name="RowAdDesc" Left="54" Top="32" Width="372" Height="14" Text="[vw_ReportDocument.KombinasyonDetay]" Font="Arial, 7pt, style=Italic" TextColor="120,120,120" VertAlign="Top" CanGrow="true" WordWrap="true"/>
+
+      <TextObject Name="RowAdSep" Left="430" Top="0" Width="0" Height="48" Border.Lines="Left" Border.Width="1"/>
+      <TextObject Name="RowAdet"  Left="430" Top="2" Width="60" Height="20" Text="[vw_ReportDocument.Miktar]" Font="Arial, 9pt" HorzAlign="Center" VertAlign="Center" Format="Number" Format.UseLocale="true" Format.DecimalDigits="0" Border.Lines="Right" Border.Width="1"/>
+      <TextObject Name="RowFyt"   Left="490" Top="2" Width="100" Height="20" Text="[String.Format(&quot;€ {0:#,##0.00}&quot;, [vw_ReportDocument.BirimFiyat])]" Font="Arial, 9pt" HorzAlign="Right" VertAlign="Center" Border.Lines="Right" Border.Width="1"/>
+      <TextObject Name="RowTtr"   Left="590" Top="2" Width="128" Height="20" Text="[String.Format(&quot;€ {0:#,##0.00}&quot;, [vw_ReportDocument.SatirToplami])]" Font="Arial, 9pt, style=Bold" HorzAlign="Right" VertAlign="Center"/>
+    </DataBand>
+
+    <!-- TOPLAM + GENEL TOPLAM -->
+    <ReportSummaryBand Name="ReportSummary1" Top="334" Width="718.2" Height="80">
+      <ShapeObject Name="SumBox1" Left="430" Top="6" Width="288" Height="26" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="SumLbl1" Left="430" Top="6" Width="160" Height="26" Text="TOPLAM" Font="Arial, 10pt, style=Bold" HorzAlign="Center" VertAlign="Center" Border.Lines="Right" Border.Width="1"/>
+      <TextObject Name="SumVal1" Left="592" Top="6" Width="124" Height="26" Text="[String.Format(&quot;€ {0:#,##0.00}&quot;, [vw_ReportDocument.AraToplam])]" Font="Arial, 10pt, style=Bold" HorzAlign="Right" VertAlign="Center"/>
+
+      <ShapeObject Name="SumBox2" Left="430" Top="36" Width="288" Height="28" Shape="Rectangle" Border.Lines="All" Border.Width="2" FillColor="240,240,240"/>
+      <TextObject Name="SumLbl2" Left="430" Top="36" Width="160" Height="28" Text="GENEL TOPLAM" Font="Arial, 11pt, style=Bold" HorzAlign="Center" VertAlign="Center" Border.Lines="Right" Border.Width="2"/>
+      <TextObject Name="SumVal2" Left="592" Top="36" Width="124" Height="28" Text="[String.Format(&quot;€ {0:#,##0.00}&quot;, [vw_ReportDocument.GenelToplam])]" Font="Arial, 11pt, style=Bold" HorzAlign="Right" VertAlign="Center"/>
+    </ReportSummaryBand>
+
+    <!-- ALT NOTLAR + BANKA + KASE -->
+    <PageFooterBand Name="PageFooter1" Top="418" Width="718.2" Height="240">
+      <TextObject Name="LblPaket" Left="0" Top="0" Width="100" Height="14" Text="PAKETLEME" Font="Arial, 8pt, style=Bold"/>
+      <TextObject Name="ValPaket" Left="100" Top="0" Width="618" Height="14" Text=":" Font="Arial, 8pt"/>
+      <TextObject Name="LblNak"   Left="0" Top="14" Width="100" Height="14" Text="NAKLİYE" Font="Arial, 8pt, style=Bold"/>
+      <TextObject Name="ValNak"   Left="100" Top="14" Width="618" Height="14" Text=":" Font="Arial, 8pt"/>
+      <TextObject Name="LblOd"    Left="0" Top="28" Width="100" Height="14" Text="ÖDEME" Font="Arial, 8pt, style=Bold"/>
+      <TextObject Name="ValOd"    Left="100" Top="28" Width="618" Height="14" Text=":" Font="Arial, 8pt"/>
+
+      <ShapeObject Name="NoteBox" Left="0" Top="48" Width="718" Height="84" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="Note1" Left="6" Top="50" Width="710" Height="14" Text="" Font="Arial, 8pt"/>
+      <TextObject Name="Note2" Left="6" Top="64" Width="710" Height="14" Text="" Font="Arial, 8pt"/>
+      <TextObject Name="Note3" Left="6" Top="78" Width="710" Height="14" Text="" Font="Arial, 8pt"/>
+      <TextObject Name="Note4" Left="6" Top="92" Width="710" Height="14" Text="" Font="Arial, 8pt, style=Bold"/>
+      <TextObject Name="Note5" Left="6" Top="106" Width="710" Height="14" Text="" Font="Arial, 8pt"/>
+
+      <ShapeObject Name="BankBox" Left="0" Top="138" Width="200" Height="56" Shape="Rectangle" Border.Lines="All" Border.Width="1" FillColor="245,245,245"/>
+      <TextObject Name="BankLbl" Left="0" Top="138" Width="200" Height="56" Text="BANKA BİLGİSİ" Font="Arial, 8pt, style=Bold" HorzAlign="Center" VertAlign="Center"/>
+      <ShapeObject Name="BankBoxR" Left="200" Top="138" Width="518" Height="56" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="Bank1" Left="206" Top="140" Width="510" Height="14" Text="" Font="Arial, 8pt"/>
+      <TextObject Name="Bank2" Left="206" Top="156" Width="510" Height="14" Text="" Font="Arial, 8pt"/>
+      <TextObject Name="Bank3" Left="206" Top="172" Width="510" Height="14" Text="" Font="Arial, 8pt"/>
+
+      <ShapeObject Name="KaseBox1" Left="0" Top="200" Width="359" Height="36" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="KaseLbl1" Left="0" Top="200" Width="359" Height="14" Text="TEKLİFİ VEREN :" Font="Arial, 8pt, style=Bold" VertAlign="Top" HorzAlign="Center" FillColor="245,245,245"/>
+      <TextObject Name="KaseVal1" Left="0" Top="216" Width="359" Height="20" Text="[vw_ReportDocument.SirketAdi]" Font="Arial, 9pt, style=Bold" HorzAlign="Center" VertAlign="Center"/>
+
+      <ShapeObject Name="KaseBox2" Left="359" Top="200" Width="359" Height="36" Shape="Rectangle" Border.Lines="All" Border.Width="1"/>
+      <TextObject Name="KaseLbl2" Left="359" Top="200" Width="359" Height="14" Text="SİPARİŞİ ONAYLAYAN FİRMA" Font="Arial, 8pt, style=Bold" VertAlign="Top" HorzAlign="Center" FillColor="245,245,245"/>
+      <TextObject Name="KaseVal2" Left="359" Top="216" Width="359" Height="20" Text="KAŞE" Font="Arial, 9pt, style=Italic" HorzAlign="Center" VertAlign="Center" TextColor="180,180,180"/>
+
+      <TextObject Name="StampText" Left="0" Top="220" Width="718" Height="10" Text="Tasarım {{stamp}}" Font="Arial, 6pt, style=Italic" HorzAlign="Right" TextColor="180,180,180"/>
+    </PageFooterBand>
+
+  </ReportPage>
+</Report>
+""";
+    }
+
     // Kullanim: GET /Document/CreateAndApplySalesQuoteDesign?name=Deneme
     // Sonuc: "satis_teklifi" belge tipine bagli yeni bir ReportTemplate olusturur,
     // vw_ReportDocument + vw_DocumentCombination source'larini ekler, master-detail
@@ -1015,6 +1262,30 @@ public sealed class DocumentController : Controller
         await _templateRepo.SaveAsync(updated, ct);
 
         return Json(new { success = true });
+    }
+
+    // ── Belge Mail Alici ────────────────────────────────────────────────────
+    // Cikti Secenekleri / Mail gonderim modali acildiginda cari karttan email
+    // adresini cekip kullaniciya gosterir; kullanici degistirebilir veya virgul/
+    // noktali virgulle ek alici(lar) ekleyebilir. SendEmail bu degeri kabul eder.
+    [HttpGet("/Document/GetEmailRecipient")]
+    public async Task<IActionResult> GetEmailRecipient([FromQuery] int recordId, CancellationToken ct)
+    {
+        if (recordId <= 0)
+            return Json(new { success = false, email = "", message = "Belge id zorunlu." });
+        var doc = await _documentRepo.GetByIdAsync(recordId, ct);
+        if (doc?.ContactId is not int cid || cid <= 0)
+            return Json(new { success = true, email = "", message = "Belgede cari atanmamis." });
+        var contact = await _financeRepo.GetContactByIdAsync(cid, ct);
+        var email = contact?.Email ?? "";
+        return Json(new
+        {
+            success     = true,
+            email,
+            contactId   = cid,
+            contactCode = contact?.AccountCode,
+            contactName = contact?.AccountTitle,
+        });
     }
 
     // ── Mail Gonder (PDF ek olarak) ─────────────────────────────────────────

@@ -28,8 +28,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active]
-            FROM {_tableName}
+            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role]            FROM {_tableName}
             ORDER BY [full_name];
             """;
 
@@ -47,8 +46,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active]
-            FROM {_tableName}
+            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role]            FROM {_tableName}
             WHERE [email] = @Email;
             """;
         command.Parameters.Add(new SqlParameter("@Email", email));
@@ -70,8 +68,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active]
-            FROM {_tableName}
+            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role]            FROM {_tableName}
             WHERE [email] = @Email
               AND [company_id] = @CompanyId;
             """;
@@ -92,8 +89,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active]
-            FROM {_tableName}
+            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role]            FROM {_tableName}
             WHERE [id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
@@ -113,9 +109,9 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active])
+                ([id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role])
             VALUES
-                (@Id, @CompanyId, @FullName, @Email, @EmployeeCode, @DepartmentId, @SupervisorUserId, @Role, @Permissions, @PasswordHash, @LanguageCode, @ThemeCode, @GridPreferencesJson, @IsActive);
+                (@Id, @CompanyId, @FullName, @Email, @EmployeeCode, @DepartmentId, @SupervisorUserId, @Role, @Permissions, @PasswordHash, @LanguageCode, @ThemeCode, @GridPreferencesJson, @IsActive, @GrafanaRole);
             """;
 
         AddUserParameters(command, userProfile);
@@ -140,7 +136,8 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
                 [language_code] = @LanguageCode,
                 [theme_code] = @ThemeCode,
                 [grid_preferences_json] = @GridPreferencesJson,
-                [is_active] = @IsActive
+                [is_active] = @IsActive,
+                [grafana_role] = @GrafanaRole
             WHERE [id] = @Id;
             """;
 
@@ -164,6 +161,9 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         command.Parameters.Add(new SqlParameter("@ThemeCode", userProfile.ThemeCode));
         command.Parameters.Add(new SqlParameter("@GridPreferencesJson", (object?)userProfile.GridPreferencesJson ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", userProfile.IsActive));
+        command.Parameters.Add(new SqlParameter("@GrafanaRole", userProfile.GrafanaRole.HasValue
+            ? (object)userProfile.GrafanaRole.Value.ToString()
+            : DBNull.Value));
     }
 
     private static UserProfile MapUser(SqlDataReader reader)
@@ -175,6 +175,14 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         var themeCode = reader.IsDBNull(11) ? UserProfile.DefaultThemeCode : reader.GetString(11);
         var gridPreferencesJson = reader.IsDBNull(12) ? string.Empty : reader.GetString(12);
         var isActive = reader.GetBoolean(13);
+        // grafana_role kolonu (column 14) — NULL ya da "Viewer"/"Editor"/"Admin"
+        GrafanaRole? grafanaRole = null;
+        if (!reader.IsDBNull(14))
+        {
+            var gr = reader.GetString(14);
+            if (Enum.TryParse(gr, true, out GrafanaRole parsedGrafana))
+                grafanaRole = parsedGrafana;
+        }
 
         if (!Enum.TryParse(roleRaw, true, out UserRole role) || !Enum.IsDefined(role))
         {
@@ -191,7 +199,8 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
             DepartmentId = reader.GetGuid(5),
             SupervisorUserId = reader.IsDBNull(6) ? null : reader.GetGuid(6),
             Role = role,
-            Permissions = DeserializePermissions(permissionsRaw)
+            Permissions = DeserializePermissions(permissionsRaw),
+            GrafanaRole = grafanaRole,
         };
 
         user.SetPasswordHash(passwordHash);

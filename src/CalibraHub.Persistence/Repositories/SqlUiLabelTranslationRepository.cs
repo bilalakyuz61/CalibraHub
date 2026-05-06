@@ -29,7 +29,7 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [form_key], [label_key], [language_code], [label_text], [updated_at]
+            SELECT [id], [form_key], [label_key], [language_code], [label_text], [Updated]
             FROM {_tableName}
             WHERE [language_code] = @LanguageCode
             ORDER BY [form_key], [label_key];
@@ -55,7 +55,7 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [form_key], [label_key], [language_code], [label_text], [updated_at]
+            SELECT [id], [form_key], [label_key], [language_code], [label_text], [Updated]
             FROM {_tableName}
             WHERE [form_key] = @FormKey
               AND [language_code] = @LanguageCode
@@ -101,7 +101,7 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
             insertCommand.Transaction = transaction;
             insertCommand.CommandText = $"""
                 INSERT INTO {_tableName}
-                    ([id], [form_key], [label_key], [language_code], [label_text], [updated_at])
+                    ([id], [form_key], [label_key], [language_code], [label_text], [Updated])
                 VALUES
                     (@Id, @FormKey, @LabelKey, @LanguageCode, @LabelText, @UpdatedAt);
                 """;

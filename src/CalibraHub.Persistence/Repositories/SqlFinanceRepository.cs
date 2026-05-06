@@ -2,6 +2,7 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Persistence.Repositories;
@@ -9,13 +10,30 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlFinanceRepository : IFinanceRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly string _tableName;
 
-    public SqlFinanceRepository(SqlServerConnectionFactory connectionFactory, CalibraDatabaseOptions options)
+    public SqlFinanceRepository(
+        SqlServerConnectionFactory connectionFactory,
+        CalibraDatabaseOptions options,
+        IHttpContextAccessor httpContextAccessor)
     {
         _connectionFactory = connectionFactory;
+        _httpContextAccessor = httpContextAccessor;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _tableName = $"[{schema}].[Contact]";
+    }
+
+    private int GetCurrentCompanyId()
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.User.Identity?.IsAuthenticated == true)
+        {
+            var raw = httpContext.User.FindFirst("company_id")?.Value;
+            if (!string.IsNullOrWhiteSpace(raw) && int.TryParse(raw, out var id))
+                return id;
+        }
+        return 0;
     }
 
     public async Task<IReadOnlyCollection<Contact>> GetContactsAsync(
@@ -28,8 +46,8 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         var where = BuildWhereClause(accountType, search);
 
         cmd.CommandText = $"""
-            SELECT [Id],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[CreatedAt]
+            SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt]
             FROM {_tableName}
             {where}
             ORDER BY [AccountCode];
@@ -55,8 +73,8 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         var where = BuildWhereClause(accountType, search);
 
         cmd.CommandText = $"""
-            SELECT [Id],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[CreatedAt],
+            SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],
                    COUNT(*) OVER() AS [_TotalCount]
             FROM {_tableName}
             {where}
@@ -73,7 +91,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         {
             results.Add(MapRow(reader));
             if (totalCount == 0)
-                totalCount = reader.GetInt32(22); // _TotalCount — 22. sutun (21 veri kolonu + COUNT OVER)
+                totalCount = reader.GetInt32(reader.GetOrdinal("_TotalCount"));
         }
 
         // Hiç sonuç yoksa toplam sayıyı ayrı çek (OFFSET sonucu boş olabilir)
@@ -90,7 +108,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
 
     private static string BuildWhereClause(byte? accountType, string? search)
     {
-        var where = "WHERE [IsActive] = 1";
+        var where = "WHERE [CompanyId] = @CompanyId AND [IsActive] = 1";
         if (accountType.HasValue)
             where += " AND [AccountType] = @AccountType";
         if (!string.IsNullOrWhiteSpace(search))
@@ -98,8 +116,9 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         return where;
     }
 
-    private static void AddFilterParams(SqlCommand cmd, byte? accountType, string? search)
+    private void AddFilterParams(SqlCommand cmd, byte? accountType, string? search)
     {
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         if (accountType.HasValue)
             cmd.Parameters.Add(new SqlParameter("@AccountType", accountType.Value));
         if (!string.IsNullOrWhiteSpace(search))
@@ -111,11 +130,12 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[CreatedAt]
+            SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt]
             FROM {_tableName}
-            WHERE [Id] = @Id;
+            WHERE [CompanyId] = @CompanyId AND [Id] = @Id;
             """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? MapRow(reader) : null;
@@ -123,6 +143,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
 
     public async Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken cancellationToken)
     {
+        // AccountCode globalde unique — tum sirketlerde kontrol edilir (UNIQUE constraint global).
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = excludeId.HasValue
@@ -141,11 +162,16 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_tableName}
-                ([AccountType],[AccountCode],[AccountTitle],[TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[CreatedAt])
+                ([CompanyId],[AccountType],[AccountCode],[AccountTitle],[TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt])
             VALUES
-                (@AccountType,@AccountCode,@AccountTitle,@TaxNumber,@IdentityNumber,@TaxOffice,@Phone,@Mobile,@Email,@Website,@Address,@PostalCode,@City,@District,@Neighborhood,@CountryCode,@ContactPerson,@IsActive,@PriceGroupId,@SalesRepresentativeId,@CreatedAt);
+                (@CompanyId,@AccountType,@AccountCode,@AccountTitle,@TaxNumber,@IdentityNumber,@TaxOffice,@Phone,@Mobile,@Email,@Website,@Address,@PostalCode,@City,@District,@Neighborhood,@CountryCode,@ContactPerson,@IsActive,@PriceGroupId,@SalesRepresentativeId,@WaPhone,@WaName,@CreatedAt);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
+        // Kayit anindaki oturum kullanicisinin sirketinden cek; claim yoksa 1 (default).
+        var effectiveCompanyId = account.CompanyId > 0
+            ? account.CompanyId
+            : (GetCurrentCompanyId() is int cid && cid > 0 ? cid : 1);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", effectiveCompanyId));
         AddParams(cmd, account);
         cmd.Parameters.Add(new SqlParameter("@CreatedAt", account.CreatedAt));
         return (int)(await cmd.ExecuteScalarAsync(cancellationToken))!;
@@ -176,10 +202,13 @@ public sealed class SqlFinanceRepository : IFinanceRepository
                 [ContactPerson]  = @ContactPerson,
                 [IsActive]       = @IsActive,
                 [PriceGroupId]   = @PriceGroupId,
-                [SalesRepresentativeId] = @SalesRepresentativeId
-            WHERE [Id] = @Id;
+                [SalesRepresentativeId] = @SalesRepresentativeId,
+                [WaPhone]        = @WaPhone,
+                [WaName]         = @WaName
+            WHERE [CompanyId] = @CompanyId AND [Id] = @Id;
             """;
         AddParams(cmd, account);
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id", account.Id));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -188,9 +217,41 @@ public sealed class SqlFinanceRepository : IFinanceRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_tableName} WHERE [Id] = @Id;";
+        cmd.CommandText = $"DELETE FROM {_tableName} WHERE [CompanyId] = @CompanyId AND [Id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateContactPriceGroupAsync(int contactId, int? priceGroupId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"UPDATE {_tableName} SET [PriceGroupId] = @PriceGroupId WHERE [CompanyId] = @CompanyId AND [Id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",    GetCurrentCompanyId()));
+        cmd.Parameters.Add(new SqlParameter("@Id",           contactId));
+        cmd.Parameters.Add(new SqlParameter("@PriceGroupId", (object?)priceGroupId ?? DBNull.Value));
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<Contact>> GetContactsByPriceGroupAsync(int priceGroupId, CancellationToken cancellationToken)
+    {
+        var results = new List<Contact>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt]
+            FROM {_tableName}
+            WHERE [CompanyId] = @CompanyId AND [IsActive] = 1 AND [PriceGroupId] = @PriceGroupId
+            ORDER BY [AccountCode];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@CompanyId",    GetCurrentCompanyId()));
+        cmd.Parameters.Add(new SqlParameter("@PriceGroupId", priceGroupId));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            results.Add(MapRow(reader));
+        return results;
     }
 
     private static void AddParams(SqlCommand cmd, Contact a)
@@ -215,31 +276,36 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         cmd.Parameters.Add(new SqlParameter("@IsActive",       a.IsActive));
         cmd.Parameters.Add(new SqlParameter("@PriceGroupId",   (object?)a.PriceGroupId   ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SalesRepresentativeId", (object?)a.SalesRepresentativeId ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@WaPhone",        (object?)a.WaPhone        ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@WaName",         (object?)a.WaName         ?? DBNull.Value));
     }
 
     private static Contact MapRow(SqlDataReader r) => new()
     {
         Id             = r.GetInt32(0),
-        AccountType    = (Domain.Enums.ContactType)r.GetByte(1),
-        AccountCode    = r.GetString(2),
-        AccountTitle   = r.GetString(3),
-        TaxNumber      = r.IsDBNull(4)  ? null : r.GetString(4),
-        IdentityNumber = r.IsDBNull(5)  ? null : r.GetString(5),
-        TaxOffice      = r.IsDBNull(6)  ? null : r.GetString(6),
-        Phone          = r.IsDBNull(7)  ? null : r.GetString(7),
-        Mobile         = r.IsDBNull(8)  ? null : r.GetString(8),
-        Email          = r.IsDBNull(9)  ? null : r.GetString(9),
-        Website        = r.IsDBNull(10) ? null : r.GetString(10),
-        Address        = r.IsDBNull(11) ? null : r.GetString(11),
-        PostalCode     = r.IsDBNull(12) ? null : r.GetString(12),
-        City           = r.IsDBNull(13) ? null : r.GetString(13),
-        District       = r.IsDBNull(14) ? null : r.GetString(14),
-        Neighborhood   = r.IsDBNull(15) ? null : r.GetString(15),
-        CountryCode    = r.IsDBNull(16) ? null : r.GetString(16),
-        ContactPerson  = r.IsDBNull(17) ? null : r.GetString(17),
-        IsActive       = r.GetBoolean(18),
-        PriceGroupId   = r.IsDBNull(19) ? null : r.GetInt32(19),
-        SalesRepresentativeId = r.IsDBNull(20) ? null : r.GetInt32(20),
-        CreatedAt      = r.GetDateTime(21)
+        CompanyId      = r.GetInt32(1),
+        AccountType    = (Domain.Enums.ContactType)r.GetByte(2),
+        AccountCode    = r.GetString(3),
+        AccountTitle   = r.GetString(4),
+        TaxNumber      = r.IsDBNull(5)  ? null : r.GetString(5),
+        IdentityNumber = r.IsDBNull(6)  ? null : r.GetString(6),
+        TaxOffice      = r.IsDBNull(7)  ? null : r.GetString(7),
+        Phone          = r.IsDBNull(8)  ? null : r.GetString(8),
+        Mobile         = r.IsDBNull(9)  ? null : r.GetString(9),
+        Email          = r.IsDBNull(10) ? null : r.GetString(10),
+        Website        = r.IsDBNull(11) ? null : r.GetString(11),
+        Address        = r.IsDBNull(12) ? null : r.GetString(12),
+        PostalCode     = r.IsDBNull(13) ? null : r.GetString(13),
+        City           = r.IsDBNull(14) ? null : r.GetString(14),
+        District       = r.IsDBNull(15) ? null : r.GetString(15),
+        Neighborhood   = r.IsDBNull(16) ? null : r.GetString(16),
+        CountryCode    = r.IsDBNull(17) ? null : r.GetString(17),
+        ContactPerson  = r.IsDBNull(18) ? null : r.GetString(18),
+        IsActive       = r.GetBoolean(19),
+        PriceGroupId   = r.IsDBNull(20) ? null : r.GetInt32(20),
+        SalesRepresentativeId = r.IsDBNull(21) ? null : r.GetInt32(21),
+        WaPhone        = r.IsDBNull(22) ? null : r.GetString(22),
+        WaName         = r.IsDBNull(23) ? null : r.GetString(23),
+        CreatedAt      = r.GetDateTime(24)
     };
 }

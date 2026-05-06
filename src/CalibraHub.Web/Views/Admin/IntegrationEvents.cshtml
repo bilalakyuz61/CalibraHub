@@ -22,6 +22,7 @@
     .ie-sql-area:focus { border-color: #3b82f6; outline: none; }
     .ie-placeholder-hint { font-size: 0.7rem; color: #94a3b8; margin-top: 4px; }
     .ie-placeholder-hint code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 0.67rem; }
+    .ie-endpoint-desc { font-size: 0.74rem; color: #475569; padding: 5px 9px; background: #f1f5f9; border-left: 3px solid #93c5fd; border-radius: 3px; line-height: 1.4; flex: 1 1 auto; }
     .ie-params-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 6px; }
     .ie-params-table th { padding: 3px 6px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 0.68rem; font-weight: 600; color: #64748b; }
     .ie-params-table td { padding: 2px 3px; border: 1px solid #e2e8f0; vertical-align: middle; }
@@ -69,6 +70,7 @@
     body.app-theme-dark .ie-sql-area:focus { border-color: #818cf8; }
     body.app-theme-dark .ie-placeholder-hint { color: #64748b; }
     body.app-theme-dark .ie-placeholder-hint code { background: rgba(255,255,255,.06); color: #a5b4fc; }
+    body.app-theme-dark .ie-endpoint-desc { background: rgba(255,255,255,.04); color: rgba(255,255,255,.75); border-left-color: rgba(129,140,248,.5); }
     body.app-theme-dark .ie-params-table th {
         background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.08); color: #94a3b8;
     }
@@ -176,7 +178,21 @@
                 </select>
                 <a href="/Admin/CompanySettings" target="_blank" title="Profil ekle" style="flex-shrink:0;font-size:0.75rem;color:#2563eb;white-space:nowrap;">+ Profil</a>
             </div>
-            <div class="ie-line"><label>Endpoint</label><input type="text" id="ieApiEndpoint" class="form-control form-control-sm" placeholder="/api/v2/ARPs" /></div>
+            <div class="ie-line">
+                <label>Endpoint</label>
+                <select id="ieApiEndpointSelect" class="form-select form-select-sm" onchange="ieEndpointSelectChange()">
+                    <option value="">— Endpoint seciniz —</option>
+                    <option value="__manual__">Diger (manuel gir)</option>
+                </select>
+            </div>
+            <div class="ie-line" id="ieApiEndpointManualRow" style="display:none;">
+                <label></label>
+                <input type="text" id="ieApiEndpoint" class="form-control form-control-sm" placeholder="/api/v2/ARPs" />
+            </div>
+            <div class="ie-line" id="ieApiEndpointDescRow" style="display:none;">
+                <label></label>
+                <span id="ieApiEndpointDesc" class="ie-endpoint-desc"></span>
+            </div>
             <div class="ie-line"><label>Method</label>
                 <select id="ieApiMethod" class="form-select form-select-sm">
                     <option value="POST">POST</option>
@@ -255,7 +271,7 @@
         Custom: []
     };
 
-    function init() { loadAll(); loadApiProfiles(); }
+    function init() { loadAll(); loadApiProfiles(); loadEndpointCatalog(); }
 
     function loadAll() {
         fetch(API('GetIntegrationEventsJson'))
@@ -530,12 +546,7 @@
     }
 
     function loadApiConfig(json) {
-        document.getElementById('ieApiProfileId').value = '';
-        document.getElementById('ieApiEndpoint').value = '';
-        document.getElementById('ieApiBodyTemplate').value = '';
-        document.getElementById('ieApiSuccessPath').value = '';
-        document.getElementById('ieApiSuccessValue').value = 'true';
-        setSelectVal('ieApiMethod', 'POST');
+        clearApiForm();
         if (!json) return;
         try {
             var c = JSON.parse(json);
@@ -545,6 +556,7 @@
             document.getElementById('ieApiBodyTemplate').value = c.bodyTemplate || '';
             document.getElementById('ieApiSuccessPath').value = c.successPath || '';
             document.getElementById('ieApiSuccessValue').value = c.successValue || 'true';
+            applyEndpointSelection(c.endpoint || '', c.method || 'POST');
         } catch(e) {}
     }
 
@@ -555,7 +567,128 @@
         document.getElementById('ieApiSuccessPath').value = '';
         document.getElementById('ieApiSuccessValue').value = 'true';
         setSelectVal('ieApiMethod', 'POST');
+        var sel = document.getElementById('ieApiEndpointSelect');
+        if (sel) sel.value = '';
+        var manualRow = document.getElementById('ieApiEndpointManualRow');
+        if (manualRow) manualRow.style.display = 'none';
+        var descRow = document.getElementById('ieApiEndpointDescRow');
+        if (descRow) descRow.style.display = 'none';
+        var desc = document.getElementById('ieApiEndpointDesc');
+        if (desc) desc.textContent = '';
     }
+
+    // ── REST API Endpoint Catalog ────────────────────────────────
+    var _endpointCatalog = [];
+
+    function loadEndpointCatalog() {
+        return fetch(API('GetIntegrationEndpointCatalogJson?vendor=Netsis'))
+            .then(function(r) { return r.json(); })
+            .then(function(items) {
+                _endpointCatalog = items || [];
+                renderEndpointCatalog();
+            })
+            .catch(function() { _endpointCatalog = []; });
+    }
+
+    function renderEndpointCatalog() {
+        var sel = document.getElementById('ieApiEndpointSelect');
+        if (!sel) return;
+        var current = sel.value;
+        while (sel.options.length > 0) sel.remove(0);
+        var ph = document.createElement('option');
+        ph.value = ''; ph.text = '— Endpoint seciniz —';
+        sel.appendChild(ph);
+        _endpointCatalog.forEach(function(e) {
+            var o = document.createElement('option');
+            o.value = (e.method || 'POST') + '|' + (e.path || '');
+            o.text = (e.title || e.path) + '  ·  ' + (e.method || 'POST') + ' ' + (e.path || '');
+            o.dataset.path = e.path || '';
+            o.dataset.method = e.method || 'POST';
+            o.dataset.description = e.description || '';
+            o.dataset.bodyTemplate = e.bodyTemplate || '';
+            sel.appendChild(o);
+        });
+        var manual = document.createElement('option');
+        manual.value = '__manual__';
+        manual.text = 'Diger (manuel gir)';
+        sel.appendChild(manual);
+        // Yuklu bir endpoint varsa, kataloga gore yeniden esle (geç yuklenen katalog senaryosu)
+        var existingEndpoint = document.getElementById('ieApiEndpoint').value;
+        var existingMethod = document.getElementById('ieApiMethod').value;
+        if (existingEndpoint) {
+            applyEndpointSelection(existingEndpoint, existingMethod);
+        } else if (current) {
+            for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === current) { sel.selectedIndex = i; break; }
+            }
+        }
+    }
+
+    function applyEndpointSelection(endpoint, method) {
+        var sel = document.getElementById('ieApiEndpointSelect');
+        var manualRow = document.getElementById('ieApiEndpointManualRow');
+        var descRow = document.getElementById('ieApiEndpointDescRow');
+        var desc = document.getElementById('ieApiEndpointDesc');
+        if (!sel) return;
+        if (!endpoint) {
+            sel.value = '';
+            if (manualRow) manualRow.style.display = 'none';
+            if (descRow) descRow.style.display = 'none';
+            if (desc) desc.textContent = '';
+            return;
+        }
+        var matchVal = (method || 'POST') + '|' + endpoint;
+        var found = false;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === matchVal) { sel.selectedIndex = i; found = true; break; }
+        }
+        if (found) {
+            if (manualRow) manualRow.style.display = 'none';
+            var d = sel.options[sel.selectedIndex].dataset.description || '';
+            if (desc) desc.textContent = d;
+            if (descRow) descRow.style.display = d ? '' : 'none';
+        } else {
+            sel.value = '__manual__';
+            if (manualRow) manualRow.style.display = '';
+            if (desc) desc.textContent = 'Listede olmayan bir endpoint icin path\'i kendiniz yazin.';
+            if (descRow) descRow.style.display = '';
+        }
+    }
+
+    window.ieEndpointSelectChange = function() {
+        var sel = document.getElementById('ieApiEndpointSelect');
+        var manualRow = document.getElementById('ieApiEndpointManualRow');
+        var descRow = document.getElementById('ieApiEndpointDescRow');
+        var desc = document.getElementById('ieApiEndpointDesc');
+        var input = document.getElementById('ieApiEndpoint');
+        var v = sel.value;
+        if (v === '') {
+            if (manualRow) manualRow.style.display = 'none';
+            if (descRow) descRow.style.display = 'none';
+            if (desc) desc.textContent = '';
+            input.value = '';
+            return;
+        }
+        if (v === '__manual__') {
+            if (manualRow) manualRow.style.display = '';
+            if (desc) desc.textContent = 'Listede olmayan bir endpoint icin path\'i kendiniz yazin.';
+            if (descRow) descRow.style.display = '';
+            setTimeout(function() { input.focus(); }, 0);
+            return;
+        }
+        var opt = sel.options[sel.selectedIndex];
+        input.value = opt.dataset.path || '';
+        setSelectVal('ieApiMethod', opt.dataset.method || 'POST');
+        var d = opt.dataset.description || '';
+        if (desc) desc.textContent = d;
+        if (descRow) descRow.style.display = d ? '' : 'none';
+        if (manualRow) manualRow.style.display = 'none';
+        var bodyEl = document.getElementById('ieApiBodyTemplate');
+        var bodyTpl = opt.dataset.bodyTemplate || '';
+        if (bodyTpl && bodyEl && (!bodyEl.value || !bodyEl.value.trim())) {
+            bodyEl.value = bodyTpl;
+        }
+    };
 
     // ── Helpers ──────────────────────────────────────────────────
     function getActionType() {

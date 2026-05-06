@@ -102,15 +102,11 @@ export async function widgetSchemaByCode(formCode) {
 
 var GUIDE_BASE = '/api/guides'
 
-/** Tum aktif rehberlerin kataloğu (admin OptionsModal dropdown'u) */
-export async function guideCatalog() {
-  var resp = await fetch(GUIDE_BASE, {
-    method: 'GET', credentials: 'same-origin',
-    headers: { 'Accept': 'application/json' },
-  })
-  if (!resp.ok) throw new Error('guideCatalog HTTP ' + resp.status)
-  return await resp.json()
-}
+// PR 3: guideCatalog() helper kaldirildi — UI artik /api/guides/views uzerinden
+// fiziksel SQL view listesini direkt cekiyor (OptionsModal/GuideCustomizationModal).
+// GUIDE_BASE su an sadece /api/guides/{code}/schema|search|resolve|distinct icin
+// kullaniliyor; {code} parametresi GuideCode VEYA ViewName kabul eder
+// (SqlGuideRepository.GetByCodeAsync iki kolonda da eslestirir).
 
 /** Tek bir rehberin schema'si — kolon header'lari + default sort */
 export async function guideSchema(guideCode) {
@@ -154,6 +150,29 @@ export async function guideSearch(guideCode, opts) {
     } catch (_) { /* body JSON degil */ }
     throw new Error('guideSearch HTTP ' + resp.status + detail)
   }
+  return await resp.json()
+}
+
+/**
+ * Bir kolonun DISTINCT degerlerini doner (max 200) — runtime'da rehber popup'inda
+ * distinct filtre cipleri icin. search non-empty ise sunucu-tarafi LIKE filtresi
+ * (Turkish_CI_AI) uygulanir → alfabetik kuyrukta gizli kalmis 200+ degerlere
+ * de ulasilabilir. Returns: string[]
+ */
+export async function guideDistinct(guideCode, column, search) {
+  if (!guideCode) throw new Error('guideCode zorunlu')
+  if (!column) throw new Error('column zorunlu')
+  var url = GUIDE_BASE + '/' + encodeURIComponent(guideCode) +
+            '/distinct/' + encodeURIComponent(column)
+  if (search && String(search).trim().length > 0) {
+    url += '?q=' + encodeURIComponent(String(search).trim())
+  }
+  var resp = await fetch(url, {
+    method: 'GET', credentials: 'same-origin',
+    headers: { 'Accept': 'application/json' },
+  })
+  if (resp.status === 404) return []
+  if (!resp.ok) throw new Error('guideDistinct HTTP ' + resp.status)
   return await resp.json()
 }
 

@@ -79,7 +79,8 @@ public sealed class AddReminderInput
     public ReminderRecurrenceType RecurrenceType { get; set; } = ReminderRecurrenceType.None;
     public string? RecurrenceData { get; set; }
     public ReminderDeliveryChannel DeliveryChannel { get; set; } = ReminderDeliveryChannel.InApp;
-    public Guid? TargetUserId { get; set; }
+    /// <summary>Hedef kullanicilar — bos ise notun sahibine gider.</summary>
+    public List<Guid>? TargetUserIds { get; set; }
 }
 
 public sealed class AddShareInput

@@ -1,0 +1,821 @@
+/* ════════════════════════════════════════════════════════════
+   widgetField.css — Form widget alanlari icin tek nokta tasarim sistemi.
+
+   ── Kapsam ──────────────────────────────────────────────────
+   Token'lar (CSS variables), input shell'leri, field wrapper'lari
+   (klasik / modern / inline), multi-check, link/lookup gruplari,
+   24-col grid container, karisik satir hizalama, hata/disabled/
+   formula/required durumlari.
+
+   ── Prefix Mimarisi ─────────────────────────────────────────
+   `.wf-*` yeni canonical sinif. Geriye donuk `.mce-*`, `.sqe-*`,
+   `.ca-*` prefix'leri ayni kurallarda (comma-separated) listeli
+   tutuluyor — Razor static template'lari ile React widget renderer
+   ayni gorunume sahip olsun. Razor sayfalarinin widget-field-spesifik
+   CSS bloklari bu dosyaya tasinarak tekrar onlendi (page chrome'a
+   dokunulmadi).
+
+   `.calibra-modern-wrap` ve `.calibra-modern-label` (eski global
+   index.css alanlari) buradaki `.wf-modern-wrap` ve `.wf-label--modern`
+   ile birlikte yasiyor; eski class adlari geriye uyum icin korundu.
+   ════════════════════════════════════════════════════════════ */
+
+
+/* ═══════════════════════════════════════════════════
+   1) Token'lar — Dark (varsayilan) ve Light tema
+   ═══════════════════════════════════════════════════ */
+html body {
+  /* Boyut */
+  --wf-input-h: 38px;
+  --wf-radius: 10px;
+  --wf-px: 12px;
+
+  /* Renk — input shell */
+  --wf-bg:           rgba(255,255,255,0.04);
+  --wf-bg-focus:     rgba(255,255,255,0.06);
+  --wf-border:       rgba(255,255,255,0.08);
+  --wf-border-hover: rgba(165,180,252,0.35);
+  --wf-border-focus: #a5b4fc;
+  --wf-text:         #f1f5f9;
+  --wf-placeholder:  rgba(255,255,255,0.4);
+  --wf-focus-ring:   0 0 0 3px rgba(99,102,241,0.25);
+
+  /* Layout */
+  --wf-row-gap: 14px;
+  --wf-col-gap: 14px;
+  --wf-inline-label-w: 160px;
+
+  /* Tipografi */
+  --wf-label-color:  rgba(255,255,255,0.78);
+  --wf-label-font:   13px;
+  --wf-label-weight: 600;
+
+  /* Hata */
+  --wf-error-color: #ef4444;
+  --wf-error-bg:    rgba(239,68,68,0.06);
+  --wf-error-ring:  0 0 0 3px rgba(239,68,68,0.18);
+
+  /* Modern label (floating) — index.css'ten tasindi */
+  --wf-modern-label-bg:    rgba(15, 23, 42, 0.98);
+  --wf-modern-label-color: rgba(165, 180, 252, 0.95);
+  --wf-modern-label-focus: #a5b4fc;
+}
+
+html:not(.dark) body,
+body.app-theme-light {
+  --wf-bg:           #ffffff;
+  --wf-bg-focus:     #ffffff;
+  --wf-border:       #e2e8f0;
+  --wf-border-hover: #c7d2fe;
+  --wf-border-focus: #6366f1;
+  --wf-text:         #0f172a;
+  --wf-placeholder:  #94a3b8;
+  --wf-focus-ring:   0 0 0 3px rgba(99,102,241,0.18);
+
+  --wf-label-color: #334155;
+
+  --wf-modern-label-bg:    #ffffff;
+  --wf-modern-label-color: #475569;
+  --wf-modern-label-focus: #3730a3;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   2) Input shell — text/number/date/select/textarea
+       width:100% — overlap bug'inin kok cozumu
+   ═══════════════════════════════════════════════════ */
+.wf-input,  .wf-select,  .wf-textarea,
+.mce-input, .mce-select, .mce-textarea,
+.sqe-input, .sqe-select, .sqe-textarea,
+.ca-input,  .ca-select,  .ca-textarea {
+  width: 100%;
+  height: var(--wf-input-h);
+  padding: 0 var(--wf-px);
+  border-radius: var(--wf-radius);
+  background: var(--wf-bg);
+  border: 1px solid var(--wf-border);
+  color: var(--wf-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  box-shadow: none;
+  transition: border-color .12s, box-shadow .12s, background .12s;
+  box-sizing: border-box;
+  outline: none;
+}
+
+body.app-theme-light .wf-input,  body.app-theme-light .wf-select,  body.app-theme-light .wf-textarea,
+body.app-theme-light .mce-input, body.app-theme-light .mce-select, body.app-theme-light .mce-textarea,
+body.app-theme-light .sqe-input, body.app-theme-light .sqe-select, body.app-theme-light .sqe-textarea,
+body.app-theme-light .ca-input,  body.app-theme-light .ca-select,  body.app-theme-light .ca-textarea {
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+}
+
+/* Hover */
+.wf-input:hover:not(:focus):not(:disabled),
+.wf-select:hover:not(:focus):not(:disabled),
+.wf-textarea:hover:not(:focus):not(:disabled),
+.mce-input:hover:not(:focus):not(:disabled),
+.mce-select:hover:not(:focus):not(:disabled),
+.mce-textarea:hover:not(:focus):not(:disabled),
+.sqe-input:hover:not(:focus):not(:disabled),
+.sqe-select:hover:not(:focus):not(:disabled),
+.sqe-textarea:hover:not(:focus):not(:disabled),
+.ca-input:hover:not(:focus):not(:disabled),
+.ca-select:hover:not(:focus):not(:disabled),
+.ca-textarea:hover:not(:focus):not(:disabled) {
+  border-color: var(--wf-border-hover);
+}
+
+/* Focus */
+.wf-input:focus,  .wf-select:focus,  .wf-textarea:focus,
+.mce-input:focus, .mce-select:focus, .mce-textarea:focus,
+.sqe-input:focus, .sqe-select:focus, .sqe-textarea:focus,
+.ca-input:focus,  .ca-select:focus,  .ca-textarea:focus {
+  outline: none;
+  border-color: var(--wf-border-focus);
+  background: var(--wf-bg-focus);
+  box-shadow: var(--wf-focus-ring);
+}
+
+/* Placeholder */
+.wf-input::placeholder,  .wf-textarea::placeholder,
+.mce-input::placeholder, .mce-textarea::placeholder,
+.sqe-input::placeholder, .sqe-textarea::placeholder,
+.ca-input::placeholder,  .ca-textarea::placeholder {
+  color: var(--wf-placeholder);
+}
+
+/* Invalid */
+.wf-input.is-invalid,  .wf-select.is-invalid,  .wf-textarea.is-invalid,
+.mce-input.is-invalid, .mce-select.is-invalid, .mce-textarea.is-invalid,
+.sqe-input.is-invalid, .sqe-select.is-invalid, .sqe-textarea.is-invalid,
+.ca-input.is-invalid,  .ca-select.is-invalid,  .ca-textarea.is-invalid {
+  border-color: var(--wf-error-color) !important;
+  box-shadow: var(--wf-error-ring) !important;
+  background: var(--wf-error-bg) !important;
+  animation: wf-shake 0.42s cubic-bezier(.36,.07,.19,.97);
+}
+
+/* ── Guide List (akordion rehber listesi widget'i) ─────────────
+   Salt okunur cikti — kullanici secim yapmaz, DB deger yazilmaz.
+   <details> ile native akordion, <summary> tikla ac/kapa.
+   Default kapali; acildiginda guide search lazy fetch eder. */
+.wf-guide-list {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+body.app-theme-dark .wf-guide-list {
+  background: rgba(15, 23, 42, 0.45);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+.wf-guide-list[open] {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
+}
+
+.wf-guide-list-summary {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer; user-select: none;
+  font-size: 12px; font-weight: 600;
+  color: rgba(30, 41, 59, 0.85);
+  list-style: none;
+  outline: none;
+}
+/* alwaysOpen mode — sade baslik (tiklanmaz, chevron yok) */
+.wf-guide-list-summary--static {
+  cursor: default;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+body.app-theme-dark .wf-guide-list-summary--static {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Search input — opsiyonel, searchEnabled=true ise tablo ustunde */
+.wf-guide-list-search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(241, 245, 249, 0.4);
+}
+body.app-theme-dark .wf-guide-list-search {
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+.wf-guide-list-search-icon { color: rgba(148, 163, 184, 0.7); flex-shrink: 0; }
+.wf-guide-list-search-input {
+  flex: 1; min-width: 0;
+  height: 26px; padding: 0 6px;
+  background: transparent; border: none; outline: none;
+  font-size: 12px; color: rgba(30, 41, 59, 0.9);
+}
+body.app-theme-dark .wf-guide-list-search-input {
+  color: rgba(255, 255, 255, 0.85);
+}
+.wf-guide-list-search-input::placeholder { color: rgba(148, 163, 184, 0.55); }
+.wf-guide-list-search-clear {
+  flex-shrink: 0; width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(148, 163, 184, 0.7); cursor: pointer; border-radius: 6px;
+}
+.wf-guide-list-search-clear:hover { color: #ef4444; }
+.wf-guide-list-summary::-webkit-details-marker { display: none; }
+body.app-theme-dark .wf-guide-list-summary { color: rgba(255, 255, 255, 0.85); }
+
+.wf-guide-list-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-guide-list-count {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(99, 102, 241, 0.12);
+  color: rgba(99, 102, 241, 0.85);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+}
+.wf-guide-list-chevron {
+  flex-shrink: 0;
+  color: rgba(148, 163, 184, 0.7);
+  transition: transform 0.2s ease;
+}
+.wf-guide-list[open] > .wf-guide-list-summary .wf-guide-list-chevron {
+  transform: rotate(180deg);
+}
+
+.wf-guide-list-body {
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  padding: 0;
+  max-height: 480px;
+  overflow-y: auto;
+}
+body.app-theme-dark .wf-guide-list-body { border-top-color: rgba(255, 255, 255, 0.06); }
+
+.wf-guide-list-table-wrap { width: 100%; }
+.wf-guide-list-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 12px;
+}
+.wf-guide-list-table thead {
+  position: sticky; top: 0; z-index: 1;
+  background: rgba(241, 245, 249, 0.95);
+}
+body.app-theme-dark .wf-guide-list-table thead {
+  background: rgba(15, 23, 42, 0.96);
+}
+.wf-guide-list-th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600; font-size: 11px;
+  color: rgba(71, 85, 105, 0.85);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  white-space: nowrap;
+  user-select: none;
+}
+body.app-theme-dark .wf-guide-list-th { color: rgba(203, 213, 225, 0.7); border-bottom-color: rgba(255, 255, 255, 0.08); }
+.wf-guide-list-th.is-sortable { cursor: pointer; }
+.wf-guide-list-th.is-sortable:hover { background: rgba(99, 102, 241, 0.05); }
+.wf-guide-list-th.is-sorted { color: #6366f1; }
+.wf-guide-list-sort-arrow { margin-left: 4px; font-size: 9px; }
+
+.wf-guide-list-table tbody tr {
+  transition: background 0.12s;
+}
+.wf-guide-list-table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.04);
+}
+body.app-theme-dark .wf-guide-list-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.wf-guide-list-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.10);
+  color: rgba(30, 41, 59, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+body.app-theme-dark .wf-guide-list-table td {
+  color: rgba(255, 255, 255, 0.82);
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+
+.wf-guide-list-empty,
+.wf-guide-list-error,
+.wf-guide-list-loading,
+.wf-guide-list-empty-row {
+  padding: 16px; text-align: center;
+  font-size: 12px; color: rgba(148, 163, 184, 0.7);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.wf-guide-list-empty-row { padding: 24px 16px; color: rgba(148, 163, 184, 0.55); }
+.wf-guide-list-error { color: #ef4444; }
+.wf-guide-list-spin { animation: wf-spin 1s linear infinite; }
+@keyframes wf-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.wf-guide-list-sentinel { height: 1px; }
+
+/* Lookup widget'i wrapper bazli — LookupCard kendi input'unu ic icine
+   sariyor; wrapper'a is-invalid eklendiginde tum LookupCard kirmizi cerceveli
+   shake yapar. */
+.wf-lookup-group.is-invalid {
+  border-radius: 10px;
+  animation: wf-shake 0.42s cubic-bezier(.36,.07,.19,.97);
+}
+.wf-lookup-group.is-invalid > *,
+.wf-lookup-group.is-invalid input,
+.wf-lookup-group.is-invalid .lookup-card {
+  border-color: var(--wf-error-color) !important;
+  box-shadow: var(--wf-error-ring) !important;
+  background: var(--wf-error-bg) !important;
+}
+
+/* Save denemesinde bos kalan zorunlu alan icin yatay titresim. Animation
+   class ekleninince bir kere calisir; tekrar tetiklemek icin renderer
+   saveAttemptErrors'i bir frame bos hale getirir, sonra yeniden setler. */
+@keyframes wf-shake {
+  0%, 100% { transform: translateX(0); }
+  15%      { transform: translateX(-7px); }
+  30%      { transform: translateX(6px); }
+  45%      { transform: translateX(-5px); }
+  60%      { transform: translateX(4px); }
+  75%      { transform: translateX(-2px); }
+  90%      { transform: translateX(2px); }
+}
+
+/* Toast container — sag alt kose, dusey stack. Coklu alan validasyonu
+   her bos zorunlu icin tek bir kart gosterir. Z-index modallarin
+   uzerinde (10500) kalsin. */
+.wf-toast-host {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 10500;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 360px;
+}
+.wf-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px 10px 12px;
+  background: rgba(15, 18, 28, 0.96);
+  color: rgba(255,255,255,0.92);
+  border: 1px solid rgba(239,68,68,0.45);
+  border-left: 3px solid #ef4444;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  font-size: 12px;
+  line-height: 1.4;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: wf-toast-in 0.22s ease-out;
+  min-width: 240px;
+}
+.wf-toast-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.18);
+  color: #fca5a5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  margin-top: 1px;
+}
+.wf-toast-body { flex: 1; min-width: 0; }
+.wf-toast-title { font-weight: 600; color: rgba(255,255,255,0.95); }
+.wf-toast-detail {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 2px;
+  word-break: break-word;
+}
+.wf-toast-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.45);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 16px;
+  line-height: 1;
+}
+.wf-toast-close:hover { color: rgba(255,255,255,0.85); }
+.wf-toast.is-leaving { animation: wf-toast-out 0.18s ease-in forwards; }
+@keyframes wf-toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes wf-toast-out {
+  to { opacity: 0; transform: translateX(20px); }
+}
+
+/* Light tema */
+body.app-theme-light .wf-toast {
+  background: #ffffff;
+  color: #1e293b;
+  border-color: rgba(239,68,68,0.4);
+}
+body.app-theme-light .wf-toast-title { color: #0f172a; }
+body.app-theme-light .wf-toast-detail { color: #64748b; }
+
+/* Sayisal — saga hizali, spinner yok */
+.wf-input[type="number"],
+.mce-input[type="number"],
+.sqe-input[type="number"],
+.ca-input[type="number"] {
+  text-align: right;
+  -moz-appearance: textfield;
+}
+.wf-input[type="number"]::-webkit-outer-spin-button,
+.wf-input[type="number"]::-webkit-inner-spin-button,
+.mce-input[type="number"]::-webkit-outer-spin-button,
+.mce-input[type="number"]::-webkit-inner-spin-button,
+.sqe-input[type="number"]::-webkit-outer-spin-button,
+.sqe-input[type="number"]::-webkit-inner-spin-button,
+.ca-input[type="number"]::-webkit-outer-spin-button,
+.ca-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+
+/* Textarea — cok satirli */
+.wf-textarea, .mce-textarea, .sqe-textarea, .ca-textarea {
+  height: auto;
+  min-height: 80px;
+  resize: vertical;
+  font-family: inherit;
+  padding: 8px var(--wf-px);
+}
+
+/* Select option dropdown teması (Win Chrome/Edge/Firefox) */
+.wf-select option,
+.mce-select option,
+.sqe-select option,
+.ca-select option {
+  background: #0d1117;
+  color: rgba(255,255,255,0.85);
+}
+body.app-theme-light .wf-select option,
+body.app-theme-light .mce-select option,
+body.app-theme-light .sqe-select option,
+body.app-theme-light .ca-select option {
+  background: #ffffff;
+  color: #1e293b;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   3) Field wrapper — KLASIK (label-left + input-right)
+   ═══════════════════════════════════════════════════ */
+.wf-field, .mce-field, .sqe-field, .ca-field {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) 1fr;
+  align-items: center;
+  column-gap: 10px;
+  min-width: 0;
+}
+.wf-field--full, .mce-field--full, .sqe-field--full, .ca-field--full {
+  grid-column: 1 / -1;
+}
+
+.wf-field > label,  .mce-field > label,  .sqe-field > label,  .ca-field > label,
+.wf-label, .mce-label, .sqe-label, .ca-label {
+  font-size: var(--wf-label-font);
+  font-weight: var(--wf-label-weight);
+  color: var(--wf-label-color);
+  letter-spacing: 0.01em;
+  margin: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.wf-field > *:not(label), .mce-field > *:not(label),
+.sqe-field > *:not(label), .ca-field > *:not(label) {
+  min-width: 0;
+}
+
+/* Required yildizi */
+.wf-required::after, .mce-required::after,
+.sqe-required::after, .ca-required::after {
+  content: ' *'; color: #f87171;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   4) Field wrapper — INLINE (160px label-left, eski isPlainField)
+   ═══════════════════════════════════════════════════ */
+.wf-field--inline {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 12px;
+  min-width: 0;
+  padding: 4px 0 4px 6px;
+}
+.wf-field--inline > .wf-label,
+.wf-field--inline > label {
+  width: var(--wf-inline-label-w);
+  min-width: var(--wf-inline-label-w);
+  flex-shrink: 0;
+  text-align: left;
+  margin-bottom: 0;
+}
+.wf-field--inline > .wf-input-slot,
+.wf-field--inline > div:not(.wf-label) {
+  flex: 1; min-width: 0;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   5) Field wrapper — MODERN (floating/outlined label)
+   ═══════════════════════════════════════════════════ */
+.wf-modern-wrap,
+.calibra-modern-wrap {
+  position: relative;
+  padding-top: 14px;
+}
+
+/* Modern label (border'in ustune asili) */
+.wf-label--modern,
+.calibra-modern-label {
+  position: absolute;
+  top: -10px;
+  left: 2px;
+  transform: translateY(0);
+  padding: 0 3px;
+  font-size: var(--wf-label-font);
+  font-weight: var(--wf-label-weight);
+  letter-spacing: 0.01em;
+  color: var(--wf-modern-label-color);
+  background: transparent;
+  pointer-events: none;
+  z-index: 1;
+  line-height: 1.35;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+.wf-modern-wrap:focus-within .wf-label--modern,
+.calibra-modern-wrap:focus-within .calibra-modern-label {
+  color: var(--wf-modern-label-focus);
+}
+
+/* Modern wrap iclik genislik garantisi (overlap bug kok cozumu).
+   `.wf-input` zaten width:100% — ama eski `.mce-input` Razor sayfasinda
+   width belirtilmemisken modern wrap'in display:block ortaminda
+   browser-default'a kuculuyor; lookup-card (gl-card) ise width:100%
+   olunca yan yana gorunum bozuluyor. Bu kural tum input/select/textarea
+   ve gl-card'i 100% e zorlar — cubic-prefix'ten bagimsiz. */
+.wf-modern-wrap > input,
+.wf-modern-wrap > select,
+.wf-modern-wrap > textarea,
+.wf-modern-wrap > .gl-card,
+.wf-modern-wrap > div > input,
+.wf-modern-wrap > div > select,
+.wf-modern-wrap > div > textarea,
+.wf-modern-wrap > div > .gl-card,
+.calibra-modern-wrap > input,
+.calibra-modern-wrap > select,
+.calibra-modern-wrap > textarea,
+.calibra-modern-wrap > .gl-card,
+.calibra-modern-wrap > div > input,
+.calibra-modern-wrap > div > select,
+.calibra-modern-wrap > div > textarea,
+.calibra-modern-wrap > div > .gl-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   6) 24-col grid container + karisik satir hizalama
+   ═══════════════════════════════════════════════════ */
+.wf-grid {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  gap: var(--wf-row-gap);
+}
+
+/* Eski prefix grid'lerin tek noktada hizalanmasi */
+.mce-grid-2, .sqe-grid-2, .ca-grid-2 {
+  /* Grid kurali zaten Razor sayfalarinda var (legacy 2-col bazlilar);
+     burada 24-col uyumu icin yeniden yazma — DynamicWidgetRenderer
+     inline grid template ile istedigi zaman 24-col verir. */
+}
+
+/* Mixed-row alignment — ayni satirda klasik + modern widget
+   bulundugunda input ust kenarlari hizalansin. */
+.wf-grid:has(.wf-modern-wrap),
+.wf-grid:has(.calibra-modern-wrap),
+.mce-grid-2:has(.wf-modern-wrap),
+.mce-grid-2:has(.calibra-modern-wrap),
+.sqe-grid-2:has(.wf-modern-wrap),
+.sqe-grid-2:has(.calibra-modern-wrap),
+.ca-grid-2:has(.wf-modern-wrap),
+.ca-grid-2:has(.calibra-modern-wrap) {
+  align-items: start;
+}
+.wf-grid:has(.wf-modern-wrap) .wf-field,
+.wf-grid:has(.calibra-modern-wrap) .wf-field,
+.mce-grid-2:has(.wf-modern-wrap) .mce-field,
+.mce-grid-2:has(.calibra-modern-wrap) .mce-field,
+.sqe-grid-2:has(.wf-modern-wrap) .sqe-field,
+.sqe-grid-2:has(.calibra-modern-wrap) .sqe-field,
+.ca-grid-2:has(.wf-modern-wrap) .ca-field,
+.ca-grid-2:has(.calibra-modern-wrap) .ca-field {
+  padding-top: 14px;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   7) Multi-check (multi-select chip container)
+   ═══════════════════════════════════════════════════ */
+.wf-multicheck, .mce-multicheck, .sqe-multicheck, .ca-multicheck {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  min-height: var(--wf-input-h);
+  padding: 6px 8px;
+  border-radius: var(--wf-radius);
+  background: var(--wf-bg);
+  border: 1px solid var(--wf-border);
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+}
+.wf-multicheck-item, .mce-multicheck-item, .sqe-multicheck-item, .ca-multicheck-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 0.8rem; color: rgba(255,255,255,0.65);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--wf-border);
+  transition: all 0.12s; user-select: none;
+}
+body.app-theme-light .wf-multicheck-item,
+body.app-theme-light .mce-multicheck-item,
+body.app-theme-light .sqe-multicheck-item,
+body.app-theme-light .ca-multicheck-item {
+  color: #475569; background: #fff; border-color: #e2e8f0;
+}
+.wf-multicheck-item:hover,  .mce-multicheck-item:hover,
+.sqe-multicheck-item:hover, .ca-multicheck-item:hover {
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.2);
+}
+.wf-multicheck-item.is-checked,  .mce-multicheck-item.is-checked,
+.sqe-multicheck-item.is-checked, .ca-multicheck-item.is-checked {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.35);
+  color: #a5b4fc;
+}
+body.app-theme-light .wf-multicheck-item.is-checked,
+body.app-theme-light .mce-multicheck-item.is-checked,
+body.app-theme-light .sqe-multicheck-item.is-checked,
+body.app-theme-light .ca-multicheck-item.is-checked {
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.3);
+  color: #4f46e5;
+}
+.wf-multicheck-item input[type="checkbox"],
+.mce-multicheck-item input[type="checkbox"],
+.sqe-multicheck-item input[type="checkbox"],
+.ca-multicheck-item input[type="checkbox"] {
+  accent-color: #6366f1; width: 14px; height: 14px; cursor: pointer;
+}
+.wf-multicheck-empty,  .mce-multicheck-empty,
+.sqe-multicheck-empty, .ca-multicheck-empty {
+  font-size: 0.76rem; color: rgba(255,255,255,0.5);
+  font-style: italic; padding: 4px;
+}
+body.app-theme-light .wf-multicheck-empty,
+body.app-theme-light .mce-multicheck-empty,
+body.app-theme-light .sqe-multicheck-empty,
+body.app-theme-light .ca-multicheck-empty { color: #94a3b8; }
+
+
+/* ═══════════════════════════════════════════════════
+   8) Link grup (input + GIT button)
+   ═══════════════════════════════════════════════════ */
+.wf-link-group, .mce-link-group, .sqe-link-group, .ca-link-group {
+  display: flex; align-items: stretch; gap: 8px;
+  width: 100%;
+}
+.wf-link-group > input, .wf-link-group > .wf-input,
+.mce-link-group > .mce-input,
+.sqe-link-group > .sqe-input,
+.sqe-link-group > input[type="text"],
+.ca-link-group  > .ca-input {
+  flex: 1 1 auto; min-width: 0;
+}
+.wf-link-btn, .mce-link-btn, .sqe-link-btn, .ca-link-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 0 14px; min-height: 34px;
+  border-radius: var(--wf-radius);
+  font-size: 0.78rem; font-weight: 600;
+  color: #c4b5fd; text-decoration: none;
+  background: rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.18s ease; cursor: pointer; flex-shrink: 0;
+}
+.wf-link-btn:hover:not(.is-disabled),
+.mce-link-btn:hover:not(.is-disabled),
+.sqe-link-btn:hover:not(.is-disabled),
+.ca-link-btn:hover:not(.is-disabled) {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.65);
+  color: #e9d5ff; transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+}
+.wf-link-btn.is-disabled,
+.mce-link-btn.is-disabled,
+.sqe-link-btn.is-disabled,
+.ca-link-btn.is-disabled {
+  opacity: 0.35; cursor: not-allowed; pointer-events: none;
+}
+body.app-theme-light .wf-link-btn,
+body.app-theme-light .mce-link-btn,
+body.app-theme-light .sqe-link-btn,
+body.app-theme-light .ca-link-btn {
+  color: #6d28d9;
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+body.app-theme-light .wf-link-btn:hover:not(.is-disabled),
+body.app-theme-light .mce-link-btn:hover:not(.is-disabled),
+body.app-theme-light .sqe-link-btn:hover:not(.is-disabled),
+body.app-theme-light .ca-link-btn:hover:not(.is-disabled) {
+  background: rgba(139, 92, 246, 0.22);
+  color: #5b21b6;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   9) Lookup grup wrap — LookupCard sarmalayicisi
+   ═══════════════════════════════════════════════════ */
+.wf-lookup-group {
+  display: block;
+  min-width: 0;
+  position: relative;
+  width: 100%;
+}
+/* GuideLookup card token uyumu — kartin disi 38px/10px,
+   widgetField token'lariyla ayni yukseklik & radius. */
+.gl-card {
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--wf-input-h);
+  border-radius: var(--wf-radius);
+}
+
+
+/* ═══════════════════════════════════════════════════
+   10) Readonly / formula / rule-error
+   ═══════════════════════════════════════════════════ */
+.wf-field--readonly, .mce-field--readonly,
+.sqe-field--readonly, .ca-field--readonly {
+  opacity: 0.78;
+}
+.wf-field--readonly input, .wf-field--readonly select, .wf-field--readonly textarea,
+.mce-field--readonly input, .mce-field--readonly select, .mce-field--readonly textarea,
+.sqe-field--readonly input, .sqe-field--readonly select, .sqe-field--readonly textarea,
+.ca-field--readonly input, .ca-field--readonly select, .ca-field--readonly textarea {
+  cursor: not-allowed;
+}
+.wf-field__readonly-wrap, .mce-field__readonly-wrap,
+.sqe-field__readonly-wrap, .ca-field__readonly-wrap {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.wf-field--formula > label::before,
+.mce-field--formula > label::before,
+.sqe-field--formula > label::before,
+.ca-field--formula > label::before {
+  content: 'fx ';
+  color: #a5b4fc;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 4px;
+  letter-spacing: 0;
+}
+
+.wf-rule-error, .mce-rule-error, .sqe-rule-error, .ca-rule-error {
+  font-size: 0.72rem;
+  color: #f87171;
+  margin-top: 4px;
+  letter-spacing: 0.01em;
+}
+body.app-theme-light .wf-rule-error,
+body.app-theme-light .mce-rule-error,
+body.app-theme-light .sqe-rule-error,
+body.app-theme-light .ca-rule-error { color: #dc2626; }

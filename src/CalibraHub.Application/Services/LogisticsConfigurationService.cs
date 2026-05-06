@@ -387,22 +387,17 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     x.Id,
                     x.Code,
                     x.Name,
-                    x.Description,
                     x.TypeId,
                     x.IsActive,
-                    x.CreatedDate,
-                    x.CreatedByUserId,
-                    x.ModifiedDate,
-                    x.ModifiedByUserId,
-                    x.TrackCombinations,
-                    x.TaxRate,
-                    x.ImageData,
-                    x.ImageMimeType))
+                    x.CreateDate,
+                    x.ModifyDate,
+                    x.UnitId,
+                    x.Combinations,
+                    x.TaxRate))
                 .ToArray(),
             Properties: properties
                 .Select(x => new FeatureDto(
                     x.Id,
-                    x.Code,
                     x.Name,
                     x.DataType.ToString(),
                     x.IsActive))
@@ -425,40 +420,20 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             StockPropertyMappings: mappings
                 .Select(x =>
                 {
-                    var property = propertyLookup.GetValueOrDefault(x.PropertyId);
+                    var property = propertyLookup.GetValueOrDefault(x.FeatureId);
                     var stockCode = stockLookup.GetValueOrDefault(x.ItemId, "-");
-                    var propertyCode = property?.Code ?? "-";
                     var propertyDataType = property?.DataType ?? ConfigurationFieldDataType.Text;
-                    var resolvedValue = x.PropertyValueId.HasValue ? valueLookup.GetValueOrDefault(x.PropertyValueId.Value) : null;
-                    var fallbackValue = !string.IsNullOrWhiteSpace(resolvedValue)
-                        ? resolvedValue
-                        : !string.IsNullOrWhiteSpace(x.TextValue)
-                            ? x.TextValue
-                            : x.NumericValue.HasValue
-                                ? x.NumericValue.Value.ToString("0.####", CultureInfo.InvariantCulture)
-                                : x.DateValue.HasValue
-                                    ? x.DateValue.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-                                    : string.Empty;
-                    var generatedConfigurationCode = !string.IsNullOrWhiteSpace(fallbackValue)
-                        ? BuildConfigurationCode(stockCode, propertyCode, fallbackValue, propertyDataType)
-                        : null;
+                    var resolvedValue = x.FeatureValueId.HasValue ? valueLookup.GetValueOrDefault(x.FeatureValueId.Value) : null;
 
-                    return new ItemPropertyMappingDto(
+                    return new ItemFeatureMappingDto(
                         x.Id,
                         x.ItemId,
                         stockCode,
-                        x.PropertyId,
-                        propertyCode,
+                        x.FeatureId,
                         property?.Name ?? "-",
                         propertyDataType.ToString(),
-                        x.PropertyValueId,
+                        x.FeatureValueId,
                         resolvedValue,
-                        !string.IsNullOrWhiteSpace(x.ConfigurationCode)
-                            ? x.ConfigurationCode
-                            : generatedConfigurationCode,
-                        x.TextValue,
-                        x.NumericValue,
-                        x.DateValue,
                         x.IsActive);
                 })
                 .ToArray());
@@ -466,58 +441,61 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
     public async Task<ProductConfigurationSnapshotDto> GetProductConfigurationSnapshotAsync(CancellationToken cancellationToken)
     {
-        var records = await _repository.GetProductConfigurationRecordsAsync(cancellationToken);
+        var records = await _repository.GetItemConfigurationsAsync(cancellationToken);
+        // Master FEATURE tanimlari ItemFeature'dan, VALUE'lar FeatureValue'dan okunur
+        var itemFeatures = await _repository.GetPropertiesAsync(cancellationToken);
+        var featureValues = await _repository.GetPropertyValuesAsync(cancellationToken);
+        // Stok-Item haritasi (combination'larin malzeme kodunu gostermek icin)
+        var items = await _repository.GetItemsAsync(cancellationToken);
+        var itemCodeById = items.ToDictionary(i => i.Id, i => i.Code);
 
-        var features = records
-            .Where(x => string.Equals(x.RecordType, "FEATURE", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(x => x.RecordCode, StringComparer.OrdinalIgnoreCase)
+        var features = itemFeatures
+            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .Select(x => new ProductConfigurationFeatureDto(
                 x.Id,
-                x.RecordCode,
-                x.RecordName,
-                NormalizeProductDataTypeValue(x.DataType),
+                string.Empty,
+                x.Name,
+                ToProductDataTypeValue(x.DataType),
                 x.IsActive,
-                x.CreatedDate,
-                string.IsNullOrWhiteSpace(x.RelatedMaterialCode) ? null : x.RelatedMaterialCode.Trim(),
+                x.CreatedAt,
+                x.UnitOfMeasure,
                 x.VisibleInDesign))
             .ToArray();
 
         var featureLookup = features.ToDictionary(x => x.Id);
 
-        var values = records
-            .Where(x => string.Equals(x.RecordType, "VALUE", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(x => x.ParentId)
-            .ThenBy(x => x.RecordCode, StringComparer.OrdinalIgnoreCase)
+        // VALUE'lar artik FeatureValue tablosundan
+        var values = featureValues
+            .OrderBy(x => x.PropertyId)
+            .ThenBy(x => x.SortOrder)
+            .ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
             .Select(x =>
             {
-                var feature = x.ParentId.HasValue ? featureLookup.GetValueOrDefault(x.ParentId.Value) : null;
-                var (description, valueData) = SplitProductValuePayload(x.RecordName);
+                var feature = featureLookup.GetValueOrDefault(x.PropertyId);
                 return new ProductConfigurationValueDto(
                     x.Id,
-                    x.ParentId ?? 0,
+                    x.PropertyId,
                     feature?.Code ?? "-",
                     feature?.Name ?? "Tanimsiz Ozellik",
-                    x.RecordCode,
-                    description,
-                    valueData,
+                    x.Code,
+                    x.Description,
+                    x.Value,
                     x.IsActive,
-                    x.CreatedDate,
-                    string.IsNullOrWhiteSpace(x.RelatedMaterialCode) ? null : x.RelatedMaterialCode.Trim());
+                    x.CreatedAt,
+                    null); // aciklama (legacy) — FeatureValue'da yok
             })
             .ToArray();
 
         var valueLookup = values.ToDictionary(x => x.Id);
 
+        // Kombinasyonlar — ItemConfiguration'da artik sadece CONFIG record'lari
         var configurations = records
             .Where(x => string.Equals(x.RecordType, "CONFIG", StringComparison.OrdinalIgnoreCase) && x.ParentId == null)
-            .OrderBy(x => x.RelatedMaterialCode, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.RecordCode, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x.ItemId)
+            .ThenBy(x => x.Id)
             .Select(x =>
             {
-                var value = x.ParentId.HasValue ? valueLookup.GetValueOrDefault(x.ParentId.Value) : null;
-                var feature = value is not null
-                    ? featureLookup.GetValueOrDefault(value.FeatureId)
-                    : null;
+                var materialCode = x.ItemId.HasValue ? itemCodeById.GetValueOrDefault(x.ItemId.Value, x.RelatedMaterialCode ?? "-") : (x.RelatedMaterialCode ?? "-");
 
                 var childValueIds = records
                     .Where(r => string.Equals(r.RecordType, "CONFIG", StringComparison.OrdinalIgnoreCase) && r.ParentId == x.Id)
@@ -525,36 +503,49 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     .Where(vId => vId > 0)
                     .ToList();
 
-                var allValueIds = new HashSet<int>();
-                if (value?.Id != null) allValueIds.Add(value.Id);
-                foreach (var cId in childValueIds) allValueIds.Add(cId);
-
                 return new ProductConfigurationItemDto(
                     x.Id,
-                    value?.Id,
-                    feature?.Id,
+                    null,
+                    null,
                     x.RecordCode,
                     x.RecordName,
-                    x.RelatedMaterialCode ?? "-",
-                    feature?.Code ?? "-",
-                    feature?.Name ?? "Tanimsiz Ozellik",
-                    value?.Code ?? "-",
-                    value?.Description ?? "Tanimsiz Deger",
-                    value?.Value ?? "-",
+                    materialCode,
+                    "-",
+                    "-",
+                    "-",
+                    "-",
+                    "-",
                     x.IsActive,
                     x.CreatedDate,
-                    allValueIds.ToArray());
+                    childValueIds.ToArray());
             })
             .ToArray();
 
-        var featureStockLinks = records
-            .Where(x => string.Equals(x.RecordType, "FEATURE_STOCK", StringComparison.OrdinalIgnoreCase))
-            .Where(x => x.ParentId.HasValue && !string.IsNullOrWhiteSpace(x.RelatedMaterialCode ?? x.RecordCode))
-            .Select(x => new ProductConfigurationFeatureStockLinkDto(
-                x.ParentId!.Value,
-                (x.RelatedMaterialCode ?? x.RecordCode).Trim().ToUpperInvariant(),
-                x.VisibleInDesign))
-            .Distinct()
+        // Feature-Stock linkleri ItemFeatureMappings'ten:
+        //   - FeatureValueId IS NULL = "header" satir (bu stok'a bu ozellik bagli, PrintDescriptionInDesign tasir)
+        //   - FeatureValueId NOT NULL = bu (stok, ozellik) icin izin verilen deger kisitlamasi
+        var stockMappings = await _repository.GetStockPropertyMappingsAsync(cancellationToken);
+        var activeMappings = stockMappings.Where(m => m.IsActive).ToArray();
+        var featureStockLinks = activeMappings
+            .Where(m => m.FeatureValueId == null)
+            .Select(m =>
+            {
+                var stockCode = itemCodeById.GetValueOrDefault(m.ItemId, string.Empty);
+                var normalizedCode = (stockCode ?? string.Empty).Trim().ToUpperInvariant();
+                var allowed = activeMappings
+                    .Where(x => x.ItemId == m.ItemId
+                                && x.FeatureId == m.FeatureId
+                                && x.FeatureValueId.HasValue)
+                    .Select(x => x.FeatureValueId!.Value)
+                    .Distinct()
+                    .ToArray();
+                return new ProductConfigurationFeatureStockLinkDto(
+                    m.FeatureId,
+                    normalizedCode,
+                    m.PrintDescriptionInDesign,
+                    allowed);
+            })
+            .Where(x => !string.IsNullOrWhiteSpace(x.StockCode))
             .ToArray();
 
         return new ProductConfigurationSnapshotDto(features, values, configurations, featureStockLinks);
@@ -570,12 +561,30 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Ozellik veri tipi gecersiz.");
         }
 
-        var normalizedDataType = ToProductDataTypeValue(request.DataType);
+        // Duplicate ozellik adi kontrolu
+        var existingFeatures = await _repository.GetPropertiesAsync(cancellationToken);
+        if (existingFeatures.Any(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("Ayni ozellik adi ile kayit zaten mevcut.");
+        }
+
         var unitOfMeasure = request.DataType == ConfigurationFieldDataType.Numeric && !string.IsNullOrWhiteSpace(request.UnitOfMeasure)
             ? request.UnitOfMeasure.Trim()
             : null;
-        var createdFeature = await _repository.AddProductFeatureAsync(name, normalizedDataType, request.IsActive, unitOfMeasure, request.VisibleInDesign, cancellationToken);
-        return createdFeature.Id;
+
+        // Master ozellik tanimi ItemFeature tablosunda — buraya kaydet
+        var feature = new ItemFeature
+        {
+            Name = name,
+            DataType = request.DataType,
+            UnitOfMeasure = unitOfMeasure,
+            VisibleInDesign = request.VisibleInDesign,
+            CreatedAt = DateTime.Now
+            // CompanyId repository tarafinda ResolveCurrentCompanyId() ile doldurulur
+        };
+        if (!request.IsActive) feature.Deactivate();
+
+        return await _repository.AddPropertyAsync(feature, cancellationToken);
     }
 
     public async Task<(int Id, string Code)> CreateProductConfigurationValueAsync(
@@ -587,29 +596,54 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Ozellik secimi zorunludur.");
         }
 
-        var features = await _repository.GetProductConfigurationRecordsAsync(cancellationToken);
-        var selectedFeature = features.FirstOrDefault(x =>
-            x.Id == request.FeatureId &&
-            string.Equals(x.RecordType, "FEATURE", StringComparison.OrdinalIgnoreCase));
-
+        var itemFeatures = await _repository.GetPropertiesAsync(cancellationToken);
+        var selectedFeature = itemFeatures.FirstOrDefault(x => x.Id == request.FeatureId);
         if (selectedFeature is null)
         {
             throw new ArgumentException("Secilen ozellik bulunamadi.");
         }
 
-        var dataType = ParseProductDataTypeValue(selectedFeature.DataType);
-        var description = NormalizeOptionalField(request.Description, 120);
+        var dataType = selectedFeature.DataType;
+        var description = NormalizeOptionalField(request.Description, 160) ?? string.Empty;
         var typedValue = NormalizeProductTypedValue(dataType, request.TextValue, request.NumericValue, request.DateValue);
-        var payload = ComposeProductValuePayload(description, typedValue);
 
-        if (payload.Length > 255)
+        if (string.IsNullOrWhiteSpace(typedValue))
         {
-            throw new ArgumentException("Deger aciklamasi ve veri birlikte en fazla 255 karakter olabilir.");
+            throw new ArgumentException("Deger zorunludur.");
         }
 
-        var aciklama = string.IsNullOrWhiteSpace(request.Aciklama) ? null : request.Aciklama.Trim();
-        var (id, code) = await _repository.AddProductValueAsync(request.FeatureId, payload, request.IsActive, aciklama, cancellationToken);
-        return (id, code);
+        // Duplicate check (ayni feature icin ayni value)
+        var existingValues = await _repository.GetPropertyValuesAsync(cancellationToken);
+        if (existingValues.Any(v => v.PropertyId == request.FeatureId &&
+                                    string.Equals(v.Value, typedValue, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("Bu ozellik icin ayni deger zaten tanimli.");
+        }
+
+        // Otomatik kod uret: ozellik degerlerinin sirasi
+        var sortOrder = existingValues.Where(v => v.PropertyId == request.FeatureId).Count() + 1;
+        var generatedCode = $"V{sortOrder:D3}";
+
+        var fv = new FeatureValue
+        {
+            PropertyId = request.FeatureId,
+            Code = generatedCode,
+            Description = string.IsNullOrWhiteSpace(description) ? typedValue : description,
+            Value = typedValue,
+            SortOrder = sortOrder
+        };
+        if (!request.IsActive) fv.Deactivate();
+
+        await _repository.AddPropertyValueAsync(fv, cancellationToken);
+
+        // INSERT'in ID'sini almak icin yeniden cek (hizli yol; daha sonra repo'dan SCOPE_IDENTITY donusumu eklenebilir)
+        var refreshed = await _repository.GetPropertyValuesAsync(cancellationToken);
+        var inserted = refreshed
+            .Where(v => v.PropertyId == request.FeatureId && string.Equals(v.Value, typedValue, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(v => v.Id)
+            .FirstOrDefault();
+
+        return (inserted?.Id ?? 0, inserted?.Code ?? generatedCode);
     }
 
     public async Task<(int Id, string Code)> CreateProductConfigurationCombinationAsync(
@@ -708,43 +742,58 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Stok eslestirmesi icin bir ozellik secilmelidir.");
         }
 
-        var records = await _repository.GetProductConfigurationRecordsAsync(cancellationToken);
-        var feature = records.FirstOrDefault(x =>
-            x.Id == request.FeatureId &&
-            string.Equals(x.RecordType, "FEATURE", StringComparison.OrdinalIgnoreCase));
+        // Master ozellik ItemFeature tablosundan
+        var itemFeatures = await _repository.GetPropertiesAsync(cancellationToken);
+        var feature = itemFeatures.FirstOrDefault(x => x.Id == request.FeatureId);
 
         if (feature is null)
         {
             throw new ArgumentException("Secilen ozellik bulunamadi.");
         }
 
-        var normalizedStockCodes = (request.StockCodes ?? Array.Empty<string>())
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Select(x => NormalizeRequiredField(x, 50, "Stok kodu").ToUpperInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var stockItems = (request.Stocks ?? Array.Empty<SaveProductConfigurationFeatureStockItem>())
+            .Where(x => !string.IsNullOrWhiteSpace(x.StockCode))
+            .Select(x => (
+                Code: NormalizeRequiredField(x.StockCode, 50, "Stok kodu").ToUpperInvariant(),
+                PrintDescriptionInDesign: x.PrintDescriptionInDesign,
+                AllowedValueIds: (x.AllowedValueIds ?? Array.Empty<int>()).Where(v => v > 0).Distinct().ToArray()))
+            .GroupBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Last())
             .ToArray();
 
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
-        var activeStockCodes = stockCards
+        var activeItemsByCode = stockCards
             .Where(x => x.IsActive)
-            .Select(x => x.Code.Trim().ToUpperInvariant())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .GroupBy(x => x.Code.Trim().ToUpperInvariant(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
 
-        var invalidStockCode = normalizedStockCodes.FirstOrDefault(x => !activeStockCodes.Contains(x));
-        if (invalidStockCode is not null)
+        // Geçerli value ID'lerini hazirla — kisitlamada gecersiz id'ye izin verme
+        var validValueIds = (await _repository.GetPropertyValuesAsync(cancellationToken))
+            .Where(v => v.PropertyId == request.FeatureId)
+            .Select(v => v.Id)
+            .ToHashSet();
+
+        var resolved = new List<(int ItemId, int[] AllowedValueIds, bool PrintDescriptionInDesign)>();
+        foreach (var item in stockItems)
         {
-            throw new ArgumentException($"Secilen stok kodu bulunamadi veya aktif degil: {invalidStockCode}.");
+            if (!activeItemsByCode.TryGetValue(item.Code, out var itemId))
+            {
+                throw new ArgumentException($"Secilen stok kodu bulunamadi veya aktif degil: {item.Code}.");
+            }
+
+            var filteredValueIds = item.AllowedValueIds.Where(v => validValueIds.Contains(v)).ToArray();
+            resolved.Add((itemId, filteredValueIds, item.PrintDescriptionInDesign));
         }
 
-        await _repository.ReplaceProductFeatureStockLinksAsync(
+        await _repository.ReplaceFeatureStockLinksAsync(
             request.FeatureId,
-            normalizedStockCodes,
+            resolved.ToArray(),
             cancellationToken);
     }
 
     public async Task SetFeaturesForItemAsync(
         string stockCode,
-        IReadOnlyCollection<(int FeatureId, bool PrintDescriptionInDesign)> items,
+        IReadOnlyCollection<(int FeatureId, bool PrintDescriptionInDesign, int[] AllowedValueIds)> items,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(stockCode))
@@ -754,27 +803,106 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
         // Stok kartinin gerçekten var ve aktif oldugunu kontrol et
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
-        var exists = stockCards.Any(x => x.IsActive &&
+        var stockCard = stockCards.FirstOrDefault(x => x.IsActive &&
             string.Equals(x.Code.Trim(), normalizedCode, StringComparison.OrdinalIgnoreCase));
-        if (!exists)
+        if (stockCard is null)
             throw new ArgumentException($"Stok kartı bulunamadı veya aktif değil: {normalizedCode}");
 
-        // Ozellikleri validate et
-        var records = await _repository.GetProductConfigurationRecordsAsync(cancellationToken);
-        var validFeatureIds = records
-            .Where(r => string.Equals(r.RecordType, "FEATURE", StringComparison.OrdinalIgnoreCase) && r.IsActive)
+        // Ozellikleri validate et — ItemFeature tablosundan
+        var itemFeatures = await _repository.GetPropertiesAsync(cancellationToken);
+        var validFeatureIds = itemFeatures
+            .Where(r => r.IsActive)
             .Select(r => r.Id)
             .ToHashSet();
 
-        var requestedItems = (items ?? Array.Empty<(int, bool)>())
+        // Tum aktif feature value'lari ile feature-by-id bag kur
+        var allFeatureValues = await _repository.GetPropertyValuesAsync(cancellationToken);
+        var validValueIdsByFeatureId = allFeatureValues
+            .Where(v => v.IsActive)
+            .GroupBy(v => v.PropertyId)
+            .ToDictionary(g => g.Key, g => g.Select(v => v.Id).ToHashSet());
+
+        var requestedItems = (items ?? Array.Empty<(int, bool, int[])>())
             .Where(x => x.FeatureId > 0)
             .GroupBy(x => x.FeatureId)
-            .Select(g => (FeatureId: g.Key, PrintDescriptionInDesign: g.Last().PrintDescriptionInDesign))
+            .Select(g =>
+            {
+                var last = g.Last();
+                var allowed = (last.AllowedValueIds ?? Array.Empty<int>())
+                    .Where(v => v > 0)
+                    .Distinct()
+                    .Where(v => validValueIdsByFeatureId.TryGetValue(g.Key, out var ok) && ok.Contains(v))
+                    .ToArray();
+                return (FeatureId: g.Key, PrintDescriptionInDesign: last.PrintDescriptionInDesign, AllowedValueIds: allowed);
+            })
             .ToArray();
 
         var invalid = requestedItems.FirstOrDefault(x => !validFeatureIds.Contains(x.FeatureId));
         if (invalid.FeatureId != 0)
             throw new ArgumentException($"Geçersiz özellik ID: {invalid.FeatureId}");
+
+        // Kombinasyon koruma 1: Stok'a daha once baglanmis olup, simdi cikarilmak istenen feature'lar
+        // arasinda aktif kombinasyonda kullanilan varsa hata firlat.
+        var existingMappings = await _repository.GetStockPropertyMappingsAsync(cancellationToken);
+        var currentFeatureIds = existingMappings
+            .Where(m => m.IsActive && m.ItemId == stockCard.Id)
+            .Select(m => m.FeatureId)
+            .Distinct()
+            .ToHashSet();
+        var requestedFeatureIds = requestedItems.Select(x => x.FeatureId).ToHashSet();
+        var removedFeatureIds = currentFeatureIds.Except(requestedFeatureIds).ToHashSet();
+        if (removedFeatureIds.Count > 0)
+        {
+            var usedFeatureIds = await _repository.GetUsedFeatureIdsInCombinationsAsync(stockCard.Id, cancellationToken);
+            var blocked = removedFeatureIds.Intersect(usedFeatureIds).ToArray();
+            if (blocked.Length > 0)
+            {
+                var blockedNames = itemFeatures
+                    .Where(f => blocked.Contains(f.Id))
+                    .Select(f => f.Name)
+                    .ToArray();
+                throw new ArgumentException(
+                    "Bu ozellik(ler) aktif kombinasyon(lar)da kullaniliyor, kaldirilamaz: " +
+                    string.Join(", ", blockedNames));
+            }
+        }
+
+        // Kombinasyon koruma 2: (feature, value) cifti aktif kombinasyonda kullaniliyorsa,
+        // bu stok icin o pair'in AllowedValueIds listesinden cikarilmasi engellenir.
+        // Kural: AllowedValueIds dolu ise (kisitlama varsa), kombinasyonda kullanilan tum value'lar listede olmali.
+        // AllowedValueIds bos ise (kisitlama yok = tum degerler gecerli), kontrol gerek yok.
+        var usedFeatureValuePairs = await _repository.GetUsedFeatureValueIdsInCombinationsAsync(stockCard.Id, cancellationToken);
+        var usedByFeature = usedFeatureValuePairs
+            .GroupBy(x => x.FeatureId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.ValueId).ToHashSet());
+
+        var blockedValuesByFeature = new Dictionary<int, List<int>>();
+        foreach (var item in requestedItems)
+        {
+            if (item.AllowedValueIds == null || item.AllowedValueIds.Length == 0) continue; // kisitlama yok
+            if (!usedByFeature.TryGetValue(item.FeatureId, out var usedValues)) continue;
+            var requestedSet = new HashSet<int>(item.AllowedValueIds);
+            var missing = usedValues.Where(v => !requestedSet.Contains(v)).ToList();
+            if (missing.Count > 0)
+            {
+                blockedValuesByFeature[item.FeatureId] = missing;
+            }
+        }
+        if (blockedValuesByFeature.Count > 0)
+        {
+            var allValues = await _repository.GetPropertyValuesAsync(cancellationToken);
+            var valueLabel = allValues.ToDictionary(v => v.Id, v => v.Description ?? v.Code ?? v.Id.ToString());
+            var msgParts = new List<string>();
+            foreach (var kv in blockedValuesByFeature)
+            {
+                var fname = itemFeatures.FirstOrDefault(f => f.Id == kv.Key)?.Name ?? ("#" + kv.Key);
+                var vNames = kv.Value.Select(vid => valueLabel.TryGetValue(vid, out var n) ? n : ("#" + vid));
+                msgParts.Add(fname + ": " + string.Join(", ", vNames));
+            }
+            throw new ArgumentException(
+                "Asagidaki deger(ler) aktif kombinasyon(lar)da kullaniliyor, izinli listeden cikarilamaz — " +
+                string.Join(" | ", msgParts));
+        }
 
         await _repository.ReplaceStockFeatureLinksAsync(normalizedCode, requestedItems, cancellationToken);
     }
@@ -797,10 +925,22 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Secilen ozellik bulunamadi.");
         }
 
+        // Duplicate ozellik adi kontrolu (kendi disindaki kayitlarda)
+        if (snapshot.Features.Any(x => x.Id != request.Id &&
+                                       string.Equals(x.Name, normalizedName, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("Ayni ozellik adi ile baska bir kayit mevcut.");
+        }
+
         var hasValues = snapshot.Values.Any(x => x.FeatureId == request.Id);
         if (hasValues && !string.Equals(feature.DataType, ToProductDataTypeValue(request.DataType), StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException("Deger girilen ozelligin veri tipi degistirilemez.");
+        }
+        // Deger girilmis ozelligin adi da degistirilemez (referans butunlugu + UI tutarliligi)
+        if (hasValues && !string.Equals(feature.Name, normalizedName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Deger girilen ozelligin adi degistirilemez.");
         }
 
         var normalizedDataType = ToProductDataTypeValue(request.DataType);
@@ -808,12 +948,14 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             ? request.UnitOfMeasure.Trim()
             : null;
 
-        await _repository.UpdateProductFeatureAsync(
+        // Master ozellik ItemFeature tablosunda — oraya update et
+        await _repository.UpdateItemFeatureAsync(
             request.Id,
             normalizedName,
             normalizedDataType,
             unitOfMeasure,
             request.VisibleInDesign,
+            feature.IsActive,
             cancellationToken);
     }
 
@@ -824,10 +966,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Silinecek ozellik secilmelidir.");
         }
 
-        var records = await _repository.GetProductConfigurationRecordsAsync(cancellationToken);
-        var feature = records.FirstOrDefault(x =>
-            x.Id == id &&
-            string.Equals(x.RecordType, "FEATURE", StringComparison.OrdinalIgnoreCase));
+        var itemFeatures = await _repository.GetPropertiesAsync(cancellationToken);
+        var feature = itemFeatures.FirstOrDefault(x => x.Id == id);
 
         if (feature is null)
         {
@@ -841,7 +981,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Degeri olan ozellik silinemez. Once tum degerleri siliniz.");
         }
 
-        await _repository.DeleteProductFeatureAsync(id, cancellationToken);
+        await _repository.DeleteItemFeatureAsync(id, cancellationToken);
     }
 
     public async Task DeleteProductConfigurationValueAsync(int id, CancellationToken cancellationToken)
@@ -851,11 +991,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Silinecek deger secilmelidir.");
         }
 
-        var records = await _repository.GetProductConfigurationRecordsAsync(cancellationToken);
-        var value = records.FirstOrDefault(x =>
-            x.Id == id &&
-            string.Equals(x.RecordType, "VALUE", StringComparison.OrdinalIgnoreCase));
-
+        // VALUE rows ItemConfiguration'dan FeatureValue tablosuna tasinmis (schema migration);
+        // Eski kod hala ItemConfiguration'da RecordType='VALUE' ariyordu — artik bos donuyor
+        // ve "Secilen deger bulunamadi" hatasi atiyordu. Dogru kaynak: GetPropertyValuesAsync.
+        var values = await _repository.GetPropertyValuesAsync(cancellationToken);
+        var value = values.FirstOrDefault(v => v.Id == id);
         if (value is null)
         {
             throw new ArgumentException("Secilen deger bulunamadi.");
@@ -868,7 +1008,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     {
         if (id <= 0) throw new ArgumentException("Guncellenmek istenen deger secilmelidir.");
 
-        var records = await _repository.GetProductConfigurationRecordsAsync(cancellationToken);
+        var records = await _repository.GetItemConfigurationsAsync(cancellationToken);
         var record = records.FirstOrDefault(x =>
             x.Id == id && string.Equals(x.RecordType, "VALUE", StringComparison.OrdinalIgnoreCase));
         if (record is null) throw new ArgumentException("Secilen deger bulunamadi.");
@@ -914,7 +1054,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Silinecek yapilandirma secilmelidir.");
         }
 
-        var records = await _repository.GetProductConfigurationRecordsAsync(cancellationToken);
+        var records = await _repository.GetItemConfigurationsAsync(cancellationToken);
         var config = records.FirstOrDefault(x =>
             x.Id == id &&
             string.Equals(x.RecordType, "CONFIG", StringComparison.OrdinalIgnoreCase));
@@ -962,14 +1102,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         {
             Code = code,
             Name = name,
-            Description = NormalizeOptionalField(request.Description, 500),
             TypeId = request.TypeId,
-            TrackCombinations = request.TrackCombinations,
+            UnitId = request.UnitId,
+            Combinations = request.Combinations,
             TaxRate = request.TaxRate,
-            CreatedDate = DateTime.Now,
-            CreatedByUserId = request.CreatedByUserId,
-            ImageData = request.ImageData,
-            ImageMimeType = request.ImageMimeType
+            CreateDate = DateTime.Now
         };
 
         await _repository.AddItemAsync(stockCard, cancellationToken);
@@ -1014,16 +1151,12 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             Id = request.ItemId,
             Code = code,
             Name = name,
-            Description = NormalizeOptionalField(request.Description, 500),
             TypeId = request.TypeId,
-            TrackCombinations = request.TrackCombinations,
+            UnitId = request.UnitId,
+            Combinations = request.Combinations,
             TaxRate = request.TaxRate,
-            CreatedDate = existing.CreatedDate,
-            CreatedByUserId = existing.CreatedByUserId,
-            ModifiedDate = DateTime.Now,
-            ModifiedByUserId = request.ModifiedByUserId,
-            ImageData = request.ImageData,
-            ImageMimeType = request.ImageMimeType
+            CreateDate = existing.CreateDate,
+            ModifyDate = DateTime.Now
         };
 
         await _repository.UpdateItemAsync(updatedItem, cancellationToken);
@@ -1156,6 +1289,196 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         await _repository.DeleteLocationAsync(locationId, cancellationToken);
     }
 
+    // ── Machine ────────────────────────────────────────────────────────────
+    public async Task<IReadOnlyCollection<MachineDto>> GetMachinesAsync(CancellationToken cancellationToken)
+    {
+        var machines = await _repository.GetMachinesAsync(cancellationToken);
+        var locations = await _repository.GetLocationsAsync(cancellationToken);
+        var locationLookup = locations.ToDictionary(x => x.Id);
+
+        return machines.Select(m =>
+        {
+            locationLookup.TryGetValue(m.LocationId, out var loc);
+            return new MachineDto(
+                m.Id,
+                m.LocationId,
+                loc?.LocationCode,
+                loc?.LocationName,
+                m.MachineCode,
+                m.MachineName,
+                m.MachineType,
+                m.HourlyCapacity,
+                m.SortOrder,
+                m.IsActive);
+        }).ToArray();
+    }
+
+    public async Task<int> CreateMachineAsync(CreateMachineRequest request, CancellationToken cancellationToken)
+    {
+        if (request.LocationId <= 0)
+            throw new ArgumentException("Lokasyon secimi zorunludur.");
+
+        var locations = await _repository.GetLocationsAsync(cancellationToken);
+        if (locations.All(l => l.Id != request.LocationId))
+            throw new ArgumentException("Secilen lokasyon bulunamadi.");
+
+        var existing = await _repository.GetMachinesAsync(cancellationToken);
+
+        // Makine Kodu UI'dan kaldirildi — kullanici girmediyse otomatik uretilir.
+        // Format: MAC-{6-hex}. Carpisirsa yeni Guid kismi ile yeniden dene.
+        var code = (request.MachineCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                var candidate = "MAC-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+                if (existing.All(m => !string.Equals(m.MachineCode, candidate, StringComparison.OrdinalIgnoreCase)))
+                {
+                    code = candidate;
+                    break;
+                }
+            }
+            if (string.IsNullOrWhiteSpace(code))
+                throw new InvalidOperationException("Otomatik makine kodu uretilemedi (5 deneme basarisiz).");
+        }
+        else if (existing.Any(m => string.Equals(m.MachineCode, code, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("Ayni makine kodu ile kayit zaten mevcut.");
+        }
+
+        var machine = new Domain.Entities.Machine
+        {
+            LocationId = request.LocationId,
+            MachineCode = code,
+            MachineName = string.IsNullOrWhiteSpace(request.MachineName) ? null : request.MachineName.Trim(),
+            MachineType = string.IsNullOrWhiteSpace(request.MachineType) ? null : request.MachineType.Trim(),
+            HourlyCapacity = request.HourlyCapacity,
+            SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
+            IsActive = request.IsActive
+        };
+        return await _repository.AddMachineAsync(machine, cancellationToken);
+    }
+
+    public async Task UpdateMachineAsync(UpdateMachineRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Id <= 0)
+            throw new ArgumentException("Makine secimi zorunludur.");
+        if (request.LocationId <= 0)
+            throw new ArgumentException("Lokasyon secimi zorunludur.");
+
+        var locations = await _repository.GetLocationsAsync(cancellationToken);
+        if (locations.All(l => l.Id != request.LocationId))
+            throw new ArgumentException("Secilen lokasyon bulunamadi.");
+
+        var all = await _repository.GetMachinesAsync(cancellationToken);
+
+        // Makine Kodu UI'da gosterilmedigi icin update'te bos gelebilir — bu durumda
+        // mevcut kodu koru. Dolu gelirse uniqueness kontrolu yap (manuel degistirilmis ise).
+        var existingMachine = all.FirstOrDefault(m => m.Id == request.Id);
+        if (existingMachine is null)
+            throw new ArgumentException("Guncellenecek makine bulunamadi.");
+
+        var code = (request.MachineCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            code = existingMachine.MachineCode;   // mevcut kodu koru
+        }
+        else if (all.Any(m => m.Id != request.Id &&
+                              string.Equals(m.MachineCode, code, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException("Bu makine kodu zaten baska bir kayitta kullaniliyor.");
+        }
+
+        var machine = new Domain.Entities.Machine
+        {
+            Id = request.Id,
+            LocationId = request.LocationId,
+            MachineCode = code,
+            MachineName = string.IsNullOrWhiteSpace(request.MachineName) ? null : request.MachineName.Trim(),
+            MachineType = string.IsNullOrWhiteSpace(request.MachineType) ? null : request.MachineType.Trim(),
+            HourlyCapacity = request.HourlyCapacity,
+            SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
+            IsActive = request.IsActive
+        };
+        await _repository.UpdateMachineAsync(machine, cancellationToken);
+    }
+
+    public async Task DeleteMachineAsync(int machineId, CancellationToken cancellationToken)
+    {
+        if (machineId <= 0)
+            throw new ArgumentException("Makine secimi zorunludur.");
+        await _repository.DeleteMachineAsync(machineId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<MachineTypeDto>> GetMachineTypesAsync(CancellationToken cancellationToken)
+    {
+        var rows = await _repository.GetMachineTypesAsync(cancellationToken);
+        return rows.Select(t => new MachineTypeDto(
+            t.Id, t.Code, t.Name, t.Description, t.IsBuiltIn, t.SortOrder, t.IsActive)).ToArray();
+    }
+
+    public async Task<int> SaveMachineTypeAsync(SaveMachineTypeRequest request, CancellationToken cancellationToken)
+    {
+        var name = (request.Name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Tip adi zorunludur.");
+
+        var existing = await _repository.GetMachineTypesAsync(cancellationToken);
+
+        if (request.Id.HasValue && request.Id.Value > 0)
+        {
+            // UPDATE — Code degistirilemez (built-in olsun ozel olsun); sadece
+            // Name/Description/SortOrder/IsActive alanlari guncellenir.
+            var current = existing.FirstOrDefault(x => x.Id == request.Id.Value);
+            if (current is null) throw new ArgumentException("Tip bulunamadi.");
+
+            await _repository.UpdateMachineTypeAsync(new Domain.Entities.MachineType
+            {
+                Id = current.Id,
+                Code = current.Code,
+                Name = name,
+                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                IsBuiltIn = current.IsBuiltIn,
+                SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
+                IsActive = request.IsActive
+            }, cancellationToken);
+            return current.Id;
+        }
+
+        // CREATE — yeni ozel tip (IsBuiltIn=false)
+        var code = (request.Code ?? string.Empty).Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(code))
+            throw new ArgumentException("Tip kodu zorunludur.");
+        if (existing.Any(x => string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("Bu kod ile baska bir tip zaten kayitli.");
+
+        return await _repository.AddMachineTypeAsync(new Domain.Entities.MachineType
+        {
+            Code = code,
+            Name = name,
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            IsBuiltIn = false,
+            SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
+            IsActive = request.IsActive
+        }, cancellationToken);
+    }
+
+    public async Task DeleteMachineTypeAsync(int id, CancellationToken cancellationToken)
+    {
+        if (id <= 0) throw new ArgumentException("Tip secimi zorunludur.");
+        var all = await _repository.GetMachineTypesAsync(cancellationToken);
+        var current = all.FirstOrDefault(x => x.Id == id);
+        if (current is null) throw new ArgumentException("Tip bulunamadi.");
+        if (current.IsBuiltIn)
+            throw new ArgumentException("Standart (built-in) tipler silinemez. Pasife alabilirsin.");
+
+        var inUse = await _repository.CountMachinesUsingTypeAsync(current.Code, cancellationToken);
+        if (inUse > 0)
+            throw new ArgumentException($"Bu tip {inUse} makinede kullanildigi icin silinemez. Once makinelerin tipini degistir.");
+
+        await _repository.DeleteMachineTypeAsync(id, cancellationToken);
+    }
+
     public async Task CreateUnitAsync(
         CreateUnitRequest request,
         CancellationToken cancellationToken)
@@ -1246,21 +1569,30 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         await _repository.DeleteUnitAsync(id, cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<StockUnitConversionDto>> GetStockUnitConversionsAsync(int stockCardId, CancellationToken cancellationToken)
+    public Task<IReadOnlyCollection<int>> GetUsedFeatureIdsInCombinationsAsync(int itemId, CancellationToken cancellationToken)
+        => _repository.GetUsedFeatureIdsInCombinationsAsync(itemId, cancellationToken);
+
+    public Task<IReadOnlyCollection<(int FeatureId, int ValueId)>> GetUsedFeatureValueIdsInCombinationsAsync(int itemId, CancellationToken cancellationToken)
+        => _repository.GetUsedFeatureValueIdsInCombinationsAsync(itemId, cancellationToken);
+
+    public Task<int> GetCombinationCountForItemAsync(int itemId, CancellationToken cancellationToken)
+        => _repository.GetCombinationCountForItemAsync(itemId, cancellationToken);
+
+    public async Task<IReadOnlyCollection<ItemUnitDto>> GetItemUnitsAsync(int itemId, CancellationToken cancellationToken)
     {
-        var items = await _repository.GetStockUnitConversionsAsync(stockCardId, cancellationToken);
-        return items.Select(x => new StockUnitConversionDto(x.Id, x.ItemId, x.LineNo, x.UnitCode, x.Multiplier)).ToList();
+        var items = await _repository.GetItemUnitsAsync(itemId, cancellationToken);
+        return items.Select(x => new ItemUnitDto(x.Id, x.ItemId, x.LineNo, x.UnitId, x.Multiplier)).ToList();
     }
 
-    public async Task SaveStockUnitConversionsAsync(int stockCardId, IReadOnlyCollection<SaveStockUnitConversionItem> items, CancellationToken cancellationToken)
+    public async Task SaveItemUnitsAsync(int itemId, IReadOnlyCollection<SaveItemUnitItem> items, CancellationToken cancellationToken)
     {
-        var conversions = items.Select(x => new StockUnitConversion
+        var conversions = items.Select(x => new ItemUnit
         {
-            ItemId = stockCardId,
-            UnitCode = x.UnitCode.Trim(),
+            ItemId = itemId,
+            UnitId = x.UnitId,
             Multiplier = x.Multiplier,
         }).ToList();
-        await _repository.SaveStockUnitConversionsAsync(stockCardId, conversions, cancellationToken);
+        await _repository.SaveItemUnitsAsync(itemId, conversions, cancellationToken);
     }
 
     public async Task<IReadOnlyCollection<ItemLocationDto>> GetItemLocationsAsync(int itemId, CancellationToken cancellationToken)
@@ -1416,8 +1748,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             return;
         }
 
-        var selectedPropertyIds = request.PropertyIds
-            .Where(x => x != Guid.Empty)
+        var selectedPropertyIds = request.FeatureIds
+            .Where(x => x > 0)
             .Distinct()
             .ToArray();
 
@@ -1440,7 +1772,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var existingMappings = await _repository.GetStockPropertyMappingsAsync(cancellationToken);
         var alreadyLinkedPropertyIds = existingMappings
             .Where(x => x.ItemId == stockCard.Id && x.IsActive)
-            .Select(x => x.PropertyId)
+            .Select(x => x.FeatureId)
             .ToHashSet();
 
         foreach (var propertyId in selectedPropertyIds)
@@ -1450,15 +1782,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 continue;
             }
 
-            var mapping = new ItemPropertyMapping
+            var mapping = new ItemFeatureMapping
             {
                 ItemId = stockCard.Id,
-                PropertyId = propertyId,
-                PropertyValueId = null,
-                ConfigurationCode = null,
-                TextValue = null,
-                NumericValue = null,
-                DateValue = null
+                FeatureId = propertyId,
+                FeatureValueId = null
             };
 
             await _repository.AddStockPropertyMappingAsync(mapping, cancellationToken);
@@ -1467,18 +1795,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
     public async Task CreatePropertyAsync(CreateFeatureRequest request, CancellationToken cancellationToken)
     {
-        var code = request.Code.Trim().ToUpperInvariant();
         var name = request.Name.Trim();
-
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            throw new ArgumentException("Ozellik kodu zorunludur.");
-        }
-
-        if (!PropertyCodeRegex.IsMatch(code))
-        {
-            throw new ArgumentException("Ozellik kodu 8 karakterli alfasayisal olmalidir.");
-        }
 
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -1491,16 +1808,16 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         }
 
         var properties = await _repository.GetPropertiesAsync(cancellationToken);
-        if (properties.Any(x => string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)))
+        if (properties.Any(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)))
         {
-            throw new ArgumentException("Ayni ozellik kodu ile kayit zaten mevcut.");
+            throw new ArgumentException("Ayni ozellik adi ile kayit zaten mevcut.");
         }
 
-        var property = new Feature
+        var property = new ItemFeature
         {
-            Code = code,
             Name = name,
             DataType = request.DataType
+            // CompanyId repository tarafinda ResolveCurrentCompanyId() ile doldurulur
         };
 
         await _repository.AddPropertyAsync(property, cancellationToken);
@@ -1515,7 +1832,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Stok karti secimi zorunludur.");
         }
 
-        if (request.PropertyId == Guid.Empty)
+        if (request.PropertyId <= 0)
         {
             throw new ArgumentException("Ozellik secimi zorunludur.");
         }
@@ -1538,7 +1855,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
         var hasExistingLink = mappings.Any(x =>
             x.ItemId == stockCard.Id &&
-            x.PropertyId == property.Id &&
+            x.FeatureId == property.Id &&
             x.IsActive);
 
         if (hasExistingLink)
@@ -1546,15 +1863,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Bu stok karti icin secilen ozellik zaten eslestirilmis.");
         }
 
-        var mapping = new ItemPropertyMapping
+        var mapping = new ItemFeatureMapping
         {
             ItemId = stockCard.Id,
-            PropertyId = property.Id,
-            PropertyValueId = null,
-            ConfigurationCode = null,
-            TextValue = null,
-            NumericValue = null,
-            DateValue = null
+            FeatureId = property.Id,
+            FeatureValueId = null
         };
 
         await _repository.AddStockPropertyMappingAsync(mapping, cancellationToken);
@@ -1565,7 +1878,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var valueCode = request.Code.Trim().ToUpperInvariant();
         var valueDescription = request.Description.Trim();
 
-        if (request.PropertyId == Guid.Empty)
+        if (request.PropertyId <= 0)
         {
             throw new ArgumentException("Ozellik secimi zorunludur.");
         }
@@ -1617,7 +1930,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     }
 
     public async Task CreateStockPropertyMappingAsync(
-        CreateItemPropertyMappingRequest request,
+        CreateItemFeatureMappingRequest request,
         CancellationToken cancellationToken)
     {
         if (request.ItemId <= 0)
@@ -1625,12 +1938,12 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Stok karti secimi zorunludur.");
         }
 
-        if (request.PropertyId == Guid.Empty)
+        if (request.FeatureId <= 0)
         {
             throw new ArgumentException("Ozellik secimi zorunludur.");
         }
 
-        if (request.PropertyValueId == Guid.Empty)
+        if (request.FeatureValueId <= 0)
         {
             throw new ArgumentException("Ozellik degeri secimi zorunludur.");
         }
@@ -1646,20 +1959,20 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Secilen stok karti bulunamadi.");
         }
 
-        var property = properties.FirstOrDefault(x => x.Id == request.PropertyId);
+        var property = properties.FirstOrDefault(x => x.Id == request.FeatureId);
         if (property is null)
         {
             throw new ArgumentException("Secilen ozellik bulunamadi.");
         }
 
-        var selectedValue = propertyValues.FirstOrDefault(x => x.Id == request.PropertyValueId);
+        var selectedValue = propertyValues.FirstOrDefault(x => x.Id == request.FeatureValueId);
         if (selectedValue is null || selectedValue.PropertyId != property.Id)
         {
             throw new ArgumentException("Secilen ozellik degeri bu ozellige ait degil.");
         }
 
         var existingMappings = mappings
-            .Where(x => x.ItemId == stockCard.Id && x.PropertyId == property.Id && x.IsActive)
+            .Where(x => x.ItemId == stockCard.Id && x.FeatureId == property.Id && x.IsActive)
             .ToArray();
 
         if (existingMappings.Length == 0)
@@ -1671,41 +1984,9 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             .OrderByDescending(x => x.CreatedAt)
             .First();
 
-        string? textValue = null;
-        decimal? numericValue = null;
-        DateTime? dateValue = null;
-
-        switch (property.DataType)
-        {
-            case ConfigurationFieldDataType.Text:
-                textValue = selectedValue.Value;
-                break;
-            case ConfigurationFieldDataType.Numeric:
-                if (!TryParseNumeric(selectedValue.Value, out var numericParsed))
-                {
-                    throw new ArgumentException("Secilen ozellik degeri sayisal formatta degil.");
-                }
-                numericValue = numericParsed;
-                break;
-            case ConfigurationFieldDataType.Date:
-                if (!TryParseDate(selectedValue.Value, out var dateParsed))
-                {
-                    throw new ArgumentException("Secilen ozellik degeri tarih formatinda degil.");
-                }
-                dateValue = dateParsed.Date;
-                break;
-            default:
-                throw new ArgumentException("Ozellik veri tipi desteklenmiyor.");
-        }
-
-        var configurationCode = BuildConfigurationCode(stockCard.Code, property.Code, selectedValue.Value, property.DataType);
         await _repository.UpdateStockPropertyMappingValueAsync(
             existingLink.Id,
             selectedValue.Id,
-            configurationCode,
-            textValue,
-            numericValue,
-            dateValue,
             cancellationToken);
     }
 
@@ -2269,14 +2550,13 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     }
 
     public async Task<(IReadOnlyCollection<ItemDto> Items, int TotalCount)> GetItemsPagedAsync(
-        string? search, int offset, int pageSize, CancellationToken cancellationToken)
+        string? search, int offset, int pageSize, CancellationToken cancellationToken, string? groupCode = null)
     {
-        var (cards, totalCount) = await _repository.GetItemsPagedAsync(search, offset, pageSize, cancellationToken);
+        var (cards, totalCount) = await _repository.GetItemsPagedAsync(search, offset, pageSize, cancellationToken, groupCode);
         var dtos = cards.Select(x => new ItemDto(
-            x.Id, x.Code, x.Name, x.Description,
-            x.TypeId, x.IsActive, x.CreatedDate, x.CreatedByUserId,
-            x.ModifiedDate, x.ModifiedByUserId, x.TrackCombinations, x.TaxRate,
-            x.ImageData, x.ImageMimeType)).ToList();
+            x.Id, x.Code, x.Name,
+            x.TypeId, x.IsActive, x.CreateDate, x.ModifyDate,
+            x.UnitId, x.Combinations, x.TaxRate)).ToList();
         return (dtos, totalCount);
     }
 
@@ -2290,14 +2570,12 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 c.Id,
                 c.Code,
                 c.Name,
-                c.Description,
                 null,
                 c.IsActive,
-                c.CreatedDate,
-                c.CreatedByUserId,
-                c.ModifiedDate,
-                c.ModifiedByUserId,
-                c.TrackCombinations))
+                c.CreateDate,
+                c.ModifyDate,
+                c.UnitId,
+                c.Combinations))
             .ToList();
     }
 
@@ -2313,30 +2591,30 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         if (request.Selections is null || request.Selections.Count == 0)
             throw new ArgumentException("En az bir özellik değeri seçmelisiniz.");
 
-        // 1) Mevcut kombinasyonları çek ve dedup check (feature+value setleri karşılaştır)
+        // 1) Mevcut kombinasyonları çek ve dedup check — ID tabanli (CLAUDE.md
+        //    "Standart kural: id tabanli FK"). FeatureValueId set'i karsilastirilir;
+        //    deger adi/whitespace/case farklarindan tamamen bagimsiz.
         var existing = await _repository.GetCombinationsByMaterialCodeAsync(request.MaterialCode, cancellationToken);
 
-        // Request'i normalize edilmiş (feature|value) set'e çevir (case-insensitive)
-        static string NormKey(string feature, string value)
-            => (feature ?? "").Trim().ToLowerInvariant() + "||" + (value ?? "").Trim().ToLowerInvariant();
-
         var requestSet = request.Selections
-            .Select(s => NormKey(s.FeatureName, s.ValueName))
-            .OrderBy(x => x, StringComparer.Ordinal)
+            .Select(s => s.ValueId)
+            .Where(id => id > 0)
+            .OrderBy(id => id)
             .ToArray();
 
         foreach (var combo in existing)
         {
             var comboSet = combo.FeatureValues
-                .Select(fv => NormKey(fv.Feature, fv.Value))
-                .OrderBy(x => x, StringComparer.Ordinal)
+                .Select(fv => fv.FeatureValueId)
+                .Where(id => id > 0)
+                .OrderBy(id => id)
                 .ToArray();
 
             if (comboSet.Length != requestSet.Length) continue;
             var matched = true;
             for (int i = 0; i < comboSet.Length; i++)
             {
-                if (!string.Equals(comboSet[i], requestSet[i], StringComparison.Ordinal))
+                if (comboSet[i] != requestSet[i])
                 {
                     matched = false;
                     break;
@@ -2344,9 +2622,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             }
             if (matched)
             {
+                // matched: mevcut kombinasyonun gercek ConfigId'sini don — yeni
+                // kayit acilmaz, frontend mevcut koda yonlendirilir.
                 return new ResolveCombinationResponse(
                     Matched: true,
-                    ConfigId: 0,
+                    ConfigId: combo.ConfigId,
                     Code: combo.Code,
                     Name: combo.Name);
             }
@@ -2376,52 +2656,136 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     public async Task<IReadOnlyCollection<BOMDto>> GetBOMsAsync(CancellationToken cancellationToken)
     {
         var trees = await _repository.GetBOMsAsync(cancellationToken);
+        // Items + ItemConfiguration lookup'lari ile enriched BOMDto map'le
+        var items = await _repository.GetItemsAsync(cancellationToken);
+        var itemById = items.ToDictionary(i => i.Id, i => i);
+        // Note: ItemConfiguration lookup'u burada minimal — ConfigCode null doner;
+        // tek-tek BOM lookup'larinda (GetBOMByItemAsync) JOIN ile gelir.
         return trees.Select(t => new BOMDto(
-            t.Id,
-            t.ParentMaterialCode,
-            t.ConfigurationCode,
-            t.Description,
-            t.ImageData,
-            t.ImageMimeType,
-            t.Lines.Select(l => new BOMLineDto(
-                l.Id,
-                l.BOMId,
-                l.ComponentMaterialCode,
-                l.ComponentConfigCode,
-                l.Quantity,
-                l.ScrapRatio,
-                l.LineGuid)).ToList())).ToList();
+            Id:            t.Id,
+            ItemId:        t.ItemId,
+            ItemCode:      itemById.TryGetValue(t.ItemId, out var pi) ? pi.Code : "",
+            ItemName:      itemById.TryGetValue(t.ItemId, out var pi2) ? (pi2.Name ?? pi2.Code) : "",
+            ConfigId:      t.ConfigId,
+            ConfigCode:    null,
+            Description:   t.Description,
+            ImageData:     t.ImageData,
+            ImageMimeType: t.ImageMimeType,
+            ImageFitMode:  t.ImageFitMode,
+            ImageRotation: t.ImageRotation,
+            Lines: t.Lines.Select(l => new BOMLineDto(
+                Id:         l.Id,
+                BOMId:      l.BOMId,
+                ItemId:     l.ItemId,
+                ItemCode:   itemById.TryGetValue(l.ItemId, out var ci) ? ci.Code : "",
+                ItemName:   itemById.TryGetValue(l.ItemId, out var ci2) ? (ci2.Name ?? ci2.Code) : "",
+                ConfigId:   l.ConfigId,
+                ConfigCode: null,
+                Quantity:   l.Quantity,
+                ScrapRatio: l.ScrapRatio,
+                LineGuid:   l.LineGuid)).ToList())).ToList();
     }
 
+    /// <summary>
+    /// Legacy code-based lookup wrapper. Frontend halen materialCode/configCode ile
+    /// sorguluyor olabilir; backend Items.code → ItemId resolve edip yeni
+    /// FK-based GetBOMByItemAsync metodunu cagirir.
+    /// </summary>
     public async Task<BOMWithNames?> GetBOMByCodeAsync(string materialCode, string? configCode, CancellationToken cancellationToken)
-        => await _repository.GetBOMByCodeAsync(materialCode, configCode, cancellationToken);
+    {
+        if (string.IsNullOrWhiteSpace(materialCode)) return null;
+        var items = await _repository.GetItemsAsync(cancellationToken);
+        var item = items.FirstOrDefault(i => string.Equals(i.Code, materialCode.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (item is null) return null;
+
+        int? configId = null;
+        if (!string.IsNullOrWhiteSpace(configCode))
+        {
+            // ItemConfiguration.RecordCode → Id resolve (config kodu CMB...) — best-effort
+            var combos = await _repository.GetCombinationsByMaterialCodeAsync(materialCode.Trim(), cancellationToken);
+            var match = combos.FirstOrDefault(c => string.Equals(c.Code, configCode.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match is not null) configId = match.ConfigId;
+        }
+
+        return await _repository.GetBOMByItemAsync(item.Id, configId, cancellationToken);
+    }
+
+    /// <summary>
+    /// PK lookup. Liste sayfasindan secilen BOM Id'si ile detay yukleme.
+    /// </summary>
+    public async Task<BOMWithNames?> GetBOMByIdAsync(int id, CancellationToken cancellationToken)
+    {
+        if (id <= 0) return null;
+        var trees = await _repository.GetBOMsAsync(cancellationToken);
+        var match = trees.FirstOrDefault(t => t.Id == id);
+        if (match is null) return null;
+        return await _repository.GetBOMByItemAsync(match.ItemId, match.ConfigId, cancellationToken);
+    }
 
     public async Task<int> SaveBOMAsync(SaveBOMRequest request, CancellationToken cancellationToken)
     {
-        var parentCode = NormalizeRequiredField(request.ParentMaterialCode, 100, "Mamul kodu");
-
+        // Items snapshot — hem aktif kontrol hem legacy code → ItemId lookup icin
         var stockCards = await _repository.GetItemsAsync(cancellationToken);
-        var activeCodes = stockCards
-            .Where(x => x.IsActive)
-            .Select(x => x.Code.Trim().ToUpperInvariant())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var activeById      = stockCards.Where(x => x.IsActive).ToDictionary(x => x.Id);
+        var activeIdByCode  = stockCards.Where(x => x.IsActive)
+                                        .GroupBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                                        .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
 
-        if (!activeCodes.Contains(parentCode.ToUpperInvariant()))
-            throw new ArgumentException($"Mamul kodu bulunamadi veya aktif degil: {parentCode}");
+        // Mamul ItemId resolve — yeni UI ItemId gonderir, eski UI ParentMaterialCode gonderir
+        int parentItemId = request.ItemId;
+        if (parentItemId <= 0 && !string.IsNullOrWhiteSpace(request.ParentMaterialCode))
+        {
+            if (!activeIdByCode.TryGetValue(request.ParentMaterialCode.Trim(), out parentItemId))
+                throw new ArgumentException($"Mamul kodu bulunamadi veya aktif degil: {request.ParentMaterialCode}");
+        }
+        if (parentItemId <= 0)
+            throw new ArgumentException("Mamul (ItemId veya ParentMaterialCode) belirtilmedi.");
+        if (!activeById.ContainsKey(parentItemId))
+            throw new ArgumentException($"Mamul (ItemId={parentItemId}) bulunamadi veya aktif degil.");
+
+        // Config — config kodu verilmis ama ConfigId yoksa best-effort lookup (legacy)
+        int? parentConfigId = request.ConfigId;
+        if (parentConfigId is null && !string.IsNullOrWhiteSpace(request.ConfigurationCode))
+        {
+            var parentItem = activeById[parentItemId];
+            var combos = await _repository.GetCombinationsByMaterialCodeAsync(parentItem.Code, cancellationToken);
+            var match = combos.FirstOrDefault(c => string.Equals(c.Code, request.ConfigurationCode.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match is not null) parentConfigId = match.ConfigId;
+        }
 
         var lines = (request.Lines ?? Array.Empty<SaveBOMLineRequest>()).ToList();
         if (lines.Count == 0)
             throw new ArgumentException("Recetede en az bir bilesen olmalidir.");
 
+        // Her bilesen icin ItemId resolve + validation
+        var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, decimal Scrap)>(lines.Count);
         foreach (var line in lines)
         {
-            var compCode = NormalizeRequiredField(line.ComponentMaterialCode, 100, "Bilesen kodu");
-            if (!activeCodes.Contains(compCode.ToUpperInvariant()))
-                throw new ArgumentException($"Bilesen kodu bulunamadi veya aktif degil: {compCode}");
+            int lineItemId = line.ItemId;
+            if (lineItemId <= 0 && !string.IsNullOrWhiteSpace(line.ComponentMaterialCode))
+            {
+                if (!activeIdByCode.TryGetValue(line.ComponentMaterialCode.Trim(), out lineItemId))
+                    throw new ArgumentException($"Bilesen kodu bulunamadi veya aktif degil: {line.ComponentMaterialCode}");
+            }
+            if (lineItemId <= 0)
+                throw new ArgumentException("Bilesen (ItemId veya ComponentMaterialCode) belirtilmedi.");
+            if (!activeById.ContainsKey(lineItemId))
+                throw new ArgumentException($"Bilesen (ItemId={lineItemId}) bulunamadi veya aktif degil.");
             if (line.Quantity <= 0)
-                throw new ArgumentException($"Bilesen miktari sifirdan buyuk olmalidir: {compCode}");
+                throw new ArgumentException($"Bilesen miktari sifirdan buyuk olmalidir: ItemId={lineItemId}");
             if (line.ScrapRatio < 0)
-                throw new ArgumentException($"Fire miktari negatif olamaz: {compCode}");
+                throw new ArgumentException($"Fire miktari negatif olamaz: ItemId={lineItemId}");
+
+            int? lineConfigId = line.ConfigId;
+            if (lineConfigId is null && !string.IsNullOrWhiteSpace(line.ComponentConfigCode))
+            {
+                var lineItem = activeById[lineItemId];
+                var combos = await _repository.GetCombinationsByMaterialCodeAsync(lineItem.Code, cancellationToken);
+                var match = combos.FirstOrDefault(c => string.Equals(c.Code, line.ComponentConfigCode.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (match is not null) lineConfigId = match.ConfigId;
+            }
+
+            resolvedLines.Add((lineItemId, lineConfigId, line.Quantity, line.ScrapRatio));
         }
 
         byte[]? imageData = null;
@@ -2432,33 +2796,36 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             imageMimeType = string.IsNullOrWhiteSpace(request.ImageMimeType) ? "image/png" : request.ImageMimeType.Trim();
         }
 
-        var configCode = string.IsNullOrWhiteSpace(request.ConfigurationCode) ? null : request.ConfigurationCode.Trim();
-        var fitMode    = string.IsNullOrWhiteSpace(request.ImageFitMode)       ? "square" : request.ImageFitMode.Trim();
+        var fitMode  = string.IsNullOrWhiteSpace(request.ImageFitMode) ? "square" : request.ImageFitMode.Trim();
+        // ImageRotation: yalnizca 0/90/180/270 kabul et; aksi durum 0'a normalize
+        var rotation = request.ImageRotation;
+        if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) rotation = 0;
 
-        // UPSERT: if no ID given, look up existing record and reuse its ID to avoid duplicates
+        // UPSERT: Id verilmemisse mevcut kaydi ItemId+ConfigId ile bul
         int resolvedId = request.Id ?? 0;
         if (resolvedId <= 0)
         {
-            var existing = await _repository.GetBOMByCodeAsync(parentCode, configCode, cancellationToken);
+            var existing = await _repository.GetBOMByItemAsync(parentItemId, parentConfigId, cancellationToken);
             if (existing is not null)
                 resolvedId = existing.Id;
         }
 
         var entity = new BOM
         {
-            Id                 = resolvedId,
-            ParentMaterialCode = parentCode,
-            ConfigurationCode  = configCode,
-            Description        = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-            ImageData          = imageData,
-            ImageMimeType      = imageMimeType,
-            ImageFitMode       = fitMode,
-            Lines = lines.Select(l => new BOMLine
+            Id            = resolvedId,
+            ItemId        = parentItemId,
+            ConfigId      = parentConfigId,
+            Description   = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            ImageData     = imageData,
+            ImageMimeType = imageMimeType,
+            ImageFitMode  = fitMode,
+            ImageRotation = rotation,
+            Lines = resolvedLines.Select(l => new BOMLine
             {
-                ComponentMaterialCode = l.ComponentMaterialCode.Trim().ToUpperInvariant(),
-                ComponentConfigCode   = string.IsNullOrWhiteSpace(l.ComponentConfigCode) ? null : l.ComponentConfigCode.Trim(),
-                Quantity   = l.Quantity,
-                ScrapRatio = l.ScrapRatio,
+                ItemId     = l.ItemId,
+                ConfigId   = l.ConfigId,
+                Quantity   = l.Qty,
+                ScrapRatio = l.Scrap,
                 LineGuid   = Guid.NewGuid()
             }).ToList()
         };

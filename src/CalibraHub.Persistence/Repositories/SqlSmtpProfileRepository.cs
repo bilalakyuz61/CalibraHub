@@ -28,7 +28,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [created_at]
+            SELECT [id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [Created]
             FROM {_tableName}
             ORDER BY [name];
             """;
@@ -47,7 +47,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [created_at]
+            SELECT [id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [Created]
             FROM {_tableName}
             WHERE [id] = @Id;
             """;
@@ -68,7 +68,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [created_at], [updated_at])
+                ([id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [Created], [Updated])
             VALUES
                 (@Id, @EntityCompanyId, @Name, @FromEmail, @FromDisplayName, @Host, @Port, @Username, @Password, @AuthMethod, @OAuth2ClientId, @OAuth2ClientSecret, @OAuth2RefreshToken, @UseSsl, @IsActive, @CreatedAt, @UpdatedAt);
             """;
@@ -100,7 +100,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
                 [oauth2_refresh_token] = @OAuth2RefreshToken,
                 [use_ssl] = @UseSsl,
                 [is_active] = @IsActive,
-                [updated_at] = @UpdatedAt
+                [Updated] = @UpdatedAt
             WHERE [id] = @Id;
             """;
 
@@ -145,7 +145,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
             OAuth2ClientId = r.IsDBNull(r.GetOrdinal("oauth2_client_id")) ? null : r.GetString(r.GetOrdinal("oauth2_client_id")),
             OAuth2ClientSecret = r.IsDBNull(r.GetOrdinal("oauth2_client_secret")) ? null : r.GetString(r.GetOrdinal("oauth2_client_secret")),
             OAuth2RefreshToken = r.IsDBNull(r.GetOrdinal("oauth2_refresh_token")) ? null : r.GetString(r.GetOrdinal("oauth2_refresh_token")),
-            CreatedAt = r.GetDateTime(r.GetOrdinal("created_at"))
+            CreatedAt = r.GetDateTime(r.GetOrdinal("Created"))
         };
 
         profile.UpdateTransport(r.GetInt32(r.GetOrdinal("port")), r.GetBoolean(r.GetOrdinal("use_ssl")));

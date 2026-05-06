@@ -25,8 +25,15 @@ var MODULE_META = {
   CONTACTS:          { label: 'Cari Hesaplar',                 icon: 'Building2', color: 'cyan'   },
   SALES_QUOTE_EDIT:  { label: 'Satış Teklifi — Üst Bilgi',     icon: 'FileText',  color: 'violet' },
   SALES_QUOTE_LINES: { label: 'Satış Teklifi — Kalem Bilgisi', icon: 'List',      color: 'amber'  },
-  PRODUCT_TREES:     { label: 'Ürün Ağacı',                    icon: 'GitBranch', color: 'emerald'},
-  PRODUCT_CONFIG:    { label: 'Ürün Konfigürasyonu',           icon: 'Sliders',   color: 'teal'   },
+  SALES_ORDER_EDIT:  { label: 'Satış Siparişi — Üst Bilgi',    icon: 'FileText',  color: 'violet' },
+  SALES_ORDER_LINES: { label: 'Satış Siparişi — Kalem Bilgisi', icon: 'List',     color: 'amber'  },
+  PRODUCT_TREES:     { label: 'Ürün Ağacı',                    icon: 'GitBranch',     color: 'emerald'},
+  WORK_ORDER_EDIT:   { label: 'İş Emirleri',                   icon: 'ClipboardList', color: 'rose'   },
+  OPERATION_EDIT:    { label: 'Operasyon',                     icon: 'Hammer',        color: 'indigo' },
+  ROUTING_EDIT:      { label: 'Rota',                          icon: 'Workflow',      color: 'indigo' },
+  PERSONNEL_EDIT:    { label: 'Personel',                      icon: 'Users',         color: 'indigo' },
+  MACHINES:          { label: 'Makineler',                     icon: 'Cog',           color: 'slate'  },
+  PRODUCT_CONFIG:    { label: 'Ürün Konfigürasyonu',           icon: 'Sliders',       color: 'teal'   },
   // Legacy (eski admin akisi)
   material_cards:        { label: 'Malzeme Kartları',    icon: 'Package',   color: 'indigo' },
   contact_accounts:      { label: 'Cari Hesaplar',       icon: 'Building2', color: 'cyan'   },
@@ -148,7 +155,6 @@ export default function ModuleSelector(props) {
                     </div>
                     <div className="flex flex-col flex-1 min-w-0">
                       <span className="text-sm font-semibold text-white/90">{meta.label}</span>
-                      <span className="text-[10px] font-mono text-white/35">{opt.value}</span>
                     </div>
                     {isSel && <Check size={14} className="text-indigo-400 flex-shrink-0" />}
                   </button>

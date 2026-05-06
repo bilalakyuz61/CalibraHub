@@ -18,12 +18,24 @@
  *   }
  */
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { Search, Settings2, Loader2, ChevronDown } from 'lucide-react'
+import { Search, Settings2, Loader2, ChevronDown, Filter, X, Download } from 'lucide-react'
 import SmartCard from './SmartCard'
 import SmartBoardConfigPanel from './SmartBoardConfigPanel'
+import SmartBoardFilterPanel, { describeFilter, entityMatchesFilters } from './SmartBoardFilterPanel'
 import { resolveIcon, resolveColor } from './DynamicWidgetFactory'
 import { loadWidgetConfig } from '../../services/widgetConfigService'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
+
+var FILTER_STORAGE_PREFIX = 'cb-sb-filters:'
+function loadInitialFilters(boardKey) {
+  if (!boardKey || typeof window === 'undefined') return []
+  try {
+    var raw = window.localStorage.getItem(FILTER_STORAGE_PREFIX + boardKey)
+    if (!raw) return []
+    var arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr : []
+  } catch (e) { return [] }
+}
 
 export default function SmartBoard(props) {
   var boardKey = props.boardKey || 'default-board'
@@ -48,6 +60,23 @@ export default function SmartBoard(props) {
   var [search, setSearch] = useState('')
   var [configOpen, setConfigOpen] = useState(false)
   var [userConfig, setUserConfig] = useState(null)
+
+  // ── Filter state (hayalet mod) ──
+  // localStorage'dan initial yukleme — sayfa arasi tercih korunur (boardKey scope)
+  var [filterOpen, setFilterOpen] = useState(false)
+  var [filters, setFilters] = useState(function () { return loadInitialFilters(boardKey) })
+
+  // formCode — props'tan gelmezse body'nin data-form-code attribute'undan oku.
+  // _Layout.cshtml ViewData["FormCode"]'u body'ye yazar; tum SmartBoard sayfalari
+  // bu sayede config degisikligi gerektirmeden filter panele FormCode aktarir.
+  var formCode = useMemo(function () {
+    if (props.formCode) return String(props.formCode)
+    if (typeof document !== 'undefined' && document.body) {
+      var fc = document.body.getAttribute('data-form-code')
+      if (fc) return fc
+    }
+    return ''
+  }, [props.formCode])
 
   // Pagination state
   var [entities, setEntities] = useState(initialEntities)
@@ -179,31 +208,199 @@ export default function SmartBoard(props) {
     return function () { observer.disconnect() }
   }, [isPaginated, hasMore, loading, handleLoadMore])
 
-  // Client-side filtering (non-paginated mode)
+  // Client-side filtering — search + filter panel (her iki mod icin)
+  // Not: Server-side paginated mode'da search server'da yapilir, ama filter panel
+  // her iki modda da CLIENT-SIDE calisir. Server-side filter destegi sonra eklenebilir.
   var filteredEntities = useMemo(function () {
-    if (isPaginated) return entities // server handles filtering
-    if (!search.trim()) return entities
-    var q = search.toLowerCase()
-    return entities.filter(function (e) {
-      return (
-        (e.title && e.title.toLowerCase().indexOf(q) !== -1) ||
-        (e.subtitle && e.subtitle.toLowerCase().indexOf(q) !== -1) ||
-        (e.description && e.description.toLowerCase().indexOf(q) !== -1)
-      )
-    })
-  }, [search, entities, isPaginated])
+    var arr = entities
+    // 1) Search (client-side mode'da)
+    if (!isPaginated && search.trim()) {
+      var q = search.toLowerCase()
+      arr = arr.filter(function (e) {
+        return (
+          (e.title && e.title.toLowerCase().indexOf(q) !== -1) ||
+          (e.subtitle && e.subtitle.toLowerCase().indexOf(q) !== -1) ||
+          (e.description && e.description.toLowerCase().indexOf(q) !== -1)
+        )
+      })
+    }
+    // 2) Filter panel kurallari (client-side, her iki mod icin)
+    if (filters.length > 0) {
+      arr = arr.filter(function (e) { return entityMatchesFilters(e, filters) })
+    }
+    return arr
+  }, [search, entities, isPaginated, filters])
 
   var subtitle = isPaginated
     ? (totalCount > 0 ? totalCount.toLocaleString('tr-TR') + ' cari' : '')
     : (props.subtitle || '')
 
   var handleActionClick = useCallback(function (action) {
+    // Trigger: window.CalibraHub.openXyzModal()  pattern'i ile global modal acar.
+    // Server-side config'te action.trigger string'i ile gelir; URL navigate'in alternatifi.
+    if (action.trigger === 'convert-orders-modal') {
+      var ch = (typeof window !== 'undefined') && window.CalibraHub
+      if (ch && typeof ch.openConvertToOrdersModal === 'function') {
+        ch.openConvertToOrdersModal({
+          onSuccess: function (res) {
+            // Basari sonrasi sayfayi yenile — yeni durum (Converted) listede yansimasi icin
+            try { window.location.reload() } catch (e) { /* ignore */ }
+          },
+        })
+      } else {
+        console.warn('[SmartBoard] openConvertToOrdersModal global fonksiyon bulunamadi')
+      }
+      return
+    }
     if (action.url) navigateInWorkspace(action.url)
   }, [])
 
   var handleConfigSaved = useCallback(function (newConfig) {
     setUserConfig(newConfig)
   }, [])
+
+  /* ── Excel (.xlsx) export — server-side ClosedXML uretir, hidden form POST
+        ile gonderilir (iframe blob URL kisitlamalarini bypass eder; "Tasinmis,
+        duzenlenmis veya silinmis olabilir" hatasinin sebebi).
+        - Paginated mode: tum sayfalari ardisik cekip birlestirir
+        - Client-only mode: filteredEntities'i dogrudan kullanir
+        Kolonlar: Kod (subtitle) + Ad (title) + tum widget alanlari. */
+  var [exporting, setExporting] = useState(false)
+
+  var handleExportCsv = useCallback(async function () {
+    if (exporting) return
+    try {
+      setExporting(true)
+
+      // 1) Veriyi topla — paginated ise tum sayfalari, degilse filteredEntities'i.
+      var allRows = []
+      if (isPaginated && apiUrl) {
+        var batchSize = Math.min(pageSize > 0 ? pageSize : 50, 200)
+        var p = 1
+        var maxPages = 200 // 200 * 200 = 40,000 kayit guvenlik valfı
+        var fetched = 0
+        while (p <= maxPages) {
+          var u = apiUrl + '?page=' + p + '&pageSize=' + batchSize
+          if (search && search.trim()) u += '&search=' + encodeURIComponent(search.trim())
+          // eslint-disable-next-line no-await-in-loop
+          var resp = await fetch(u, { credentials: 'same-origin' })
+          // eslint-disable-next-line no-await-in-loop
+          var data = await resp.json()
+          if (!data) break
+          if (data.error) { throw new Error(String(data.error)) }
+          var ents = Array.isArray(data.entities) ? data.entities : []
+          var total = data.totalCount || 0
+          allRows = allRows.concat(ents)
+          fetched += ents.length
+          if (ents.length === 0) break
+          if (total > 0 && fetched >= total) break
+          p++
+        }
+        // Aktif filtre panel kurallarini client-side uygula (henuz server-side filter yok)
+        if (filters && filters.length > 0) {
+          allRows = allRows.filter(function (e) { return entityMatchesFilters(e, filters) })
+        }
+      } else {
+        allRows = filteredEntities || []
+      }
+
+      if (!allRows || allRows.length === 0) {
+        try { window.alert('Aktarılacak satır yok.') } catch (_) { /* ignore */ }
+        return
+      }
+
+      // 2) Kolonlari belirle — master widgets oncelikli, sonra entity widgets'tan ek
+      var seen = {}
+      var widgetCols = []
+      function addCol(id, label) {
+        if (!id || seen[id]) return
+        seen[id] = true
+        widgetCols.push({ id: String(id), label: String(label || id) })
+      }
+      masterWidgets.forEach(function (w) { if (w) addCol(w.id, w.label) })
+      allRows.forEach(function (e) {
+        if (!e || !Array.isArray(e.widgets)) return
+        e.widgets.forEach(function (w) { if (w) addCol(w.id, w.label) })
+      })
+
+      // 3) Server payload — Kod + Ad + widget kolonlari
+      var headers = [{ id: '__code', label: 'Kod' }, { id: '__name', label: 'Ad' }]
+        .concat(widgetCols.map(function (c) { return { id: c.id, label: c.label } }))
+
+      function valueOf(w) {
+        if (!w) return null
+        var v = w.value
+        if (v === undefined) return null
+        return v // backend tip kontrolunu kendisi yapar (string/number/bool/object/array)
+      }
+
+      var rows = allRows.map(function (e) {
+        var obj = {
+          __code: e.subtitle || '',
+          __name: e.title    || '',
+        }
+        if (Array.isArray(e.widgets)) {
+          e.widgets.forEach(function (w) {
+            if (w && w.id) obj[w.id] = valueOf(w)
+          })
+        }
+        return obj
+      })
+
+      var ts = new Date()
+      var pad = function (n) { return n < 10 ? '0' + n : String(n) }
+      var stamp = ts.getFullYear() + pad(ts.getMonth() + 1) + pad(ts.getDate()) + '_' +
+                  pad(ts.getHours()) + pad(ts.getMinutes()) + pad(ts.getSeconds())
+      var fileName = (boardKey || 'liste') + '_' + stamp + '.xlsx'
+      var sheetName = (title || 'Liste').slice(0, 31)
+
+      var payload = {
+        fileName:  fileName,
+        sheetName: sheetName,
+        headers:   headers,
+        rows:      rows,
+      }
+
+      // 4) Hidden form POST submission — iframe blob URL kisitlamalarini bypass eder.
+      //    Browser dogal navigation handle eder, server Content-Disposition header'i
+      //    ile attachment olarak donerse browser dosyayi indirir. CSP / sandbox
+      //    'allow-downloads' bayragi yoksa bile bu yontem calisir.
+      var token = ''
+      var tokenInput = document.querySelector('input[name="__RequestVerificationToken"]')
+      if (tokenInput) token = tokenInput.value || ''
+
+      var form = document.createElement('form')
+      form.method = 'POST'
+      form.action = '/api/export/smartboard-excel'
+      form.target = '_self'
+      form.style.display = 'none'
+
+      var hidden = document.createElement('textarea')
+      hidden.name = 'payload'
+      hidden.value = JSON.stringify(payload)
+      form.appendChild(hidden)
+
+      if (token) {
+        var tokInput = document.createElement('input')
+        tokInput.type = 'hidden'
+        tokInput.name = '__RequestVerificationToken'
+        tokInput.value = token
+        form.appendChild(tokInput)
+      }
+
+      document.body.appendChild(form)
+      form.submit()
+      // Submit non-navigating attachment, ama yine de form'u temizle
+      setTimeout(function () {
+        if (form.parentNode) form.parentNode.removeChild(form)
+      }, 1500)
+    } catch (err) {
+      console.error('[SmartBoard] Export hatasi:', err)
+      try { window.alert('Aktarma sırasında hata: ' + (err && err.message ? err.message : err)) } catch (_) { /* ignore */ }
+    } finally {
+      setExporting(false)
+    }
+  }, [exporting, isPaginated, apiUrl, pageSize, search, filters, filteredEntities, masterWidgets, boardKey, title])
 
   var visibleIds = userConfig && Array.isArray(userConfig.visibleIds) ? userConfig.visibleIds : null
   var order = userConfig && Array.isArray(userConfig.order) ? userConfig.order : null
@@ -273,6 +470,49 @@ export default function SmartBoard(props) {
 
         {!searchable && <div className="flex-1" />}
 
+        {/* Filter button — hayalet mod (low saturation, dot indicator aktifte) */}
+        <button
+          onClick={function () { setFilterOpen(true) }}
+          className={'relative p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
+            (filters.length > 0
+              ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-400/30'
+              : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06]')
+          }
+          title={filters.length > 0 ? (filters.length + ' filtre aktif') : 'Filtreleme'}
+        >
+          <Filter size={15} className={filters.length > 0
+            ? 'text-indigo-600 dark:text-indigo-400'
+            : 'text-slate-500 dark:text-white/40 group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors'
+          } />
+          {filters.length > 0 && (
+            <span
+              className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold bg-indigo-500 text-white flex items-center justify-center"
+              style={{ boxShadow: '0 0 0 2px rgba(15,23,42,0.6)' }}
+            >
+              {filters.length}
+            </span>
+          )}
+        </button>
+
+        {/* Excel/CSV export — paginated mode'da tum sayfalari ardisik ceker;
+            UTF-8 BOM + CSV (Excel Tr lokali ile dogrudan acar). Master + sistem
+            widget'lari kolon olarak yazilir. Export sirasinda spinner gosterilir. */}
+        <button
+          onClick={function () { handleExportCsv() }}
+          disabled={exporting}
+          className={'p-2.5 rounded-xl border transition-all group flex-shrink-0 ' +
+            (exporting
+              ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-400/30 cursor-wait'
+              : 'bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border-slate-200 dark:border-white/[0.06]')
+          }
+          title={exporting ? 'Aktariliyor...' : "Excel'e Aktar"}
+        >
+          {exporting
+            ? <Loader2 size={15} className="text-emerald-600 dark:text-emerald-400 animate-spin" />
+            : <Download size={15} className="text-slate-500 dark:text-white/40 group-hover:text-emerald-600 dark:group-hover:text-emerald-400/80 transition-colors" />
+          }
+        </button>
+
         <button
           onClick={function () { setConfigOpen(true) }}
           className="p-2.5 rounded-xl bg-white/60 dark:bg-white/[0.04] hover:bg-white/80 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/[0.06] transition-all group flex-shrink-0"
@@ -305,6 +545,64 @@ export default function SmartBoard(props) {
           </div>
         )}
       </div>
+
+      {/* ── Aktif filtre chip strip (hayalet mod) ──
+          Topbar altinda, dusuk opacity (0.65) ile lebon-floating gorunur.
+          Her chip × ile silinir, aktif filtre toplam ekran genisliginde scroll'lanir. */}
+      {filters.length > 0 && (
+        <div
+          className="flex items-center gap-1.5 px-5 py-2 flex-shrink-0 overflow-x-auto"
+          style={{
+            background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.04)',
+            borderBottom: isDark ? '1px solid rgba(99,102,241,0.1)' : '1px solid rgba(99,102,241,0.08)',
+            opacity: 0.85,
+          }}
+        >
+          <Filter size={11} className="text-indigo-500/70 dark:text-indigo-400/70 flex-shrink-0" />
+          {filters.map(function (f) {
+            return (
+              <span
+                key={f.id}
+                className="inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full text-[10.5px] font-medium flex-shrink-0"
+                style={{
+                  background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)',
+                  border: isDark ? '1px solid rgba(99,102,241,0.25)' : '1px solid rgba(99,102,241,0.18)',
+                  color: isDark ? '#a5b4fc' : '#4338ca',
+                }}
+                title={describeFilter(f)}
+              >
+                <span className="truncate max-w-[200px]">{describeFilter(f)}</span>
+                <button
+                  type="button"
+                  onClick={function () {
+                    var next = filters.filter(function (x) { return x.id !== f.id })
+                    setFilters(next)
+                    try {
+                      if (next.length === 0) window.localStorage.removeItem(FILTER_STORAGE_PREFIX + boardKey)
+                      else window.localStorage.setItem(FILTER_STORAGE_PREFIX + boardKey, JSON.stringify(next))
+                    } catch (e) { /* ignore */ }
+                  }}
+                  className="ml-0.5 p-0.5 rounded-full hover:bg-indigo-500/20 dark:hover:bg-indigo-400/20 transition-colors flex-shrink-0"
+                  title="Bu filtreyi kaldir"
+                >
+                  <X size={10} strokeWidth={2.5} />
+                </button>
+              </span>
+            )
+          })}
+          <button
+            type="button"
+            onClick={function () {
+              setFilters([])
+              try { window.localStorage.removeItem(FILTER_STORAGE_PREFIX + boardKey) } catch (e) { /* ignore */ }
+            }}
+            className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-medium text-slate-500 dark:text-white/50 hover:text-rose-500 dark:hover:text-rose-300 transition-colors flex-shrink-0"
+            title="Tum filtreleri temizle"
+          >
+            Tumunu temizle
+          </button>
+        </div>
+      )}
 
       {/* ── Kart Listesi ─────────────────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
@@ -364,6 +662,18 @@ export default function SmartBoard(props) {
         boardKey={boardKey}
         masterWidgets={masterWidgets}
         onSaved={handleConfigSaved}
+      />
+
+      {/* ── Filter Panel (hayalet mod) ─────── */}
+      <SmartBoardFilterPanel
+        isOpen={filterOpen}
+        onClose={function () { setFilterOpen(false) }}
+        boardKey={boardKey}
+        formCode={formCode}
+        masterWidgets={masterWidgets}
+        entities={entities}
+        filters={filters}
+        onApply={function (next) { setFilters(next) }}
       />
     </div>
   )

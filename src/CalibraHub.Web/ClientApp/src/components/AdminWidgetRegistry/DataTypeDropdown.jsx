@@ -29,8 +29,12 @@ export var DATA_TYPES = [
   { value: 'dropdown',     label: 'Secim Listesi',    icon: 'List',         color: 'teal' },
   { value: 'multi-select', label: 'Coklu Secim',      icon: 'Layers',       color: 'teal' },
   { value: 'link',         label: 'Baglanti',         icon: 'ExternalLink', color: 'violet' },
-  { value: 'lookup',       label: 'Rehber (Lookup)',  icon: 'Search',       color: 'amber' },
-  { value: 'grid',         label: 'Alt Tablo',        icon: 'Table',        color: 'blue' },
+  // 'lookup' ve 'grid' eski tipler — yeni tanim listesinden gizlendi (hidden:true).
+  // Eski tanimlanmis widget'lar edit acilinca DATA_TYPES.find(...) ile yine bulunur,
+  // ekranda dogru ikon/renk goster — sadece dropdown listesinde gorunmez.
+  { value: 'lookup',       label: 'Rehber (Lookup)',  icon: 'Search',       color: 'amber', hidden: true },
+  { value: 'guide-list',   label: 'Rehber Listesi',   icon: 'Table',        color: 'amber' },
+  { value: 'grid',         label: 'Alt Tablo',        icon: 'Table',        color: 'blue',  hidden: true },
 ]
 
 export default function DataTypeDropdown(props) {
@@ -105,7 +109,7 @@ export default function DataTypeDropdown(props) {
               boxShadow: '0 12px 40px rgba(0, 0, 0, 0.4)',
             }}
           >
-            {DATA_TYPES.map(function(t) {
+            {DATA_TYPES.filter(function(t) { return !t.hidden }).map(function(t) {
               var palette = resolveColor(t.color)
               var Icon = resolveIcon(t.icon)
               var isSel = t.value === value

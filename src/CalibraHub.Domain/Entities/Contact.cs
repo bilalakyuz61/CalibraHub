@@ -10,6 +10,9 @@ public sealed class Contact
     [Description("Birincil anahtar. IDENTITY.")]
     public int Id { get; init; }
 
+    [Description("Carinin ait oldugu sirket. FK -> Company.Id. Kayit anindaki oturum kullanicisinin sirketinden otomatik doldurulur.")]
+    public int CompanyId { get; set; }
+
     [Description("Cari hesap tipi (musteri/satici/her ikisi).")]
     public ContactType AccountType { get; init; } = ContactType.Customer;
 
@@ -32,6 +35,12 @@ public sealed class Contact
     public string? Mobile { get; init; }
     public string? Email { get; init; }
     public string? Website { get; init; }
+
+    [Description("WhatsApp icin ayri numara (Mobile'dan farkli olabilir). Gelen mesaj eslestirme ve giden gonderim icin kullanilir.")]
+    public string? WaPhone { get; init; }
+
+    [Description("Cari'nin WhatsApp'ta gorunen adi — sohbet listesinde bu yazi gosterilir, AccountTitle ile farkli olabilir.")]
+    public string? WaName { get; init; }
     public string? Address { get; init; }
     public string? PostalCode { get; init; }
     public string? City { get; init; }

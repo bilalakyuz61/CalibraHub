@@ -22,10 +22,12 @@ import {
   Plus, Trash2, Pencil, Hash, FileText, Ruler, Sigma, DollarSign,
   Percent, Calculator, StickyNote, CircleDot, Lock, Pin, PinOff,
   Settings, X as XIcon, GitBranch, History, AlertTriangle,
-  MoreHorizontal, ExternalLink,
+  MoreHorizontal, ExternalLink, ChevronRight,
 } from 'lucide-react'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
 import LineGridCell, { CombinationLookupCell } from './LineGridCell'
+import CostViewerModal from './CostViewerModal'
+import QuoteCostSummaryModal from './QuoteCostSummaryModal'
 import { evaluate } from './formulaEvaluator'
 import { getTopBody } from '../../utils/topPortal'
 import DynamicWidgetRenderer from '../DynamicWidgetRenderer/DynamicWidgetRenderer'
@@ -116,6 +118,43 @@ export default function CalibraLineItemsGrid(props) {
   //   satir revised_from_id = secili satirin id'si ile eklenir.
   var [reviseModal, setReviseModal] = useState(null) // { row, tab: 'revise'|'history', draft:{...} }
 
+  // ── Belge para birimi (#sqCurrency'den okunur, change'de senkron) ──
+  // Toplam alaninin sag tarafinda ve para birimi gosterilen yerlerde
+  // kullanilir. Default TRY; programatik set sonrasi 'sq:currency' window
+  // event'i ile de senkronlanir (DocumentEdit yukleyici tarafinda dispatch).
+  var [docCurrency, setDocCurrency] = useState(function () {
+    if (typeof document === 'undefined') return 'TRY'
+    var el = document.getElementById('sqCurrency')
+    return (el && el.value) ? el.value : 'TRY'
+  })
+  useEffect(function () {
+    var el = (typeof document !== 'undefined') ? document.getElementById('sqCurrency') : null
+    function syncFromEl() {
+      if (el && el.value) setDocCurrency(el.value)
+    }
+    function onCustom(e) {
+      var code = (e && e.detail && e.detail.code) || (el && el.value) || 'TRY'
+      setDocCurrency(code)
+    }
+    if (el) el.addEventListener('change', syncFromEl)
+    window.addEventListener('sq:currency', onCustom)
+    // Mount'tan sonra select'in degeri (sqLoadQuote ile) sonradan setlenebilir —
+    // kucuk bir polling ile ilk degeri yakala (bir kerelik).
+    var attempts = 0
+    var poll = setInterval(function () {
+      if (attempts++ > 20) { clearInterval(poll); return }
+      var v = el && el.value
+      if (v && v !== docCurrency) { setDocCurrency(v); clearInterval(poll) }
+    }, 150)
+    return function () {
+      if (el) el.removeEventListener('change', syncFromEl)
+      window.removeEventListener('sq:currency', onCustom)
+      clearInterval(poll)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  var currencySymbol = ({ TRY: '₺', USD: '$', EUR: '€', GBP: '£' })[docCurrency] || docCurrency
+
   // ── Satir kisayol menusu (•••) ───────────────────────────
   //   Aksiyon seridinin basindaki MoreHorizontal butonuna basilinca acilan liste.
   //   Suan tek item: "Stok Kartina Git". Ileride ek ozellikler (kart bilgisi,
@@ -123,6 +162,9 @@ export default function CalibraLineItemsGrid(props) {
   //   altinda konumlanir, dis click veya Esc ile kapanir.
   //   State: null veya { row, pos:{top,left,width} }
   var [shortcutsMenu, setShortcutsMenu] = useState(null)
+  // Maliyet Goruntuleme — kisayol menusunden acilan standart modal.
+  // null veya { materialCode, configCode, quantity, materialName }
+  var [costViewer, setCostViewer] = useState(null)
   // Split-pane: modal body icinde solda grup listesi, sagda secili grubun alanlari.
   // DynamicWidgetRenderer her grup icin [data-dyn-group-id] karti render eder;
   // MutationObserver ile bu kartlari yakalayip grup listesini olusturuyoruz.
@@ -460,10 +502,34 @@ export default function CalibraLineItemsGrid(props) {
   // cunku extrasModalRow state'i burada. Rows degistikce ref'i guncel tut.
   var rowsRef = useRef(rows)
   useEffect(function () { rowsRef.current = rows }, [rows])
+
+  // SALES_QUOTE_LINES formundaki zorunlu widget durumu — chain sonunda extras
+  // modal'i SADECE zorunlu alan varsa otomatik acilir. Yoksa kullanici akistan
+  // takilmadan satira devam eder; ihtiyaci olursa ⚙ butonuyla manuel acabilir.
+  // Schema bir kez yuklenir ve cache'lenir (ref ile listener'a senkron tutulur).
+  var hasRequiredLineWidgetsRef = useRef(false)
+  useEffect(function () {
+    var alive = true
+    fetch('/api/widgets/forms/SALES_QUOTE_LINES/schema', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (schema) {
+        if (!alive || !schema || !Array.isArray(schema.widgets)) return
+        // ASP.NET Core JSON camelCase'e cevirir; Pascal fallback'i de dusuruyoruz.
+        var any = schema.widgets.some(function (w) {
+          return w && (w.isRequired === true || w.IsRequired === true)
+        })
+        hasRequiredLineWidgetsRef.current = any
+      })
+      .catch(function () { /* sessiz — schema yoksa otomatik acma yapma */ })
+    return function () { alive = false }
+  }, [])
+
   useEffect(function () {
     function onAutoOpen(e) {
       var d = e.detail || {}
       if (d.stage !== 'extras') return
+      // Zorunlu widget yoksa otomatik acma — guided chain burada sessizce biter.
+      if (!hasRequiredLineWidgetsRef.current) return
       var target = (rowsRef.current || []).find(function (r) { return r._uid === d.rowUid })
       if (target) setExtrasModalRow(target)
     }
@@ -647,7 +713,7 @@ export default function CalibraLineItemsGrid(props) {
       className="calibra-line-grid rounded-2xl overflow-hidden border border-slate-200 bg-white/70 dark:bg-white/[0.04] dark:border-white/10 backdrop-blur-xl shadow-sm">
       {/* Header row */}
       <div className="flex items-center border-b border-slate-200 bg-slate-50/80 dark:bg-white/[0.03] dark:border-white/[0.08]">
-        <div className="w-[200px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
+        <div className="w-[140px] flex-shrink-0 px-2 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-white/50 text-center">
           Islem
         </div>
         {columns.map(function(col) {
@@ -718,9 +784,9 @@ export default function CalibraLineItemsGrid(props) {
                   style={{ position: 'relative' }}
                 >
                   <div className="flex items-stretch" style={{ position: 'relative' }}>
-                    {/* Aksiyon seridi: ••• kisayol menusu + Kombinasyon + Not + Ek Alanlar (⚙) + Revize + Sil.
-                        ••• butonu ileride daha fazla kisayol eklenecek (stok kartina git vb.). */}
-                    <div className="w-[200px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
+                    {/* Aksiyon seridi (sadelesti): ••• kisayol + Kombinasyon + Ek Alanlar (⚙) + Sil.
+                        Not ve Revize butonlari ••• icine tasindi — tek dropdown'dan erisilir. */}
+                    <div className="w-[140px] flex-shrink-0 flex items-center justify-center gap-1 border-r border-slate-100 dark:border-white/[0.04]">
                       {/* Satir kisayol menusu — MoreHorizontal ikonu, tiklayinca liste acilir */}
                       <button
                         type="button"
@@ -756,30 +822,8 @@ export default function CalibraLineItemsGrid(props) {
                           </div>
                         )
                       })}
-                      {belowColumns.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={function() { if (canModify(row)) toggleNote(row._uid) }}
-                          disabled={!canModify(row)}
-                          className={'relative w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-                            !canModify(row)
-                              ? 'text-slate-300 dark:text-white/15 cursor-not-allowed'
-                              : (isNoteOpen(row)
-                                  ? 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/15'
-                                  : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:text-white/30 dark:hover:text-amber-300 dark:hover:bg-amber-500/10')
-                          )}
-                          title={!canModify(row) ? 'Once kilidi acin' : (isNoteOpen(row) ? 'Notu gizle' : (hasAnyBelowValue(row) ? 'Not var — goster' : 'Not ekle'))}
-                        >
-                          <StickyNote size={13} strokeWidth={1.8} />
-                          {hasAnyBelowValue(row) && !isNoteOpen(row) && (
-                            <span
-                              className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400"
-                              style={{ boxShadow: '0 0 4px rgba(251,191,36,0.8)' }}
-                              aria-hidden="true"
-                            />
-                          )}
-                        </button>
-                      )}
+                      {/* Not butonu aksiyon seridinden cikartildi — artik ••• kisayol
+                          menusunun icinde "Not Ekle / Goster / Gizle" olarak yer aliyor. */}
                       {/* Ek Alanlar (SALES_QUOTE_LINES widget'lari) — sadece kayitli satirlarda.
                           Renk kuralı:
                             - Satir kaydedilmemis → sky (notr)
@@ -830,44 +874,9 @@ export default function CalibraLineItemsGrid(props) {
                           </button>
                         )
                       })()}
-                      {/* Revize butonu — satir hakkinda revizyon modal'ini acar.
-                          2 sekme: Revize Et (yeni revize olustur) + Gecmis Revizeler.
-                          Satir kilidine bagli DEGIL — kilitli satir da revize edilebilir.
-                          Kayitli olmayan (id yok) satir icin de acilir: chain bos goruntulenir.
-                          Revize edilmis satirlarda (revisedFromId dolu) zincir uzunlugu rozet olarak gosterilir. */}
-                      {(function () {
-                        var hasRevisionParent = row.revisedFromId != null && Number(row.revisedFromId) > 0
-                        return (
-                          <button
-                            type="button"
-                            onClick={function () {
-                              setReviseModal({
-                                row: row,
-                                tab: 'revise',
-                                // Sadelestirilmis revize akisi: kullanici sadece ACIKLAMA
-                                // girer (ESKI satira not olarak eklenir). Yeni satir
-                                // aynen kopyalanarak alta eklenir; degisiklikler gridde.
-                                draft: { notes: '' },
-                              })
-                            }}
-                            className={'relative w-7 h-7 rounded-lg flex items-center justify-center transition-colors ' + (
-                              hasRevisionParent
-                                ? 'text-violet-600 bg-violet-50 hover:bg-violet-100 dark:text-violet-300 dark:bg-violet-500/15 dark:hover:bg-violet-500/25'
-                                : 'text-slate-400 hover:text-violet-500 hover:bg-violet-50 dark:text-white/30 dark:hover:text-violet-300 dark:hover:bg-violet-500/10'
-                            )}
-                            title={hasRevisionParent ? 'Bu satir bir revize — gecmisi / yeni revize icin ac' : 'Revize et / gecmisi izle'}
-                          >
-                            <GitBranch size={13} strokeWidth={1.9} />
-                            {hasRevisionParent && (
-                              <span
-                                className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-violet-400"
-                                style={{ boxShadow: '0 0 4px rgba(167,139,250,0.85)' }}
-                                aria-hidden="true"
-                              />
-                            )}
-                          </button>
-                        )
-                      })()}
+                      {/* Revize butonu aksiyon seridinden cikartildi — artik ••• kisayol
+                          menusunde "Revize Et" olarak yer aliyor (hala revised zincir
+                          rozetini satir uzerinde gostermiyoruz; modal icinde zincir var). */}
                       <button
                         type="button"
                         onClick={function() {
@@ -904,6 +913,7 @@ export default function CalibraLineItemsGrid(props) {
                             row={row}
                             value={row[col.key]}
                             onChange={function(k, v, fill) { handleCellChange(row._uid, k, v, fill) }}
+                            siblingColumns={allColumns}
                           />
                         </div>
                       )
@@ -914,7 +924,7 @@ export default function CalibraLineItemsGrid(props) {
                     {isPending && (
                       <div
                         style={{
-                          position: 'absolute', left: 200, right: 0, bottom: 0,
+                          position: 'absolute', left: 140, right: 0, bottom: 0,
                           height: 3, zIndex: 5, pointerEvents: 'none',
                           background: 'rgba(239,68,68,.15)',
                           overflow: 'hidden',
@@ -1018,7 +1028,7 @@ export default function CalibraLineItemsGrid(props) {
               {labels.totalLabel || 'Toplam'}
             </span>
             <span className="font-mono tabular-nums text-amber-600 dark:text-amber-300 text-[15px] font-bold">
-              {TR_FMT(totalSum, 2)} ₺
+              {TR_FMT(totalSum, 2)} {currencySymbol}
             </span>
           </div>
         )}
@@ -1032,12 +1042,56 @@ export default function CalibraLineItemsGrid(props) {
           Portal: .sqe-tab-content icine absolute konumlanir — app shell (ust bar,
           sol menu, alt panel) ve SQE sol tab navi gizlenmez, sadece icerik alani
           ortulur. */}
-      {extrasModalRow && createPortal(
+      {extrasModalRow && (function () {
+        // Tema detection — kisayol menusuyle ayni chain (iframe parent fallback, default light).
+        var __isLight = (function () {
+          if (typeof document === 'undefined') return true
+          try {
+            if (document.body.classList.contains('app-theme-light')) return true
+            if (document.body.classList.contains('app-theme-dark'))  return false
+            if (window.parent && window.parent !== window && window.parent.document && window.parent.document.body) {
+              if (window.parent.document.body.classList.contains('app-theme-light')) return true
+              if (window.parent.document.body.classList.contains('app-theme-dark'))  return false
+            }
+          } catch (_) {}
+          return true
+        })()
+        var __overlayBg  = __isLight
+          ? 'radial-gradient(at 20% 10%, rgba(99,102,241,0.06) 0%, transparent 45%), radial-gradient(at 85% 85%, rgba(168,85,247,0.05) 0%, transparent 45%), rgba(15,23,42,0.35)'
+          : 'radial-gradient(at 20% 10%, rgba(99,102,241,0.12) 0%, transparent 45%), radial-gradient(at 85% 85%, rgba(168,85,247,0.10) 0%, transparent 45%), rgba(3,6,15,0.72)'
+        var __panelBg     = __isLight
+          ? 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)'
+          : 'linear-gradient(180deg, rgba(23,28,42,0.98) 0%, rgba(15,19,30,0.98) 100%)'
+        var __panelBorder = __isLight ? '1px solid #e2e8f0'                 : '1px solid rgba(255,255,255,0.10)'
+        var __panelShadow = __isLight
+          ? '0 16px 48px rgba(15,23,42,0.18), 0 0 0 1px rgba(99,102,241,0.08)'
+          : '0 32px 96px rgba(0,0,0,0.65), 0 0 0 1px rgba(99,102,241,0.08)'
+        var __textColor   = __isLight ? '#0f172a' : 'rgba(255,255,255,0.92)'
+        var __mutedText   = __isLight ? '#64748b' : 'rgba(255,255,255,0.5)'
+        var __subtleText  = __isLight ? '#94a3b8' : 'rgba(255,255,255,0.35)'
+        var __sepColor    = __isLight ? '#e2e8f0' : 'rgba(255,255,255,0.06)'
+        var __headTitle   = __isLight ? '#0f172a' : '#fff'
+        var __chipBg      = __isLight ? 'rgba(99,102,241,0.08)'  : 'rgba(99,102,241,0.12)'
+        var __chipText    = __isLight ? '#4338ca'                : '#a5b4fc'
+        var __chipBorder  = __isLight ? 'rgba(99,102,241,0.20)'  : 'rgba(99,102,241,0.22)'
+        var __closeBtnBg  = __isLight ? 'rgba(15,23,42,0.04)'    : 'rgba(255,255,255,0.04)'
+        var __closeBtnBdr = __isLight ? 'rgba(15,23,42,0.08)'    : 'rgba(255,255,255,0.08)'
+        var __closeBtnClr = __isLight ? '#475569'                : 'rgba(255,255,255,0.7)'
+        var __footerBg    = __isLight ? 'rgba(15,23,42,0.02)'    : 'rgba(0,0,0,0.18)'
+        var __cancelBtnBg = __isLight ? '#fff'                    : 'rgba(255,255,255,0.04)'
+        var __cancelBdr   = __isLight ? '#e2e8f0'                : 'rgba(255,255,255,0.10)'
+        var __cancelClr   = __isLight ? '#475569'                : 'rgba(255,255,255,0.8)'
+        var __cancelBgHov = __isLight ? '#f1f5f9'                : 'rgba(255,255,255,0.08)'
+        var __bodyTint    = __isLight
+          ? 'linear-gradient(180deg, rgba(99,102,241,0.02) 0%, transparent 40%)'
+          : 'linear-gradient(180deg, rgba(255,255,255,0.008) 0%, transparent 40%)'
+
+        return createPortal(
         <div
           onClick={function(e) { if (e.target === e.currentTarget && !extrasSaving) closeExtrasModal() }}
           style={{
             position: 'absolute', inset: 0,
-            background: 'radial-gradient(at 20% 10%, rgba(99,102,241,0.12) 0%, transparent 45%), radial-gradient(at 85% 85%, rgba(168,85,247,0.10) 0%, transparent 45%), rgba(3,6,15,0.72)',
+            background: __overlayBg,
             backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             zIndex: 50, padding: 16,
@@ -1052,10 +1106,10 @@ export default function CalibraLineItemsGrid(props) {
             width: '92%', maxWidth: 820, maxHeight: '88vh',
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
             borderRadius: 18,
-            background: 'linear-gradient(180deg, rgba(23,28,42,0.98) 0%, rgba(15,19,30,0.98) 100%)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            boxShadow: '0 32px 96px rgba(0,0,0,0.65), 0 0 0 1px rgba(99,102,241,0.08)',
-            color: 'rgba(255,255,255,0.92)',
+            background: __panelBg,
+            border: __panelBorder,
+            boxShadow: __panelShadow,
+            color: __textColor,
             animation: 'sqExtrasPop 220ms cubic-bezier(.2,.8,.3,1)',
           }}>
             {/* Ust gradient serit */}
@@ -1071,7 +1125,7 @@ export default function CalibraLineItemsGrid(props) {
             <div style={{
               display: 'flex', alignItems: 'center', gap: 14,
               padding: '16px 22px',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              borderBottom: '1px solid ' + __sepColor,
               flexShrink: 0,
             }}>
               <div style={{
@@ -1082,19 +1136,19 @@ export default function CalibraLineItemsGrid(props) {
                 boxShadow: '0 4px 16px rgba(99,102,241,0.18)',
                 flexShrink: 0,
               }}>
-                <Settings size={18} strokeWidth={1.8} style={{ color: '#a5b4fc' }} />
+                <Settings size={18} strokeWidth={1.8} style={{ color: __isLight ? '#4f46e5' : '#a5b4fc' }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.012em', color: '#fff' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.012em', color: __headTitle }}>
                   Kalem Ek Alanları
                 </div>
-                <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 11.5, color: __mutedText, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{
                     fontFamily: "'JetBrains Mono','Consolas',monospace",
                     fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em',
                     padding: '2px 8px', borderRadius: 6,
-                    background: 'rgba(99,102,241,0.12)', color: '#a5b4fc',
-                    border: '1px solid rgba(99,102,241,0.22)',
+                    background: __chipBg, color: __chipText,
+                    border: '1px solid ' + __chipBorder,
                   }}>
                     {extrasModalRow.materialCode || '—'}
                   </span>
@@ -1107,15 +1161,15 @@ export default function CalibraLineItemsGrid(props) {
                 onClick={function() { if (!extrasSaving) closeExtrasModal() }}
                 disabled={extrasSaving}
                 style={{
-                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                  color: 'rgba(255,255,255,0.7)', cursor: extrasSaving ? 'not-allowed' : 'pointer',
+                  background: __closeBtnBg, border: '1px solid ' + __closeBtnBdr,
+                  color: __closeBtnClr, cursor: extrasSaving ? 'not-allowed' : 'pointer',
                   width: 32, height: 32, borderRadius: 10,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   transition: 'all .12s',
                   opacity: extrasSaving ? 0.4 : 1,
                 }}
-                onMouseEnter={function(e) { if (!extrasSaving) { e.currentTarget.style.background='rgba(239,68,68,0.12)'; e.currentTarget.style.color='#fca5a5'; e.currentTarget.style.borderColor='rgba(239,68,68,0.25)' } }}
-                onMouseLeave={function(e) { e.currentTarget.style.background='rgba(255,255,255,0.04)'; e.currentTarget.style.color='rgba(255,255,255,0.7)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)' }}
+                onMouseEnter={function(e) { if (!extrasSaving) { e.currentTarget.style.background='rgba(239,68,68,0.12)'; e.currentTarget.style.color = (__isLight ? '#b91c1c' : '#fca5a5'); e.currentTarget.style.borderColor='rgba(239,68,68,0.25)' } }}
+                onMouseLeave={function(e) { e.currentTarget.style.background = __closeBtnBg; e.currentTarget.style.color = __closeBtnClr; e.currentTarget.style.borderColor = __closeBtnBdr }}
                 title="Kapat (Esc)"
               >
                 <XIcon size={15} strokeWidth={2} />
@@ -1131,7 +1185,7 @@ export default function CalibraLineItemsGrid(props) {
               className="sqe-widget-wrap"
               style={{
                 flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 24px',
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.008) 0%, transparent 40%)',
+                background: __bodyTint,
               }}
             >
               <DynamicWidgetRenderer
@@ -1150,22 +1204,22 @@ export default function CalibraLineItemsGrid(props) {
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               gap: 12, padding: '14px 22px',
-              borderTop: '1px solid rgba(255,255,255,0.06)',
-              background: 'rgba(0,0,0,0.18)',
+              borderTop: '1px solid ' + __sepColor,
+              background: __footerBg,
               flexShrink: 0,
             }}>
               <div style={{ fontSize: 11.5, minHeight: 18 }}>
                 {extrasToast && extrasToast.type === 'ok' && (
-                  <span style={{ color: '#86efac', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ color: __isLight ? '#047857' : '#86efac', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
                     {extrasToast.text}
                   </span>
                 )}
                 {extrasToast && extrasToast.type === 'err' && (
-                  <span style={{ color: '#fca5a5' }}>{extrasToast.text}</span>
+                  <span style={{ color: __isLight ? '#b91c1c' : '#fca5a5' }}>{extrasToast.text}</span>
                 )}
                 {!extrasToast && (
-                  <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  <span style={{ color: __subtleText }}>
                     Değişiklikler kaydedildiğinde satıra işlenir
                   </span>
                 )}
@@ -1177,16 +1231,16 @@ export default function CalibraLineItemsGrid(props) {
                   disabled={extrasSaving}
                   style={{
                     padding: '8px 16px', borderRadius: 10,
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    color: 'rgba(255,255,255,0.8)',
+                    background: __cancelBtnBg,
+                    border: '1px solid ' + __cancelBdr,
+                    color: __cancelClr,
                     fontSize: 12.5, fontWeight: 600,
                     cursor: extrasSaving ? 'not-allowed' : 'pointer',
                     opacity: extrasSaving ? 0.5 : 1,
                     transition: 'all .12s',
                   }}
-                  onMouseEnter={function(e) { if (!extrasSaving) e.currentTarget.style.background='rgba(255,255,255,0.08)' }}
-                  onMouseLeave={function(e) { e.currentTarget.style.background='rgba(255,255,255,0.04)' }}
+                  onMouseEnter={function(e) { if (!extrasSaving) e.currentTarget.style.background = __cancelBgHov }}
+                  onMouseLeave={function(e) { e.currentTarget.style.background = __cancelBtnBg }}
                 >
                   İptal
                 </button>
@@ -1230,122 +1284,348 @@ export default function CalibraLineItemsGrid(props) {
         // Boylece app shell (ust bar/sol menu/alt panel) ve SQE action bar
         // modal tarafindan ortulmez, sadece sol tab navi + sag icerik ortulur.
         (document.querySelector('.sqe-body') || document.body)
-      )}
+      )
+      })()}
 
       {/* ── Kisayol menusu (••• butonu dropdown'i) ────────────────────
           Butonun altinda absolute konumlanmis kucuk liste. Dis click veya
           Esc kapatir. Her item kendi tiklamasinda menuyu kapatir (navigasyon
           sonrasi state hizli temizlensin). Portal ile .sqe-body'ye cizilir
           (action bar container'inin overflow'una takilmamasi icin). */}
-      {shortcutsMenu && createPortal(
-        (function () {
+      {/* Portal hep mount; AnimatePresence dropdown'in giris/cikis animasyonunu handle eder */}
+      {createPortal(
+        <AnimatePresence>{shortcutsMenu && (function () {
           var srow = shortcutsMenu.row
           var pos = shortcutsMenu.pos || { top: 0, left: 0, width: 200 }
           var itemId = srow && (srow.stockCardId || srow.itemId)
 
           function close() { setShortcutsMenu(null) }
+          // Shell API'sine guvenli erisim — iframe icindeyken window.top.CalibraHub
+          // varsa onu, yoksa fallback olarak yerel navigation'i kullan.
+          function openInWorkspaceTab(url, title, matchPath) {
+            try {
+              var topWin = window.top || window
+              if (topWin && topWin.CalibraHub && typeof topWin.CalibraHub.openWorkspaceTab === 'function') {
+                topWin.CalibraHub.openWorkspaceTab({ url: url, title: title, matchPath: matchPath })
+                return
+              }
+            } catch (_) { /* cross-origin */ }
+            navigateInWorkspace(url)
+          }
           function goToStockCard() {
             close()
             if (!itemId) {
               alert('Bu satirda malzeme secilmedi — stok kartina gidilemedi.')
               return
             }
-            var targetUrl = '/Logistics/MaterialCardEdit?id=' + itemId
-            // Shell API — Satis Teklifi tab'ini kapatmadan yeni tab acar.
-            // matchPath: /Logistics/MaterialCard (hem Cards hem CardEdit URL'lerini
-            // yakalar) — ayni grubun acik tab'i varsa ayni tab icinde yuklenir.
-            try {
-              var top = window.top || window
-              if (top && top.CalibraHub && typeof top.CalibraHub.openWorkspaceTab === 'function') {
-                top.CalibraHub.openWorkspaceTab({
-                  url: targetUrl,
-                  title: 'Malzeme Kartlari',
-                  matchPath: '/Logistics/MaterialCard',
-                })
-                return
-              }
-            } catch (_) { /* cross-origin fallback asagida */ }
-            // Fallback: Shell API erisilemiyorsa mevcut navigation
-            navigateInWorkspace(targetUrl)
+            openInWorkspaceTab(
+              '/Logistics/MaterialCardEdit?id=' + itemId,
+              'Malzeme Kartlari',
+              '/Logistics/MaterialCard',
+            )
+          }
+          function goToPriceList() {
+            close()
+            // Fiyat listesi — materialCode hint olarak gecirilir, PriceList sayfasi
+            // ileride bu paramayi kullanip ilgili satirin fiyat gecmisini auto-expand
+            // edebilir. Suan icin fiyat girisi/listeleme sayfasi yeni tab'ta acilir.
+            var matCode = srow && srow.materialCode ? String(srow.materialCode) : ''
+            var url = '/PriceList/PriceList' + (matCode ? '?stockCode=' + encodeURIComponent(matCode) : '')
+            openInWorkspaceTab(url, 'Fiyat Listesi', '/PriceList/PriceList')
+          }
+          function toggleNoteFromMenu() {
+            close()
+            if (!srow || !canModify(srow)) return
+            toggleNote(srow._uid)
+          }
+          function openReviseFromMenu() {
+            close()
+            if (!srow) return
+            setReviseModal({
+              row: srow,
+              tab: 'revise',
+              // Sadelestirilmis revize akisi: kullanici sadece ACIKLAMA girer
+              // (ESKI satira not olarak eklenir). Yeni satir aynen kopyalanarak
+              // alta eklenir; degisiklikler gridden yapilir.
+              draft: { notes: '' },
+            })
+          }
+          function openCostViewerFromMenu() {
+            close()
+            if (!srow || !srow.materialCode) return
+            setCostViewer({
+              materialCode: srow.materialCode,
+              configCode:   srow.combinationCode || null,
+              quantity:     Number(srow.quantity) || 1,
+              materialName: srow.materialName || '',
+            })
           }
 
-          // Item tanimi — ileride yeni kisayollar buraya eklenir (fiyat gecmisi,
-          // barkod bas, stok hareketleri vb.)
+          // Not durumuna gore label + ikon degisir.
+          var noteDisabled = !srow || !canModify(srow) || (belowColumns.length === 0)
+          var noteHasContent = srow ? hasAnyBelowValue(srow) : false
+          var noteOpen = srow ? isNoteOpen(srow) : false
+          var noteLabel = noteOpen
+            ? 'Notu Gizle'
+            : (noteHasContent ? 'Notu Goster' : 'Not Ekle')
+          var noteDisabledTitle = (!srow || !canModify(srow))
+            ? 'Once kilidi acin'
+            : (belowColumns.length === 0 ? 'Bu grid icin not alani tanimli degil' : '')
+
+          // Revize: satir kilidinden bagimsiz calisir. Kayitsiz (id yok) satir icin de
+          // menu acilir ama createRevision icinde id yoksa uyari veriliyor — UX tutarli.
+          var reviseHasParent = srow && srow.revisedFromId != null && Number(srow.revisedFromId) > 0
+          var reviseLabel = reviseHasParent ? 'Revize Et / Gecmisi Goster' : 'Revize Et'
+
+          // Item tanimi — ileride yeni kisayollar buraya eklenir (barkod bas,
+          // stok hareketleri vb.). Her item bir aksent renge sahip (icon pill
+          // ve hover vurgusu icin), ve grup ayraci `groupBefore` ile baslayan
+          // ilk item'larda belirir. Aksiyonlar 2 grupta: Navigasyon (kart/fiyat)
+          // ve Satir Islemi (not/revize).
           var items = [
             {
               key: 'stock-card',
               label: 'Stok Kartina Git',
+              hint: 'Yeni sekme',
               icon: ExternalLink,
+              accent: 'indigo',
+              hasArrow: true,
               onClick: goToStockCard,
               disabled: !itemId,
               disabledTitle: 'Once malzeme seciniz',
             },
+            {
+              key: 'price-list',
+              label: 'Fiyat Gecmisi',
+              hint: 'Fiyat Listesi',
+              icon: History,
+              accent: 'emerald',
+              hasArrow: true,
+              onClick: goToPriceList,
+              disabled: false,
+            },
+            {
+              key: 'cost-view',
+              label: 'Maliyet Gör',
+              hint: 'Reçete fiyat',
+              icon: Calculator,
+              accent: 'amber',
+              groupBefore: true,
+              onClick: openCostViewerFromMenu,
+              disabled: !srow || !srow.materialCode,
+              disabledTitle: 'Önce malzeme seçin',
+            },
+            {
+              key: 'note',
+              label: noteLabel,
+              icon: StickyNote,
+              accent: 'amber',
+              onClick: toggleNoteFromMenu,
+              disabled: noteDisabled,
+              disabledTitle: noteDisabledTitle,
+            },
+            {
+              key: 'revise',
+              label: reviseLabel,
+              icon: GitBranch,
+              accent: 'violet',
+              onClick: openReviseFromMenu,
+              disabled: false,
+            },
           ]
+          // Aksent renk haritasi — icon pill bg / text + hover bg.
+          // Light/dark farkli paletler. Tema body class'i ile alginirir; iframe icinde
+          // mount edilmis ise parent dokumanin body class'ina da bakilir (workspace
+          // iframe'leri tema sinifini bazen biraz sonra alir — fallback chain). Default light.
+          var __isLight = (function () {
+            if (typeof document === 'undefined') return true
+            try {
+              if (document.body.classList.contains('app-theme-light')) return true
+              if (document.body.classList.contains('app-theme-dark'))  return false
+              if (window.parent && window.parent !== window && window.parent.document && window.parent.document.body) {
+                if (window.parent.document.body.classList.contains('app-theme-light')) return true
+                if (window.parent.document.body.classList.contains('app-theme-dark'))  return false
+              }
+            } catch (_) {}
+            return true   // hicbir class yoksa light varsayilan
+          })()
+          var accentMap = __isLight ? {
+            indigo:  { bg: 'rgba(99,102,241,0.10)',  text: '#4f46e5', hoverBg: 'rgba(99,102,241,0.10)',  hoverShadow: 'rgba(99,102,241,0.22)' },
+            emerald: { bg: 'rgba(16,185,129,0.10)',  text: '#047857', hoverBg: 'rgba(16,185,129,0.10)',  hoverShadow: 'rgba(16,185,129,0.22)' },
+            amber:   { bg: 'rgba(245,158,11,0.12)',  text: '#b45309', hoverBg: 'rgba(245,158,11,0.10)',  hoverShadow: 'rgba(245,158,11,0.25)' },
+            violet:  { bg: 'rgba(139,92,246,0.10)',  text: '#6d28d9', hoverBg: 'rgba(139,92,246,0.10)',  hoverShadow: 'rgba(139,92,246,0.22)' },
+            sky:     { bg: 'rgba(14,165,233,0.10)',  text: '#0369a1', hoverBg: 'rgba(14,165,233,0.10)',  hoverShadow: 'rgba(14,165,233,0.22)' },
+            slate:   { bg: 'rgba(148,163,184,0.14)', text: '#475569', hoverBg: 'rgba(148,163,184,0.10)', hoverShadow: 'rgba(148,163,184,0.22)' },
+          } : {
+            indigo:  { bg: 'rgba(99,102,241,0.18)',  text: '#a5b4fc', hoverBg: 'rgba(99,102,241,0.12)',  hoverShadow: 'rgba(99,102,241,0.20)' },
+            emerald: { bg: 'rgba(16,185,129,0.18)',  text: '#6ee7b7', hoverBg: 'rgba(16,185,129,0.10)',  hoverShadow: 'rgba(16,185,129,0.18)' },
+            amber:   { bg: 'rgba(245,158,11,0.18)',  text: '#fcd34d', hoverBg: 'rgba(245,158,11,0.10)',  hoverShadow: 'rgba(245,158,11,0.18)' },
+            violet:  { bg: 'rgba(139,92,246,0.20)',  text: '#c4b5fd', hoverBg: 'rgba(139,92,246,0.10)',  hoverShadow: 'rgba(139,92,246,0.20)' },
+            sky:     { bg: 'rgba(14,165,233,0.18)',  text: '#7dd3fc', hoverBg: 'rgba(14,165,233,0.10)',  hoverShadow: 'rgba(14,165,233,0.18)' },
+            slate:   { bg: 'rgba(148,163,184,0.18)', text: '#cbd5e1', hoverBg: 'rgba(148,163,184,0.10)', hoverShadow: 'rgba(148,163,184,0.18)' },
+          }
+          // Tema-bagli surface/text degerleri — paneli ve item rengini saran ortak palet
+          var __menuBg     = __isLight ? 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)' : 'linear-gradient(180deg, rgba(28,32,48,0.97) 0%, rgba(20,24,38,0.97) 100%)'
+          var __menuBorder = __isLight ? '1px solid rgba(99,102,241,0.18)' : '1px solid rgba(255,255,255,0.08)'
+          var __menuShadow = __isLight
+            ? '0 12px 36px rgba(15,23,42,0.14), 0 4px 14px rgba(99,102,241,0.10), inset 0 1px 0 rgba(255,255,255,0.6)'
+            : '0 20px 60px rgba(0,0,0,0.55), 0 6px 20px rgba(99,102,241,0.18), inset 0 1px 0 rgba(255,255,255,0.06)'
+          var __sepColor   = __isLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.10)'
+          var __textColor      = __isLight ? '#0f172a'             : 'rgba(255,255,255,0.92)'
+          var __textColorDis   = __isLight ? '#94a3b8'             : 'rgba(255,255,255,0.35)'
+          var __hintColor      = __isLight ? '#64748b'             : 'rgba(255,255,255,0.42)'
+          var __hintColorDis   = __isLight ? '#cbd5e1'             : 'rgba(255,255,255,0.25)'
+          var __chevronColor   = __isLight ? '#94a3b8'             : 'rgba(255,255,255,0.30)'
 
           return (
             <>
               {/* Gorunmez overlay — dis click ile kapat */}
-              <div
+              <motion.div
+                key="sm-shortcuts-overlay"
                 onClick={close}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
                 style={{
                   position: 'fixed', inset: 0, zIndex: 9998,
                   background: 'transparent',
                 }}
               />
-              {/* Menu — butonun altina konumla */}
-              <div
+              {/* Menu — butonun altina konumla, spring entrance + child stagger */}
+              <motion.div
+                key="sm-shortcuts-menu"
                 role="menu"
                 aria-label="Satir kisayol menusu"
                 onKeyDown={function (e) { if (e.key === 'Escape') close() }}
+                initial={{ opacity: 0, y: -10, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 28, mass: 0.6 }}
                 style={{
                   position: 'fixed',
                   top: pos.top, left: pos.left,
-                  minWidth: pos.width,
+                  minWidth: Math.max(pos.width, 240),
                   zIndex: 9999,
-                  borderRadius: 10,
-                  padding: 4,
-                  background: 'rgba(23,28,42,0.98)',
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  boxShadow: '0 16px 44px rgba(0,0,0,0.55), 0 0 0 1px rgba(99,102,241,0.08)',
-                  backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-                  display: 'flex', flexDirection: 'column', gap: 2,
-                  animation: 'sqShortcutsFade 120ms ease-out',
+                  borderRadius: 14,
+                  padding: 6,
+                  // Glassmorphism — tema-bagli zemin + ic isik + cam efekti
+                  background: __menuBg,
+                  border: __menuBorder,
+                  boxShadow: __menuShadow,
+                  backdropFilter: 'blur(18px) saturate(140%)',
+                  WebkitBackdropFilter: 'blur(18px) saturate(140%)',
+                  display: 'flex', flexDirection: 'column',
+                  transformOrigin: 'top left',
                 }}
               >
-                <style>{'@keyframes sqShortcutsFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}'}</style>
-                {items.map(function (it) {
+                {/* Renkli ust aksent cizgisi — cam yansimasi gibi durur. Light temada
+                    daha hafif tonda, dark temada daha belirgin. */}
+                <div aria-hidden="true" style={{
+                  position: 'absolute', top: 0, left: 14, right: 14, height: 1,
+                  background: __isLight
+                    ? 'linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.40) 30%, rgba(168,85,247,0.40) 70%, transparent 100%)'
+                    : 'linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.55) 30%, rgba(168,85,247,0.55) 70%, transparent 100%)',
+                  pointerEvents: 'none',
+                }} />
+                {items.map(function (it, idx) {
                   var Icon = it.icon
+                  var pal = accentMap[it.accent] || accentMap.slate
+                  // Custom render with stagger via per-item motion
                   return (
-                    <button
-                      key={it.key}
-                      type="button"
-                      role="menuitem"
-                      disabled={!!it.disabled}
-                      onClick={it.onClick}
-                      title={it.disabled ? (it.disabledTitle || '') : (it.title || '')}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '8px 11px',
-                        fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.005em',
-                        color: it.disabled ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.88)',
-                        background: 'transparent', border: 'none',
-                        borderRadius: 7,
-                        cursor: it.disabled ? 'not-allowed' : 'pointer',
-                        textAlign: 'left',
-                        transition: 'background .1s, color .1s',
-                      }}
-                      onMouseEnter={function (e) { if (!it.disabled) { e.currentTarget.style.background = 'rgba(99,102,241,0.15)'; e.currentTarget.style.color = '#fff' } }}
-                      onMouseLeave={function (e) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = it.disabled ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.88)' }}
-                    >
-                      <Icon size={14} strokeWidth={1.9} style={{ flexShrink: 0, opacity: it.disabled ? 0.4 : 0.85 }} />
-                      <span style={{ flex: 1 }}>{it.label}</span>
-                    </button>
+                    <span key={it.key} style={{ display: 'contents' }}>
+                      {it.groupBefore && (
+                        <motion.div
+                          aria-hidden="true"
+                          initial={{ opacity: 0, scaleX: 0.6 }}
+                          animate={{ opacity: 1, scaleX: 1 }}
+                          transition={{ delay: 0.04 * idx + 0.05, duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+                          style={{
+                            height: 1, margin: '4px 8px',
+                            background: 'linear-gradient(90deg, transparent, ' + __sepColor + ', transparent)',
+                            transformOrigin: 'left center',
+                          }}
+                        />
+                      )}
+                      <motion.button
+                        type="button"
+                        role="menuitem"
+                        disabled={!!it.disabled}
+                        onClick={it.onClick}
+                        title={it.disabled ? (it.disabledTitle || '') : (it.title || '')}
+                        initial={{ opacity: 0, x: -6 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.04 * idx + 0.06, duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                        whileHover={!it.disabled ? { x: 2 } : {}}
+                        whileTap={!it.disabled ? { scale: 0.985 } : {}}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 11,
+                          padding: '8px 10px 8px 8px',
+                          fontSize: 12.75, fontWeight: 600, letterSpacing: '-0.005em',
+                          color: it.disabled ? __textColorDis : __textColor,
+                          background: 'transparent', border: 'none',
+                          borderRadius: 9,
+                          cursor: it.disabled ? 'not-allowed' : 'pointer',
+                          textAlign: 'left',
+                          transition: 'background .14s ease, box-shadow .14s ease, color .14s ease',
+                          position: 'relative',
+                        }}
+                        onMouseEnter={function (e) {
+                          if (it.disabled) return
+                          e.currentTarget.style.background = pal.hoverBg
+                          e.currentTarget.style.boxShadow = '0 0 0 1px ' + pal.hoverShadow + ' inset'
+                          e.currentTarget.style.color = pal.text
+                        }}
+                        onMouseLeave={function (e) {
+                          e.currentTarget.style.background = 'transparent'
+                          e.currentTarget.style.boxShadow = 'none'
+                          e.currentTarget.style.color = it.disabled ? __textColorDis : __textColor
+                        }}
+                      >
+                        {/* Icon pill — accent renkli kucuk yuvarlak kare */}
+                        <span style={{
+                          flexShrink: 0,
+                          width: 26, height: 26,
+                          borderRadius: 8,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          background: it.disabled ? (__isLight ? 'rgba(148,163,184,0.18)' : 'rgba(148,163,184,0.10)') : pal.bg,
+                          color: it.disabled ? __textColorDis : pal.text,
+                          border: '1px solid ' + (it.disabled ? (__isLight ? 'rgba(148,163,184,0.20)' : 'rgba(148,163,184,0.10)') : 'transparent'),
+                          transition: 'transform .14s ease',
+                        }}>
+                          <Icon size={14} strokeWidth={1.9} />
+                        </span>
+                        {/* Label + opsiyonel ipucu metni */}
+                        <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {it.label}
+                          </span>
+                          {it.hint && (
+                            <span style={{
+                              fontSize: 10, fontWeight: 500, letterSpacing: '.02em',
+                              color: it.disabled ? __hintColorDis : __hintColor,
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {it.hint}
+                            </span>
+                          )}
+                        </span>
+                        {/* Sag chevron — navigasyon item'larini isaret eder */}
+                        {it.hasArrow && !it.disabled && (
+                          <ChevronRight size={13} strokeWidth={2} style={{
+                            flexShrink: 0,
+                            color: __chevronColor,
+                            transition: 'transform .14s ease, color .14s ease',
+                          }} />
+                        )}
+                      </motion.button>
+                    </span>
                   )
                 })}
-              </div>
+              </motion.div>
             </>
           )
-        })(),
+        })()}</AnimatePresence>,
         (document.querySelector('.sqe-body') || document.body)
       )}
 
@@ -1823,6 +2103,29 @@ export default function CalibraLineItemsGrid(props) {
         })(),
         (document.querySelector('.sqe-body') || document.body)
       )}
+
+      {/* ── Belge Toplu Maliyet Modal'i ────────────────────────────────────
+          Window CustomEvent `quote:open-cost-summary` ile dis dunyadan acilir
+          (cshtml'deki Islemler dropdown'undaki "Tüm Ürünlerin Maliyeti"). Her
+          kalem icin paralel /Logistics/GetMaterialCost cagriyla toplam hesaplanir. */}
+      <QuoteCostSummaryModal />
+
+      {/* ── Maliyet Goruntuleme modal ──────────────────────────────────────
+          Standart yeniden-kullanilabilir modal: kalem grid'inden satir kisayol
+          menusu ile cagrilir; ileride Tip 1 (sabit alan) veya Tip 2 (widget)
+          icindeki "Maliyetini Gor" aksiyonlari da ayni component'i kullanir. */}
+      <CostViewerModal
+        isOpen={!!costViewer}
+        onClose={function () { setCostViewer(null) }}
+        materialCode={costViewer ? costViewer.materialCode : ''}
+        configCode={costViewer ? costViewer.configCode : null}
+        quantity={costViewer ? costViewer.quantity : 1}
+        title={costViewer
+          ? ('Maliyet Görüntüleme — ' + costViewer.materialCode
+              + (costViewer.materialName ? ' (' + costViewer.materialName + ')' : '')
+              + (costViewer.configCode ? ' / ' + costViewer.configCode : ''))
+          : ''}
+      />
     </div>
   )
 }

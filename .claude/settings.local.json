@@ -239,7 +239,28 @@
       "Bash(node -e 'const m=require\\('\\\\''__TRACKED_VAR__'\\\\''\\);console.log\\(Object.keys\\(m\\).slice\\(0,3\\).join\\('\\\\'','\\\\''\\)\\)')",
       "Bash(npm run:*)",
       "Bash(gh auth:*)",
-      "Bash(export PATH=\"/c/Program Files/GitHub CLI:$PATH\")"
+      "Bash(export PATH=\"/c/Program Files/GitHub CLI:$PATH\")",
+      "Bash(mv CalibraHub.Domain/Entities/ContactAccount.cs CalibraHub.Domain/Entities/Contact.cs)",
+      "Bash(mv CalibraHub.Web/Views/Finance/ContactAccounts.cshtml CalibraHub.Web/Views/Finance/Contacts.cshtml)",
+      "Bash(mv CalibraHub.Web/Views/Finance/ContactAccountEdit.cshtml CalibraHub.Web/Views/Finance/ContactEdit.cshtml)",
+      "Bash(mv CalibraHub.Web/Models/Finance/ContactAccountsViewModel.cs CalibraHub.Web/Models/Finance/ContactsViewModel.cs)",
+      "Bash(mv src/CalibraHub.Domain/Entities/ConfigurationProperty.cs src/CalibraHub.Domain/Entities/Feature.cs)",
+      "Bash(mv src/CalibraHub.Domain/Entities/ConfigurationPropertyValue.cs src/CalibraHub.Domain/Entities/FeatureValue.cs)",
+      "Bash(mv src/CalibraHub.Domain/Entities/MeasureUnitDefinition.cs src/CalibraHub.Domain/Entities/Unit.cs)",
+      "Bash(mv src/CalibraHub.Domain/Entities/PriceListEntry.cs src/CalibraHub.Domain/Entities/PriceList.cs)",
+      "Bash(powershell -Command \"Get-Process -Name CalibraHub.Web -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "PowerShell(Stop-Process -Id 25084 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(\"killed\")",
+      "PowerShell(Stop-Process -Id 32532 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id 32692 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell($conn = Get-NetTCPConnection -LocalPort 61001 -State Listen -ErrorAction SilentlyContinue; if \\($conn\\) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; \"stopped PID $\\($conn.OwningProcess\\)\" } else { \"no process on port 61001\" })",
+      "PowerShell($proc = Start-Process -FilePath \"dotnet\" -ArgumentList \"run\",\"--no-build\",\"--project\",\"D:\\\\JetBrainsRider\\\\Projeler\\\\CalibraHub\\\\src\\\\CalibraHub.Web\\\\CalibraHub.Web.csproj\" -WorkingDirectory \"D:\\\\JetBrainsRider\\\\Projeler\\\\CalibraHub\\\\src\\\\CalibraHub.Web\" -WindowStyle Hidden -PassThru -RedirectStandardOutput \"C:\\\\Users\\\\bilal\\\\AppData\\\\Local\\\\Temp\\\\calibrahub-detached.log\" -RedirectStandardError \"C:\\\\Users\\\\bilal\\\\AppData\\\\Local\\\\Temp\\\\calibrahub-detached.err\"; Start-Sleep -Seconds 1; \"started PID $\\($proc.Id\\)\")",
+      "PowerShell($conn = Get-NetTCPConnection -LocalPort 61001 -State Listen -ErrorAction SilentlyContinue; if \\($conn\\) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; \"stopped PID $\\($conn.OwningProcess\\)\" } else { \"no process on 61001\" })",
+      "PowerShell($proc = Start-Process -FilePath \"dotnet\" -ArgumentList \"run\",\"--no-build\",\"--project\",\"D:\\\\JetBrainsRider\\\\Projeler\\\\CalibraHub\\\\src\\\\CalibraHub.Web\\\\CalibraHub.Web.csproj\" -WorkingDirectory \"D:\\\\JetBrainsRider\\\\Projeler\\\\CalibraHub\\\\src\\\\CalibraHub.Web\" -WindowStyle Hidden -PassThru -RedirectStandardOutput \"C:\\\\Users\\\\bilal\\\\AppData\\\\Local\\\\Temp\\\\calibrahub-detached.log\" -RedirectStandardError \"C:\\\\Users\\\\bilal\\\\AppData\\\\Local\\\\Temp\\\\calibrahub-detached.err\"; \"started PID $\\($proc.Id\\)\")",
+      "Bash(npm --version)",
+      "Read(//c/Users/bilal/.claude/plans/**)",
+      "Bash(mkdir -p \"C:/Users/bilal/.claude/plans\")"
     ]
   }
 }

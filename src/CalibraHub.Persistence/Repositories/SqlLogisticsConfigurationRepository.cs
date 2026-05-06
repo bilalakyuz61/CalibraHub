@@ -19,17 +19,19 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     private readonly string _materialCardFieldOptionsTableName;
     private readonly string _propertiesTableName;
     private readonly string _propertyValuesTableName;
-    private readonly string _stockPropertyMappingsTableName;
-    private readonly string _productConfigurationTableName;
+    private readonly string _itemFeatureMappingsTableName;
+    private readonly string _itemConfigurationTableName;
     private readonly string _warehouseLocationsTableName;
     private readonly string _measureUnitDefinitionsTableName;
     private readonly string _productTreesTableName;
     private readonly string _productTreeLinesTableName;
     private readonly string _materialGroupsTableName;
     private readonly string _materialGroupMappingsTableName;
-    private readonly string _stockUnitConversionsTableName;
+    private readonly string _itemUnitsTableName;
     private readonly string _itemLocationsTableName;
     private readonly string _locationTypesTableName;
+    private readonly string _machinesTableName;
+    private readonly string _machineTypesTableName;
 
     public SqlLogisticsConfigurationRepository(
         SqlServerConnectionFactory connectionFactory,
@@ -41,46 +43,48 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         _materialCardFieldGroupsTableName = $"[{_schema}].[FieldGroup]";
         _materialCardFieldSettingsTableName = $"[{_schema}].[Field]";
         _materialCardFieldOptionsTableName = $"[{_schema}].[material_card_field_options]";
-        _propertiesTableName = $"[{_schema}].[Feature]";
+        _propertiesTableName = $"[{_schema}].[ItemFeature]";
         _propertyValuesTableName = $"[{_schema}].[FeatureValue]";
-        _stockPropertyMappingsTableName = $"[{_schema}].[stock_card_property_mappings]";
-        _productConfigurationTableName = $"[{_schema}].[ProductConfiguration]";
+        _itemFeatureMappingsTableName = $"[{_schema}].[ItemFeatureMappings]";
+        _itemConfigurationTableName = $"[{_schema}].[ItemConfiguration]";
         _warehouseLocationsTableName = $"[{_schema}].[Location]";
         _measureUnitDefinitionsTableName = $"[{_schema}].[Unit]";
         _productTreesTableName = $"[{_schema}].[BOM]";
         _productTreeLinesTableName = $"[{_schema}].[BOMLine]";
         _materialGroupsTableName    = $"[{_schema}].[MaterialGroups]";
         _materialGroupMappingsTableName = $"[{_schema}].[MaterialGroupMappings]";
-        _stockUnitConversionsTableName = $"[{_schema}].[stock_unit_conversions]";
+        _itemUnitsTableName = $"[{_schema}].[ItemUnits]";
         _itemLocationsTableName = $"[{_schema}].[item_locations]";
         _locationTypesTableName = $"[{_schema}].[location_types]";
+        _machinesTableName = $"[{_schema}].[Machine]";
+        _machineTypesTableName = $"[{_schema}].[MachineType]";
     }
 
     public async Task<IReadOnlyCollection<Item>> GetItemsAsync(CancellationToken cancellationToken)
     {
         var stockCards = new List<Item>();
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
 
         command.CommandText = $"""
-            SELECT [id],
-                   [code],
-                   [name],
-                   [description],
-                   [is_active],
-                   [created_at],
-                   [created_by_user_id],
-                   [modified_at],
-                   [modified_by_user_id],
-                   [image_data],
-                   [image_mime_type],
-                   [track_combinations],
-                   ISNULL([tax_rate], 20) AS [tax_rate],
-                   [type_id]
+            SELECT [Id],
+                   [Code],
+                   [Name],
+                   [IsActive],
+                   [CreateDate],
+                   [ModifyDate],
+                   [Combinations],
+                   ISNULL([TaxRate], 20) AS [TaxRate],
+                   [TypeId],
+                   [UnitId],
+                   [CompanyId]
             FROM {_stockCardsTableName}
-            ORDER BY [code];
+            WHERE [CompanyId] = @CompanyId
+            ORDER BY [Code];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -90,19 +94,16 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 Id = reader.GetInt32(0),
                 Code = reader.GetString(1),
                 Name = reader.GetString(2),
-                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
-                CreatedDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
-                CreatedByUserId = reader.IsDBNull(6) ? null : reader.GetInt32(6),
-                ModifiedDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
-                ModifiedByUserId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
-                ImageData = reader.IsDBNull(9) ? null : (byte[])reader.GetValue(9),
-                ImageMimeType = reader.IsDBNull(10) ? null : reader.GetString(10),
-                TrackCombinations = !reader.IsDBNull(11) && reader.GetBoolean(11),
-                TaxRate = reader.IsDBNull(12) ? 20m : reader.GetDecimal(12),
-                TypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
+                CreateDate = reader.IsDBNull(4) ? null : reader.GetDateTime(4),
+                ModifyDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                Combinations = !reader.IsDBNull(6) && reader.GetBoolean(6),
+                TaxRate = reader.IsDBNull(7) ? 20m : reader.GetDecimal(7),
+                TypeId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                UnitId = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                CompanyId = reader.GetInt32(10)
             };
 
-            if (!reader.GetBoolean(4))
+            if (!reader.GetBoolean(3))
             {
                 stockCard.Deactivate();
             }
@@ -114,64 +115,73 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     }
 
     public async Task<(IReadOnlyCollection<Item> Items, int TotalCount)> GetItemsPagedAsync(
-        string? search, int offset, int pageSize, CancellationToken cancellationToken)
+        string? search, int offset, int pageSize, CancellationToken cancellationToken, string? groupCode = null)
     {
         var items = new List<Item>();
         var totalCount = 0;
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var cmd = connection.CreateCommand();
 
-        var where = "WHERE [is_active] = 1";
+        // [Items]'in alias'i lazim cunku EXISTS subquery'de Items.Id'ye disaridan referans verecegiz.
+        var where = "WHERE i.[CompanyId] = @CompanyId AND i.[IsActive] = 1";
         if (!string.IsNullOrWhiteSpace(search))
-            where += " AND ([code] LIKE @Search OR [name] LIKE @Search)";
+            where += " AND (i.[Code] LIKE @Search OR i.[Name] LIKE @Search)";
+        if (!string.IsNullOrWhiteSpace(groupCode))
+            where += $" AND EXISTS (SELECT 1 FROM {_materialGroupMappingsTableName} mgm WHERE mgm.[ItemId] = i.[Id] AND mgm.[GroupCode] = @GroupCode)";
 
-        cmd.CommandText = $"""
-            SELECT [id], [code], [name], [description],
-                   [is_active], [created_at], [created_by_user_id], [modified_at],
-                   [modified_by_user_id], [image_data], [image_mime_type],
-                   [track_combinations], ISNULL([tax_rate], 20) AS [tax_rate], [type_id],
-                   COUNT(*) OVER() AS [_TotalCount]
-            FROM {_stockCardsTableName}
-            {where}
-            ORDER BY [code]
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            """;
-
-        if (!string.IsNullOrWhiteSpace(search))
-            cmd.Parameters.Add(new SqlParameter("@Search", $"%{search}%"));
-        cmd.Parameters.Add(new SqlParameter("@Offset", offset));
-        cmd.Parameters.Add(new SqlParameter("@PageSize", pageSize));
-
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
         {
-            var card = new Item
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT i.[Id], i.[Code], i.[Name],
+                       i.[IsActive], i.[CreateDate], i.[ModifyDate],
+                       i.[Combinations], ISNULL(i.[TaxRate], 20) AS [TaxRate], i.[TypeId],
+                       i.[UnitId], i.[CompanyId],
+                       COUNT(*) OVER() AS [_TotalCount]
+                FROM {_stockCardsTableName} i
+                {where}
+                ORDER BY i.[Code]
+                OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
+                """;
+
+            cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+            if (!string.IsNullOrWhiteSpace(search))
+                cmd.Parameters.Add(new SqlParameter("@Search", $"%{search}%"));
+            if (!string.IsNullOrWhiteSpace(groupCode))
+                cmd.Parameters.Add(new SqlParameter("@GroupCode", groupCode));
+            cmd.Parameters.Add(new SqlParameter("@Offset", offset));
+            cmd.Parameters.Add(new SqlParameter("@PageSize", pageSize));
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
             {
-                Id = reader.GetInt32(0),
-                Code = reader.GetString(1),
-                Name = reader.GetString(2),
-                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
-                CreatedDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
-                CreatedByUserId = reader.IsDBNull(6) ? null : reader.GetInt32(6),
-                ModifiedDate = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
-                ModifiedByUserId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
-                ImageData = reader.IsDBNull(9) ? null : (byte[])reader.GetValue(9),
-                ImageMimeType = reader.IsDBNull(10) ? null : reader.GetString(10),
-                TrackCombinations = !reader.IsDBNull(11) && reader.GetBoolean(11),
-                TaxRate = reader.IsDBNull(12) ? 20m : reader.GetDecimal(12),
-                TypeId = reader.IsDBNull(13) ? null : reader.GetInt32(13)
-            };
-            if (!reader.GetBoolean(4)) card.Deactivate();
-            items.Add(card);
-            if (totalCount == 0) totalCount = reader.GetInt32(14);
+                var card = new Item
+                {
+                    Id = reader.GetInt32(0),
+                    Code = reader.GetString(1),
+                    Name = reader.GetString(2),
+                    CreateDate = reader.IsDBNull(4) ? null : reader.GetDateTime(4),
+                    ModifyDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                    Combinations = !reader.IsDBNull(6) && reader.GetBoolean(6),
+                    TaxRate = reader.IsDBNull(7) ? 20m : reader.GetDecimal(7),
+                    TypeId = reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                    UnitId = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                    CompanyId = reader.GetInt32(10)
+                };
+                if (!reader.GetBoolean(3)) card.Deactivate();
+                items.Add(card);
+                if (totalCount == 0) totalCount = reader.GetInt32(11);
+            }
         }
 
         if (items.Count == 0)
         {
             await using var countCmd = connection.CreateCommand();
-            countCmd.CommandText = $"SELECT COUNT(*) FROM {_stockCardsTableName} {where};";
+            countCmd.CommandText = $"SELECT COUNT(*) FROM {_stockCardsTableName} i {where};";
+            countCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             if (!string.IsNullOrWhiteSpace(search))
                 countCmd.Parameters.Add(new SqlParameter("@Search", $"%{search}%"));
+            if (!string.IsNullOrWhiteSpace(groupCode))
+                countCmd.Parameters.Add(new SqlParameter("@GroupCode", groupCode));
             totalCount = (int)(await countCmd.ExecuteScalarAsync(cancellationToken))!;
         }
 
@@ -186,7 +196,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [group_key], [group_label], [display_order], [is_active], [created_at], [updated_at], [screen_code], [layer_key]
+            SELECT [id], [group_key], [group_label], [display_order], [is_active], [Created], [Updated], [screen_code], [layer_key]
             FROM {_materialCardFieldGroupsTableName}
             ORDER BY [display_order], [group_label];
             """;
@@ -236,8 +246,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [column_span],
                    [is_system],
                    [is_active],
-                   [created_at],
-                   [updated_at],
+                   [Created],
+                   [Updated],
                    [screen_code],
                    [layer_key]
             FROM {_materialCardFieldSettingsTableName}
@@ -284,7 +294,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [field_definition_id], [option_key], [option_label], [sort_order], [is_active], [created_at], [updated_at]
+            SELECT [id], [field_definition_id], [option_key], [option_label], [sort_order], [is_active], [Created], [Updated]
             FROM {_materialCardFieldOptionsTableName}
             ORDER BY [field_definition_id], [sort_order], [option_label];
             """;
@@ -328,13 +338,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     [group_label] = @GroupLabel,
                     [display_order] = @DisplayOrder,
                     [is_active] = @IsActive,
-                    [updated_at] = @UpdatedAt
+                    [Updated] = @UpdatedAt
                 WHERE [id] = @Id;
             END
             ELSE
             BEGIN
                 INSERT INTO {_materialCardFieldGroupsTableName}
-                    ([id], [screen_code], [layer_key], [group_key], [group_label], [display_order], [is_active], [created_at], [updated_at])
+                    ([id], [screen_code], [layer_key], [group_key], [group_label], [display_order], [is_active], [Created], [Updated])
                 VALUES
                     (@Id, @ScreenCode, @LayerKey, @GroupKey, @GroupLabel, @DisplayOrder, @IsActive, @CreatedAt, @UpdatedAt);
             END;
@@ -382,13 +392,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                         [column_span] = @ColumnSpan,
                         [is_system] = @IsSystem,
                         [is_active] = @IsActive,
-                        [updated_at] = @UpdatedAt
+                        [Updated] = @UpdatedAt
                     WHERE [id] = @Id;
                 END
                 ELSE
                 BEGIN
                     INSERT INTO {_materialCardFieldSettingsTableName}
-                        ([id], [screen_code], [layer_key], [group_id], [field_key], [field_label], [data_type], [is_visible], [is_required], [default_value], [display_order], [column_span], [is_system], [is_active], [created_at], [updated_at])
+                        ([id], [screen_code], [layer_key], [group_id], [field_key], [field_label], [data_type], [is_visible], [is_required], [default_value], [display_order], [column_span], [is_system], [is_active], [Created], [Updated])
                     VALUES
                         (@Id, @ScreenCode, @LayerKey, @GroupId, @FieldKey, @FieldLabel, @DataType, @IsVisible, @IsRequired, @DefaultValue, @DisplayOrder, @ColumnSpan, @IsSystem, @IsActive, @CreatedAt, @UpdatedAt);
                 END;
@@ -427,13 +437,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                         [option_label] = @OptionLabel,
                         [sort_order] = @SortOrder,
                         [is_active] = @IsActive,
-                        [updated_at] = @UpdatedAt
+                        [Updated] = @UpdatedAt
                     WHERE [id] = @Id;
                 END
                 ELSE
                 BEGIN
                     INSERT INTO {_materialCardFieldOptionsTableName}
-                        ([id], [field_definition_id], [option_key], [option_label], [sort_order], [is_active], [created_at], [updated_at])
+                        ([id], [field_definition_id], [option_key], [option_label], [sort_order], [is_active], [Created], [Updated])
                     VALUES
                         (@Id, @FieldDefinitionId, @OptionKey, @OptionLabel, @SortOrder, @IsActive, @CreatedAt, @UpdatedAt);
                 END;
@@ -462,7 +472,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [field_key], [field_label], [is_visible], [is_required], [display_order], [created_at], [updated_at]
+            SELECT [id], [field_key], [field_label], [is_visible], [is_required], [display_order], [Created], [Updated]
             FROM {_materialCardFieldSettingsTableName}
             ORDER BY [display_order], [field_label];
             """;
@@ -511,13 +521,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                         [is_visible] = @IsVisible,
                         [is_required] = @IsRequired,
                         [display_order] = @DisplayOrder,
-                        [updated_at] = @UpdatedAt
+                        [Updated] = @UpdatedAt
                     WHERE [field_key] = @FieldKey;
                 END
                 ELSE
                 BEGIN
                     INSERT INTO {_materialCardFieldSettingsTableName}
-                        ([id], [field_key], [field_label], [is_visible], [is_required], [display_order], [created_at], [updated_at])
+                        ([id], [field_key], [field_label], [is_visible], [is_required], [display_order], [Created], [Updated])
                     VALUES
                         (@Id, @FieldKey, @FieldLabel, @IsVisible, @IsRequired, @DisplayOrder, @CreatedAt, @UpdatedAt);
                 END;
@@ -538,17 +548,20 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await transaction.CommitAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<Feature>> GetPropertiesAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<ItemFeature>> GetPropertiesAsync(CancellationToken cancellationToken)
     {
-        var properties = new List<Feature>();
+        var properties = new List<ItemFeature>();
 
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [code], [name], [data_type], [is_active], [created_at]
+            SELECT [Id], [CompanyId], [Name], [DataType], [UnitOfMeasure], [VisibleInDesign], [IsActive], [CreatedAt]
             FROM {_propertiesTableName}
-            ORDER BY [code];
+            WHERE [CompanyId] = @CompanyId
+            ORDER BY [Name];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -560,16 +573,18 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 dataType = ConfigurationFieldDataType.Text;
             }
 
-            var property = new Feature
+            var property = new ItemFeature
             {
-                Id = reader.GetGuid(0),
-                Code = reader.GetString(1),
+                Id = reader.GetInt32(0),
+                CompanyId = reader.GetInt32(1),
                 Name = reader.GetString(2),
                 DataType = dataType,
-                CreatedAt = reader.GetFieldValue<DateTime>(5)
+                UnitOfMeasure = reader.IsDBNull(4) ? null : reader.GetString(4),
+                VisibleInDesign = reader.GetBoolean(5),
+                CreatedAt = reader.GetFieldValue<DateTime>(7)
             };
 
-            if (!reader.GetBoolean(4))
+            if (!reader.GetBoolean(6))
             {
                 property.Deactivate();
             }
@@ -587,7 +602,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [feature_id], [code], [description], [value], [sort_order], [is_active], [created_at]
+            SELECT [id], [feature_id], [code], [description], [value], [sort_order], [is_active], [Created]
             FROM {_propertyValuesTableName}
             ORDER BY [feature_id], [sort_order], [code];
             """;
@@ -597,8 +612,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         {
             var value = new FeatureValue
             {
-                Id = reader.GetGuid(0),
-                PropertyId = reader.GetGuid(1),
+                Id = reader.GetInt32(0),
+                PropertyId = reader.GetInt32(1),
                 Code = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
                 Description = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
                 Value = reader.GetString(4),
@@ -617,35 +632,33 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return values;
     }
 
-    public async Task<IReadOnlyCollection<ItemPropertyMapping>> GetStockPropertyMappingsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<ItemFeatureMapping>> GetStockPropertyMappingsAsync(CancellationToken cancellationToken)
     {
-        var mappings = new List<ItemPropertyMapping>();
+        var mappings = new List<ItemFeatureMapping>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [item_id], [property_id], [property_value_id], [configuration_code], [text_value], [numeric_value], [date_value], [is_active], [created_at]
-            FROM {_stockPropertyMappingsTableName}
-            ORDER BY [created_at] DESC;
+            SELECT [Id], [ItemId], [FeatureId], [FeatureValueId], [IsActive], [CreatedAt],
+                   ISNULL([PrintDescriptionInDesign], 1) AS [PrintDescriptionInDesign]
+            FROM {_itemFeatureMappingsTableName}
+            ORDER BY [CreatedAt] DESC;
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var mapping = new ItemPropertyMapping
+            var mapping = new ItemFeatureMapping
             {
-                Id = reader.GetGuid(0),
+                Id = reader.GetInt32(0),
                 ItemId = reader.GetInt32(1),
-                PropertyId = reader.GetGuid(2),
-                PropertyValueId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
-                ConfigurationCode = reader.IsDBNull(4) ? null : reader.GetString(4),
-                TextValue = reader.IsDBNull(5) ? null : reader.GetString(5),
-                NumericValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
-                DateValue = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
-                CreatedAt = reader.GetFieldValue<DateTime>(9)
+                FeatureId = reader.GetInt32(2),
+                FeatureValueId = reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                CreatedAt = reader.GetFieldValue<DateTime>(5),
+                PrintDescriptionInDesign = reader.GetBoolean(6),
             };
 
-            if (!reader.GetBoolean(8))
+            if (!reader.GetBoolean(4))
             {
                 mapping.Deactivate();
             }
@@ -656,23 +669,23 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return mappings;
     }
 
-    public async Task<IReadOnlyCollection<ProductConfigurationRecord>> GetProductConfigurationRecordsAsync(
+    public async Task<IReadOnlyCollection<ItemConfiguration>> GetItemConfigurationsAsync(
         CancellationToken cancellationToken)
     {
-        var records = new List<ProductConfigurationRecord>();
+        var records = new List<ItemConfiguration>();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT [Id], [ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate], [VisibleInDesign]
-            FROM {_productConfigurationTableName}
+            FROM {_itemConfigurationTableName}
             ORDER BY [RecordType], [ParentId], [RecordCode], [Id];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            records.Add(new ProductConfigurationRecord
+            records.Add(new ItemConfiguration
             {
                 Id = reader.GetInt32(0),
                 ParentId = reader.IsDBNull(1) ? null : reader.GetInt32(1),
@@ -760,13 +773,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             DECLARE @GeneratedCode NVARCHAR(100);
 
             SELECT @NextNo = ISNULL(MAX(TRY_CAST(RIGHT([RecordCode], 3) AS INT)), 0) + 1
-            FROM {_productConfigurationTableName} WITH (UPDLOCK, HOLDLOCK)
+            FROM {_itemConfigurationTableName} WITH (UPDLOCK, HOLDLOCK)
             WHERE [RecordType] = N'FEATURE'
               AND [RecordCode] LIKE N'OZ[0-9][0-9][0-9]';
 
             SET @GeneratedCode = N'OZ' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
-            INSERT INTO {_productConfigurationTableName}
+            INSERT INTO {_itemConfigurationTableName}
                 ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [VisibleInDesign], [CreatedDate])
             VALUES
                 (NULL, N'FEATURE', @GeneratedCode, @RecordName, @DataType, @UnitOfMeasure, @IsActive, @VisibleInDesign, GETDATE());
@@ -808,14 +821,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             DECLARE @GeneratedCode NVARCHAR(100);
 
             SELECT @NextNo = ISNULL(MAX(TRY_CAST(RIGHT([RecordCode], 3) AS INT)), 0) + 1
-            FROM {_productConfigurationTableName} WITH (UPDLOCK, HOLDLOCK)
+            FROM {_itemConfigurationTableName} WITH (UPDLOCK, HOLDLOCK)
             WHERE [RecordType] = N'VALUE'
               AND [ParentId] = @FeatureId
               AND [RecordCode] LIKE N'DG[0-9][0-9][0-9]';
 
             SET @GeneratedCode = N'DG' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
-            INSERT INTO {_productConfigurationTableName}
+            INSERT INTO {_itemConfigurationTableName}
                 ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
             VALUES
                 (@FeatureId, N'VALUE', @GeneratedCode, @RecordName, NULL, @Aciklama, @IsActive, GETDATE());
@@ -856,14 +869,14 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             DECLARE @GeneratedCode NVARCHAR(100);
 
             SELECT @NextNo = ISNULL(MAX(TRY_CAST(RIGHT([RecordCode], 3) AS INT)), 0) + 1
-            FROM {_productConfigurationTableName} WITH (UPDLOCK, HOLDLOCK)
+            FROM {_itemConfigurationTableName} WITH (UPDLOCK, HOLDLOCK)
             WHERE [RecordType] = N'CONFIG'
               AND [RelatedMaterialCode] = @RelatedMaterialCode
               AND LEFT([RecordCode], LEN(@RelatedMaterialCode) + 1) = @RelatedMaterialCode + N'-';
 
             SET @GeneratedCode = @RelatedMaterialCode + N'-' + RIGHT(N'000' + CAST(@NextNo AS NVARCHAR(3)), 3);
 
-            INSERT INTO {_productConfigurationTableName}
+            INSERT INTO {_itemConfigurationTableName}
                 ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
             VALUES
                 (@ValueId, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());
@@ -902,15 +915,15 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         sql.AppendLine("DECLARE @NextNo INT;");
         sql.AppendLine("DECLARE @GeneratedCode NVARCHAR(100);");
         // Global sayac: CMB + 12 haneli sifir-dolgulu sira no (toplam 15 karakter)
-        sql.AppendLine($"SELECT @NextNo = ISNULL(MAX(TRY_CAST(SUBSTRING([RecordCode], 4, 12) AS INT)), 0) + 1 FROM {_productConfigurationTableName} WITH (UPDLOCK, HOLDLOCK) WHERE [RecordType] = N'CONFIG' AND LEFT([RecordCode], 3) = N'CMB' AND LEN([RecordCode]) = 15;");
+        sql.AppendLine($"SELECT @NextNo = ISNULL(MAX(TRY_CAST(SUBSTRING([RecordCode], 4, 12) AS INT)), 0) + 1 FROM {_itemConfigurationTableName} WITH (UPDLOCK, HOLDLOCK) WHERE [RecordType] = N'CONFIG' AND LEFT([RecordCode], 3) = N'CMB' AND LEN([RecordCode]) = 15;");
         sql.AppendLine("SET @GeneratedCode = N'CMB' + RIGHT(REPLICATE(N'0', 12) + CAST(@NextNo AS NVARCHAR(12)), 12);");
-        sql.AppendLine($"INSERT INTO {_productConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]) VALUES (NULL, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());");
+        sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]) VALUES (NULL, N'CONFIG', @GeneratedCode, @RecordName, NULL, @RelatedMaterialCode, @IsActive, GETDATE());");
         sql.AppendLine("DECLARE @ConfigId INT = SCOPE_IDENTITY();");
 
         var pIndex = 0;
         foreach (var valId in valueIds)
         {
-            sql.AppendLine($"INSERT INTO {_productConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]) VALUES (@ConfigId, N'CONFIG', CAST(NEWID() AS NVARCHAR(100)), CAST(@ValueId{pIndex} AS NVARCHAR(255)), NULL, @RelatedMaterialCode, 1, GETDATE());");
+            sql.AppendLine($"INSERT INTO {_itemConfigurationTableName} ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate]) VALUES (@ConfigId, N'CONFIG', CAST(NEWID() AS NVARCHAR(100)), CAST(@ValueId{pIndex} AS NVARCHAR(255)), NULL, @RelatedMaterialCode, 1, GETDATE());");
             command.Parameters.Add(new SqlParameter($"@ValueId{pIndex}", valId));
             pIndex++;
         }
@@ -942,7 +955,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         var sql = new StringBuilder();
         sql.AppendLine("BEGIN TRANSACTION;");
         sql.AppendLine($"""
-            DELETE FROM {_productConfigurationTableName}
+            DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'FEATURE_STOCK'
               AND [ParentId] = @FeatureId;
             """);
@@ -957,7 +970,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         for (var index = 0; index < normalizedCodes.Length; index++)
         {
             sql.AppendLine($"""
-                INSERT INTO {_productConfigurationTableName}
+                INSERT INTO {_itemConfigurationTableName}
                     ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate])
                 VALUES
                     (@FeatureId, N'FEATURE_STOCK', @StockCode{index}, @StockCode{index}, NULL, @StockCode{index}, 1, GETDATE());
@@ -973,49 +986,97 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     }
 
     /// <summary>
-    /// Bir stok kartina (MaterialCode) bagli FEATURE_STOCK kayitlarini tamamen replace eder.
-    /// stockCode icin mevcut tum FEATURE_STOCK kayitlari silinir, sonra verilen featureIds icin yeni kayitlar eklenir.
+    /// Bir stok kartina bagli ozellik listesini ItemFeatureMappings tablosunda gunceller.
+    /// Her feature icin: 1 header satiri (FeatureValueId NULL) + 0..N value satiri.
+    /// stockCode → ItemId cozumlemesi yapildiktan sonra ItemFeatureMappings WHERE [ItemId] = @ItemId tum satirlari silinir, yeni liste eklenir.
     /// </summary>
-    public async Task ReplaceStockFeatureLinksAsync(string stockCode, (int FeatureId, bool PrintDescriptionInDesign)[] items, CancellationToken cancellationToken)
+    public async Task ReplaceStockFeatureLinksAsync(
+        string stockCode,
+        (int FeatureId, bool PrintDescriptionInDesign, int[] AllowedValueIds)[] items,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(stockCode))
             throw new ArgumentException("Stok kodu zorunludur.", nameof(stockCode));
         var normalizedCode = stockCode.Trim().ToUpperInvariant();
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
 
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        var sql = new StringBuilder();
 
-        sql.AppendLine("BEGIN TRANSACTION;");
-        sql.AppendLine($"""
-            DELETE FROM {_productConfigurationTableName}
-            WHERE [RecordType] = N'FEATURE_STOCK'
-              AND UPPER(LTRIM(RTRIM([RelatedMaterialCode]))) = @StockCode;
-            """);
-        command.Parameters.Add(new SqlParameter("@StockCode", normalizedCode));
-
-        // (FeatureId, PrintDescriptionInDesign) — ayni featureId birden fazla kez gelirse son deger gecerli
-        var distinctItems = (items ?? Array.Empty<(int, bool)>())
-            .Where(x => x.FeatureId > 0)
-            .GroupBy(x => x.FeatureId)
-            .Select(g => (FeatureId: g.Key, PrintDescriptionInDesign: g.Last().PrintDescriptionInDesign))
-            .ToArray();
-
-        for (var i = 0; i < distinctItems.Length; i++)
+        // stockCode → ItemId (sirket bazli)
+        int itemId;
+        await using (var lookupCmd = connection.CreateCommand())
         {
-            sql.AppendLine($"""
-                INSERT INTO {_productConfigurationTableName}
-                    ([ParentId], [RecordType], [RecordCode], [RecordName], [DataType], [RelatedMaterialCode], [IsActive], [CreatedDate], [VisibleInDesign])
-                VALUES
-                    (@FeatureId{i}, N'FEATURE_STOCK', @StockCode, @StockCode, NULL, @StockCode, 1, GETDATE(), @PrintDesc{i});
-                """);
-            command.Parameters.Add(new SqlParameter($"@FeatureId{i}", distinctItems[i].FeatureId));
-            command.Parameters.Add(new SqlParameter($"@PrintDesc{i}", distinctItems[i].PrintDescriptionInDesign));
+            lookupCmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+            lookupCmd.CommandText = $"""
+                SELECT TOP (1) [Id] FROM {_stockCardsTableName}
+                WHERE UPPER(LTRIM(RTRIM([Code]))) = @StockCode
+                  AND [CompanyId] = @CompanyId
+                  AND [IsActive] = 1;
+                """;
+            lookupCmd.Parameters.Add(new SqlParameter("@StockCode", normalizedCode));
+            var raw = await lookupCmd.ExecuteScalarAsync(cancellationToken);
+            if (raw is null || raw == DBNull.Value)
+                throw new ArgumentException($"Aktif stok kartı bulunamadı: {normalizedCode}");
+            itemId = Convert.ToInt32(raw);
         }
 
-        sql.AppendLine("COMMIT TRANSACTION;");
-        command.CommandText = sql.ToString();
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        // Bu stok'un TUM linklerini sil (header + value-restriction)
+        await using (var delCmd = connection.CreateCommand())
+        {
+            delCmd.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [ItemId] = @ItemId;";
+            delCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+            await delCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var now = DateTime.Now;
+        var distinctItems = (items ?? Array.Empty<(int, bool, int[])>())
+            .Where(x => x.FeatureId > 0)
+            .GroupBy(x => x.FeatureId)
+            .Select(g => (
+                FeatureId: g.Key,
+                PrintDescriptionInDesign: g.Last().PrintDescriptionInDesign,
+                AllowedValueIds: (g.Last().AllowedValueIds ?? Array.Empty<int>())
+                    .Where(v => v > 0).Distinct().ToArray()))
+            .ToArray();
+
+        foreach (var f in distinctItems)
+        {
+            // Header row (FeatureValueId NULL)
+            await using (var headerCmd = connection.CreateCommand())
+            {
+                headerCmd.CommandText = $"""
+                    INSERT INTO {_itemFeatureMappingsTableName}
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                    VALUES
+                        (@ItemId, @FeatureId, NULL, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
+                    """;
+                headerCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+                headerCmd.Parameters.Add(new SqlParameter("@FeatureId", f.FeatureId));
+                headerCmd.Parameters.Add(new SqlParameter("@PrintDesc", f.PrintDescriptionInDesign));
+                headerCmd.Parameters.Add(new SqlParameter("@CreatedAt", now));
+                headerCmd.Parameters.Add(new SqlParameter("@UpdatedAt", now));
+                await headerCmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            // Value-restriction rows
+            foreach (var valueId in f.AllowedValueIds)
+            {
+                await using var valCmd = connection.CreateCommand();
+                valCmd.CommandText = $"""
+                    INSERT INTO {_itemFeatureMappingsTableName}
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                    VALUES
+                        (@ItemId, @FeatureId, @FeatureValueId, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
+                    """;
+                valCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+                valCmd.Parameters.Add(new SqlParameter("@FeatureId", f.FeatureId));
+                valCmd.Parameters.Add(new SqlParameter("@FeatureValueId", valueId));
+                valCmd.Parameters.Add(new SqlParameter("@PrintDesc", f.PrintDescriptionInDesign));
+                valCmd.Parameters.Add(new SqlParameter("@CreatedAt", now));
+                valCmd.Parameters.Add(new SqlParameter("@UpdatedAt", now));
+                await valCmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
     }
 
     public async Task UpdateProductFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, bool visibleInDesign, CancellationToken cancellationToken)
@@ -1023,7 +1084,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            UPDATE {_productConfigurationTableName}
+            UPDATE {_itemConfigurationTableName}
             SET [RecordName]          = @RecordName,
                 [DataType]            = @DataType,
                 [RelatedMaterialCode] = @UnitOfMeasure,
@@ -1048,23 +1109,23 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.CommandText = $"""
             BEGIN TRANSACTION;
 
-            DELETE FROM {_productConfigurationTableName}
+            DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'FEATURE_STOCK'
               AND [ParentId] = @Id;
 
-            DELETE FROM {_productConfigurationTableName}
+            DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'CONFIG'
               AND [ParentId] IN (
                     SELECT [Id]
-                    FROM {_productConfigurationTableName}
+                    FROM {_itemConfigurationTableName}
                     WHERE [RecordType] = N'VALUE'
                       AND [ParentId] = @Id);
 
-            DELETE FROM {_productConfigurationTableName}
+            DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'VALUE'
               AND [ParentId] = @Id;
 
-            DELETE FROM {_productConfigurationTableName}
+            DELETE FROM {_itemConfigurationTableName}
             WHERE [Id] = @Id
               AND [RecordType] = N'FEATURE';
 
@@ -1078,17 +1139,32 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     public async Task DeleteProductValueAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+
+        // 1) ItemFeatureMappings — bu FeatureValue'yu kullanan stok kisit satirlarini temizle (FK)
+        await using (var clearMappings = connection.CreateCommand())
+        {
+            clearMappings.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [FeatureValueId] = @Id;";
+            clearMappings.Parameters.Add(new SqlParameter("@Id", id));
+            await clearMappings.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // 2) ItemConfiguration'da bu valueId'yi referans eden CONFIG child satirlari
+        //    + asil deger kaydi FeatureValue tablosundan — schema migration sonrasi
+        //    VALUE rows ItemConfiguration'da degil, FeatureValue'da. Eski kod hala
+        //    ItemConfiguration RecordType='VALUE' silmeye calisiyordu — no-op olur,
+        //    gerçek deger silinmezdi. Yeni schema'ya uygun:
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             BEGIN TRANSACTION;
 
-            DELETE FROM {_productConfigurationTableName}
+            -- CONFIG child kayitlari: RecordName=valueId (string olarak) — bu deger silinince temizlenmeli
+            DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'CONFIG'
-              AND [ParentId] = @Id;
+              AND TRY_CAST([RecordName] AS INT) = @Id;
 
-            DELETE FROM {_productConfigurationTableName}
-            WHERE [Id] = @Id
-              AND [RecordType] = N'VALUE';
+            -- Asil deger
+            DELETE FROM {_propertyValuesTableName}
+            WHERE [id] = @Id;
 
             COMMIT TRANSACTION;
             """;
@@ -1102,7 +1178,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            UPDATE {_productConfigurationTableName}
+            UPDATE {_itemConfigurationTableName}
             SET [RecordName] = @RecordName,
                 [RelatedMaterialCode] = @Aciklama
             WHERE [Id] = @Id
@@ -1122,10 +1198,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
             BEGIN TRANSACTION;
 
-            DELETE FROM {_productConfigurationTableName}
+            DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'CONFIG' AND [ParentId] = @Id;
 
-            DELETE FROM {_productConfigurationTableName}
+            DELETE FROM {_itemConfigurationTableName}
             WHERE [RecordType] = N'CONFIG' AND [Id] = @Id;
 
             COMMIT TRANSACTION;
@@ -1140,7 +1216,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            UPDATE {_productConfigurationTableName}
+            UPDATE {_itemConfigurationTableName}
             SET [RecordName] = @RecordName
             WHERE [RecordType] = N'CONFIG' AND [Id] = @Id AND [ParentId] IS NULL;
             """;
@@ -1191,28 +1267,25 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task<int> AddItemAsync(Item stockCard, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_stockCardsTableName}
-                ([code], [name], [description], [type_id], [is_active], [created_at], [created_by_user_id], [image_data], [image_mime_type], [track_combinations], [tax_rate], [updated_at])
+                ([CompanyId], [Code], [Name], [TypeId], [UnitId], [IsActive], [CreateDate], [Combinations], [TaxRate])
             VALUES
-                (@Code, @Name, @Description, @TypeId, @IsActive, @CreatedDate, @CreatedByUserId, @ImageData, @ImageMimeType, @TrackCombinations, @TaxRate, GETDATE());
+                (@CompanyId, @Code, @Name, @TypeId, @UnitId, @IsActive, @CreateDate, @Combinations, @TaxRate);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@Code", stockCard.Code));
         command.Parameters.Add(new SqlParameter("@Name", stockCard.Name));
-        command.Parameters.Add(new SqlParameter("@Description", (object?)stockCard.Description ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@TypeId", (object?)stockCard.TypeId ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@UnitId", (object?)stockCard.UnitId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", stockCard.IsActive ? 1 : 0));
-        command.Parameters.Add(new SqlParameter("@CreatedDate", (object?)stockCard.CreatedDate ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@CreatedByUserId", (object?)stockCard.CreatedByUserId ?? DBNull.Value));
-        var imgParam = new SqlParameter("@ImageData", System.Data.SqlDbType.VarBinary, -1);
-        imgParam.Value = (object?)stockCard.ImageData ?? DBNull.Value;
-        command.Parameters.Add(imgParam);
-        command.Parameters.Add(new SqlParameter("@ImageMimeType", (object?)stockCard.ImageMimeType ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@TrackCombinations", stockCard.TrackCombinations ? 1 : 0));
+        command.Parameters.Add(new SqlParameter("@CreateDate", (object?)stockCard.CreateDate ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@Combinations", stockCard.Combinations ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@TaxRate", stockCard.TaxRate));
 
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
@@ -1220,38 +1293,30 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task UpdateItemAsync(Item stockCard, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_stockCardsTableName}
             SET
-                [code] = @Code,
-                [name] = @Name,
-                [description] = @Description,
-                [type_id] = @TypeId,
-                [modified_at] = @ModifiedDate,
-                [modified_by_user_id] = @ModifiedByUserId,
-                [track_combinations] = @TrackCombinations,
-                [tax_rate] = @TaxRate,
-                [image_data] = CASE WHEN @UpdateImage = 1 THEN @ImageData ELSE [image_data] END,
-                [image_mime_type] = CASE WHEN @UpdateImage = 1 THEN @ImageMimeType ELSE [image_mime_type] END,
-                [updated_at] = GETDATE()
-            WHERE [id] = @Id;
+                [Code] = @Code,
+                [Name] = @Name,
+                [TypeId] = @TypeId,
+                [UnitId] = @UnitId,
+                [Combinations] = @Combinations,
+                [TaxRate] = @TaxRate,
+                [ModifyDate] = @ModifyDate
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", stockCard.Id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@Code", stockCard.Code));
         command.Parameters.Add(new SqlParameter("@Name", stockCard.Name));
-        command.Parameters.Add(new SqlParameter("@Description", (object?)stockCard.Description ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@TypeId", (object?)stockCard.TypeId ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@ModifiedDate", (object?)stockCard.ModifiedDate ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@ModifiedByUserId", (object?)stockCard.ModifiedByUserId ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@UpdateImage", stockCard.ImageData != null ? 1 : 0));
-        var updImgParam = new SqlParameter("@ImageData", System.Data.SqlDbType.VarBinary, -1);
-        updImgParam.Value = (object?)stockCard.ImageData ?? DBNull.Value;
-        command.Parameters.Add(updImgParam);
-        command.Parameters.Add(new SqlParameter("@ImageMimeType", (object?)stockCard.ImageMimeType ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@TrackCombinations", stockCard.TrackCombinations ? 1 : 0));
+        command.Parameters.Add(new SqlParameter("@UnitId", (object?)stockCard.UnitId ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@ModifyDate", (object?)stockCard.ModifyDate ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@Combinations", stockCard.Combinations ? 1 : 0));
         command.Parameters.Add(new SqlParameter("@TaxRate", stockCard.TaxRate));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1259,26 +1324,28 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task UpdateItemActiveStatusAsync(int stockCardId, bool isActive, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_stockCardsTableName}
             SET
-                [is_active] = @IsActive,
-                [modified_at] = @UpdatedAt,
-                [updated_at] = @UpdatedAt
-            WHERE [id] = @Id;
+                [IsActive] = @IsActive,
+                [ModifyDate] = @ModifyDate
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", stockCardId));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@IsActive", isActive ? 1 : 0));
-        command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@ModifyDate", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task DeleteItemAsync(int stockCardId, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
@@ -1286,8 +1353,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         {
             deleteMappingsCommand.Transaction = transaction;
             deleteMappingsCommand.CommandText = $"""
-                DELETE FROM {_stockPropertyMappingsTableName}
-                WHERE [item_id] = @ItemId;
+                DELETE FROM {_itemFeatureMappingsTableName}
+                WHERE [ItemId] = @ItemId;
                 """;
             deleteMappingsCommand.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
             await deleteMappingsCommand.ExecuteNonQueryAsync(cancellationToken);
@@ -1298,9 +1365,10 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             deleteMaterialCardCommand.Transaction = transaction;
             deleteMaterialCardCommand.CommandText = $"""
                 DELETE FROM {_stockCardsTableName}
-                WHERE [id] = @ItemId;
+                WHERE [Id] = @ItemId AND [CompanyId] = @CompanyId;
                 """;
             deleteMaterialCardCommand.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
+            deleteMaterialCardCommand.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await deleteMaterialCardCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -1309,17 +1377,19 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task UpdateItemConfigurableStatusAsync(int stockCardId, bool isConfigurable, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_stockCardsTableName}
             SET
-                [updated_at] = @UpdatedAt
-            WHERE [id] = @Id;
+                [ModifyDate] = @ModifyDate
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", stockCardId));
-        command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        command.Parameters.Add(new SqlParameter("@ModifyDate", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1391,6 +1461,188 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    // ── Machine CRUD ─────────────────────────────────────────────────────
+    public async Task<IReadOnlyCollection<Machine>> GetMachinesAsync(CancellationToken cancellationToken)
+    {
+        var rows = new List<Machine>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT [Id],
+                   [LocationId],
+                   [MachineCode],
+                   [MachineName],
+                   [MachineType],
+                   [HourlyCapacity],
+                   [SortOrder],
+                   [IsActive]
+            FROM {_machinesTableName}
+            ORDER BY [SortOrder], [MachineCode];
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new Machine
+            {
+                Id = reader.GetInt32(0),
+                LocationId = reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+                MachineCode = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                MachineName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                MachineType = reader.IsDBNull(4) ? null : reader.GetString(4),
+                HourlyCapacity = reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                SortOrder = reader.IsDBNull(6) ? 0 : reader.GetInt32(6),
+                IsActive = !reader.IsDBNull(7) && reader.GetBoolean(7)
+            });
+        }
+        return rows;
+    }
+
+    public async Task<int> AddMachineAsync(Machine machine, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            INSERT INTO {_machinesTableName}
+                ([LocationId], [MachineCode], [MachineName], [MachineType], [HourlyCapacity], [SortOrder], [IsActive])
+            VALUES
+                (@LocationId, @MachineCode, @MachineName, @MachineType, @HourlyCapacity, @SortOrder, @IsActive);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
+            """;
+        command.Parameters.Add(new SqlParameter("@LocationId", machine.LocationId));
+        command.Parameters.Add(new SqlParameter("@MachineCode", machine.MachineCode));
+        command.Parameters.Add(new SqlParameter("@MachineName", (object?)machine.MachineName ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@MachineType", (object?)machine.MachineType ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@HourlyCapacity", (object?)machine.HourlyCapacity ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@SortOrder", machine.SortOrder));
+        command.Parameters.Add(new SqlParameter("@IsActive", machine.IsActive));
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    public async Task UpdateMachineAsync(Machine machine, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_machinesTableName}
+            SET [LocationId]      = @LocationId,
+                [MachineCode]     = @MachineCode,
+                [MachineName]     = @MachineName,
+                [MachineType]     = @MachineType,
+                [HourlyCapacity]  = @HourlyCapacity,
+                [SortOrder]       = @SortOrder,
+                [IsActive]        = @IsActive
+            WHERE [Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", machine.Id));
+        command.Parameters.Add(new SqlParameter("@LocationId", machine.LocationId));
+        command.Parameters.Add(new SqlParameter("@MachineCode", machine.MachineCode));
+        command.Parameters.Add(new SqlParameter("@MachineName", (object?)machine.MachineName ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@MachineType", (object?)machine.MachineType ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@HourlyCapacity", (object?)machine.HourlyCapacity ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@SortOrder", machine.SortOrder));
+        command.Parameters.Add(new SqlParameter("@IsActive", machine.IsActive));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteMachineAsync(int machineId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM {_machinesTableName} WHERE [Id] = @Id;";
+        command.Parameters.Add(new SqlParameter("@Id", machineId));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // ── MachineType referans veri ────────────────────────────────────
+    public async Task<IReadOnlyCollection<MachineType>> GetMachineTypesAsync(CancellationToken cancellationToken)
+    {
+        var rows = new List<MachineType>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        // NOT: dropdown icin sadece IsActive=true beklemek admin ekraninda hatali — burada
+        // tum (aktif+pasif) satirlari donduruyoruz. Dropdown'da filtreleme client-side yapilir.
+        command.CommandText = $"""
+            SELECT [Id], [Code], [Name], [Description], [IsBuiltIn], [SortOrder], [IsActive]
+            FROM {_machineTypesTableName}
+            ORDER BY [SortOrder], [Name];
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new MachineType
+            {
+                Id = reader.GetInt32(0),
+                Code = reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
+                Name = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
+                IsBuiltIn = !reader.IsDBNull(4) && reader.GetBoolean(4),
+                SortOrder = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
+                IsActive = !reader.IsDBNull(6) && reader.GetBoolean(6)
+            });
+        }
+        return rows;
+    }
+
+    public async Task<int> AddMachineTypeAsync(MachineType type, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            INSERT INTO {_machineTypesTableName}
+                ([Code],[Name],[Description],[IsBuiltIn],[SortOrder],[IsActive])
+            VALUES
+                (@Code,@Name,@Description,@IsBuiltIn,@SortOrder,@IsActive);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
+            """;
+        command.Parameters.Add(new SqlParameter("@Code", type.Code));
+        command.Parameters.Add(new SqlParameter("@Name", type.Name));
+        command.Parameters.Add(new SqlParameter("@Description", (object?)type.Description ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@IsBuiltIn", type.IsBuiltIn));
+        command.Parameters.Add(new SqlParameter("@SortOrder", type.SortOrder));
+        command.Parameters.Add(new SqlParameter("@IsActive", type.IsActive));
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    public async Task UpdateMachineTypeAsync(MachineType type, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        // Code degisikligi yapilmaz (Built-in olsun ozel olsun) — Machine.MachineType FK gibi
+        // davraniyor. Code'u baska tabloda referans degeri oldugu icin sabit tutuyoruz.
+        command.CommandText = $"""
+            UPDATE {_machineTypesTableName}
+            SET [Name] = @Name,
+                [Description] = @Description,
+                [SortOrder] = @SortOrder,
+                [IsActive] = @IsActive
+            WHERE [Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", type.Id));
+        command.Parameters.Add(new SqlParameter("@Name", type.Name));
+        command.Parameters.Add(new SqlParameter("@Description", (object?)type.Description ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@SortOrder", type.SortOrder));
+        command.Parameters.Add(new SqlParameter("@IsActive", type.IsActive));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteMachineTypeAsync(int id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM {_machineTypesTableName} WHERE [Id] = @Id;";
+        command.Parameters.Add(new SqlParameter("@Id", id));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<int> CountMachinesUsingTypeAsync(string typeCode, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM {_machinesTableName} WHERE [MachineType] = @TypeCode;";
+        command.Parameters.Add(new SqlParameter("@TypeCode", typeCode));
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+    }
+
     public async Task AddUnitAsync(Unit definition, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
@@ -1454,28 +1706,28 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<StockUnitConversion>> GetStockUnitConversionsAsync(int stockCardId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<ItemUnit>> GetItemUnitsAsync(int itemId, CancellationToken cancellationToken)
     {
-        var results = new List<StockUnitConversion>();
+        var results = new List<ItemUnit>();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await EnsureStockUnitConversionsTableAsync(connection, cancellationToken);
+        await EnsureItemUnitsTableAsync(connection, cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[item_id],[line_no],[unit_code],[multiplier]
-            FROM {_stockUnitConversionsTableName}
-            WHERE [item_id] = @ItemId
-            ORDER BY [line_no];
+            SELECT [Id],[ItemId],[LineNo],[UnitId],[Multiplier]
+            FROM {_itemUnitsTableName}
+            WHERE [ItemId] = @ItemId
+            ORDER BY [LineNo];
             """;
-        cmd.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
+        cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            results.Add(new StockUnitConversion
+            results.Add(new ItemUnit
             {
                 Id = reader.GetInt32(0),
                 ItemId = reader.GetInt32(1),
                 LineNo = reader.GetInt32(2),
-                UnitCode = reader.GetString(3),
+                UnitId = reader.GetInt32(3),
                 Multiplier = reader.GetDecimal(4),
             });
         }
@@ -1484,60 +1736,252 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     /// <summary>
     /// Per-company DB'de tablonun var olmadigi durumda idempotent olarak yaratir.
-    /// CalibraDatabaseInitializer startup'ta ana DB'de yaratiyor, fakat per-company
-    /// DB baglandiginda tablo yok ise Invalid object name (208) hatasi aliniyor.
+    /// Legacy stock_unit_conversions varsa ItemUnits'e rename eder. Eski schema
+    /// (UnitId kolonu yok) tespit edilirse drop edilir ve yeniden yaratilir.
     /// </summary>
-    private async Task EnsureStockUnitConversionsTableAsync(SqlConnection connection, CancellationToken ct)
+    private async Task EnsureItemUnitsTableAsync(SqlConnection connection, CancellationToken ct)
     {
         var s = _schema.Replace("]", "]]");
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            IF OBJECT_ID(N'[{s}].[stock_unit_conversions]', N'U') IS NULL
+            -- Legacy rename: stock_unit_conversions -> ItemUnits
+            IF OBJECT_ID(N'[{s}].[ItemUnits]', N'U') IS NULL
+               AND OBJECT_ID(N'[{s}].[stock_unit_conversions]', N'U') IS NOT NULL
             BEGIN
-                CREATE TABLE [{s}].[stock_unit_conversions]
+                EXEC sp_rename N'[{s}].[stock_unit_conversions]', N'ItemUnits';
+            END;
+
+            -- Eski schema (UnitId yok = legacy unit_code string mevcut) ise drop et
+            IF OBJECT_ID(N'[{s}].[ItemUnits]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[ItemUnits]', N'UnitId') IS NULL
+            BEGIN
+                DROP TABLE [{s}].[ItemUnits];
+            END;
+
+            -- Yeni schema ile yarat
+            IF OBJECT_ID(N'[{s}].[ItemUnits]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ItemUnits]
                 (
-                    [id]            INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [item_id] INT               NOT NULL,
-                    [line_no]       INT               NOT NULL,
-                    [unit_code]     NVARCHAR(20)      NOT NULL,
-                    [multiplier]    DECIMAL(18,6)     NOT NULL DEFAULT(1)
+                    [Id]         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [ItemId]     INT               NOT NULL,
+                    [LineNo]     INT               NOT NULL,
+                    [UnitId]     INT               NOT NULL,
+                    [Multiplier] DECIMAL(18,6)     NOT NULL DEFAULT(1)
                 );
-                CREATE UNIQUE INDEX [ux_stock_unit_conversions_card_line]
-                    ON [{s}].[stock_unit_conversions]([item_id], [line_no]);
+                CREATE UNIQUE INDEX [ux_ItemUnits_ItemId_LineNo]
+                    ON [{s}].[ItemUnits]([ItemId], [LineNo]);
+            END;
+
+            -- FK ItemUnits.ItemId -> Items.Id
+            IF OBJECT_ID(N'[{s}].[ItemUnits]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[Items]', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.foreign_keys
+                   WHERE [name] = N'FK_ItemUnits_Items'
+                     AND [parent_object_id] = OBJECT_ID(N'[{s}].[ItemUnits]'))
+            BEGIN
+                ALTER TABLE [{s}].[ItemUnits]
+                WITH NOCHECK
+                ADD CONSTRAINT [FK_ItemUnits_Items]
+                    FOREIGN KEY ([ItemId]) REFERENCES [{s}].[Items]([Id]) ON DELETE CASCADE;
+            END;
+
+            -- FK ItemUnits.UnitId -> Unit.Id
+            IF OBJECT_ID(N'[{s}].[ItemUnits]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{s}].[Unit]', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.foreign_keys
+                   WHERE [name] = N'FK_ItemUnits_Unit'
+                     AND [parent_object_id] = OBJECT_ID(N'[{s}].[ItemUnits]'))
+            BEGIN
+                ALTER TABLE [{s}].[ItemUnits]
+                WITH NOCHECK
+                ADD CONSTRAINT [FK_ItemUnits_Unit]
+                    FOREIGN KEY ([UnitId]) REFERENCES [{s}].[Unit]([Id]);
             END;
             """;
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task SaveStockUnitConversionsAsync(int stockCardId, IReadOnlyCollection<StockUnitConversion> conversions, CancellationToken cancellationToken)
+    public async Task SaveItemUnitsAsync(int itemId, IReadOnlyCollection<ItemUnit> conversions, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await EnsureStockUnitConversionsTableAsync(connection, cancellationToken);
+        await EnsureItemUnitsTableAsync(connection, cancellationToken);
 
         // Mevcut satirlari sil
         await using (var delCmd = connection.CreateCommand())
         {
-            delCmd.CommandText = $"DELETE FROM {_stockUnitConversionsTableName} WHERE [item_id] = @ItemId;";
-            delCmd.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
+            delCmd.CommandText = $"DELETE FROM {_itemUnitsTableName} WHERE [ItemId] = @ItemId;";
+            delCmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
             await delCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        // Yeni satirlari ekle (ilk satir=0 master birim, sonrakiler 1..5)
-        var lineNo = -1;
+        // Master birim Items.UnitId'de tutuluyor — bu tablo sadece alternat birimler (1..5).
+        var lineNo = 0;
         foreach (var c in conversions)
         {
             lineNo++;
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = $"""
-                INSERT INTO {_stockUnitConversionsTableName}
-                    ([item_id],[line_no],[unit_code],[multiplier])
-                VALUES (@ItemId, @LineNo, @UnitCode, @Multiplier);
+                INSERT INTO {_itemUnitsTableName}
+                    ([ItemId],[LineNo],[UnitId],[Multiplier])
+                VALUES (@ItemId, @LineNo, @UnitId, @Multiplier);
                 """;
-            cmd.Parameters.Add(new SqlParameter("@ItemId", stockCardId));
+            cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
             cmd.Parameters.Add(new SqlParameter("@LineNo", lineNo));
-            cmd.Parameters.Add(new SqlParameter("@UnitCode", c.UnitCode));
+            cmd.Parameters.Add(new SqlParameter("@UnitId", c.UnitId));
             cmd.Parameters.Add(new SqlParameter("@Multiplier", c.Multiplier));
             await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Bir stoga bagli feature'lardan hangileri aktif bir kombinasyonda kullaniliyor — bunlarin
+    /// stok-ozellik baglantisi kaldirilamamali.
+    /// </summary>
+    public async Task<IReadOnlyCollection<int>> GetUsedFeatureIdsInCombinationsAsync(int itemId, CancellationToken cancellationToken)
+    {
+        var results = new List<int>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT DISTINCT fv.[feature_id]
+            FROM {_itemConfigurationTableName} parent
+            JOIN {_itemConfigurationTableName} child ON child.[ParentId] = parent.[Id]
+            JOIN [{_schema}].[FeatureValue] fv ON fv.[id] = TRY_CAST(child.[RecordName] AS INT)
+            WHERE parent.[ItemId] = @ItemId
+              AND parent.[IsActive] = 1
+              AND parent.[RecordType] = N'CONFIG'
+              AND child.[RecordType] = N'CONFIG';
+            """;
+        cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(reader.GetInt32(0));
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Bir stogun aktif kombinasyonlarinda kullanilan (FeatureId, FeatureValueId) ciftleri.
+    /// Bu ciftler kullaniciya kapatilamaz: deger izinli liste cikarilamaz, ozellik linki kaldirilamaz.
+    /// </summary>
+    public async Task<IReadOnlyCollection<(int FeatureId, int ValueId)>> GetUsedFeatureValueIdsInCombinationsAsync(
+        int itemId, CancellationToken cancellationToken)
+    {
+        var results = new List<(int, int)>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT DISTINCT fv.[feature_id], fv.[id]
+            FROM {_itemConfigurationTableName} parent
+            JOIN {_itemConfigurationTableName} child ON child.[ParentId] = parent.[Id]
+            JOIN [{_schema}].[FeatureValue] fv ON fv.[id] = TRY_CAST(child.[RecordName] AS INT)
+            WHERE parent.[ItemId] = @ItemId
+              AND parent.[IsActive] = 1
+              AND parent.[RecordType] = N'CONFIG'
+              AND child.[RecordType] = N'CONFIG';
+            """;
+        cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add((reader.GetInt32(0), reader.GetInt32(1)));
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Bir stogun aktif kombinasyon (CONFIG record_type, ParentId NULL, IsActive=1) sayisi.
+    /// Yeni ozellik eklenirken UI uyarisi icin kullanilir.
+    /// </summary>
+    public async Task<int> GetCombinationCountForItemAsync(int itemId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT COUNT(*)
+            FROM {_itemConfigurationTableName}
+            WHERE [ItemId] = @ItemId
+              AND [IsActive] = 1
+              AND [RecordType] = N'CONFIG'
+              AND [ParentId] IS NULL;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        var raw = await cmd.ExecuteScalarAsync(cancellationToken);
+        return raw == null || raw == DBNull.Value ? 0 : Convert.ToInt32(raw);
+    }
+
+    /// <summary>
+    /// Bir ozellige bagli stok listesini ItemFeatureMappings tablosunda gunceller.
+    /// Her stok icin: 1 header satiri (FeatureValueId NULL) + 0..N value satiri (FeatureValueId set).
+    /// Header satiri PrintDescriptionInDesign tasiyici. Mevcut tum linkleri (header + value) silip yeniden yazar.
+    /// </summary>
+    public async Task ReplaceFeatureStockLinksAsync(
+        int featureId,
+        (int ItemId, int[] AllowedValueIds, bool PrintDescriptionInDesign)[] items,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+
+        // Bu ozellige ait TUM linkleri sil (header + value-restriction)
+        await using (var delCmd = connection.CreateCommand())
+        {
+            delCmd.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [FeatureId] = @FeatureId;";
+            delCmd.Parameters.Add(new SqlParameter("@FeatureId", featureId));
+            await delCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var now = DateTime.Now;
+        var distinctItems = (items ?? Array.Empty<(int, int[], bool)>())
+            .Where(x => x.ItemId > 0)
+            .GroupBy(x => x.ItemId)
+            .Select(g => (
+                ItemId: g.Key,
+                AllowedValueIds: (g.Last().AllowedValueIds ?? Array.Empty<int>())
+                    .Where(v => v > 0).Distinct().ToArray(),
+                PrintDescriptionInDesign: g.Last().PrintDescriptionInDesign))
+            .ToArray();
+
+        foreach (var item in distinctItems)
+        {
+            // Header row (FeatureValueId NULL) — PrintDescriptionInDesign tasir
+            await using (var headerCmd = connection.CreateCommand())
+            {
+                headerCmd.CommandText = $"""
+                    INSERT INTO {_itemFeatureMappingsTableName}
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                    VALUES
+                        (@ItemId, @FeatureId, NULL, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
+                    """;
+                headerCmd.Parameters.Add(new SqlParameter("@ItemId", item.ItemId));
+                headerCmd.Parameters.Add(new SqlParameter("@FeatureId", featureId));
+                headerCmd.Parameters.Add(new SqlParameter("@PrintDesc", item.PrintDescriptionInDesign));
+                headerCmd.Parameters.Add(new SqlParameter("@CreatedAt", now));
+                headerCmd.Parameters.Add(new SqlParameter("@UpdatedAt", now));
+                await headerCmd.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            // Value-restriction rows
+            foreach (var valueId in item.AllowedValueIds)
+            {
+                await using var valCmd = connection.CreateCommand();
+                valCmd.CommandText = $"""
+                    INSERT INTO {_itemFeatureMappingsTableName}
+                        ([ItemId], [FeatureId], [FeatureValueId], [PrintDescriptionInDesign], [IsActive], [CreatedAt], [UpdatedAt])
+                    VALUES
+                        (@ItemId, @FeatureId, @FeatureValueId, @PrintDesc, 1, @CreatedAt, @UpdatedAt);
+                    """;
+                valCmd.Parameters.Add(new SqlParameter("@ItemId", item.ItemId));
+                valCmd.Parameters.Add(new SqlParameter("@FeatureId", featureId));
+                valCmd.Parameters.Add(new SqlParameter("@FeatureValueId", valueId));
+                valCmd.Parameters.Add(new SqlParameter("@PrintDesc", item.PrintDescriptionInDesign));
+                valCmd.Parameters.Add(new SqlParameter("@CreatedAt", now));
+                valCmd.Parameters.Add(new SqlParameter("@UpdatedAt", now));
+                await valCmd.ExecuteNonQueryAsync(cancellationToken);
+            }
         }
     }
 
@@ -1753,25 +2197,77 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task AddPropertyAsync(Feature property, CancellationToken cancellationToken)
+    public async Task<int> AddPropertyAsync(ItemFeature property, CancellationToken cancellationToken)
     {
+        var companyId = property.CompanyId > 0 ? property.CompanyId : _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_propertiesTableName}
-                ([id], [code], [name], [data_type], [is_active], [created_at], [updated_at])
+                ([CompanyId], [Name], [DataType], [UnitOfMeasure], [VisibleInDesign], [IsActive], [CreatedAt], [UpdatedAt])
             VALUES
-                (@Id, @Code, @Name, @DataType, @IsActive, @CreatedAt, @UpdatedAt);
+                (@CompanyId, @Name, @DataType, @UnitOfMeasure, @VisibleInDesign, @IsActive, @CreatedAt, @UpdatedAt);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
-        command.Parameters.Add(new SqlParameter("@Id", property.Id));
-        command.Parameters.Add(new SqlParameter("@Code", property.Code));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@Name", property.Name));
         command.Parameters.Add(new SqlParameter("@DataType", property.DataType.ToString()));
+        command.Parameters.Add(new SqlParameter("@UnitOfMeasure", (object?)property.UnitOfMeasure ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@VisibleInDesign", property.VisibleInDesign));
         command.Parameters.Add(new SqlParameter("@IsActive", property.IsActive));
         command.Parameters.Add(new SqlParameter("@CreatedAt", property.CreatedAt));
         command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
 
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task UpdateItemFeatureAsync(int id, string name, string dataType, string? unitOfMeasure, bool visibleInDesign, bool isActive, CancellationToken cancellationToken)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_propertiesTableName}
+            SET [Name] = @Name,
+                [DataType] = @DataType,
+                [UnitOfMeasure] = @UnitOfMeasure,
+                [VisibleInDesign] = @VisibleInDesign,
+                [IsActive] = @IsActive,
+                [UpdatedAt] = @UpdatedAt
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
+            """;
+
+        command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
+        command.Parameters.Add(new SqlParameter("@Name", name));
+        command.Parameters.Add(new SqlParameter("@DataType", dataType));
+        command.Parameters.Add(new SqlParameter("@UnitOfMeasure", (object?)unitOfMeasure ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@VisibleInDesign", visibleInDesign));
+        command.Parameters.Add(new SqlParameter("@IsActive", isActive));
+        command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteItemFeatureAsync(int id, CancellationToken cancellationToken)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+
+        // FK ItemFeatureMappings_ItemFeature CASCADE degil — once mapping'leri temizle
+        await using (var clearMappings = connection.CreateCommand())
+        {
+            clearMappings.CommandText = $"DELETE FROM {_itemFeatureMappingsTableName} WHERE [FeatureId] = @Id;";
+            clearMappings.Parameters.Add(new SqlParameter("@Id", id));
+            await clearMappings.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM {_propertiesTableName} WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
+        command.Parameters.Add(new SqlParameter("@Id", id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -1781,12 +2277,11 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_propertyValuesTableName}
-                ([id], [feature_id], [code], [description], [value], [sort_order], [is_active], [created_at], [updated_at])
+                ([feature_id], [code], [description], [value], [sort_order], [is_active], [Created], [Updated])
             VALUES
-                (@Id, @PropertyId, @Code, @Description, @Value, @SortOrder, @IsActive, @CreatedAt, @UpdatedAt);
+                (@PropertyId, @Code, @Description, @Value, @SortOrder, @IsActive, @CreatedAt, @UpdatedAt);
             """;
 
-        command.Parameters.Add(new SqlParameter("@Id", propertyValue.Id));
         command.Parameters.Add(new SqlParameter("@PropertyId", propertyValue.PropertyId));
         command.Parameters.Add(new SqlParameter("@Code", propertyValue.Code));
         command.Parameters.Add(new SqlParameter("@Description", propertyValue.Description));
@@ -1799,25 +2294,20 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task AddStockPropertyMappingAsync(ItemPropertyMapping mapping, CancellationToken cancellationToken)
+    public async Task AddStockPropertyMappingAsync(ItemFeatureMapping mapping, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            INSERT INTO {_stockPropertyMappingsTableName}
-                ([id], [item_id], [property_id], [property_value_id], [configuration_code], [text_value], [numeric_value], [date_value], [is_active], [created_at], [updated_at])
+            INSERT INTO {_itemFeatureMappingsTableName}
+                ([ItemId], [FeatureId], [FeatureValueId], [IsActive], [CreatedAt], [UpdatedAt])
             VALUES
-                (@Id, @ItemId, @PropertyId, @PropertyValueId, @ConfigurationCode, @TextValue, @NumericValue, @DateValue, @IsActive, @CreatedAt, @UpdatedAt);
+                (@ItemId, @FeatureId, @FeatureValueId, @IsActive, @CreatedAt, @UpdatedAt);
             """;
 
-        command.Parameters.Add(new SqlParameter("@Id", mapping.Id));
         command.Parameters.Add(new SqlParameter("@ItemId", mapping.ItemId));
-        command.Parameters.Add(new SqlParameter("@PropertyId", mapping.PropertyId));
-        command.Parameters.Add(new SqlParameter("@PropertyValueId", (object?)mapping.PropertyValueId ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@ConfigurationCode", (object?)mapping.ConfigurationCode ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@TextValue", (object?)mapping.TextValue ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@NumericValue", (object?)mapping.NumericValue ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@DateValue", (object?)mapping.DateValue ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@FeatureId", mapping.FeatureId));
+        command.Parameters.Add(new SqlParameter("@FeatureValueId", (object?)mapping.FeatureValueId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", mapping.IsActive));
         command.Parameters.Add(new SqlParameter("@CreatedAt", mapping.CreatedAt));
         command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
@@ -1826,34 +2316,22 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     }
 
     public async Task UpdateStockPropertyMappingValueAsync(
-        Guid mappingId,
-        Guid propertyValueId,
-        string? configurationCode,
-        string? textValue,
-        decimal? numericValue,
-        DateTime? dateValue,
+        int mappingId,
+        int featureValueId,
         CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            UPDATE {_stockPropertyMappingsTableName}
+            UPDATE {_itemFeatureMappingsTableName}
             SET
-                [property_value_id] = @PropertyValueId,
-                [configuration_code] = @ConfigurationCode,
-                [text_value] = @TextValue,
-                [numeric_value] = @NumericValue,
-                [date_value] = @DateValue,
-                [updated_at] = @UpdatedAt
-            WHERE [id] = @Id;
+                [FeatureValueId] = @FeatureValueId,
+                [UpdatedAt] = @UpdatedAt
+            WHERE [Id] = @Id;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", mappingId));
-        command.Parameters.Add(new SqlParameter("@PropertyValueId", propertyValueId));
-        command.Parameters.Add(new SqlParameter("@ConfigurationCode", (object?)configurationCode ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@TextValue", (object?)textValue ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@NumericValue", (object?)numericValue ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@DateValue", (object?)dateValue ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@FeatureValueId", featureValueId));
         command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1889,12 +2367,12 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT
-                t.[Id], t.[ParentMaterialCode], t.[ConfigurationCode], t.[Description],
-                t.[ImageData], t.[ImageMimeType],
+                t.[Id], t.[ItemId], t.[ConfigId], t.[Description],
+                t.[ImageData], t.[ImageMimeType], t.[ImageFitMode], t.[ImageRotation],
                 l.[Id]       AS [LineId],
                 l.[BOMId],
-                l.[ComponentMaterialCode],
-                l.[ComponentConfigCode],
+                l.[ItemId]   AS [LineItemId],
+                l.[ConfigId] AS [LineConfigId],
                 l.[Quantity],
                 l.[ScrapRatio],
                 l.[LineGuid]
@@ -1912,29 +2390,38 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             var treeId = reader.GetInt32(0);
             if (!treesById.ContainsKey(treeId))
             {
+                // Eski kayıtlarda BOM.ItemId NULL kalmış olabilir (kolon sonradan
+                // eklendi, NULL allowed). Bu durumda yetim BOM'u atlıyoruz —
+                // kullanıcıya gösterilemeyecek bir kart oluşturmak yerine listede
+                // hiç görünmesin (boş Master/Detail = ekran patlamış görünümü).
+                if (reader.IsDBNull(1)) continue;
+
                 treesById[treeId] = new BOM
                 {
-                    Id                 = treeId,
-                    ParentMaterialCode = reader.GetString(1),
-                    ConfigurationCode  = reader.IsDBNull(2) ? null : reader.GetString(2),
-                    Description        = reader.IsDBNull(3) ? null : reader.GetString(3),
-                    ImageData          = reader.IsDBNull(4) ? null : (byte[])reader.GetValue(4),
-                    ImageMimeType      = reader.IsDBNull(5) ? null : reader.GetString(5),
+                    Id            = treeId,
+                    ItemId        = reader.GetInt32(1),
+                    ConfigId      = reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                    Description   = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    ImageData     = reader.IsDBNull(4) ? null : (byte[])reader.GetValue(4),
+                    ImageMimeType = reader.IsDBNull(5) ? null : reader.GetString(5),
+                    ImageFitMode  = reader.IsDBNull(6) ? null : reader.GetString(6),
+                    ImageRotation = reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
                 };
                 linesByTreeId[treeId] = new List<BOMLine>();
             }
 
-            if (!reader.IsDBNull(6))
+            // Line satırı: en az LineId + LineItemId dolu olmalı (NULL = orphan / no-op join row).
+            if (!reader.IsDBNull(8) && !reader.IsDBNull(10) && linesByTreeId.ContainsKey(treeId))
             {
                 linesByTreeId[treeId].Add(new BOMLine
                 {
-                    Id                    = reader.GetInt32(6),
-                    BOMId         = reader.GetInt32(7),
-                    ComponentMaterialCode = reader.GetString(8),
-                    ComponentConfigCode   = reader.IsDBNull(9) ? null : reader.GetString(9),
-                    Quantity              = reader.GetDecimal(10),
-                    ScrapRatio            = reader.GetDecimal(11),
-                    LineGuid              = reader.GetGuid(12),
+                    Id         = reader.GetInt32(8),
+                    BOMId      = reader.IsDBNull(9)  ? treeId : reader.GetInt32(9),
+                    ItemId     = reader.GetInt32(10),
+                    ConfigId   = reader.IsDBNull(11) ? null : reader.GetInt32(11),
+                    Quantity   = reader.IsDBNull(12) ? 0m : reader.GetDecimal(12),
+                    ScrapRatio = reader.IsDBNull(13) ? 0m : reader.GetDecimal(13),
+                    LineGuid   = reader.IsDBNull(14) ? Guid.Empty : reader.GetGuid(14),
                 });
             }
         }
@@ -1945,42 +2432,47 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         return treesById.Values.ToList();
     }
 
-    public async Task<BOMWithNames?> GetBOMByCodeAsync(string materialCode, string? configCode, CancellationToken cancellationToken)
+    public async Task<BOMWithNames?> GetBOMByItemAsync(int itemId, int? configId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
 
-        var configFilter    = string.IsNullOrWhiteSpace(configCode)
-            ? "t.[ConfigurationCode] IS NULL"
-            : "t.[ConfigurationCode] = @ConfigCode";
-        var configFilterSub = string.IsNullOrWhiteSpace(configCode)
-            ? "[ConfigurationCode] IS NULL"
-            : "[ConfigurationCode] = @ConfigCode";
+        var configFilter    = configId.HasValue ? "t.[ConfigId] = @ConfigId" : "t.[ConfigId] IS NULL";
+        var configFilterSub = configId.HasValue ? "[ConfigId] = @ConfigId"   : "[ConfigId] IS NULL";
 
+        // Items + ItemConfiguration JOIN ile enriched response — frontend display icin
+        // ItemCode/ItemName/ConfigCode field'lari tasinir.
         command.CommandText = $"""
             SELECT
-                t.[Id], t.[ParentMaterialCode], t.[ConfigurationCode], t.[Description],
-                t.[ImageData], t.[ImageMimeType], t.[ImageFitMode],
-                l.[ComponentMaterialCode],
-                ISNULL(m.[name], l.[ComponentMaterialCode]) AS [ComponentMaterialName],
-                l.[ComponentConfigCode],
+                t.[Id], t.[ItemId], pi.[code] AS ParentItemCode, ISNULL(pi.[name], pi.[code]) AS ParentItemName,
+                t.[ConfigId], pcfg.[RecordCode] AS ParentConfigCode,
+                t.[Description],
+                t.[ImageData], t.[ImageMimeType], t.[ImageFitMode], t.[ImageRotation],
+                l.[ItemId]   AS LineItemId,
+                ci.[code]    AS LineItemCode,
+                ISNULL(ci.[name], ci.[code]) AS LineItemName,
+                l.[ConfigId] AS LineConfigId,
+                lcfg.[RecordCode] AS LineConfigCode,
                 l.[Quantity],
                 l.[ScrapRatio]
             FROM {_productTreesTableName} t
-            LEFT JOIN {_productTreeLinesTableName} l  ON l.[BOMId] = t.[Id]
-            LEFT JOIN {_stockCardsTableName}        m ON m.[code]  = l.[ComponentMaterialCode]
-            WHERE t.[ParentMaterialCode] = @MaterialCode
+            INNER JOIN {_stockCardsTableName} pi ON pi.[id] = t.[ItemId]
+            LEFT  JOIN [{_schema}].[ItemConfiguration] pcfg ON pcfg.[Id] = t.[ConfigId]
+            LEFT  JOIN {_productTreeLinesTableName} l  ON l.[BOMId] = t.[Id]
+            LEFT  JOIN {_stockCardsTableName} ci ON ci.[id] = l.[ItemId]
+            LEFT  JOIN [{_schema}].[ItemConfiguration] lcfg ON lcfg.[Id] = l.[ConfigId]
+            WHERE t.[ItemId] = @ItemId
               AND {configFilter}
               AND t.[Id] = (
                   SELECT MAX([Id]) FROM {_productTreesTableName}
-                  WHERE [ParentMaterialCode] = @MaterialCode AND {configFilterSub}
+                  WHERE [ItemId] = @ItemId AND {configFilterSub}
               )
             ORDER BY l.[Id];
             """;
 
-        command.Parameters.Add(new SqlParameter("@MaterialCode", materialCode.Trim().ToUpperInvariant()));
-        if (!string.IsNullOrWhiteSpace(configCode))
-            command.Parameters.Add(new SqlParameter("@ConfigCode", configCode.Trim()));
+        command.Parameters.Add(new SqlParameter("@ItemId", itemId));
+        if (configId.HasValue)
+            command.Parameters.Add(new SqlParameter("@ConfigId", configId.Value));
 
         BOMWithNames? result = null;
         var lines = new List<BOMLineWithName>();
@@ -1991,24 +2483,30 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             if (result is null)
             {
                 result = new BOMWithNames(
-                    reader.GetInt32(0),
-                    reader.GetString(1),
-                    reader.IsDBNull(2)  ? null : reader.GetString(2),
-                    reader.IsDBNull(3)  ? null : reader.GetString(3),
-                    reader.IsDBNull(4)  ? null : (byte[])reader.GetValue(4),
-                    reader.IsDBNull(5)  ? null : reader.GetString(5),
-                    reader.IsDBNull(6)  ? null : reader.GetString(6),
-                    lines);
+                    Id:            reader.GetInt32(0),
+                    ItemId:        reader.GetInt32(1),
+                    ItemCode:      reader.GetString(2),
+                    ItemName:      reader.GetString(3),
+                    ConfigId:      reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                    ConfigCode:    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    Description:   reader.IsDBNull(6) ? null : reader.GetString(6),
+                    ImageData:     reader.IsDBNull(7) ? null : (byte[])reader.GetValue(7),
+                    ImageMimeType: reader.IsDBNull(8) ? null : reader.GetString(8),
+                    ImageFitMode:  reader.IsDBNull(9) ? null : reader.GetString(9),
+                    ImageRotation: reader.GetInt32(10),
+                    Lines:         lines);
             }
 
-            if (!reader.IsDBNull(7))
+            if (!reader.IsDBNull(11))
             {
                 lines.Add(new BOMLineWithName(
-                    reader.GetString(7),
-                    reader.GetString(8),
-                    reader.IsDBNull(9)  ? null : reader.GetString(9),
-                    reader.GetDecimal(10),
-                    reader.GetDecimal(11)));
+                    ItemId:                reader.GetInt32(11),
+                    ComponentMaterialCode: reader.IsDBNull(12) ? "" : reader.GetString(12),
+                    ComponentMaterialName: reader.IsDBNull(13) ? "" : reader.GetString(13),
+                    ConfigId:              reader.IsDBNull(14) ? null : reader.GetInt32(14),
+                    ComponentConfigCode:   reader.IsDBNull(15) ? null : reader.GetString(15),
+                    Quantity:              reader.GetDecimal(16),
+                    ScrapRatio:            reader.GetDecimal(17)));
             }
         }
 
@@ -2026,17 +2524,18 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             cmd.Transaction = transaction;
             cmd.CommandText = $"""
                 INSERT INTO {_productTreesTableName}
-                    ([ParentMaterialCode],[ConfigurationCode],[Description],[ImageData],[ImageMimeType],[ImageFitMode],[CreatedAt],[UpdatedAt])
+                    ([ItemId],[ConfigId],[Description],[ImageData],[ImageMimeType],[ImageFitMode],[ImageRotation],[CreatedAt],[UpdatedAt])
                 VALUES
-                    (@ParentMaterialCode,@ConfigurationCode,@Description,@ImageData,@ImageMimeType,@ImageFitMode,GETDATE(),GETDATE());
+                    (@ItemId,@ConfigId,@Description,@ImageData,@ImageMimeType,@ImageFitMode,@ImageRotation,GETDATE(),GETDATE());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);
                 """;
-            cmd.Parameters.Add(new SqlParameter("@ParentMaterialCode", tree.ParentMaterialCode));
-            cmd.Parameters.Add(new SqlParameter("@ConfigurationCode", (object?)tree.ConfigurationCode ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@Description",       (object?)tree.Description       ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@ImageData",         (object?)tree.ImageData         ?? DBNull.Value) { SqlDbType = System.Data.SqlDbType.VarBinary });
-            cmd.Parameters.Add(new SqlParameter("@ImageMimeType",     (object?)tree.ImageMimeType     ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@ImageFitMode",      (object?)tree.ImageFitMode      ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ItemId",            tree.ItemId));
+            cmd.Parameters.Add(new SqlParameter("@ConfigId",          (object?)tree.ConfigId      ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@Description",       (object?)tree.Description   ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ImageData",         (object?)tree.ImageData     ?? DBNull.Value) { SqlDbType = System.Data.SqlDbType.VarBinary });
+            cmd.Parameters.Add(new SqlParameter("@ImageMimeType",     (object?)tree.ImageMimeType ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ImageFitMode",      (object?)tree.ImageFitMode  ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ImageRotation",     tree.ImageRotation));
             newId = (int)(await cmd.ExecuteScalarAsync(cancellationToken))!;
         }
 
@@ -2046,13 +2545,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Transaction = transaction;
             lineCmd.CommandText = $"""
                 INSERT INTO {_productTreeLinesTableName}
-                    ([BOMId],[ComponentMaterialCode],[ComponentConfigCode],[Quantity],[ScrapRatio],[LineGuid])
+                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid])
                 VALUES
-                    (@TreeId,@CompCode,@CompCfg,@Qty,@Scrap,@LineGuid);
+                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid);
                 """;
-            lineCmd.Parameters.Add(new SqlParameter("@TreeId",  newId));
-            lineCmd.Parameters.Add(new SqlParameter("@CompCode", line.ComponentMaterialCode));
-            lineCmd.Parameters.Add(new SqlParameter("@CompCfg",  (object?)line.ComponentConfigCode ?? DBNull.Value));
+            lineCmd.Parameters.Add(new SqlParameter("@BOMId",   newId));
+            lineCmd.Parameters.Add(new SqlParameter("@ItemId",  line.ItemId));
+            lineCmd.Parameters.Add(new SqlParameter("@ConfigId",(object?)line.ConfigId ?? DBNull.Value));
             lineCmd.Parameters.Add(new SqlParameter("@Qty",      line.Quantity));
             lineCmd.Parameters.Add(new SqlParameter("@Scrap",    line.ScrapRatio));
             lineCmd.Parameters.Add(new SqlParameter("@LineGuid", line.LineGuid == Guid.Empty ? Guid.NewGuid() : line.LineGuid));
@@ -2073,30 +2572,32 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             cmd.Transaction = transaction;
             cmd.CommandText = $"""
                 UPDATE {_productTreesTableName}
-                SET [ParentMaterialCode] = @ParentMaterialCode,
-                    [ConfigurationCode]  = @ConfigurationCode,
-                    [Description]        = @Description,
-                    [ImageData]          = @ImageData,
-                    [ImageMimeType]      = @ImageMimeType,
-                    [ImageFitMode]       = @ImageFitMode,
-                    [UpdatedAt]          = GETDATE()
+                SET [ItemId]        = @ItemId,
+                    [ConfigId]      = @ConfigId,
+                    [Description]   = @Description,
+                    [ImageData]     = @ImageData,
+                    [ImageMimeType] = @ImageMimeType,
+                    [ImageFitMode]  = @ImageFitMode,
+                    [ImageRotation] = @ImageRotation,
+                    [UpdatedAt]     = GETDATE()
                 WHERE [Id] = @Id;
                 """;
-            cmd.Parameters.Add(new SqlParameter("@Id",                 tree.Id));
-            cmd.Parameters.Add(new SqlParameter("@ParentMaterialCode", tree.ParentMaterialCode));
-            cmd.Parameters.Add(new SqlParameter("@ConfigurationCode",  (object?)tree.ConfigurationCode ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@Description",        (object?)tree.Description       ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@ImageData",          (object?)tree.ImageData         ?? DBNull.Value) { SqlDbType = System.Data.SqlDbType.VarBinary });
-            cmd.Parameters.Add(new SqlParameter("@ImageMimeType",      (object?)tree.ImageMimeType     ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@ImageFitMode",       (object?)tree.ImageFitMode      ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@Id",            tree.Id));
+            cmd.Parameters.Add(new SqlParameter("@ItemId",        tree.ItemId));
+            cmd.Parameters.Add(new SqlParameter("@ConfigId",      (object?)tree.ConfigId      ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@Description",   (object?)tree.Description   ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ImageData",     (object?)tree.ImageData     ?? DBNull.Value) { SqlDbType = System.Data.SqlDbType.VarBinary });
+            cmd.Parameters.Add(new SqlParameter("@ImageMimeType", (object?)tree.ImageMimeType ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ImageFitMode",  (object?)tree.ImageFitMode  ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@ImageRotation", tree.ImageRotation));
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using (var deleteCmd = connection.CreateCommand())
         {
             deleteCmd.Transaction = transaction;
-            deleteCmd.CommandText = $"DELETE FROM {_productTreeLinesTableName} WHERE [BOMId] = @TreeId;";
-            deleteCmd.Parameters.Add(new SqlParameter("@TreeId", tree.Id));
+            deleteCmd.CommandText = $"DELETE FROM {_productTreeLinesTableName} WHERE [BOMId] = @BOMId;";
+            deleteCmd.Parameters.Add(new SqlParameter("@BOMId", tree.Id));
             await deleteCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -2106,13 +2607,13 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
             lineCmd.Transaction = transaction;
             lineCmd.CommandText = $"""
                 INSERT INTO {_productTreeLinesTableName}
-                    ([BOMId],[ComponentMaterialCode],[ComponentConfigCode],[Quantity],[ScrapRatio],[LineGuid])
+                    ([BOMId],[ItemId],[ConfigId],[Quantity],[ScrapRatio],[LineGuid])
                 VALUES
-                    (@TreeId,@CompCode,@CompCfg,@Qty,@Scrap,@LineGuid);
+                    (@BOMId,@ItemId,@ConfigId,@Qty,@Scrap,@LineGuid);
                 """;
-            lineCmd.Parameters.Add(new SqlParameter("@TreeId",  tree.Id));
-            lineCmd.Parameters.Add(new SqlParameter("@CompCode", line.ComponentMaterialCode));
-            lineCmd.Parameters.Add(new SqlParameter("@CompCfg",  (object?)line.ComponentConfigCode ?? DBNull.Value));
+            lineCmd.Parameters.Add(new SqlParameter("@BOMId",   tree.Id));
+            lineCmd.Parameters.Add(new SqlParameter("@ItemId",  line.ItemId));
+            lineCmd.Parameters.Add(new SqlParameter("@ConfigId",(object?)line.ConfigId ?? DBNull.Value));
             lineCmd.Parameters.Add(new SqlParameter("@Qty",      line.Quantity));
             lineCmd.Parameters.Add(new SqlParameter("@Scrap",    line.ScrapRatio));
             lineCmd.Parameters.Add(new SqlParameter("@LineGuid", line.LineGuid == Guid.Empty ? Guid.NewGuid() : line.LineGuid));
@@ -2145,7 +2646,7 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var cmd1 = connection.CreateCommand();
         cmd1.CommandText = $"""
             SELECT [Id], [RecordCode], [RecordName]
-            FROM {_productConfigurationTableName}
+            FROM {_itemConfigurationTableName}
             WHERE [RecordType] = 'CONFIG'
               AND [ParentId] IS NULL
               AND [RelatedMaterialCode] = @mc
@@ -2164,41 +2665,50 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                     configId,
                     r1.GetString(1),
                     r1.IsDBNull(2) ? r1.GetString(1) : r1.GetString(2),
-                    new List<(string Feature, string Value)>());
+                    new List<CombinationFeatureValueDto>());
             }
         }
 
         if (combos.Count == 0) return Array.Empty<CombinationLookupRow>();
 
-        // Adım 2: Alt CONFIG → VALUE → FEATURE join ile özellik-değer çiftleri
+        // Adım 2: Child CONFIG → FeatureValue → ItemFeature join ile özellik-değer çiftleri.
+        // Schema notu (CalibraHub gerçeği):
+        //   - parent CONFIG (kombinasyon kodu) → ItemConfiguration, ParentId NULL
+        //   - child CONFIG (her özellik için) → ItemConfiguration, ParentId=parent, RecordType='CONFIG',
+        //     RecordName=FeatureValue.id (string olarak)
+        //   - VALUE master → FeatureValue tablosu (id, feature_id, code, description, value)
+        //   - FEATURE master → ItemFeature tablosu (Id, Name)
+        // FeatureValueId match/dedup icin kullanilir (CLAUDE.md id tabanli kural).
         await using var cmd2 = connection.CreateCommand();
         cmd2.CommandText = $"""
             SELECT
-                ch.[ParentId]            AS ConfigId,
-                f.[RecordName]           AS FeatureName,
-                TRIM(SUBSTRING(v.[RecordName], CHARINDEX('||', v.[RecordName]) + 2, 500)) AS ValueDesc
-            FROM {_productConfigurationTableName} ch
-            JOIN {_productConfigurationTableName} v
-                ON v.[Id] = TRY_CAST(ch.[RecordName] AS INT) AND v.[RecordType] = 'VALUE'
-            JOIN {_productConfigurationTableName} f
-                ON f.[Id] = v.[ParentId] AND f.[RecordType] = 'FEATURE'
-            WHERE ch.[RecordType] = 'CONFIG'
-              AND ch.[ParentId] IN ({string.Join(",", combos.Keys)})
-              AND ch.[RelatedMaterialCode] = @mc
-            ORDER BY ch.[ParentId], f.[RecordCode];
+                child.[ParentId]                                      AS ConfigId,
+                fv.[id]                                               AS FeatureValueId,
+                f.[Name]                                              AS FeatureName,
+                COALESCE(NULLIF(fv.[description], N''), fv.[value])   AS ValueDesc,
+                fv.[code]                                             AS ValueCode
+            FROM {_itemConfigurationTableName} child
+            JOIN [{_schema}].[FeatureValue] fv
+                ON fv.[id] = TRY_CAST(child.[RecordName] AS INT)
+            JOIN {_propertiesTableName} f
+                ON f.[Id] = fv.[feature_id]
+            WHERE child.[RecordType] = 'CONFIG'
+              AND child.[ParentId] IN ({string.Join(",", combos.Keys)})
+            ORDER BY child.[ParentId], f.[Name];
             """;
-        var p2 = cmd2.CreateParameter(); p2.ParameterName = "@mc"; p2.Value = materialCode;
-        cmd2.Parameters.Add(p2);
 
         await using (var r2 = await cmd2.ExecuteReaderAsync(cancellationToken))
         {
             while (await r2.ReadAsync(cancellationToken))
             {
-                var configId  = r2.GetInt32(0);
-                var feature   = r2.IsDBNull(1) ? "" : r2.GetString(1);
-                var valueDesc = r2.IsDBNull(2) ? "" : r2.GetString(2);
+                var configId       = r2.GetInt32(0);
+                var featureValueId = r2.GetInt32(1);
+                var feature        = r2.IsDBNull(2) ? "" : r2.GetString(2);
+                var valueDesc      = r2.IsDBNull(3) ? "" : r2.GetString(3);
+                var valueCode      = r2.IsDBNull(4) ? "" : r2.GetString(4);
                 if (combos.TryGetValue(configId, out var row))
-                    ((List<(string, string)>)row.FeatureValues).Add((feature, valueDesc));
+                    ((List<CombinationFeatureValueDto>)row.FeatureValues).Add(
+                        new CombinationFeatureValueDto(featureValueId, feature, valueDesc, valueCode));
             }
         }
 

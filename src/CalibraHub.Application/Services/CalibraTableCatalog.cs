@@ -22,7 +22,7 @@ public static class CalibraTableCatalog
         "Contact",
 
         // Stok & Lojistik
-        "Item", "Location", "Unit", "stock_unit_conversions",
+        "Item", "Location", "Unit", "ItemUnits",
 
         // Urun Ozellik / Konfigurasyon
         "Feature", "FeatureValue", "FieldGroup", "Field",
@@ -37,7 +37,7 @@ public static class CalibraTableCatalog
         "sales_quote_attachments", "sales_quote_line_details", "sales_representatives",
 
         // Fiyat Listesi & Doviz
-        "PriceGroup", "PriceList", "currencies", "exchange_rates",
+        "PriceGroup", "PriceList", "currencies", "Exchange",
 
         // Belge / Rapor / Tasarim
         "design_templates", "document_types", "report_templates",
@@ -66,6 +66,21 @@ public static class CalibraTableCatalog
 
         // Dinamik Raporlama
         "RptDef", "RptDefRole", "RptRunLog", "RptView", "RptViewCol", "RptViewRole",
+
+        // Sirket Parametre / Numerator / Stok Hareketi (Faz 0)
+        "CompanyParameter", "Numerator", "StockMovement",
+
+        // Uretim Is Emri (Faz 1)
+        "WorkOrder", "WorkOrderSource",
+
+        // Uretim Operasyon Sozlugu + Routing + Makine Sureleri (Faz 3)
+        "Operation", "Routing", "RoutingOperation", "OperationMachineTime",
+
+        // Is Emri Operasyonlari (Faz 3a)
+        "WorkOrderOperation",
+
+        // Uretim personneli (Faz 3a revize — User tablosundan ayri)
+        "Personnel",
     };
 
     public static bool IsOwned(string tableName)

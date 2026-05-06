@@ -15,7 +15,9 @@ import {
 
 // sqlPassword: '' = değiştirilmedi (sunucu mevcut şifreyi korur), hasPassword: mevcut şifre var mı
 var EMPTY_COMPANY = { id: null, name: '', sqlServer: '', sqlDatabase: '', sqlUsername: '', sqlPassword: '', hasPassword: false, isActive: true }
-var EMPTY_USER    = { id: null, companyId: null, firstName: '', lastName: '', email: '', password: '', isActive: true }
+// role: CalibraHub yetkisi — 'Admin' / 'SistemAdmin' / 'User' (default User = en kisitli)
+// grafanaRole: Grafana yetkisi — 'Admin' / 'Designer' / 'Viewer' (default Viewer)
+var EMPTY_USER    = { id: null, companyId: null, firstName: '', lastName: '', email: '', password: '', role: 'User', grafanaRole: 'Viewer', isActive: true }
 
 export default function CompanyUserManagementPanel() {
 
@@ -41,6 +43,7 @@ export default function CompanyUserManagementPanel() {
   var [userLoading,      setUserLoading]      = useState(true)
   var [userError,        setUserError]        = useState(null)
   var [userSearch,       setUserSearch]       = useState('')
+  var [userCompanyFilter,setUserCompanyFilter]= useState('all')   // 'all' = filtre yok; aksi halde companyId
   var [editingUser,      setEditingUser]      = useState(null)
   var [userForm,         setUserForm]         = useState(EMPTY_USER)
   var [userSaving,       setUserSaving]       = useState(false)
@@ -141,6 +144,27 @@ export default function CompanyUserManagementPanel() {
     setUserFormErr(null); setShowUserPwd(false)
   }
 
+  function handleEditUser(u) {
+    // FullName'i Ad/Soyad'a ayır — ilk kelime Ad, kalan Soyad
+    var fullName = (u.fullName || '').trim()
+    var spaceIdx = fullName.indexOf(' ')
+    var firstName = spaceIdx === -1 ? fullName : fullName.substring(0, spaceIdx)
+    var lastName  = spaceIdx === -1 ? ''       : fullName.substring(spaceIdx + 1).trim()
+    setEditingUser(u.id)
+    setUserForm({
+      id: u.id,
+      companyId: u.companyId,
+      firstName: firstName,
+      lastName: lastName,
+      email: u.email || '',
+      password: '',  // boş = mevcut şifre korunur
+      role: u.uiRole || 'User',           // CalibraHub yetkisi (Admin/SistemAdmin/User) — backend mapping
+      grafanaRole: u.grafanaRole || 'Viewer', // Grafana yetkisi (Admin/Designer/Viewer); null kayit edit'te Viewer'a default
+      isActive: u.isActive
+    })
+    setUserFormErr(null); setShowUserPwd(false)
+  }
+
   function handleCancelUser() { setEditingUser(null); setUserFormErr(null) }
 
   async function handleSaveUser(e) {
@@ -148,12 +172,17 @@ export default function CompanyUserManagementPanel() {
     if (!userForm.companyId) { setUserFormErr('Şirket seçimi zorunludur.'); return }
     if (!userForm.firstName.trim()) { setUserFormErr('Ad zorunludur.'); return }
     if (!userForm.email.trim()) { setUserFormErr('E-posta zorunludur.'); return }
-    if (!userForm.password || userForm.password.length < 8) { setUserFormErr('Şifre en az 8 karakter olmalıdır.'); return }
+    var isEditing = editingUser !== 'new' && editingUser !== null
+    if (!isEditing) {
+      if (!userForm.password || userForm.password.length < 8) { setUserFormErr('Şifre en az 8 karakter olmalıdır.'); return }
+    } else if (userForm.password && userForm.password.length < 8) {
+      setUserFormErr('Şifre değiştirmek için en az 8 karakter girin (boş bırakırsanız değişmez).'); return
+    }
     setUserSaving(true); setUserFormErr(null)
     var result = await saveUserJson(userForm)
     setUserSaving(false)
     if (result.success) {
-      showToast('success', 'Kullanıcı oluşturuldu.')
+      showToast('success', isEditing ? 'Kullanıcı güncellendi.' : 'Kullanıcı oluşturuldu.')
       setEditingUser(null); loadUsers()
     } else {
       setUserFormErr(result.message || 'Kaydetme başarısız.')
@@ -179,6 +208,9 @@ export default function CompanyUserManagementPanel() {
   })
 
   var filteredUsers = users.filter(function (u) {
+    // Şirket filtresi (üst dropdown) — 'all' = tüm şirketler
+    if (userCompanyFilter !== 'all' && String(u.companyId) !== String(userCompanyFilter)) return false
+    // Arama metni
     if (!userSearch.trim()) return true
     var q = userSearch.toLowerCase()
     return (u.fullName || '').toLowerCase().includes(q) ||
@@ -448,6 +480,21 @@ export default function CompanyUserManagementPanel() {
               <button type="button" className="cum-btn cum-btn--primary" onClick={handleNewUser}>
                 <Plus size={14} /> Yeni Kullanıcı
               </button>
+
+              {/* Şirket filtresi — companies state'ini dropdown'da listeler */}
+              <div className="cum-filter-wrap" title="Şirket filtresi">
+                <Building2 size={13} className="cum-filter-ico" />
+                <select className="cum-filter-select"
+                  value={userCompanyFilter}
+                  onChange={function (e) { setUserCompanyFilter(e.target.value) }}>
+                  <option value="all">Tüm Şirketler ({users.length})</option>
+                  {companies.map(function (c) {
+                    var cnt = users.filter(function (u) { return String(u.companyId) === String(c.id) }).length
+                    return <option key={c.id} value={c.id}>{c.name} ({cnt})</option>
+                  })}
+                </select>
+              </div>
+
               <div className="cum-search-wrap">
                 <Search size={13} className="cum-search-ico" />
                 <input type="search" className="cum-search" placeholder="Kullanıcı ara..."
@@ -471,8 +518,12 @@ export default function CompanyUserManagementPanel() {
             ) : filteredUsers.length === 0 ? (
               <div className="cum-empty">
                 <Users size={42} />
-                <p>{userSearch ? 'Eşleşen kullanıcı bulunamadı.' : 'Henüz kullanıcı tanımlanmamış.'}</p>
-                {!userSearch && (
+                <p>
+                  {userSearch ? 'Eşleşen kullanıcı bulunamadı.'
+                    : userCompanyFilter !== 'all' ? 'Bu şirkette kayıtlı kullanıcı yok.'
+                    : 'Henüz kullanıcı tanımlanmamış.'}
+                </p>
+                {!userSearch && userCompanyFilter === 'all' && (
                   <button type="button" className="cum-btn cum-btn--primary" onClick={handleNewUser}>
                     <Plus size={14} /> İlk Kullanıcıyı Ekle
                   </button>
@@ -506,6 +557,9 @@ export default function CompanyUserManagementPanel() {
                             </span>
                           </td>
                           <td className="cum-td-actions">
+                            <button type="button" className="cum-action-btn" onClick={function () { handleEditUser(u) }} title="Düzenle">
+                              <Pencil size={13} />
+                            </button>
                             <button type="button" className="cum-action-btn cum-action-btn--danger"
                               onClick={function () { setConfirmDelUser(u.id) }} title="Pasife Al">
                               <Trash2 size={13} />
@@ -525,7 +579,8 @@ export default function CompanyUserManagementPanel() {
             <div className="cum-form-panel">
               <div className="cum-form-header">
                 <h3 className="cum-form-title">
-                  <Users size={16} /> Yeni Kullanıcı
+                  <Users size={16} />
+                  {editingUser === 'new' ? 'Yeni Kullanıcı' : 'Kullanıcı Düzenle'}
                 </h3>
                 <button type="button" className="cum-close-btn" onClick={handleCancelUser}><X size={16} /></button>
               </div>
@@ -573,6 +628,58 @@ export default function CompanyUserManagementPanel() {
                     <button type="button" className="cum-eye-btn" onClick={function () { setShowUserPwd(!showUserPwd) }}>
                       {showUserPwd ? <EyeOff size={13} /> : <Eye size={13} />}
                     </button>
+                  </div>
+                </div>
+
+                {/* CalibraHub Yetkisi — radio (3 secenek): Admin / Sistem Admin / User */}
+                <div className="cum-field">
+                  <label className="cum-label">CalibraHub Yetkisi <span className="cum-req">*</span></label>
+                  <div className="cum-radio-group" role="radiogroup">
+                    {[
+                      { v: 'Admin',       t: 'Admin',        d: 'Şirket yöneticisi (kullanıcı/ayar yönetimi)' },
+                      { v: 'SistemAdmin', t: 'Sistem Admin', d: 'Tüm sistem üzerinde tam yetki' },
+                      { v: 'User',        t: 'User',         d: 'Standart kullanıcı (görüntüleme + temel işlemler)' }
+                    ].map(function (opt) {
+                      var checked = (userForm.role || 'User') === opt.v
+                      return (
+                        <label key={opt.v} className={'cum-radio' + (checked ? ' is-checked' : '')}>
+                          <input type="radio" name="cum-role"
+                            value={opt.v} checked={checked}
+                            onChange={function () { setUserForm(Object.assign({}, userForm, { role: opt.v })) }} />
+                          <span className="cum-radio-dot" aria-hidden="true"></span>
+                          <span className="cum-radio-text">
+                            <span className="cum-radio-title">{opt.t}</span>
+                            <span className="cum-radio-desc">{opt.d}</span>
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Grafana Yetkisi — radio (3 secenek): Admin / Designer / Viewer */}
+                <div className="cum-field">
+                  <label className="cum-label">Grafana Yetkisi <span className="cum-req">*</span></label>
+                  <div className="cum-radio-group" role="radiogroup">
+                    {[
+                      { v: 'Admin',    t: 'Admin',    d: 'Org yöneticisi (datasource, kullanıcı yönetimi)' },
+                      { v: 'Designer', t: 'Designer', d: 'Dashboard ve panel tasarlar/edit eder' },
+                      { v: 'Viewer',   t: 'Viewer',   d: 'Sadece dashboard görüntüleyebilir' }
+                    ].map(function (opt) {
+                      var checked = (userForm.grafanaRole || 'Viewer') === opt.v
+                      return (
+                        <label key={opt.v} className={'cum-radio' + (checked ? ' is-checked' : '')}>
+                          <input type="radio" name="cum-grafanarole"
+                            value={opt.v} checked={checked}
+                            onChange={function () { setUserForm(Object.assign({}, userForm, { grafanaRole: opt.v })) }} />
+                          <span className="cum-radio-dot" aria-hidden="true"></span>
+                          <span className="cum-radio-text">
+                            <span className="cum-radio-title">{opt.t}</span>
+                            <span className="cum-radio-desc">{opt.d}</span>
+                          </span>
+                        </label>
+                      )
+                    })}
                   </div>
                 </div>
 

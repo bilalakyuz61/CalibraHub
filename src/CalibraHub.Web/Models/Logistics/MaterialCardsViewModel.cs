@@ -63,8 +63,9 @@ public sealed class MaterialCardRowViewModel
     public int Id { get; init; }
     public string Code { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
-    public string? Description { get; init; }
     public int? TypeId { get; init; }
+    public int? UnitId { get; init; }
+    public string? UnitName { get; init; }
     public bool IsActive { get; init; }
 }
 
@@ -84,19 +85,14 @@ public sealed class MaterialCardCreateInput
     public string Code { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Malzeme adi zorunludur.")]
-    [MaxLength(255, ErrorMessage = "Malzeme adi en fazla 255 karakter olabilir.")]
+    [MaxLength(200, ErrorMessage = "Malzeme adi en fazla 200 karakter olabilir.")]
     public string Name { get; set; } = string.Empty;
-
-    [MaxLength(500, ErrorMessage = "Aciklama en fazla 500 karakter olabilir.")]
-    public string? Description { get; set; }
 
     public int? TypeId { get; set; }
 
-    public string? ExistingImageUrl { get; set; }
+    public int? UnitId { get; set; }
 
-    public string? ProductImageBase64 { get; set; }
-
-    public bool TrackCombinations { get; set; }
+    public bool Combinations { get; set; }
 }
 
 public sealed class SaveMaterialCardJsonInput
@@ -104,9 +100,8 @@ public sealed class SaveMaterialCardJsonInput
     public int? ItemId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
     public int? TypeId { get; set; }
-    public bool TrackCombinations { get; set; }
+    public int? UnitId { get; set; }
+    public bool Combinations { get; set; }
     public decimal TaxRate { get; set; } = 20m;
-    public string? ProductImageBase64 { get; set; }
 }

@@ -50,7 +50,7 @@ import {
   ArrowUpRight, ExternalLink, ArrowRight, Link as LinkIcon,
   TreePine, Receipt, Send, FileCheck, History, BarChart3,
   Printer, Copy, Edit, Eye, Share2, Download, List,
-  Trash, Trash2,
+  Trash, Trash2, ClipboardList, Cog,
   // Lookup / Search ikonlari
   Search,
   // Grid / Master-Detail ikonlari
@@ -74,7 +74,7 @@ var iconMap = {
   Receipt: Receipt, Send: Send, FileCheck: FileCheck,
   History: History, BarChart3: BarChart3, Printer: Printer,
   Copy: Copy, Edit: Edit, Eye: Eye, Share2: Share2, Download: Download, List: List,
-  Trash: Trash, Trash2: Trash2,
+  Trash: Trash, Trash2: Trash2, ClipboardList: ClipboardList, Cog: Cog,
   // Lookup
   Search: Search,
   // Grid / Master-Detail
