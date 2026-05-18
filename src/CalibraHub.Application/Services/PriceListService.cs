@@ -135,9 +135,62 @@ public sealed class PriceListService : IPriceListService
     {
         var existing = await _repo.GetEntryByIdAsync(req.Id, ct);
         if (existing is null) return (false, "Kayit bulunamadi.");
-        existing.Price     = req.Price;
+
+        // Kismi update — null gelen alan mevcut degerden korunur.
+        if (req.Price.HasValue) existing.Price = req.Price.Value;
+        if (req.CurrencyId.HasValue && req.CurrencyId.Value > 0) existing.CurrencyId = req.CurrencyId.Value;
+        if (!string.IsNullOrWhiteSpace(req.PriceType))
+        {
+            var t = NormalizePriceType(req.PriceType);
+            if (!IsValidPriceType(t))
+                return (false, "Fiyat tipi 'b' (alış), 's' (satış) veya 'm' (maliyet) olmali.");
+            // Grup-tipi kisidi
+            var grp = await _repo.GetGroupByIdAsync(existing.GroupId, ct);
+            if (grp is not null)
+            {
+                var typeErr = AssertTypeAllowed(grp, t);
+                if (typeErr is not null) return (false, typeErr);
+            }
+            existing.PriceType = t;
+        }
+        if (req.ValidFrom.HasValue) existing.ValidFrom = req.ValidFrom.Value;
+        if (req.ClearValidTo) existing.ValidTo = null;
+        else if (req.ValidTo.HasValue) existing.ValidTo = req.ValidTo.Value;
+
+        // ── Uniqueness ön-kontrol: aynı (Group + Item + Config + Currency + PriceType + ValidFrom)
+        //    kombinasyonu ile başka aktif kayıt var mı? Varsa kullanıcıya açık hata göster.
+        //    DB'deki UNIQUE INDEX zaten enforce ediyor; bu pre-check sadece daha okunabilir mesaj için.
+        if (existing.IsActive)
+        {
+            var dup = await _repo.FindActiveDuplicateAsync(
+                existing.GroupId, existing.ItemId, existing.ConfigId,
+                existing.CurrencyId, existing.PriceType, existing.ValidFrom,
+                excludeId: existing.Id, ct);
+            if (dup != null)
+            {
+                return (false,
+                    $"Aynı kombinasyonda başka bir aktif kayıt zaten var (ID: {dup.Id}). " +
+                    "Fiyat grubu + stok + kombinasyon + döviz + tip + başlangıç tarihi aynı olan ikinci kayıt oluşturulamaz.");
+            }
+        }
+
         existing.UpdatedAt = DateTime.Now;
-        await _repo.UpdateEntryAsync(existing, ct);
+        try
+        {
+            await _repo.UpdateEntryAsync(existing, ct);
+        }
+        catch (Exception ex) when (
+            ex.GetType().Name == "SqlException" &&
+            (ex.Message.Contains("ux_pricelist_unique_active") ||
+             ex.Message.Contains("UNIQUE KEY") ||
+             ex.Message.Contains("duplicate key")))
+        {
+            // SQL UNIQUE INDEX ihlali — pre-check kacirdi (race condition?), DB son savunma hatti.
+            // Application katmani Microsoft.Data.SqlClient'a referans vermiyor, type name kontrolu kullaniyoruz.
+            return (false,
+                "Aynı stok + kombinasyon + döviz + tip + başlangıç tarihi için zaten bir kayıt mevcut. " +
+                "Yeni bir başlangıç tarihi girin veya mevcut kaydı düzeltin.");
+        }
         return (true, null);
     }
 

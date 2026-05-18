@@ -238,6 +238,70 @@ public sealed class CollaborationRuntimeStore
         }
     }
 
+    public IReadOnlyCollection<CollaborationLockSnapshot> GetAllActiveLocks(DateTime now)
+    {
+        lock (_gate)
+        {
+            return _locksByRecordKey.Values
+                .Where(ls => !IsExpired(ls, now))
+                .Select(ToSnapshot)
+                .ToArray();
+        }
+    }
+
+    public bool AdminBreakLock(string recordType, string recordId,
+        out CollaborationRecordLockChangedEvent releasedEvent)
+    {
+        lock (_gate)
+        {
+            var key = CollaborationGroupNames.BuildRecordKey(recordType, recordId);
+            if (!_locksByRecordKey.Remove(key, out var ls))
+            {
+                releasedEvent = new CollaborationRecordLockChangedEvent(recordType, recordId, null);
+                return false;
+            }
+
+            releasedEvent = new CollaborationRecordLockChangedEvent(ls.RecordType, ls.RecordId, null);
+            return true;
+        }
+    }
+
+    public void RestoreLock(CollaborationLockSnapshot snapshot)
+    {
+        lock (_gate)
+        {
+            var recordKey = CollaborationGroupNames.BuildRecordKey(snapshot.RecordType, snapshot.RecordId);
+            if (_locksByRecordKey.ContainsKey(recordKey))
+            {
+                return;
+            }
+
+            _locksByRecordKey[recordKey] = new RecordLockState(
+                recordKey,
+                snapshot.RecordType,
+                snapshot.RecordId,
+                snapshot.OwnerUserId,
+                snapshot.OwnerDisplayName,
+                string.Empty,
+                string.Empty,
+                snapshot.RecordTitle,
+                snapshot.PageUrl,
+                snapshot.AcquiredAt,
+                snapshot.LastHeartbeatAt);
+        }
+    }
+
+    public IReadOnlyCollection<string> GetActiveLockKeys(DateTime now)
+    {
+        lock (_gate)
+        {
+            return _locksByRecordKey.Values
+                .Where(ls => !IsExpired(ls, now))
+                .Select(ls => ls.RecordKey)
+                .ToArray();
+        }
+    }
+
     public CollaborationExpirationResult ExpireStaleEntries(DateTime now)
     {
         lock (_gate)

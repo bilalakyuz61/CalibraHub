@@ -2,7 +2,9 @@
 
 <section class="integrator-dashboard__group">
     <article class="integrator-card integrator-card--form entity-form-card" data-standard-screen-designer>
-        <form method="post" asp-action="SaveScreenLayout" class="integrator-form" id="standardScreenDesignForm" autocomplete="off">
+        <form method="post" asp-action="SaveScreenLayout" class="integrator-form" id="standardScreenDesignForm" autocomplete="off"
+              data-collaboration-record-type="ADMIN_SCREEN_LAYOUT"
+              data-collaboration-record-title="Ekran Düzeni">
             @Html.AntiForgeryToken()
             <input asp-for="ScreenCode" type="hidden" />
             <input asp-for="ScreenLabel" type="hidden" />

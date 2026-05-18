@@ -76,6 +76,13 @@ public interface IGuideRepository
     /// </summary>
     Task<IReadOnlyCollection<string>> GetViewColumnsAsync(string viewName, CancellationToken ct);
 
+    /// <summary>
+    /// View kolonlarinin SQL veri tipini (nvarchar, int, decimal, datetime2, bit vb.)
+    /// kolon adina map'ler. Frontend Alan Ayarlari modal'inda kolon yaninda kucuk
+    /// chip olarak gosterilir. INFORMATION_SCHEMA.COLUMNS uzerinden okunur.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetViewColumnTypesAsync(string viewName, CancellationToken ct);
+
     // PR 3: UpsertAsync ve DeleteAsync kaldirildi — admin GuideMas CRUD UI
     // gereksiz; GuideMas startup auto-discovery ile besleniyor (DiscoverAndRegisterGuidesAsync).
 

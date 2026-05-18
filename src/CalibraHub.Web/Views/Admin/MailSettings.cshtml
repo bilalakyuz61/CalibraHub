@@ -40,7 +40,7 @@
     <div class="ms-body">
 
         <div class="ms-form-area">
-            <div class="entity-form-toolbar">
+            <div class="entity-form-toolbar cb-sticky-toolbar cb-sticky-toolbar--top">
                 <button type="submit" form="smtp-form" class="btn btn-primary integrator-btn-primary">Kaydet</button>
                 <a asp-action="MailSettings" class="btn btn-secondary integrator-btn-secondary">Yeni</a>
                 @if (editing)
@@ -266,8 +266,17 @@
                         })
                     });
                     var data = await resp.json();
-                    alert(data.isSuccess ? 'Basarili: ' + data.message : 'Hata: ' + data.message);
-                } catch (e) { alert('Test hatasi: ' + e.message); }
+                    // Rapor §6.6 — toast / CalibraAlert tercih
+                    var msg = (data.isSuccess ? 'Basarili: ' : 'Hata: ') + (data.message || '');
+                    if (window.CalibraAlert && CalibraAlert[data.isSuccess ? 'success' : 'error']) CalibraAlert[data.isSuccess ? 'success' : 'error'](msg);
+                    else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(msg, data.isSuccess ? 'ok' : 'err');
+                    else alert(msg);
+                } catch (e) {
+                    var em = 'Test hatasi: ' + e.message;
+                    if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(em);
+                    else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(em, 'err');
+                    else alert(em);
+                }
                 finally { testBtn.disabled = false; testBtn.textContent = 'Baglanti Test Et'; }
             });
         }

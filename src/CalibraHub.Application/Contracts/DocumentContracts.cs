@@ -10,7 +10,9 @@ public sealed record DocumentDto(
     string Status, int RevisionNo, int? ParentDocumentId, string? Notes,
     string? CreatedBy, DateTime CreatedAt, DateTime UpdatedAt, bool IsActive,
     string? ContactCode = null,
-    int? DocumentTypeId = null);
+    int? DocumentTypeId = null,
+    DateTime? DeliveryDate = null,        // Faz M — sipariş için talep edilen teslim tarihi
+    int? DeliveryDays = null);            // Faz M — teslim süresi (gün), DocumentDate'e eklenir
 
 /// <summary>
 /// DocumentLineDto — UI'a gonderilen satir goruntusu. ItemId + CombinationId tablodaki
@@ -52,7 +54,9 @@ public sealed record SaveDocumentRequest(
     string? PaymentTerms, string? DeliveryTerms, string? DeliveryAddress,
     string? Notes, IReadOnlyCollection<SaveDocumentLineRequest> Lines,
     string? ContactCode = null,
-    int? DocumentTypeId = null);
+    int? DocumentTypeId = null,
+    DateTime? DeliveryDate = null,        // Faz M — sipariş için
+    int? DeliveryDays = null);            // Faz M — teslim süresi (gün)
 
 /// <summary>
 /// Client'tan gelen kayit istegi. ItemId zorunludur — malzeme kodu/adi tabloda tutulmaz,

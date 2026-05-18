@@ -11,18 +11,32 @@ import { createRoot } from 'react-dom/client'
 import ErrorBoundary from './components/ErrorBoundary'
 import MaterialListEmbed from './components/MaterialCard/MaterialListEmbed'
 import { SmartBoard } from './components/CalibraSmartBoard'
+import { DocDesignerApp, DocDesignerList } from './components/DocDesigner'
 import AdminWidgetRegistryPanel from './components/AdminWidgetRegistry/AdminWidgetRegistryPanel'
 import ShellRedesignDemo from './components/ShellRedesignDemo/ShellRedesignDemo'
 import Shell from './components/Shell/Shell'
 import CalibraLineItemsGrid from './components/CalibraLineItemsGrid/CalibraLineItemsGrid'
 import DynamicWidgetRenderer from './components/DynamicWidgetRenderer/DynamicWidgetRenderer'
 import FormManagementPanel from './components/FormManagement/FormManagementPanel'
+import FormManagementTree from './components/FormManagement/FormManagementTree'
 import NotesWorkspace from './components/NotesWorkspace/NotesWorkspace'
 import CompanyUserManagementPanel from './components/CompanyUserManagement/CompanyUserManagementPanel'
 import InvoiceDataGrid from './components/InvoiceDataGrid/InvoiceDataGrid'
 import OrgChartWorkspace from './components/OrgChart/OrgChartWorkspace'
 import WhatsAppMessenger from './components/WhatsAppMessenger/WhatsAppMessenger'
 import './components/WhatsAppMessenger/WhatsAppMessenger.css'
+import CardGroupTree from './components/CardGroupTree/CardGroupTree'
+import './components/CardGroupTree/CardGroupTree.css'
+import LocationTree from './components/LocationTree/LocationTree'
+import './components/LocationTree/LocationTree.css'
+import IntegrationsList from './components/IntegrationWizard/IntegrationsList'
+import IntegrationWizard from './components/IntegrationWizard/IntegrationWizard'
+import IntegrationEndpointsList from './components/IntegrationWizard/IntegrationEndpointsList'
+import IntegrationsHub from './components/IntegrationWizard/IntegrationsHub'
+import IntegrationQueue from './components/IntegrationWizard/IntegrationQueue'
+import './components/IntegrationWizard/IntegrationWizard.css'
+import RoutingTree from './components/RoutingTree/RoutingTree'
+import OperationGrid from './components/OperationGrid/OperationGrid'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
 import CombinationPickerModal from './components/CalibraLineItemsGrid/CombinationPickerModal'
@@ -331,6 +345,27 @@ function mountDynamicWidgetRenderer(element, config) {
       try { root.unmount() } catch (e) { /* ignore */ }
       mountedRoots.delete(element)
     },
+  }
+}
+
+/**
+ * FormManagementTree mount — Module → SubModule → SmartCard ağaç görünümü.
+ */
+function mountFormManagementTree(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(FormManagementTree, { config: config })
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
   }
 }
 
@@ -827,6 +862,7 @@ window.CalibraHub.mountShell = mountShell
 window.CalibraHub.mountLineItemsGrid = mountLineItemsGrid
 window.CalibraHub.mountDynamicWidgetRenderer = mountDynamicWidgetRenderer
 window.CalibraHub.mountFormManagement = mountFormManagement
+window.CalibraHub.mountFormManagementTree = mountFormManagementTree
 window.CalibraHub.mountNotesWorkspace = mountNotesWorkspace
 window.CalibraHub.mountCompanyUserManagement = mountCompanyUserManagement
 window.CalibraHub.mountInvoiceDataGrid = mountInvoiceDataGrid
@@ -1059,3 +1095,234 @@ function mountWhatsAppMessenger(element, config) {
   }
 }
 window.CalibraHub.mountWhatsAppMessenger = mountWhatsAppMessenger
+
+/**
+ * CardGroupTree mount — Malzeme/Cari sekmeleri + hiyerarşik ağaç görünümü.
+ * @param {HTMLElement} element
+ * @param {object} treeConfig - { cardTypes, newUrl, deleteApiUrl }
+ */
+function mountCardGroupTree(element, treeConfig) {
+  treeConfig = treeConfig || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(CardGroupTree, { config: treeConfig })
+    )
+  )
+  return {
+    unmount: function() { root.unmount(); mountedRoots.delete(element) }
+  }
+}
+window.CalibraHub.mountCardGroupTree = mountCardGroupTree
+
+/**
+ * DocDesigner mount — band-layout dokuman tasarimcisi (editor).
+ */
+function mountDocDesigner(element, options) {
+  options = options || {}
+  var root = createRoot(element)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(DocDesignerApp, { layoutId: options.layoutId || 0 })
+    )
+  )
+  return { unmount: function () { root.unmount() } }
+}
+function mountDocDesignerList(element) {
+  var root = createRoot(element)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(DocDesignerList, null)
+    )
+  )
+  return { unmount: function () { root.unmount() } }
+}
+window.CalibraHub.mountDocDesigner = mountDocDesigner
+window.CalibraHub.mountDocDesignerList = mountDocDesignerList
+
+/**
+ * RoutingTree mount — Rota Tanımlamaları ağaç görünümü (Rota → Operasyonlar).
+ * @param {HTMLElement} element
+ * @param {object} config - { routings, urls: { save, delete, operationsLookup, refresh } }
+ */
+function mountRoutingTree(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(RoutingTree, { config: config })
+    )
+  )
+  return {
+    unmount: function() { root.unmount(); mountedRoots.delete(element) }
+  }
+}
+window.CalibraHub.mountRoutingTree = mountRoutingTree
+
+/**
+ * OperationGrid mount — Operasyon Tanımlamaları kart grid görünümü.
+ * @param {HTMLElement} element
+ * @param {object} config - { operations: [...], urls: { save, delete, refresh } }
+ */
+function mountOperationGrid(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(OperationGrid, { config: config })
+    )
+  )
+  return {
+    unmount: function() { root.unmount(); mountedRoots.delete(element) }
+  }
+}
+window.CalibraHub.mountOperationGrid = mountOperationGrid
+
+/**
+ * LocationTree mount — Lokasyon Tanımlamaları kart-ağaç görünümü.
+ * @param {HTMLElement} element
+ * @param {object} config - { roots, types, saveUrl, deleteUrl, refreshUrl, maxDepth }
+ */
+function mountLocationTree(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(LocationTree, { config: config })
+    )
+  )
+  return {
+    unmount: function() { root.unmount(); mountedRoots.delete(element) }
+  }
+}
+window.CalibraHub.mountLocationTree = mountLocationTree
+
+/**
+ * IntegrationsList mount — Entegrasyon liste sayfası (SmartBoard-stilinde kart liste).
+ * @param {HTMLElement} element
+ * @param {object} config - { apiBase, wizardUrlNew, wizardUrlEdit }
+ */
+function mountIntegrationsList(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(IntegrationsList, { config: config })
+    )
+  )
+  return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountIntegrationsList = mountIntegrationsList
+
+/**
+ * IntegrationWizard mount — 5-step entegrasyon kurgu sihirbazı.
+ * @param {HTMLElement} element
+ * @param {object} config - { apiBase, integrationId, listUrl }
+ */
+function mountIntegrationWizard(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(IntegrationWizard, { config: config })
+    )
+  )
+  return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountIntegrationWizard = mountIntegrationWizard
+
+/**
+ * IntegrationEndpointsList mount — REST endpoint katalog admin sayfası.
+ */
+function mountIntegrationEndpointsList(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(IntegrationEndpointsList, { config: config })
+    )
+  )
+  return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountIntegrationEndpointsList = mountIntegrationEndpointsList
+
+/**
+ * IntegrationsHub mount — Tek sayfa, 2 tab: Entegrasyonlar + Endpointler.
+ * @param {HTMLElement} element
+ * @param {object} config - { apiBase, wizardUrlNew, wizardUrlEdit, initialTab? }
+ */
+function mountIntegrationsHub(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(IntegrationsHub, { config: config })
+    )
+  )
+  return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountIntegrationsHub = mountIntegrationsHub
+
+/**
+ * IntegrationQueue mount — Aktarım Kuyruğu sayfası.
+ * Manual tetikleyicili entegrasyonların bekleyen kayıtlarını listeler,
+ * tekli/toplu aktarım + "Hariç Tut" işlemlerini yönetir.
+ * @param {HTMLElement} element
+ * @param {object} config - { apiBase }
+ */
+function mountIntegrationQueue(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(IntegrationQueue, { config: config })
+    )
+  )
+  return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountIntegrationQueue = mountIntegrationQueue

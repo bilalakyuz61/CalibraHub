@@ -12,6 +12,7 @@ public sealed class DocumentService : IDocumentService
     private readonly IFinanceService _financeService;
     private readonly IDocumentTypeRepository _documentTypeRepo;
     private readonly IDocumentSourceRepository _docSourceRepo;
+    private readonly IDocumentNumberService? _docNumberService;
     private const string DefaultSalesQuoteTypeCode = "satis_teklifi";
     private const string DefaultSalesOrderTypeCode = "satis_siparisi";
 
@@ -19,12 +20,46 @@ public sealed class DocumentService : IDocumentService
         IDocumentRepository repo,
         IFinanceService financeService,
         IDocumentTypeRepository documentTypeRepo,
-        IDocumentSourceRepository docSourceRepo)
+        IDocumentSourceRepository docSourceRepo,
+        IDocumentNumberService? docNumberService = null)
     {
         _repo = repo;
         _financeService = financeService;
         _documentTypeRepo = documentTypeRepo;
         _docSourceRepo = docSourceRepo;
+        _docNumberService = docNumberService;
+    }
+
+    /// <summary>
+    /// Faz P — Yeni belge numarası türetme: önce DocumentNumberRule kontrol et,
+    /// kural yoksa eski default davranışa fallback (repo.GetNextDocumentNumberAsync).
+    /// Yeni belge tipleri için admin DocumentNumberRule tanımlayınca otomatik etkin olur.
+    /// </summary>
+    private async Task<string> ResolveNextDocumentNumberAsync(
+        int documentTypeId, int? contactId, int? userId, DateTime issueDate, CancellationToken ct)
+    {
+        if (_docNumberService is not null)
+        {
+            // ContactGroupId resolve — Contact var ise grubunu çek
+            int? contactGroupId = null;
+            if (contactId is > 0)
+            {
+                var contact = await _financeService.GetContactByIdAsync(contactId.Value, ct);
+                contactGroupId = contact?.ContactGroupId;
+            }
+            var ctx = new DocumentNumberContext(
+                DocumentTypeId: documentTypeId,
+                ContactId:      contactId,
+                ContactGroupId: contactGroupId,
+                UserId:         userId,
+                BranchId:       null,             // ileride
+                IssueDate:      issueDate);
+            var generated = await _docNumberService.GenerateNextAsync(ctx, ct);
+            if (!string.IsNullOrWhiteSpace(generated)) return generated;
+        }
+
+        // Fallback: kural yok → eski sayaç (TKL{yyMM}{seq}) davranışı korunur (geriye uyum)
+        return await _repo.GetNextDocumentNumberAsync(ct);
     }
 
     private async Task<int?> ResolveDefaultQuoteTypeIdAsync(CancellationToken ct)
@@ -180,7 +215,15 @@ public sealed class DocumentService : IDocumentService
         request = request with { ContactId = resolvedContactId, ContactName = resolvedContactName };
 
         var isNew = !request.Id.HasValue || request.Id.Value == 0;
-        var quoteNumber = isNew ? await _repo.GetNextDocumentNumberAsync(ct) : "";
+        var effectiveTypeIdForNumber = request.DocumentTypeId ?? await ResolveDefaultQuoteTypeIdAsync(ct) ?? 0;
+        var quoteNumber = isNew
+            ? await ResolveNextDocumentNumberAsync(
+                documentTypeId: effectiveTypeIdForNumber,
+                contactId:      request.ContactId,
+                userId:         null,    // current user — controller catch eder, ileride pass
+                issueDate:      request.DocumentDate,
+                ct)
+            : "";
 
         // Satirlari hesapla
         var lineRequests = request.Lines.ToArray();
@@ -229,6 +272,8 @@ public sealed class DocumentService : IDocumentService
                 DocumentTypeId = effectiveDocumentTypeId,
                 DocumentDate = request.DocumentDate,
                 ValidUntil = request.ValidUntil,
+                DeliveryDate = request.DeliveryDate,    // Faz M
+                DeliveryDays = request.DeliveryDays,    // Faz M
                 ContactId = request.ContactId,
                 ContactName = request.ContactName,
                 ContactAddress = request.ContactAddress,
@@ -260,6 +305,8 @@ public sealed class DocumentService : IDocumentService
             existing.DocumentTypeId = request.DocumentTypeId ?? existing.DocumentTypeId ?? effectiveDocumentTypeId;
             existing.DocumentDate = request.DocumentDate;
             existing.ValidUntil = request.ValidUntil;
+            existing.DeliveryDate = request.DeliveryDate;    // Faz M
+            existing.DeliveryDays = request.DeliveryDays;    // Faz M
             existing.ContactId = request.ContactId;
             existing.ContactName = request.ContactName;
             existing.ContactAddress = request.ContactAddress;
@@ -291,6 +338,8 @@ public sealed class DocumentService : IDocumentService
                 DocumentTypeId = quote.DocumentTypeId,
                 DocumentDate = quote.DocumentDate,
                 ValidUntil = quote.ValidUntil,
+                DeliveryDate = quote.DeliveryDate,    // Faz M
+                DeliveryDays = quote.DeliveryDays,    // Faz M
                 ContactId = quote.ContactId,
                 ContactName = quote.ContactName,
                 ContactAddress = quote.ContactAddress,
@@ -405,7 +454,9 @@ public sealed class DocumentService : IDocumentService
         q.Status.ToString(), q.RevisionNo, q.ParentDocumentId, q.Notes,
         q.CreatedBy, q.CreatedAt, q.UpdatedAt, q.IsActive,
         q.ContactCode,
-        q.DocumentTypeId);
+        q.DocumentTypeId,
+        q.DeliveryDate,        // Faz M
+        q.DeliveryDays);       // Faz M
 
     /// <summary>
     /// Satir revizyonu — repository katmanina delege eder. Widget degerlerinin
@@ -475,8 +526,14 @@ public sealed class DocumentService : IDocumentService
         {
             var first = grp.First().Quote;
 
-            // Yeni siparis numarasi
-            var orderNumber = await _repo.GetNextDocumentNumberAsync(ct);
+            // Yeni siparis numarasi — Faz P: kurala göre türet, yoksa eski fallback
+            var orderTypeIdForNumber = await ResolveDefaultOrderTypeIdAsync(ct) ?? 0;
+            var orderNumber = await ResolveNextDocumentNumberAsync(
+                documentTypeId: orderTypeIdForNumber,
+                contactId:      first.ContactId,
+                userId:         null,
+                issueDate:      DateTime.Now,
+                ct);
 
             // Tutar hesabi: subtotal = tum gruptaki line'larin line_total toplami
             var allLines = grp.SelectMany(t => t.Lines).ToArray();

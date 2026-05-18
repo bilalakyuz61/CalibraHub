@@ -52,12 +52,6 @@ public interface ILogisticsConfigurationRepository
     Task UpdateMachineAsync(Machine machine, CancellationToken cancellationToken);
     Task DeleteMachineAsync(int machineId, CancellationToken cancellationToken);
 
-    // ── MachineType referans verisi ──────────────────────────────────
-    Task<IReadOnlyCollection<MachineType>> GetMachineTypesAsync(CancellationToken cancellationToken);
-    Task<int> AddMachineTypeAsync(MachineType type, CancellationToken cancellationToken);
-    Task UpdateMachineTypeAsync(MachineType type, CancellationToken cancellationToken);
-    Task DeleteMachineTypeAsync(int id, CancellationToken cancellationToken);
-    Task<int> CountMachinesUsingTypeAsync(string typeCode, CancellationToken cancellationToken);
     Task<int> AddPropertyAsync(ItemFeature property, CancellationToken cancellationToken);
     Task ReplaceFeatureStockLinksAsync(
         int featureId,
@@ -127,6 +121,12 @@ public interface ILogisticsConfigurationRepository
     Task DeleteBOMAsync(int id, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<CombinationLookupRow>> GetCombinationsByMaterialCodeAsync(
         string materialCode, CancellationToken cancellationToken);
+    /// <summary>
+    /// Tüm aktif kombinasyonlar — "Tanımlı Kombinasyonlar" liste ekranı için.
+    /// Parent stok bilgisi (Items JOIN ile ItemId/ItemCode/ItemName) ve özellik/değer
+    /// ayrıntısı dahil tek call'da döner.
+    /// </summary>
+    Task<IReadOnlyCollection<CombinationListItemDto>> GetAllCombinationsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyCollection<MaterialGroup>> GetMaterialGroupsAsync(int? category, CancellationToken cancellationToken);
     Task AddMaterialGroupAsync(MaterialGroup group, CancellationToken cancellationToken);
     Task UpdateMaterialGroupAsync(MaterialGroup group, CancellationToken cancellationToken);

@@ -29,6 +29,11 @@ public sealed class DocumentType
     public string? RequiredKeyColumn { get; init; }
 
     public string? Description { get; init; }
+    // NOT (Faz N revize): UI yonlendirme + entegrasyon metadata'si Forms tablosunda
+    // tutulur, DocumentType'da DEGIL. Cunku ListUrl/Icon/IsTransferable form-seviyesi
+    // ozellikleri (her form'un kendi liste sayfasi, ikonu, transferable durumu olur);
+    // belge tipi ise raporlama/gruplama icin kavramsal varlık. Forms.FormCode bazinda
+    // sorulur. Bu sayede tek-formlu belge tipleri (CONTACTS, ITEMS) icin de calisir.
 
     [Description("Soft delete — listede gosterilir mi?")]
     public bool IsActive { get; set; } = true;

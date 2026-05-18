@@ -2,6 +2,7 @@ using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Services;
+using CalibraHub.Application.Services.Integration;
 using CalibraHub.Infrastructure.Integrations;
 using CalibraHub.Infrastructure.Reporting;
 using CalibraHub.Persistence.Database;
@@ -86,11 +87,10 @@ var useInMemoryPersistence = builder.Environment.IsDevelopment() &&
 var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, ".app-data-protection");
 
 builder.Services.AddScoped<IDocumentImportService, DocumentImportService>();
-builder.Services.AddSingleton<IReportService, FastReportService>();
-builder.Services.AddScoped<IDocumentGenerationService, DocumentGenerationService>();
+// Eski FastReport servisleri (IReportService, IDocumentGenerationService,
+// IReportTemplateRepository, IReportTemplateSourceRepository) kaldirildi —
+// tum belge basimlari artik Belge Tasarimcisi (DocDesigner) uzerinden yapilir.
 builder.Services.AddScoped<IDocumentTypeRepository, SqlDocumentTypeRepository>();
-builder.Services.AddScoped<IReportTemplateRepository, SqlReportTemplateRepository>();
-builder.Services.AddScoped<IReportTemplateSourceRepository, SqlReportTemplateSourceRepository>();
 // Sistem Ayarlari gate + lisans dogrulama
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IGateCredentialsRepository,
                            CalibraHub.Persistence.Repositories.SqlGateCredentialsRepository>();
@@ -136,6 +136,8 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ISchedul
                            CalibraHub.Infrastructure.Scheduling.HttpApiTaskExecutor>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
                            CalibraHub.Infrastructure.Scheduling.ViewReportTaskExecutor>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Application.Services.Scheduling.IntegrationTaskExecutor>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IEmailSender,
                            CalibraHub.Infrastructure.Notifications.SmtpEmailSender>();
 builder.Services.AddScoped<CalibraHub.Application.Services.Scheduling.IScheduledTaskDispatcher,
@@ -154,11 +156,17 @@ builder.Services.AddScoped<IUiTextService, UiTextService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<CollaborationRuntimeStore>();
+builder.Services.AddHostedService<CollaborationStartupLoadService>();
 builder.Services.AddHostedService<CollaborationCleanupService>();
+
+// Named HTTP clients — static HttpClient anti-pattern yerine IHttpClientFactory ile pool yonetilir
+builder.Services.AddHttpClient("tcmb", c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient("integrator-reachability", c => c.Timeout = TimeSpan.FromSeconds(10));
 
 if (useMockIntegratorClient)
 {
-    builder.Services.AddSingleton<IIntegratorDocumentClient>(_ => new MockIntegratorDocumentClient(simulatedDocumentsPerPull));
+    builder.Services.AddSingleton<IIntegratorDocumentClient>(sp => new MockIntegratorDocumentClient(
+        sp.GetRequiredService<IHttpClientFactory>(), simulatedDocumentsPerPull));
 }
 else
 {
@@ -171,7 +179,6 @@ builder.Services.AddSingleton(bootstrapAdminOptions);
 builder.Services.AddSingleton<CompanyConnectionRegistry>();
 builder.Services.AddSingleton<ICompanyConnectionRegistry>(sp => sp.GetRequiredService<CompanyConnectionRegistry>());
 builder.Services.AddSingleton<SqlServerConnectionFactory>();
-builder.Services.AddScoped<CalibraHub.Web.Infrastructure.Reporting.ReportSchemaProvider>();
 builder.Services.AddScoped<ILogisticsConfigurationRepository, SqlLogisticsConfigurationRepository>();
 builder.Services.AddScoped<IFinanceRepository, SqlFinanceRepository>();
 builder.Services.AddScoped<IAddressRepository, SqlAddressRepository>();
@@ -179,17 +186,56 @@ builder.Services.AddScoped<IContactItemRepository, SqlContactItemRepository>();
 builder.Services.AddScoped<IDbSchemaRepository, SqlDbSchemaRepository>();
 builder.Services.AddScoped<IDbSchemaService, DbSchemaService>();
 builder.Services.AddScoped<ICardGroupRepository, SqlCardGroupRepository>();
+builder.Services.AddScoped<ICollaborationLockRepository, SqlCollaborationLockRepository>();
 builder.Services.AddScoped<IDesignTemplateRepository, SqlDesignTemplateRepository>();
-builder.Services.AddScoped<IIntegrationEventRepository, SqlIntegrationEventRepository>();
 builder.Services.AddScoped<IIntegrationApiProfileRepository, SqlIntegrationApiProfileRepository>();
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<IIntegrationEventService, IntegrationEventService>();
 builder.Services.AddScoped<IDocumentRepository, SqlDocumentRepository>();
 builder.Services.AddScoped<IDocumentSourceRepository, SqlDocumentSourceRepository>();
 builder.Services.AddScoped<IUserSettingRepository, SqlUserSettingRepository>();
 builder.Services.AddScoped<ISalesRepresentativeRepository, SqlSalesRepresentativeRepository>();
 builder.Services.AddScoped<ISalesRepresentativeService, SalesRepresentativeService>();
+builder.Services.AddScoped<ICariGroupRepository, SqlCariGroupRepository>();
+builder.Services.AddScoped<ICariGroupService, CariGroupService>();
+builder.Services.AddScoped<IIntegrationRepository, SqlIntegrationRepository>();
+builder.Services.AddScoped<IBodyTemplateRepository, SqlBodyTemplateRepository>();
+builder.Services.AddScoped<IFormLinesRepository, SqlFormLinesRepository>();
+builder.Services.AddScoped<IItemCombinationResolver, SqlItemCombinationResolver>();
+builder.Services.AddScoped<IPostProcedureExecutor, SqlPostProcedureExecutor>();
+builder.Services.AddScoped<IIntegrationStatusTracker, SqlIntegrationStatusTracker>();
+builder.Services.AddScoped<IIntegrationRecordStatusRepository, SqlIntegrationRecordStatusRepository>();
+builder.Services.AddScoped<IIntegrationQueueService, SqlIntegrationQueueService>();
+builder.Services.AddScoped<IIntegrationDocCatalogRepository, SqlIntegrationDocCatalogRepository>();
+builder.Services.AddScoped<IIntegrationDocCatalogService, IntegrationDocCatalogService>();
+builder.Services.AddHostedService<CalibraHub.Web.Services.IntegrationDocCatalogSeedService>();
+builder.Services.AddScoped<IDocumentNumberService, SqlDocumentNumberService>();
+builder.Services.AddScoped<IDocumentNumberRuleRepository, SqlDocumentNumberRuleRepository>();
+builder.Services.AddScoped<IFormMetadataService, FormMetadataService>();
+builder.Services.AddScoped<IMappingEngine, MappingEngine>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IIntegrationLookupFunctionDefinitionRepository,
+                           CalibraHub.Persistence.Repositories.SqlIntegrationLookupFunctionDefinitionRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IIntegrationLookupFunctionRegistry,
+                           CalibraHub.Persistence.Repositories.SqlIntegrationLookupFunctionRegistry>();
+// NOT: IntegrationLookupFunctionAdminService DI'dan kaldirildi — admin UI artik yok.
+// Kullanici DB tarafinda 3-paramli SQL function tanimliyor; wizard direkt DB function
+// listesinden secim yapiyor (/Integrations/api/db-functions endpoint).
+builder.Services.AddScoped<IIntegrationAuthHandler, IntegrationAuthHandler>();
+builder.Services.AddSingleton<IEndpointCatalogService, CalibraHub.Web.Services.EndpointCatalogService>();
+// Eager warm-up: Lazy yerine startup'ta parse — CSV bulunamiyorsa veya parse hatasi
+// varsa erken yakala (lazy ise ilk istegi atan kullaniciya geri donus)
+builder.Services.AddScoped<IHttpExecutor, HttpExecutor>();
+builder.Services.AddScoped<IBodySchemaResolver, BodySchemaResolver>();
+builder.Services.AddScoped<IIntegrationRunner, IntegrationRunner>();
+builder.Services.AddScoped<IIntegrationService, IntegrationService>();
+// OnSave dispatcher — Save sonrasi otomatik trigger'lari arka planda fire eder.
+// Singleton: scope'u kendi acar (IServiceScopeFactory uzerinden), HTTP context bittikten sonra calisir.
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IIntegrationOnSaveDispatcher,
+                              CalibraHub.Application.Services.Integration.IntegrationOnSaveDispatcher>();
+// Mapster (rapor §2.4) — entity ↔ DTO mapping. Yeni kod IMapper veya .Adapt() kullanir.
+builder.Services.AddSingleton(CalibraHub.Application.Mapping.MapsterConfig.BuildTypeAdapterConfig());
+builder.Services.AddScoped<MapsterMapper.IMapper, MapsterMapper.ServiceMapper>();
+
 builder.Services.AddScoped<ICurrencyRepository, SqlCurrencyRepository>();
 builder.Services.AddScoped<IExchangeRateRepository, SqlExchangeRateRepository>();
 builder.Services.AddScoped<ICurrencyService, CurrencyService>();
@@ -201,6 +247,10 @@ builder.Services.AddScoped<IGuideService, GuideService>();
 
 // Form Yöneticisi (dbo.Forms CRUD)
 builder.Services.AddScoped<IFormRepository, SqlFormRepository>();
+
+// Depo İşlemleri (Transfer + Ambar Giriş/Çıkış)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IStockDocRepository,
+                           CalibraHub.Persistence.Repositories.SqlStockDocRepository>();
 
 // Sabit alan ayarlari (FldSet — rehber eslestirme)
 builder.Services.AddScoped<IFieldSettingRepository, SqlFieldSettingRepository>();
@@ -243,6 +293,10 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWork
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWorkOrderOperationService,
     CalibraHub.Application.Services.WorkOrderOperationService>();
 
+// Is Emri Bilesenleri (Faz 2 — BOM patlatma ciktisi)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderComponentRepository,
+    CalibraHub.Persistence.Repositories.SqlWorkOrderComponentRepository>();
+
 // Personnel — uretim personneli kartlari (User tablosundan ayri, Faz 3a revize)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPersonnelRepository,
     CalibraHub.Persistence.Repositories.SqlPersonnelRepository>();
@@ -260,6 +314,28 @@ builder.Services.AddScoped<IReportEngineService, ReportEngineService>();
 builder.Services.AddScoped<IDocLayoutRepository, SqlDocLayoutRepository>();
 builder.Services.AddScoped<IDocLayoutRenderer, DocLayoutRenderer>();
 builder.Services.AddScoped<IDocDesignerService, DocDesignerService>();
+
+// Dinamik Tasarım Seçim Motoru
+// Yeni kriter eklemek için: IDesignCriterion implementasyonu + AddSingleton.
+// Repository ve Provider'a dokunmak gerekmez (Open/Closed).
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.DesignProvider.IDesignCriterion,
+                              CalibraHub.Application.Services.DesignProvider.CustomerCriterion>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.DesignProvider.IDesignCriterion,
+                              CalibraHub.Application.Services.DesignProvider.ContactGroupCriterion>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.DesignProvider.IDesignCriterion,
+                              CalibraHub.Application.Services.DesignProvider.UserCriterion>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.DesignProvider.IDesignCriterion,
+                              CalibraHub.Application.Services.DesignProvider.BranchCriterion>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.DesignProvider.IDesignCriterion,
+                              CalibraHub.Application.Services.DesignProvider.WarehouseCriterion>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDocLayoutRuleRepository,
+                           CalibraHub.Persistence.Repositories.SqlDocLayoutRuleRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.DesignProvider.IDesignProvider,
+                           CalibraHub.Application.Services.DesignProvider.DesignProvider>();
+builder.Services.AddScoped<IDocLayoutRuleService, DocLayoutRuleService>();
+
+// PrintDispatcher — Belge Tasarimcisi (DocDesigner) yoluyla PDF uretir
+builder.Services.AddScoped<IPrintDispatcher, PrintDispatcher>();
 
 // EAV widget sistemi
 builder.Services.AddScoped<IWidgetRepository, SqlWidgetRepository>();
@@ -309,6 +385,8 @@ else
     builder.Services.AddScoped<INoteRepository, SqlNoteRepository>();
     builder.Services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
     builder.Services.AddScoped<IOrgChartRepository, SqlOrgChartRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAttachmentRepository,
+                               CalibraHub.Persistence.Repositories.SqlAttachmentRepository>();
 }
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -374,6 +452,29 @@ mvcBuilder.AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
 });
+
+// ── Mobile API CORS ──────────────────────────────────────────────────────
+// Android companion app (mobile/CalibraHubAndroid) icin. AVD emulator
+// host alias'i 10.0.2.2; fiziksel cihazlar LAN IP'siyle gelir. Production
+// erp.calibrahub.com da listeye eklendi.
+// Sadece /api/mobile/* rotalarinin [EnableCors("MobileApi")] attribute'u ile
+// devreye girer; diger rotalar etkilenmez.
+var mobileCorsOrigins = builder.Configuration
+    .GetSection("Mobile:CorsAllowedOrigins").Get<string[]>()
+    ?? new[]
+    {
+        "http://10.0.2.2",          // Android emulator → host
+        "http://localhost",
+        "http://127.0.0.1",
+        "https://erp.calibrahub.com"
+    };
+builder.Services.AddCors(opt => opt.AddPolicy("MobileApi", p => p
+    .WithOrigins(mobileCorsOrigins)
+    .SetIsOriginAllowedToAllowWildcardSubdomains()
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()));
+
 if (builder.Environment.IsDevelopment())
 {
     mvcBuilder.AddRazorRuntimeCompilation();
@@ -383,6 +484,18 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 
 var app = builder.Build();
+
+// Endpoint katalog warm-up — startup'ta CSV parse, hata olursa erken yakala
+try
+{
+    var catalog = app.Services.GetRequiredService<IEndpointCatalogService>();
+    var count = catalog.GetAll().Count;
+    app.Logger.LogInformation("[EndpointCatalog] {Count} endpoint katalogtan yuklendi.", count);
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "[EndpointCatalog] Yukleme basarisiz — combobox bos kalir.");
+}
 
 using (var scope = app.Services.CreateScope())
 {
@@ -466,7 +579,7 @@ using (var scope = app.Services.CreateScope())
     {
         var dbInitForCompanies = scope.ServiceProvider.GetRequiredService<CalibraDatabaseInitializer>();
 
-        // Master (system) DB adini connection string'den cozup FastReport view'inde
+        // Master (system) DB adini connection string'den cozup vw_ReportDocument view'inde
         // 3-parcali isim [Calibra].[dbo].[Company] referansi icin kullaniriz.
         // Config'deki connection string DPAPI ile sifreli; startup'ta cozulmus
         // degeri databaseOptions.ConnectionString'den aliyoruz.
@@ -495,7 +608,7 @@ using (var scope = app.Services.CreateScope())
                     "[Guide Schema] Sirket {CompanyId} icin view tazeleme basarisiz", c.Id);
             }
 
-            // FastReport belge view'i — vw_ReportDocument + stored proc.
+            // DocDesigner belge view'i — vw_ReportDocument + stored proc.
             // Idempotent CREATE OR ALTER; her startup'ta v_Flat_* widget
             // kolonlarini hw_* / lw_* olarak yansitan guncel view uretir.
             try
@@ -516,6 +629,11 @@ using (var scope = app.Services.CreateScope())
 // Development'ta view'da stack trace + detay gosterilir; Prod'da sadece kullanici-dostu mesaj.
 // Bu, default developer exception page (sari sayfa) yerine kurumsal gorunum saglar.
 app.UseExceptionHandler("/Home/Error");
+// JSON API endpoint'leri icin standart ApiResponse<T> formatinda hata cevabi.
+// HTML akisi etkilenmez (UseExceptionHandler'a re-throw eder). Rapor §2.7.
+// Sirasi: UseExceptionHandler'dan SONRA, UseRouting'ten ONCE.
+app.UseApiExceptionHandler();
+
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
@@ -528,6 +646,10 @@ app.UseRouting();
 app.UseSession();  // GateController'in Session'a erisimi icin
 app.UseAuthentication();
 app.UseAuthorization();
+
+// CORS — Authentication'dan sonra ki cookie-based credentials akabilsin.
+// Sadece [EnableCors("MobileApi")] olan endpoint'lerde devreye girer.
+app.UseCors();
 app.UseMiddleware<WorkspaceRedirectPreservationMiddleware>();
 
 app.Use(async (context, next) =>

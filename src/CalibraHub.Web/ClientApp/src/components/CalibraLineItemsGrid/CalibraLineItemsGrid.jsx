@@ -450,9 +450,34 @@ export default function CalibraLineItemsGrid(props) {
       next[rowUid] = true
       return next
     })
-    // Sure dolunca gercek silmeyi yap
+    // Sure dolunca gercek silmeyi yap.
+    // ONEMLI: Silinen satir aktif (revisedFromId=null) satirsa, ona isaret eden
+    // eski revizyon satirlari da zincir boyunca silinmeli. Aksi halde kayit
+    // silinince eski surum gorunur hale gelir. Save sirasinda da getRows()
+    // listesinden cikan tum id'ler backend tarafindan DELETE edilir.
     var tid = setTimeout(function () {
-      setRows(function (prev) { return prev.filter(function (r) { return r._uid !== rowUid }) })
+      setRows(function (prev) {
+        var target = prev.find(function (r) { return r._uid === rowUid })
+        if (!target) return prev
+        // Zinciri BFS ile topla: hedef + hedefin id'sine isaret eden eski surumleri bul
+        var removeUids = {}
+        removeUids[target._uid] = true
+        var queue = [target]
+        var guard = 0
+        while (queue.length > 0 && guard < 50) {
+          var cur = queue.shift()
+          guard++
+          if (!cur.id || Number(cur.id) <= 0) continue
+          var curId = Number(cur.id)
+          prev.forEach(function (r) {
+            if (r.revisedFromId != null && Number(r.revisedFromId) === curId && !removeUids[r._uid]) {
+              removeUids[r._uid] = true
+              queue.push(r)
+            }
+          })
+        }
+        return prev.filter(function (r) { return !removeUids[r._uid] })
+      })
       setPendingDelete(function (prev) {
         var next = Object.assign({}, prev)
         delete next[rowUid]
@@ -607,12 +632,19 @@ export default function CalibraLineItemsGrid(props) {
   }
 
   // ── Footer subtotal hesapla ──
+  // ÖNEMLI: Revize edilmis (superseded) parent satirlar UI'da gizli — bunlari
+  // topluya KATMA. Aksi halde revize sonrasi toplam ciftleyip kullaniciya
+  // "neden eski kalemi de sayiyor?" hissi verir.
   var subtotals = useMemo(function() {
     var out = {}
     if (footer.showSubtotal && Array.isArray(footer.subtotalColumns)) {
+      // Aktif satirlar: revisedFromId bos — eski (superseded) satirlar kendi revisedFromId'sini tasir
+      var liveRows = rows.filter(function (r) {
+        return r.revisedFromId == null || Number(r.revisedFromId) <= 0
+      })
       footer.subtotalColumns.forEach(function(colKey) {
         var sum = 0
-        rows.forEach(function(r) {
+        liveRows.forEach(function(r) {
           var v = r[colKey]
           if (typeof v === 'number') sum += v
           else if (v != null && v !== '') {
@@ -750,17 +782,9 @@ export default function CalibraLineItemsGrid(props) {
         ) : (
           <AnimatePresence initial={false}>
             {(function () {
-              // supersededIds — revise edilmis (artik gorunmeyen) satir id'leri
-              var supersededIds = {}
-              rows.forEach(function (r) {
-                if (r.revisedFromId != null && Number(r.revisedFromId) > 0) {
-                  supersededIds[Number(r.revisedFromId)] = true
-                }
-              })
+              // Aktif satirlar: revisedFromId bos — eski (superseded) satirlarda revisedFromId dolu
               var visibleRows = rows.filter(function (r) {
-                // Id yoksa (yeni satir veya yeni revize — henuz kaydedilmemis) her zaman gorunur
-                if (r.id == null || Number(r.id) <= 0) return true
-                return !supersededIds[Number(r.id)]
+                return r.revisedFromId == null || Number(r.revisedFromId) <= 0
               })
               if (visibleRows.length === 0) {
                 // Tum satirlar revize edilmis (edge case) — bos mesaji goster
@@ -1315,7 +1339,10 @@ export default function CalibraLineItemsGrid(props) {
           function goToStockCard() {
             close()
             if (!itemId) {
-              alert('Bu satirda malzeme secilmedi — stok kartina gidilemedi.')
+              // Rapor §6.6 — toast fallback
+              var m = 'Bu satirda malzeme secilmedi — stok kartina gidilemedi.'
+              if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(m, 'warn')
+              else alert(m)
               return
             }
             openInWorkspaceTab(
@@ -1374,7 +1401,8 @@ export default function CalibraLineItemsGrid(props) {
 
           // Revize: satir kilidinden bagimsiz calisir. Kayitsiz (id yok) satir icin de
           // menu acilir ama createRevision icinde id yoksa uyari veriliyor — UX tutarli.
-          var reviseHasParent = srow && srow.revisedFromId != null && Number(srow.revisedFromId) > 0
+          var reviseHasParent = srow && srow.id != null && Number(srow.id) > 0 &&
+            rows.some(function (r) { return r.revisedFromId != null && Number(r.revisedFromId) === Number(srow.id) })
           var reviseLabel = reviseHasParent ? 'Revize Et / Gecmisi Goster' : 'Revize Et'
 
           // Item tanimi — ileride yeni kisayollar buraya eklenir (barkod bas,
@@ -1644,20 +1672,32 @@ export default function CalibraLineItemsGrid(props) {
           var draft = reviseModal.draft || {}
 
           // Revize zinciri — kok (orijinal) -> son revizelere dogru
+          // Yeni yon: eski satirlarda revisedFromId = daha yeni satirin id'si
+          // row (aktif, revisedFromId=null) baslangic; gerideki surumleri bul
           var chain = []
           var seen = {}
           var cur = row
-          while (cur) {
-            if (seen[cur._uid] || seen['id:' + cur.id]) break
+          if (cur) {
             seen[cur._uid] = true
             if (cur.id) seen['id:' + cur.id] = true
             chain.push(cur)
-            if (!cur.revisedFromId) break
-            cur = rows.find(function (r) { return Number(r.id) === Number(cur.revisedFromId) })
+          }
+          var guard = 0
+          while (cur && cur.id && Number(cur.id) > 0 && guard < 50) {
+            guard++
+            var curId = Number(cur.id)
+            var predecessor = rows.find(function (r) {
+              return r.revisedFromId != null && Number(r.revisedFromId) === curId && !seen[r._uid]
+            })
+            if (!predecessor) break
+            seen[predecessor._uid] = true
+            if (predecessor.id) seen['id:' + predecessor.id] = true
+            chain.push(predecessor)
+            cur = predecessor
           }
           chain.reverse() // orijinal en basta, bu satir en altta
           var chainIndex = chain.length - 1 // bu satirin pozisyonu (0 = orijinal)
-          var hasRevisionParent = row.revisedFromId != null && Number(row.revisedFromId) > 0
+          var hasRevisionParent = chain.length > 1
 
           // Tarih/para formatlamak icin kisa yardimci — satir icinde inline
           var fmtNum = function (n) {
@@ -1691,7 +1731,11 @@ export default function CalibraLineItemsGrid(props) {
           function createRevision() {
             var parentId = Number(row.id)
             if (!parentId || parentId <= 0) {
-              alert('Once ana belgeyi kaydedin — kayitli olmayan satir revize edilemez.')
+              // Rapor §6.6 — toast fallback
+              var m0 = 'Once ana belgeyi kaydedin — kayitli olmayan satir revize edilemez.'
+              if (window.CalibraAlert && window.CalibraAlert.warn) window.CalibraAlert.warn(m0)
+              else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(m0, 'warn')
+              else alert(m0)
               return
             }
             // Server-side atomik revize — /Sales/ReviseLine tek transaction:
@@ -1715,7 +1759,11 @@ export default function CalibraLineItemsGrid(props) {
               .then(function (resp) { return resp.json() })
               .then(function (data) {
                 if (!data || data.success !== true) {
-                  alert('Revize basarisiz: ' + (data && data.message ? data.message : 'bilinmeyen hata'))
+                  // Rapor §6.6 — toast fallback
+                  var m1 = 'Revize basarisiz: ' + (data && data.message ? data.message : 'bilinmeyen hata')
+                  if (window.CalibraAlert && window.CalibraAlert.error) window.CalibraAlert.error(m1)
+                  else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(m1, 'err')
+                  else alert(m1)
                   setReviseModal(function (m) { return m ? Object.assign({}, m, { saving: false }) : m })
                   return
                 }
@@ -1745,7 +1793,10 @@ export default function CalibraLineItemsGrid(props) {
                   .catch(function () { /* swallow */ })
               })
               .catch(function (err) {
-                alert('Revize hatasi: ' + (err && err.message ? err.message : String(err)))
+                var m2 = 'Revize hatasi: ' + (err && err.message ? err.message : String(err))
+                if (window.CalibraAlert && window.CalibraAlert.error) window.CalibraAlert.error(m2)
+                else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(m2, 'err')
+                else alert(m2)
                 setReviseModal(function (m) { return m ? Object.assign({}, m, { saving: false }) : m })
               })
           }

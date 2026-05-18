@@ -7,6 +7,9 @@ public sealed class Machine
 {
     public int Id { get; init; }
 
+    /// <summary>Sahip sirket — multi-tenant icin gerekli (per-company DB olsa bile tutulur).</summary>
+    public int CompanyId { get; init; }
+
     /// <summary>FK Location.Id — makinenin bulundugu fiziki lokasyon.</summary>
     public int LocationId { get; init; }
 
@@ -15,9 +18,6 @@ public sealed class Machine
 
     /// <summary>Makinenin gorunur adi (ornek: "CNC-1 Torna").</summary>
     public string? MachineName { get; init; }
-
-    /// <summary>Makine tipi/kategorisi (CNC, Press, Montaj vb.) — serbest metin.</summary>
-    public string? MachineType { get; init; }
 
     /// <summary>Saatlik max uretim kapasitesi (mamul birimi cinsinden).</summary>
     public decimal? HourlyCapacity { get; init; }

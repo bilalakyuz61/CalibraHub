@@ -8,7 +8,7 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class InMemoryDevelopmentBootstrapper
 {
     private const int DefaultCompanyId = 1;
-    private static readonly Guid DefaultDepartmentId = Guid.Parse("8ad68ef8-63f8-4a26-a7fd-62c4fcbac120");
+    private const int DefaultDepartmentId = 1;
     private static readonly Guid DefaultAdminUserId = Guid.Parse("0dbb6f1d-9a15-4f6f-b1f0-661bb6b43ec2");
     private const string DefaultPassword = "12345678";
 
@@ -89,7 +89,6 @@ public sealed class InMemoryDevelopmentBootstrapper
         {
             Id = DefaultDepartmentId,
             CompanyId = companyId,
-            Code = "FIN",
             Name = "Finans"
         };
 

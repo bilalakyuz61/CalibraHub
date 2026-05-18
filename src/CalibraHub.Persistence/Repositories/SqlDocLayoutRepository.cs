@@ -195,6 +195,23 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task SetDefaultAsync(int id, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            DECLARE @DocType nvarchar(60);
+            SELECT @DocType = [DocType] FROM {_layout} WHERE [Id] = @Id AND [IsActive] = 1;
+            IF @DocType IS NULL
+                THROW 51001, 'Layout bulunamadi veya pasif.', 1;
+            UPDATE {_layout}
+            SET [IsDefault] = CASE WHEN [Id] = @Id THEN 1 ELSE 0 END,
+                [UpdatedAt] = SYSUTCDATETIME()
+            WHERE [DocType] = @DocType AND [IsActive] = 1;";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static DocLayout MapLayout(SqlDataReader r) => new()
     {
         Id          = r.GetInt32(0),

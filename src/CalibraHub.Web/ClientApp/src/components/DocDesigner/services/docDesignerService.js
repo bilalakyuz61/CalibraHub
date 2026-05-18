@@ -1,72 +1,83 @@
 const BASE = '/api/doc-designer'
 
 export async function listLayouts(docType) {
-  const url = docType ? `${BASE}/layouts?docType=${encodeURIComponent(docType)}` : `${BASE}/layouts`
-  const res = await fetch(url, { credentials: 'include' })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  const qs = docType ? `?docType=${encodeURIComponent(docType)}` : ''
+  const r = await fetch(`${BASE}/layouts${qs}`)
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
 }
 
 export async function getLayout(id) {
-  const res = await fetch(`${BASE}/layouts/${id}`, { credentials: 'include' })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  const r = await fetch(`${BASE}/layouts/${id}`)
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
 }
 
 export async function saveLayout(req) {
-  const res = await fetch(`${BASE}/layouts`, {
+  const r = await fetch(`${BASE}/layouts`, {
     method: 'PUT',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req)
+    body: JSON.stringify(req),
   })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
 }
 
 export async function deleteLayout(id) {
-  const res = await fetch(`${BASE}/layouts/${id}`, { method: 'DELETE', credentials: 'include' })
-  if (!res.ok) throw new Error(await res.text())
+  const r = await fetch(`${BASE}/layouts/${id}`, { method: 'DELETE' })
+  if (!r.ok) throw new Error(await r.text())
 }
 
-export async function previewHtml(layoutId, documentId) {
-  const res = await fetch(`${BASE}/preview`, {
+export async function previewLayout(req) {
+  const r = await fetch(`${BASE}/preview`, {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ layoutId, documentId: documentId ?? null, paramOverrides: null })
+    body: JSON.stringify(req),
   })
-  if (!res.ok) throw new Error(await res.text())
-  const data = await res.json()
-  return data.html
+  if (!r.ok) throw new Error(await r.text())
+  const { html } = await r.json()
+  return html
 }
 
-export async function renderPdfBlob(layoutId, documentId) {
-  const res = await fetch(`${BASE}/render-pdf`, {
+export async function renderPdf(req) {
+  const r = await fetch(`${BASE}/render-pdf`, {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ layoutId, documentId: documentId ?? null, paramOverrides: null })
+    body: JSON.stringify(req),
   })
-  if (!res.ok) throw new Error(await res.text())
-  return res.blob()
+  if (!r.ok) throw new Error(await r.text())
+  return r.blob()
 }
 
 export async function listDocTypes() {
-  const res = await fetch(`${BASE}/doc-types`, { credentials: 'include' })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  const r = await fetch(`${BASE}/doc-types`)
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
 }
 
 export async function listViews() {
-  const res = await fetch('/api/reporting/views', { credentials: 'include' })
-  if (!res.ok) throw new Error(await res.text())
-  return res.json()
+  const r = await fetch('/api/reporting/views')
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
 }
 
 export async function getViewColumns(viewId) {
-  const res = await fetch(`/api/reporting/views/${viewId}`, { credentials: 'include' })
-  if (!res.ok) throw new Error(await res.text())
-  const data = await res.json()
-  return data.columns ?? []
+  const r = await fetch(`/api/reporting/views/${viewId}/discover-columns`)
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+/** GET /api/database/views → { schema, name, fullName }[] */
+export async function listDbViews() {
+  const r = await fetch('/api/database/views')
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+/** GET /api/database/tables/{schemaAndName}/columns → string[] → { colName, displayName }[] */
+export async function getDbViewColumns(schemaAndName) {
+  const r = await fetch(`/api/database/tables/${encodeURIComponent(schemaAndName)}/columns`)
+  if (!r.ok) throw new Error(await r.text())
+  const cols = await r.json()  // string[]
+  return cols.map(c => ({ colName: c, displayName: c }))
 }

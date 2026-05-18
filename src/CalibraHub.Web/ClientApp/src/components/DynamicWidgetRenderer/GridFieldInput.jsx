@@ -89,9 +89,14 @@ export default function GridFieldInput(props) {
     setModalOpen(true)
   }
 
-  function deleteRow(idx) {
+  async function deleteRow(idx) {
     if (!onRowsChange) return
-    if (!window.confirm('Bu satiri silmek istediginizden emin misiniz?')) return
+    // Rapor §6.6 — CalibraAlert.confirm fallback
+    var ok = window.CalibraAlert && window.CalibraAlert.confirm
+      ? await window.CalibraAlert.confirm('Bu satiri silmek istediginizden emin misiniz?',
+          { title: 'Satır Sil', okText: 'Evet, Sil', cancelText: 'Vazgeç', danger: true })
+      : window.confirm('Bu satiri silmek istediginizden emin misiniz?')
+    if (!ok) return
     var next = rows.filter(function (_, i) { return i !== idx })
     onRowsChange(next)
   }

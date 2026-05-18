@@ -27,9 +27,9 @@ public sealed class SqlDepartmentRepository : IDepartmentRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [code], [name], [parent_department_id], [is_active]
+            SELECT [Id], [CompanyId], [Name], [ParentDepartmentId], [IsActive]
             FROM {_tableName}
-            ORDER BY [company_id], [code];
+            ORDER BY [CompanyId], [Name];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -37,41 +37,89 @@ public sealed class SqlDepartmentRepository : IDepartmentRepository
         {
             var department = new Department
             {
-                Id = reader.GetGuid(0),
+                Id = reader.GetInt32(0),
                 CompanyId = reader.GetInt32(1),
-                Code = reader.GetString(2),
-                Name = reader.GetString(3),
-                ParentDepartmentId = reader.IsDBNull(4) ? null : reader.GetGuid(4)
+                Name = reader.GetString(2),
+                ParentDepartmentId = reader.IsDBNull(3) ? null : reader.GetInt32(3),
             };
-
-            if (!reader.GetBoolean(5))
-            {
-                department.Deactivate();
-            }
-
+            if (!reader.GetBoolean(4)) department.Deactivate();
             departments.Add(department);
         }
 
         return departments;
     }
 
-    public async Task AddAsync(Department department, CancellationToken cancellationToken)
+    public async Task<Department?> GetByIdAsync(int id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT [Id], [CompanyId], [Name], [ParentDepartmentId], [IsActive]
+            FROM {_tableName}
+            WHERE [Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", id));
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return null;
+
+        var dept = new Department
+        {
+            Id = reader.GetInt32(0),
+            CompanyId = reader.GetInt32(1),
+            Name = reader.GetString(2),
+            ParentDepartmentId = reader.IsDBNull(3) ? null : reader.GetInt32(3),
+        };
+        if (!reader.GetBoolean(4)) dept.Deactivate();
+        return dept;
+    }
+
+    public async Task<int> AddAsync(Department department, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([id], [company_id], [code], [name], [parent_department_id], [is_active])
+                ([CompanyId], [Name], [ParentDepartmentId], [IsActive])
+            OUTPUT INSERTED.[Id]
             VALUES
-                (@Id, @CompanyId, @Code, @Name, @ParentDepartmentId, @IsActive);
+                (@CompanyId, @Name, @ParentDepartmentId, @IsActive);
             """;
-        command.Parameters.Add(new SqlParameter("@Id", department.Id));
         command.Parameters.Add(new SqlParameter("@CompanyId", department.CompanyId));
-        command.Parameters.Add(new SqlParameter("@Code", department.Code));
         command.Parameters.Add(new SqlParameter("@Name", department.Name));
         command.Parameters.Add(new SqlParameter("@ParentDepartmentId", (object?)department.ParentDepartmentId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", department.IsActive));
 
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is int id ? id : Convert.ToInt32(result);
+    }
+
+    public async Task UpdateAsync(Department department, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"""
+            UPDATE {_tableName}
+            SET
+                [Name] = @Name,
+                [ParentDepartmentId] = @ParentDepartmentId,
+                [IsActive] = @IsActive
+            WHERE [Id] = @Id;
+            """;
+        command.Parameters.Add(new SqlParameter("@Id", department.Id));
+        command.Parameters.Add(new SqlParameter("@Name", department.Name));
+        command.Parameters.Add(new SqlParameter("@ParentDepartmentId", (object?)department.ParentDepartmentId ?? DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@IsActive", department.IsActive));
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task DeleteAsync(int id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM {_tableName} WHERE [Id] = @Id;";
+        command.Parameters.Add(new SqlParameter("@Id", id));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 }

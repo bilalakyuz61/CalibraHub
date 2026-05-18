@@ -72,13 +72,22 @@ export default function InvoiceDataGrid(props) {
       var res  = await fetch(toggleUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
       var data = await res.json()
       if (data && data.success === false) {
-        alert('Hata: ' + (data.message || 'Bilinmeyen'))
+        // Rapor §6.6 — toast fallback
+        var m = 'Hata: ' + (data.message || 'Bilinmeyen')
+        if (window.CalibraAlert && window.CalibraAlert.error) window.CalibraAlert.error(m)
+        else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(m, 'err')
+        else alert(m)
       } else {
         setLiveRows(function(prev) {
           return prev.map(function(r) { return r.id === row.id ? Object.assign({}, r, { isProcessed: !r.isProcessed }) : r })
         })
       }
-    } catch (err) { alert('Bağlantı hatası: ' + err.message) }
+    } catch (err) {
+      var em = 'Bağlantı hatası: ' + err.message
+      if (window.CalibraAlert && window.CalibraAlert.error) window.CalibraAlert.error(em)
+      else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
+      else alert(em)
+    }
     finally { setTogglingId(null) }
   }
 

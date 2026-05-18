@@ -75,10 +75,19 @@ export default function MaterialListEmbed(props) {
         if (data.success) {
           fetchData()
         } else {
-          alert('Silme hatasi: ' + (data.message || 'Bilinmeyen'))
+          // Rapor §6.6 — toast fallback
+          var m = 'Silme hatasi: ' + (data.message || 'Bilinmeyen')
+          if (window.CalibraAlert && window.CalibraAlert.error) window.CalibraAlert.error(m)
+          else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(m, 'err')
+          else alert(m)
         }
       })
-      .catch(function(err) { alert('Silme hatasi: ' + err.message) })
+      .catch(function(err) {
+        var em = 'Silme hatasi: ' + err.message
+        if (window.CalibraAlert && window.CalibraAlert.error) window.CalibraAlert.error(em)
+        else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
+        else alert(em)
+      })
   }, [deleteApiUrl, fetchData])
 
   // Inline toggle (simule)

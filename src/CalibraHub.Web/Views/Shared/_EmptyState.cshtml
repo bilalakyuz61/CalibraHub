@@ -1,0 +1,81 @@
+@*
+    _EmptyState — Bos liste/sonuc ekranlari icin standart partial (rapor §6.4).
+
+    Razor list ekranlarinda emptyText yerine zengin "ne yapayim?" mesaji + opsiyonel CTA.
+
+    Kullanim:
+        @await Html.PartialAsync("_EmptyState", new EmptyStateModel {
+            Icon = "inbox",
+            Title = "Henüz teklif yok",
+            Description = "İlk teklifinizi oluşturarak satışa başlayın.",
+            ActionLabel = "Yeni Teklif",
+            ActionUrl = "/Sales/DocumentEdit?type=quote"
+        })
+*@
+@model CalibraHub.Web.Models.EmptyStateModel
+
+<div class="cb-empty-state" role="status">
+    @if (!string.IsNullOrEmpty(Model.Icon))
+    {
+        <div class="cb-empty-state__icon">
+            @* Lucide-style inline SVG — sadece birkaç yaygın ikon *@
+            @switch (Model.Icon)
+            {
+                case "inbox":
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                    break;
+                case "search":
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    break;
+                case "folder":
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    break;
+                default:
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    break;
+            }
+        </div>
+    }
+    <h3 class="cb-empty-state__title">@Model.Title</h3>
+    @if (!string.IsNullOrWhiteSpace(Model.Description))
+    {
+        <p class="cb-empty-state__desc">@Model.Description</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(Model.ActionLabel) && !string.IsNullOrWhiteSpace(Model.ActionUrl))
+    {
+        <a href="@Model.ActionUrl" class="cb-empty-state__cta">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            @Model.ActionLabel
+        </a>
+    }
+</div>
+
+<style>
+    .cb-empty-state {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; padding: 48px 24px; min-height: 280px;
+        color: var(--app-text-muted, #64748b);
+    }
+    .cb-empty-state__icon {
+        margin-bottom: 16px;
+        color: var(--app-text-muted, #94a3b8);
+        opacity: 0.6;
+    }
+    .cb-empty-state__title {
+        margin: 0 0 8px; font-size: 16px; font-weight: 600;
+        color: var(--app-text, #334155);
+    }
+    .cb-empty-state__desc {
+        margin: 0 0 20px; font-size: 13.5px; max-width: 380px;
+        line-height: 1.55;
+    }
+    .cb-empty-state__cta {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 16px; border-radius: 8px;
+        background: #6366f1; color: #fff;
+        font-size: 13px; font-weight: 600;
+        text-decoration: none;
+        transition: background .15s;
+    }
+    .cb-empty-state__cta:hover { background: #4f46e5; color: #fff; }
+</style>

@@ -140,7 +140,12 @@
     var supportedThemes = UiCatalog.GetThemes();
     var tabsEnabled = !isWorkspaceFrame && isAuthenticated && controllerName != "account";
     var showWorkspaceActionBar = !isWorkspaceFrame && isAuthenticated && controllerName != "account";
+    // collaborationEnabled: presence/messaging UI parent shell'de.
+    // collaborationLocksEnabled: iframe icinde de SignalR + collaboration.js yuklensin ki
+    // marker form'lar (data-collaboration-record-*) icin lock acquire/release calismaya devam etsin.
+    // Ikisi de auth zorunlu; account ekranlarinda hicbiri yuklenmez.
     var collaborationEnabled = !isWorkspaceFrame && isAuthenticated && controllerName != "account";
+    var collaborationLocksEnabled = isAuthenticated && controllerName != "account";
     var homeUrl = Url.Action("Index", "Home") ?? "/";
     object? titleValue = null;
     var pageTitle = ViewData?.TryGetValue("Title", out titleValue) == true
@@ -148,7 +153,9 @@
         : "CalibraHub";
     var collaborationConfig = new
     {
-        enabled = collaborationEnabled,
+        // Workspace frame (iframe) icinde de tracking calissin diye locks-enabled flag'i kullaniyoruz.
+        // Chat/presence UI HTML'i ayri olarak `collaborationEnabled` ile gizli kaliyor.
+        enabled = collaborationLocksEnabled,
         hubUrl = Url.Content("~/hubs/collaboration"),
         releaseUrl = Url.Content("~/api/collaboration/release"),
         currentUserId = profileUserId,
@@ -735,13 +742,13 @@ else
 
 <script src="~/lib/jquery/dist/jquery.min.js"></script>
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-@if (collaborationEnabled)
+@if (collaborationLocksEnabled)
 {
     <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
 }
 <script src="~/js/site.js" asp-append-version="true" defer></script>
 <script src="~/js/calibraAlert.js" asp-append-version="true"></script>
-@if (collaborationEnabled)
+@if (collaborationLocksEnabled)
 {
     <script src="~/js/collaboration.js" asp-append-version="true" defer></script>
 }
@@ -771,6 +778,41 @@ else
         });
     </script>
 }
+@* ── Global Ctrl+S kisayolu (CLAUDE.md rapor §6.2) ──
+   Form ekranlarinda Ctrl+S tarayicinin "Save Page" dialogunu acmasini engeller,
+   onun yerine sayfadaki ilk primary save butonuna click trigger eder.
+   Search prioritesi: en yakin form > ilk form > globalde. Buton onceligi:
+   id="caSaveBtn" / id="sqSaveBtn" / id="*SaveBtn" / .btn-primary / .ca-btn--primary / .sqe-btn--primary *@
+<script>
+(function () {
+    if (window.__cbCtrlSBootstrapped) return;
+    window.__cbCtrlSBootstrapped = true;
+    document.addEventListener('keydown', function (e) {
+        var isSaveCombo = (e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey) && !e.altKey;
+        if (!isSaveCombo) return;
+        var saveBtn = findSaveButton(e.target);
+        if (!saveBtn) return;
+        e.preventDefault();
+        // Buton disable ise hicbir sey yapma
+        if (saveBtn.disabled) return;
+        saveBtn.click();
+    }, { capture: true });
+
+    function findSaveButton(focusEl) {
+        // 1) Aktif input'a en yakin form
+        var form = focusEl && focusEl.closest ? focusEl.closest('form, .ca-body, .sqe-body, [data-save-scope]') : null;
+        var sel = '[data-primary-save], #caSaveBtn, #sqSaveBtn, button[id$="SaveBtn"], ' +
+                  '.cb-sticky-toolbar .btn-primary, .cb-sticky-toolbar .ca-btn--primary, .cb-sticky-toolbar .sqe-btn--primary, ' +
+                  'button.ca-btn--primary, button.sqe-btn--primary, button.btn-primary';
+        if (form) {
+            var btn = form.querySelector(sel);
+            if (btn) return btn;
+        }
+        // 2) Genel sayfada ilk Save adayi
+        return document.querySelector(sel);
+    }
+})();
+</script>
 @await RenderSectionAsync("Scripts", required: false)
 @if (ViewData["DbInfo"] is string dbInfoHtml && !string.IsNullOrWhiteSpace(dbInfoHtml))
 {

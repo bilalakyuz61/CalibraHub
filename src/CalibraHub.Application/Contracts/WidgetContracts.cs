@@ -56,7 +56,13 @@ public sealed record WidgetRulesDto(
     string? VisibleIf,
     string? DisabledIf,
     string? Formula,
-    string? RequiredIf = null);
+    string? RequiredIf = null,
+    // Varsayilan deger — yeni kayit olusturulurken widget'a atanir. Static literal
+    // veya formula olabilir (DefaultValueKind ile ayrilir). Tarih alani icin TODAY(),
+    // YESTERDAY(), TOMORROW() gibi function call'lar runtime'da cozulur.
+    string? DefaultValue = null,
+    // 'static' (literal) veya 'formula' (hesaplanan ifade). Null = bilinmiyor / yok.
+    string? DefaultValueKind = null);
 
 /// <summary>
 /// Tek widget icin schema + value birlestirilmis DTO. React'in dogrudan

@@ -39,6 +39,7 @@ export default function WidgetRegistryList(props) {
   var onPlainFieldToggle = props.onPlainFieldToggle
   var onListableToggle = props.onListableToggle
   var onReorder = props.onReorder
+  var onGroupReorder = props.onGroupReorder
   var editingId = props.editingId
   var savingId = props.savingId
   var searchQuery = (props.searchQuery || '').trim().toLowerCase()
@@ -158,9 +159,16 @@ export default function WidgetRegistryList(props) {
                 {filteredTotal} / {total} widget eşleşti
               </div>
             )}
-            {sections.map(function (section) {
+            {sections.map(function (section, sIdx) {
               var g = section.group
               var isOpen = openMap[g.id] !== false // default acik
+              // Grup reorder — sadece gercek gruplarda; "__ungrouped" pasif.
+              // Ardisik iki grubun sortOrder'ini swap et (handleReorder grup
+              // versiyonu = onGroupReorder prop ile delege edilir).
+              var realGroupSections = sections.filter(function (s) { return s.group.id !== '__ungrouped' })
+              var realIdx = realGroupSections.indexOf(section)
+              var canMoveUp = g.id !== '__ungrouped' && realIdx > 0 && onGroupReorder
+              var canMoveDown = g.id !== '__ungrouped' && realIdx < realGroupSections.length - 1 && onGroupReorder
               return (
                 <div
                   key={g.id}
@@ -208,6 +216,35 @@ export default function WidgetRegistryList(props) {
                     <span className="text-[10px] font-semibold text-slate-400 dark:text-white/50 bg-slate-100 dark:bg-white/[0.04] px-2 py-0.5 rounded-full">
                       {section.fields.length}
                     </span>
+                    {/* Grup sırasını degistir — yukari/asagi */}
+                    {canMoveUp && (
+                      <button
+                        type="button"
+                        onClick={function (e) {
+                          e.stopPropagation()
+                          var prevSection = realGroupSections[realIdx - 1]
+                          if (prevSection) onGroupReorder(g, prevSection.group)
+                        }}
+                        className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors flex-shrink-0"
+                        title="Grubu yukarı taşı"
+                      >
+                        <ArrowUp size={12} strokeWidth={2.2} />
+                      </button>
+                    )}
+                    {canMoveDown && (
+                      <button
+                        type="button"
+                        onClick={function (e) {
+                          e.stopPropagation()
+                          var nextSection = realGroupSections[realIdx + 1]
+                          if (nextSection) onGroupReorder(g, nextSection.group)
+                        }}
+                        className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/15 transition-colors flex-shrink-0"
+                        title="Grubu aşağı taşı"
+                      >
+                        <ArrowDown size={12} strokeWidth={2.2} />
+                      </button>
+                    )}
                     {/* Grup sil butonu — sadece gercek gruplar (Genel sanal bucket haric) */}
                     {g.id !== '__ungrouped' && onDelete && (
                       <button

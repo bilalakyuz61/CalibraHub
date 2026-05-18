@@ -1383,7 +1383,7 @@
                         + '<td class="pl-entry-name">' + esc(e.itemName) + '</td>'
                         + comboTd
                         + '<td><span class="pl-entry-cur">' + esc(e.currencyCode) + '</span></td>'
-                        + '<td><span class="pl-type-badge ' + typeCls + '">' + typeLabel + '</span></td>'
+                        + '<td data-type-code="' + esc(e.priceType) + '"><span class="pl-type-badge ' + typeCls + '">' + typeLabel + '</span></td>'
                         + '<td class="num" id="plPriceDisp' + e.id + '">' + fmt(e.price) + '</td>'
                         + '<td class="pl-entry-date">' + esc(e.validFrom || '—') + '</td>'
                         + '<td class="pl-entry-date">' + esc(e.validTo || '—') + '</td>'
@@ -1402,60 +1402,135 @@
             });
     }
 
-    // ── Inline edit (tek fiyat) ──
+    // ── Inline edit (tüm alanlar: döviz, tip, fiyat, geçerlilik tarihleri) ─────
+    // Düzenleme moduna geçince row'daki ilgili sütunlar input/select'e dönüşür.
+    // Cancel'da orijinal değerlere geri dönülür (snapshot row.dataset).
     window.plStartEdit = function(id, priceOrig) {
         var row = document.getElementById('plRow' + id);
         var btns = document.getElementById('plRowBtns' + id);
         if (!row || row.classList.contains('is-editing')) return;
         row.classList.add('is-editing');
 
+        // Mevcut row değerlerini DOM'dan topla — cancel için snapshot
+        var cells = row.querySelectorAll('td');
+        // Sıralama: 0=ItemCode 1=ItemName 2=Combo 3=Currency 4=Type 5=Price 6=ValidFrom 7=ValidTo 8=Actions
+        var origCurrencyCode = (cells[3] && cells[3].textContent || '').trim();
+        var origTypeCode     = cells[4] && cells[4].dataset && cells[4].dataset.typeCode || '';
+        var origValidFrom    = (cells[6] && cells[6].textContent || '').trim();
+        var origValidTo      = (cells[7] && cells[7].textContent || '').trim();
+        row.dataset.origCurrencyCode = origCurrencyCode;
+        row.dataset.origTypeCode     = origTypeCode;
+        row.dataset.origValidFrom    = origValidFrom;
+        row.dataset.origValidTo      = origValidTo;
+        row.dataset.origPrice        = String(priceOrig);
+
+        // Currency select
+        var currencyOpts = '';
+        Object.keys(currenciesById).forEach(function(cid) {
+            var c = currenciesById[cid];
+            var sel = (c.code === origCurrencyCode) ? ' selected' : '';
+            currencyOpts += '<option value="' + cid + '"' + sel + '>' + esc(c.code) + '</option>';
+        });
+        cells[3].innerHTML =
+            '<select class="pl-input" id="plCurInput' + id + '" style="padding:3px 5px;font-size:.75rem;">'
+            + currencyOpts + '</select>';
+
+        // PriceType select
+        function typeOpt(val, lbl) {
+            return '<option value="' + val + '"' + (val === origTypeCode ? ' selected' : '') + '>' + lbl + '</option>';
+        }
+        cells[4].innerHTML =
+            '<select class="pl-input" id="plTypeInput' + id + '" style="padding:3px 5px;font-size:.75rem;">'
+            + typeOpt('b', 'Alış') + typeOpt('s', 'Satış') + typeOpt('m', 'Maliyet')
+            + '</select>';
+
+        // Price input
         document.getElementById('plPriceDisp' + id).innerHTML =
-            '<input type="number" class="pl-input" step="0.01" min="0" id="plPriceInput' + id + '" value="' + priceOrig + '" />';
+            '<input type="number" class="pl-input" step="0.01" min="0" id="plPriceInput' + id + '" value="' + priceOrig + '" style="width:100px;text-align:right;" />';
+
+        // Date inputs — convert ISO/dd.MM.yyyy to YYYY-MM-DD for date input
+        function toDateInputValue(v) {
+            if (!v || v === '—') return '';
+            // ISO format (2026-05-10...) → YYYY-MM-DD
+            var iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+            if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+            // dd.MM.yyyy → YYYY-MM-DD
+            var tr = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(v);
+            if (tr) return tr[3] + '-' + tr[2] + '-' + tr[1];
+            return '';
+        }
+        cells[6].innerHTML =
+            '<input type="date" class="pl-input" id="plFromInput' + id + '" value="' + toDateInputValue(origValidFrom) + '" style="font-size:.75rem;" />';
+        cells[7].innerHTML =
+            '<input type="date" class="pl-input" id="plToInput' + id + '" value="' + toDateInputValue(origValidTo) + '" style="font-size:.75rem;" placeholder="(boş)" />';
 
         btns.innerHTML =
             '<button type="button" class="pl-save-inline" onclick="plSaveInline(' + id + ')">'
             + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Kaydet'
             + '</button>'
-            + '<button type="button" class="pl-cancel-inline" onclick="plCancelEdit(' + id + ',' + priceOrig + ')">İptal</button>';
+            + '<button type="button" class="pl-cancel-inline" onclick="plCancelEdit(' + id + ')">İptal</button>';
 
         document.getElementById('plPriceInput' + id).focus();
+        document.getElementById('plPriceInput' + id).select();
     };
 
-    window.plCancelEdit = function(id, priceOrig) {
-        var row = document.getElementById('plRow' + id);
-        row.classList.remove('is-editing');
-        document.getElementById('plPriceDisp' + id).textContent = fmt(priceOrig);
-        document.getElementById('plRowBtns' + id).innerHTML =
-            '<button type="button" class="pl-btn pl-btn--ghost" style="padding:4px 8px;" onclick="plStartEdit(' + id + ',' + priceOrig + ')" title="Düzenle">'
-            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
-            + '</button>'
-            + '<button type="button" class="pl-btn pl-btn--danger-ghost" style="padding:4px 8px;" onclick="plDeleteEntry(' + id + ')" title="Sil">'
-            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>'
-            + '</button>';
+    window.plCancelEdit = function(id) {
+        // Cancel: row'u tamamen yeniden yüklemek en temiz (snapshot karışıklığını önler)
+        loadExistingEntries(groupId);
     };
 
     window.plSaveInline = function(id) {
+        var row = document.getElementById('plRow' + id);
+        if (!row) return;
         var priceEl = document.getElementById('plPriceInput' + id);
-        var price = parseFloat(priceEl.value) || 0;
+        var curEl   = document.getElementById('plCurInput'   + id);
+        var typeEl  = document.getElementById('plTypeInput'  + id);
+        var fromEl  = document.getElementById('plFromInput'  + id);
+        var toEl    = document.getElementById('plToInput'    + id);
+
+        var price       = parseFloat(priceEl.value);
+        var currencyId  = parseInt(curEl.value, 10) || 0;
+        var priceType   = typeEl.value || 's';
+        var validFrom   = fromEl.value || null;       // YYYY-MM-DD or null
+        var validToVal  = toEl.value || '';
+        var clearValidTo = (validToVal === '');
+        var validTo     = clearValidTo ? null : validToVal;
+
+        if (Number.isNaN(price) || price < 0) {
+            plMsg('Geçerli bir fiyat girin.', false);
+            priceEl.focus();
+            return;
+        }
+        if (!currencyId) { plMsg('Döviz seçin.', false); curEl.focus(); return; }
+        if (!validFrom)  { plMsg('Başlangıç tarihi zorunlu.', false); fromEl.focus(); return; }
+
         var btn = document.querySelector('#plRowBtns' + id + ' .pl-save-inline');
         if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
         fetch(API('UpdatePriceListJson'), {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id, price: price })
+            body: JSON.stringify({
+                id:           id,
+                price:        price,
+                currencyId:   currencyId,
+                priceType:    priceType,
+                validFrom:    validFrom,
+                validTo:      validTo,
+                clearValidTo: clearValidTo,
+            })
         })
-        .then(function(r) { return r.json(); })
+        .then(function(r) { return r.json().catch(function() { return { success: false, message: 'Geçersiz sunucu yanıtı (HTTP ' + r.status + ')' }; }); })
         .then(function(d) {
-            if (d.success) {
+            if (d && d.success) {
                 loadExistingEntries(groupId);
-                plMsg('Fiyat güncellendi.', true);
+                plMsg('Kayıt güncellendi.', true);
             } else {
-                plMsg(d.message || 'Güncellenemedi.', false);
+                plMsg((d && d.message) || 'Güncellenemedi.', false);
                 if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Kaydet'; }
             }
         })
-        .catch(function() {
-            plMsg('Bağlantı hatası.', false);
+        .catch(function(e) {
+            plMsg('Bağlantı hatası: ' + (e && e.message || ''), false);
             if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg>Kaydet'; }
         });
     };

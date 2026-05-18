@@ -11,4 +11,10 @@ public interface IDocLayoutRepository
     Task<int> UpsertAsync(SaveDocLayoutRequest req, Guid ownerUserId, CancellationToken ct);
     Task ReplaceDataSourcesAsync(int layoutId, IReadOnlyCollection<DocLayoutDsDto> sources, CancellationToken ct);
     Task SoftDeleteAsync(int id, CancellationToken ct);
+
+    /// <summary>
+    /// Belirtilen layout'u varsayilan yapar; ayni DocType'taki diger tum aktif layout'larin
+    /// IsDefault bayragini false yapar. Boylelikle her belge tipinde tek varsayilan kalir.
+    /// </summary>
+    Task SetDefaultAsync(int id, CancellationToken ct);
 }

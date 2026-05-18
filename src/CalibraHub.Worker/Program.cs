@@ -3,6 +3,7 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Configuration;
 using CalibraHub.Application.Services;
+using CalibraHub.Application.Services.Integration;
 using CalibraHub.Infrastructure.Integrations;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -87,9 +88,14 @@ var host = Host.CreateDefaultBuilder(args)
             DefaultPassword = configuration[$"{BootstrapAdminOptions.SectionName}:DefaultPassword"] ?? "12345678"
         };
 
+        // Named HTTP clients — IHttpClientFactory ile pool yonetilir
+        services.AddHttpClient("tcmb", c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient("integrator-reachability", c => c.Timeout = TimeSpan.FromSeconds(10));
+
         if (useMockIntegratorClient)
         {
-            services.AddSingleton<IIntegratorDocumentClient>(_ => new MockIntegratorDocumentClient(simulatedDocumentsPerPull));
+            services.AddSingleton<IIntegratorDocumentClient>(sp => new MockIntegratorDocumentClient(
+                sp.GetRequiredService<IHttpClientFactory>(), simulatedDocumentsPerPull));
         }
         else
         {
@@ -154,6 +160,24 @@ var host = Host.CreateDefaultBuilder(args)
                            CalibraHub.Application.Services.Scheduling.CurrencyRefreshTaskExecutor>();
         services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
                            CalibraHub.Infrastructure.Scheduling.ViewReportTaskExecutor>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Application.Services.Scheduling.IntegrationTaskExecutor>();
+
+        // Integration runtime — cron tetiklenen entegrasyonlar icin Worker tarafinda da gerekli
+        services.AddScoped<IIntegrationRepository, SqlIntegrationRepository>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IIntegrationApiProfileRepository,
+                           CalibraHub.Persistence.Repositories.SqlIntegrationApiProfileRepository>();
+        services.AddScoped<IFormMetadataService, FormMetadataService>();
+        services.AddScoped<IFormLinesRepository, SqlFormLinesRepository>();
+        services.AddScoped<IItemCombinationResolver, SqlItemCombinationResolver>();
+        services.AddScoped<IPostProcedureExecutor, SqlPostProcedureExecutor>();
+        services.AddScoped<IIntegrationStatusTracker, SqlIntegrationStatusTracker>();
+        services.AddScoped<IIntegrationRecordStatusRepository, SqlIntegrationRecordStatusRepository>();
+        services.AddScoped<IMappingEngine, MappingEngine>();
+        services.AddScoped<IIntegrationAuthHandler, IntegrationAuthHandler>();
+        services.AddScoped<IHttpExecutor, HttpExecutor>();
+        services.AddScoped<IIntegrationRunner, IntegrationRunner>();
+        services.AddMemoryCache();
         services.AddScoped<CalibraHub.Application.Abstractions.Services.IEmailSender,
                            CalibraHub.Infrastructure.Notifications.SmtpEmailSender>();
         services.AddHttpClient();

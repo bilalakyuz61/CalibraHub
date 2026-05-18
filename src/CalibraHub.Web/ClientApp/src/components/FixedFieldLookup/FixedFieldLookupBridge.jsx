@@ -79,7 +79,6 @@ function resolveFilterTokens(filterJson) {
 export default function FixedFieldLookupBridge(props) {
   var inputEl    = props.inputElement
   var defaultGuideCode = props.guideCode
-  var filterJson = props.filterJson || null
 
   var formCode   = props.formCode || null
   var fieldKey   = props.fieldKey || null
@@ -97,6 +96,10 @@ export default function FixedFieldLookupBridge(props) {
   var [modalOpen, setModalOpen]       = useState(false)
   var [settingsOpen, setSettingsOpen] = useState(false)
   var [formatJson, setFormatJson]     = useState(props.formatJson || null)
+  // FldSet binding'i fetch edilince guncellenir — admin Alan Ayarlari'nda
+  // SQL kisit (TYPEID IN (2,3) gibi) yazmissa runtime'da modal'a sticky olarak
+  // staticConstraint parametresi ile gecirilir, /api/guides search'e ulasir.
+  var [filterJson, setFilterJson]     = useState(props.filterJson || null)
   var [schemaVersion, setSchemaVersion] = useState(0)
   // FldSet binding'i admin Alan Ayarlari'ndan farkli bir view'a baglandiysa,
   // hardcoded prop guideCode'u override et. PR sonrasi: hatali bile baglansa
@@ -213,6 +216,13 @@ export default function FixedFieldLookupBridge(props) {
         // FormatJson her zaman uygulanir (gorunur kolonlar, label override, vs.)
         if (binding.formatJson) {
           setFormatJson(binding.formatJson)
+        }
+        // FilterJson — admin Alan Ayarlari'nda yazilan SQL kisit (raw WHERE fragment).
+        // Guide search query'sine staticConstraint olarak gecer; modal listesi
+        // bu kisit altinda filtrelenir. Onceki bug: bu satir yoktu, bu yuzden
+        // admin'in girdigi 'TYPEID IN (2,3)' gibi kisitlar runtime'da uygulanmiyordu.
+        if (binding.filterJson) {
+          setFilterJson(binding.filterJson)
         }
         // ViewName/GuideCode override: admin baska bir view secmisse
         var override = binding.viewName || (binding.guideCode && binding.guideCode !== '' ? binding.guideCode : null)

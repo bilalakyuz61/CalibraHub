@@ -347,12 +347,19 @@
             bar.style.width = pct + '%';
             bar.style.background = score <= 2 ? '#ef4444' : score === 3 ? '#f59e0b' : score === 4 ? '#eab308' : '#22c55e';
         }
+        // Rapor §6.6 — native alert → CalibraAlert.warn/error/success (toast fallback)
+        function _saNotify(msg, kind) {
+            // kind: 'warn' | 'error' | 'success'
+            if (window.CalibraAlert && CalibraAlert[kind]) { CalibraAlert[kind](msg); return; }
+            if (window.CalibraHub && CalibraHub.toast) { CalibraHub.toast(msg, kind === 'error' ? 'err' : (kind === 'warn' ? 'warn' : 'ok')); return; }
+            alert(msg);
+        }
         function saChangePwd() {
             var cur = document.getElementById('pwdCurrent').value;
             var n1  = document.getElementById('pwdNew').value;
             var n2  = document.getElementById('pwdNew2').value;
-            if (!cur || !n1 || !n2) { alert('Tum alanlar dolu olmali.'); return; }
-            if (n1 !== n2) { alert('Yeni sifreler eslesmiyor.'); return; }
+            if (!cur || !n1 || !n2) { _saNotify('Tum alanlar dolu olmali.', 'warn'); return; }
+            if (n1 !== n2) { _saNotify('Yeni sifreler eslesmiyor.', 'warn'); return; }
             var fd = new FormData();
             fd.append('currentPassword', cur);
             fd.append('newPassword', n1);
@@ -360,7 +367,7 @@
             fetch('/Gate/Password/Change', { method:'POST', body: fd, credentials:'same-origin' })
                 .then(function(r){ return r.json(); })
                 .then(function(d){
-                    alert((d.success ? '✓ ' : '✗ ') + (d.message || (d.success ? 'Sifre degistirildi.' : 'Hata.')));
+                    _saNotify((d.success ? '✓ ' : '✗ ') + (d.message || (d.success ? 'Sifre degistirildi.' : 'Hata.')), d.success ? 'success' : 'error');
                     if (d.success) {
                         document.getElementById('pwdCurrent').value = '';
                         document.getElementById('pwdNew').value = '';

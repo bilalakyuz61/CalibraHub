@@ -61,6 +61,28 @@ function findInputLabel(el) {
  * DOM'dan modal disindaki id'li input/select/textarea'lari tara.
  * Modal portallarini disla (z-index 10000/9999 elementler).
  */
+// HTML input type → kullanıcıya gösterilen Türkçe veri tipi etiketi.
+// "+ Form Alanı Ekle" dropdown'unda her satırın yanında küçük chip olarak gösterilir.
+function inferDataType(el) {
+  if (!el) return ''
+  const tag = (el.tagName || '').toLowerCase()
+  if (tag === 'textarea') return 'Metin'
+  if (tag === 'select')   return 'Seçim'
+  const t = (el.type || '').toLowerCase()
+  if (t === 'number')             return 'Sayısal'
+  if (t === 'date')               return 'Tarih'
+  if (t === 'datetime-local')     return 'Tarih/Saat'
+  if (t === 'time')               return 'Saat'
+  if (t === 'checkbox')           return 'Bool'
+  if (t === 'radio')              return 'Seçim'
+  if (t === 'email')              return 'E-posta'
+  if (t === 'tel')                return 'Telefon'
+  if (t === 'url')                return 'URL'
+  if (t === 'password')           return 'Şifre'
+  if (t === 'hidden')             return 'Hidden'
+  return 'Metin'
+}
+
 function scanFormFields() {
   if (typeof document === 'undefined') return []
   const found = []
@@ -78,10 +100,11 @@ function scanFormFields() {
     if (el.id.length < 2) return
     const tr = findInputLabel(el)
     found.push({
-      token: '#' + el.id,
-      label: tr || el.id,
+      token:    '#' + el.id,
+      label:    tr || el.id,
       secondary: el.id,
-      group: 'Form Bilgileri',
+      dataType: inferDataType(el),
+      group:    'Form Bilgileri',
     })
     seen.add(el.id)
   })
@@ -128,6 +151,8 @@ export function listFieldOptions(extraOptions) {
     token:     '#widget.' + (w.code || w.widgetCode),
     label:     w.label || w.fieldLabel || w.code || w.widgetCode,
     secondary: 'widget.' + (w.code || w.widgetCode),
+    // Admin tanımlı widget'larda dataType var (Metin, Sayısal, Tarih vb.) — direkt aktarılır.
+    dataType:  w.dataType || w.DataType || '',
     group:     'Widget Alanları',
   })).filter(o => o.token !== '#widget.' && o.token !== '#widget.undefined')
   const extra = Array.isArray(extraOptions)
@@ -135,6 +160,7 @@ export function listFieldOptions(extraOptions) {
         token:     o.token && o.token.startsWith('#') ? o.token : ('#' + (o.token || '')),
         label:     o.label || o.token,
         secondary: o.secondary || o.token,
+        dataType:  o.dataType || '',
         group:     o.group || 'Diger',
       }))
     : []

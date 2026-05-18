@@ -1,0 +1,92 @@
+using System.ComponentModel;
+using CalibraHub.Domain.Enums;
+
+namespace CalibraHub.Domain.Entities;
+
+/// <summary>
+/// Bir entegrasyon kurgusu — wizard 5 step sonucu uretilir. Hangi formdan (SourceFormCode)
+/// hangi endpoint'e (TargetEndpointId) hangi mapping kurallariyla (Mappings) ve hangi
+/// trigger'larla (Triggers) calistirilacagini tanimlar.
+///
+/// Tasarim dokumani: docs/integration-wizard-design.md
+/// </summary>
+[Description("Entegrasyon konfigurasyonu. Form -> Endpoint mapping kurallari + tetikleyicilerin agregatoru.")]
+public sealed class Integration
+{
+    public int Id { get; init; }
+
+    public required string Name { get; set; }
+
+    public string? Description { get; set; }
+
+    /// <summary>Kaynak form (dbo.Forms.FormCode ile eslesir, orn. "SALES_ORDERS").</summary>
+    public required string SourceFormCode { get; set; }
+
+    /// <summary>
+    /// Hedef REST endpoint (opsiyonel). FK -> IntegrationEndpoint.Id.
+    /// NULL ise "Sadece Prosedür" modu — HTTP cagrisi yapilmaz, mapping engine atlanir,
+    /// yalnizca PreProcedureName / PostProcedureName calistirilir. Bu modda en az birinin
+    /// dolu olmasi sart (validation servis katmaninda).
+    /// </summary>
+    public int? TargetEndpointId { get; set; }
+
+    /// <summary>Hata aldiginda davranis: Skip / Retry / Manuel.</summary>
+    public IntegrationErrorBehavior ErrorBehavior { get; set; } = IntegrationErrorBehavior.Skip;
+
+    /// <summary>Retry davranisi secildiyse maks deneme sayisi.</summary>
+    public int RetryCount { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    /// <summary>Versiyon numarasi — IntegrationHistory ile birlikte rollback icin (V1.1).</summary>
+    public int VersionNo { get; set; } = 1;
+
+    /// <summary>
+    /// Entegrasyon HTTP cagrisindan ONCE calistirilacak opsiyonel SQL stored procedure
+    /// adi. NULL ise pre-action yok. Format: "dbo.LockDocument" veya "LockDocument".
+    /// Engine: EXEC PreProc → (basarili ise) HTTP cagrisi → EXEC PostProc.
+    /// PreProc HATA verirse entegrasyon IPTAL edilir; HTTP hic cagirilmaz, run log'a Failed yazilir.
+    /// Kullanim ornekleri:
+    ///   - Belgeyi 'Pending' status'a cek (concurrent lock)
+    ///   - Pre-validation (yeterli stok? cari risk limit?)
+    ///   - Audit kayit at (kim baslatti, ne zaman)
+    ///   - Staging tablosuna snapshot al (rollback icin)
+    /// </summary>
+    public string? PreProcedureName { get; set; }
+
+    /// <summary>
+    /// Pre-procedure parametreleri JSON array — Post ile ayni format.
+    /// SourceType: FormField | Constant | RunMeta. (Response/HttpStatus YOK — HTTP henuz yapilmadi)
+    /// </summary>
+    public string? PreProcedureParamsJson { get; set; }
+
+    /// <summary>
+    /// Entegrasyon basariyla calistiktan sonra calistirilacak SQL stored procedure adi
+    /// (opsiyonel). NULL ise post-action yok. Format: "dbo.MarkAsExported" veya "MarkAsExported".
+    /// Engine: HTTP basarili ise EXEC PostProcedureName @p1=v1, @p2=v2, ...
+    /// </summary>
+    public string? PostProcedureName { get; set; }
+
+    /// <summary>
+    /// Post-procedure parametreleri JSON array. Her parametre:
+    ///   { "name":"@DocumentId", "sourceType":"FormField", "sourceValue":"Id" }
+    ///   { "name":"@Status",     "sourceType":"Constant",  "sourceValue":"Exported" }
+    ///   { "name":"@RunId",      "sourceType":"RunMeta",   "sourceValue":"RunId" }
+    ///   { "name":"@HttpCode",   "sourceType":"Response",  "sourceValue":"StatusCode" }
+    /// SourceType: FormField | Constant | RunMeta | Response
+    /// </summary>
+    public string? PostProcedureParamsJson { get; set; }
+
+    public string? CreatedBy { get; set; }
+    public DateTime Created { get; init; } = DateTime.UtcNow;
+    public string? UpdatedBy { get; set; }
+    public DateTime? Updated { get; set; }
+
+    // ── Aggregate children (transient — repository tarafindan join ile doldurulur) ──
+
+    public IReadOnlyList<IntegrationMapping> Mappings { get; set; } = Array.Empty<IntegrationMapping>();
+    public IReadOnlyList<IntegrationTrigger> Triggers { get; set; } = Array.Empty<IntegrationTrigger>();
+
+    /// <summary>Endpoint ve auth profile bilgileri (display amacli, ayri sorgu).</summary>
+    public IntegrationEndpoint? Endpoint { get; set; }
+}

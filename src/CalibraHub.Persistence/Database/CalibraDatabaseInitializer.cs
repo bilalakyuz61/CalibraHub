@@ -15,8 +15,7 @@ namespace CalibraHub.Persistence.Database;
 public sealed class CalibraDatabaseInitializer
 {
     private const int DefaultCompanyId = 1;
-    private static readonly Guid FinanceDepartmentId = Guid.Parse("8ad68ef8-63f8-4a26-a7fd-62c4fcbac120");
-    private static readonly Guid OperationsDepartmentId = Guid.Parse("f744af50-51f8-4f74-a89b-66bc99c79c30");
+    // Department.Id artik INT IDENTITY — eski Guid sabitleri kaldirildi.
     private static readonly Guid AdminUserId = Guid.Parse("0dbb6f1d-9a15-4f6f-b1f0-661bb6b43ec2");
 
     private readonly SqlServerConnectionFactory _connectionFactory;
@@ -71,8 +70,206 @@ public sealed class CalibraDatabaseInitializer
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
+
+        // Onbakim: stale BaseRecordKey'leri PascalCase'e cek + v_Flat_* view'larini
+        // mevcut tablo yapilarina gore yeniden uret. Bu yapilmadan vw_ReportDocument
+        // calistirildiginda v_Flat_SALES_QUOTE_EDIT'in eski snake_case kolonlari
+        // "Invalid column name 'document_number'" gibi hatalara takilir.
+        await MigrateFormsBaseRecordKeyAsync(connection, cancellationToken);
+        await RebuildDocumentFlatViewsAsync(connection, cancellationToken);
+
         await CreateReportDocumentProcAsync(connection, systemDatabaseName, cancellationToken);
         await RebuildReportDocumentViewAsync(connection, cancellationToken);
+    }
+
+    /// <summary>
+    /// Per-company Forms tablosundaki BaseRecordKey'leri tablo rename'leri sonrasi
+    /// dogru PascalCase'e cek. Her startup'ta calisir, idempotent.
+    /// </summary>
+    private static async Task MigrateFormsBaseRecordKeyAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var sql = """
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+            BEGIN
+                -- Document table rename: snake_case -> PascalCase
+                UPDATE dbo.Forms
+                   SET [BaseRecordKey] = N'DocumentNumber',
+                       [BaseTable]     = N'dbo.Document'
+                 WHERE [FormCode] = N'SALES_QUOTE_EDIT'
+                   AND ([BaseRecordKey] IN (N'document_number', N'doc_no')
+                        OR [BaseTable] IN (N'dbo.sales_quotes', N'dbo.Documents'));
+
+                UPDATE dbo.Forms
+                   SET [BaseRecordKey] = N'Id',
+                       [BaseTable]     = N'dbo.DocumentLine'
+                 WHERE [FormCode] = N'SALES_QUOTE_LINES'
+                   AND ([BaseTable] IN (N'dbo.sales_quote_lines', N'dbo.DocumentLines'));
+
+                -- Items table: material_code -> Code (PascalCase)
+                UPDATE dbo.Forms
+                   SET [BaseRecordKey] = N'Code',
+                       [BaseTable]     = N'dbo.Items'
+                 WHERE [FormCode] = N'ITEMS'
+                   AND ([BaseRecordKey] IN (N'material_code', N'code', N'item_code')
+                        OR [BaseTable] IN (N'dbo.Item', N'dbo.stock_cards'));
+
+                -- Contact table: ContactAccounts -> Contact (artik tek tablo)
+                UPDATE dbo.Forms
+                   SET [BaseTable] = N'dbo.Contact'
+                 WHERE [FormCode] = N'CONTACTS'
+                   AND [BaseTable] IN (N'dbo.ContactAccounts', N'dbo.Contacts');
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// Document/DocumentLine/Items/Contact gibi temel formlar icin v_Flat_{FormCode}
+    /// view'larini mevcut INFORMATION_SCHEMA kolonlarina gore yeniden olusturur.
+    /// SqlWidgetRepository.RegenerateFlattenedViewAsync ile ozdes mantik, ama
+    /// per-company connection ile dogrudan calisir (HttpContext gerektirmez).
+    /// </summary>
+    private static async Task RebuildDocumentFlatViewsAsync(SqlConnection connection, CancellationToken ct)
+    {
+        // Forms tablosu yoksa cik
+        await using (var checkCmd = connection.CreateCommand())
+        {
+            checkCmd.CommandText = "IF OBJECT_ID(N'dbo.Forms', N'U') IS NULL SELECT 0 ELSE SELECT 1";
+            var exists = (int)((await checkCmd.ExecuteScalarAsync(ct)) ?? 0);
+            if (exists == 0) return;
+        }
+
+        // BaseTable+BaseRecordKey dolu olan formlari oku
+        var forms = new List<(int Id, string FormCode, string BaseTable, string BaseRecordKey)>();
+        await using (var formCmd = connection.CreateCommand())
+        {
+            formCmd.CommandText = """
+                SELECT [Id], [FormCode], [BaseTable], [BaseRecordKey]
+                FROM dbo.Forms
+                WHERE [BaseTable] IS NOT NULL AND LEN(LTRIM(RTRIM([BaseTable]))) > 0
+                  AND [BaseRecordKey] IS NOT NULL AND LEN(LTRIM(RTRIM([BaseRecordKey]))) > 0
+                """;
+            await using var reader = await formCmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                forms.Add((reader.GetInt32(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+            }
+        }
+
+        foreach (var (formId, formCode, baseTable, baseRecordKey) in forms)
+        {
+            try
+            {
+                await RebuildSingleFlatViewAsync(connection, formId, formCode, baseTable, baseRecordKey, ct);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[FlatView regen] {formCode}: {ex.Message}");
+            }
+        }
+    }
+
+    private static async Task RebuildSingleFlatViewAsync(
+        SqlConnection conn, int formId, string formCode, string baseTable, string baseRecordKey, CancellationToken ct)
+    {
+        // Identifier guvenligi
+        var formCodeRegex = new System.Text.RegularExpressions.Regex(@"^[A-Za-z_][A-Za-z0-9_]{0,63}$");
+        if (!formCodeRegex.IsMatch(formCode)) return;
+
+        // Schema + table parse: "dbo.Document" veya "Document"
+        var rawTable = baseTable.Replace("[", "").Replace("]", "");
+        var dotIdx   = rawTable.IndexOf('.');
+        var schema   = dotIdx > 0 ? rawTable.Substring(0, dotIdx) : "dbo";
+        var tableName = dotIdx > 0 ? rawTable.Substring(dotIdx + 1) : rawTable;
+        if (!formCodeRegex.IsMatch(schema) || !formCodeRegex.IsMatch(tableName) || !formCodeRegex.IsMatch(baseRecordKey))
+            return;
+
+        // INFORMATION_SCHEMA'dan base table kolonlarini cek
+        var columns = new List<string>();
+        await using (var colCmd = conn.CreateCommand())
+        {
+            colCmd.CommandText = """
+                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = @s AND TABLE_NAME = @t
+                ORDER BY ORDINAL_POSITION
+                """;
+            colCmd.Parameters.Add(new SqlParameter("@s", schema));
+            colCmd.Parameters.Add(new SqlParameter("@t", tableName));
+            await using var reader = await colCmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                columns.Add(reader.GetString(0));
+        }
+        if (columns.Count == 0) return;
+
+        // BaseRecordKey gecerli mi? (case-insensitive)
+        if (!columns.Any(c => string.Equals(c, baseRecordKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.Error.WriteLine($"[FlatView regen] {formCode}: BaseRecordKey '{baseRecordKey}' table'da bulunamadi → skip");
+            return;
+        }
+
+        // Widget definitions (sadece data tipinde olanlar)
+        var widgets = new List<(string WidgetCode, string DataType)>();
+        await using (var wCmd = conn.CreateCommand())
+        {
+            wCmd.CommandText = """
+                SELECT [WidgetCode], COALESCE([DataType], N'text')
+                FROM dbo.WidgetMas
+                WHERE [FormId] = @fid AND [IsActive] = 1
+                  AND [DataType] NOT IN (N'group', N'grid')
+                ORDER BY [SortOrder]
+                """;
+            wCmd.Parameters.Add(new SqlParameter("@fid", formId));
+            await using var reader = await wCmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                widgets.Add((reader.GetString(0), reader.GetString(1)));
+        }
+
+        var baseColSet = new HashSet<string>(columns, StringComparer.OrdinalIgnoreCase);
+        var pivotWidgets = widgets
+            .Where(w => formCodeRegex.IsMatch(w.WidgetCode) && !baseColSet.Contains(w.WidgetCode))
+            .ToList();
+
+        var viewName = "v_Flat_" + formCode;
+        var schemaEsc = schema.Replace("]", "]]");
+        var tableEsc  = tableName.Replace("]", "]]");
+        var keyEsc    = baseRecordKey.Replace("]", "]]");
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"CREATE OR ALTER VIEW [{schemaEsc}].[{viewName}] AS");
+        sb.AppendLine("SELECT");
+
+        var selectParts = columns.Select(c => $"    base.[{c.Replace("]", "]]")}]").ToList();
+        foreach (var (code, dt) in pivotWidgets)
+        {
+            var col = code.Replace("]", "]]");
+            var wc  = code.Replace("'", "''");
+            var dtl = (dt ?? "text").ToLowerInvariant();
+            string castExpr = dtl switch
+            {
+                "numeric" => $"TRY_CAST(MAX(CASE WHEN m.[WidgetCode] = N'{wc}' THEN t.[Value] END) AS DECIMAL(18,4))",
+                "date"    => $"TRY_CAST(MAX(CASE WHEN m.[WidgetCode] = N'{wc}' THEN t.[Value] END) AS DATE)",
+                "boolean" => $"CAST(CASE WHEN MAX(CASE WHEN m.[WidgetCode] = N'{wc}' THEN t.[Value] END) = N'true' THEN 1 " +
+                             $"WHEN MAX(CASE WHEN m.[WidgetCode] = N'{wc}' THEN t.[Value] END) = N'false' THEN 0 ELSE NULL END AS BIT)",
+                _         => $"CAST(MAX(CASE WHEN m.[WidgetCode] = N'{wc}' THEN t.[Value] END) AS NVARCHAR(500))"
+            };
+            selectParts.Add($"    {castExpr} AS [{col}]");
+        }
+        sb.AppendLine(string.Join(",\n", selectParts));
+        sb.AppendLine($"FROM [{schemaEsc}].[{tableEsc}] base");
+        sb.AppendLine($"LEFT JOIN [{schemaEsc}].[WidgetMas] m ON m.[FormId] = {formId}");
+        sb.AppendLine($"LEFT JOIN [{schemaEsc}].[WidgetTra] t ON t.[WidgetId] = m.[Id]");
+        sb.AppendLine($"    AND t.[RecordId] = CAST(base.[{keyEsc}] AS NVARCHAR(60))");
+        sb.AppendLine("GROUP BY");
+        sb.AppendLine(string.Join(",\n", columns.Select(c => $"    base.[{c.Replace("]", "]]")}]")));
+        sb.Append(';');
+
+        await using var execCmd = conn.CreateCommand();
+        execCmd.CommandText = sb.ToString();
+        execCmd.CommandTimeout = 60;
+        await execCmd.ExecuteNonQueryAsync(ct);
     }
 
     private static async Task CreateReportDocumentProcAsync(
@@ -133,7 +330,7 @@ BEGIN
         THEN N'LEFT JOIN [dbo].[v_Flat_SALES_QUOTE_EDIT]  hw ON hw.[id] = d.[id]' + CHAR(13) + CHAR(10)
         ELSE N'' END;
     DECLARE @LwJoin NVARCHAR(MAX) = CASE WHEN @HasLwView = 1
-        THEN N'LEFT JOIN [dbo].[v_Flat_SALES_QUOTE_LINES] lw ON lw.[id] = dl.[id]' + CHAR(13) + CHAR(10)
+        THEN N'LEFT JOIN [dbo].[v_Flat_SALES_QUOTE_LINES] lw ON lw.[Id] = dl.[Id]' + CHAR(13) + CHAR(10)
         ELSE N'' END;
 
     IF @HasHwView = 0 SET @HwColsSql = N'';
@@ -143,48 +340,75 @@ BEGIN
 CREATE OR ALTER VIEW [dbo].[vw_ReportDocument]
 AS
 SELECT
+    -- ─── Belge Basligi ──────────────────────────────────────────────────
     d.[id]                                 AS BelgeId,
-    d.[DocumentNumber]                    AS BelgeNo,
-    d.[DocumentTypeId]                   AS BelgeTurId,
+    d.[DocumentNumber]                     AS BelgeNo,
+    d.[DocumentTypeId]                     AS BelgeTurId,
     dt.[code]                              AS BelgeTurKodu,
     dt.[name]                              AS BelgeTurAdi,
-    d.[CompanyId]                         AS BelgeSirketId,
-    d.[DocumentDate]                      AS BelgeTarihi,
-    d.[ValidUntil]                        AS GecerlilikTarihi,
+    d.[CompanyId]                          AS BelgeSirketId,
+    d.[DocumentDate]                       AS BelgeTarihi,
+    d.[ValidUntil]                         AS GecerlilikTarihi,
     d.[currency]                           AS ParaBirimi,
-    d.[SubTotal]                          AS AraToplam,
-    d.[DiscountRate]                      AS IskontoOrani,
-    d.[DiscountAmount]                    AS IskontoTutari,
-    d.[TaxRate]                           AS KdvOrani,
-    d.[TaxAmount]                         AS KdvTutari,
-    d.[GrandTotal]                        AS GenelToplam,
-    d.[PaymentTerms]                      AS OdemeKosullari,
-    d.[DeliveryTerms]                     AS TeslimKosullari,
-    d.[DeliveryAddress]                   AS TeslimatAdresi,
+    cur.[name]                             AS ParaBirimiAdi,
+    cur.[symbol]                           AS ParaBirimiSimgesi,
+    d.[SubTotal]                           AS AraToplam,
+    d.[DiscountRate]                       AS IskontoOrani,
+    d.[DiscountAmount]                     AS IskontoTutari,
+    d.[TaxRate]                            AS KdvOrani,
+    d.[TaxAmount]                          AS KdvTutari,
+    d.[GrandTotal]                         AS GenelToplam,
+    d.[PaymentTerms]                       AS OdemeKosullari,
+    d.[DeliveryTerms]                      AS TeslimKosullari,
+    d.[DeliveryAddress]                    AS TeslimatAdresi,
+    d.[ContactAddress]                     AS BelgeCariAdresi,
     d.[status]                             AS BelgeDurumu,
-    d.[RevisionNo]                        AS RevizyonNo,
+    d.[RevisionNo]                         AS RevizyonNo,
+    d.[ParentDocumentId]                   AS AnaBelgeId,
     d.[notes]                              AS BelgeNotu,
-    d.[Created]                         AS OlusturulmaTarihi,
-    d.[Updated]                         AS GuncellenmeTarihi,
+    d.[IsActive]                           AS BelgeAktif,
+    d.[CreatedBy]                          AS OlusturanKullanici,
+    d.[Created]                            AS OlusturulmaTarihi,
+    d.[Updated]                            AS GuncellenmeTarihi,
 
-    d.[ContactId]                         AS CariId,
+    -- ─── Cari Bilgileri ─────────────────────────────────────────────────
+    d.[ContactId]                          AS CariId,
     c.[AccountCode]                        AS CariKodu,
     c.[AccountTitle]                       AS CariUnvani,
     c.[TaxOffice]                          AS CariVergiDairesi,
     c.[TaxNumber]                          AS CariVergiNo,
+    c.[IdentityNumber]                     AS CariTcKimlikNo,
     c.[Phone]                              AS CariTelefon,
     c.[Mobile]                             AS CariCep,
+    c.[WaPhone]                            AS CariWhatsAppTel,
+    c.[WaName]                             AS CariWhatsAppAd,
     c.[Email]                              AS CariEposta,
     c.[Website]                            AS CariWebSitesi,
     c.[Address]                            AS CariAdres,
     c.[PostalCode]                         AS CariPostaKodu,
     c.[City]                               AS CariSehir,
     c.[District]                           AS CariIlce,
+    c.[Neighborhood]                       AS CariMahalle,
+    c.[CountryCode]                        AS CariUlkeKodu,
+    c.[ContactPerson]                      AS CariYetkili,
+    c.[PriceGroupId]                       AS CariFiyatGrubuId,
+    c.[SalesRepresentativeId]              AS CariTemsilciId,
+    -- Cari icin tek satirda tam adres (rapor footer/letterhead icin pratik)
+    CONCAT(c.[Address],
+        CASE WHEN c.[Neighborhood] IS NOT NULL THEN N'' / '' + c.[Neighborhood] ELSE N'''' END,
+        CASE WHEN c.[District]     IS NOT NULL THEN N'' / '' + c.[District]     ELSE N'''' END,
+        CASE WHEN c.[City]         IS NOT NULL THEN N'' / '' + c.[City]         ELSE N'''' END,
+        CASE WHEN c.[PostalCode]   IS NOT NULL THEN N'' ''   + c.[PostalCode]   ELSE N'''' END
+    )                                      AS CariTamAdres,
+    CASE WHEN c.[TaxOffice] IS NOT NULL OR c.[TaxNumber] IS NOT NULL
+         THEN CONCAT(c.[TaxOffice], N'' V.D. '', c.[TaxNumber])
+         ELSE N'''' END                    AS CariVergiSatiri,
 
-    d.[SalesRepId]                       AS TemsilciId,
-    sr.[rep_code]                          AS TemsilciKodu,
+    -- ─── Satis Temsilcisi ───────────────────────────────────────────────
+    d.[SalesRepId]                         AS TemsilciId,
     sr.[rep_name]                          AS TemsilciAdi,
 
+    -- ─── Sirket (master DB Company) ────────────────────────────────────
     comp.[name]                            AS SirketAdi,
     comp.[title]                           AS SirketUnvani,
     comp.[address]                         AS SirketAdresi,
@@ -202,35 +426,49 @@ SELECT
     CONCAT(comp.[tax_office], N'' V.D. '', comp.[tax_number])
                                            AS SirketVergiSatiri,
 
-    dl.[id]                                AS KalemId,
-    dl.[line_no]                           AS SiraNo,
-    dl.[quantity]                          AS Miktar,
-    dl.[unit_price]                        AS BirimFiyat,
-    dl.[discount_rate]                     AS KalemIskontoOrani,
-    dl.[line_total]                        AS SatirToplami,
-    dl.[combination_id]                    AS KombinasyonId,
-    dl.[notes]                             AS KalemNotu,
-    dl.[notes_pinned]                      AS KalemNotuSabitli,
+    -- ─── Belge Kalemi ──────────────────────────────────────────────────
+    dl.[Id]                                AS KalemId,
+    dl.[LineNo]                            AS SiraNo,
+    dl.[Quantity]                          AS Miktar,
+    dl.[UnitPrice]                         AS BirimFiyat,
+    dl.[DiscountRate]                      AS KalemIskontoOrani,
+    -- Hesap: brut tutar = miktar x birim fiyat. Iskonto tutari brut uzerinden turetilir.
+    (dl.[Quantity] * dl.[UnitPrice])       AS KalemBrutTutar,
+    (dl.[Quantity] * dl.[UnitPrice] * dl.[DiscountRate] / 100.0)
+                                           AS KalemIskontoTutari,
+    dl.[LineTotal]                         AS SatirToplami,
+    dl.[CombinationId]                     AS KombinasyonId,
+    dl.[Notes]                             AS KalemNotu,
+    dl.[NotesPinned]                       AS KalemNotuSabitli,
+    dl.[RevisedFromId]                     AS KalemRevizeKaynakId,
 
-    dl.[item_id]                           AS MalzemeId,
+    -- ─── Malzeme ───────────────────────────────────────────────────────
+    dl.[ItemId]                            AS MalzemeId,
     i.[Code]                               AS MalzemeKodu,
     i.[Name]                               AS MalzemeAdi,
     i.[TaxRate]                            AS MalzemeKdvOrani,
+    i.[TypeId]                             AS MalzemeTipId,
+    i.[UnitId]                             AS MalzemeVarsayilanBirimId,
 
-    dl.[unit_id]                           AS BirimId,
+    -- ─── Birim ─────────────────────────────────────────────────────────
+    dl.[UnitId]                            AS BirimId,
     mu.[UnitCode]                          AS BirimKodu,
     mu.[UnitName]                          AS BirimAdi,
+    mu.[IntlCode]                          AS BirimUluslararasiKodu,
 
-    dl.[location_id]                       AS LokasyonId,
+    -- ─── Lokasyon ──────────────────────────────────────────────────────
+    dl.[LocationId]                        AS LokasyonId,
     loc.[LocationCode]                     AS LokasyonKodu,
     loc.[LocationName]                     AS LokasyonAdi,
+    loc.[IsMachinePark]                    AS LokasyonMakineParki,
+    loc.[IsStorageArea]                    AS LokasyonDepo,
 
     -- Kombinasyon detaylarini tek satirda birlestir — Designer Community Edition
     -- Detail Data band desteklemedigi icin kullanisli. Ornek: Boy - 1200 / Renk - Kirmizi
     STUFF((
         SELECT N'' / '' + CONCAT(sqld.[feature_name], N'' - '', sqld.[value_name])
         FROM [dbo].[sales_quote_line_details] sqld
-        WHERE sqld.[quote_line_id] = dl.[id]
+        WHERE sqld.[quote_line_id] = dl.[Id]
         ORDER BY sqld.[line_order]
         FOR XML PATH(''''), TYPE
     ).value(N''.'', N''nvarchar(max)''), 1, 3, N'''')       AS KombinasyonOzet,
@@ -239,7 +477,7 @@ SELECT
     STUFF((
         SELECT N'', '' + sqld.[value_name]
         FROM [dbo].[sales_quote_line_details] sqld
-        WHERE sqld.[quote_line_id] = dl.[id]
+        WHERE sqld.[quote_line_id] = dl.[Id]
         ORDER BY sqld.[line_order]
         FOR XML PATH(''''), TYPE
     ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonDegerleri,
@@ -249,40 +487,50 @@ SELECT
     STUFF((
         SELECT N'', '' + sqld.[description]
         FROM [dbo].[sales_quote_line_details] sqld
-        WHERE sqld.[quote_line_id] = dl.[id]
+        WHERE sqld.[quote_line_id] = dl.[Id]
           AND sqld.[description] IS NOT NULL
           AND LTRIM(RTRIM(sqld.[description])) <> N''''
         ORDER BY sqld.[line_order]
         FOR XML PATH(''''), TYPE
     ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonAciklamalari,
 
-    -- Tam detay: Her ozellik ayri satirda (CR+LF ile). FastReport TextObject
-    -- WordWrap+CanGrow ile multi-line gosterir. Format:
-    --   - Boy - 1200 (4 kat koruma)
-    --   - Renk - Kirmizi
+    -- Tam detay: Tek satir, virgulle ayrilmis. Onceki versiyon CR+LF + dash bullet
+    -- ile feature_name - value_name formati kullaniyordu (FastReport multi-line).
+    -- Artik SubDetail tablo nesting ile vw_DocumentCombination ayri satirlar uretiyor;
+    -- bu kolon sade inline ozet olarak kullaniliyor. Sadece value_name + opsiyonel
+    -- aciklama yer alir, ozellik basligi (feature_name) yok.
+    -- Format ornegi: 1200 (4 kat koruma), Kirmizi
     STUFF((
-        SELECT NCHAR(13) + NCHAR(10) + N''- '' + CONCAT(sqld.[feature_name], N'' - '', sqld.[value_name],
-            CASE WHEN sqld.[description] IS NOT NULL
-                  AND LTRIM(RTRIM(sqld.[description])) <> N''''
-                 THEN N'' ('' + sqld.[description] + N'')''
-                 ELSE N''''
-            END)
+        SELECT N'', '' + sqld.[value_name]
+            + CASE WHEN sqld.[description] IS NOT NULL
+                    AND LTRIM(RTRIM(sqld.[description])) <> N''''
+                   THEN N'' ('' + sqld.[description] + N'')''
+                   ELSE N''''
+              END
         FROM [dbo].[sales_quote_line_details] sqld
-        WHERE sqld.[quote_line_id] = dl.[id]
+        WHERE sqld.[quote_line_id] = dl.[Id]
         ORDER BY sqld.[line_order]
         FOR XML PATH(''''), TYPE
     ).value(N''.'', N''nvarchar(max)''), 1, 2, N'''')       AS KombinasyonDetay
 ' + @HwColsSql + @LwColsSql + N'
 FROM [dbo].[Document] d
-LEFT JOIN [dbo].[DocumentLine]           dl   ON dl.[document_id]     = d.[id]
+-- Revize edilmis eski satirlar (revised_from_id dolu ve > 0) raporda gorunmez;
+-- yalnizca orijinal / aktif satirlar (NULL veya 0) JOIN icine girer. Sart ON icine
+-- konuyor ki revisyon olmayan belgeler de gorunmeye devam etsin (LEFT JOIN korunsun).
+LEFT JOIN [dbo].[DocumentLine]           dl   ON dl.[DocumentId]     = d.[id]
+                                              AND (dl.[RevisedFromId] IS NULL OR dl.[RevisedFromId] = 0)
 LEFT JOIN [dbo].[Contact]                c    ON c.[Id]               = d.[ContactId]
 LEFT JOIN [dbo].[sales_representatives]  sr   ON sr.[id]              = d.[SalesRepId]
 LEFT JOIN [dbo].[document_types]         dt   ON dt.[id]              = d.[DocumentTypeId]
-LEFT JOIN [dbo].[Items]                  i    ON i.[Id]               = dl.[item_id]
-LEFT JOIN [dbo].[Unit]                   mu   ON mu.[Id]              = dl.[unit_id]
-LEFT JOIN [dbo].[Location]               loc  ON loc.[Id]             = dl.[location_id]
+LEFT JOIN [dbo].[Items]                  i    ON i.[Id]               = dl.[ItemId]
+LEFT JOIN [dbo].[Unit]                   mu   ON mu.[Id]              = dl.[UnitId]
+LEFT JOIN [dbo].[Location]               loc  ON loc.[Id]             = dl.[LocationId]
+LEFT JOIN [dbo].[currencies]             cur  ON cur.[code]           = d.[currency]
 ' + @HwJoin + @LwJoin + N'
-LEFT JOIN [{systemDatabaseName}].[dbo].[Company] comp ON comp.[id] = d.[CompanyId];';
+LEFT JOIN [{systemDatabaseName}].[dbo].[Company] comp ON comp.[id] = d.[CompanyId]
+-- Sadece aktif belgeler: silinmis / pasif (IsActive = 0) Document kayitlari
+-- raporda gorunmez. Renamer is_active -> IsActive (PascalCase) yapiyor.
+WHERE d.[IsActive] = 1;';
 
     EXEC sp_executesql @Sql;
 
@@ -303,14 +551,23 @@ AS
 SELECT
     d.[id]                       AS BelgeId,
     d.[DocumentNumber]           AS BelgeNo,
-    dl.[id]                      AS KalemId,
-    dl.[line_no]                 AS KalemSiraNo,
+    d.[DocumentTypeId]           AS BelgeTurId,
+    d.[currency]                 AS ParaBirimi,
+    dl.[Id]                      AS KalemId,
+    dl.[LineNo]                  AS KalemSiraNo,
     i.[Code]                     AS MalzemeKodu,
     i.[Name]                     AS MalzemeAdi,
-    dl.[quantity]                AS Miktar,
-    dl.[unit_price]              AS BirimFiyat,
-    dl.[line_total]              AS SatirToplami,
+    i.[TaxRate]                  AS MalzemeKdvOrani,
+    dl.[Quantity]                AS Miktar,
+    dl.[UnitPrice]               AS BirimFiyat,
+    dl.[DiscountRate]            AS KalemIskontoOrani,
+    dl.[LineTotal]               AS SatirToplami,
+    dl.[CombinationId]           AS KombinasyonId,
     mu.[UnitCode]                AS BirimKodu,
+    mu.[UnitName]                AS BirimAdi,
+    mu.[IntlCode]                AS BirimUluslararasiKodu,
+    loc.[LocationCode]           AS LokasyonKodu,
+    loc.[LocationName]           AS LokasyonAdi,
     sqld.[id]                    AS DetayId,
     sqld.[line_order]            AS SiraNo,
     sqld.[feature_name]          AS OzellikAdi,
@@ -318,10 +575,16 @@ SELECT
     sqld.[value_name]            AS DegerAdi,
     sqld.[description]           AS Aciklama
 FROM [dbo].[DocumentLine] dl
-INNER JOIN [dbo].[Document]     d  ON d.[id]          = dl.[document_id]
-LEFT  JOIN [dbo].[sales_quote_line_details] sqld ON sqld.[quote_line_id] = dl.[id]
-LEFT  JOIN [dbo].[Items]        i  ON i.[Id]          = dl.[item_id]
-LEFT  JOIN [dbo].[Unit]         mu ON mu.[Id]         = dl.[unit_id];';
+INNER JOIN [dbo].[Document]     d   ON d.[id]              = dl.[DocumentId]
+LEFT  JOIN [dbo].[sales_quote_line_details] sqld ON sqld.[quote_line_id] = dl.[Id]
+LEFT  JOIN [dbo].[Items]        i   ON i.[Id]              = dl.[ItemId]
+LEFT  JOIN [dbo].[Unit]         mu  ON mu.[Id]             = dl.[UnitId]
+LEFT  JOIN [dbo].[Location]     loc ON loc.[Id]            = dl.[LocationId]
+-- Revize edilmis kalemler ve pasif belgeler filtrelenir (vw_ReportDocument ile ayni
+-- kurallar). Aksi halde document 4 te bir kalemin 4 versiyonu varsa kombinasyon
+-- ozellikleri 4 kere tekrar eder.
+WHERE d.[IsActive] = 1
+  AND (dl.[RevisedFromId] IS NULL OR dl.[RevisedFromId] = 0);';
 
     EXEC sp_executesql @SqlCmb;
 END;";
@@ -384,14 +647,18 @@ END;";
             await EnsureAddressTablesAsync(connection, cancellationToken);
             await EnsureContactItemTableAsync(connection, cancellationToken);
             await EnsureDesignTemplatesTableAsync(connection, cancellationToken);
-            await EnsureIntegrationEventTablesAsync(connection, cancellationToken);
-            await MigrateIntegrationEventsTableAsync(connection, cancellationToken);
+            await DropLegacyIntegrationEventTablesAsync(connection, cancellationToken);
             await EnsureIntegrationApiProfilesTableAsync(connection, cancellationToken);
+            await EnsureIntegrationTablesAsync(connection, cancellationToken);
+            await EnsureIntegrationRecordStatusTableAsync(connection, cancellationToken);
+            await EnsureIntegrationLookupFunctionTablesAsync(connection, cancellationToken);
+            await EnsureIntegrationDocCatalogTablesAsync(connection, cancellationToken);
             await EnsureDynamicFieldValuesTableAsync(connection, cancellationToken);
             await EnsureDocumentTablesAsync(connection, cancellationToken);
             await MigrateDocumentContactNameDropAsync(connection, cancellationToken);
             await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
             await EnsureDocumentTypesTableAsync(connection, cancellationToken);
+            await EnsureDocumentNumberRulesTableAsync(connection, cancellationToken);
             await EnsureReportTemplatesTableAsync(connection, cancellationToken);
             await EnsureReportTemplateSourcesTableAsync(connection, cancellationToken);
             await EnsureScheduledTasksTableAsync(connection, cancellationToken);
@@ -405,6 +672,8 @@ END;";
             await EnsureSalesRepresentativeTableAsync(connection, cancellationToken);
             await EnsureCurrencyTablesAsync(connection, cancellationToken);
             await SeedCurrenciesAsync(connection, cancellationToken);
+            await MigrateDocumentLineColumnNamesAsync(connection, cancellationToken);
+            Console.WriteLine("[DB INIT] MigrateDocumentLineColumnNamesAsync completed successfully.");
             await EnsureDocumentLineDetailsTableAsync(connection, cancellationToken);
             await EnsurePriceListTablesAsync(connection, cancellationToken);
             await EncryptLegacyIntegratorSecretsAsync(connection, cancellationToken);
@@ -430,6 +699,10 @@ END;";
             await EnsureProductionInfrastructureAsync(connection, cancellationToken);
             await EnsureDocLayoutTableAsync(connection, cancellationToken);
             await EnsureDocLayoutDsTableAsync(connection, cancellationToken);
+            await EnsureDocLayoutRuleTableAsync(connection, cancellationToken);
+            await EnsureStockDocTablesAsync(connection, cancellationToken);
+            await EnsureGlobalLockTableAsync(connection, cancellationToken);
+            await EnsureAttachmentTableAsync(cancellationToken);
         }
         catch (SqlException sqlEx)
         {
@@ -640,23 +913,50 @@ END;";
         var schemaForSql = _schema.Replace("]", "]]");
         var schemaLiteral = _schema.Replace("'", "''");
 
+        // __SchemaVersion tablosu (rapor §2.8) — yeni migration'lar buradan kayit tutar.
+        // Mevcut 66 migration metoduna dokunulmaz (zaten IF NOT EXISTS ile idempotent),
+        // ama yeni eklemeler MigrationVersionTracker.RunOnceAsync ile resume-safe yapilir.
+        await new MigrationVersionTracker(_schema).EnsureTableAsync(connection, cancellationToken);
+
         var commandText = $"""
             IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE [name] = N'{schemaLiteral}')
             BEGIN
                 EXEC(N'CREATE SCHEMA [{schemaForSql}]');
             END;
 
+            -- Department tablosu: INT PK, PascalCase, Code kaldirildi.
+            -- Mevcut UNIQUEIDENTIFIER tabloyu drop+recreate (Plan A — veri kaybi kabul).
+            IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NOT NULL
+               AND EXISTS (
+                   SELECT 1 FROM sys.columns
+                   WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Department]')
+                     AND [name] = N'id'
+               )
+            BEGIN
+                -- User.department_id FK'sini once kaldir
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE [name] = N'fk_users_departments_department_id')
+                BEGIN
+                    EXEC(N'ALTER TABLE [{schemaForSql}].[User] DROP CONSTRAINT [fk_users_departments_department_id];');
+                END;
+                EXEC(N'DROP TABLE [{schemaForSql}].[Department];');
+            END;
+
             IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{schemaForSql}].[Department]
                 (
-                    [id] UNIQUEIDENTIFIER NOT NULL CONSTRAINT [pk_departments] PRIMARY KEY DEFAULT(NEWSEQUENTIALID()),
-                    [code] NVARCHAR(20) NOT NULL,
-                    [name] NVARCHAR(100) NOT NULL,
-                    [parent_department_id] UNIQUEIDENTIFIER NULL,
-                    [is_active] BIT NOT NULL CONSTRAINT [df_departments_is_active] DEFAULT(1)
+                    [Id] INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_Department] PRIMARY KEY,
+                    [CompanyId] INT NOT NULL,
+                    [Name] NVARCHAR(100) NOT NULL,
+                    [ParentDepartmentId] INT NULL,
+                    [IsActive] BIT NOT NULL CONSTRAINT [df_Department_IsActive] DEFAULT(1),
+                    CONSTRAINT [fk_Department_Parent]
+                        FOREIGN KEY ([ParentDepartmentId]) REFERENCES [{schemaForSql}].[Department]([Id])
                 );
-                CREATE UNIQUE INDEX [ux_departments_code] ON [{schemaForSql}].[Department]([code]);
+                CREATE UNIQUE INDEX [ux_Department_CompanyId_Name]
+                    ON [{schemaForSql}].[Department]([CompanyId], [Name]);
+                CREATE INDEX [ix_Department_CompanyId]
+                    ON [{schemaForSql}].[Department]([CompanyId]);
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[User]', N'U') IS NULL
@@ -667,7 +967,7 @@ END;";
                     [full_name] NVARCHAR(100) NOT NULL,
                     [email] NVARCHAR(120) NOT NULL,
                     [employee_code] NVARCHAR(30) NOT NULL,
-                    [department_id] UNIQUEIDENTIFIER NOT NULL,
+                    [department_id] INT NULL,
                     [supervisor_user_id] UNIQUEIDENTIFIER NULL,
                     [role] NVARCHAR(50) NOT NULL,
                     [permissions] NVARCHAR(MAX) NOT NULL,
@@ -677,8 +977,6 @@ END;";
                     [grid_preferences_json] NVARCHAR(MAX) NULL,
                     [grafana_role] NVARCHAR(20) NULL,
                     [is_active] BIT NOT NULL CONSTRAINT [df_users_is_active] DEFAULT(1),
-                    CONSTRAINT [fk_users_departments_department_id]
-                        FOREIGN KEY ([department_id]) REFERENCES [{schemaForSql}].[Department]([id]),
                     CONSTRAINT [fk_users_users_supervisor_user_id]
                         FOREIGN KEY ([supervisor_user_id]) REFERENCES [{schemaForSql}].[User]([id])
                 );
@@ -2042,6 +2340,8 @@ END;";
                     [MaxWeightCapacity] DECIMAL(18,2) NULL,
                     [VolumeCapacity] DECIMAL(18,2) NULL,
                     [IsActive] BIT NOT NULL CONSTRAINT [df_Locations_IsActive] DEFAULT(1),
+                    [IsMachinePark] BIT NOT NULL CONSTRAINT [df_Locations_IsMachinePark] DEFAULT(0),
+                    [IsStorageArea] BIT NOT NULL CONSTRAINT [df_Locations_IsStorageArea] DEFAULT(0),
                     CONSTRAINT [FK_Location_Parent]
                         FOREIGN KEY ([ParentId]) REFERENCES [{schemaForSql}].[Location]([Id])
                 );
@@ -2130,6 +2430,20 @@ END;";
                     SET [IsActive] = 1
                     WHERE [IsActive] IS NULL;
                 ');
+            END;
+
+            IF OBJECT_ID(N'[{schemaForSql}].[Location]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Location]', N'IsMachinePark') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Location]
+                ADD [IsMachinePark] BIT NOT NULL CONSTRAINT [df_Locations_IsMachinePark] DEFAULT(0);
+            END;
+
+            IF OBJECT_ID(N'[{schemaForSql}].[Location]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Location]', N'IsStorageArea') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Location]
+                ADD [IsStorageArea] BIT NOT NULL CONSTRAINT [df_Locations_IsStorageArea] DEFAULT(0);
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[Location]', N'U') IS NOT NULL
@@ -2326,10 +2640,10 @@ END;";
                 CREATE TABLE [{schemaForSql}].[Machine]
                 (
                     [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    [CompanyId] INT NOT NULL,
                     [LocationId] INT NOT NULL,
                     [MachineCode] NVARCHAR(50) NOT NULL,
                     [MachineName] NVARCHAR(150) NULL,
-                    [MachineType] NVARCHAR(60) NULL,
                     [HourlyCapacity] DECIMAL(18,4) NULL,
                     [SortOrder] INT NOT NULL CONSTRAINT [df_Machine_SortOrder] DEFAULT(0),
                     [IsActive] BIT NOT NULL CONSTRAINT [df_Machine_IsActive] DEFAULT(1),
@@ -2337,75 +2651,53 @@ END;";
                         FOREIGN KEY ([LocationId]) REFERENCES [{schemaForSql}].[Location]([Id])
                 );
 
-                CREATE UNIQUE INDEX [ux_Machine_MachineCode]
-                    ON [{schemaForSql}].[Machine]([MachineCode]);
+                CREATE UNIQUE INDEX [ux_Machine_CompanyId_MachineCode]
+                    ON [{schemaForSql}].[Machine]([CompanyId], [MachineCode]);
+
+                CREATE INDEX [ix_Machine_CompanyId]
+                    ON [{schemaForSql}].[Machine]([CompanyId]);
 
                 CREATE INDEX [ix_Machine_LocationId]
                     ON [{schemaForSql}].[Machine]([LocationId]);
             END;
 
-            -- ── MachineType: makine tipi referans veri (Logo Netsis 9 std. tip + ozel) ──
-            IF OBJECT_ID(N'[{schemaForSql}].[MachineType]', N'U') IS NULL
+            -- Mevcut Machine tablosunda CompanyId yoksa ekle (default = active company)
+            IF OBJECT_ID(N'[{schemaForSql}].[Machine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Machine]', N'CompanyId') IS NULL
             BEGIN
-                CREATE TABLE [{schemaForSql}].[MachineType]
-                (
-                    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [Code] NVARCHAR(50) NOT NULL,
-                    [Name] NVARCHAR(120) NOT NULL,
-                    [Description] NVARCHAR(800) NULL,
-                    [IsBuiltIn] BIT NOT NULL CONSTRAINT [df_MachineType_IsBuiltIn] DEFAULT(0),
-                    [SortOrder] INT NOT NULL CONSTRAINT [df_MachineType_SortOrder] DEFAULT(0),
-                    [IsActive] BIT NOT NULL CONSTRAINT [df_MachineType_IsActive] DEFAULT(1)
-                );
-                CREATE UNIQUE INDEX [ux_MachineType_Code] ON [{schemaForSql}].[MachineType]([Code]);
+                EXEC(N'ALTER TABLE [{schemaForSql}].[Machine] ADD [CompanyId] INT NOT NULL CONSTRAINT [df_Machine_CompanyId] DEFAULT(1);');
+                -- Eski unique index ([MachineCode]) varsa, CompanyId-scoped versiyonla degistir
+                IF EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Machine]')
+                             AND [name] = N'ux_Machine_MachineCode')
+                BEGIN
+                    EXEC(N'DROP INDEX [ux_Machine_MachineCode] ON [{schemaForSql}].[Machine];');
+                END;
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Machine]')
+                                 AND [name] = N'ux_Machine_CompanyId_MachineCode')
+                BEGIN
+                    EXEC(N'CREATE UNIQUE INDEX [ux_Machine_CompanyId_MachineCode] ON [{schemaForSql}].[Machine]([CompanyId], [MachineCode]);');
+                END;
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Machine]')
+                                 AND [name] = N'ix_Machine_CompanyId')
+                BEGIN
+                    EXEC(N'CREATE INDEX [ix_Machine_CompanyId] ON [{schemaForSql}].[Machine]([CompanyId]);');
+                END;
             END;
 
-            -- Built-in 9 standart makine tipi seed (idempotent — sadece eksik olanlari ekler).
-            -- Description'larda kritik planlama davranisi/parametreleri belirtilir.
-            ;WITH src ([Code],[Name],[Description],[SortOrder]) AS (
-                SELECT * FROM (VALUES
-                    (N'NORMAL_SINGLE', N'Normal (Single Processor)',
-                     N'Ayni anda yalnizca 1 urun isleyebilir. Standart tek-islemcili tezgah/makine icin temel tip. Uretim Suresi + Uretim Miktari ikisi birlikte tanimlanir (orn. 70 sn''de 8 metre).',
-                     10),
-                    (N'NORMAL_MULTI', N'Normal (Multi Processor)',
-                     N'Ayni anda birden fazla AYNI urunu paralel isler. Bu tip secildiginde "Islemci Sayisi" parametresi aktiflesir — makinenin paralel kapasitesi. Farkli urunler ayni anda islenemez.',
-                     20),
-                    (N'FASON', N'Fason',
-                     N'Disarida islenmek uzere gonderilen uretim. "Cari Kodu" + "Kapasite" alanlari ile fason ureticiyi tanimlar. Fason Lojistik Plani sekmesinde gidis/donus gun ve saatleri girilir. Kapasite tanimli degilse sonsuz kapasite varsayilir; tanimliysa 24 saatlik dilime gore birim uretim suresi hesaplanir.',
-                     30),
-                    (N'FIRIN', N'Fırın',
-                     N'Bos kapasitesi oldugu surece yeni urun alabilir (gercek ekmek firini gibi). Farkli urunleri ayni anda isler — her urun firinda kendi proses suresi kadar islenir. "Ise Baslayabilmek icin Min. Kapasite Doluluk Orani" parametresi: ornek 0.8 = firin kapasitesinin %80 orani dolmadan calismaya baslamaz.',
-                     40),
-                    (N'SUREKLI_FIRIN', N'Sürekli Fırın',
-                     N'Firin icinde surekli akis var — urunler firina girer, icinde ilerler, ciktiklarinda islenmis olur. "Cevrim Suresi" parametresi: makine dolduktan sonra her birim urun icin makineden cikis suresi (orn. 30 sn''de 1 adet). Ilk urun cikana kadar gecen sure = uretim suresi.',
-                     50),
-                    (N'MONTAJ_HATTI', N'Montaj Hattı',
-                     N'Surekli firin ile ayni mantik (cevrim suresi destekli). EK olarak Montaj Hatti Dengeleme destegi var — operasyon dagilimi optimum sekilde dengelenir. Hatti olusturan istasyonlar arasinda akis sirasi korunur.',
-                     60),
-                    (N'MANUEL_MONTAJ', N'Manuel Montaj',
-                     N'Operator/kaynak tabanli uretim. "Min. Calisabilecek Kaynak Seti Sayisi" + "Maks. Calisabilecek Kaynak Seti Sayisi" parametreleriyle algoritma optimum kaynak atamasi yapar. Ayni anda farkli urunler islenebilir (orn. montaj masasi etrafinda paketleme operasyonu).',
-                     70),
-                    (N'KAZAN', N'Kazan',
-                     N'Kapasite tamamen dolmamis olsa dahi makine basladigi an proses sona erene kadar yeni urun ALMAZ. "Farkli Urunler Ayni Anda Islem Gorebilsin" parametresi acilirsa "Gruplama Secenegi" listesi (Uretim Suresi, Grup Kodu, Kod-1..5, Urun Grubu) ile harman uretimi yapilir — gruptaki tum urunler max sureye gore islenir. Min. Kapasite Doluluk Orani da uygulanir.',
-                     80),
-                    (N'ROBOT', N'Robot',
-                     N'Ayni anda farkli urunleri es zamanli isleyebilen makine. "Es Zamanli Is Setleri Tanimlama" sekmesi ile mumkun her kombinasyon (orn. A-B, A-C, B-C, A-B-C) set olarak girilmelidir. Tanimlanmamis bir kombinasyon olusursa makineye is emri ATANMAZ.',
-                     90)
-                ) v ([Code],[Name],[Description],[SortOrder])
-            )
-            -- HOLDLOCK: Web + Worker startup'ta paralel migration calistirinca race
-            -- olusabilir (MATCHED kontrolu ile INSERT arasinda satir eklenirse duplicate
-            -- key hatasi). HOLDLOCK ile MERGE update lock alir → seri calisir.
-            MERGE [{schemaForSql}].[MachineType] WITH (HOLDLOCK) AS tgt
-            USING src ON tgt.[Code] = src.[Code]
-            WHEN NOT MATCHED THEN
-                INSERT ([Code],[Name],[Description],[IsBuiltIn],[SortOrder],[IsActive])
-                VALUES (src.[Code], src.[Name], src.[Description], 1, src.[SortOrder], 1)
-            WHEN MATCHED THEN
-                UPDATE SET [Name] = src.[Name],
-                           [Description] = src.[Description],
-                           [SortOrder] = src.[SortOrder],
-                           [IsBuiltIn] = 1;
+            -- MachineType tablosu kaldirildi (parametre tabanli yonetim widget uzerinde
+            --  olacak). Mevcut DB'de varsa drop + Machine.MachineType kolonu da temizle.
+            IF OBJECT_ID(N'[{schemaForSql}].[Machine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Machine]', N'MachineType') IS NOT NULL
+            BEGIN
+                EXEC(N'ALTER TABLE [{schemaForSql}].[Machine] DROP COLUMN [MachineType];');
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[MachineType]', N'U') IS NOT NULL
+            BEGIN
+                EXEC(N'DROP TABLE [{schemaForSql}].[MachineType];');
+            END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[Unit]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Unit]', N'UnitCode') IS NULL
@@ -2913,80 +3205,29 @@ END;";
                 ');
             END;
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Department]', N'company_id') IS NULL
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[Department]
-                ADD [company_id] INT NOT NULL CONSTRAINT [df_departments_company_id_default] DEFAULT(0);
-            END;
+            -- (Eski Department migration kodlari kaldirildi — yeni schema CREATE TABLE'da
+            --  Id INT IDENTITY + CompanyId/Name/IsActive PascalCase + UNIQUE(CompanyId,Name) ile
+            --  kuruluyor. Drop+recreate Plan A.)
 
-            IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Department]', N'company_id') IS NOT NULL
-            BEGIN
-                EXEC sp_executesql
-                    N'UPDATE [{schemaForSql}].[Department]
-                      SET [company_id] = @DefaultCompanyId
-                      WHERE [company_id] = 0;',
-                    N'@DefaultCompanyId INT',
-                    @DefaultCompanyId = @CompanyId;
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Department]', N'company_id') IS NOT NULL
+            -- User.department_id eski UNIQUEIDENTIFIER tipinde ise INT NULL'a cevir
+            IF OBJECT_ID(N'[{schemaForSql}].[User]', N'U') IS NOT NULL
                AND EXISTS (
-                   SELECT 1
-                   FROM sys.columns
-                   WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Department]')
-                     AND [name] = N'company_id'
-                     AND [is_nullable] = 1
+                   SELECT 1 FROM sys.columns c
+                   JOIN sys.types t ON c.[user_type_id] = t.[user_type_id]
+                   WHERE c.[object_id] = OBJECT_ID(N'[{schemaForSql}].[User]')
+                     AND c.[name] = N'department_id'
+                     AND t.[name] = N'uniqueidentifier'
                )
             BEGIN
-                EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Department]
-                    ALTER COLUMN [company_id] INT NOT NULL;
-                ');
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Department]', N'company_id') IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1
-                   FROM sys.foreign_keys
-                   WHERE [name] = N'fk_departments_company_company_id'
-                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[Department]')
-               )
-            BEGIN
-                EXEC(N'
-                    ALTER TABLE [{schemaForSql}].[Department]
-                    ADD CONSTRAINT [fk_departments_company_company_id]
-                    FOREIGN KEY ([company_id]) REFERENCES [{schemaForSql}].[Company]([id]);
-                ');
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NOT NULL
-               AND EXISTS (
-                   SELECT 1
-                   FROM sys.indexes
-                   WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Department]')
-                     AND [name] = N'ux_departments_code'
-               )
-            BEGIN
-                EXEC(N'DROP INDEX [ux_departments_code] ON [{schemaForSql}].[Department];');
-            END;
-
-            IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NOT NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Department]', N'company_id') IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1
-                   FROM sys.indexes
-                   WHERE [object_id] = OBJECT_ID(N'[{schemaForSql}].[Department]')
-                     AND [name] = N'ux_departments_company_code'
-               )
-            BEGIN
-                EXEC(N'
-                    CREATE UNIQUE INDEX [ux_departments_company_code]
-                    ON [{schemaForSql}].[Department]([company_id], [code]);
-                ');
+                -- Mevcut FK varsa once kaldir
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys
+                           WHERE [name] = N'fk_users_departments_department_id')
+                BEGIN
+                    EXEC(N'ALTER TABLE [{schemaForSql}].[User] DROP CONSTRAINT [fk_users_departments_department_id];');
+                END;
+                -- Tipi degistirmek icin DROP + ADD
+                EXEC(N'ALTER TABLE [{schemaForSql}].[User] DROP COLUMN [department_id];');
+                EXEC(N'ALTER TABLE [{schemaForSql}].[User] ADD [department_id] INT NULL;');
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[integrator_settings]', N'U') IS NOT NULL
@@ -3789,19 +4030,17 @@ END;";
             return;
         }
 
+        // Department: yeni schema (Id INT IDENTITY, PascalCase, no Code).
+        // FinanceDepartmentId/OperationsDepartmentId artik kullanilmaz — IDENTITY kolonuyla auto.
         await using var insertCommand = connection.CreateCommand();
         insertCommand.CommandText = $"""
-            INSERT INTO [{_schema}].[Department] ([id], [company_id], [code], [name], [parent_department_id], [is_active])
+            INSERT INTO [{_schema}].[Department] ([CompanyId], [Name], [ParentDepartmentId], [IsActive])
             VALUES
-                (@FinanceId, @CompanyId, @FinanceCode, @FinanceName, NULL, 1),
-                (@OperationsId, @CompanyId, @OperationsCode, @OperationsName, NULL, 1);
+                (@CompanyId, @FinanceName, NULL, 1),
+                (@CompanyId, @OperationsName, NULL, 1);
             """;
-        insertCommand.Parameters.Add(new SqlParameter("@FinanceId", FinanceDepartmentId));
         insertCommand.Parameters.Add(new SqlParameter("@CompanyId", DefaultCompanyId));
-        insertCommand.Parameters.Add(new SqlParameter("@FinanceCode", "FIN"));
         insertCommand.Parameters.Add(new SqlParameter("@FinanceName", "Finans"));
-        insertCommand.Parameters.Add(new SqlParameter("@OperationsId", OperationsDepartmentId));
-        insertCommand.Parameters.Add(new SqlParameter("@OperationsCode", "OPS"));
         insertCommand.Parameters.Add(new SqlParameter("@OperationsName", "Operasyon"));
 
         await insertCommand.ExecuteNonQueryAsync(cancellationToken);
@@ -3842,6 +4081,13 @@ END;";
         var permissions = string.Join(',', UserAuthorizationCatalog.Permissions.Select(x => x.ToString()));
         var passwordHash = _passwordHashService.HashPassword(adminPassword);
 
+        // Default department lookup (yeni schema: INT IDENTITY, lookup by Name)
+        await using var deptLookupCmd = connection.CreateCommand();
+        deptLookupCmd.CommandText = $"SELECT TOP 1 [Id] FROM [{_schema}].[Department] WHERE [CompanyId] = @CompanyId AND [Name] = N'Finans';";
+        deptLookupCmd.Parameters.Add(new SqlParameter("@CompanyId", DefaultCompanyId));
+        var deptIdObj = await deptLookupCmd.ExecuteScalarAsync(cancellationToken);
+        object adminDeptIdParam = deptIdObj is int di ? di : (object)DBNull.Value;
+
         await using var insertCommand = connection.CreateCommand();
         insertCommand.CommandText = $"""
             INSERT INTO [{_schema}].[User]
@@ -3854,7 +4100,7 @@ END;";
         insertCommand.Parameters.Add(new SqlParameter("@FullName", adminFullName));
         insertCommand.Parameters.Add(new SqlParameter("@Email", adminEmail));
         insertCommand.Parameters.Add(new SqlParameter("@EmployeeCode", adminEmployeeCode));
-        insertCommand.Parameters.Add(new SqlParameter("@DepartmentId", FinanceDepartmentId));
+        insertCommand.Parameters.Add(new SqlParameter("@DepartmentId", adminDeptIdParam));
         insertCommand.Parameters.Add(new SqlParameter("@Role", UserRole.SystemAdmin.ToString()));
         insertCommand.Parameters.Add(new SqlParameter("@Permissions", permissions));
         insertCommand.Parameters.Add(new SqlParameter("@PasswordHash", passwordHash));
@@ -4364,6 +4610,30 @@ END;";
         var s = _schema.Replace("]", "]]");
         var schemaLiteral = _schema.Replace("'", "''");
         var commandText = $"""
+            -- CariGroup: cari hesap gruplari (Toptan/Perakende/VIP vb.).
+            -- Per-company; Contact ve DocLayoutRule bu tabloya FK verir.
+            IF OBJECT_ID(N'[{s}].[CariGroup]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[CariGroup]
+                (
+                    [Id]         INT          NOT NULL IDENTITY(1,1) CONSTRAINT [pk_CariGroup] PRIMARY KEY,
+                    [CompanyId]  INT          NOT NULL,
+                    [Code]       NVARCHAR(50) NOT NULL,
+                    [Name]       NVARCHAR(150) NOT NULL,
+                    [SortOrder]  INT          NOT NULL CONSTRAINT [df_CariGroup_Sort]    DEFAULT(0),
+                    [IsActive]   BIT          NOT NULL CONSTRAINT [df_CariGroup_Active]  DEFAULT(1),
+                    [CreatedAt]  DATETIME2(0) NOT NULL CONSTRAINT [df_CariGroup_Created] DEFAULT(SYSUTCDATETIME())
+                );
+
+                -- Code per-company unique (filtered: sadece aktif gruplar arasinda)
+                CREATE UNIQUE NONCLUSTERED INDEX [ux_CariGroup_Code]
+                    ON [{s}].[CariGroup]([CompanyId], [Code])
+                    WHERE [IsActive] = 1;
+
+                CREATE INDEX [ix_CariGroup_Company]
+                    ON [{s}].[CariGroup]([CompanyId]);
+            END;
+
             IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[Contact]
@@ -4392,6 +4662,7 @@ END;";
                     [IsActive]       BIT            NOT NULL DEFAULT 1,
                     [PriceGroupId]   INT            NULL,
                     [SalesRepresentativeId] INT     NULL,
+                    [ContactGroupId] INT            NULL,
                     [CreatedAt]      DATETIME2      NOT NULL,
                     CONSTRAINT [uq_contact_accounts_code] UNIQUE ([AccountCode])
                 );
@@ -4401,6 +4672,9 @@ END;";
 
                 CREATE INDEX [ix_contact_company]
                     ON [{s}].[Contact]([CompanyId]);
+
+                CREATE INDEX [ix_contact_group]
+                    ON [{s}].[Contact]([ContactGroupId]);
             END;
 
             -- Mevcut DB'ler icin migrate: WaPhone + WaName kolonlari (Faz 1: WhatsApp musteri eslestirmesi)
@@ -4414,6 +4688,14 @@ END;";
                AND COL_LENGTH(N'{schemaLiteral}.Contact', N'WaName') IS NULL
             BEGIN
                 ALTER TABLE [{s}].[Contact] ADD [WaName] NVARCHAR(150) NULL;
+            END;
+
+            -- Mevcut DB'ler icin migrate: ContactGroupId kolonu (Cari Grup ozelligi)
+            IF OBJECT_ID(N'[{s}].[Contact]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.Contact', N'ContactGroupId') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[Contact] ADD [ContactGroupId] INT NULL;
+                EXEC(N'CREATE INDEX [ix_contact_group] ON [{s}].[Contact]([ContactGroupId]);');
             END;
 
             -- Mevcut DB'ler icin migrate: CompanyId kolonu (multi-tenant izolasyon)
@@ -4520,151 +4802,22 @@ END;";
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private async Task EnsureIntegrationEventTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    // Eski "Entegrasyon Tanimlari" (integration_event_*) sistemi yeni
+    // IntegrationsHub / IntegrationWizard tarafindan tamamen ikame edildi.
+    // Bu migration kalan tablolari ve indekslerini idempotent olarak siler.
+    private async Task DropLegacyIntegrationEventTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
         var commandText = $"""
-            IF OBJECT_ID(N'[{s}].[integration_event_definitions]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{s}].[integration_event_definitions]
-                (
-                    [id]              UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [company_id]      INT NOT NULL,
-                    [name]            NVARCHAR(200)    NOT NULL,
-                    [event_source]    NVARCHAR(100)    NOT NULL,
-                    [event_type]      NVARCHAR(50)     NOT NULL,
-                    [event_detail]    NVARCHAR(200)    NULL,
-                    [sql_command]     NVARCHAR(MAX)    NOT NULL,
-                    [stop_on_error]   BIT              NOT NULL DEFAULT(1),
-                    [is_active]       BIT              NOT NULL DEFAULT(1),
-                    [execution_order] INT              NOT NULL DEFAULT(0),
-                    [Created]      DATETIME2(0)     NOT NULL,
-                    [Updated]      DATETIME2(0)     NULL    
-                );
-                CREATE INDEX [ix_ied_lookup] ON [{s}].[integration_event_definitions]
-                    ([company_id], [event_source], [event_type], [is_active]);
-            END;
-
-            IF OBJECT_ID(N'[{s}].[integration_event_logs]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{s}].[integration_event_logs]
-                (
-                    [id]            UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-                    [definition_id] UNIQUEIDENTIFIER NOT NULL,
-                    [company_id]    INT NOT NULL,
-                    [event_source]  NVARCHAR(100)    NOT NULL,
-                    [event_type]    NVARCHAR(50)     NOT NULL,
-                    [executed_sql]  NVARCHAR(MAX)    NOT NULL,
-                    [success]       BIT              NOT NULL,
-                    [error_message] NVARCHAR(MAX)    NULL,
-                    [executed_at]   DATETIME2(0)     NOT NULL,
-                    [duration_ms]   BIGINT           NOT NULL DEFAULT(0)
-                );
-                CREATE INDEX [ix_iel_browse] ON [{s}].[integration_event_logs]
-                    ([company_id], [executed_at] DESC);
-            END;
+            IF OBJECT_ID(N'[{s}].[integration_event_logs]', N'U') IS NOT NULL
+                DROP TABLE [{s}].[integration_event_logs];
+            IF OBJECT_ID(N'[{s}].[integration_event_definitions]', N'U') IS NOT NULL
+                DROP TABLE [{s}].[integration_event_definitions];
             """;
 
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private async Task MigrateIntegrationEventsTableAsync(SqlConnection connection, CancellationToken cancellationToken)
-    {
-        var s = _schema.Replace("]", "]]");
-
-        // Each DDL statement runs in its own batch to avoid SQL Server compile-time
-        // schema-binding issues when dropping and re-adding a column in the same batch.
-        var steps = new List<string>
-        {
-            // 1a — drop lookup index on definitions (if column is still UNIQUEIDENTIFIER)
-            $"""
-            IF EXISTS (
-                SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_definitions]')
-                  AND name = 'company_id' AND system_type_id = TYPE_ID('uniqueidentifier')
-            ) AND EXISTS (SELECT 1 FROM sys.indexes
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_definitions]') AND name = 'ix_ied_lookup')
-                DROP INDEX [ix_ied_lookup] ON [{s}].[integration_event_definitions];
-            """,
-            // 1b — drop the UNIQUEIDENTIFIER column
-            $"""
-            IF EXISTS (
-                SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_definitions]')
-                  AND name = 'company_id' AND system_type_id = TYPE_ID('uniqueidentifier')
-            )
-                ALTER TABLE [{s}].[integration_event_definitions] DROP COLUMN [company_id];
-            """,
-            // 1c — add back as INT
-            $"""
-            IF NOT EXISTS (
-                SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_definitions]')
-                  AND name = 'company_id'
-            )
-                ALTER TABLE [{s}].[integration_event_definitions] ADD [company_id] INT NOT NULL DEFAULT(0);
-            """,
-            // 1d — recreate index
-            $"""
-            IF NOT EXISTS (SELECT 1 FROM sys.indexes
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_definitions]') AND name = 'ix_ied_lookup')
-                CREATE INDEX [ix_ied_lookup] ON [{s}].[integration_event_definitions]
-                    ([company_id], [event_source], [event_type], [is_active]);
-            """,
-
-            // 2a — drop browse index on logs
-            $"""
-            IF EXISTS (
-                SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_logs]')
-                  AND name = 'company_id' AND system_type_id = TYPE_ID('uniqueidentifier')
-            ) AND EXISTS (SELECT 1 FROM sys.indexes
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_logs]') AND name = 'ix_iel_browse')
-                DROP INDEX [ix_iel_browse] ON [{s}].[integration_event_logs];
-            """,
-            // 2b — drop UNIQUEIDENTIFIER column in logs
-            $"""
-            IF EXISTS (
-                SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_logs]')
-                  AND name = 'company_id' AND system_type_id = TYPE_ID('uniqueidentifier')
-            )
-                ALTER TABLE [{s}].[integration_event_logs] DROP COLUMN [company_id];
-            """,
-            // 2c — add back as INT
-            $"""
-            IF NOT EXISTS (
-                SELECT 1 FROM sys.columns
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_logs]')
-                  AND name = 'company_id'
-            )
-                ALTER TABLE [{s}].[integration_event_logs] ADD [company_id] INT NOT NULL DEFAULT(0);
-            """,
-            // 2d — recreate index
-            $"""
-            IF NOT EXISTS (SELECT 1 FROM sys.indexes
-                WHERE object_id = OBJECT_ID(N'[{s}].[integration_event_logs]') AND name = 'ix_iel_browse')
-                CREATE INDEX [ix_iel_browse] ON [{s}].[integration_event_logs]
-                    ([company_id], [executed_at] DESC);
-            """,
-
-            // 3 — extra columns
-            $"IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[integration_event_definitions]') AND name='action_type') ALTER TABLE [{s}].[integration_event_definitions] ADD [action_type] NVARCHAR(50) NOT NULL DEFAULT 'SqlCommand';",
-            $"IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[integration_event_definitions]') AND name='procedure_name') ALTER TABLE [{s}].[integration_event_definitions] ADD [procedure_name] NVARCHAR(200) NULL;",
-            $"IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[integration_event_definitions]') AND name='parameters_json') ALTER TABLE [{s}].[integration_event_definitions] ADD [parameters_json] NVARCHAR(MAX) NULL;",
-            $"IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[integration_event_definitions]') AND name='api_config_json') ALTER TABLE [{s}].[integration_event_definitions] ADD [api_config_json] NVARCHAR(MAX) NULL;",
-            $"IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[integration_event_logs]') AND name='action_type') ALTER TABLE [{s}].[integration_event_logs] ADD [action_type] NVARCHAR(50) NULL DEFAULT 'SqlCommand';",
-            $"IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID(N'[{s}].[integration_event_logs]') AND name='response_body') ALTER TABLE [{s}].[integration_event_logs] ADD [response_body] NVARCHAR(MAX) NULL;",
-        };
-
-        foreach (var step in steps)
-        {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = step;
-            await cmd.ExecuteNonQueryAsync(cancellationToken);
-        }
     }
 
     private async Task EnsureIntegrationApiProfilesTableAsync(SqlConnection connection, CancellationToken cancellationToken)
@@ -4753,6 +4906,855 @@ END;";
         }
 
         Console.WriteLine("[DB INIT] EnsureIntegrationApiProfilesTableAsync tamamlandi.");
+    }
+
+    /// <summary>
+    /// Entegrasyon Wizard modulu icin 5 tablo:
+    ///   IntegrationEndpoint  — REST endpoint katalogu (FK: integration_api_profiles)
+    ///   Integration          — entegrasyon konfigurasyonu (Forms.FormCode -> Endpoint)
+    ///   IntegrationMapping   — alan eslestirme kurallari (1-n Integration)
+    ///   IntegrationTrigger   — tetikleyici konfigleri (Manual/Cron/OnSave/Event) (1-n Integration)
+    ///   IntegrationRun       — calistirma audit log (1-n Integration, BIGINT PK — high volume)
+    ///
+    /// Naming convention: CLAUDE.md -> DB Naming Convention bolumune uygun (PascalCase,
+    /// prefix yok, Id/IsActive/Created/Updated/CreatedBy/UpdatedBy standardi).
+    ///
+    /// Idempotent: IF OBJECT_ID(...) IS NULL kontrolu ile her startup'ta guvenle calisir.
+    /// Tasarim dokumani: docs/integration-wizard-design.md
+    /// </summary>
+    private async Task EnsureIntegrationTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+
+        // ── 1. IntegrationEndpoint ──────────────────────────────────────────
+        // REST endpoint katalogu. ApiProfileId FK ile integration_api_profiles'a baglanir
+        // (auth + base URL oradan okunur). NOT: ApiProfileId UNIQUEIDENTIFIER cunku
+        // legacy integration_api_profiles.id GUID — INT'e migration ileride yapilabilir.
+        var sqlEndpoint = $"""
+            IF OBJECT_ID(N'[{s}].[IntegrationEndpoint]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationEndpoint] (
+                    [Id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationEndpoint PRIMARY KEY,
+                    [ApiProfileId]  UNIQUEIDENTIFIER NOT NULL,
+                    [Name]          NVARCHAR(200) NOT NULL,
+                    [HttpMethod]    NVARCHAR(10)  NOT NULL CONSTRAINT DF_IntegrationEndpoint_Method DEFAULT 'POST',
+                    [UrlTemplate]   NVARCHAR(500) NOT NULL,
+                    [BodySchema]    NVARCHAR(MAX) NULL,
+                    [Description]   NVARCHAR(1000) NULL,
+                    [IsActive]      BIT           NOT NULL CONSTRAINT DF_IntegrationEndpoint_IsActive DEFAULT 1,
+                    [CreatedBy]     NVARCHAR(120) NULL,
+                    [Created]       DATETIME2     NOT NULL CONSTRAINT DF_IntegrationEndpoint_Created DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]     NVARCHAR(120) NULL,
+                    [Updated]       DATETIME2     NULL,
+                    CONSTRAINT FK_IntegrationEndpoint_ApiProfile FOREIGN KEY ([ApiProfileId])
+                        REFERENCES [{s}].[integration_api_profiles]([id])
+                );
+                CREATE INDEX IX_IntegrationEndpoint_Profile
+                    ON [{s}].[IntegrationEndpoint]([ApiProfileId], [IsActive]);
+            END;
+            """;
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = sqlEndpoint;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // ── 2. Integration ──────────────────────────────────────────────────
+        // Ana konfig satiri. Form -> Endpoint baglantisi + error davranisi + versiyon.
+        var sqlIntegration = $"""
+            IF OBJECT_ID(N'[{s}].[Integration]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[Integration] (
+                    [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Integration PRIMARY KEY,
+                    [Name]             NVARCHAR(200) NOT NULL,
+                    [Description]      NVARCHAR(1000) NULL,
+                    [SourceFormCode]   NVARCHAR(50)  NOT NULL,
+                    [TargetEndpointId] INT           NOT NULL,
+                    [ErrorBehavior]    NVARCHAR(20)  NOT NULL CONSTRAINT DF_Integration_ErrorBehavior DEFAULT 'Skip',
+                    [RetryCount]       INT           NOT NULL CONSTRAINT DF_Integration_RetryCount DEFAULT 0,
+                    [IsActive]         BIT           NOT NULL CONSTRAINT DF_Integration_IsActive DEFAULT 1,
+                    [VersionNo]        INT           NOT NULL CONSTRAINT DF_Integration_VersionNo DEFAULT 1,
+                    [CreatedBy]        NVARCHAR(120) NULL,
+                    [Created]          DATETIME2     NOT NULL CONSTRAINT DF_Integration_Created DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]        NVARCHAR(120) NULL,
+                    [Updated]          DATETIME2     NULL,
+                    CONSTRAINT FK_Integration_Endpoint FOREIGN KEY ([TargetEndpointId])
+                        REFERENCES [{s}].[IntegrationEndpoint]([Id])
+                );
+                CREATE INDEX IX_Integration_SourceForm
+                    ON [{s}].[Integration]([SourceFormCode], [IsActive]);
+                CREATE INDEX IX_Integration_Endpoint
+                    ON [{s}].[Integration]([TargetEndpointId]);
+            END;
+
+            -- Faz K: Post-Procedure — entegrasyon basariyla calistiktan sonra
+            -- isteyene gore SQL stored procedure tetiklenir (orn. dbo.MarkAsExported).
+            -- PostProcedureParamsJson: parametre dizisi (name/sourceType/sourceValue alanli objeler)
+            IF OBJECT_ID(N'[{s}].[Integration]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[Integration]', N'PostProcedureName') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[Integration]
+                    ADD [PostProcedureName] NVARCHAR(200) NULL;
+            END;
+            IF OBJECT_ID(N'[{s}].[Integration]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[Integration]', N'PostProcedureParamsJson') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[Integration]
+                    ADD [PostProcedureParamsJson] NVARCHAR(MAX) NULL;
+            END;
+
+            -- Faz O: TargetEndpointId nullable — "Sadece Prosedur" modu icin (HTTP yok).
+            -- Idempotent: zaten NULL ise no-op. NOT NULL constraint'i NULL'a cevirir; FK aynı kalir.
+            IF EXISTS (
+                SELECT 1 FROM sys.columns
+                WHERE object_id = OBJECT_ID(N'[{s}].[Integration]')
+                  AND name = N'TargetEndpointId'
+                  AND is_nullable = 0)
+            BEGIN
+                ALTER TABLE [{s}].[Integration] ALTER COLUMN [TargetEndpointId] INT NULL;
+            END;
+
+            -- Faz K2: Pre-Procedure — entegrasyon HTTP cagrisindan ONCE calistirilan SP
+            -- (lock atma, pre-validation, staging snapshot vb.). PreProc HATA verirse
+            -- entegrasyon iptal edilir (HTTP hic cagirilmaz, run log Failed).
+            IF OBJECT_ID(N'[{s}].[Integration]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[Integration]', N'PreProcedureName') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[Integration]
+                    ADD [PreProcedureName] NVARCHAR(200) NULL;
+            END;
+            IF OBJECT_ID(N'[{s}].[Integration]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[Integration]', N'PreProcedureParamsJson') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[Integration]
+                    ADD [PreProcedureParamsJson] NVARCHAR(MAX) NULL;
+            END;
+            """;
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = sqlIntegration;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // ── 3. IntegrationMapping ───────────────────────────────────────────
+        // Alan eslestirme satirlari. Parent silinince CASCADE.
+        var sqlMapping = $"""
+            IF OBJECT_ID(N'[{s}].[IntegrationMapping]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationMapping] (
+                    [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationMapping PRIMARY KEY,
+                    [IntegrationId]     INT           NOT NULL,
+                    [TargetPath]        NVARCHAR(500) NOT NULL,
+                    [TargetDataType]    NVARCHAR(50)  NULL,
+                    [SourceType]        NVARCHAR(20)  NOT NULL,  -- FormField | Constant | Formula | Lookup
+                    [SourceValue]       NVARCHAR(MAX) NULL,
+                    [LookupSourceField] NVARCHAR(200) NULL,
+                    [DefaultValue]      NVARCHAR(500) NULL,
+                    [FormatPattern]     NVARCHAR(100) NULL,
+                    [IsRequired]        BIT           NOT NULL CONSTRAINT DF_IntegrationMapping_IsRequired DEFAULT 0,
+                    [SortOrder]         INT           NOT NULL CONSTRAINT DF_IntegrationMapping_SortOrder DEFAULT 0,
+                    [GroupKey]          NVARCHAR(100) NULL,
+                    [SourceSection]     NVARCHAR(20)  NOT NULL CONSTRAINT DF_IntegrationMapping_SourceSection DEFAULT 'Header',
+                    CONSTRAINT FK_IntegrationMapping_Integration FOREIGN KEY ([IntegrationId])
+                        REFERENCES [{s}].[Integration]([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX IX_IntegrationMapping_Integration
+                    ON [{s}].[IntegrationMapping]([IntegrationId], [SortOrder]);
+            END;
+
+            -- Faz I: Master-Detail — SourceSection kolonu (Header | Lines | Combination)
+            -- Idempotent: kolon yoksa eklenir, mevcut mapping'ler 'Header' default ile dolar.
+            IF OBJECT_ID(N'[{s}].[IntegrationMapping]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[IntegrationMapping]', N'SourceSection') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationMapping]
+                    ADD [SourceSection] NVARCHAR(20) NOT NULL
+                        CONSTRAINT DF_IntegrationMapping_SourceSection DEFAULT 'Header';
+            END;
+
+            -- Faz J: Lookup zenginlestirme — coklu WHERE filtre + return column
+            -- LookupFiltersJson: JSON array, GuideConstraintDto'ya parse edilir.
+            -- Format ornegi: [ field/operator/sourceField/value/logic alanli objeler ]
+            -- LookupReturnColumn: hangi guide kolonu donulecek (null ise DisplayColumn — geriye uyum)
+            IF OBJECT_ID(N'[{s}].[IntegrationMapping]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[IntegrationMapping]', N'LookupFiltersJson') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationMapping]
+                    ADD [LookupFiltersJson] NVARCHAR(MAX) NULL;
+            END;
+            IF OBJECT_ID(N'[{s}].[IntegrationMapping]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[IntegrationMapping]', N'LookupReturnColumn') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationMapping]
+                    ADD [LookupReturnColumn] NVARCHAR(100) NULL;
+            END;
+
+            -- LookupParam: SourceType=Function + SqlFunctionName modu icin manuel 3. parametre.
+            -- Mapping satirinda kullanici serbest yazar (orn. "USD", "MainWarehouse").
+            -- Runtime: SELECT [schema].[fnName](@formCode, @keyValue, @LookupParam)
+            IF OBJECT_ID(N'[{s}].[IntegrationMapping]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[IntegrationMapping]', N'LookupParam') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationMapping]
+                    ADD [LookupParam] NVARCHAR(500) NULL;
+            END;
+            """;
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = sqlMapping;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // ── 4. IntegrationTrigger ───────────────────────────────────────────
+        // Tetikleyici konfigi. Multi-trigger destek (Manual + Cron + OnSave + Event ayri satir).
+        // V1: Manual + Cron destekleniyor; OnSave + Event V2'de aktif olacak (schema hazir).
+        var sqlTrigger = $"""
+            IF OBJECT_ID(N'[{s}].[IntegrationTrigger]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationTrigger] (
+                    [Id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationTrigger PRIMARY KEY,
+                    [IntegrationId] INT           NOT NULL,
+                    [TriggerType]   NVARCHAR(20)  NOT NULL,  -- Manual | Cron | OnSave | Event
+                    [Config]        NVARCHAR(MAX) NULL,      -- JSON: cron expr, button label, event code
+                    [IsActive]      BIT           NOT NULL CONSTRAINT DF_IntegrationTrigger_IsActive DEFAULT 1,
+                    [Created]       DATETIME2     NOT NULL CONSTRAINT DF_IntegrationTrigger_Created DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT FK_IntegrationTrigger_Integration FOREIGN KEY ([IntegrationId])
+                        REFERENCES [{s}].[Integration]([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX IX_IntegrationTrigger_Type
+                    ON [{s}].[IntegrationTrigger]([TriggerType], [IsActive]);
+                CREATE INDEX IX_IntegrationTrigger_Integration
+                    ON [{s}].[IntegrationTrigger]([IntegrationId]);
+            END;
+            """;
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = sqlTrigger;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // ── 5. IntegrationRun ───────────────────────────────────────────────
+        // Calistirma audit log. BIGINT PK (high volume). Parent silinse bile RUN log korunur
+        // (CASCADE YOK — audit log sacred). User entegrasyonu silmek isterse soft-delete onerilir.
+        var sqlRun = $"""
+            IF OBJECT_ID(N'[{s}].[IntegrationRun]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationRun] (
+                    [Id]             BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationRun PRIMARY KEY,
+                    [IntegrationId]  INT           NOT NULL,
+                    [TriggerType]    NVARCHAR(20)  NOT NULL,    -- Manual | Cron | OnSave | Event
+                    [SourceRecordId] NVARCHAR(100) NULL,
+                    [StartedAt]      DATETIME2     NOT NULL CONSTRAINT DF_IntegrationRun_StartedAt DEFAULT SYSUTCDATETIME(),
+                    [FinishedAt]     DATETIME2     NULL,
+                    [DurationMs]     INT           NULL,
+                    [Status]         NVARCHAR(20)  NOT NULL,    -- Success | Failed | Skipped | Retrying
+                    [HttpStatusCode] INT           NULL,
+                    [RequestBody]    NVARCHAR(MAX) NULL,
+                    [ResponseBody]   NVARCHAR(MAX) NULL,
+                    [ErrorMessage]   NVARCHAR(MAX) NULL,
+                    [RetryAttempt]   INT           NOT NULL CONSTRAINT DF_IntegrationRun_RetryAttempt DEFAULT 0,
+                    [TriggeredBy]    NVARCHAR(120) NULL,        -- manuel icin user; cron icin 'system'
+                    CONSTRAINT FK_IntegrationRun_Integration FOREIGN KEY ([IntegrationId])
+                        REFERENCES [{s}].[Integration]([Id])
+                );
+                CREATE INDEX IX_IntegrationRun_Integration_Started
+                    ON [{s}].[IntegrationRun]([IntegrationId], [StartedAt] DESC);
+                CREATE INDEX IX_IntegrationRun_SourceRecord
+                    ON [{s}].[IntegrationRun]([SourceRecordId], [StartedAt] DESC);
+                CREATE INDEX IX_IntegrationRun_Status
+                    ON [{s}].[IntegrationRun]([Status], [StartedAt] DESC);
+            END;
+            """;
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = sqlRun;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // ── 6. BodyTemplate ─────────────────────────────────────────────────
+        // Endpoint Body Schema icin hazır JSON sablonları. Endpoint Edit modal'ında
+        // "Şablon Galerisi" butonundan tek-tıkla yuklenir. Sablon kataloglu/aramaLi
+        // (Kategori + Etiketler), kullanım sayisi populerlik icin tutulur.
+        var sqlBodyTemplate = $"""
+            IF OBJECT_ID(N'[{s}].[BodyTemplate]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[BodyTemplate] (
+                    [Id]            INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_BodyTemplate PRIMARY KEY,
+                    [Category]      NVARCHAR(50)  NOT NULL,           -- 'Sales' | 'Purchase' | 'Customer' | 'Stock' | 'EDocument'
+                    [Name]          NVARCHAR(200) NOT NULL,           -- "Musteri Siparisi (Netsis)"
+                    [DocType]       NVARCHAR(50)  NULL,               -- "ftSSip" gibi
+                    [ProviderHint]  NVARCHAR(50)  NULL,               -- 'Netsis' | 'Logo' | 'Custom'
+                    [UrlPattern]    NVARCHAR(500) NULL,               -- "/api/v2/ItemSlips" — eslesme onerisi icin
+                    [HttpMethod]    NVARCHAR(10)  NULL,               -- "POST" — eslesme filtresi
+                    [BodyJson]      NVARCHAR(MAX) NOT NULL,           -- Korlestirilmis JSON sablonu
+                    [Description]   NVARCHAR(1000) NULL,
+                    [Tags]          NVARCHAR(500) NULL,               -- "satis,siparis,netsis" — comma-separated
+                    [UsageCount]    INT           NOT NULL CONSTRAINT DF_BodyTemplate_UsageCount DEFAULT 0,
+                    [IsBuiltIn]     BIT           NOT NULL CONSTRAINT DF_BodyTemplate_IsBuiltIn DEFAULT 0,
+                    [IsActive]      BIT           NOT NULL CONSTRAINT DF_BodyTemplate_IsActive DEFAULT 1,
+                    [CreatedBy]     NVARCHAR(120) NULL,
+                    [Created]       DATETIME2     NOT NULL CONSTRAINT DF_BodyTemplate_Created DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]     NVARCHAR(120) NULL,
+                    [Updated]       DATETIME2     NULL
+                );
+                CREATE INDEX IX_BodyTemplate_Category
+                    ON [{s}].[BodyTemplate]([Category], [IsActive]);
+                CREATE INDEX IX_BodyTemplate_Provider
+                    ON [{s}].[BodyTemplate]([ProviderHint], [IsActive]);
+            END;
+            """;
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = sqlBodyTemplate;
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await SeedBuiltInBodyTemplatesAsync(connection, cancellationToken);
+
+        Console.WriteLine("[DB INIT] EnsureIntegrationTablesAsync tamamlandi.");
+    }
+
+    /// <summary>
+    /// IntegrationRecordStatus — entegrasyon X kayit Y eslemesi icin "Aktarim
+    /// Kuyrugu" sayfasinin durum takip tablosu. Her (IntegrationId, RecordId)
+    /// cifti icin tek satir; Status alanindan filtre yapilarak kuyruk listelenir.
+    ///
+    /// Status:
+    ///   Pending  — kayit hic islenmemis (default)
+    ///   Sent     — basariyla gonderildi (kuyrukta gorunmez)
+    ///   Failed   — denendi, hata aldi (kuyrukta gorunur, yeniden denenebilir)
+    ///   Skipped  — kullanici "bu kayit ERP'de var, gonderme" dedi (kuyruktan
+    ///              cikar, "Haric Tutulanlar" filtresinden geri alinabilir)
+    ///
+    /// Bekleyenler sorgusu: Status IN ('Pending','Failed') AND IsActive=1
+    /// </summary>
+    /// <summary>
+    /// Lookup Fonksiyonu (Function source tipi) tanim tablolari.
+    /// IntegrationLookupFunction:        kayit basligi (kod, ad, view adi, anahtar kolonu)
+    /// IntegrationLookupFunctionColumn:  donulebilir kolon listesi (UI dropdown'lari icin)
+    /// Seed: ilk kurulumda kod-tabanli 5 fonksiyon (ITEMS/CONTACTS/LOCATIONS/UNITS/CURRENCIES)
+    /// otomatik eklenir; admin sonradan yenilerini admin paneli uzerinden ekler.
+    /// </summary>
+    private async Task EnsureIntegrationLookupFunctionTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationLookupFunction]'))
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationLookupFunction] (
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_IntegrationLookupFunction] PRIMARY KEY,
+                    [Code]        NVARCHAR(40)      NOT NULL,
+                    [Label]       NVARCHAR(120)     NOT NULL,
+                    [Description] NVARCHAR(500)     NULL,
+                    [ViewName]    NVARCHAR(120)     NOT NULL,
+                    [KeyColumn]   NVARCHAR(60)      NOT NULL,
+                    [SortOrder]   INT               NOT NULL CONSTRAINT [DF_IntegrationLookupFunction_Sort]    DEFAULT(0),
+                    [IsActive]    BIT               NOT NULL CONSTRAINT [DF_IntegrationLookupFunction_Active]  DEFAULT(1),
+                    [CreatedBy]   NVARCHAR(120)     NULL,
+                    [Created]     DATETIME2         NOT NULL CONSTRAINT [DF_IntegrationLookupFunction_Created] DEFAULT(SYSUTCDATETIME()),
+                    [UpdatedBy]   NVARCHAR(120)     NULL,
+                    [Updated]     DATETIME2         NULL
+                );
+                CREATE UNIQUE NONCLUSTERED INDEX [UX_IntegrationLookupFunction_Code]
+                    ON [{s}].[IntegrationLookupFunction]([Code])
+                    WHERE [IsActive] = 1;
+            END;
+
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationLookupFunctionColumn]'))
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationLookupFunctionColumn] (
+                    [Id]         INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_IntegrationLookupFunctionColumn] PRIMARY KEY,
+                    [FunctionId] INT               NOT NULL,
+                    [Column]     NVARCHAR(60)      NOT NULL,
+                    [Label]      NVARCHAR(120)     NOT NULL,
+                    [SortOrder]  INT               NOT NULL CONSTRAINT [DF_IntegrationLookupFunctionColumn_Sort] DEFAULT(0),
+                    CONSTRAINT [FK_IntegrationLookupFunctionColumn_Fn]
+                        FOREIGN KEY ([FunctionId]) REFERENCES [{s}].[IntegrationLookupFunction]([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_IntegrationLookupFunctionColumn_FunctionId]
+                    ON [{s}].[IntegrationLookupFunctionColumn]([FunctionId]);
+            END;
+
+            -- Migration: SqlSnippet kolonu [LEGACY - geriye uyum icin tutulur]
+            IF NOT EXISTS (SELECT 1 FROM sys.columns
+                WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationLookupFunction]') AND name = 'SqlSnippet')
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationLookupFunction] ADD [SqlSnippet] NVARCHAR(MAX) NULL;
+            END;
+
+            -- Migration: SqlFunctionName — DB'de tanimli scalar function (sys.objects type='FN')
+            -- secimi. Yeni "SQL Fonksiyonu" modu — 3-param standart imza (formCode, key, param).
+            IF NOT EXISTS (SELECT 1 FROM sys.columns
+                WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationLookupFunction]') AND name = 'SqlFunctionName')
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationLookupFunction] ADD [SqlFunctionName] NVARCHAR(255) NULL;
+            END;
+
+            -- Migration: ViewName/KeyColumn nullable yap (SQL fonksiyonlarinda dolu olmayabilir)
+            IF EXISTS (SELECT 1 FROM sys.columns
+                WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationLookupFunction]')
+                  AND name = 'ViewName' AND is_nullable = 0)
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationLookupFunction] ALTER COLUMN [ViewName] NVARCHAR(120) NULL;
+            END;
+            IF EXISTS (SELECT 1 FROM sys.columns
+                WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationLookupFunction]')
+                  AND name = 'KeyColumn' AND is_nullable = 0)
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationLookupFunction] ALTER COLUMN [KeyColumn] NVARCHAR(60) NULL;
+            END;
+
+            -- Seed: ilk kurulumda 5 view-based fonksiyon. Idempotent — Code zaten varsa atla.
+            DECLARE @SeedFn TABLE (Code NVARCHAR(40), Label NVARCHAR(120), Description NVARCHAR(500),
+                                   ViewName NVARCHAR(120), KeyColumn NVARCHAR(60), SortOrder INT);
+            INSERT @SeedFn VALUES
+                (N'ITEMS',     N'Stok',        N'Malzeme/stok karti — kayit Id''sinden Kod/Ad/Birim cek',                 N'cbv_Guide_Items',      N'Id', 10),
+                (N'CONTACTS',  N'Cari',        N'Cari hesap — kayit Id''sinden Hesap Kodu/Adi/VKN cek',                   N'cbv_Guide_Contacts',   N'Id', 20),
+                (N'LOCATIONS', N'Depo',        N'Lokasyon/Depo — kayit Id''sinden Kod/Ad cek',                            N'cbv_Guide_Locations',  N'Id', 30),
+                (N'UNITS',     N'Olcu Birimi', N'Olcu birimi — kayit Id''sinden Kod/Ad cek',                              N'cbv_Guide_Units',      N'Id', 40),
+                (N'CURRENCIES',N'Doviz',       N'Doviz — kayit Id''sinden Kod/Ad cek',                                    N'cbv_Guide_Currencies', N'Id', 50);
+
+            INSERT INTO [{s}].[IntegrationLookupFunction] (Code, Label, Description, ViewName, KeyColumn, SortOrder, CreatedBy)
+            SELECT sf.Code, sf.Label, sf.Description, sf.ViewName, sf.KeyColumn, sf.SortOrder, N'system-seed'
+            FROM @SeedFn sf
+            WHERE NOT EXISTS (SELECT 1 FROM [{s}].[IntegrationLookupFunction] f WHERE f.Code = sf.Code);
+
+            -- Seed: 3 SQL fonksiyon ornegi — serbest SQL ile (admin panelden duzenlenebilir).
+            -- @Key parametresi mapping satirinda secilen form alaninin degerini alir.
+            -- SQL fonksiyon seed: ALTER ile ayni batch'te oldugundan EXEC ile defer ediliyor
+            -- (yoksa SQL Server "Invalid column name 'SqlSnippet'" compile hatasi verir)
+            EXEC(N'
+                DECLARE @SeedSqlFn TABLE (Code NVARCHAR(40), Label NVARCHAR(120), Description NVARCHAR(500),
+                                          SqlSnippet NVARCHAR(MAX), SortOrder INT);
+                INSERT @SeedSqlFn VALUES
+                    (N''CARI_BAKIYE'',  N''Cari Bakiye (SQL)'',
+                     N''Cari hesabin guncel bakiyesini hesaplar (Borc - Alacak).'',
+                     N''SELECT ISNULL(SUM(CASE WHEN dt.[Sign] = 1 THEN d.[Amount] ELSE -d.[Amount] END), 0) AS [Value] FROM [dbo].[Document] d INNER JOIN [dbo].[document_types] dt ON dt.[Id] = d.[DocumentTypeId] WHERE d.[ContactId] = @Key AND d.[IsActive] = 1'',
+                     100),
+                    (N''TODAY_NETSIS'', N''Bugun (Netsis Format)'',
+                     N''Bugunun tarihini Netsis ISO 8601 formatinda doner (@Key parametresi kullanilmaz).'',
+                     N''SELECT CONVERT(NVARCHAR(19), GETDATE(), 126) AS [Value]'',
+                     110),
+                    (N''STOK_MIKTAR'',  N''Stok Mevcut Miktar (SQL)'',
+                     N''Bir stok kalemenin tum depolardaki toplam mevcut miktarini hesaplar.'',
+                     N''SELECT ISNULL(SUM([Quantity]), 0) AS [Value] FROM [dbo].[item_locations] WHERE [ItemId] = @Key'',
+                     120);
+
+                INSERT INTO [{s}].[IntegrationLookupFunction] (Code, Label, Description, SqlSnippet, SortOrder, CreatedBy)
+                SELECT sf.Code, sf.Label, sf.Description, sf.SqlSnippet, sf.SortOrder, N''system-seed''
+                FROM @SeedSqlFn sf
+                WHERE NOT EXISTS (SELECT 1 FROM [{s}].[IntegrationLookupFunction] f WHERE f.Code = sf.Code);
+
+                DECLARE @SqlFnIds TABLE (Id INT);
+                INSERT @SqlFnIds SELECT [Id] FROM [{s}].[IntegrationLookupFunction]
+                                           WHERE [Code] IN (N''CARI_BAKIYE'', N''TODAY_NETSIS'', N''STOK_MIKTAR'');
+                INSERT INTO [{s}].[IntegrationLookupFunctionColumn] (FunctionId, [Column], Label, SortOrder)
+                SELECT i.[Id], N''Value'', N''Sonuc'', 10
+                FROM @SqlFnIds i
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM [{s}].[IntegrationLookupFunctionColumn] c
+                    WHERE c.FunctionId = i.[Id] AND c.[Column] = N''Value'');
+            ');
+
+            -- Seed kolonlar — fonksiyon-spesifik
+            DECLARE @SeedCol TABLE (Code NVARCHAR(40), [Column] NVARCHAR(60), Label NVARCHAR(120), SortOrder INT);
+            INSERT @SeedCol VALUES
+                -- ITEMS
+                (N'ITEMS', N'Code',         N'Kod',         10),
+                (N'ITEMS', N'Name',         N'Ad',          20),
+                (N'ITEMS', N'BaseUnitCode', N'Ana Birim',   30),
+                (N'ITEMS', N'CategoryCode', N'Kategori',    40),
+                -- CONTACTS
+                (N'CONTACTS', N'AccountCode',  N'Hesap Kodu', 10),
+                (N'CONTACTS', N'AccountTitle', N'Hesap Adi',  20),
+                (N'CONTACTS', N'TaxNumber',    N'Vergi No',   30),
+                (N'CONTACTS', N'Phone',        N'Telefon',    40),
+                -- LOCATIONS
+                (N'LOCATIONS', N'Code', N'Kod', 10),
+                (N'LOCATIONS', N'Name', N'Ad',  20),
+                -- UNITS
+                (N'UNITS', N'Code', N'Kod', 10),
+                (N'UNITS', N'Name', N'Ad',  20),
+                -- CURRENCIES
+                (N'CURRENCIES', N'Code',   N'Kod',    10),
+                (N'CURRENCIES', N'Name',   N'Ad',     20),
+                (N'CURRENCIES', N'Symbol', N'Sembol', 30);
+
+            INSERT INTO [{s}].[IntegrationLookupFunctionColumn] (FunctionId, [Column], Label, SortOrder)
+            SELECT f.Id, sc.[Column], sc.Label, sc.SortOrder
+            FROM @SeedCol sc
+            INNER JOIN [{s}].[IntegrationLookupFunction] f ON f.Code = sc.Code
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [{s}].[IntegrationLookupFunctionColumn] c
+                WHERE c.FunctionId = f.Id AND c.[Column] = sc.[Column]);
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Sonuc dogrulama — kac fonksiyon + kolon var (debug icin)
+        await using var verifyCmd = connection.CreateCommand();
+        verifyCmd.CommandText = $"""
+            SELECT
+              (SELECT COUNT(*) FROM [{s}].[IntegrationLookupFunction]) AS FnCount,
+              (SELECT COUNT(*) FROM [{s}].[IntegrationLookupFunctionColumn]) AS ColCount;
+            """;
+        await using var rd = await verifyCmd.ExecuteReaderAsync(cancellationToken);
+        if (await rd.ReadAsync(cancellationToken))
+        {
+            var fnCount = rd.GetInt32(0);
+            var colCount = rd.GetInt32(1);
+            Console.WriteLine($"[DB INIT] EnsureIntegrationLookupFunctionTablesAsync tamamlandi. ({fnCount} fonksiyon, {colCount} kolon)");
+        }
+    }
+
+    /// <summary>
+    /// Entegrasyon Doc Catalog tablolari — Provider + Enum tanimi + Enum degeri + Alan aciklamasi.
+    /// Tum Provider'lar (Netsis, Logo, SAP, CustomREST...) icin tek noktada admin-editable katalog.
+    ///
+    /// Iliskiler:
+    ///   IntegrationProvider 1─N IntegrationEnumDefinition 1─N IntegrationEnumValue
+    ///   IntegrationProvider 1─N IntegrationFieldDoc → opsiyonel FK IntegrationEnumDefinition
+    ///
+    /// Idempotent — IF NOT EXISTS guard. Mevcut data dokunulmaz.
+    /// </summary>
+    private async Task EnsureIntegrationDocCatalogTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            -- 1) IntegrationProvider — entegrasyon provider listesi (Netsis/Logo/SAP/Custom)
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationProvider]'))
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationProvider] (
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationProvider PRIMARY KEY,
+                    [Code]        NVARCHAR(40)      NOT NULL,
+                    [Label]       NVARCHAR(120)     NOT NULL,
+                    [Description] NVARCHAR(500)     NULL,
+                    [SourceInfo]  NVARCHAR(500)     NULL,
+                    [IconColor]   NVARCHAR(20)      NULL
+                        CONSTRAINT DF_IntegrationProvider_IconColor DEFAULT N'indigo',
+                    [SortOrder]   INT               NOT NULL
+                        CONSTRAINT DF_IntegrationProvider_SortOrder DEFAULT 0,
+                    [IsActive]    BIT               NOT NULL
+                        CONSTRAINT DF_IntegrationProvider_IsActive DEFAULT 1,
+                    [CreatedBy]   NVARCHAR(120)     NULL,
+                    [Created]     DATETIME2         NOT NULL
+                        CONSTRAINT DF_IntegrationProvider_Created DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]   NVARCHAR(120)     NULL,
+                    [Updated]     DATETIME2         NULL
+                );
+                CREATE UNIQUE NONCLUSTERED INDEX UX_IntegrationProvider_Code
+                    ON [{s}].[IntegrationProvider] ([Code]) WHERE [IsActive] = 1;
+            END;
+
+            -- 2) IntegrationEnumDefinition — Provider'in enum tipleri (TFaturaTip vb.)
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationEnumDefinition]'))
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationEnumDefinition] (
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationEnumDefinition PRIMARY KEY,
+                    [ProviderId]  INT               NOT NULL,
+                    [Code]        NVARCHAR(80)      NOT NULL,
+                    [Label]       NVARCHAR(160)     NOT NULL,
+                    [Description] NVARCHAR(1000)    NULL,
+                    [SourceInfo]  NVARCHAR(500)     NULL,
+                    [IsActive]    BIT               NOT NULL
+                        CONSTRAINT DF_IntegrationEnumDefinition_IsActive DEFAULT 1,
+                    [CreatedBy]   NVARCHAR(120)     NULL,
+                    [Created]     DATETIME2         NOT NULL
+                        CONSTRAINT DF_IntegrationEnumDefinition_Created DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]   NVARCHAR(120)     NULL,
+                    [Updated]     DATETIME2         NULL,
+                    CONSTRAINT FK_IntegrationEnumDefinition_Provider
+                        FOREIGN KEY ([ProviderId]) REFERENCES [{s}].[IntegrationProvider]([Id])
+                );
+                CREATE UNIQUE NONCLUSTERED INDEX UX_IntegrationEnumDefinition_ProviderCode
+                    ON [{s}].[IntegrationEnumDefinition] ([ProviderId], [Code]) WHERE [IsActive] = 1;
+            END;
+
+            -- Migration: UsedInFieldPaths kolonu — enum'un hangi field path'lerde kullanildigi
+            -- (JSON array). Yeni model: tek-ekran enum yonetimi, FieldDoc.EnumDefinitionId yerine.
+            IF OBJECT_ID(N'[{s}].[IntegrationEnumDefinition]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[IntegrationEnumDefinition]', N'UsedInFieldPaths') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[IntegrationEnumDefinition] ADD [UsedInFieldPaths] NVARCHAR(MAX) NULL;
+            END;
+
+            -- 3) IntegrationEnumValue — Enum'un izin verilen degerleri (0=ftSFat vs.)
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationEnumValue]'))
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationEnumValue] (
+                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationEnumValue PRIMARY KEY,
+                    [EnumDefinitionId] INT              NOT NULL,
+                    [Value]           NVARCHAR(40)      NOT NULL,
+                    [Label]           NVARCHAR(200)     NOT NULL,
+                    [TechnicalCode]   NVARCHAR(80)      NULL,
+                    [Description]     NVARCHAR(1000)    NULL,
+                    [SortOrder]       INT               NOT NULL
+                        CONSTRAINT DF_IntegrationEnumValue_SortOrder DEFAULT 0,
+                    [IsActive]        BIT               NOT NULL
+                        CONSTRAINT DF_IntegrationEnumValue_IsActive DEFAULT 1,
+                    [CreatedBy]       NVARCHAR(120)     NULL,
+                    [Created]         DATETIME2         NOT NULL
+                        CONSTRAINT DF_IntegrationEnumValue_Created DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]       NVARCHAR(120)     NULL,
+                    [Updated]         DATETIME2         NULL,
+                    CONSTRAINT FK_IntegrationEnumValue_Enum
+                        FOREIGN KEY ([EnumDefinitionId]) REFERENCES [{s}].[IntegrationEnumDefinition]([Id])
+                        ON DELETE CASCADE
+                );
+                CREATE INDEX IX_IntegrationEnumValue_Enum
+                    ON [{s}].[IntegrationEnumValue] ([EnumDefinitionId], [SortOrder]);
+            END;
+
+            -- 4) IntegrationFieldDoc — bir endpoint alani icin aciklama + opsiyonel enum referansi
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationFieldDoc]'))
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationFieldDoc] (
+                    [Id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_IntegrationFieldDoc PRIMARY KEY,
+                    [ProviderId]       INT               NOT NULL,
+                    [Resource]         NVARCHAR(120)     NOT NULL,
+                    [FieldPath]        NVARCHAR(300)     NOT NULL,
+                    [Label]            NVARCHAR(200)     NULL,
+                    [Description]      NVARCHAR(2000)    NULL,
+                    [Example]          NVARCHAR(500)     NULL,
+                    [Notes]            NVARCHAR(2000)    NULL,
+                    [EnumDefinitionId] INT               NULL,
+                    [IsRequired]       BIT               NOT NULL
+                        CONSTRAINT DF_IntegrationFieldDoc_IsRequired DEFAULT 0,
+                    [SortOrder]        INT               NOT NULL
+                        CONSTRAINT DF_IntegrationFieldDoc_SortOrder DEFAULT 0,
+                    [IsActive]         BIT               NOT NULL
+                        CONSTRAINT DF_IntegrationFieldDoc_IsActive DEFAULT 1,
+                    [CreatedBy]        NVARCHAR(120)     NULL,
+                    [Created]          DATETIME2         NOT NULL
+                        CONSTRAINT DF_IntegrationFieldDoc_Created DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]        NVARCHAR(120)     NULL,
+                    [Updated]          DATETIME2         NULL,
+                    CONSTRAINT FK_IntegrationFieldDoc_Provider
+                        FOREIGN KEY ([ProviderId]) REFERENCES [{s}].[IntegrationProvider]([Id]),
+                    CONSTRAINT FK_IntegrationFieldDoc_Enum
+                        FOREIGN KEY ([EnumDefinitionId]) REFERENCES [{s}].[IntegrationEnumDefinition]([Id])
+                );
+                CREATE UNIQUE NONCLUSTERED INDEX UX_IntegrationFieldDoc_PRP
+                    ON [{s}].[IntegrationFieldDoc] ([ProviderId], [Resource], [FieldPath])
+                    WHERE [IsActive] = 1;
+                CREATE INDEX IX_IntegrationFieldDoc_ProviderResource
+                    ON [{s}].[IntegrationFieldDoc] ([ProviderId], [Resource]) WHERE [IsActive] = 1;
+            END;
+
+            -- 5) ApiProfile.provider_code — hangi provider'a bagli (Netsis vb.)
+            -- Denormalized string (FK degil) — admin UI'da dropdown'dan secilir,
+            -- kosul: IntegrationProvider.Code ile match olmali (runtime kontrol).
+            IF NOT EXISTS (SELECT 1 FROM sys.columns
+                WHERE object_id = OBJECT_ID(N'[{s}].[integration_api_profiles]') AND name = 'provider_code')
+            BEGIN
+                ALTER TABLE [{s}].[integration_api_profiles] ADD [provider_code] NVARCHAR(40) NULL;
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Sonuc dogrulama
+        await using var verifyCmd = connection.CreateCommand();
+        verifyCmd.CommandText = $"""
+            SELECT
+              (SELECT COUNT(*) FROM [{s}].[IntegrationProvider]) AS Providers,
+              (SELECT COUNT(*) FROM [{s}].[IntegrationEnumDefinition]) AS Enums,
+              (SELECT COUNT(*) FROM [{s}].[IntegrationEnumValue]) AS EnumValues,
+              (SELECT COUNT(*) FROM [{s}].[IntegrationFieldDoc]) AS FieldDocs;
+            """;
+        await using var rd = await verifyCmd.ExecuteReaderAsync(cancellationToken);
+        if (await rd.ReadAsync(cancellationToken))
+        {
+            Console.WriteLine($"[DB INIT] EnsureIntegrationDocCatalogTablesAsync tamamlandi. " +
+                $"({rd.GetInt32(0)} provider, {rd.GetInt32(1)} enum, {rd.GetInt32(2)} enum-deger, {rd.GetInt32(3)} field-doc)");
+        }
+    }
+
+    private async Task EnsureIntegrationRecordStatusTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE object_id = OBJECT_ID(N'[{s}].[IntegrationRecordStatus]'))
+            BEGIN
+                CREATE TABLE [{s}].[IntegrationRecordStatus] (
+                    [Id]            INT IDENTITY(1,1) NOT NULL
+                        CONSTRAINT PK_IntegrationRecordStatus PRIMARY KEY,
+                    [IntegrationId] INT             NOT NULL,
+                    [RecordId]      NVARCHAR(100)   NOT NULL,
+                    [Status]        NVARCHAR(20)    NOT NULL
+                        CONSTRAINT DF_IntegrationRecordStatus_Status DEFAULT 'Pending',
+                    [LastRunId]     BIGINT          NULL,
+                    [LastSentAt]    DATETIME2       NULL,
+                    [LastError]     NVARCHAR(MAX)   NULL,
+                    [AttemptCount]  INT             NOT NULL
+                        CONSTRAINT DF_IntegrationRecordStatus_AttemptCount DEFAULT 0,
+                    [SkippedBy]     NVARCHAR(120)   NULL,
+                    [SkippedAt]     DATETIME2       NULL,
+                    [SkipReason]    NVARCHAR(500)   NULL,
+                    [IsActive]      BIT             NOT NULL
+                        CONSTRAINT DF_IntegrationRecordStatus_IsActive DEFAULT 1,
+                    [CreatedBy]     NVARCHAR(120)   NULL,
+                    [Created]       DATETIME2       NOT NULL
+                        CONSTRAINT DF_IntegrationRecordStatus_Created DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]     NVARCHAR(120)   NULL,
+                    [Updated]       DATETIME2       NULL
+                );
+                CREATE UNIQUE INDEX UX_IntegrationRecordStatus_Unique
+                    ON [{s}].[IntegrationRecordStatus] ([IntegrationId], [RecordId])
+                    WHERE [IsActive] = 1;
+                CREATE INDEX IX_IntegrationRecordStatus_Status
+                    ON [{s}].[IntegrationRecordStatus] ([IntegrationId], [Status]);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        Console.WriteLine("[DB INIT] EnsureIntegrationRecordStatusTableAsync tamamlandi.");
+    }
+
+    /// <summary>
+    /// Baslangic body sablonlarini seed eder (idempotent — Name+ProviderHint+DocType benzersiz).
+    /// 15 sablon: Netsis NetOpenX'in en yaygin kullanilan belgeleri.
+    /// CalibraHub-EkranIyilestirme-Plani.md Bolum 5 + Netsis dokumantasyonundan derlendi.
+    /// </summary>
+    private async Task SeedBuiltInBodyTemplatesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+
+        // Tuple syntax: typed nullable DocType ile temiz seed listesi
+        var seeds = new (string Category, string Name, string? DocType, string Provider,
+                         string? UrlPattern, string? HttpMethod, string Description,
+                         string Tags, string Body)[]
+        {
+            // ─── Satış belgeleri ─────────────────────────────────────────────
+            ("Sales", "Musteri Siparisi (Netsis)", "ftSSip",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — musteri siparisi (Tip=4)",
+             "satis,siparis,netsis,ftSSip",
+             "{\r\n  \"Seri\": \"S\",\r\n  \"KayitliNumaraOtomatikGuncellensin\": true,\r\n  \"FatUst\": {\r\n    \"Tip\": 4,\r\n    \"CariKod\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"SIPARIS_TEST\": \"\",\r\n    \"TIPI\": 1,\r\n    \"KDV_DAHILMI\": true,\r\n    \"PLA_KODU\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"DEPO_KODU\": 1,\r\n      \"STra_GCMIK\": 0,\r\n      \"STra_NF\": 0,\r\n      \"Stra_FiiliTar\": \"\"\r\n    }\r\n  ]\r\n}"),
+
+            ("Sales", "Satis Faturasi (Netsis)", "ftSFat",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — satis faturasi (Tip=1)",
+             "satis,fatura,netsis,ftSFat",
+             "{\r\n  \"Seri\": \"A\",\r\n  \"KayitliNumaraOtomatikGuncellensin\": true,\r\n  \"FatUst\": {\r\n    \"Tip\": 1,\r\n    \"CariKod\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"TIPI\": 1,\r\n    \"KDV_DAHILMI\": true,\r\n    \"PLA_KODU\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"DEPO_KODU\": 1,\r\n      \"STra_GCMIK\": 0,\r\n      \"STra_NF\": 0,\r\n      \"STra_BF\": 0\r\n    }\r\n  ]\r\n}"),
+
+            ("Sales", "Satis Irsaliyesi (Netsis)", "ftSIrs",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — satis irsaliyesi (Tip=6)",
+             "satis,irsaliye,netsis,ftSIrs",
+             "{\r\n  \"Seri\": \"I\",\r\n  \"KayitliNumaraOtomatikGuncellensin\": true,\r\n  \"FatUst\": {\r\n    \"Tip\": 6,\r\n    \"CariKod\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"FiiliTarih\": \"\",\r\n    \"SevkAdresi\": \"\",\r\n    \"Plaka\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"DEPO_KODU\": 1,\r\n      \"STra_GCMIK\": 0\r\n    }\r\n  ]\r\n}"),
+
+            ("Sales", "Satis Iade Faturasi (Netsis)", "ftSIade",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — satis iade faturasi (Tip=3)",
+             "satis,iade,fatura,netsis,ftSIade",
+             "{\r\n  \"Seri\": \"A\",\r\n  \"FatUst\": {\r\n    \"Tip\": 3,\r\n    \"CariKod\": \"\",\r\n    \"FATIRS_NO\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"TIPI\": 1,\r\n    \"KDV_DAHILMI\": true,\r\n    \"PLA_KODU\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"DEPO_KODU\": 1,\r\n      \"STra_GCMIK\": 0,\r\n      \"STra_NF\": 0,\r\n      \"STra_BF\": 0\r\n    }\r\n  ]\r\n}"),
+
+            // ─── Alış belgeleri ──────────────────────────────────────────────
+            ("Purchase", "Alis Siparisi (Netsis)", "ftASip",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — alis siparisi (Tip=5)",
+             "alis,siparis,netsis,ftASip",
+             "{\r\n  \"Seri\": \"S\",\r\n  \"KayitliNumaraOtomatikGuncellensin\": true,\r\n  \"FatUst\": {\r\n    \"Tip\": 5,\r\n    \"CariKod\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"TIPI\": 1,\r\n    \"KDV_DAHILMI\": false,\r\n    \"PLA_KODU\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"DEPO_KODU\": 2,\r\n      \"STra_GCMIK\": 0,\r\n      \"STra_NF\": 0\r\n    }\r\n  ]\r\n}"),
+
+            ("Purchase", "Alis Faturasi (Netsis)", "ftAFat",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — alis faturasi (Tip=2)",
+             "alis,fatura,netsis,ftAFat",
+             "{\r\n  \"Seri\": \"B\",\r\n  \"FatUst\": {\r\n    \"Tip\": 2,\r\n    \"CariKod\": \"\",\r\n    \"FATIRS_NO\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"TIPI\": 1,\r\n    \"KDV_DAHILMI\": false,\r\n    \"PLA_KODU\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"DEPO_KODU\": 2,\r\n      \"STra_GCMIK\": 0,\r\n      \"STra_NF\": 0\r\n    }\r\n  ]\r\n}"),
+
+            ("Purchase", "Alis Irsaliyesi (Netsis)", "ftAIrs",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — alis irsaliyesi (Tip=7)",
+             "alis,irsaliye,netsis,ftAIrs",
+             "{\r\n  \"Seri\": \"I\",\r\n  \"KayitliNumaraOtomatikGuncellensin\": true,\r\n  \"FatUst\": {\r\n    \"Tip\": 7,\r\n    \"CariKod\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"FiiliTarih\": \"\",\r\n    \"PLA_KODU\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"DEPO_KODU\": 2,\r\n      \"STra_GCMIK\": 0\r\n    }\r\n  ]\r\n}"),
+
+            ("Purchase", "Alis Iade Faturasi (Netsis)", "ftAIade",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — alis iade faturasi (Tip=8)",
+             "alis,iade,fatura,netsis,ftAIade",
+             "{\r\n  \"Seri\": \"B\",\r\n  \"FatUst\": {\r\n    \"Tip\": 8,\r\n    \"CariKod\": \"\",\r\n    \"FATIRS_NO\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"TIPI\": 1,\r\n    \"KDV_DAHILMI\": false,\r\n    \"PLA_KODU\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"DEPO_KODU\": 2,\r\n      \"STra_GCMIK\": 0,\r\n      \"STra_NF\": 0\r\n    }\r\n  ]\r\n}"),
+
+            // ─── Hizmet/Masraf ───────────────────────────────────────────────
+            ("Sales", "Hizmet Faturasi (Netsis)", "ftHzm",
+             "Netsis", "/api/v2/ItemSlips", "POST",
+             "Netsis NetOpenX ItemSlips POST — hizmet/masraf faturasi (Tip=12). Stok yerine hizmet kodu kullanilir.",
+             "hizmet,masraf,fatura,netsis,ftHzm",
+             "{\r\n  \"Seri\": \"H\",\r\n  \"FatUst\": {\r\n    \"Tip\": 12,\r\n    \"CariKod\": \"\",\r\n    \"Tarih\": \"\",\r\n    \"TIPI\": 1,\r\n    \"KDV_DAHILMI\": true,\r\n    \"PLA_KODU\": \"\"\r\n  },\r\n  \"Kalems\": [\r\n    {\r\n      \"StokKodu\": \"\",\r\n      \"STra_NF\": 0,\r\n      \"STra_GCMIK\": 1,\r\n      \"STra_KDV\": 18\r\n    }\r\n  ]\r\n}"),
+
+            // ─── Cari (musteri/tedarikci) ────────────────────────────────────
+            ("Customer", "Yeni Cari (Netsis ARPs)", null,
+             "Netsis", "/api/v2/ARPs", "POST",
+             "Netsis NetOpenX ARPs POST — yeni cari hesap acma. CARI_TIP: A=Alici, S=Satici, T=Tedarikci.",
+             "cari,musteri,tedarikci,netsis,ARPs",
+             "{\r\n  \"CariTemelBilgi\": {\r\n    \"CARI_KOD\": \"\",\r\n    \"CARI_ISIM\": \"\",\r\n    \"CARI_TIP\": \"A\",\r\n    \"VERGI_NUMARASI\": \"\",\r\n    \"VERGI_DAIRESI\": \"\"\r\n  },\r\n  \"CariEkBilgi\": {\r\n    \"TELEFON\": \"\",\r\n    \"EMAIL\": \"\",\r\n    \"ADRES_BAS\": \"\",\r\n    \"IL\": \"\",\r\n    \"ILCE\": \"\"\r\n  }\r\n}"),
+
+            ("Customer", "Cari Yaslandirma Sorgu (Netsis)", null,
+             "Netsis", "/api/v2/ARPsAging/SettlementByAging", "POST",
+             "Netsis NetOpenX ARPsAging — cari yaslandirma raporu sorgusu (vade tarihi bazli alacak/borc analizi).",
+             "cari,yaslandirma,raporlama,netsis,ARPsAging",
+             "{\r\n  \"CariKodu\": \"\",\r\n  \"BaslangicTarih\": \"\",\r\n  \"BitisTarih\": \"\",\r\n  \"DovizTipi\": 0\r\n}"),
+
+            // ─── Stok ────────────────────────────────────────────────────────
+            ("Stock", "Stok Karti (Netsis Items)", null,
+             "Netsis", "/api/v2/Items", "POST",
+             "Netsis NetOpenX Items POST — yeni stok karti acma. STOK_KODU benzersiz; OLCU_BR1 ana olcu birimi.",
+             "stok,kart,netsis,Items",
+             "{\r\n  \"TemelBilgi\": {\r\n    \"Stok_Kodu\": \"\",\r\n    \"Stok_Adi\": \"\",\r\n    \"Grup_Kodu\": \"\",\r\n    \"OLCU_BR1\": \"AD\",\r\n    \"KDV\": 18,\r\n    \"DOVIZ_TIP\": 0\r\n  },\r\n  \"EkBilgi\": {\r\n    \"BARKOD1\": \"\",\r\n    \"URETICI_KODU\": \"\",\r\n    \"WEBDE_GORUNSUN\": false\r\n  }\r\n}"),
+
+            ("Stock", "Toplu Faturalama (Netsis)", null,
+             "Netsis", "/api/v2/BatchInvoicing", "POST",
+             "Netsis NetOpenX BatchInvoicing — irsaliye listesini toplu faturaya cevirme. IrsaliyeNumaralari: dizi.",
+             "toplu,fatura,irsaliye,netsis,BatchInvoicing",
+             "{\r\n  \"CariKod\": \"\",\r\n  \"Tarih\": \"\",\r\n  \"Seri\": \"A\",\r\n  \"IrsaliyeNumaralari\": [\"\"]\r\n}"),
+
+            // ─── Banka ───────────────────────────────────────────────────────
+            ("Bank", "Banka Hesap Hareketi (Netsis)", null,
+             "Netsis", "/api/v2/BankAccountTransaction", "POST",
+             "Netsis NetOpenX BankAccountTransaction — banka hesap hareketi. IslemTipi: 1=Tahsilat (cari->banka), 2=Tediye (banka->cari).",
+             "banka,tahsilat,tediye,netsis,BankAccountTransaction",
+             "{\r\n  \"BankaKodu\": \"\",\r\n  \"BankaSubeKodu\": \"\",\r\n  \"IslemTipi\": 1,\r\n  \"Tarih\": \"\",\r\n  \"Tutar\": 0,\r\n  \"Aciklama\": \"\",\r\n  \"CariKodu\": \"\"\r\n}"),
+
+            ("Bank", "Banka Havale/EFT (Netsis)", null,
+             "Netsis", "/api/v2/BankRemittanceTransfer", "POST",
+             "Netsis NetOpenX BankRemittanceTransfer — bankalar arasi havale/EFT transferi.",
+             "banka,havale,eft,netsis,BankRemittanceTransfer",
+             "{\r\n  \"CikisBankaKodu\": \"\",\r\n  \"GirisBankaKodu\": \"\",\r\n  \"Tarih\": \"\",\r\n  \"Tutar\": 0,\r\n  \"Aciklama\": \"\"\r\n}"),
+        };
+
+        // Idempotent: Name+Provider+DocType benzersiz key
+        var sqlMerge = $"""
+            INSERT INTO [{s}].[BodyTemplate]
+                ([Category], [Name], [DocType], [ProviderHint], [UrlPattern], [HttpMethod],
+                 [BodyJson], [Description], [Tags], [IsBuiltIn], [IsActive], [CreatedBy])
+            SELECT @cat, @name, @doctype, @provider, @urlpattern, @httpmethod,
+                   @body, @desc, @tags, 1, 1, 'system'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM [{s}].[BodyTemplate]
+                WHERE [Name] = @name
+                  AND ISNULL([ProviderHint], '') = ISNULL(@provider, '')
+                  AND ISNULL([DocType], '') = ISNULL(@doctype, '')
+            );
+            """;
+
+        foreach (var seed in seeds)
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = sqlMerge;
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@cat", seed.Category));
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@name", seed.Name));
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@doctype", (object?)seed.DocType ?? DBNull.Value));
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@provider", seed.Provider));
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@urlpattern", (object?)seed.UrlPattern ?? DBNull.Value));
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@httpmethod", (object?)seed.HttpMethod ?? DBNull.Value));
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@body", seed.Body));
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@desc", (object?)seed.Description ?? DBNull.Value));
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@tags", (object?)seed.Tags ?? DBNull.Value));
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private async Task EnsureDynamicFieldValuesTableAsync(SqlConnection connection, CancellationToken cancellationToken)
@@ -4899,39 +5901,79 @@ END;";
                AND COL_LENGTH(N'[{s}].[Document]', N'CompanyId') IS NOT NULL
                 CREATE INDEX [ix_document_company] ON [{s}].[Document]([CompanyId]);
 
+            -- Faz M: Teslim Tarihi + Teslim Suresi (gun) — Document (ust seviye) + DocumentLine (kalem)
+            -- Sipariş için anlamlı (teklifte ValidUntil, siparişte DeliveryDate/DeliveryDays).
+            -- DeliveryDays: sipariş tarihinden itibaren teslim süresi. UI'da çift yönlü sync:
+            --   gün girilince tarih = DocumentDate + N gün, tarih girilince gün = DATEDIFF.
+            -- Kalem bazlı override: DocumentLine.DeliveryDate / DeliveryDays NULL ise üst belge fallback.
+            IF COL_LENGTH(N'[{s}].[Document]', N'DeliveryDate') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [DeliveryDate] DATETIME2 NULL;
+            IF COL_LENGTH(N'[{s}].[Document]', N'DeliveryDays') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [DeliveryDays] INT NULL;
+
+            -- Faz L: Entegrasyon tracking — belge ERP/dis sisteme gonderildi mi?
+            -- IntegrationSentAt: son basarili entegrasyon zamani (NULL = hic gonderilmedi)
+            -- IntegrationStatus: 'Sent' | 'Failed' | 'Pending' | NULL (hic denenmedi)
+            -- LastIntegrationRunId: son IntegrationRun.Id referansi (audit linki)
+            -- LastIntegrationId: hangi entegrasyon konfigi calisti (FK -> Integration.Id)
+            IF COL_LENGTH(N'[{s}].[Document]', N'IntegrationSentAt') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [IntegrationSentAt] DATETIME2 NULL;
+            IF COL_LENGTH(N'[{s}].[Document]', N'IntegrationStatus') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [IntegrationStatus] NVARCHAR(20) NULL;
+            IF COL_LENGTH(N'[{s}].[Document]', N'LastIntegrationRunId') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [LastIntegrationRunId] BIGINT NULL;
+            IF COL_LENGTH(N'[{s}].[Document]', N'LastIntegrationId') IS NULL
+                ALTER TABLE [{s}].[Document] ADD [LastIntegrationId] INT NULL;
+            -- Listede 'gonderilmemis' kayitlari hizli filtre icin
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_document_integration_status'
+                           AND object_id = OBJECT_ID(N'[{s}].[Document]'))
+               AND COL_LENGTH(N'[{s}].[Document]', N'IntegrationStatus') IS NOT NULL
+                CREATE INDEX [ix_document_integration_status]
+                    ON [{s}].[Document]([IntegrationStatus]) INCLUDE ([IntegrationSentAt]);
+
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NULL
             BEGIN
                 -- Satir tablosu — material/unit/combination/location display degerleri
                 -- tutulmaz; id FK'leri ile Item/Unit/ProductConfiguration/Location'dan okunur.
                 CREATE TABLE [{s}].[DocumentLine]
                 (
-                    [id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_document_line] PRIMARY KEY,
-                    [document_id]     INT              NOT NULL,
-                    [line_no]         INT              NOT NULL DEFAULT(0),
-                    [item_id]         INT              NOT NULL,
-                    [unit_id]         INT              NULL,
-                    [quantity]        DECIMAL(18,4)    NOT NULL DEFAULT(0),
-                    [unit_price]      DECIMAL(18,4)    NOT NULL DEFAULT(0),
-                    [discount_rate]   DECIMAL(5,2)     NOT NULL DEFAULT(0),
-                    [line_total]      DECIMAL(18,4)    NOT NULL DEFAULT(0),
-                    [combination_id]  INT              NULL,
-                    [location_id]     INT              NULL,
-                    [notes]           NVARCHAR(500)    NULL,
-                    [notes_pinned]    BIT              NOT NULL DEFAULT(0),
+                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocumentLine] PRIMARY KEY,
+                    [DocumentId]      INT              NOT NULL,
+                    [LineNo]          INT              NOT NULL DEFAULT(0),
+                    [ItemId]          INT              NOT NULL,
+                    [UnitId]          INT              NULL,
+                    [Quantity]        DECIMAL(18,4)    NOT NULL DEFAULT(0),
+                    [UnitPrice]       DECIMAL(18,4)    NOT NULL DEFAULT(0),
+                    [DiscountRate]    DECIMAL(5,2)     NOT NULL DEFAULT(0),
+                    [LineTotal]       DECIMAL(18,4)    NOT NULL DEFAULT(0),
+                    [CombinationId]   INT              NULL,
+                    [LocationId]      INT              NULL,
+                    [Notes]           NVARCHAR(500)    NULL,
+                    [NotesPinned]     BIT              NOT NULL CONSTRAINT [DF_DocumentLine_NotesPinned] DEFAULT(0),
                     -- Revize zinciri: bu satir hangi DocumentLine'dan revize edildi?
                     -- NULL => orijinal satir. Zincir geriye takip edilerek kac
                     -- revize oldugu gorulebilir. Self-referencing FK.
-                    [revised_from_id] INT              NULL,
-                    CONSTRAINT [fk_document_line_document] FOREIGN KEY ([document_id])
+                    [RevisedFromId]   INT              NULL,
+                    [SourceLineId]    INT              NULL,
+                    CONSTRAINT [FK_DocumentLine_Document] FOREIGN KEY ([DocumentId])
                         REFERENCES [{s}].[Document]([id])
                 );
-                CREATE INDEX [ix_document_line_document] ON [{s}].[DocumentLine]([document_id]);
+                CREATE INDEX [IX_DocumentLine_DocumentId] ON [{s}].[DocumentLine]([DocumentId]);
                 -- Revize index dinamik EXEC — SQL Server batch derleme sirasinda
                 -- mevcut (eski) sema uzerinde kolon dogrulama yapiyor ve IF blogu
                 -- icinde de olsa "kolon yok" hatasi veriyor. Deferred parsing icin
                 -- EXEC(N'...') kullaniyoruz; runtime'da kolon olustugundan calisir.
-                EXEC(N'CREATE INDEX [ix_document_line_revised_from] ON [{s}].[DocumentLine]([revised_from_id]) WHERE [revised_from_id] IS NOT NULL;');
+                EXEC(N'CREATE INDEX [IX_DocumentLine_RevisedFromId] ON [{s}].[DocumentLine]([RevisedFromId]) WHERE [RevisedFromId] IS NOT NULL;');
             END;
+
+            -- Faz M: Kalem bazlı teslim tarihi + teslim süresi (gün).
+            -- NULL ise üst Document.DeliveryDate / DeliveryDays fallback olur (engine veya UI).
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'DeliveryDate') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [DeliveryDate] DATETIME2 NULL;
+            IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'DeliveryDays') IS NULL
+                ALTER TABLE [{s}].[DocumentLine] ADD [DeliveryDays] INT NULL;
             """;
 
         await using var cmd = connection.CreateCommand();
@@ -5169,18 +6211,176 @@ END;";
                 CREATE TABLE [{s}].[sales_representatives]
                 (
                     [id]         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    [rep_code]   NVARCHAR(20)      NOT NULL,
                     [rep_name]   NVARCHAR(200)     NOT NULL,
                     [is_active]  BIT               NOT NULL DEFAULT(1),
                     [Created] DATETIME2(0)      NOT NULL DEFAULT(GETDATE()),
                     [Updated] DATETIME2(0)      NULL     DEFAULT(GETDATE())
                 );
-                CREATE UNIQUE INDEX [ux_sales_representatives_code]
-                    ON [{s}].[sales_representatives]([rep_code]);
+                CREATE UNIQUE INDEX [ux_sales_representatives_name]
+                    ON [{s}].[sales_representatives]([rep_name]);
+            END;
+
+            -- Mevcut tablolarda rep_code varsa kaldir (UI'dan ve veri tabanindan cikariliyor)
+            IF OBJECT_ID(N'[{s}].[sales_representatives]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{s}.[sales_representatives]', N'rep_code') IS NOT NULL
+            BEGIN
+                IF EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE [object_id] = OBJECT_ID(N'[{s}].[sales_representatives]')
+                             AND [name] = N'ux_sales_representatives_code')
+                BEGIN
+                    EXEC(N'DROP INDEX [ux_sales_representatives_code] ON [{s}].[sales_representatives];');
+                END;
+                EXEC(N'ALTER TABLE [{s}].[sales_representatives] DROP COLUMN [rep_code];');
+            END;
+
+            -- Yeni unique index (rep_name uzerinde) eksikse ekle
+            IF OBJECT_ID(N'[{s}].[sales_representatives]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE [object_id] = OBJECT_ID(N'[{s}].[sales_representatives]')
+                                 AND [name] = N'ux_sales_representatives_name')
+            BEGIN
+                EXEC(N'CREATE UNIQUE INDEX [ux_sales_representatives_name] ON [{s}].[sales_representatives]([rep_name]);');
             END;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    // ── DocumentLine column snake_case → PascalCase migration ────────────────
+
+    /// <summary>
+    /// Existing databases have DocumentLine with snake_case column names.
+    /// This migration renames each column using sp_rename, guarded by COL_LENGTH
+    /// so it is safe to run repeatedly (idempotent).
+    /// Must run BEFORE EnsureDocumentLineDetailsTableAsync which expects PascalCase names.
+    /// </summary>
+    private async Task MigrateDocumentLineColumnNamesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s  = _schema.Replace("]", "]]");
+        var sl = _schema.Replace("'", "''");
+
+        // Column renames: (oldName, newName)
+        var colRenames = new (string Old, string New)[]
+        {
+            ("id",              "Id"),
+            ("document_id",     "DocumentId"),
+            ("line_no",         "LineNo"),
+            ("item_id",         "ItemId"),
+            ("unit_id",         "UnitId"),
+            ("quantity",        "Quantity"),
+            ("unit_price",      "UnitPrice"),
+            ("discount_rate",   "DiscountRate"),
+            ("line_total",      "LineTotal"),
+            ("combination_id",  "CombinationId"),
+            ("location_id",     "LocationId"),
+            ("notes",           "Notes"),
+            ("notes_pinned",    "NotesPinned"),
+            ("revised_from_id", "RevisedFromId"),
+            ("source_line_id",  "SourceLineId"),
+        };
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL");
+        sb.AppendLine("BEGIN");
+
+        // Drop indexes on columns being renamed FIRST — sp_rename blocks if dependent index exists.
+        // Use dynamic SQL to drop whichever index name currently exists (handles DBs where
+        // the index was already renamed in a prior partial run but the column rename failed).
+        sb.AppendLine($"""
+                DECLARE @_docIdx  sysname, @_revIdx sysname, @_dropSql nvarchar(500);
+
+                -- Drop any index on document_id (old or new index name) before rename
+                SELECT @_docIdx = [name] FROM sys.indexes
+                 WHERE [name] IN (N'ix_document_line_document', N'IX_DocumentLine_DocumentId')
+                   AND [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]');
+                IF @_docIdx IS NOT NULL AND COL_LENGTH(N'{sl}.[DocumentLine]', N'document_id') IS NOT NULL
+                BEGIN
+                    SET @_dropSql = N'DROP INDEX [' + @_docIdx + N'] ON [{s}].[DocumentLine];';
+                    EXEC(@_dropSql);
+                END;
+
+                -- Drop any index on revised_from_id (old or new index name) before rename
+                SELECT @_revIdx = [name] FROM sys.indexes
+                 WHERE [name] IN (N'ix_document_line_revised_from', N'IX_DocumentLine_RevisedFromId')
+                   AND [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]');
+                IF @_revIdx IS NOT NULL AND COL_LENGTH(N'{sl}.[DocumentLine]', N'revised_from_id') IS NOT NULL
+                BEGIN
+                    SET @_dropSql = N'DROP INDEX [' + @_revIdx + N'] ON [{s}].[DocumentLine];';
+                    EXEC(@_dropSql);
+                END;
+            """);
+
+        // Use sys.columns with case-sensitive collation so that renames like
+        // quantity → Quantity are detected correctly (COL_LENGTH is case-insensitive).
+        foreach (var (oldCol, newCol) in colRenames)
+        {
+            sb.AppendLine($"""
+                    IF EXISTS (SELECT 1 FROM sys.columns
+                               WHERE [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]')
+                                 AND [name] = N'{oldCol}' COLLATE Latin1_General_CS_AS)
+                    BEGIN
+                        EXEC sp_rename N'[{s}].[DocumentLine].[{oldCol}]', N'{newCol}', N'COLUMN';
+                    END;
+                """);
+        }
+
+        // Recreate indexes with new names after column renames
+        sb.AppendLine($"""
+                -- Recreate IX_DocumentLine_DocumentId (if missing)
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE [name] = N'IX_DocumentLine_DocumentId'
+                                 AND [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                    EXEC(N'CREATE INDEX [IX_DocumentLine_DocumentId] ON [{s}].[DocumentLine]([DocumentId]);');
+
+                -- Recreate IX_DocumentLine_RevisedFromId (if missing)
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE [name] = N'IX_DocumentLine_RevisedFromId'
+                                 AND [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                    EXEC(N'CREATE INDEX [IX_DocumentLine_RevisedFromId] ON [{s}].[DocumentLine]([RevisedFromId]) WHERE [RevisedFromId] IS NOT NULL;');
+            """);
+
+        // Constraint renames
+        sb.AppendLine($"""
+                -- PK rename
+                IF EXISTS (SELECT 1 FROM sys.key_constraints
+                           WHERE [name] = N'pk_document_line'
+                             AND [parent_object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                   AND NOT EXISTS (SELECT 1 FROM sys.key_constraints
+                                   WHERE [name] = N'PK_DocumentLine'
+                                     AND [parent_object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                BEGIN
+                    EXEC sp_rename N'[{s}].[pk_document_line]', N'PK_DocumentLine', N'OBJECT';
+                END;
+
+                -- FK rename
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys
+                           WHERE [name] = N'fk_document_line_document'
+                             AND [parent_object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys
+                                   WHERE [name] = N'FK_DocumentLine_Document'
+                                     AND [parent_object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                BEGIN
+                    EXEC sp_rename N'[{s}].[fk_document_line_document]', N'FK_DocumentLine_Document', N'OBJECT';
+                END;
+
+                -- Default constraint rename (notes_pinned)
+                IF EXISTS (SELECT 1 FROM sys.default_constraints
+                           WHERE [name] = N'df_document_line_notes_pinned'
+                             AND [parent_object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                   AND NOT EXISTS (SELECT 1 FROM sys.default_constraints
+                                   WHERE [name] = N'DF_DocumentLine_NotesPinned'
+                                     AND [parent_object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
+                BEGIN
+                    EXEC sp_rename N'[{s}].[df_document_line_notes_pinned]', N'DF_DocumentLine_NotesPinned', N'OBJECT';
+                END;
+
+            """);
+
+        sb.AppendLine("END;");
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sb.ToString();
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -5192,52 +6392,57 @@ END;";
         var sl = _schema.Replace("'", "''");
 
         // DocumentLine schema migrasyonu: legacy kolonlari drop et (material_code,
-        // material_name, combination_code, is_active) + combination_id ekle + item_id
+        // material_name, combination_code, is_active) + CombinationId ekle + ItemId
         // NOT NULL'a cek. Tum adimlar idempotent — kolon yoksa no-op.
         var migrateSql = $"""
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
             BEGIN
-                -- combination_id ekle (henuz yoksa)
-                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'combination_id') IS NULL
-                    ALTER TABLE [{s}].[DocumentLine] ADD [combination_id] INT NULL;
+                -- CombinationId ekle (henuz yoksa)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'CombinationId') IS NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD [CombinationId] INT NULL;
 
-                -- unit_id ekle (henuz yoksa) — unit_name'den turemis degerlerle backfill
-                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'unit_id') IS NULL
-                    ALTER TABLE [{s}].[DocumentLine] ADD [unit_id] INT NULL;
+                -- UnitId ekle (henuz yoksa) — unit_name'den turemis degerlerle backfill
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'UnitId') IS NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD [UnitId] INT NULL;
 
-                -- location_id ekle (henuz yoksa)
-                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'location_id') IS NULL
-                    ALTER TABLE [{s}].[DocumentLine] ADD [location_id] INT NULL;
+                -- LocationId ekle (henuz yoksa)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'LocationId') IS NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD [LocationId] INT NULL;
 
-                -- notes_pinned ekle (satir notunun belge acilisinda acik gelmesi)
-                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'notes_pinned') IS NULL
-                    ALTER TABLE [{s}].[DocumentLine] ADD [notes_pinned] BIT NOT NULL CONSTRAINT [df_document_line_notes_pinned] DEFAULT(0);
+                -- NotesPinned ekle (satir notunun belge acilisinda acik gelmesi)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'NotesPinned') IS NULL
+                    ALTER TABLE [{s}].[DocumentLine] ADD [NotesPinned] BIT NOT NULL CONSTRAINT [DF_DocumentLine_NotesPinned] DEFAULT(0);
 
-                -- revised_from_id ekle (revize zinciri — satir hangi satirdan revize edildi?)
-                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'revised_from_id') IS NULL
+                -- RevisedFromId ekle (revize zinciri — satir hangi satirdan revize edildi?)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'RevisedFromId') IS NULL
                 BEGIN
-                    ALTER TABLE [{s}].[DocumentLine] ADD [revised_from_id] INT NULL;
+                    ALTER TABLE [{s}].[DocumentLine] ADD [RevisedFromId] INT NULL;
+                END;
+                -- SourceLineId ekle (kaynak satir referansi)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'SourceLineId') IS NULL
+                BEGIN
+                    ALTER TABLE [{s}].[DocumentLine] ADD [SourceLineId] INT NULL;
                 END;
                 -- Filtered index — revize edilmis satirlari hizli listelemek icin
-                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'ix_document_line_revised_from'
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_DocumentLine_RevisedFromId'
                                 AND [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]'))
                 BEGIN
-                    EXEC(N'CREATE INDEX [ix_document_line_revised_from] ON [{s}].[DocumentLine]([revised_from_id]) WHERE [revised_from_id] IS NOT NULL;');
+                    EXEC(N'CREATE INDEX [IX_DocumentLine_RevisedFromId] ON [{s}].[DocumentLine]([RevisedFromId]) WHERE [RevisedFromId] IS NOT NULL;');
                 END;
 
-                -- Eski unit_name'den unit_id backfill (ayni schema'daki Unit tablosu)
+                -- Eski unit_name'den UnitId backfill (ayni schema'daki Unit tablosu)
                 IF COL_LENGTH(N'{sl}.[DocumentLine]', N'unit_name') IS NOT NULL
-                   AND COL_LENGTH(N'{sl}.[DocumentLine]', N'unit_id') IS NOT NULL
+                   AND COL_LENGTH(N'{sl}.[DocumentLine]', N'UnitId') IS NOT NULL
                    AND OBJECT_ID(N'[{s}].[Unit]', N'U') IS NOT NULL
                 BEGIN
                     EXEC(N'
                         UPDATE l
-                           SET l.[unit_id] = u.[Id]
+                           SET l.[UnitId] = u.[Id]
                           FROM [{s}].[DocumentLine] l
                           JOIN [{s}].[Unit] u
                             ON u.[UnitCode] COLLATE Turkish_CI_AI = l.[unit_name] COLLATE Turkish_CI_AI
                             OR u.[UnitName] COLLATE Turkish_CI_AI = l.[unit_name] COLLATE Turkish_CI_AI
-                         WHERE l.[unit_id] IS NULL AND l.[unit_name] IS NOT NULL;
+                         WHERE l.[UnitId] IS NULL AND l.[unit_name] IS NOT NULL;
                     ');
                 END;
 
@@ -5271,14 +6476,14 @@ END;";
                     EXEC(N'ALTER TABLE [{s}].[DocumentLine] DROP COLUMN [is_active];');
                 END;
 
-                -- item_id NOT NULL'a cek (null kayit yoksa — varsa temizle)
-                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'item_id') IS NOT NULL
+                -- ItemId NOT NULL'a cek (null kayit yoksa — varsa temizle)
+                IF COL_LENGTH(N'{sl}.[DocumentLine]', N'ItemId') IS NOT NULL
                    AND EXISTS (SELECT 1 FROM sys.columns
                                 WHERE [object_id] = OBJECT_ID(N'[{s}].[DocumentLine]')
-                                  AND [name] = N'item_id' AND [is_nullable] = 1)
+                                  AND [name] = N'ItemId' AND [is_nullable] = 1)
                 BEGIN
-                    EXEC(N'DELETE FROM [{s}].[DocumentLine] WHERE [item_id] IS NULL;');
-                    EXEC(N'ALTER TABLE [{s}].[DocumentLine] ALTER COLUMN [item_id] INT NOT NULL;');
+                    EXEC(N'DELETE FROM [{s}].[DocumentLine] WHERE [ItemId] IS NULL;');
+                    EXEC(N'ALTER TABLE [{s}].[DocumentLine] ALTER COLUMN [ItemId] INT NOT NULL;');
                 END;
             END;
             """;
@@ -5298,7 +6503,7 @@ END;";
                     [description]    NVARCHAR(500)     NULL,
                     [line_order]     INT               NOT NULL DEFAULT(0),
                     CONSTRAINT [fk_sqld_quote_line] FOREIGN KEY ([quote_line_id])
-                        REFERENCES [{s}].[DocumentLine]([id]) ON DELETE CASCADE
+                        REFERENCES [{s}].[DocumentLine]([Id]) ON DELETE CASCADE
                 );
                 CREATE INDEX [ix_sqld_quote_line] ON [{s}].[sales_quote_line_details]([quote_line_id]);
             END;
@@ -5460,9 +6665,82 @@ END;";
             BEGIN
                 ALTER TABLE [{s}].[document_types] ADD [required_key_column] NVARCHAR(100) NULL;
             END;
+
+            -- Faz N (revize): UI/entegrasyon metadata'si Forms tablosuna tasindi
+            -- (PascalCase kolonlar, dogal yer cunku form-seviyesi ozellikler).
+            -- DocumentType sadece kavramsal belge tipi (raporlama/Document.DocumentTypeId FK) icin.
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = commandText;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Faz P — Belge Numarası Türetme Kuralları + Sayaç state. Tasarım Kuralı (DocLayoutRule)
+    /// pattern'inin birebir kopyası, ama "tasarım seç" yerine "numara formatı seç". Yeni belge
+    /// kayıt edildiğinde IDocumentNumberService rule resolution + counter increment yapar.
+    ///
+    /// Kolonlar PascalCase (CLAUDE.md naming convention) — yeni tablolar.
+    /// Idempotent: tablo varsa ALTER ile eksik kolonlar eklenir.
+    /// </summary>
+    private async Task EnsureDocumentNumberRulesTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            -- ── DocumentNumberRule: kural tanımı (filtreler + format) ───────────
+            IF OBJECT_ID(N'[{s}].[DocumentNumberRule]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DocumentNumberRule]
+                (
+                    [Id]              INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocumentNumberRule] PRIMARY KEY,
+                    [Name]            NVARCHAR(200) NOT NULL,
+                    [DocumentTypeId]  INT           NOT NULL,
+                    -- Filtreler (Tasarım Kuralı pattern: NULL = wildcard)
+                    [ContactId]       INT           NULL,
+                    [ContactGroupId]  INT           NULL,
+                    [UserId]          INT           NULL,
+                    [BranchId]        INT           NULL,
+                    [FromDate]        DATETIME2     NULL,
+                    [ToDate]          DATETIME2     NULL,
+                    -- Format parçaları
+                    [Prefix]          NVARCHAR(20)  NULL,
+                    [YearFormat]      NVARCHAR(10)  NULL,
+                    [MonthFormat]     NVARCHAR(10)  NULL,
+                    [CounterLength]   INT           NOT NULL CONSTRAINT [DF_DocumentNumberRule_CounterLength] DEFAULT(6),
+                    [CounterStart]    INT           NOT NULL CONSTRAINT [DF_DocumentNumberRule_CounterStart] DEFAULT(1),
+                    [ResetPeriod]     INT           NOT NULL CONSTRAINT [DF_DocumentNumberRule_ResetPeriod] DEFAULT(0),
+                    [TotalLength]     INT           NULL,
+                    [Weight]          INT           NOT NULL CONSTRAINT [DF_DocumentNumberRule_Weight] DEFAULT(0),
+                    [IsActive]        BIT           NOT NULL CONSTRAINT [DF_DocumentNumberRule_IsActive] DEFAULT(1),
+                    [CreatedBy]       NVARCHAR(120) NULL,
+                    [Created]         DATETIME2     NOT NULL CONSTRAINT [DF_DocumentNumberRule_Created] DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]       NVARCHAR(120) NULL,
+                    [Updated]         DATETIME2     NULL
+                );
+                -- Rule lookup index (en sık sorgu): aktif kurallar belge tipine göre
+                CREATE INDEX [IX_DocumentNumberRule_DocumentType]
+                    ON [{s}].[DocumentNumberRule]([DocumentTypeId], [IsActive], [Weight] DESC);
+            END;
+
+            -- ── DocumentNumberCounter: kural başına anlık sayaç state ───────────
+            IF OBJECT_ID(N'[{s}].[DocumentNumberCounter]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DocumentNumberCounter]
+                (
+                    [Id]            INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_DocumentNumberCounter] PRIMARY KEY,
+                    [RuleId]        INT           NOT NULL,
+                    [ResetKey]      NVARCHAR(20)  NOT NULL CONSTRAINT [DF_DocumentNumberCounter_ResetKey] DEFAULT(N''),
+                    [CurrentValue]  BIGINT        NOT NULL CONSTRAINT [DF_DocumentNumberCounter_CurrentValue] DEFAULT(0),
+                    [LastUpdated]   DATETIME2     NOT NULL CONSTRAINT [DF_DocumentNumberCounter_LastUpdated] DEFAULT SYSUTCDATETIME(),
+                    CONSTRAINT [FK_DocumentNumberCounter_Rule] FOREIGN KEY ([RuleId])
+                        REFERENCES [{s}].[DocumentNumberRule]([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [UX_DocumentNumberCounter_Rule_Reset]
+                    ON [{s}].[DocumentNumberCounter]([RuleId], [ResetKey]);
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -6023,15 +7301,15 @@ END;";
                        q.[DiscountAmount] AS [DiscountAmount], q.[TaxRate] AS [TaxRate],
                        q.[TaxAmount] AS [TaxAmount], q.[GrandTotal] AS [GrandTotal],
                        q.[PaymentTerms] AS [PaymentTerms], q.[notes] AS [Notes],
-                       ql.[line_no] AS [LineNo], mi.[Code] AS [MaterialCode],
+                       ql.[LineNo] AS [LineNo], mi.[Code] AS [MaterialCode],
                        mi.[Name] AS [MaterialName], mu.[UnitName] AS [UnitName],
-                       ql.[quantity] AS [Quantity], ql.[unit_price] AS [UnitPrice],
-                       ql.[discount_rate] AS [LineDiscountRate], ql.[line_total] AS [LineTotal]
+                       ql.[Quantity] AS [Quantity], ql.[UnitPrice] AS [UnitPrice],
+                       ql.[DiscountRate] AS [LineDiscountRate], ql.[LineTotal] AS [LineTotal]
                 FROM [{s}].[Document] q
                 LEFT JOIN [{s}].[Contact] ca ON ca.[Id] = q.[ContactId]
-                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id]
-                LEFT JOIN [{s}].[Items] mi ON mi.[Id] = ql.[item_id]
-                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[unit_id]
+                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[DocumentId] = q.[id]
+                LEFT JOIN [{s}].[Items] mi ON mi.[Id] = ql.[ItemId]
+                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[UnitId]
                 WHERE q.[IsActive] = 1
                 """),
             ("vw_DeliveryNote", $"""
@@ -6039,14 +7317,14 @@ END;";
                        q.[DocumentDate] AS [DocumentDate], ca.[AccountTitle] AS [CustomerName],
                        q.[ContactAddress] AS [CustomerAddress], q.[DeliveryAddress] AS [DeliveryAddress],
                        q.[DeliveryTerms] AS [DeliveryTerms],
-                       ql.[line_no] AS [LineNo], mi.[Code] AS [MaterialCode],
+                       ql.[LineNo] AS [LineNo], mi.[Code] AS [MaterialCode],
                        mi.[Name] AS [MaterialName], mu.[UnitName] AS [UnitName],
-                       ql.[quantity] AS [Quantity]
+                       ql.[Quantity] AS [Quantity]
                 FROM [{s}].[Document] q
                 LEFT JOIN [{s}].[Contact] ca ON ca.[Id] = q.[ContactId]
-                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id]
-                LEFT JOIN [{s}].[Items] mi ON mi.[Id] = ql.[item_id]
-                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[unit_id]
+                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[DocumentId] = q.[id]
+                LEFT JOIN [{s}].[Items] mi ON mi.[Id] = ql.[ItemId]
+                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[UnitId]
                 WHERE q.[IsActive] = 1
                 """),
             ("vw_ProductBarcode", $"""
@@ -6076,15 +7354,15 @@ END;";
                        q.[PaymentTerms] AS [PaymentTerms], q.[DeliveryTerms] AS [DeliveryTerms],
                        q.[DeliveryAddress] AS [DeliveryAddress], q.[notes] AS [Notes],
                        q.[status] AS [Status], q.[RevisionNo] AS [RevisionNo],
-                       ql.[line_no] AS [LineNo], mi.[Code] AS [MaterialCode],
+                       ql.[LineNo] AS [LineNo], mi.[Code] AS [MaterialCode],
                        mi.[Name] AS [MaterialName], mu.[UnitName] AS [UnitName],
-                       ql.[quantity] AS [Quantity], ql.[unit_price] AS [UnitPrice],
-                       ql.[discount_rate] AS [LineDiscountRate], ql.[line_total] AS [LineTotal]
+                       ql.[Quantity] AS [Quantity], ql.[UnitPrice] AS [UnitPrice],
+                       ql.[DiscountRate] AS [LineDiscountRate], ql.[LineTotal] AS [LineTotal]
                 FROM [{s}].[Document] q
                 LEFT JOIN [{s}].[Contact] ca ON ca.[Id] = q.[ContactId]
-                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[document_id] = q.[id]
-                LEFT JOIN [{s}].[Items] mi ON mi.[Id] = ql.[item_id]
-                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[unit_id]
+                LEFT JOIN [{s}].[DocumentLine] ql ON ql.[DocumentId] = q.[id]
+                LEFT JOIN [{s}].[Items] mi ON mi.[Id] = ql.[ItemId]
+                LEFT JOIN [{s}].[Unit] mu ON mu.[Id] = ql.[UnitId]
                 WHERE q.[IsActive] = 1
                 """),
             ("vw_MaterialCards", $"""
@@ -6424,6 +7702,28 @@ END;";
                 CREATE INDEX [ix_pricelist_lookup]
                     ON [{s}].[PriceList]([GroupId],[ItemId],[ConfigId],[PriceType],[ValidFrom]);
             END;
+
+            -- UNIQUE filtered index — aynı (Group + Item + Config + Currency + PriceType + ValidFrom)
+            -- kombinasyonu ile ikinci AKTİF kayıt oluşturulamaz. Soft-deleted (IsActive=0)
+            -- satırlar haricte tutulur (filtre) — eski iptal edilmiş kayıtlar yeni girişi engellemez.
+            -- TRY blok: mevcut duplicate aktif kayıtlar varsa CREATE başarısız olur ama startup
+            -- bloklanmaz (kullanıcı manuel temizler, sonraki açılışta migration tekrar dener).
+            IF OBJECT_ID(N'[{s}].[PriceList]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE object_id = OBJECT_ID(N'[{s}].[PriceList]')
+                                 AND name = N'ux_pricelist_unique_active')
+            BEGIN
+                BEGIN TRY
+                    CREATE UNIQUE INDEX [ux_pricelist_unique_active]
+                        ON [{s}].[PriceList]([GroupId],[ItemId],[ConfigId],[CurrencyId],[PriceType],[ValidFrom])
+                        WHERE [IsActive] = 1;
+                END TRY
+                BEGIN CATCH
+                    -- Mevcut duplicate'ler nedeniyle index olusturulamadi.
+                    -- Loglamak yerine sessiz gec — migration startup'i kirmasin.
+                    PRINT 'WARN: ux_pricelist_unique_active olusturulamadi, mevcut duplicate kayitlar var.';
+                END CATCH
+            END;
             """;
 
         await using var cmd = connection.CreateCommand();
@@ -6470,6 +7770,50 @@ END;";
             BEGIN
                 ALTER TABLE dbo.Forms ADD [BaseRecordKey] NVARCHAR(60) NULL;
             END;
+
+            -- Faz I: Master-Detail entegrasyon — LinesFormCode + LinesParentColumn
+            -- Bir "kok form" (orn. SALES_ORDER_NEW) ile baglı kalem form'unu (SALES_ORDER_LINES)
+            -- iliskilendirir. Wizard Step 1'de tek form secince kalem form'u otomatik kesfedilir,
+            -- entegrasyon runner'i her iki form'un verilerini birlestirip tek body uretir.
+            -- NULL = tek seviyeli form (geriye uyum, mevcut tek-form entegrasyonlari calismaya devam eder).
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Forms', N'LinesFormCode') IS NULL
+            BEGIN
+                ALTER TABLE dbo.Forms ADD [LinesFormCode] NVARCHAR(50) NULL;
+            END;
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Forms', N'LinesParentColumn') IS NULL
+            BEGIN
+                ALTER TABLE dbo.Forms ADD [LinesParentColumn] NVARCHAR(100) NULL;
+            END;
+
+            -- Faz N: Form metadata hub — UI yonlendirme + entegrasyon ortak kanalı.
+            -- Yeni belge tipi eklemek icin sadece bu kolonlari Forms seed'inde doldurmak yeterli.
+            -- ListUrl    : save/delete sonrasi geri donulecek liste sayfasi
+            -- NewUrl     : "Yeni X" buton URL'i
+            -- EditUrl    : edit sayfasi sablonu — runtime "{id}" placeholder'i resolve edilir
+            -- Icon       : Lucide icon (ShoppingCart, FileText, Truck, vb.)
+            -- IconColor  : tema renk anahtari (emerald/indigo/amber/rose/slate/blue/violet)
+            -- IsTransferable : entegrasyon Wizard'da picker'da goster + "ERP'ye Aktar" butonu aktif
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Forms', N'ListUrl') IS NULL
+                ALTER TABLE dbo.Forms ADD [ListUrl] NVARCHAR(200) NULL;
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Forms', N'NewUrl') IS NULL
+                ALTER TABLE dbo.Forms ADD [NewUrl] NVARCHAR(200) NULL;
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Forms', N'EditUrl') IS NULL
+                ALTER TABLE dbo.Forms ADD [EditUrl] NVARCHAR(200) NULL;
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Forms', N'Icon') IS NULL
+                ALTER TABLE dbo.Forms ADD [Icon] NVARCHAR(50) NULL;
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Forms', N'IconColor') IS NULL
+                ALTER TABLE dbo.Forms ADD [IconColor] NVARCHAR(20) NULL;
+            IF OBJECT_ID(N'dbo.Forms', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Forms', N'IsTransferable') IS NULL
+                ALTER TABLE dbo.Forms
+                    ADD [IsTransferable] BIT NOT NULL CONSTRAINT [DF_Forms_IsTransferable] DEFAULT(1);
             """;
         await using (var ddlCmd = connection.CreateCommand())
         {
@@ -6492,18 +7836,19 @@ END;";
 
             UPDATE dbo.Forms
                SET [BaseTable] = N'dbo.Items',
-                   [BaseRecordKey] = N'code'
+                   [BaseRecordKey] = N'Code'
              WHERE [FormCode] = N'ITEMS'
                AND ([BaseTable] IS NULL OR [BaseTable] = N''
                     OR [BaseTable] IN (N'dbo.Item', N'dbo.stock_cards')
-                    OR [BaseRecordKey] = N'material_code');
+                    OR [BaseRecordKey] IN (N'material_code', N'code'));
 
             UPDATE dbo.Forms
                SET [BaseTable] = N'dbo.Document',
-                   [BaseRecordKey] = N'document_number'
+                   [BaseRecordKey] = N'DocumentNumber'
              WHERE [FormCode] = N'SALES_QUOTE_EDIT'
                AND ([BaseTable] IS NULL OR [BaseTable] = N''
-                    OR [BaseTable] IN (N'dbo.sales_quotes', N'dbo.Documents'));
+                    OR [BaseTable] IN (N'dbo.sales_quotes', N'dbo.Documents')
+                    OR [BaseRecordKey] = N'document_number');
 
             UPDATE dbo.Forms
                SET [BaseTable] = N'dbo.DocumentLine',
@@ -6511,6 +7856,92 @@ END;";
              WHERE [FormCode] = N'SALES_QUOTE_LINES'
                AND ([BaseTable] IS NULL OR [BaseTable] = N''
                     OR [BaseTable] IN (N'dbo.sales_quote_lines', N'dbo.DocumentLines'));
+
+            -- ── Migration: stale snake_case BaseRecordKey'leri PascalCase'e cek
+            -- Document/Items tablo rename'leri sonrasinda BaseRecordKey eski
+            -- isimlerle kalmis olabilir. v_Flat_* regen'i base.[document_number]
+            -- gibi referanslar uretip CREATE VIEW'da deferred-resolution hatasi
+            -- ile sessiz fail olur ve eski view stale kalir. Force-fix:
+            UPDATE dbo.Forms SET [BaseRecordKey] = N'DocumentNumber'
+             WHERE [FormCode] = N'SALES_QUOTE_EDIT'
+               AND [BaseRecordKey] IN (N'document_number', N'doc_no');
+            UPDATE dbo.Forms SET [BaseRecordKey] = N'Code'
+             WHERE [FormCode] = N'ITEMS'
+               AND [BaseRecordKey] IN (N'material_code', N'code', N'item_code');
+
+            -- ── SALES_ORDER serisi BaseTable seed (SALES_QUOTE pattern'i ile ayni)
+            UPDATE dbo.Forms
+               SET [BaseTable] = N'dbo.Document',
+                   [BaseRecordKey] = N'DocumentNumber'
+             WHERE [FormCode] IN (N'SALES_ORDER_NEW', N'SALES_ORDER_EDIT')
+               AND ([BaseTable] IS NULL OR [BaseTable] = N''
+                    OR [BaseTable] IN (N'dbo.sales_orders', N'dbo.Documents')
+                    OR [BaseRecordKey] = N'document_number');
+
+            UPDATE dbo.Forms
+               SET [BaseTable] = N'dbo.DocumentLine',
+                   [BaseRecordKey] = N'id'
+             WHERE [FormCode] = N'SALES_ORDER_LINES'
+               AND ([BaseTable] IS NULL OR [BaseTable] = N''
+                    OR [BaseTable] IN (N'dbo.sales_order_lines', N'dbo.DocumentLines'));
+
+            -- SALES_QUOTE_NEW de SALES_QUOTE_EDIT ile ayni base'e baglansin (tek seviyede eksikti)
+            UPDATE dbo.Forms
+               SET [BaseTable] = N'dbo.Document',
+                   [BaseRecordKey] = N'DocumentNumber'
+             WHERE [FormCode] = N'SALES_QUOTE_NEW'
+               AND ([BaseTable] IS NULL OR [BaseTable] = N''
+                    OR [BaseRecordKey] = N'document_number');
+
+            -- ── Faz I: Master-Detail iliskileri seed
+            -- SALES_ORDER_NEW/EDIT → kalem form: SALES_ORDER_LINES (parent FK: DocumentId)
+            -- Idempotent: bos olanlara yazar, mevcut deger korunur (admin override icin)
+            UPDATE dbo.Forms
+               SET [LinesFormCode]     = N'SALES_ORDER_LINES',
+                   [LinesParentColumn] = N'DocumentId'
+             WHERE [FormCode] IN (N'SALES_ORDER_NEW', N'SALES_ORDER_EDIT')
+               AND ([LinesFormCode] IS NULL OR [LinesFormCode] = N'');
+
+            UPDATE dbo.Forms
+               SET [LinesFormCode]     = N'SALES_QUOTE_LINES',
+                   [LinesParentColumn] = N'DocumentId'
+             WHERE [FormCode] IN (N'SALES_QUOTE_NEW', N'SALES_QUOTE_EDIT')
+               AND ([LinesFormCode] IS NULL OR [LinesFormCode] = N'');
+
+            -- ── Faz N: Form metadata hub seed (sadece NULL alanlari doldur — admin override korunur)
+            -- Yeni belge tipi (SALES_DISPATCH_EDIT, PURCHASE_ORDER_EDIT vb.) eklenince
+            -- buraya bir UPDATE bloku ekleyin — kod degisikligi yok.
+
+            -- Satis Teklifi (EDIT formu — kayit sayfasi)
+            UPDATE dbo.Forms SET
+                [ListUrl]   = ISNULL([ListUrl],   N'/Sales/Documents'),
+                [NewUrl]    = ISNULL([NewUrl],    N'/Sales/DocumentEdit?type=quote'),
+                [EditUrl]   = ISNULL([EditUrl],   N'/Sales/DocumentEdit'),
+                [Icon]      = ISNULL([Icon],      N'FileText'),
+                [IconColor] = ISNULL([IconColor], N'indigo')
+             WHERE [FormCode] = N'SALES_QUOTE_EDIT';
+
+            -- Satis Siparisi (EDIT formu)
+            UPDATE dbo.Forms SET
+                [ListUrl]   = ISNULL([ListUrl],   N'/Sales/Orders'),
+                [NewUrl]    = ISNULL([NewUrl],    N'/Sales/DocumentEdit?type=order'),
+                [EditUrl]   = ISNULL([EditUrl],   N'/Sales/DocumentEdit'),
+                [Icon]      = ISNULL([Icon],      N'ShoppingCart'),
+                [IconColor] = ISNULL([IconColor], N'emerald')
+             WHERE [FormCode] = N'SALES_ORDER_EDIT';
+
+            -- Liste/Yeni varyantlari ana liste sayfasiyla baglanir (UI tarafi geri donus icin kullanir)
+            UPDATE dbo.Forms SET
+                [ListUrl] = ISNULL([ListUrl], N'/Sales/Documents'),
+                [Icon]    = ISNULL([Icon],    N'FileText'),
+                [IconColor] = ISNULL([IconColor], N'indigo')
+             WHERE [FormCode] IN (N'SALES_QUOTE', N'SALES_QUOTE_NEW', N'SALES_QUOTE_LINES');
+
+            UPDATE dbo.Forms SET
+                [ListUrl] = ISNULL([ListUrl], N'/Sales/Orders'),
+                [Icon]    = ISNULL([Icon],    N'ShoppingCart'),
+                [IconColor] = ISNULL([IconColor], N'emerald')
+             WHERE [FormCode] IN (N'SALES_ORDER', N'SALES_ORDER_NEW', N'SALES_ORDER_LINES');
             """;
         await using (var seedCmd = connection.CreateCommand())
         {
@@ -7024,17 +8455,18 @@ END;";
             await cmd4.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        // ── DocumentLine tablosuna source_line_id kolonu (idempotent) ──
+        // ── DocumentLine tablosuna SourceLineId kolonu (idempotent) ──
         // Kalem bazli kaynak iz: tekliften sipariş clone edilirken her satirin
-        // kaynak teklif satiriyla 1-1 baglantisini tutar. revised_from_id ile
+        // kaynak teklif satiriyla 1-1 baglantisini tutar. RevisedFromId ile
         // ayni pattern (self-referencing nullable INT FK).
         var addSourceLineCol = $"""
             IF OBJECT_ID(N'[{s}].[DocumentLine]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{s}].[DocumentLine]', N'SourceLineId') IS NULL
                AND COL_LENGTH(N'[{s}].[DocumentLine]', N'source_line_id') IS NULL
             BEGIN
-                ALTER TABLE [{s}].[DocumentLine] ADD [source_line_id] INT NULL;
-                CREATE INDEX [IX_DocumentLine_source_line_id]
-                    ON [{s}].[DocumentLine] ([source_line_id]);
+                ALTER TABLE [{s}].[DocumentLine] ADD [SourceLineId] INT NULL;
+                CREATE INDEX [IX_DocumentLine_SourceLineId]
+                    ON [{s}].[DocumentLine] ([SourceLineId]);
             END;
             """;
         await using (var cmdSL = connection.CreateCommand())
@@ -8703,6 +10135,28 @@ END;";
                     ON [{schemaForSql}].[RoutingOperation]([OperationId]);
             END;
 
+            -- ===== RoutingItemMap (rota → mamul/kombinasyon coka-cok eslestirmesi) =====
+            IF OBJECT_ID(N'[{schemaForSql}].[RoutingItemMap]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{schemaForSql}].[RoutingItemMap]
+                (
+                    [Id]        INT NOT NULL IDENTITY(1,1) CONSTRAINT [PK_RoutingItemMap] PRIMARY KEY,
+                    [RoutingId] INT NOT NULL,
+                    [ItemId]    INT NOT NULL,
+                    [ConfigId]  INT NULL,
+                    CONSTRAINT [FK_RIM_Routing]
+                        FOREIGN KEY ([RoutingId])
+                        REFERENCES [{schemaForSql}].[Routing]([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [ux_RIM_Routing_Item_Config]
+                    ON [{schemaForSql}].[RoutingItemMap]([RoutingId], [ItemId], [ConfigId])
+                    WHERE [ConfigId] IS NOT NULL;
+                CREATE UNIQUE INDEX [ux_RIM_Routing_Item_NoConfig]
+                    ON [{schemaForSql}].[RoutingItemMap]([RoutingId], [ItemId])
+                    WHERE [ConfigId] IS NULL;
+                CREATE INDEX [ix_RIM_Item] ON [{schemaForSql}].[RoutingItemMap]([ItemId]);
+            END;
+
             -- ===== OperationMachineTime (operasyon × makine × urun bazli sure) =====
             IF OBJECT_ID(N'[{schemaForSql}].[OperationMachineTime]', N'U') IS NULL
             BEGIN
@@ -8861,6 +10315,89 @@ END;";
                 ');
             END;
 
+            -- ===== Faz 3: WorkOrder.AssignedPersonnelId (User'dan bagimsiz Personnel atamasi) =====
+            -- AssignedUserId (User FK) Personnel.UserId zorunluluğu yaratiyordu — kaldirildi.
+            -- Yeni atama dogrudan Personnel.Id'ye yapilir; eski sutun (AssignedUserId) backward
+            -- compat icin saklanir, runtime'da artik kullanilmiyor.
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'AssignedPersonnelId') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrder] ADD [AssignedPersonnelId] INT NULL;
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'AssignedPersonnelId') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[Personnel]', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.foreign_keys
+                   WHERE [name] = N'FK_WorkOrder_AssignedPersonnel'
+                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]'))
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrder]
+                    ADD CONSTRAINT [FK_WorkOrder_AssignedPersonnel]
+                    FOREIGN KEY ([AssignedPersonnelId])
+                    REFERENCES [{schemaForSql}].[Personnel]([Id]);
+            END;
+
+            -- ===== Faz 3: WorkOrder.DefaultMachineId (header'dan operasyonlara fallback makine) =====
+            -- Patlatma sirasinda RoutingOperation'da MachineId NULL ise WO.DefaultMachineId kullanilir.
+            -- Salt header tercihi — operasyon bazinda override edilebilir.
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'DefaultMachineId') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrder] ADD [DefaultMachineId] INT NULL;
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'[{schemaForSql}].[WorkOrder]', N'DefaultMachineId') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[Machine]', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.foreign_keys
+                   WHERE [name] = N'FK_WorkOrder_DefaultMachine'
+                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[WorkOrder]'))
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrder]
+                    ADD CONSTRAINT [FK_WorkOrder_DefaultMachine]
+                    FOREIGN KEY ([DefaultMachineId])
+                    REFERENCES [{schemaForSql}].[Machine]([Id]);
+            END;
+
+            -- ===== Faz 2: WorkOrderComponent (BOM patlatma ciktisi) =====
+            -- Iş emri reçetesinin patlatilmis bilesen listesi. ExplodeBomAsync
+            -- mevcut satirlari silip yeniden yazar (idempotent re-explode).
+            -- RequiredQuantity = bomLine.Quantity * wo.PlannedQuantity * (1 + ScrapRate)
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderComponent]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{schemaForSql}].[WorkOrderComponent]
+                (
+                    [Id]               INT NOT NULL IDENTITY(1,1) CONSTRAINT [PK_WorkOrderComponent] PRIMARY KEY,
+                    [WorkOrderId]      INT NOT NULL,
+                    [ItemId]           INT NOT NULL,
+                    [ConfigId]         INT NULL,
+                    [RequiredQuantity] DECIMAL(18,4) NOT NULL CONSTRAINT [df_WorkOrderComponent_Req] DEFAULT(0),
+                    [IssuedQuantity]   DECIMAL(18,4) NOT NULL CONSTRAINT [df_WorkOrderComponent_Issued] DEFAULT(0),
+                    [ScrapRate]        DECIMAL(18,4) NOT NULL CONSTRAINT [df_WorkOrderComponent_Scrap] DEFAULT(0),
+                    [UnitId]           INT NULL,
+                    [Notes]            NVARCHAR(500) NULL,
+                    [Created]          DATETIME2 NOT NULL CONSTRAINT [df_WorkOrderComponent_Created] DEFAULT(SYSUTCDATETIME()),
+                    [Updated]          DATETIME2 NULL
+                );
+                CREATE INDEX [ix_WorkOrderComponent_WorkOrder]
+                    ON [{schemaForSql}].[WorkOrderComponent]([WorkOrderId]);
+                CREATE INDEX [ix_WorkOrderComponent_Item]
+                    ON [{schemaForSql}].[WorkOrderComponent]([ItemId]);
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[WorkOrderComponent]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[{schemaForSql}].[WorkOrder]', N'U') IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM sys.foreign_keys
+                   WHERE [name] = N'FK_WorkOrderComponent_WorkOrder'
+                     AND [parent_object_id] = OBJECT_ID(N'[{schemaForSql}].[WorkOrderComponent]'))
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[WorkOrderComponent]
+                    ADD CONSTRAINT [FK_WorkOrderComponent_WorkOrder]
+                    FOREIGN KEY ([WorkOrderId])
+                    REFERENCES [{schemaForSql}].[WorkOrder]([Id]) ON DELETE CASCADE;
+            END;
+
             -- ===== Faz 3a: WorkOrderOperation (is emri operasyon adimlari) =====
             -- Release sirasinda Routing'in operasyonlari kopyalanir, shop-floor uzerinden takip edilir.
             -- StartedBy/CompletedBy referansi Personnel.Id (INT) — User degil, ciddi bicimde uretim katindaki
@@ -8968,6 +10505,138 @@ END;";
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    private async Task EnsureDocLayoutRuleTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        // Dinamik Tasarım Seçim Motoru — hiyerarşik kural tablosu.
+        // Her kriter (Customer, User, Branch, Warehouse, ContactGroup) NULLable kolon olarak
+        // saklanır; "bu kolonun null olması" = "tüm değerler için geçerli kural".
+        // Repository sorgusu 2^n ağırlık toplamı ile en spesifik kuralı seçer.
+        var s = _schema.Replace("]", "]]");
+        var schemaLiteral = _schema.Replace("'", "''");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[DocLayoutRule]
+                (
+                    [Id]              INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_DocLayoutRule] PRIMARY KEY,
+                    [DocType]         NVARCHAR(60)      NOT NULL,
+                    [LayoutId]        INT               NOT NULL,
+                    [CustomerId]      INT               NULL,
+                    [ContactGroupId]  INT               NULL,
+                    [UserId]          UNIQUEIDENTIFIER  NULL,
+                    [BranchId]        INT               NULL,
+                    [WarehouseId]     INT               NULL,
+                    [IsActive]        BIT               NOT NULL CONSTRAINT [df_DocLayoutRule_Active]  DEFAULT(1),
+                    [CreatedAt]       DATETIME2(0)      NOT NULL CONSTRAINT [df_DocLayoutRule_Created] DEFAULT(SYSUTCDATETIME()),
+                    [UpdatedAt]       DATETIME2(0)      NOT NULL CONSTRAINT [df_DocLayoutRule_Updated] DEFAULT(SYSUTCDATETIME()),
+                    CONSTRAINT [fk_DocLayoutRule_Layout] FOREIGN KEY ([LayoutId]) REFERENCES [{s}].[DocLayout]([Id])
+                );
+
+                -- Sorgu desenine optimize edilmiş kapsayıcı (covering) index:
+                -- (DocType, IsActive) filtresinden sonra kriter kolonları + LayoutId + UpdatedAt
+                -- INCLUDE'da geldiği için sorgu key-lookup yapmadan tamamlanır.
+                CREATE NONCLUSTERED INDEX [ix_DocLayoutRule_Lookup]
+                    ON [{s}].[DocLayoutRule]([DocType], [IsActive])
+                    INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [LayoutId], [UpdatedAt]);
+
+                -- Aynı (DocType + kriter kombinasyonu) için iki aktif kural olamaz.
+                -- Filtered UNIQUE index NULL'leri "değer" olarak kabul ettiğinden bu örtüşür.
+                CREATE UNIQUE NONCLUSTERED INDEX [ux_DocLayoutRule_Combo]
+                    ON [{s}].[DocLayoutRule]([DocType], [CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId])
+                    WHERE [IsActive] = 1;
+            END;
+
+            -- Mevcut DB'ler icin migrate: ContactGroupId kolonu (Cari Grup kriteri)
+            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.DocLayoutRule', N'ContactGroupId') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DocLayoutRule] ADD [ContactGroupId] INT NULL;
+
+                -- Eski UNIQUE index'i yeniden olustur (ContactGroupId dahil)
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ux_DocLayoutRule_Combo' AND object_id = OBJECT_ID(N'[{s}].[DocLayoutRule]'))
+                    EXEC(N'DROP INDEX [ux_DocLayoutRule_Combo] ON [{s}].[DocLayoutRule];');
+
+                EXEC(N'CREATE UNIQUE NONCLUSTERED INDEX [ux_DocLayoutRule_Combo]
+                       ON [{s}].[DocLayoutRule]([DocType], [CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId])
+                       WHERE [IsActive] = 1;');
+
+                -- Eski covering index'i drop+yeniden olustur (ContactGroupId INCLUDE'a eklenmeli)
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_DocLayoutRule_Lookup' AND object_id = OBJECT_ID(N'[{s}].[DocLayoutRule]'))
+                    EXEC(N'DROP INDEX [ix_DocLayoutRule_Lookup] ON [{s}].[DocLayoutRule];');
+
+                EXEC(N'CREATE NONCLUSTERED INDEX [ix_DocLayoutRule_Lookup]
+                       ON [{s}].[DocLayoutRule]([DocType], [IsActive])
+                       INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [LayoutId], [UpdatedAt]);');
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private async Task EnsureStockDocTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[stock_doc]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[stock_doc]
+                (
+                    [id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_stock_doc] PRIMARY KEY,
+                    [company_id]       INT               NOT NULL,
+                    [doc_type]         NVARCHAR(20)      NOT NULL,
+                    [doc_no]           NVARCHAR(30)      NOT NULL,
+                    [doc_date]         DATE              NOT NULL,
+                    [from_location_id] INT               NULL,
+                    [to_location_id]   INT               NULL,
+                    [ref_no]           NVARCHAR(50)      NULL,
+                    [notes]            NVARCHAR(500)     NULL,
+                    [created_by]       NVARCHAR(100)     NULL,
+                    [created]          DATETIME2         NOT NULL CONSTRAINT [df_stock_doc_created] DEFAULT GETDATE(),
+                    [is_active]        BIT               NOT NULL CONSTRAINT [df_stock_doc_active]  DEFAULT 1,
+                    CONSTRAINT [uq_stock_doc_no] UNIQUE ([company_id], [doc_no])
+                );
+                CREATE INDEX [ix_stock_doc_company_type] ON [{s}].[stock_doc]([company_id], [doc_type]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[stock_doc_line]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[stock_doc_line]
+                (
+                    [id]               INT IDENTITY(1,1) NOT NULL CONSTRAINT [pk_stock_doc_line] PRIMARY KEY,
+                    [doc_id]           INT               NOT NULL,
+                    [line_no]          INT               NOT NULL,
+                    [item_id]          INT               NOT NULL,
+                    [unit_id]          INT               NULL,
+                    [qty]              DECIMAL(18,4)     NOT NULL,
+                    [combination_id]   INT               NULL,
+                    [notes]            NVARCHAR(200)     NULL,
+                    [from_location_id] INT               NULL,
+                    [to_location_id]   INT               NULL,
+                    CONSTRAINT [fk_stock_doc_line_doc] FOREIGN KEY ([doc_id])
+                        REFERENCES [{s}].[stock_doc]([id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [ix_stock_doc_line_doc] ON [{s}].[stock_doc_line]([doc_id]);
+            END;
+
+            IF OBJECT_ID(N'[{s}].[stock_doc_line]', N'U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[stock_doc_line]')
+                                 AND [name] = N'from_location_id')
+                    ALTER TABLE [{s}].[stock_doc_line] ADD [from_location_id] INT NULL;
+
+                IF NOT EXISTS (SELECT 1 FROM sys.columns
+                               WHERE object_id = OBJECT_ID(N'[{s}].[stock_doc_line]')
+                                 AND [name] = N'to_location_id')
+                    ALTER TABLE [{s}].[stock_doc_line] ADD [to_location_id] INT NULL;
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private async Task EnsureDocLayoutDsTableAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
@@ -8994,6 +10663,76 @@ END;";
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private async Task EnsureGlobalLockTableAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[GlobalLock]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[GlobalLock]
+                (
+                    [Id]            INT           IDENTITY(1,1) NOT NULL CONSTRAINT [PK_GlobalLock] PRIMARY KEY,
+                    [RecordType]    NVARCHAR(100) NOT NULL,
+                    [RecordId]      NVARCHAR(200) NOT NULL,
+                    [UserId]        NVARCHAR(50)  NOT NULL,
+                    [UserName]      NVARCHAR(200) NOT NULL,
+                    [SessionId]     NVARCHAR(200) NOT NULL,
+                    [RecordTitle]   NVARCHAR(500) NULL,
+                    [PageUrl]       NVARCHAR(1000) NULL,
+                    [AcquiredAt]    DATETIME2     NOT NULL CONSTRAINT [DF_GlobalLock_AcquiredAt]   DEFAULT SYSUTCDATETIME(),
+                    [LastHeartbeat] DATETIME2     NOT NULL CONSTRAINT [DF_GlobalLock_Heartbeat]    DEFAULT SYSUTCDATETIME(),
+                    [IsActive]      BIT           NOT NULL CONSTRAINT [DF_GlobalLock_IsActive]     DEFAULT 1,
+                    [CreatedBy]     NVARCHAR(120) NULL,
+                    [Created]       DATETIME2     NOT NULL CONSTRAINT [DF_GlobalLock_Created]      DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]     NVARCHAR(120) NULL,
+                    [Updated]       DATETIME2     NULL
+                );
+                CREATE INDEX [IX_GlobalLock_Record] ON [{s}].[GlobalLock]([RecordType],[RecordId]) WHERE [IsActive] = 1;
+                CREATE INDEX [IX_GlobalLock_Session] ON [{s}].[GlobalLock]([SessionId]) WHERE [IsActive] = 1;
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Calibra master DB'de merkezi Attachment tablosunu olusturur (idempotent).
+    /// OpenSystemConnectionAsync kullanir — her zaman Calibra DB'ye yazar.
+    /// </summary>
+    private async Task EnsureAttachmentTableAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            IF OBJECT_ID(N'[dbo].[Attachment]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [dbo].[Attachment]
+                (
+                    [Id]            UNIQUEIDENTIFIER NOT NULL
+                                        CONSTRAINT [PK_Attachment] PRIMARY KEY
+                                        CONSTRAINT [DF_Attachment_Id] DEFAULT NEWID(),
+                    [EntityType]    NVARCHAR(50)     NOT NULL,
+                    [EntityId]      NVARCHAR(50)     NOT NULL,
+                    [FileName]      NVARCHAR(255)    NOT NULL,
+                    [StoredName]    NVARCHAR(255)    NOT NULL,
+                    [ContentType]   NVARCHAR(100)    NULL,
+                    [FileSize]      BIGINT           NOT NULL CONSTRAINT [DF_Attachment_FileSize]  DEFAULT 0,
+                    [Description]   NVARCHAR(500)    NULL,
+                    [BinaryContent] VARBINARY(MAX)   NULL,
+                    [IsActive]      BIT              NOT NULL CONSTRAINT [DF_Attachment_IsActive]  DEFAULT 1,
+                    [CreatedBy]     NVARCHAR(120)    NULL,
+                    [Created]       DATETIME2        NOT NULL CONSTRAINT [DF_Attachment_Created]   DEFAULT SYSUTCDATETIME(),
+                    [UpdatedBy]     NVARCHAR(120)    NULL,
+                    [Updated]       DATETIME2        NULL
+                );
+                CREATE INDEX [IX_Attachment_EntityType_EntityId]
+                    ON [dbo].[Attachment] ([EntityType], [EntityId]);
+            END;
+            """;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

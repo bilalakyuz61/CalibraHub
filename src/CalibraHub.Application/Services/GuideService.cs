@@ -48,13 +48,26 @@ public sealed class GuideService : IGuideService
                 .Where(c => actualCols.Any(ac => string.Equals(ac, c, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
 
+        // Kolon SQL veri tiplerini cek — frontend Alan Ayarlari modal'inda kolon
+        // yaninda kucuk chip olarak gosterir. Hata olursa bos donduriur (regression olmasin).
+        IReadOnlyDictionary<string, string>? columnTypes = null;
+        try
+        {
+            columnTypes = await _repository.GetViewColumnTypesAsync(guide.ViewName, ct);
+        }
+        catch
+        {
+            columnTypes = null;
+        }
+
         return new GuideSchemaDto(
             GuideCode: guide.GuideCode,
             GuideLabel: guide.GuideLabel,
             ValueColumn: guide.ValueColumn,
             DisplayColumn: guide.DisplayColumn,
             Columns: resolvedCols,
-            DefaultSortColumn: guide.DefaultSortColumn);
+            DefaultSortColumn: guide.DefaultSortColumn,
+            ColumnTypes: columnTypes);
     }
 
     public async Task<GuideSearchResultDto?> SearchAsync(

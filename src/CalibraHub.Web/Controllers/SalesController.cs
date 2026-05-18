@@ -1,3 +1,4 @@
+using CalibraHub.Application.Abstractions.DesignProvider;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -8,6 +9,7 @@ using CalibraHub.Web.Models.Sales;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using System.Globalization;
 using System.Security.Claims;
 
@@ -23,10 +25,12 @@ public sealed class SalesController : Controller
     private readonly IWidgetService _widgetService;
     private readonly IWidgetRepository _widgetRepo;
     private readonly IFieldSettingRepository _fieldSettings;
-    private readonly IReportTemplateRepository _templateRepo;
-    private readonly IDocumentGenerationService _reportGenerationService;
     private readonly IDocumentTypeRepository _documentTypeRepo;
+    private readonly IFormMetadataService _formMetadata;
     private readonly IWorkOrderService _workOrderService;
+    private readonly IPrintDispatcher _printDispatcher;
+    private readonly IIntegrationOnSaveDispatcher _onSaveDispatcher;
+    private readonly ILogger<SalesController> _logger;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
 
@@ -50,10 +54,12 @@ public sealed class SalesController : Controller
         IWidgetService widgetService,
         IWidgetRepository widgetRepo,
         IFieldSettingRepository fieldSettings,
-        IReportTemplateRepository templateRepo,
-        IDocumentGenerationService reportGenerationService,
         IDocumentTypeRepository documentTypeRepo,
+        IFormMetadataService formMetadata,
         IWorkOrderService workOrderService,
+        IPrintDispatcher printDispatcher,
+        IIntegrationOnSaveDispatcher onSaveDispatcher,
+        ILogger<SalesController> logger,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
     {
@@ -64,10 +70,12 @@ public sealed class SalesController : Controller
         _widgetService = widgetService;
         _widgetRepo = widgetRepo;
         _fieldSettings = fieldSettings;
-        _templateRepo = templateRepo;
-        _reportGenerationService = reportGenerationService;
         _documentTypeRepo = documentTypeRepo;
+        _formMetadata = formMetadata;
         _workOrderService = workOrderService;
+        _printDispatcher = printDispatcher;
+        _onSaveDispatcher = onSaveDispatcher;
+        _logger = logger;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
@@ -565,18 +573,28 @@ public sealed class SalesController : Controller
             typeCode = "satis_siparisi";
         }
 
-        if (typeId == null)
-        {
-            var dt = await _documentTypeRepo.GetByCodeAsync(typeCode, ct);
-            typeId = dt?.Id;
-        }
+        // DocumentType sadece kavramsal belge tipi (Document.DocumentTypeId FK + raporlama).
+        // UI metadata (ListUrl/Icon/IsTransferable) Forms tablosundan beslenir — Faz N hub.
+        var docType = await _documentTypeRepo.GetByCodeAsync(typeCode, ct);
+        if (typeId == null) typeId = docType?.Id;
+
+        // Edit form code (SALES_QUOTE_EDIT / SALES_ORDER_EDIT) — bu formdaki UI metadata'si
+        // ListUrl/Icon/IsTransferable'i belirler. Yeni belge tipleri (DISPATCH, PURCHASE_ORDER vb.)
+        // eklenince sadece Forms seed'i yeterli; controller dokunulmaz.
+        var editFormCode = string.Equals(typeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase)
+            ? "SALES_ORDER_EDIT" : "SALES_QUOTE_EDIT";
+        var formMeta = await _formMetadata.GetFormAsync(editFormCode, ct);
 
         // Satır grid kolonlarına rehber binding'lerini runtime'da inject et — belge tipine göre form kodu seç
         var lineFormCode = string.Equals(typeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase)
             ? "SALES_ORDER_LINES"
             : "SALES_QUOTE_LINES";
         var bindings = await _fieldSettings.GetGuideBindingsForFormAsync(lineFormCode, ct);
-        var lineGridConfig = BuildDocumentLineGridConfig(bindings);
+        // Fallback: sipariş satırları için kendi form kodunda binding yoksa teklif kodundan devral.
+        // Her iki belge tipinin kalem yapısı özdeş — aynı rehber konfigürasyonu uygulanabilir.
+        if (bindings.Count == 0 && string.Equals(lineFormCode, "SALES_ORDER_LINES", StringComparison.OrdinalIgnoreCase))
+            bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -588,6 +606,14 @@ public sealed class SalesController : Controller
             LineGridConfigJson = System.Text.Json.JsonSerializer.Serialize(lineGridConfig, jsonOpts),
             DocumentTypeCode = typeCode,
             DocumentTypeId = typeId,
+            // Faz N — Forms tablosundan beslenen UI/entegrasyon metadata.
+            // DocumentType.Name (Satış Siparişi) header label icin; gerisi form-seviyesi.
+            ListReturnUrl         = formMeta?.ListUrl  ?? "/Sales/Documents",
+            NewUrl                = formMeta?.NewUrl,
+            DocumentTypeName      = docType?.Name      ?? (typeCode == "satis_siparisi" ? "Satış Siparişi" : "Satış Teklifi"),
+            DocumentTypeIcon      = formMeta?.Icon,
+            DocumentTypeIconColor = formMeta?.IconColor,
+            IsTransferable        = formMeta?.IsTransferable ?? true,
         };
 
         return View("DocumentEdit", vm);
@@ -605,7 +631,8 @@ public sealed class SalesController : Controller
     // Computed hucreler: formula string'i gelir, React guvenli evaluator ile hesaplar.
     // ════════════════════════════════════════════════════════════════
     private object BuildDocumentLineGridConfig(
-        IReadOnlyCollection<FieldGuideBindingDto>? bindings = null)
+        IReadOnlyCollection<FieldGuideBindingDto>? bindings = null,
+        string lineFormCode = "SALES_QUOTE_LINES")
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
         var bindingMap = (bindings ?? [])
@@ -627,7 +654,7 @@ public sealed class SalesController : Controller
                     // Binding varsa guide mode, yoksa doğrudan URL ile inline dropdown
                     guideCode      = matBinding?.GuideCode,
                     filterJson     = matBinding?.FilterJson,
-                    formCode       = "SALES_QUOTE_LINES",
+                    formCode       = lineFormCode,
                     formatJson     = matBinding?.FormatJson,
                     lookupUrl      = matBinding == null ? "/Sales/GetMaterials" : (string?)null,
                     lookupValueKey = "materialCode",
@@ -774,6 +801,18 @@ public sealed class SalesController : Controller
     {
         var quotes = await _quoteService.GetQuotesAsync(search, status, ct);
         return Json(quotes);
+    }
+
+    /// <summary>
+    /// İş emri "Kaynak Sipariş Ekle" modalında kullanılır — sadece satış siparişlerini
+    /// (Document.type = satis_siparisi) flat liste olarak doner. GetDocuments
+    /// tum belge tiplerini doner (geriye doniik uyum), bu endpoint sadece siparis filtreler.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetOrdersList(string? search, string? status, CancellationToken ct)
+    {
+        var orders = await _quoteService.GetByTypeAsync("satis_siparisi", search, status, ct);
+        return Json(orders);
     }
 
     [HttpGet]
@@ -1080,6 +1119,18 @@ public sealed class SalesController : Controller
                 }
             }
 
+            // Otomatik Save trigger'li entegrasyonlari arka planda fire et (fire-and-forget).
+            // Sales document hem QUOTE hem ORDER olabilir + hem NEW hem EDIT form code'lariyla
+            // wizard'da tanimlanmis olabilir — tum 4 varyanti tara. DB'de UNIQUE INDEX
+            // sayesinde her sorgu cok hizli; eslesmesi olmayan form code'lar no-op doner.
+            if (quote != null && quote.Id > 0)
+            {
+                _onSaveDispatcher.FireOnSave(
+                    new[] { "SALES_QUOTE_NEW", "SALES_QUOTE_EDIT", "SALES_ORDER_NEW", "SALES_ORDER_EDIT" },
+                    quote.Id.ToString(),
+                    userName);
+            }
+
             return Json(new { success = true, quote });
         }
         catch (Exception ex)
@@ -1179,8 +1230,8 @@ public sealed class SalesController : Controller
 
     /// <summary>
     /// Satis teklifini yazdirmak icin basit bir print-friendly HTML dondurur.
-    /// SmartCard "Yazdir" aksiyonundan tetiklenir. Ileride FastReport PDF
-    /// uretimine bagli PDF stream'i doner; su an placeholder — tarayicinin
+    /// SmartCard "Yazdir" aksiyonundan tetiklenir. Ileride Belge Tasarimcisi
+    /// (DocDesigner) uzerinden PDF stream'i doner; su an placeholder — tarayicinin
     /// yazdir dialogu kendiliginden acilir (window.print).
     /// </summary>
     /// <summary>
@@ -1219,7 +1270,7 @@ public sealed class SalesController : Controller
                      transition:background .15s, transform .15s; }}
   .sq-print-close:hover {{ background:rgba(220,38,38,.92); transform:rotate(90deg); }}
 
-  /* Yukleme spinner'i — iframe PDF'i yuklenene kadar (~1-2sn FastReport
+  /* Yukleme spinner'i — iframe PDF'i yuklenene kadar (~1-2sn DocDesigner
      uretimi) ortada donen halka + ""Dizayn hazirlaniyor..."" metni.
      JS iframe'in load event'ini yakalayinca data-loaded=""1"" ekler ve
      overlay fade-out ile kapatilir. */
@@ -1338,7 +1389,7 @@ public sealed class SalesController : Controller
 
     /// <summary>
     /// Satis teklifini QUOTE belge turunun VARSAYILAN (IsDefault=true) dizayni
-    /// ile FastReport uzerinden PDF olarak uretir; browser'in PDF viewer'i inline
+    /// ile Belge Tasarimcisi (DocDesigner) uzerinden PDF olarak uretir; browser'in PDF viewer'i inline
     /// acar (Content-Disposition: inline). Kullanici tarayici toolbar'indan
     /// yazdir dialogunu acabilir ("Ctrl+P" veya viewer buton).
     ///
@@ -1353,31 +1404,51 @@ public sealed class SalesController : Controller
             var quote = await _quoteService.GetQuoteByIdAsync(id, ct);
             if (quote == null) return NotFound();
 
-            // Belge tur id — Quote DTO'dan gelir; yoksa QUOTE kodundan cozeriz.
-            int? docTypeId = quote.DocumentTypeId;
-            if (!docTypeId.HasValue)
+            // DesignSelectionContext — Belge Tasarimcisi (DocDesigner) icin baglam
+            var userId = GetUserId();
+
+            // Carinin grubunu cek — kural eslemesinde "su gruba ait cariler" siniri icin
+            int? contactGroupId = null;
+            if (quote.ContactId is int qcid && qcid > 0)
             {
-                var types = await _documentTypeRepo.GetAllAsync(ct);
-                var quoteType = types.FirstOrDefault(t =>
-                    string.Equals(t.Code, "QUOTE", StringComparison.OrdinalIgnoreCase));
-                docTypeId = quoteType?.Id;
+                var contact = await _financeService.GetContactByIdAsync(qcid, ct);
+                contactGroupId = contact?.ContactGroupId;
             }
-            if (!docTypeId.HasValue)
-                return PrintErrorPage("Belge turu (QUOTE) sistemde tanimli degil. Yoneticiye bildiriniz.");
 
-            var template = await _templateRepo.GetDefaultByDocumentTypeIdAsync(docTypeId.Value, ct);
-            if (template == null)
-                return PrintErrorPage(
-                    "Bu belge turu (QUOTE) icin VARSAYILAN dizayn tanimlanmamis. Rapor Sablonlari ekranindan bir sablon secip 'Varsayilan' isaretleyin.");
+            var ctx = new DesignSelectionContext
+            {
+                DocType        = "sales_quote",
+                CustomerId     = quote.ContactId,
+                ContactGroupId = contactGroupId,
+                UserId         = userId == Guid.Empty ? null : (Guid?)userId,
+                BranchId       = null,    // ileride quote.BranchId
+                WarehouseId    = null,
+            };
 
-            var pdf = await _reportGenerationService.GeneratePdfAsync(template.Id, id, ct);
+            _logger.LogInformation(
+                "[PrintQuote] id={Id} → dispatcher (cust={Cust}, user={User})",
+                id, ctx.CustomerId, ctx.UserId);
+
+            var pdf = await _printDispatcher.DispatchPrintAsync(ctx, id, ct);
+
             Response.Headers["Content-Disposition"] = "inline; filename=\"teklif.pdf\"";
             Response.Headers["X-Content-Type-Options"] = "nosniff";
+            // Tasarımcıda yapılan değişiklikler hemen yansısın diye browser cache devre dışı
+            Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
+            Response.Headers["Pragma"]        = "no-cache";
+            Response.Headers["Expires"]       = "0";
             return File(pdf, "application/pdf");
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Beklenen hata (tasarım/şablon yok) — dostane hata sayfası
+            _logger.LogWarning(ex, "[PrintQuote] id={Id} yazdırılamadı (no design).", id);
+            return PrintErrorPage(ex.Message);
         }
         catch (Exception ex)
         {
-            return PrintErrorPage("Yazdirma hatasi: " + ex.Message);
+            _logger.LogError(ex, "[PrintQuote] id={Id} beklenmeyen hata.", id);
+            return PrintErrorPage("Yazdırma hatası: " + ex.Message);
         }
     }
 
@@ -1568,12 +1639,18 @@ public sealed class SalesController : Controller
                     f.outerHTML = '<div class=""sq-mail-success"">Mail gonderildi.</div>';
                 }} else {{
                     if (submitBtn) {{ submitBtn.disabled = false; submitBtn.textContent = 'Gonder'; }}
-                    alert('Gonderilemedi: ' + (d && d.message ? d.message : 'Bilinmeyen hata'));
+                    var m = 'Gonderilemedi: ' + (d && d.message ? d.message : 'Bilinmeyen hata');
+                    if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(m);
+                    else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(m, 'err');
+                    else alert(m);
                 }}
             }})
             .catch(function (err) {{
                 if (submitBtn) {{ submitBtn.disabled = false; submitBtn.textContent = 'Gonder'; }}
-                alert('Hata: ' + err.message);
+                var em = 'Hata: ' + err.message;
+                if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(em);
+                else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(em, 'err');
+                else alert(em);
             }});
         return false;
     }};
@@ -1597,110 +1674,7 @@ public sealed class SalesController : Controller
         return Json(new { success = true, message = "Mail kuyruga alindi (simulasyon)." });
     }
 
-    // ════════════════════════════════════════════════════════════════
-    // Ekli Dosyalar — document_attachments (yeni, INT FK, tek tablo).
-    // Eski sales_quote_attachments (Guid) deprecated — initializer yeni tabloyu garanti eder.
-    // Tablo tamami synonym ile farkli bir DB'ye yonlendirilebilir.
-    // ════════════════════════════════════════════════════════════════
-
-    [HttpGet]
-    public async Task<IActionResult> GetDocumentAttachments(int documentId, CancellationToken ct)
-    {
-        var list = new List<object>();
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            SELECT [id],[file_name],[mime_type],[file_size],[uploaded_at]
-            FROM [{_schema}].[document_attachments]
-            WHERE [document_id] = @DocumentId AND [is_active] = 1
-            ORDER BY [uploaded_at] DESC;
-            """;
-        cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct))
-        {
-            list.Add(new
-            {
-                id = r.GetInt32(0),
-                fileName = r.GetString(1),
-                mimeType = r.IsDBNull(2) ? null : r.GetString(2),
-                fileSize = r.GetInt64(3),
-                uploadedAt = r.GetDateTime(4),
-            });
-        }
-        return Json(list);
-    }
-
-    [HttpPost]
-    [RequestSizeLimit(50 * 1024 * 1024)] // 50 MB per dosya
-    public async Task<IActionResult> UploadDocumentAttachment(
-        [FromForm] int documentId,
-        [FromForm] List<IFormFile> files,
-        CancellationToken ct)
-    {
-        if (documentId <= 0)
-            return BadRequest(new { success = false, message = "Belge id gecersiz." });
-        if (files == null || files.Count == 0)
-            return BadRequest(new { success = false, message = "Dosya yok." });
-
-        var user = User.Identity?.Name ?? "unknown";
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-
-        foreach (var file in files)
-        {
-            if (file.Length <= 0) continue;
-            await using var ms = new MemoryStream();
-            await file.CopyToAsync(ms, ct);
-            var bytes = ms.ToArray();
-
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"""
-                INSERT INTO [{_schema}].[document_attachments]
-                    ([document_id],[file_name],[mime_type],[file_size],[content],[uploaded_by],[uploaded_at],[is_active])
-                VALUES (@DocumentId,@FileName,@Mime,@Size,@Content,@User,SYSUTCDATETIME(),1);
-                """;
-            cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
-            cmd.Parameters.Add(new SqlParameter("@FileName", file.FileName ?? "file"));
-            cmd.Parameters.Add(new SqlParameter("@Mime", (object?)file.ContentType ?? DBNull.Value));
-            cmd.Parameters.Add(new SqlParameter("@Size", (long)bytes.Length));
-            cmd.Parameters.Add(new SqlParameter("@Content", bytes));
-            cmd.Parameters.Add(new SqlParameter("@User", user));
-            await cmd.ExecuteNonQueryAsync(ct);
-        }
-        return Json(new { success = true });
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> DownloadDocumentAttachment(int id, CancellationToken ct)
-    {
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"""
-            SELECT [file_name],[mime_type],[content]
-            FROM [{_schema}].[document_attachments]
-            WHERE [id] = @Id AND [is_active] = 1;
-            """;
-        cmd.Parameters.Add(new SqlParameter("@Id", id));
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-        if (!await r.ReadAsync(ct)) return NotFound();
-        var fileName = r.GetString(0);
-        var mime = r.IsDBNull(1) ? "application/octet-stream" : r.GetString(1);
-        var content = (byte[])r[2];
-        return File(content, mime, fileName);
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteDocumentAttachment([FromBody] DeleteAttachmentBody body, CancellationToken ct)
-    {
-        if (body == null || body.Id <= 0)
-            return BadRequest(new { success = false, message = "Id gecersiz." });
-        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE [{_schema}].[document_attachments] SET [is_active] = 0 WHERE [id] = @Id;";
-        cmd.Parameters.Add(new SqlParameter("@Id", body.Id));
-        await cmd.ExecuteNonQueryAsync(ct);
-        return Json(new { success = true });
-    }
+    // NOT: GetDocumentAttachments + UploadDocumentAttachment + DownloadDocumentAttachment + DeleteDocumentAttachment DocumentAttachmentController'a tasindi (rapor 2.3 split).
 }
 
 public sealed record DeleteQuoteBody(int Id);

@@ -257,8 +257,13 @@ export default function OrgChartWorkspace() {
       })
   }, [])
 
-  var handleDeleteChart = useCallback(function (id) {
-    if (!confirm('Bu semayi silmek istediginizden emin misiniz?')) return
+  var handleDeleteChart = useCallback(async function (id) {
+    // Rapor §6.6 — CalibraAlert.confirm fallback
+    var ok = window.CalibraAlert && window.CalibraAlert.confirm
+      ? await window.CalibraAlert.confirm('Bu semayi silmek istediginizden emin misiniz?',
+          { title: 'Şemayı Sil', okText: 'Evet, Sil', cancelText: 'Vazgeç', danger: true })
+      : confirm('Bu semayi silmek istediginizden emin misiniz?')
+    if (!ok) return
     api.deleteChart(id)
       .then(function () {
         setCharts(function (prev) { return prev.filter(function (c) { return c.id !== id }) })

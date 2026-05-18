@@ -57,4 +57,8 @@ public sealed class LocationInput
     public decimal? VolumeCapacity { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    public bool IsMachinePark { get; set; }
+
+    public bool IsStorageArea { get; set; }
 }

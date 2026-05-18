@@ -596,6 +596,29 @@ public sealed class SqlGuideRepository : IGuideRepository
         return cols.AsReadOnly();
     }
 
+    public async Task<IReadOnlyDictionary<string, string>> GetViewColumnTypesAsync(string viewName, CancellationToken ct)
+    {
+        ValidateIdentifier(viewName, "ViewName");
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var types = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT [COLUMN_NAME], [DATA_TYPE]
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE [TABLE_SCHEMA] = @Schema AND [TABLE_NAME] = @View
+            ORDER BY [ORDINAL_POSITION];";
+        cmd.Parameters.AddWithValue("@Schema", _schemaName);
+        cmd.Parameters.AddWithValue("@View", viewName);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var col = reader.GetString(0);
+            var typ = reader.IsDBNull(1) ? "" : reader.GetString(1);
+            if (IdentifierRegex.IsMatch(col)) types[col] = typ;
+        }
+        return types;
+    }
+
     // PR 3: UpsertAsync ve DeleteAsync admin metodlari kaldirildi — UI artik
     // /api/guides/views uzerinden fiziksel view'lari direkt kullaniyor.
     // GuideMas kayitlari startup auto-discovery (DiscoverAndRegisterGuidesAsync)

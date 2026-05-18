@@ -16,12 +16,20 @@ namespace CalibraHub.Web.Models.Navigation;
 public static class MenuDefinition
 {
     /// <summary>Tek bir menu dugumu (grup veya link).</summary>
+    /// <remarks>
+    /// MatchPath: opsiyonel URL prefix. Set ise menu tiklandiginda Shell mevcut
+    /// tab'lar arasinda bu prefix'e sahip olani arar; varsa o tab'i AS-IS aktive eder
+    /// (URL'i degistirmez — kullanicinin edit context'i korunur). Yoksa Url ile yeni
+    /// tab acar. Ornek: Malzeme Kartlari menusu icin matchPath='/Logistics/MaterialCard'
+    /// ile WO ekranindan acilan MaterialCardEdit?id=N tab'i bulunup aktif edilir.
+    /// </remarks>
     public sealed record MenuNode(
         string Key,                          // Unique — "logistics.materials"
         string Label,                        // Kullaniciya gosterilen metin
         string? Icon,                        // Lucide icon adi (null ise CircleDot fallback)
         string? Url,                         // Tiklaninca acilacak URL — null ise sadece grup basligi
-        IReadOnlyList<MenuNode>? Children);  // Nested alt ogeler
+        IReadOnlyList<MenuNode>? Children,   // Nested alt ogeler
+        string? MatchPath = null);           // Opsiyonel mevcut tab match prefix
 
     /// <summary>
     /// Tam menu agacini doner.
@@ -36,7 +44,11 @@ public static class MenuDefinition
         {
             new("settings.company",           "Şirket Ayarları",         "Building2",   "/Admin/CompanySettings",    null),
             new("settings.parameters",        "Şirket Parametreleri",    "SlidersHorizontal", "/Admin/Parameters",   null),
-            new("settings.integrationevents", "Entegrasyon Tanımları",   "Zap",         "/Admin/IntegrationEvents",  null),
+            // Tum entegrasyon ekranlari (Profiller / Endpointler / Entegrasyonlar / Aktarim Kuyrugu
+            // / Enum Tanimlari / Calistirma Logu) tek sayfada — IntegrationsHub icindeki tab'larla.
+            // Deep-link: /Integrations#queue, /Integrations#enums vb.
+            new("settings.integrations",      "Entegrasyon Wizard",      "Plug",        "/Integrations",             null,
+                MatchPath: "/Integrations"),
             new("settings.viewsettings",      "Alan Rehberi",            "LayoutGrid",  "/Admin/ViewSettings",       null),
             new("settings.dbschema",          "Veritabanı Haritası",     "Database",    "/admin/db-schema",          null),
             new("settings.scheduledtasks",    "Zamanlanmış Görevler",    "Clock",       "/Admin/ScheduledTasks",     null),
@@ -80,13 +92,21 @@ public static class MenuDefinition
             {
                 new("logistics.fixed", "Sabit Tanımlamalar", "Folder", null, new List<MenuNode>
                 {
-                    new("logistics.materials", "Malzeme Kartları", "Boxes", "/Logistics/MaterialCards", null),
+                    new("logistics.materials", "Malzeme Kartları", "Boxes", "/Logistics/MaterialCards", null,
+                        MatchPath: "/Logistics/MaterialCard"),
                     new("logistics.configuration", "Özellik ve Kombinasyon", "Sliders", "/Logistics/ProductConfiguration", null),
+                    new("logistics.combinations", "Tanımlı Kombinasyonlar", "Grid3X3", "/Logistics/Combinations", null,
+                        MatchPath: "/Logistics/Combination"),
                 }),
                 new("logistics.sales", "Satış", "TrendingUp", null, new List<MenuNode>
                 {
                     new("logistics.salesquotes", "Satış Teklifi", "FileText", "/Sales/Documents", null),
                     new("logistics.salesorders", "Satış Siparişi", "ShoppingCart", "/Sales/Orders", null),
+                }),
+                new("logistics.warehouse", "Depo", "Warehouse", null, new List<MenuNode>
+                {
+                    new("logistics.transfer",   "Transfer",             "ArrowLeftRight", "/Warehouse/Transfer",   null),
+                    new("logistics.stockentry", "Ambar Giriş / Çıkış", "PackageCheck",   "/Warehouse/StockEntry", null),
                 }),
             }),
 
@@ -118,6 +138,7 @@ public static class MenuDefinition
                 new("gendef.machines",    "Makine Tanımlamaları",       "Cog",         "/Logistics/Machines",                      null),
                 new("gendef.operations",  "Operasyon Tanımlamaları",    "Hammer",      "/Production/Operations",                   null),
                 new("gendef.routings",    "Rota Tanımlamaları",         "Workflow",    "/Production/Routings",                     null),
+                new("gendef.departments", "Departman Tanımlamaları",    "Building2",   "/Admin/Departments",                       null),
                 new("gendef.personnel",   "Personel Tanımlamaları",     "Users",       "/Production/Personnel",                    null),
                 new("gendef.pricelist",   "Fiyat Listesi",              "Tag",         "/PriceList/PriceGroups",                   null),
             }),
@@ -125,11 +146,11 @@ public static class MenuDefinition
             // ────────────── 7. Tasarim ──────────────
             new("design", "Tasarım", "LayoutGrid", null, new List<MenuNode>
             {
-                new("design.documents",       "Belge Şablonları",      "FileText",   "/Document",              null),
+                new("design.docdesigner",     "Belge Tasarımcısı",     "PenSquare",  "/DocDesigner",           null),
+                new("design.doclayoutrule",   "Tasarım Kuralları",     "GitBranch",  "/DocLayoutRule",         null),
                 // Rehber Yonetimi menusu kaldirildi — rehber konfigurasyonu artik
                 // widget bazinda inline (WidgetBuilderForm'daki "Rehber" satiri +
                 // GuideSettingsModal) ya da text+rehber butonu uzerinden yapiliyor.
-                new("design.formmanagement",  "Form Tasarım Ayarları", "LayoutList", "/Admin/FormManagement",  null),
             }),
 
             // ────────────── 8. Ayarlar ──────────────

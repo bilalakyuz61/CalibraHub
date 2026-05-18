@@ -1,0 +1,1199 @@
+/* RoutingTree — Rota Tanımlamaları — SmartBoard visual standard */
+.rt-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: linear-gradient(160deg, #0d1117 0%, #0c0f1a 60%, #0d1020 100%);
+  color: #e2e8f0;
+  font-size: 13px;
+}
+
+/* ── Header ── */
+.rt-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+.rt-header__id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.rt-header__icon {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(139,92,246,0.15) 100%);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: #818cf8;
+  flex-shrink: 0;
+}
+.rt-header__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.92);
+  line-height: 1.2;
+}
+.rt-header__sub {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 1px;
+}
+.rt-header__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 7px 10px;
+  transition: border-color 0.15s;
+}
+.rt-header__search:focus-within { border-color: rgba(99,102,241,0.4); }
+.rt-header__search svg { color: #475569; flex-shrink: 0; }
+.rt-header__search input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-size: 13px; color: #e2e8f0;
+}
+.rt-header__search input::placeholder { color: #374151; }
+.rt-header__clear {
+  background: none; border: none; cursor: pointer;
+  color: #475569; padding: 2px; border-radius: 4px;
+  display: flex; align-items: center;
+}
+.rt-header__clear:hover { color: #94a3b8; }
+
+/* ── Buttons ── */
+.rt-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 8px; border: none;
+  cursor: pointer; font-size: 13px; font-weight: 500;
+  transition: background 0.15s, opacity 0.15s; flex-shrink: 0;
+}
+.rt-btn--primary {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+}
+.rt-btn--primary:hover { background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); }
+.rt-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.rt-btn--ghost {
+  background: rgba(255,255,255,0.05);
+  color: #94a3b8;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.rt-btn--ghost:hover { background: rgba(255,255,255,0.09); }
+.rt-btn--danger { background: #ef4444; color: #fff; }
+.rt-btn--danger:hover { background: #dc2626; }
+.rt-btn--sm { padding: 5px 10px; font-size: 12px; }
+
+/* ── Settings/icon button (gear, vb.) ── */
+.rt-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.1s;
+  flex-shrink: 0;
+}
+.rt-icon-btn:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.4);
+  color: #a5b4fc;
+  transform: translateY(-1px);
+}
+.rt-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.rt-icon-btn--xs {
+  width: 22px; height: 22px;
+  border-radius: 5px;
+  background: transparent;
+  border-color: transparent;
+  color: #475569;
+}
+.rt-icon-btn--xs:hover { transform: none; }
+.rt-icon-btn--active {
+  background: rgba(99,102,241,0.16);
+  border-color: rgba(99,102,241,0.45);
+  color: #c7d2fe;
+}
+.rt-icon-btn__badge {
+  position: absolute;
+  top: -5px; right: -5px;
+  min-width: 17px; height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 10px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 2px #0c0f1a;
+}
+.rt-icon-btn { position: relative; }
+.rt-spin { animation: rt-spin 0.9s linear infinite; }
+@keyframes rt-spin { to { transform: rotate(360deg); } }
+
+/* ── List ── */
+.rt-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Empty state ── */
+.rt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 80px 20px;
+  color: #374151;
+  text-align: center;
+}
+
+/* ── Inline form row ── */
+.rt-form-row {
+  padding: 8px 16px;
+  background: rgba(99,102,241,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.rt-inline-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* ── Form inputs ── */
+.rt-fi {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 12px;
+  color: #e2e8f0;
+  outline: none;
+  transition: border-color 0.15s;
+  min-width: 0;
+}
+.rt-fi:focus { border-color: rgba(99,102,241,0.5); }
+.rt-fi option { background: #1e293b; }
+.rt-fi--code  { width: 90px;  flex-shrink: 0; }
+.rt-fi--name  { flex: 2; min-width: 130px; }
+.rt-fi--desc  { flex: 3; min-width: 100px; }
+.rt-fi--check {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; color: #94a3b8;
+  white-space: nowrap; flex-shrink: 0; cursor: pointer;
+  background: none; border: none; padding: 0;
+}
+.rt-fi--seq   { width: 60px; flex-shrink: 0; text-align: right; }
+.rt-fi--notes { flex: 2; min-width: 80px; }
+.rt-fi--picker {
+  display: flex; align-items: center; justify-content: space-between;
+  flex: 3; min-width: 120px; cursor: pointer;
+}
+.rt-fi--picker:hover { border-color: rgba(99,102,241,0.4); }
+
+/* ══════════════════════════════════════════════════════════════════
+   C-Grid kart standardi — SmartCard ile uyumlu yatay panel.
+   Sol: chevron + ikon avatar + kimlik (kod/ad/aciklama)
+   Sag: widget chip'leri + durum badge + toggle + aksiyon butonlari
+   ══════════════════════════════════════════════════════════════════ */
+.rt-row-wrap {
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+  overflow: hidden;
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s, transform 0.15s;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 2px 8px rgba(0,0,0,0.18);
+}
+.rt-row-wrap:hover {
+  border-color: rgba(99,102,241,0.32);
+  background: linear-gradient(180deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 4px 18px rgba(99,102,241,0.18);
+}
+.rt-row-wrap--open {
+  border-color: rgba(99,102,241,0.45);
+  background: linear-gradient(180deg, rgba(99,102,241,0.08) 0%, rgba(99,102,241,0.02) 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 6px 24px rgba(99,102,241,0.22);
+}
+
+/* ── Routing kart govdesi ── */
+.rt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+.rt-row::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+  opacity: 0.55;
+  transition: opacity 0.18s;
+}
+.rt-row-wrap:hover .rt-row::before { opacity: 0.85; }
+.rt-row-wrap--open .rt-row::before { opacity: 1; }
+
+.rt-row__chevron {
+  background: none; border: none; cursor: pointer;
+  color: #475569; padding: 4px; border-radius: 6px;
+  display: flex; align-items: center;
+  transition: color 0.15s, transform 0.22s, background 0.12s;
+  flex-shrink: 0;
+}
+.rt-row__chevron:hover { background: rgba(99,102,241,0.1); color: #818cf8; }
+.rt-row__chevron--open {
+  transform: rotate(90deg);
+  color: #a5b4fc;
+}
+
+/* ── Ikon avatar ── */
+.rt-row__avatar {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.22) 0%, rgba(139,92,246,0.16) 100%);
+  border: 1px solid rgba(99,102,241,0.3);
+  display: flex; align-items: center; justify-content: center;
+  color: #a5b4fc;
+  flex-shrink: 0;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.rt-row-wrap:hover .rt-row__avatar {
+  transform: scale(1.04);
+  box-shadow: 0 4px 14px rgba(99,102,241,0.3);
+}
+
+/* ── Kimlik (kod / ad / aciklama) ── */
+.rt-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.rt-row__code {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a5b4fc;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.rt-row__name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.rt-row__desc {
+  font-size: 11.5px;
+  color: #64748b;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ── Bolucu cizgi ── */
+.rt-row__divider {
+  width: 1px; height: 36px;
+  background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+  flex-shrink: 0;
+}
+
+/* ── Widget tile'lar ── */
+.rt-row__tiles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.rt-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 6px 12px;
+  min-width: 70px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.rt-tile:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+.rt-tile__label {
+  font-size: 9px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+.rt-tile__value {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+  line-height: 1.1;
+}
+.rt-tile--indigo .rt-tile__value { color: #a5b4fc; }
+.rt-tile__detail {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: #64748b;
+  margin-left: 1px;
+}
+
+/* ── Operation row widget tile (kompakt) ── */
+.rt-tile--sm {
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.06);
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.rt-tile--sm .rt-tile__label { font-size: 9px; }
+.rt-tile--sm .rt-tile__value { font-size: 11px; color: #94a3b8; }
+
+.rt-ops__c--widgets {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Durum badge (chip) ── */
+.rt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  border: 1px solid;
+}
+.rt-status--active {
+  background: rgba(16,185,129,0.12);
+  color: #34d399;
+  border-color: rgba(16,185,129,0.3);
+}
+.rt-status--passive {
+  background: rgba(100,116,139,0.12);
+  color: #94a3b8;
+  border-color: rgba(100,116,139,0.3);
+}
+.rt-status__dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* ── Active toggle switch ── */
+.rt-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  width: 34px;
+  height: 19px;
+}
+.rt-toggle input {
+  opacity: 0; width: 0; height: 0; position: absolute;
+}
+.rt-toggle__slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: background 0.2s, border-color 0.2s;
+}
+.rt-toggle__slider::before {
+  content: '';
+  position: absolute;
+  left: 2px; top: 2px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: transform 0.2s, background 0.2s;
+}
+.rt-toggle input:checked ~ .rt-toggle__slider {
+  background: rgba(16,185,129,0.2);
+  border-color: rgba(16,185,129,0.4);
+}
+.rt-toggle input:checked ~ .rt-toggle__slider::before {
+  transform: translateX(15px);
+  background: #10b981;
+}
+
+/* ── Aksiyon butonlari ── */
+.rt-row__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.rt-act {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  cursor: pointer;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #64748b;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.1s;
+}
+.rt-act:hover { transform: translateY(-1px); }
+.rt-act--edit:hover {
+  background: rgba(245,158,11,0.14);
+  border-color: rgba(245,158,11,0.4);
+  color: #fbbf24;
+}
+.rt-act--del:hover {
+  background: rgba(239,68,68,0.14);
+  border-color: rgba(239,68,68,0.4);
+  color: #f87171;
+}
+.rt-act--save:hover {
+  background: rgba(99,102,241,0.15);
+  border-color: rgba(99,102,241,0.4);
+  color: #a5b4fc;
+}
+.rt-act--cancel:hover {
+  background: rgba(100,116,139,0.15);
+  border-color: rgba(100,116,139,0.4);
+  color: #cbd5e1;
+}
+.rt-act:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ── Operations panel (kart yapisinda) ── */
+.rt-ops {
+  background: rgba(0,0,0,0.18);
+  border-top: 1px solid rgba(99,102,241,0.18);
+  padding: 8px 14px 12px;
+}
+.rt-ops__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 8px;
+}
+.rt-ops__title {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex: 1;
+}
+.rt-ops__add-form {
+  margin: 0 4px 8px;
+  padding: 8px 10px;
+  background: rgba(99,102,241,0.08);
+  border: 1px dashed rgba(99,102,241,0.3);
+  border-radius: 8px;
+}
+.rt-ops__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+/* ── Operasyon kart (rota karti ile ayni gorsel dil, daha kucuk) ── */
+.rt-row-wrap--op {
+  border-radius: 10px;
+  border-color: rgba(255,255,255,0.05);
+  background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.012) 100%);
+  box-shadow: none;
+}
+.rt-row-wrap--op:hover {
+  border-color: rgba(6,182,212,0.32);
+  background: linear-gradient(180deg, rgba(6,182,212,0.06) 0%, rgba(6,182,212,0.02) 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 3px 14px rgba(6,182,212,0.18);
+}
+.rt-row--op {
+  padding: 8px 12px;
+  gap: 10px;
+}
+.rt-row--op::before {
+  background: linear-gradient(180deg, #06b6d4 0%, #0891b2 100%);
+  opacity: 0.6;
+}
+.rt-row-wrap--op:hover .rt-row--op::before { opacity: 0.95; }
+.rt-row__avatar--op {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(6,182,212,0.22) 0%, rgba(14,165,233,0.16) 100%);
+  border-color: rgba(6,182,212,0.3);
+  color: #67e8f9;
+}
+.rt-row-wrap--op:hover .rt-row__avatar--op {
+  box-shadow: 0 4px 14px rgba(6,182,212,0.3);
+}
+
+/* ── Sürükle-bırak handle ── */
+.rt-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: #475569;
+  cursor: grab;
+  border-radius: 4px;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+.rt-drag-handle:hover { background: rgba(255,255,255,0.06); color: #94a3b8; }
+.rt-drag-handle:active { cursor: grabbing; }
+.rt-row-wrap--dragging {
+  box-shadow: 0 12px 36px rgba(6,182,212,0.4), 0 0 0 1px rgba(6,182,212,0.5) !important;
+  cursor: grabbing;
+}
+
+/* ── Sira numarasi badge ── */
+.rt-seq-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(99,102,241,0.14);
+  border: 1px solid rgba(99,102,241,0.32);
+  color: #c7d2fe;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+/* ── Yeni tile renkleri ── */
+.rt-tile--blue {
+  border-color: rgba(59,130,246,0.25);
+  background: rgba(59,130,246,0.08);
+}
+.rt-tile--blue .rt-tile__value { color: #93c5fd; }
+.rt-tile--cyan {
+  border-color: rgba(6,182,212,0.28);
+  background: rgba(6,182,212,0.08);
+}
+.rt-tile--cyan .rt-tile__value { color: #67e8f9; }
+.rt-tile--muted {
+  background: rgba(255,255,255,0.02);
+  border-color: rgba(255,255,255,0.06);
+  border-style: dashed;
+}
+.rt-tile__value--muted {
+  color: #475569;
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* ── Yeni aksiyon buton hover'lari (renkli) ── */
+.rt-act--stock:hover {
+  background: rgba(59,130,246,0.14);
+  border-color: rgba(59,130,246,0.4);
+  color: #93c5fd;
+}
+.rt-act--addop:hover {
+  background: rgba(99,102,241,0.14);
+  border-color: rgba(99,102,241,0.4);
+  color: #a5b4fc;
+}
+.rt-act--machine:hover {
+  background: rgba(6,182,212,0.14);
+  border-color: rgba(6,182,212,0.4);
+  color: #67e8f9;
+}
+.rt-ops__head {
+  display: flex;
+  align-items: center;
+  padding: 5px 16px 5px 42px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.rt-ops__c {
+  font-size: 10px;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rt-ops__c--seq     { width: 48px; flex-shrink: 0; }
+.rt-ops__c--op      { flex: 1; padding-left: 8px; }
+.rt-ops__c--machine { width: 160px; flex-shrink: 0; }
+.rt-ops__c--notes   { flex: 1; min-width: 0; }
+.rt-ops__c--act     { width: 32px; flex-shrink: 0; }
+
+.rt-ops__empty {
+  padding: 16px 16px 16px 42px;
+  font-size: 12px;
+  color: #374151;
+  font-style: italic;
+}
+
+.rt-ops__row {
+  display: flex;
+  align-items: center;
+  padding: 6px 16px 6px 42px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  transition: background 0.1s;
+}
+.rt-ops__row:hover { background: rgba(255,255,255,0.02); }
+
+.rt-ops__ocode {
+  font-size: 11px;
+  font-weight: 700;
+  color: #818cf8;
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  letter-spacing: 0.03em;
+}
+.rt-ops__oname {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.rt-ops__muted { color: #2d3748; }
+
+/* ── Machine select ── */
+.rt-machine-sel {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: #e2e8f0;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+.rt-machine-sel:focus { border-color: rgba(99,102,241,0.5); }
+.rt-machine-sel option { background: #1e293b; }
+
+/* ── Footer ── */
+.rt-ops__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 8px 42px;
+  flex-wrap: wrap;
+}
+.rt-ops__action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.rt-ops__action-btn:hover {
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.3);
+  color: #818cf8;
+}
+.rt-ops__action-btn--machine:hover {
+  background: rgba(6,182,212,0.08);
+  border-color: rgba(6,182,212,0.3);
+  color: #06b6d4;
+}
+
+/* ── Op add form ── */
+.rt-op-form {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+}
+
+/* ── Operation picker modal ── */
+.rt-picker-backdrop {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.rt-picker {
+  background: #111827;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  width: 420px; max-width: 90vw;
+  max-height: 70vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  overflow: hidden;
+}
+.rt-picker__head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.rt-picker__search {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-size: 13px; color: #e2e8f0;
+}
+.rt-picker__search::placeholder { color: #374151; }
+.rt-picker__close {
+  background: none; border: none; cursor: pointer;
+  color: #475569; padding: 3px; border-radius: 4px;
+  display: flex; align-items: center;
+}
+.rt-picker__close:hover { color: #94a3b8; }
+.rt-picker__list { flex: 1; overflow-y: auto; }
+.rt-picker__info {
+  padding: 24px; text-align: center;
+  font-size: 13px; color: #475569;
+}
+.rt-picker__item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 14px;
+  background: none; border: none; cursor: pointer;
+  text-align: left; border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.1s;
+}
+.rt-picker__item:hover { background: rgba(255,255,255,0.04); }
+.rt-picker__code {
+  font-size: 11px; font-weight: 700;
+  color: #818cf8; font-family: ui-monospace, monospace;
+  letter-spacing: 0.04em; flex-shrink: 0; width: 70px;
+}
+.rt-picker__name { font-size: 12px; color: #94a3b8; }
+
+/* ── Delete modal ── */
+.rt-del-backdrop {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.rt-del-modal {
+  background: #111827;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 24px; max-width: 400px; width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+.rt-del-modal__head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.rt-del-modal__icon {
+  background: rgba(239,68,68,0.1);
+  border-radius: 8px; padding: 9px;
+  display: flex; align-items: center;
+}
+.rt-del-modal__title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+.rt-del-modal__label { font-size: 12px; color: #64748b; margin-top: 2px; }
+.rt-del-modal__body  { font-size: 13px; color: #94a3b8; margin-bottom: 20px; line-height: 1.6; }
+.rt-del-modal__foot  { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   LIGHT THEME — body.app-theme-light scope
+   Default stiller dark icin — burada light variant overrides.
+   Kullanilan paletler app-temasi ile uyumlu (slate-50/100/200, indigo-500/600).
+   ════════════════════════════════════════════════════════════════════════ */
+body.app-theme-light .rt-root {
+  background:
+    radial-gradient(at 20% 30%, rgba(99,102,241,0.05) 0px, transparent 50%),
+    radial-gradient(at 80% 20%, rgba(14,165,233,0.04) 0px, transparent 50%),
+    radial-gradient(at 50% 80%, rgba(168,85,247,0.04) 0px, transparent 50%),
+    #f8fafc;
+  color: #1e293b;
+}
+
+/* ── Header ── */
+body.app-theme-light .rt-header {
+  border-bottom-color: rgba(15,23,42,0.08);
+}
+body.app-theme-light .rt-header__icon {
+  background: linear-gradient(135deg, rgba(99,102,241,0.14) 0%, rgba(139,92,246,0.08) 100%);
+  border-color: rgba(99,102,241,0.25);
+  color: #6366f1;
+}
+body.app-theme-light .rt-header__title { color: #0f172a; }
+body.app-theme-light .rt-header__sub   { color: #94a3b8; }
+body.app-theme-light .rt-header__search {
+  background: rgba(255,255,255,0.7);
+  border-color: rgba(15,23,42,0.1);
+}
+body.app-theme-light .rt-header__search:focus-within { border-color: rgba(99,102,241,0.5); }
+body.app-theme-light .rt-header__search svg          { color: #94a3b8; }
+body.app-theme-light .rt-header__search input        { color: #1e293b; }
+body.app-theme-light .rt-header__search input::placeholder { color: #94a3b8; }
+body.app-theme-light .rt-header__clear        { color: #94a3b8; }
+body.app-theme-light .rt-header__clear:hover  { color: #475569; }
+
+/* ── Buttons ── */
+body.app-theme-light .rt-btn--primary {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.25);
+}
+body.app-theme-light .rt-btn--ghost {
+  background: rgba(255,255,255,0.8);
+  color: #475569;
+  border-color: rgba(15,23,42,0.12);
+}
+body.app-theme-light .rt-btn--ghost:hover {
+  background: #fff;
+  color: #1e293b;
+}
+
+/* ── Icon buttons (filter/export/settings) ── */
+body.app-theme-light .rt-icon-btn {
+  background: rgba(255,255,255,0.7);
+  border-color: rgba(15,23,42,0.1);
+  color: #64748b;
+}
+body.app-theme-light .rt-icon-btn:hover {
+  background: rgba(99,102,241,0.08);
+  border-color: rgba(99,102,241,0.4);
+  color: #4f46e5;
+}
+body.app-theme-light .rt-icon-btn--xs {
+  background: transparent;
+  border-color: transparent;
+  color: #94a3b8;
+}
+body.app-theme-light .rt-icon-btn--xs:hover {
+  background: rgba(99,102,241,0.08);
+  color: #4f46e5;
+}
+body.app-theme-light .rt-icon-btn--active {
+  background: rgba(99,102,241,0.1);
+  border-color: rgba(99,102,241,0.4);
+  color: #4338ca;
+}
+body.app-theme-light .rt-icon-btn__badge {
+  box-shadow: 0 0 0 2px #f8fafc;
+}
+
+/* ── Empty state ── */
+body.app-theme-light .rt-empty { color: #94a3b8; }
+
+/* ── Inline form ── */
+body.app-theme-light .rt-form-row {
+  background: rgba(99,102,241,0.05);
+  border-bottom-color: rgba(15,23,42,0.06);
+}
+
+/* ── Form inputs ── */
+body.app-theme-light .rt-fi {
+  background: #fff;
+  border-color: rgba(15,23,42,0.12);
+  color: #1e293b;
+}
+body.app-theme-light .rt-fi:focus { border-color: rgba(99,102,241,0.5); }
+body.app-theme-light .rt-fi::placeholder { color: #94a3b8; }
+body.app-theme-light .rt-fi option { background: #fff; color: #1e293b; }
+body.app-theme-light .rt-fi--check { color: #475569; }
+body.app-theme-light .rt-fi--picker:hover { border-color: rgba(99,102,241,0.4); }
+
+/* ── Routing kart sarmalayicisi ── */
+body.app-theme-light .rt-row-wrap {
+  border-color: rgba(15,23,42,0.08);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 2px 8px rgba(15,23,42,0.06);
+}
+body.app-theme-light .rt-row-wrap:hover {
+  border-color: rgba(99,102,241,0.4);
+  background: linear-gradient(180deg, #ffffff 0%, rgba(99,102,241,0.04) 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 4px 18px rgba(99,102,241,0.18);
+}
+body.app-theme-light .rt-row-wrap--open {
+  border-color: rgba(99,102,241,0.5);
+  background: linear-gradient(180deg, #ffffff 0%, rgba(99,102,241,0.06) 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 6px 24px rgba(99,102,241,0.2);
+}
+
+/* ── Chevron ── */
+body.app-theme-light .rt-row__chevron { color: #94a3b8; }
+body.app-theme-light .rt-row__chevron:hover {
+  background: rgba(99,102,241,0.08);
+  color: #4f46e5;
+}
+body.app-theme-light .rt-row__chevron--open { color: #4f46e5; }
+
+/* ── Avatar ── */
+body.app-theme-light .rt-row__avatar {
+  background: linear-gradient(135deg, rgba(99,102,241,0.14) 0%, rgba(139,92,246,0.1) 100%);
+  border-color: rgba(99,102,241,0.28);
+  color: #4f46e5;
+}
+body.app-theme-light .rt-row-wrap:hover .rt-row__avatar {
+  box-shadow: 0 4px 14px rgba(99,102,241,0.22);
+}
+
+/* ── Kimlik (kod / ad / aciklama) ── */
+body.app-theme-light .rt-row__code { color: #4f46e5; }
+body.app-theme-light .rt-row__name { color: #0f172a; }
+body.app-theme-light .rt-row__desc { color: #94a3b8; }
+
+/* ── Bolucu cizgi ── */
+body.app-theme-light .rt-row__divider {
+  background: linear-gradient(180deg, transparent 0%, rgba(15,23,42,0.12) 50%, transparent 100%);
+}
+
+/* ── Widget tile ── */
+body.app-theme-light .rt-tile {
+  background: rgba(255,255,255,0.85);
+  border-color: rgba(15,23,42,0.08);
+}
+body.app-theme-light .rt-tile:hover {
+  background: #fff;
+  border-color: rgba(15,23,42,0.16);
+}
+body.app-theme-light .rt-tile__label  { color: #94a3b8; }
+body.app-theme-light .rt-tile__value  { color: #334155; }
+body.app-theme-light .rt-tile--indigo .rt-tile__value { color: #4f46e5; }
+body.app-theme-light .rt-tile__detail { color: #94a3b8; }
+
+body.app-theme-light .rt-tile--sm {
+  background: rgba(255,255,255,0.7);
+  border-color: rgba(15,23,42,0.07);
+}
+body.app-theme-light .rt-tile--sm .rt-tile__value { color: #475569; }
+
+body.app-theme-light .rt-tile--blue {
+  background: rgba(59,130,246,0.06);
+  border-color: rgba(59,130,246,0.25);
+}
+body.app-theme-light .rt-tile--blue .rt-tile__value { color: #2563eb; }
+body.app-theme-light .rt-tile--cyan {
+  background: rgba(6,182,212,0.06);
+  border-color: rgba(6,182,212,0.28);
+}
+body.app-theme-light .rt-tile--cyan .rt-tile__value { color: #0891b2; }
+body.app-theme-light .rt-tile--muted {
+  background: rgba(15,23,42,0.02);
+  border-color: rgba(15,23,42,0.08);
+}
+body.app-theme-light .rt-tile__value--muted { color: #94a3b8; }
+
+/* ── Status badge ── */
+body.app-theme-light .rt-status--active {
+  background: rgba(16,185,129,0.1);
+  color: #059669;
+  border-color: rgba(16,185,129,0.32);
+}
+body.app-theme-light .rt-status--passive {
+  background: rgba(100,116,139,0.1);
+  color: #64748b;
+  border-color: rgba(100,116,139,0.3);
+}
+
+/* ── Toggle ── */
+body.app-theme-light .rt-toggle__slider {
+  background: rgba(15,23,42,0.1);
+  border-color: rgba(15,23,42,0.12);
+}
+body.app-theme-light .rt-toggle__slider::before {
+  background: #cbd5e1;
+}
+body.app-theme-light .rt-toggle input:checked ~ .rt-toggle__slider {
+  background: rgba(16,185,129,0.18);
+  border-color: rgba(16,185,129,0.45);
+}
+body.app-theme-light .rt-toggle input:checked ~ .rt-toggle__slider::before {
+  background: #10b981;
+}
+
+/* ── Aksiyon butonlari ── */
+body.app-theme-light .rt-act {
+  background: rgba(255,255,255,0.85);
+  border-color: rgba(15,23,42,0.1);
+  color: #64748b;
+}
+body.app-theme-light .rt-act--edit:hover {
+  background: rgba(245,158,11,0.12);
+  border-color: rgba(245,158,11,0.4);
+  color: #d97706;
+}
+body.app-theme-light .rt-act--del:hover {
+  background: rgba(239,68,68,0.12);
+  border-color: rgba(239,68,68,0.4);
+  color: #dc2626;
+}
+body.app-theme-light .rt-act--save:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.4);
+  color: #4f46e5;
+}
+body.app-theme-light .rt-act--cancel:hover {
+  background: rgba(100,116,139,0.12);
+  border-color: rgba(100,116,139,0.4);
+  color: #475569;
+}
+body.app-theme-light .rt-act--stock:hover {
+  background: rgba(59,130,246,0.12);
+  border-color: rgba(59,130,246,0.4);
+  color: #2563eb;
+}
+body.app-theme-light .rt-act--addop:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.4);
+  color: #4f46e5;
+}
+body.app-theme-light .rt-act--machine:hover {
+  background: rgba(6,182,212,0.12);
+  border-color: rgba(6,182,212,0.4);
+  color: #0891b2;
+}
+
+/* ── Operations panel ── */
+body.app-theme-light .rt-ops {
+  background: rgba(99,102,241,0.04);
+  border-top-color: rgba(99,102,241,0.18);
+}
+body.app-theme-light .rt-ops__title { color: #94a3b8; }
+body.app-theme-light .rt-ops__add-form {
+  background: rgba(99,102,241,0.06);
+  border-color: rgba(99,102,241,0.3);
+}
+body.app-theme-light .rt-ops__empty { color: #94a3b8; }
+body.app-theme-light .rt-ops__head  { border-bottom-color: rgba(15,23,42,0.06); }
+body.app-theme-light .rt-ops__c     { color: #94a3b8; }
+body.app-theme-light .rt-ops__row   { border-bottom-color: rgba(15,23,42,0.04); }
+body.app-theme-light .rt-ops__row:hover { background: rgba(15,23,42,0.02); }
+body.app-theme-light .rt-ops__ocode { color: #4f46e5; }
+body.app-theme-light .rt-ops__oname { color: #475569; }
+body.app-theme-light .rt-ops__muted { color: #cbd5e1; }
+body.app-theme-light .rt-ops__action-btn {
+  background: rgba(255,255,255,0.7);
+  border-color: rgba(15,23,42,0.12);
+  color: #64748b;
+}
+body.app-theme-light .rt-ops__action-btn:hover {
+  background: rgba(99,102,241,0.06);
+  border-color: rgba(99,102,241,0.3);
+  color: #4f46e5;
+}
+body.app-theme-light .rt-ops__action-btn--machine:hover {
+  background: rgba(6,182,212,0.06);
+  border-color: rgba(6,182,212,0.3);
+  color: #0891b2;
+}
+
+/* ── Operasyon kart (op satir) ── */
+body.app-theme-light .rt-row-wrap--op {
+  border-color: rgba(15,23,42,0.07);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 1px 4px rgba(15,23,42,0.04);
+}
+body.app-theme-light .rt-row-wrap--op:hover {
+  border-color: rgba(6,182,212,0.4);
+  background: linear-gradient(180deg, #ffffff 0%, rgba(6,182,212,0.05) 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 3px 14px rgba(6,182,212,0.16);
+}
+body.app-theme-light .rt-row__avatar--op {
+  background: linear-gradient(135deg, rgba(6,182,212,0.14) 0%, rgba(14,165,233,0.1) 100%);
+  border-color: rgba(6,182,212,0.32);
+  color: #0891b2;
+}
+
+/* ── Drag handle ── */
+body.app-theme-light .rt-drag-handle { color: #94a3b8; }
+body.app-theme-light .rt-drag-handle:hover {
+  background: rgba(15,23,42,0.05);
+  color: #475569;
+}
+body.app-theme-light .rt-row-wrap--dragging {
+  box-shadow: 0 12px 36px rgba(6,182,212,0.3), 0 0 0 1px rgba(6,182,212,0.5) !important;
+}
+
+/* ── Sira numarasi badge ── */
+body.app-theme-light .rt-seq-badge {
+  background: rgba(99,102,241,0.1);
+  border-color: rgba(99,102,241,0.3);
+  color: #4338ca;
+}
+
+/* ── Machine select ── */
+body.app-theme-light .rt-machine-sel {
+  background: #fff;
+  border-color: rgba(15,23,42,0.12);
+  color: #1e293b;
+}
+body.app-theme-light .rt-machine-sel:focus { border-color: rgba(99,102,241,0.5); }
+body.app-theme-light .rt-machine-sel option { background: #fff; color: #1e293b; }
+
+/* ── Picker modal ── */
+body.app-theme-light .rt-picker-backdrop {
+  background: rgba(15,23,42,0.4);
+}
+body.app-theme-light .rt-picker {
+  background: #ffffff;
+  border-color: rgba(15,23,42,0.1);
+  box-shadow: 0 20px 60px rgba(15,23,42,0.25);
+}
+body.app-theme-light .rt-picker__head {
+  border-bottom-color: rgba(15,23,42,0.07);
+}
+body.app-theme-light .rt-picker__search { color: #1e293b; }
+body.app-theme-light .rt-picker__search::placeholder { color: #94a3b8; }
+body.app-theme-light .rt-picker__close { color: #94a3b8; }
+body.app-theme-light .rt-picker__close:hover { color: #475569; }
+body.app-theme-light .rt-picker__info { color: #94a3b8; }
+body.app-theme-light .rt-picker__item {
+  border-bottom-color: rgba(15,23,42,0.05);
+}
+body.app-theme-light .rt-picker__item:hover { background: rgba(99,102,241,0.05); }
+body.app-theme-light .rt-picker__code { color: #4f46e5; }
+body.app-theme-light .rt-picker__name { color: #475569; }
+
+/* ── Delete modal ── */
+body.app-theme-light .rt-del-backdrop {
+  background: rgba(15,23,42,0.4);
+}
+body.app-theme-light .rt-del-modal {
+  background: #ffffff;
+  border-color: rgba(15,23,42,0.1);
+  box-shadow: 0 20px 60px rgba(15,23,42,0.25);
+}
+body.app-theme-light .rt-del-modal__icon {
+  background: rgba(239,68,68,0.08);
+}
+body.app-theme-light .rt-del-modal__title { color: #0f172a; }
+body.app-theme-light .rt-del-modal__label { color: #94a3b8; }
+body.app-theme-light .rt-del-modal__body  { color: #475569; }

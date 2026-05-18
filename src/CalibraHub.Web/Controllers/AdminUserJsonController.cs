@@ -1,0 +1,217 @@
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
+using CalibraHub.Domain.Enums;
+using CalibraHub.Web.Models.Admin;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace CalibraHub.Web.Controllers;
+
+/// <summary>
+/// AdminUserJsonController — Kullanici tanimi JSON CRUD endpoint'leri
+/// (rapor §2.3 AdminController split).
+///
+/// Tasinmis endpoint'ler:
+///   - GET  /Admin/GetAdminUsersJson      → liste (search + companyId)
+///   - GET  /Admin/GetUsersFormDataJson   → dropdown'lar (sirket/dep/sup/role/perm)
+///   - POST /Admin/SaveAdminUserJson      → yeni kullanici + Grafana rolu
+///   - POST /Admin/UpdateAdminUserJson    → guncelle (Grafana rolu dahil)
+/// </summary>
+[Authorize]
+public sealed class AdminUserJsonController : Controller
+{
+    private readonly IAdminReadService _adminReadService;
+    private readonly IAdminManagementService _adminManagementService;
+
+    public AdminUserJsonController(
+        IAdminReadService adminReadService,
+        IAdminManagementService adminManagementService)
+    {
+        _adminReadService = adminReadService;
+        _adminManagementService = adminManagementService;
+    }
+
+    [HttpGet("/Admin/GetAdminUsersJson")]
+    public async Task<IActionResult> GetAdminUsersJson(string? search, int? companyId, CancellationToken cancellationToken)
+    {
+        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+        var items = snapshot.Users.AsEnumerable();
+        if (companyId.HasValue)
+            items = items.Where(x => x.CompanyId == companyId.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLowerInvariant();
+            items = items.Where(x =>
+                (x.FullName ?? "").ToLowerInvariant().Contains(q) ||
+                (x.Email ?? "").ToLowerInvariant().Contains(q) ||
+                (x.EmployeeCode ?? "").ToLowerInvariant().Contains(q));
+        }
+        return Json(items.Select(x => new
+        {
+            x.Id, x.CompanyId, x.CompanyName, x.FullName, x.Email, x.EmployeeCode,
+            x.DepartmentName, supervisorName = x.SupervisorName ?? "-",
+            x.Role, permissions = string.Join(", ", x.Permissions),
+            x.IsActive,
+            grafanaRole = x.GrafanaRole
+        }).ToArray());
+    }
+
+    [HttpGet("/Admin/GetUsersFormDataJson")]
+    public async Task<IActionResult> GetUsersFormDataJson(int? companyId, CancellationToken cancellationToken)
+    {
+        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+
+        var companies = snapshot.Companies
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.Name)
+            .Select(x => new { id = x.Id.ToString(), name = x.Name })
+            .ToArray();
+
+        var resolvedCompanyId = companyId ?? (companies.Length > 0 ? int.Parse(companies[0].id) : (int?)null);
+
+        var departments = snapshot.Departments
+            .Where(x => !resolvedCompanyId.HasValue || x.CompanyId == resolvedCompanyId.Value)
+            .Select(x => new { id = x.Id.ToString(), name = x.Name })
+            .ToArray();
+
+        var supervisors = snapshot.Users
+            .Where(x => !resolvedCompanyId.HasValue || x.CompanyId == resolvedCompanyId.Value)
+            .Select(x => new { id = x.Id.ToString(), name = x.FullName })
+            .ToArray();
+
+        var roles = UserAuthorizationCatalog.Roles
+            .Select(r => new { value = r.ToString(), label = UserAuthorizationCatalog.GetRoleLabel(r) })
+            .ToArray();
+
+        var permissions = UserAuthorizationCatalog.Permissions
+            .Select(p => new { value = p.ToString(), label = UserAuthorizationCatalog.GetPermissionLabel(p) })
+            .ToArray();
+
+        return Json(new { companies, departments, supervisors, roles, permissions });
+    }
+
+    [HttpPost("/Admin/SaveAdminUserJson")]
+    public async Task<IActionResult> SaveAdminUserJson([FromBody] UserCreateInput input, CancellationToken cancellationToken)
+    {
+        if (!input.CompanyId.HasValue)
+            return Json(new { success = false, message = "Sirket secimi zorunludur." });
+        if (!input.DepartmentId.HasValue)
+            return Json(new { success = false, message = "Departman secimi zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.FullName))
+            return Json(new { success = false, message = "Ad Soyad zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.Email))
+            return Json(new { success = false, message = "E-posta zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.EmployeeCode))
+            return Json(new { success = false, message = "Sicil kodu zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.Role) || !TryParseRole(input.Role, out var role))
+            return Json(new { success = false, message = "Gecerli bir rol seciniz." });
+
+        input.Permissions ??= new List<string>();
+        input.Permissions = input.Permissions.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (!TryParsePermissions(input.Permissions, out var permissions))
+            return Json(new { success = false, message = "Secilen yetkilerden biri gecersiz." });
+
+        // Grafana yetki seviyesi (opsiyonel) — bos/null ise kullanici Grafana'ya eklenmez.
+        GrafanaRole? grafanaRole = null;
+        if (!string.IsNullOrWhiteSpace(input.GrafanaRole))
+        {
+            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out GrafanaRole parsed))
+                grafanaRole = parsed;
+            else
+                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Editor/Admin)." });
+        }
+
+        try
+        {
+            await _adminManagementService.CreateUserAsync(
+                new CreateUserRequest(
+                    input.CompanyId.Value,
+                    input.FullName,
+                    input.Email,
+                    input.EmployeeCode,
+                    input.DepartmentId.Value,
+                    input.SupervisorUserId,
+                    role,
+                    permissions,
+                    Password: null,
+                    GrafanaRole: grafanaRole),
+                cancellationToken);
+            return Json(new { success = true, message = "Kullanici olusturuldu." });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>Mevcut kullanicinin temel bilgilerini ve Grafana rolunu gunceller.</summary>
+    [HttpPost("/Admin/UpdateAdminUserJson")]
+    public async Task<IActionResult> UpdateAdminUserJson(
+        [FromBody] UserUpdateInput input, CancellationToken cancellationToken)
+    {
+        if (input.Id == Guid.Empty)
+            return Json(new { success = false, message = "Kullanici Id zorunlu." });
+        if (!input.CompanyId.HasValue)
+            return Json(new { success = false, message = "Sirket secimi zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.FullName))
+            return Json(new { success = false, message = "Ad Soyad zorunludur." });
+        if (string.IsNullOrWhiteSpace(input.Email))
+            return Json(new { success = false, message = "E-posta zorunludur." });
+
+        // Grafana yetki seviyesi: input.GrafanaRoleProvided = true ise "" → null (Yok),
+        // "Viewer"/"Editor"/"Admin" → enum. Provided = false ise mevcut rol korunur.
+        GrafanaRole? grafanaRole = null;
+        if (input.GrafanaRoleProvided && !string.IsNullOrWhiteSpace(input.GrafanaRole))
+        {
+            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out GrafanaRole parsed))
+                grafanaRole = parsed;
+            else
+                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Editor/Admin/bos)." });
+        }
+
+        try
+        {
+            await _adminManagementService.UpdateUserAsync(
+                new UpdateUserRequest(
+                    input.Id,
+                    input.CompanyId.Value,
+                    input.FullName,
+                    input.Email,
+                    Password: null,
+                    SetGrafanaRole: input.GrafanaRoleProvided,
+                    GrafanaRole: grafanaRole),
+                cancellationToken);
+            return Json(new { success = true, message = "Kullanici guncellendi." });
+        }
+        catch (ArgumentException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    private static bool TryParseRole(string value, out UserRole role) =>
+        Enum.TryParse(value, true, out role) && Enum.IsDefined(role);
+
+    private static bool TryParsePermissions(
+        IReadOnlyCollection<string> values,
+        out IReadOnlyCollection<UserPermission> permissions)
+    {
+        var parsedPermissions = new List<UserPermission>();
+
+        foreach (var value in values)
+        {
+            if (!Enum.TryParse(value, true, out UserPermission permission) || !Enum.IsDefined(permission))
+            {
+                permissions = Array.Empty<UserPermission>();
+                return false;
+            }
+
+            parsedPermissions.Add(permission);
+        }
+
+        permissions = parsedPermissions.Distinct().ToArray();
+        return true;
+    }
+}

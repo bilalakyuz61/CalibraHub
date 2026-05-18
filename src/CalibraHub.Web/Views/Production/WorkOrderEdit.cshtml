@@ -208,6 +208,18 @@ body.app-theme-dark .woe-nav-count { color: #a5b4fc; }
     gap: 10px; align-items: center; margin-bottom: 10px;
 }
 .woe-row label { font-size: 12px; color: var(--woe-text-muted); font-weight: 500; }
+/* Tıklanabilir başlık — Mamul Kodu *'a tıklayınca Malzeme Kartı'na navigate eder.
+   Cursor + indigo hover + alttan kesik çizgi (link davranışını ima eder). */
+.woe-row__label--link {
+    cursor: pointer;
+    transition: color .12s, text-decoration-color .12s;
+    text-decoration: underline dotted transparent;
+    text-underline-offset: 3px;
+}
+.woe-row__label--link:hover {
+    color: var(--woe-accent);
+    text-decoration-color: var(--woe-accent);
+}
 .woe-row input, .woe-row select, .woe-row textarea {
     padding: 7px 10px; border-radius: 6px;
     border: 1px solid var(--woe-border);
@@ -431,8 +443,198 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
 }
 .woe-rota-row .rota-del:hover { background: rgba(239,68,68,.15); color: #f87171; }
 .woe-rota-empty { padding: 14px; text-align: center; }
+.wo-mach-btn {
+    background: var(--woe-input-disabled);
+    border: 1px dashed var(--woe-border);
+    color: var(--woe-text); font-size: 12px;
+    padding: 4px 9px; border-radius: 5px;
+    cursor: pointer; text-align: left;
+    transition: background .12s, border-color .12s, color .12s;
+}
+.wo-mach-btn:hover {
+    background: rgba(99,102,241,.08);
+    border-color: var(--woe-accent);
+    border-style: solid;
+    color: var(--woe-accent);
+}
+
+/* ── Rehber pick butonlari (Sorumlu / Lokasyon / Rota) ─────────────── */
+.woe-pick-btn {
+    flex: 0 0 auto;
+    width: 32px; height: 32px;
+    border: 1px solid var(--woe-border);
+    background: var(--woe-input-bg); color: var(--woe-text-muted);
+    border-radius: 6px; cursor: pointer;
+    font-size: 14px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .12s, color .12s, border-color .12s;
+}
+.woe-pick-btn:hover:not(:disabled) {
+    background: rgba(99,102,241,.1); border-color: var(--woe-accent);
+    color: var(--woe-accent);
+}
+.woe-pick-btn:disabled { opacity: .5; cursor: not-allowed; }
+.woe-pick-btn--clear:hover:not(:disabled) {
+    background: rgba(239,68,68,.1); border-color: #ef4444; color: #ef4444;
+}
+input[id$="Display"][readonly] { cursor: default; opacity: .92; }
+
+/* ── Generic picker modal ─────────────────────────────────────────── */
+.wpicker-backdrop {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center;
+}
+.wpicker {
+    width: min(640px, 92vw);
+    max-height: 78vh;
+    background: var(--woe-surface); color: var(--woe-text);
+    border: 1px solid var(--woe-border); border-radius: 12px;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,.4);
+}
+.wpicker__head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--woe-border);
+}
+.wpicker__title {
+    font-size: 14px; font-weight: 600; color: var(--woe-text);
+    flex: 0 0 auto;
+}
+.wpicker__search {
+    flex: 1 1 auto; min-width: 0;
+    padding: 7px 10px; border-radius: 6px;
+    border: 1px solid var(--woe-border);
+    background: var(--woe-input-bg); color: var(--woe-text);
+    outline: none; font-size: 13px;
+}
+.wpicker__search:focus { border-color: var(--woe-accent); }
+.wpicker__close {
+    flex: 0 0 auto; width: 28px; height: 28px;
+    background: none; border: none; color: var(--woe-text-muted);
+    cursor: pointer; border-radius: 6px;
+    font-size: 18px; display: inline-flex; align-items: center; justify-content: center;
+}
+.wpicker__close:hover { background: rgba(255,255,255,.06); color: var(--woe-text); }
+.wpicker__list {
+    flex: 1 1 auto; overflow-y: auto; min-height: 0;
+}
+.wpicker__row {
+    display: grid; grid-template-columns: 130px 1fr auto;
+    align-items: center; gap: 10px;
+    padding: 9px 14px; cursor: pointer;
+    border-bottom: 1px solid var(--woe-border-light);
+    transition: background .1s;
+}
+.wpicker__row:hover { background: rgba(99,102,241,.08); }
+.wpicker__code {
+    font-family: ui-monospace, 'Cascadia Code', monospace;
+    font-size: 12px; font-weight: 600; color: var(--woe-accent);
+    letter-spacing: .03em;
+}
+.wpicker__name {
+    font-size: 13px; color: var(--woe-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wpicker__meta {
+    font-size: 11px; color: var(--woe-text-muted);
+    flex: 0 0 auto;
+}
+.wpicker__badge {
+    display: inline-block; padding: 1px 7px; border-radius: 8px;
+    font-size: 10px; font-weight: 600;
+    background: rgba(245,158,11,.18); color: #f59e0b;
+    margin-left: 6px;
+}
+.wpicker__empty, .wpicker__loading {
+    padding: 24px; text-align: center; color: var(--woe-text-muted);
+    font-size: 13px;
+}
+
+/* ── BOM (Reçete) tablosu — Faz 2 ──────────────────────────────── */
+.woe-bom-table {
+    background: var(--woe-input-disabled);
+    border: 1px solid var(--woe-border-light);
+    border-radius: 8px; overflow: hidden;
+    margin-top: 10px;
+}
+.woe-bom-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 110px 110px 80px 80px 1fr;
+    align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--woe-border-light);
+    font-size: 13px;
+}
+.woe-bom-row:last-child { border-bottom: none; }
+.woe-bom-row.woe-bom-head {
+    background: rgba(99,102,241,.06);
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--woe-text-muted);
+}
+.woe-bom-empty { padding: 18px 14px; text-align: center; line-height: 1.6; }
+.woe-bom-design-note {
+    margin-top: 14px; padding: 12px 14px;
+    background: rgba(99,102,241,.06);
+    border: 1px dashed rgba(99,102,241,.35);
+    border-radius: 8px;
+    font-size: 12.5px; color: var(--woe-text-muted); line-height: 1.55;
+}
+.woe-bom-design-note code {
+    background: rgba(99,102,241,.12); color: var(--woe-accent);
+    padding: 1px 6px; border-radius: 4px;
+    font-size: 11.5px;
+}
+
+/* ── Toolbar inline switch ("Üretime Planla") ─────────────────────── */
+.woe-switch-inline {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 8px;
+    background: rgba(34,197,94,.08);
+    border: 1px solid rgba(34,197,94,.25);
+    cursor: pointer; user-select: none;
+    transition: background .12s, border-color .12s;
+}
+.woe-switch-inline:hover { background: rgba(34,197,94,.14); border-color: rgba(34,197,94,.4); }
+.woe-switch-inline input[type="checkbox"] {
+    position: absolute; opacity: 0; width: 0; height: 0;
+}
+.woe-switch-inline .woe-switch-track {
+    position: relative; display: inline-block;
+    width: 32px; height: 18px;
+    background: rgba(15,23,42,.25);
+    border-radius: 999px;
+    transition: background .18s;
+    flex-shrink: 0;
+}
+.woe-switch-inline .woe-switch-track::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #fff;
+    transition: left .18s, background .18s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.woe-switch-inline input:checked ~ .woe-switch-track { background: #16a34a; }
+.woe-switch-inline input:checked ~ .woe-switch-track::after { left: 16px; }
+.woe-switch-inline .woe-switch-text {
+    font-size: 12.5px; font-weight: 600;
+    color: #16a34a;
+    white-space: nowrap;
+}
+body.app-theme-dark .woe-switch-inline .woe-switch-text { color: #4ade80; }
+.woe-switch-inline input:not(:checked) ~ .woe-switch-text { color: var(--woe-text-muted); opacity: .7; }
 </style>
 }
+
+@{
+    var _colId = !isNew ? Model!.Id.ToString() : $"new-{Guid.NewGuid():N}";
+    var _colTitle = isNew ? "Yeni İş Emri" : $"İş Emri: {Model!.OrderNumber}";
+}
+<form class="integrator-form" style="display:none" aria-hidden="true"
+      data-collaboration-record-type="WORK_ORDER_EDIT"
+      data-collaboration-record-id="@_colId"
+      data-collaboration-record-title="@_colTitle"></form>
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
 <div class="woe-page">
@@ -440,15 +642,25 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
         <a class="woe-back" href="@Url.Action("WorkOrders")" title="Listeye dön">←</a>
         <a class="woe-btn" href="@Url.Action("WorkOrderEdit")" id="btn-new" title="Yeni iş emri">+ Yeni</a>
         <button class="woe-btn woe-btn--primary" id="btn-save" @(isNew || canEditPlan ? "" : "disabled")>Kaydet</button>
+        @* "Üretime Planla" switch — sadece YENİ iş emrinde göster. Default ON; kapatırsa
+           WO Taslak (Planned) statüsünde kaydedilir, sonradan toolbar'daki Salına ile
+           üretime açılabilir. ON ise Save sırasında autoRelease=true gönderilir,
+           backend operasyonları otomatik patlatır + Released statüsüne yazar. *@
+        @if (isNew)
+        {
+            <label class="woe-switch-inline" title="Açıkken: kaydet sonrası iş emri Released statüsüne geçer ve üretim sahasına açılır. Kapatırsan: Taslak kalır, sonra Salına butonuyla açarsın.">
+                <input type="checkbox" id="f-autoRelease" checked />
+                <span class="woe-switch-track"></span>
+                <span class="woe-switch-text">Üretime Planla</span>
+            </label>
+        }
         @if (!isNew)
         {
-            @* Başlat / Tamamla butonları kaldırıldı — bu işlemler Faz 3'te
-               makine ataması üzerinden (Makine → İş Emrini Başlat / Bitir / Kısmi Bitir)
-               yapılacak. Salına/Kapat/Revize/İptal yöneticilik aksiyonları olarak kalır. *@
-            <button class="woe-btn woe-btn--success" id="btn-release" @(canRelease ? "" : "disabled")>Salına ▶</button>
-            <button class="woe-btn" id="btn-close" @(canClose ? "" : "disabled")>Kapat</button>
+            @* Salına / Kapat / İptal butonları toolbar'dan kaldırıldı:
+                 - Salına: artık YENİ iş emrinde "Üretime Planla" switch'i ile yapılır
+                 - Kapat / İptal: nadir kullanım — gerekirse ayrı bir "Yönetim" menüsünden açılır
+               Revize: hâlâ yöneticilik aksiyonu olarak kalir. *@
             <button class="woe-btn woe-btn--warn" id="btn-revise" @(canRevise ? "" : "disabled")>Revize</button>
-            <button class="woe-btn woe-btn--danger" id="btn-cancel" @(canCancel ? "" : "disabled")>İptal</button>
         }
         <span class="spacer"></span>
         <h1>@(isNew ? "Yeni İş Emri" : Model!.OrderNumber)@(Model is { RevisionNo: > 0 } ? $" • Rev {Model.RevisionNo}" : "")</h1>
@@ -517,9 +729,11 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
 
                 @* Mamul Kodu — Tip 1 (Mamul) standart rehberi (ITEMS_FINISHED guide).
                    Mamul Adi okunur etiket olarak gosterilir; rehberden secince ya da
-                   kod yazip Tab/blur sonrasi resolveItem() doldurur. *@
+                   kod yazip Tab/blur sonrasi resolveItem() doldurur.
+                   "Mamul Kodu *" başlığına tek tıklayınca seçilmiş mamulün
+                   Malzeme Kartı edit ekranına navigate olur (link davranışı). *@
                 <div class="woe-row">
-                    <label>Mamul Kodu *</label>
+                    <label id="lbl-itemCode" class="woe-row__label--link" title="Mamulün malzeme kartını aç">Mamul Kodu *</label>
                     <div class="woe-inline-fields">
                         <input type="text" id="f-itemCode" class="woe-input--code" value="@Model?.ItemCode" placeholder="Mamul kodu seçiniz..." @(canEditPlan || isNew ? "" : "readonly") />
                         <input type="hidden" id="f-itemId" value="@Model?.ItemId" />
@@ -528,13 +742,20 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                 </div>
 
                 <div class="woe-row" id="f-configWrapper" style="display:none;">
-                    <label>Konfigürasyon Kodu</label>
-                    <input type="text" id="f-configCode" placeholder="Kombinasyon kodunu yazın..." @(canEditPlan || isNew ? "" : "readonly") />
-                    <input type="hidden" id="f-configId" value="@Model?.ConfigId" />
-                </div>
-                <div class="woe-row" id="f-configDescWrapper" style="display:none;">
-                    <label>Konfigürasyon</label>
-                    <input type="text" id="f-configDesc" readonly />
+                    <label>Konfigürasyon Kodu *</label>
+                    <div class="woe-inline-fields">
+                        <input type="text" id="f-configCode" class="woe-input--code" placeholder="Kombinasyon kodu..." @(canEditPlan || isNew ? "" : "readonly") />
+                        <input type="hidden" id="f-configId" value="@Model?.ConfigId" />
+                        <input type="text" id="f-configDesc" class="woe-readonly-text" readonly placeholder="Konfigürasyon açıklaması" />
+                        <button type="button" class="woe-pick-btn" data-pick="config"
+                                @(canEditPlan || isNew ? "" : "disabled")
+                                title="Kombinasyon rehberinden seç">🔍</button>
+                        @if (canEditPlan || isNew)
+                        {
+                            <button type="button" class="woe-pick-btn woe-pick-btn--clear"
+                                    data-clear="config" title="Temizle">×</button>
+                        }
+                    </div>
                 </div>
 
                 <div class="woe-row">
@@ -583,7 +804,7 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
             <!-- Tab: Makine / Planlama -->
             <section class="woe-pane-section" data-pane="makine">
                 <h2>Planlama &amp; Makine</h2>
-                <div class="pane-hint">Üretim takvimi, sorumlu, öncelik ve üretim konumu. (Makine / iş merkezi ataması Faz 3'te eklenecek.)</div>
+                <div class="pane-hint">Üretim takvimi, sorumlu, öncelik, üretim konumu ve default makine. Default Makine, operasyon patlatmasında satır makinesizse fallback olur — operasyon satırında ayrıca override edilebilir.</div>
 
                 <div class="woe-row split">
                     <label>Plan Başlangıç</label>
@@ -593,8 +814,24 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                 </div>
 
                 <div class="woe-row split">
-                    <label>Sorumlu (User.Id)</label>
-                    <input type="text" id="f-assignedUserId" value="@Model?.AssignedUserId" placeholder="GUID (User.id)" maxlength="36" @(canEditPlan || isNew ? "" : "readonly") />
+                    <label>Sorumlu Personel</label>
+                    @* Personel rehberi — secim sonrasi Personnel.Id hidden f-assignedPersonnelId'e
+                       yazilir. Personel'in sistem kullanicisi (User) olmasi GEREKMEZ.
+                       Eski f-assignedUserId artik kullanilmiyor (legacy column). *@
+                    <div class="woe-inline-fields">
+                        <input type="hidden" id="f-assignedPersonnelId" value="@Model?.AssignedPersonnelId" />
+                        <input type="text" id="f-personnelDisplay" class="woe-input--code"
+                               value="@(Model?.AssignedPersonnelName ?? Model?.AssignedUserName)" placeholder="Personel seçiniz..."
+                               readonly title="Listeden seçmek için 🔍 butonuna basın" />
+                        <button type="button" class="woe-pick-btn" data-pick="personnel"
+                                @(canEditPlan || isNew ? "" : "disabled")
+                                title="Personel rehberinden seç">🔍</button>
+                        @if (canEditPlan || isNew)
+                        {
+                            <button type="button" class="woe-pick-btn woe-pick-btn--clear"
+                                    data-clear="personnel" title="Temizle">×</button>
+                        }
+                    </div>
                     <label style="text-align:right; padding-right:6px;">Öncelik</label>
                     <select id="f-priority" @(canEditPlan || isNew ? "" : "disabled")>
                         @foreach (var p in Enum.GetValues<WorkOrderPriority>())
@@ -606,20 +843,67 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                     </select>
                 </div>
 
+                @* Default Makine — header tercihi. Patlatma sirasinda RoutingOperation
+                   makinesizse bu makine kullanilir; her operasyonda override edilebilir. *@
                 <div class="woe-row">
-                    <label>Üretim Konumu</label>
-                    <input type="number" id="f-locationId" value="@Model?.WarehouseLocationId" placeholder="Location.Id" @(canEditPlan || isNew ? "" : "readonly") />
+                    <label>Default Makine</label>
+                    <div class="woe-inline-fields">
+                        <input type="hidden" id="f-defaultMachineId" value="@Model?.DefaultMachineId" />
+                        <input type="text" id="f-defaultMachineDisplay" class="woe-input--code"
+                               value="@(Model?.DefaultMachineCode ?? "")" placeholder="Makine seçiniz..."
+                               readonly title="Listeden seçmek için 🔍 butonuna basın" />
+                        <span class="woe-readonly-text" id="f-defaultMachineName">@Model?.DefaultMachineName</span>
+                        <button type="button" class="woe-pick-btn" data-pick="machine"
+                                @(canEditPlan || isNew ? "" : "disabled")
+                                title="Makine rehberinden seç">🔍</button>
+                        @if (canEditPlan || isNew)
+                        {
+                            <button type="button" class="woe-pick-btn woe-pick-btn--clear"
+                                    data-clear="machine" title="Temizle">×</button>
+                        }
+                    </div>
                 </div>
 
-                @* Rota seçimi — Routing rehberi (ROUTING). Boş bırakılırsa Release sırasında
-                   Item bazlı default rota otomatik aranır. Mamul kodu değişince f-itemCode
-                   change handler'ı bu alanı resetler. *@
+                <div class="woe-row">
+                    <label>Üretim Konumu</label>
+                    @* Lokasyon rehberi — picker buton acilir, secim sonrasi Location.Id
+                       f-locationId hidden'a, kod+ad display'e yazilir. *@
+                    <div class="woe-inline-fields">
+                        <input type="hidden" id="f-locationId" value="@Model?.WarehouseLocationId" />
+                        <input type="text" id="f-locationDisplay" class="woe-input--code"
+                               value="@Model?.WarehouseLocationCode" placeholder="Lokasyon seçiniz..."
+                               readonly title="Listeden seçmek için 🔍 butonuna basın" />
+                        <button type="button" class="woe-pick-btn" data-pick="location"
+                                @(canEditPlan || isNew ? "" : "disabled")
+                                title="Lokasyon rehberinden seç">🔍</button>
+                        @if (canEditPlan || isNew)
+                        {
+                            <button type="button" class="woe-pick-btn woe-pick-btn--clear"
+                                    data-clear="location" title="Temizle">×</button>
+                        }
+                    </div>
+                </div>
+
+                @* Rota seçimi — Routing rehberi. Picker secimi f-routingId'i doldurur,
+                   kod ve ad inline gosterilir. Bos birakilirsa Release'da Item bazli
+                   default rota otomatik aranir. *@
                 <div class="woe-row">
                     <label>Rota</label>
                     <div class="woe-inline-fields">
-                        <input type="text" id="f-routingCode" value="@Model?.RoutingCode" placeholder="Boş = otomatik (Item bazlı)" @(canEditPlan || isNew ? "" : "readonly") />
                         <input type="hidden" id="f-routingId" value="@Model?.RoutingId" />
+                        <input type="text" id="f-routingCode" class="woe-input--code"
+                               value="@Model?.RoutingCode"
+                               placeholder="Boş = Mamul'e göre otomatik"
+                               readonly title="Listeden seçmek için 🔍 butonuna basın" />
                         <span class="woe-readonly-text" id="f-routingName">@Model?.RoutingName</span>
+                        <button type="button" class="woe-pick-btn" data-pick="routing"
+                                @(canEditPlan || isNew ? "" : "disabled")
+                                title="Rota rehberinden seç">🔍</button>
+                        @if (canEditPlan || isNew)
+                        {
+                            <button type="button" class="woe-pick-btn woe-pick-btn--clear"
+                                    data-clear="routing" title="Temizle">×</button>
+                        }
                     </div>
                 </div>
             </section>
@@ -670,16 +954,43 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                 }
             </section>
 
-            <!-- Tab: Reçete -->
+            <!-- Tab: Reçete (Faz 2 — BOM Patlatma) -->
             <section class="woe-pane-section" data-pane="recete">
-                <h2>Reçete (Bill of Materials)</h2>
-                <div class="pane-hint">Mamul reçetesinden patlatılacak bileşen ve fire bilgisi.</div>
-                <div class="woe-placeholder" id="woe-recipe-pane">
-                    <strong>Faz 2 — BOM Patlatma</strong>
-                    Mamul kodu ve konfigürasyon seçildiğinde mevcut reçete bu sekmede listelenecek; bileşen miktarı planlanan üretim miktarına göre çoğaltılacak.
-                    <br><br>
-                    <a href="@Url.Action("BOMs", "Logistics")">→ Ürün Ağacı'nı yönet</a>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+                    <h2 style="margin:0; flex:1;">Reçete (Bill of Materials)</h2>
+                    @if (!isNew)
+                    {
+                        <button type="button" class="woe-btn" id="btn-bom-explode"
+                                title="Ürün ağacındaki bileşenleri planlanan miktara çarp ve listele (mevcut listeyi siler)">
+                            ⚙ Reçeteyi Patlat
+                        </button>
+                    }
                 </div>
+                <div class="pane-hint">
+                    Mamul reçetesinden patlatılacak bileşen ve fire bilgisi.
+                    <strong>Patlat</strong> butonu aktif Ürün Ağacı'ndaki bileşenleri
+                    (kombinasyon dahil) planlanan miktara orantılı olarak yansıtır.
+                </div>
+
+                @if (isNew)
+                {
+                    <div class="src-empty">İş emri kaydedildikten sonra reçeteyi patlatabilirsin.</div>
+                }
+                else
+                {
+                    <div id="woe-bom-list" class="woe-bom-table" data-workorder-id="@Model!.Id">
+                        <div class="woe-bom-row woe-bom-head">
+                            <span>Bileşen</span>
+                            <span>Konfig</span>
+                            <span style="text-align:right;">Net İhtiyaç</span>
+                            <span style="text-align:right;">Çıkış Yapılan</span>
+                            <span style="text-align:right;">Fire %</span>
+                            <span>Birim</span>
+                            <span>Notlar</span>
+                        </div>
+                        <div class="woe-bom-empty src-empty">Yükleniyor…</div>
+                    </div>
+                }
             </section>
 
             <!-- Tab: Kaynak Siparişler -->
@@ -735,8 +1046,8 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                         </div>
                         <div style="padding:14px 18px;">
                             <div class="pane-hint" style="margin-bottom:10px;">
-                                Sipariş listesinden seç → satır seç → miktar gir → "Ekle".
-                                Mevcut iş emrinin mamul/konfigürasyonuyla eşleşmeyen satırlar da seçilebilir; backend mamul-config eşleşmesini doğrular.
+                                Satış siparişinden seç → satır seç → miktar gir → "Ekle".
+                                Satır listesi yalnızca iş emrindeki <strong>Mamul + Konfigürasyon</strong>'la eşleşen kalemlerle gösterilir.
                             </div>
 
                             <div style="margin-bottom:12px;">
@@ -747,7 +1058,7 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                             </div>
 
                             <div style="margin-bottom:12px;">
-                                <label style="font-size:12px; color:var(--woe-text-muted); display:block; margin-bottom:4px;">Satır</label>
+                                <label style="font-size:12px; color:var(--woe-text-muted); display:block; margin-bottom:4px;">Satır (eşleşen)</label>
                                 <select id="add-src-line" class="woe-unit-select" style="width:100%; min-width:0;" disabled>
                                     <option value="">Önce sipariş seç</option>
                                 </select>
@@ -889,11 +1200,23 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
             plannedStartDate: txt('f-plannedStart'),
             plannedEndDate: txt('f-plannedEnd'),
             priority: num('f-priority') ?? 1,
-            assignedUserId: txt('f-assignedUserId'),
+            // assignedUserId artık kullanılmıyor (legacy column) — null gönderiyoruz
+            assignedUserId: null,
+            // Sorumlu Personel: Personnel.Id (User hesabı gerekmez)
+            assignedPersonnelId: num('f-assignedPersonnelId'),
             warehouseLocationId: num('f-locationId'),
             // Rota: Genel tab'taki rehber alanından (boşsa server tarafı item bazlı arar)
             routingId: num('f-routingId'),
-            notes: txt('f-notes')
+            // Default Makine: header tercihi — patlatmada operasyon bazli fallback
+            defaultMachineId: num('f-defaultMachineId'),
+            notes: txt('f-notes'),
+            // "Üretime Planla" switch — sadece yeni iş emrinde anlamli (toolbar'da
+            // hidden değilse). Açık ise WO Released statüsünde acilir + operasyonlar
+            // patlatilir; kapali ise Taslak (Planned) kalir.
+            autoRelease: (function(){
+                var sw = document.getElementById('f-autoRelease');
+                return sw ? !!sw.checked : null;
+            })()
         };
     }
 
@@ -902,8 +1225,7 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
         const codeEl = document.getElementById('f-itemCode');
         const nameEl = document.getElementById('f-itemName');
         const idEl   = document.getElementById('f-itemId');
-        const cfgWrap     = document.getElementById('f-configWrapper');
-        const cfgDescWrap = document.getElementById('f-configDescWrapper');
+        const cfgWrap = document.getElementById('f-configWrapper');
         if (!codeEl) return null;
 
         // Yardimci — span/input ayrimi yapmadan yaz (textContent vs value)
@@ -923,7 +1245,6 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
             setText(unitDispClr, '');
             if (unitIdClr) unitIdClr.value = '';
             cfgWrap.style.display = 'none';
-            cfgDescWrap.style.display = 'none';
             document.getElementById('f-configCode').value = '';
             document.getElementById('f-configId').value = '';
             document.getElementById('f-configDesc').value = '';
@@ -938,7 +1259,6 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                 setText(nameEl, '');
                 idEl.value = '';
                 cfgWrap.style.display = 'none';
-                cfgDescWrap.style.display = 'none';
                 return null;
             }
             // StockLookup artik id, unitId, unitCode dondur (LogisticsController ext'i)
@@ -974,7 +1294,6 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
 
             const hasCfg = match.hasConfig === true || match.hasConfig === 'true';
             cfgWrap.style.display = hasCfg ? '' : 'none';
-            cfgDescWrap.style.display = hasCfg ? '' : 'none';
             if (!hasCfg) {
                 document.getElementById('f-configCode').value = '';
                 document.getElementById('f-configId').value = '';
@@ -993,8 +1312,8 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                             cfgCodeEl.value = cfgMatch.code;
                             const descEl = document.getElementById('f-configDesc');
                             if (descEl) {
-                                descEl.value = (cfgMatch.features || [])
-                                    .map(f => `${f.feature}: ${f.value || f.valueCode || ''}`).join(' | ');
+                                descEl.value = cfgMatch.name ||
+                                    (cfgMatch.features || []).map(f => `${f.feature}: ${f.value || f.valueCode || ''}`).join(' | ');
                             }
                         }
                     } catch (_) { /* sessiz */ }
@@ -1032,7 +1351,8 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
             cfgCodeEl.value = match.code;
             if (cfgIdEl) cfgIdEl.value = (match.configId ?? '').toString();
             if (descEl) {
-                descEl.value = (match.features || []).map(f => `${f.feature}: ${f.value || f.valueCode || ''}`).join(' | ');
+                descEl.value = match.name ||
+                    (match.features || []).map(f => `${f.feature}: ${f.value || f.valueCode || ''}`).join(' | ');
             }
             return match;
         } catch (err) {
@@ -1061,6 +1381,9 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
         }
         const body = payload();
         if (!body.itemId) { flash('Mamul kodu seçilmedi veya geçersiz.', false); return; }
+        if (document.getElementById('f-configWrapper').style.display !== 'none' && !body.configId) {
+            flash('Kombinasyonlu mamulde konfigürasyon seçimi zorunludur.', false); return;
+        }
         if (!body.plannedQuantity || body.plannedQuantity <= 0) { flash('Planlanan miktar 0\'dan büyük olmalı.', false); return; }
 
         // Ek alan (widget) zorunlu + kisitlama validasyonu — entity save'den ONCE kontrol et
@@ -1073,11 +1396,17 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
         }
 
         const url = isNew ? '@Url.Action("Create")' : '@Url.Action("Update")/' + id;
+        // Update payload: tum alanlari gonder — backend UpdateWorkOrderRequest record'u bekliyor.
         const r = await call(url, isNew ? body : {
             plannedQuantity: body.plannedQuantity, unitId: body.unitId,
             plannedStartDate: body.plannedStartDate, plannedEndDate: body.plannedEndDate,
-            priority: body.priority, assignedUserId: body.assignedUserId,
-            warehouseLocationId: body.warehouseLocationId, notes: body.notes
+            priority: body.priority,
+            assignedUserId: body.assignedUserId,
+            assignedPersonnelId: body.assignedPersonnelId,
+            warehouseLocationId: body.warehouseLocationId,
+            routingId: body.routingId,
+            defaultMachineId: body.defaultMachineId,
+            notes: body.notes
         });
         if (!r.ok) { flash(r.error || 'Hata.', false); return; }
 
@@ -1107,11 +1436,21 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
     /* Başlat (Status=2 InProgress) ve Tamamla (Status=3 Completed) iş emri toolbar'ından
        kaldırıldı — bu geçişler Faz 3'te makine ataması üzerinden tetiklenecek
        (Üretim → Makine → İş Emrini Başlat / Bitir / Kısmi Bitir). */
-    document.getElementById('btn-close')?.addEventListener('click',   () => { if (confirm('İş emrini kalıcı kapatıyorsun. Devam edilsin mi?')) changeStatus(4); });
-    document.getElementById('btn-cancel')?.addEventListener('click',  () => { if (confirm('İş emrini iptal etmek istediğine emin misin?')) changeStatus(5); });
+    document.getElementById('btn-close')?.addEventListener('click', async () => {
+        var ok = await CalibraAlert.confirm('İş emrini kalıcı kapatıyorsun. Devam edilsin mi?',
+            { title: 'İş Emrini Kapat', okText: 'Evet, Kapat', cancelText: 'Vazgeç', danger: true });
+        if (ok) changeStatus(4);
+    });
+    document.getElementById('btn-cancel')?.addEventListener('click', async () => {
+        var ok = await CalibraAlert.confirm('İş emrini iptal etmek istediğine emin misin?',
+            { title: 'İş Emrini İptal', okText: 'Evet, İptal Et', cancelText: 'Vazgeç', danger: true });
+        if (ok) changeStatus(5);
+    });
 
     document.getElementById('btn-revise')?.addEventListener('click', async () => {
-        if (!confirm('Yeni revizyon emri oluşturulsun mu? Mevcut emir iptal edilecek.')) return;
+        var ok = await CalibraAlert.confirm('Yeni revizyon emri oluşturulsun mu? Mevcut emir iptal edilecek.',
+            { title: 'Yeni Revizyon', okText: 'Evet, Oluştur', cancelText: 'Vazgeç', danger: false });
+        if (!ok) return;
         const r = await call('@Url.Action("Revise")/' + id);
         if (r.ok && r.id) location.href = '@Url.Action("WorkOrderEdit")?id=' + r.id;
         else flash(r.error || 'Hata.', false);
@@ -1131,6 +1470,39 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
         }
     });
     document.getElementById('f-configCode')?.addEventListener('blur', resolveConfig);
+
+    // ── "Mamul Kodu *" başlığına tıklama → Malzeme Kartı edit ekranı ─────
+    // Workspace iframe içindeysek window.top.CalibraHub.openWorkspaceTab ile
+    // YENİ "Malzeme Kartları" tab'ı açılır. Açık bir Malzeme Kartı tab'ı varsa
+    // (matchPath ile yakalanır), o tab URL'i yeni id ile güncellenip aktive edilir.
+    // iframe dışındaysak (rare) düz navigate.
+    (function bindItemLabelClick() {
+        var lbl = document.getElementById('lbl-itemCode');
+        if (!lbl) return;
+        lbl.addEventListener('click', function () {
+            var idEl = document.getElementById('f-itemId');
+            var itemId = parseInt((idEl && idEl.value) || '0', 10) || 0;
+            if (itemId <= 0) {
+                flash('Mamul önce seçilmeli — kod yazıp Tab\'a basın veya rehberden seçin.', false);
+                return;
+            }
+            var url = '/Logistics/MaterialCardEdit?id=' + encodeURIComponent(itemId);
+            try {
+                if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
+                    window.top.CalibraHub.openWorkspaceTab({
+                        url: url,
+                        title: 'Malzeme Kartları',
+                        // matchPath: aynı /Logistics/MaterialCard prefix'ine sahip
+                        // mevcut tab varsa (list ya da başka edit) URL'ini güncelle + aktive et.
+                        matchPath: '/Logistics/MaterialCard',
+                    });
+                    return;
+                }
+            } catch (e) { /* cross-origin vs — fallback'a düş */ }
+            // Fallback: aynı pencerede navigate
+            window.location.href = url;
+        });
+    })();
 
     function ensureLookupsMounted() {
         if (!window.CalibraHub || !window.CalibraHub.mountLookupForInput) return;
@@ -1167,6 +1539,341 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                 clearInterval(lookupTimer); ensureLookupsMounted();
             } else if (lookupTries >= 50) clearInterval(lookupTimer);
         }, 100);
+    }
+
+    // ── Generic picker (rehber) — Sorumlu / Lokasyon / Rota / Operasyon / Makine ─
+    // Modal patterm RoutingTree.PickerModal ile ayni gorsel dilde ama vanilla.
+    // window.wpicker olarak expose ediliyor — diger IIFE'lerden de cagrilabilir.
+    // opts: { title, url, codeOf, nameOf, metaOf?, badgeOf?, filter?, onSelect }
+    window.wpicker = wpicker;
+    function wpicker(opts) {
+        var bd = document.createElement('div');
+        bd.className = 'wpicker-backdrop';
+        bd.innerHTML =
+            '<div class="wpicker">' +
+              '<div class="wpicker__head">' +
+                '<span class="wpicker__title">' + (opts.title || 'Seç') + '</span>' +
+                '<input type="text" class="wpicker__search" placeholder="Ara... (kod, ad)" autofocus />' +
+                '<button type="button" class="wpicker__close" title="Kapat (Esc)">×</button>' +
+              '</div>' +
+              '<div class="wpicker__list"><div class="wpicker__loading">Yükleniyor…</div></div>' +
+            '</div>';
+
+        function close() {
+            document.removeEventListener('keydown', onKey);
+            if (bd.parentNode) bd.parentNode.removeChild(bd);
+        }
+        function onKey(e) { if (e.key === 'Escape') close(); }
+        document.addEventListener('keydown', onKey);
+        bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+        bd.querySelector('.wpicker__close').addEventListener('click', close);
+
+        var list   = bd.querySelector('.wpicker__list');
+        var search = bd.querySelector('.wpicker__search');
+        var allItems = [];
+
+        function render(items) {
+            if (!items || items.length === 0) {
+                list.innerHTML = '<div class="wpicker__empty">Kayıt bulunamadı.</div>';
+                return;
+            }
+            // Inline picker satiri — kolon sayisina gore esnek olabilir; basit tutuyoruz:
+            // [code] [name + meta] [badge?]
+            list.innerHTML = items.map(function (it, i) {
+                var code = (opts.codeOf ? opts.codeOf(it) : (it.code || it.machineCode || it.locationCode || '')) || '';
+                var name = (opts.nameOf ? opts.nameOf(it) : (it.name || it.fullName || it.machineName || it.locationName || '')) || '';
+                var meta = opts.metaOf ? (opts.metaOf(it) || '') : '';
+                var badge = opts.badgeOf ? (opts.badgeOf(it) || '') : '';
+                return '<div class="wpicker__row" data-idx="' + i + '">' +
+                       '<span class="wpicker__code">' + escHtml(code) + '</span>' +
+                       '<span class="wpicker__name">' + escHtml(name) +
+                            (meta ? ' <span class="wpicker__meta">· ' + escHtml(meta) + '</span>' : '') +
+                       '</span>' +
+                       '<span>' + (badge ? '<span class="wpicker__badge">' + escHtml(badge) + '</span>' : '') + '</span>' +
+                       '</div>';
+            }).join('');
+            list.querySelectorAll('.wpicker__row').forEach(function (row) {
+                row.addEventListener('click', function () {
+                    var idx = parseInt(row.getAttribute('data-idx'), 10);
+                    var item = items[idx];
+                    if (typeof opts.onSelect === 'function') opts.onSelect(item);
+                    close();
+                });
+            });
+        }
+
+        function applyFilter() {
+            var q = (search.value || '').trim().toLowerCase();
+            if (!q) { render(allItems); return; }
+            var fil = allItems.filter(function (it) {
+                return Object.keys(it).some(function (k) {
+                    var v = it[k];
+                    return v != null && String(v).toLowerCase().indexOf(q) !== -1;
+                });
+            });
+            render(fil);
+        }
+        search.addEventListener('input', applyFilter);
+
+        document.body.appendChild(bd);
+        setTimeout(function () { search.focus(); }, 30);
+
+        // Veri cek
+        fetch(opts.url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                allItems = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
+                if (typeof opts.filter === 'function') allItems = allItems.filter(opts.filter);
+                render(allItems);
+            })
+            .catch(function (e) {
+                list.innerHTML = '<div class="wpicker__empty">Yükleme hatası: ' + escHtml(String(e.message || e)) + '</div>';
+            });
+
+        function escHtml(s) {
+            return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+    }
+
+    // ── Pick handler'lari ────────────────────────────────────────────────
+    function pickPersonnel() {
+        wpicker({
+            title: 'Personel Rehberi',
+            url: '/Production/PersonnelList?includeInactive=false&onlyOperators=false',
+            codeOf: function (p) { return p.code || ''; },
+            nameOf: function (p) { return p.fullName || ''; },
+            metaOf: function (p) {
+                var bits = [];
+                if (p.title) bits.push(p.title);
+                if (p.department) bits.push(p.department);
+                return bits.join(' · ');
+            },
+            // Personel atamasi artik dogrudan Personnel.Id'ye yapiliyor — User hesabi gerekmez.
+            onSelect: function (p) {
+                document.getElementById('f-assignedPersonnelId').value = p.id || '';
+                document.getElementById('f-personnelDisplay').value = p.fullName || '';
+            },
+        });
+    }
+    function pickLocation() {
+        wpicker({
+            title: 'Üretim Lokasyonu Rehberi',
+            url: '/Logistics/GetAllLocations',
+            codeOf: function (l) { return l.locationCode || ''; },
+            nameOf: function (l) { return l.locationName || ''; },
+            metaOf: function (l) { return l.locationTypeDisplayName || l.locationTypeCode || ''; },
+            // Sadece AKTIF + ÜRETIM HATTI (IsMachinePark=true) lokasyonlar listelenir.
+            // Stok/depo lokasyonlari hariç tutulur — iş emrinin üretim konumu makine parkurudur.
+            filter: function (l) {
+                return l.isActive !== false && l.isMachinePark === true;
+            },
+            onSelect: function (l) {
+                document.getElementById('f-locationId').value = l.id || '';
+                document.getElementById('f-locationDisplay').value =
+                    (l.locationCode || '') + (l.locationName ? ' · ' + l.locationName : '');
+            },
+        });
+    }
+    function pickMachine() {
+        wpicker({
+            title: 'Makine Rehberi (Default)',
+            url: '/Logistics/GetAllMachines',
+            codeOf:  function (m) { return m.machineCode || ''; },
+            nameOf:  function (m) { return m.machineName || ''; },
+            metaOf:  function (m) { return m.locationName || m.locationCode || ''; },
+            badgeOf: function (m) { return m.isActive === false ? 'Pasif' : ''; },
+            filter:  function (m) { return m.isActive !== false; },
+            onSelect: function (m) {
+                document.getElementById('f-defaultMachineId').value = m.id || '';
+                document.getElementById('f-defaultMachineDisplay').value = m.machineCode || '';
+                var nameEl = document.getElementById('f-defaultMachineName');
+                if (nameEl) nameEl.textContent = m.machineName || '';
+            },
+        });
+    }
+    function pickRouting() {
+        // Mamul seciliyse o item icin filtreli liste; degilse tum aktif rotalar.
+        var itemId = parseInt(document.getElementById('f-itemId')?.value || '0', 10) || 0;
+        var url = '/Production/RoutingsList' + (itemId > 0 ? ('?itemId=' + itemId) : '');
+        wpicker({
+            title: 'Rota Rehberi' + (itemId ? ' (Mamul filtreli)' : ''),
+            url: url,
+            codeOf: function (r) { return r.code || ''; },
+            nameOf: function (r) { return r.name || ''; },
+            metaOf: function (r) { return r.itemCode ? ('Mamul: ' + r.itemCode) : (r.description || ''); },
+            badgeOf: function (r) { return r.isActive ? '' : 'Pasif'; },
+            filter: function (r) { return r.isActive !== false; },
+            onSelect: function (r) {
+                document.getElementById('f-routingId').value = r.id || '';
+                document.getElementById('f-routingCode').value = r.code || '';
+                var nameEl = document.getElementById('f-routingName');
+                if (nameEl) nameEl.textContent = r.name || '';
+            },
+        });
+    }
+    function pickConfig() {
+        var matCode = (document.getElementById('f-itemCode')?.value || '').trim();
+        if (!matCode) { flash('Önce mamul kodu seçiniz.', false); return; }
+        wpicker({
+            title: 'Kombinasyon Rehberi',
+            url: '/Logistics/CombinationLookup?materialCode=' + encodeURIComponent(matCode),
+            codeOf: function (c) { return c.code || ''; },
+            nameOf: function (c) {
+                return c.name || (c.features || []).map(function (f) {
+                    return f.feature + ': ' + (f.value || f.valueCode || '');
+                }).join(' | ');
+            },
+            onSelect: function (c) {
+                document.getElementById('f-configCode').value = c.code || '';
+                document.getElementById('f-configId').value = (c.configId ?? '').toString();
+                var desc = c.name || (c.features || []).map(function (f) {
+                    return f.feature + ': ' + (f.value || f.valueCode || '');
+                }).join(' | ');
+                document.getElementById('f-configDesc').value = desc;
+            },
+        });
+    }
+    function clearPick(kind) {
+        if (kind === 'personnel') {
+            document.getElementById('f-assignedPersonnelId').value = '';
+            document.getElementById('f-personnelDisplay').value = '';
+        } else if (kind === 'location') {
+            document.getElementById('f-locationId').value = '';
+            document.getElementById('f-locationDisplay').value = '';
+        } else if (kind === 'routing') {
+            document.getElementById('f-routingId').value = '';
+            document.getElementById('f-routingCode').value = '';
+            var nameEl = document.getElementById('f-routingName');
+            if (nameEl) nameEl.textContent = '';
+        } else if (kind === 'machine') {
+            document.getElementById('f-defaultMachineId').value = '';
+            document.getElementById('f-defaultMachineDisplay').value = '';
+            var mEl = document.getElementById('f-defaultMachineName');
+            if (mEl) mEl.textContent = '';
+        } else if (kind === 'config') {
+            document.getElementById('f-configCode').value = '';
+            document.getElementById('f-configId').value = '';
+            document.getElementById('f-configDesc').value = '';
+        }
+    }
+    var _pickBtns = document.querySelectorAll('button[data-pick]');
+    console.log('[WOE] Picker butonlari bulundu:', _pickBtns.length,
+        Array.from(_pickBtns).map(function (b) { return b.getAttribute('data-pick'); }));
+    _pickBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var kind = btn.getAttribute('data-pick');
+            console.log('[WOE] Picker click:', kind);
+            if (kind === 'personnel') pickPersonnel();
+            else if (kind === 'location') pickLocation();
+            else if (kind === 'routing') pickRouting();
+            else if (kind === 'machine') pickMachine();
+            else if (kind === 'config') pickConfig();
+            else console.warn('[WOE] Bilinmeyen pick kind:', kind);
+        });
+    });
+    document.querySelectorAll('button[data-clear]').forEach(function (btn) {
+        btn.addEventListener('click', function () { clearPick(btn.getAttribute('data-clear')); });
+    });
+
+    // ── BOM Patlatma (Faz 2) — load + render + explode ──────────────────
+    var bomList = document.getElementById('woe-bom-list');
+    if (bomList) {
+        var bomWoId = parseInt(bomList.getAttribute('data-workorder-id'), 10);
+
+        function fmt(n, d) {
+            d = d == null ? 4 : d;
+            if (n == null || isNaN(n)) return '—';
+            return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+        }
+        function escHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function renderBomList(items) {
+            // Header'ı koru, satırları replace et
+            var head = bomList.querySelector('.woe-bom-head');
+            bomList.innerHTML = '';
+            if (head) bomList.appendChild(head);
+
+            if (!items || items.length === 0) {
+                var empty = document.createElement('div');
+                empty.className = 'woe-bom-empty src-empty';
+                empty.innerHTML = 'Henüz patlatma yapılmadı. <strong>"⚙ Reçeteyi Patlat"</strong> butonuna basarak ürün ağacından bileşen listesini oluştur.';
+                bomList.appendChild(empty);
+                return;
+            }
+
+            items.forEach(function (c) {
+                var row = document.createElement('div');
+                row.className = 'woe-bom-row';
+                var firePct = (Number(c.scrapRate) || 0) * 100;
+                row.innerHTML =
+                    '<span><strong style="color:var(--woe-accent);">' + escHtml(c.itemCode || ('#' + c.itemId)) + '</strong>' +
+                        (c.itemName ? ' · <span style="color:var(--woe-text-muted);">' + escHtml(c.itemName) + '</span>' : '') + '</span>' +
+                    '<span style="color:var(--woe-text-muted); font-size:12px;">' + escHtml(c.configCode || '—') + '</span>' +
+                    '<span style="text-align:right; font-weight:600;">' + fmt(c.requiredQuantity, 2) + '</span>' +
+                    '<span style="text-align:right;">' + fmt(c.issuedQuantity, 2) + '</span>' +
+                    '<span style="text-align:right; color:' + (firePct > 0 ? '#f59e0b' : 'var(--woe-text-muted)') + ';">' +
+                        (firePct > 0 ? firePct.toFixed(2) + ' %' : '—') + '</span>' +
+                    '<span style="color:var(--woe-text-muted);">' + escHtml(c.unitCode || '—') + '</span>' +
+                    '<span style="color:var(--woe-text-muted); font-size:12px;">' + escHtml(c.notes || '') + '</span>';
+                bomList.appendChild(row);
+            });
+        }
+
+        async function loadBom() {
+            try {
+                var r = await fetch('/Production/WorkOrderComponents?workOrderId=' + bomWoId, { credentials: 'same-origin' });
+                var list = await r.json();
+                renderBomList(Array.isArray(list) ? list : []);
+            } catch (ex) {
+                flash('Bileşen listesi yüklenemedi: ' + ex.message, false);
+            }
+        }
+
+        async function explodeBom() {
+            var ok = await CalibraAlert.confirm('Reçete patlatılacak. Mevcut bileşen listesi silinecek ve ürün ağacından yeniden oluşturulacak. Devam edilsin mi?',
+            { title: 'Reçeteyi Patlat', okText: 'Evet, Patlat', cancelText: 'Vazgeç', danger: true });
+        if (!ok) return;
+            var btn = document.getElementById('btn-bom-explode');
+            if (btn) btn.disabled = true;
+            try {
+                var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+                var r = await fetch('/Production/ExplodeBom?workOrderId=' + bomWoId, {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'RequestVerificationToken': token },
+                });
+                var j = await r.json();
+                if (!j.ok) {
+                    flash(j.error || 'Patlatma başarısız', false);
+                    return;
+                }
+                flash('Reçete patlatıldı: ' + (j.result?.componentCount || 0) + ' bileşen yazıldı.', true);
+                await loadBom();
+            } catch (ex) {
+                flash('Hata: ' + ex.message, false);
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        document.getElementById('btn-bom-explode')?.addEventListener('click', explodeBom);
+
+        // Reçete tabı açılınca lazy-load
+        var bomLoaded = false;
+        function maybeLoadBom() {
+            if (bomLoaded) return;
+            var sec = document.querySelector('.woe-pane-section[data-pane="recete"]');
+            if (sec && sec.classList.contains('is-active')) {
+                bomLoaded = true;
+                loadBom();
+            }
+        }
+        document.querySelectorAll('.woe-nav-btn').forEach(function (b) {
+            b.addEventListener('click', function () { setTimeout(maybeLoadBom, 50); });
+        });
+        setTimeout(maybeLoadBom, 100);
     }
 
     // ── Sol nav "Widget Sahaları" butonunu admin tanimli ilk grup adiyla guncelle.
@@ -1342,14 +2049,12 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
 
     async function loadDocs() {
         try {
-            // Sales order listesi — sadece açık siparişler (status: Approved/Sent),
-            // Cancelled/Rejected dışında. Backend GetDocuments endpoint'i tüm
-            // statüleri döner, biz client-side filtreliyoruz.
-            const r = await fetch('/Sales/GetDocuments', { credentials: 'same-origin' });
+            // SADECE satış SIPARIŞLERİ (Document.type = satis_siparisi) — teklifler hariç.
+            // Cancelled/Rejected statüsündekiler client-side filtre ile haricte tutulur.
+            const r = await fetch('/Sales/GetOrdersList', { credentials: 'same-origin' });
             const list = await r.json();
             docSel.innerHTML = '<option value="">— Sipariş seç —</option>';
             (Array.isArray(list) ? list : []).forEach(function (d) {
-                // d.status: 'Cancelled' / 'Rejected' siparişler için ekleme yok
                 const status = String(d.status || d.Status || '').toLowerCase();
                 if (status === 'cancelled' || status === 'rejected') return;
                 const opt = document.createElement('option');
@@ -1379,29 +2084,79 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
             const r = await fetch('/Sales/GetQuote?id=' + encodeURIComponent(docId), { credentials: 'same-origin' });
             const data = await r.json();
             currentLines = Array.isArray(data?.lines) ? data.lines : (Array.isArray(data?.Lines) ? data.Lines : []);
-            if (currentLines.length === 0) {
-                lineSel.innerHTML = '<option value="">Bu siparişte kalem yok</option>';
-                return;
-            }
-            lineSel.innerHTML = '<option value="">— Satır seç —</option>';
-            currentLines.forEach(function (l, i) {
-                const id   = l.id || l.Id;
-                const code = l.materialCode || l.MaterialCode || l.material_code || '';
-                const name = l.materialName || l.MaterialName || l.material_name || '';
-                const qty  = Number(l.quantity || l.Quantity || 0);
-                const opt  = document.createElement('option');
-                opt.value = String(id);
-                opt.dataset.qty = String(qty);
-                opt.dataset.code = code;
-                opt.dataset.name = name;
-                opt.textContent = '#' + id + ' — ' + (code || '?') + (name ? ' / ' + name : '') + ' (' + qty.toFixed(2) + ')';
-                lineSel.appendChild(opt);
-            });
-            lineSel.disabled = false;
+            renderLines();
         } catch (e) {
             console.error('[WOE-AddSrc] Sipariş satırları yüklenemedi:', e);
             lineSel.innerHTML = '<option value="">(Hata — yenileyin)</option>';
         }
+    }
+
+    // İş emrinin mamul + konfigürasyon kimliklerini oku — satır filtresi için.
+    function woMatchKey() {
+        var itemId = parseInt(document.getElementById('f-itemId')?.value || '0', 10) || 0;
+        var configIdRaw = document.getElementById('f-configId')?.value;
+        var configId = (configIdRaw && configIdRaw !== '') ? (parseInt(configIdRaw, 10) || null) : null;
+        return { itemId: itemId, configId: configId };
+    }
+
+    // Bir satırın WO ile eşleşip eşleşmediği — itemId zorunlu, configId tam eşleşme
+    // (WO config'siz ise satır da config'siz olmalı; WO config'li ise aynı configId).
+    function lineMatchesWo(l, wo) {
+        var lItemId   = Number(l.itemId       || l.ItemId       || 0);
+        var lConfigId = Number(l.combinationId || l.CombinationId || 0) || null;
+        if (!wo.itemId || lItemId !== wo.itemId) return false;
+        // Config eşleşmesi: ikisi de boş VEYA ikisi de aynı id
+        if (wo.configId == null && lConfigId == null) return true;
+        return wo.configId === lConfigId;
+    }
+
+    // Satır listesini render et — DAİMA mamul + konfigürasyon ile eşleşen satırları gösterir.
+    // Eşleşme zorunlu: WO'nun mamulü çözülmemişse hiç satır listelenmez.
+    function renderLines() {
+        lineSel.innerHTML = '';
+        lineInfo.textContent = '';
+        if (!currentLines || currentLines.length === 0) {
+            lineSel.innerHTML = '<option value="">Bu siparişte kalem yok</option>';
+            lineSel.disabled = true;
+            return;
+        }
+        var wo = woMatchKey();
+        if (!wo.itemId) {
+            lineSel.innerHTML = '<option value="">Önce iş emri Mamul Kodu doldurulmalı</option>';
+            lineSel.disabled = true;
+            lineInfo.innerHTML = '<span style="color:#f59e0b;">⚠ Eşleşme için Genel sekmesinden Mamul Kodu seçin.</span>';
+            return;
+        }
+        var visible = currentLines.filter(function (l) { return lineMatchesWo(l, wo); });
+
+        if (visible.length === 0) {
+            lineSel.innerHTML = '<option value="">Mamul/konfigürasyon ile eşleşen satır yok</option>';
+            lineSel.disabled = true;
+            lineInfo.textContent = currentLines.length + ' satır var, hiçbiri iş emrinin mamulü ile eşleşmiyor.';
+            return;
+        }
+
+        lineSel.innerHTML = '<option value="">— Satır seç —</option>';
+        visible.forEach(function (l) {
+            var id    = l.id || l.Id;
+            var code  = l.materialCode || l.MaterialCode || '';
+            var name  = l.materialName || l.MaterialName || '';
+            var qty   = Number(l.quantity || l.Quantity || 0);
+            var combo = l.combinationCode || l.CombinationCode || '';
+            var opt   = document.createElement('option');
+            opt.value = String(id);
+            opt.dataset.qty = String(qty);
+            opt.dataset.code = code;
+            opt.dataset.name = name;
+            var label = '#' + id + ' — ' + (code || '?');
+            if (combo) label += ' [' + combo + ']';
+            if (name)  label += ' / ' + name;
+            label += ' (' + qty.toFixed(2) + ')';
+            opt.textContent = label;
+            lineSel.appendChild(opt);
+        });
+        lineSel.disabled = false;
+        lineInfo.textContent = visible.length + ' / ' + currentLines.length + ' satır eşleşti.';
     }
 
     async function onLineChange() {
@@ -1427,12 +2182,19 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
         btnSubmit.disabled = remaining <= 0;
     }
 
+    // Rapor §6.6 — native alert → CalibraAlert/toast fallback
+    function _woNotify(msg, kind) {
+        if (window.CalibraAlert && CalibraAlert[kind]) { CalibraAlert[kind](msg); return; }
+        if (window.CalibraHub && CalibraHub.toast) { CalibraHub.toast(msg, kind === 'error' ? 'err' : (kind === 'warn' ? 'warn' : 'ok')); return; }
+        alert(msg);
+    }
+
     async function submit() {
         const docId  = Number(docSel.value);
         const lineId = Number(lineSel.value);
         const qty    = Number(qtyInput.value);
-        if (!docId || !lineId) { alert('Sipariş ve satır seçin.'); return; }
-        if (!qty || qty <= 0) { alert('Geçerli miktar girin.'); return; }
+        if (!docId || !lineId) { _woNotify('Sipariş ve satır seçin.', 'warn'); return; }
+        if (!qty || qty <= 0) { _woNotify('Geçerli miktar girin.', 'warn'); return; }
 
         btnSubmit.disabled = true;
         btnSubmit.textContent = 'Ekleniyor…';
@@ -1456,12 +2218,12 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
                 // Sayfayı yenile — yeni source list ve PlannedQuantity gözüksün
                 location.reload();
             } else {
-                alert('Hata: ' + (data?.error || 'Bilinmeyen.'));
+                _woNotify('Hata: ' + (data?.error || 'Bilinmeyen.'), 'error');
                 btnSubmit.disabled = false;
                 btnSubmit.textContent = 'Ekle';
             }
         } catch (e) {
-            alert('İstek hatası: ' + e.message);
+            _woNotify('İstek hatası: ' + e.message, 'error');
             btnSubmit.disabled = false;
             btnSubmit.textContent = 'Ekle';
         }
@@ -1566,11 +2328,24 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
             opCell.textContent = (op.operationCode ? op.operationCode + ' · ' : '') + (op.operationName || '#' + op.operationId);
             row.appendChild(opCell);
 
-            // Makine
+            // Makine — düzenlenebilirse pickerli buton, değilse salt-okur span
             const machCell = document.createElement('span');
-            machCell.textContent = op.machineCode
+            const machText = op.machineCode
                 ? (op.machineCode + (op.machineName ? ' · ' + op.machineName : ''))
-                : '—';
+                : '— atanmadı';
+            const opStatus = op.status || 0;
+            if (canEdit && opStatus === 0) {
+                // Tıklanabilir buton — picker ile değiştir
+                const machBtn = document.createElement('button');
+                machBtn.type = 'button';
+                machBtn.className = 'wo-mach-btn';
+                machBtn.title = 'Makine atamak/değiştirmek için tıklayın';
+                machBtn.textContent = machText;
+                machBtn.addEventListener('click', function () { pickMachineForOp(op); });
+                machCell.appendChild(machBtn);
+            } else {
+                machCell.textContent = machText;
+            }
             row.appendChild(machCell);
 
             // Süre
@@ -1607,7 +2382,9 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
     }
 
     async function removeOp(opId) {
-        if (!confirm('Bu operasyonu silmek istediğinize emin misiniz?')) return;
+        var ok = await CalibraAlert.confirm('Bu operasyonu silmek istediğinize emin misiniz?',
+            { title: 'Operasyonu Sil', okText: 'Evet, Sil', cancelText: 'Vazgeç', danger: true });
+        if (!ok) return;
         try {
             const r = await fetch('/Production/DeleteWorkOrderOperation/' + opId, {
                 method: 'POST', credentials: 'same-origin',
@@ -1629,7 +2406,9 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
             flashRota('Önce Genel sekmesinden Rota seçin (veya emir Released aşamasına gelince otomatik patlatılır).', false);
             return;
         }
-        if (!confirm('Rota şablonundaki operasyonlar bu iş emrine kopyalanacak. Mevcut operasyonlar silinecek. Devam edilsin mi?')) return;
+        var ok = await CalibraAlert.confirm('Rota şablonundaki operasyonlar bu iş emrine kopyalanacak. Mevcut operasyonlar silinecek. Devam edilsin mi?',
+            { title: 'Rotadan Patlat', okText: 'Evet, Patlat', cancelText: 'Vazgeç', danger: true });
+        if (!ok) return;
         try {
             const r = await fetch('/Production/ExplodeFromRouting', {
                 method: 'POST', credentials: 'same-origin',
@@ -1645,47 +2424,156 @@ html.dark .woe-unit-select > * { background-color: #0d1323; color: #e2e8f0; }
         }
     }
 
-    // Manuel ekleme: minimal modal yerine prompt akışı (Phase 3a için yeterli; sonradan modal'a yükseltilebilir)
+    // Operasyon satırına makine ata/değiştir — rehber picker + SaveWorkOrderOperation
+    // (mevcut tüm alanları korur, sadece machineId değişir).
+    function pickMachineForOp(op) {
+        if (typeof window.wpicker !== 'function') {
+            flashRota('Picker hazır değil — sayfayı yenileyin.', false);
+            return;
+        }
+        window.wpicker({
+            title: 'Makine Rehberi (Op: ' + (op.operationCode || '#' + op.operationId) + ')',
+            url: '/Logistics/GetAllMachines',
+            codeOf:  function (m) { return m.machineCode || ''; },
+            nameOf:  function (m) { return m.machineName || ''; },
+            metaOf:  function (m) { return m.locationName || m.locationCode || ''; },
+            badgeOf: function (m) { return m.isActive === false ? 'Pasif' : ''; },
+            filter:  function (m) { return m.isActive !== false; },
+            onSelect: async function (m) {
+                try {
+                    const r = await fetch('/Production/SaveWorkOrderOperation', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                        body: JSON.stringify({
+                            id: op.id, workOrderId: woId,
+                            sequence: op.sequence, operationId: op.operationId,
+                            machineId: m.id || null,
+                            plannedDuration: op.plannedDuration ?? null,
+                            durationUnit: op.durationUnit ?? 1,
+                            notes: op.notes ?? null,
+                        }),
+                    });
+                    const j = await r.json();
+                    if (!j.ok) { flashRota(j.error || 'Makine atama başarısız', false); return; }
+                    flashRota('Makine atandı: ' + (m.machineCode || ''), true);
+                    await loadRota();
+                } catch (ex) {
+                    flashRota('Hata: ' + ex.message, false);
+                }
+            },
+        });
+    }
+
+    // Manuel operasyon ekleme — rehber picker + inline form modal.
+    // Akış: picker'dan operasyon seç → küçük form (sıra + süre) → SaveWorkOrderOperation
     async function addOp() {
-        const opCodePrompt = prompt('Operasyon kodu (Operation.Code):');
-        if (!opCodePrompt) return;
-        // Operation lookup: /Production/OperationsList ile arama (basit liste)
-        let opId = 0;
-        try {
-            const lr = await fetch('/Production/OperationsList?includeInactive=false', { credentials: 'same-origin' });
-            const ops = await lr.json();
-            const match = (ops || []).find(o =>
-                String(o.code).trim().toLowerCase() === opCodePrompt.trim().toLowerCase());
-            if (!match) { flashRota('Operasyon bulunamadı: ' + opCodePrompt, false); return; }
-            opId = match.id;
-        } catch (ex) { flashRota('Operasyon listesi alınamadı: ' + ex.message, false); return; }
+        if (typeof window.wpicker !== 'function') {
+            flashRota('Picker hazır değil — sayfayı yenileyin.', false);
+            return;
+        }
+        // 1) Operasyon rehberi
+        window.wpicker({
+            title: 'Operasyon Rehberi',
+            url: '/Production/OperationsList?includeInactive=false',
+            codeOf:  function (o) { return o.code || ''; },
+            nameOf:  function (o) { return o.name || ''; },
+            metaOf:  function (o) { return o.description || ''; },
+            badgeOf: function (o) { return o.isActive === false ? 'Pasif' : ''; },
+            filter:  function (o) { return o.isActive !== false; },
+            onSelect: function (op) { openOpAddForm(op); },
+        });
+    }
 
-        const seqStr = prompt('Sıra numarası:', '10');
-        if (seqStr == null) return;
-        const seq = parseInt(seqStr, 10);
-        if (Number.isNaN(seq) || seq < 0) { flashRota('Geçersiz sıra.', false); return; }
+    // Operasyon seçildikten sonra inline form modal — sıra + süre + notlar.
+    function openOpAddForm(op) {
+        // Sonraki sıra numarasını mevcut listeden hesapla (10'luk artışla)
+        var rows = rotaList.querySelectorAll('.woe-rota-row:not(.woe-rota-head)');
+        var nextSeq = (rows.length + 1) * 10;
 
-        const dur = prompt('Planlanan süre (dakika, boş geçilebilir):', '');
-        const plannedDuration = (dur == null || dur === '') ? null : Number(dur);
+        var bd = document.createElement('div');
+        bd.className = 'wpicker-backdrop';
+        bd.innerHTML =
+            '<div class="wpicker" style="width:min(440px,92vw);">' +
+              '<div class="wpicker__head">' +
+                '<span class="wpicker__title">Operasyon Detayları</span>' +
+                '<button type="button" class="wpicker__close" title="Kapat (Esc)">×</button>' +
+              '</div>' +
+              '<div style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">' +
+                '<div style="font-size:12px; color:var(--woe-text-muted);">Seçilen operasyon</div>' +
+                '<div style="padding:8px 10px; background:var(--woe-input-disabled); border-radius:6px; border:1px solid var(--woe-border-light);">' +
+                  '<strong style="color:var(--woe-accent);">' + escAttr(op.code || '') + '</strong> · ' + escAttr(op.name || '') +
+                '</div>' +
+                '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
+                  '<label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--woe-text-muted);">' +
+                    '<span>Sıra</span>' +
+                    '<input id="op-add-seq" type="number" min="1" step="1" value="' + nextSeq + '" ' +
+                      'style="padding:7px 10px; border-radius:6px; border:1px solid var(--woe-border); background:var(--woe-input-bg); color:var(--woe-text); font-size:13px; outline:none;" />' +
+                  '</label>' +
+                  '<label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--woe-text-muted);">' +
+                    '<span>Planlanan Süre (dk)</span>' +
+                    '<input id="op-add-dur" type="number" min="0" step="0.01" placeholder="boş geçilebilir" ' +
+                      'style="padding:7px 10px; border-radius:6px; border:1px solid var(--woe-border); background:var(--woe-input-bg); color:var(--woe-text); font-size:13px; outline:none;" />' +
+                  '</label>' +
+                '</div>' +
+                '<label style="display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--woe-text-muted);">' +
+                  '<span>Notlar</span>' +
+                  '<textarea id="op-add-notes" rows="2" placeholder="opsiyonel" ' +
+                    'style="padding:7px 10px; border-radius:6px; border:1px solid var(--woe-border); background:var(--woe-input-bg); color:var(--woe-text); font-size:13px; outline:none; resize:vertical;"></textarea>' +
+                '</label>' +
+              '</div>' +
+              '<div style="display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--woe-border);">' +
+                '<button type="button" class="woe-btn" id="op-add-cancel">Vazgeç</button>' +
+                '<button type="button" class="woe-btn woe-btn--primary" id="op-add-save">Ekle</button>' +
+              '</div>' +
+            '</div>';
 
-        try {
-            const r = await fetch('/Production/SaveWorkOrderOperation', {
-                method: 'POST', credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                body: JSON.stringify({
-                    id: 0, workOrderId: woId,
-                    sequence: seq, operationId: opId,
-                    machineId: null, plannedDuration: plannedDuration,
-                    durationUnit: 1 /* Minute */,
-                    notes: null
-                })
-            });
-            const j = await r.json();
-            if (!j.ok) { flashRota(j.error || 'Kayıt başarısız', false); return; }
-            flashRota('Operasyon eklendi.', true);
-            await loadRota();
-        } catch (ex) {
-            flashRota('Hata: ' + ex.message, false);
+        function close() {
+            document.removeEventListener('keydown', onKey);
+            if (bd.parentNode) bd.parentNode.removeChild(bd);
+        }
+        function onKey(e) { if (e.key === 'Escape') close(); }
+        document.addEventListener('keydown', onKey);
+        bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+        bd.querySelector('.wpicker__close').addEventListener('click', close);
+        bd.querySelector('#op-add-cancel').addEventListener('click', close);
+
+        document.body.appendChild(bd);
+        setTimeout(function () { bd.querySelector('#op-add-seq').focus(); bd.querySelector('#op-add-seq').select(); }, 30);
+
+        bd.querySelector('#op-add-save').addEventListener('click', async function () {
+            var seq = parseInt(bd.querySelector('#op-add-seq').value, 10);
+            if (Number.isNaN(seq) || seq < 0) {
+                flashRota('Geçersiz sıra.', false);
+                return;
+            }
+            var durRaw = bd.querySelector('#op-add-dur').value;
+            var plannedDuration = (durRaw === '' || durRaw == null) ? null : Number(durRaw);
+            var notes = (bd.querySelector('#op-add-notes').value || '').trim() || null;
+
+            try {
+                const r = await fetch('/Production/SaveWorkOrderOperation', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({
+                        id: 0, workOrderId: woId,
+                        sequence: seq, operationId: op.id,
+                        machineId: null, plannedDuration: plannedDuration,
+                        durationUnit: 1 /* Minute */,
+                        notes: notes,
+                    }),
+                });
+                const j = await r.json();
+                if (!j.ok) { flashRota(j.error || 'Kayıt başarısız', false); return; }
+                flashRota('Operasyon eklendi.', true);
+                close();
+                await loadRota();
+            } catch (ex) {
+                flashRota('Hata: ' + ex.message, false);
+            }
+        });
+
+        function escAttr(s) {
+            return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
     }
 

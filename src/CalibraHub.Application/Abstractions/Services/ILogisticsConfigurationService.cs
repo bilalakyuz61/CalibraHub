@@ -33,10 +33,6 @@ public interface ILogisticsConfigurationService
     Task UpdateMachineAsync(UpdateMachineRequest request, CancellationToken cancellationToken);
     Task DeleteMachineAsync(int machineId, CancellationToken cancellationToken);
 
-    // ── MachineType referans verisi ──────────────────────────────────
-    Task<IReadOnlyCollection<MachineTypeDto>> GetMachineTypesAsync(CancellationToken cancellationToken);
-    Task<int> SaveMachineTypeAsync(SaveMachineTypeRequest request, CancellationToken cancellationToken);
-    Task DeleteMachineTypeAsync(int id, CancellationToken cancellationToken);
     Task CreateUnitAsync(CreateUnitRequest request, CancellationToken cancellationToken);
     Task UpdateUnitAsync(UpdateUnitRequest request, CancellationToken cancellationToken);
     Task DeleteUnitAsync(int id, CancellationToken cancellationToken);
@@ -86,6 +82,9 @@ public interface ILogisticsConfigurationService
     Task<IReadOnlyCollection<ItemDto>> GetItemsForLookupAsync(CancellationToken cancellationToken);
     Task<IReadOnlyCollection<CombinationLookupRow>> GetCombinationsForLookupAsync(
         string materialCode, CancellationToken cancellationToken);
+
+    /// <summary>"Tanımlı Kombinasyonlar" liste ekranı için tüm kombinasyonları döner.</summary>
+    Task<IReadOnlyCollection<CombinationListItemDto>> GetAllCombinationsAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Satış teklifi satırında yeni kombinasyon oluşturma/çözme akışı:

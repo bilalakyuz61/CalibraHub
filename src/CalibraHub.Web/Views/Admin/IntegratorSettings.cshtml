@@ -40,7 +40,7 @@
 </style>
 }
 
-<div class="entity-form-toolbar" data-no-proxy="1">
+<div class="entity-form-toolbar cb-sticky-toolbar cb-sticky-toolbar--top" data-no-proxy="1">
     <button type="button" class="btn btn-primary btn-sm" onclick="isrSave()">Kaydet</button>
     <button type="button" class="btn btn-outline-danger btn-sm" id="isrDelBtn" onclick="isrDelete()" disabled>Sil</button>
     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="isrTest()">Baglanti Test</button>
@@ -252,9 +252,12 @@
           .catch(function(e) { toolbarMsg('Hata: ' + e.message, false); });
     };
 
-    window.isrDelete = function() {
+    window.isrDelete = async function() {
         var id = document.getElementById('isrId').value;
-        if (!id || !confirm('Bu entegrator ayarini silmek istediginize emin misiniz?')) return;
+        if (!id) return;
+        var ok = await CalibraAlert.confirm('Bu entegrator ayarini silmek istediginize emin misiniz?',
+            { title: 'Entegrator Sil', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true });
+        if (!ok) return;
         fetch(API('DeleteIntegratorSettingsJson') + '?id=' + id, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {

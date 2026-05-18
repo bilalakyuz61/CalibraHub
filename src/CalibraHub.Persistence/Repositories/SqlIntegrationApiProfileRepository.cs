@@ -24,7 +24,7 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[Created],[Updated]
+            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[provider_code],[Created],[Updated]
             FROM {_table} WHERE [company_id] = @CompanyId ORDER BY [name];
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
@@ -50,7 +50,7 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[Created],[Updated]
+            SELECT [id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[provider_code],[Created],[Updated]
             FROM {_table} WHERE [id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
@@ -65,11 +65,11 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         cmd.CommandText = $"""
             IF EXISTS (SELECT 1 FROM {_table} WHERE [id] = @Id)
                 UPDATE {_table} SET [name]=@Name, [auth_type]=@AuthType, [base_url]=@BaseUrl,
-                    [auth_config_json]=@AuthConfigJson, [is_active]=@IsActive, [Updated]=@UpdatedAt
+                    [auth_config_json]=@AuthConfigJson, [is_active]=@IsActive, [provider_code]=@ProviderCode, [Updated]=@UpdatedAt
                 WHERE [id]=@Id
             ELSE
-                INSERT INTO {_table} ([id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[Created],[Updated])
-                VALUES (@Id,@CompanyId,@Name,@AuthType,@BaseUrl,@AuthConfigJson,@IsActive,@CreatedAt,@UpdatedAt);
+                INSERT INTO {_table} ([id],[company_id],[name],[auth_type],[base_url],[auth_config_json],[is_active],[provider_code],[Created],[Updated])
+                VALUES (@Id,@CompanyId,@Name,@AuthType,@BaseUrl,@AuthConfigJson,@IsActive,@ProviderCode,@CreatedAt,@UpdatedAt);
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", p.Id));
         cmd.Parameters.Add(new SqlParameter("@CompanyId", p.CompanyId));
@@ -78,6 +78,7 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         cmd.Parameters.Add(new SqlParameter("@BaseUrl", p.BaseUrl));
         cmd.Parameters.Add(new SqlParameter("@AuthConfigJson", (object?)p.AuthConfigJson ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@IsActive", p.IsActive));
+        cmd.Parameters.Add(new SqlParameter("@ProviderCode", (object?)p.ProviderCode ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@CreatedAt", p.CreatedAt));
         cmd.Parameters.Add(new SqlParameter("@UpdatedAt", p.UpdatedAt));
         await cmd.ExecuteNonQueryAsync(ct);
@@ -101,6 +102,7 @@ public sealed class SqlIntegrationApiProfileRepository : IIntegrationApiProfileR
         BaseUrl = r.GetString(r.GetOrdinal("base_url")),
         AuthConfigJson = r.IsDBNull(r.GetOrdinal("auth_config_json")) ? null : r.GetString(r.GetOrdinal("auth_config_json")),
         IsActive = r.GetBoolean(r.GetOrdinal("is_active")),
+        ProviderCode = r.IsDBNull(r.GetOrdinal("provider_code")) ? null : r.GetString(r.GetOrdinal("provider_code")),
         CreatedAt = r.GetDateTime(r.GetOrdinal("Created")),
         UpdatedAt = r.GetDateTime(r.GetOrdinal("Updated")),
     };

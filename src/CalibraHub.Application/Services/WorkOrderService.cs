@@ -24,19 +24,25 @@ public sealed class WorkOrderService : IWorkOrderService
     private readonly ICompanyParameterService _parameters;
     private readonly IDocumentRepository _documents;
     private readonly IWorkOrderOperationRepository _workOrderOperations;
+    private readonly IWorkOrderComponentRepository _workOrderComponents;
+    private readonly ILogisticsConfigurationRepository _logisticsConfig;
 
     public WorkOrderService(
         IWorkOrderRepository workOrders,
         INumeratorService numerator,
         ICompanyParameterService parameters,
         IDocumentRepository documents,
-        IWorkOrderOperationRepository workOrderOperations)
+        IWorkOrderOperationRepository workOrderOperations,
+        IWorkOrderComponentRepository workOrderComponents,
+        ILogisticsConfigurationRepository logisticsConfig)
     {
         _workOrders = workOrders;
         _numerator = numerator;
         _parameters = parameters;
         _documents = documents;
         _workOrderOperations = workOrderOperations;
+        _workOrderComponents = workOrderComponents;
+        _logisticsConfig = logisticsConfig;
     }
 
     public Task<IReadOnlyCollection<WorkOrderListItemDto>> ListAsync(WorkOrderStatus? status, CancellationToken ct)
@@ -63,7 +69,10 @@ public sealed class WorkOrderService : IWorkOrderService
             if (Guid.TryParse(rawUserId, out var parsedUser)) defaultUserId = parsedUser;
         }
         var defaultPlanDays = await _parameters.GetIntAsync(FormCode, "DefaultPlanDays", ct) ?? 7;
-        var autoRelease = await _parameters.GetBoolAsync(FormCode, "AutoRelease", ct) ?? false;
+        // Per-WO switch ("Üretime Planla") öncelikli — request.AutoRelease set ise onu kullan,
+        // yoksa CompanyParameter fallback. Frontend default ON gönderir; user kapatırsa false.
+        var autoRelease = request.AutoRelease
+            ?? (await _parameters.GetBoolAsync(FormCode, "AutoRelease", ct) ?? false);
 
         var orderDate = DateTime.UtcNow;
         var plannedEnd = request.PlannedEndDate ?? orderDate.AddDays(defaultPlanDays);
@@ -87,6 +96,8 @@ public sealed class WorkOrderService : IWorkOrderService
             AssignedUserId = defaultUserId,
             WarehouseLocationId = defaultLocationId,
             RoutingId = resolvedRoutingId,
+            DefaultMachineId = request.DefaultMachineId,
+            AssignedPersonnelId = request.AssignedPersonnelId,
             Notes = request.Notes,
         };
 
@@ -182,6 +193,8 @@ public sealed class WorkOrderService : IWorkOrderService
                 AssignedUserId: target.AssignedUserId,
                 WarehouseLocationId: target.WarehouseLocationId,
                 RoutingId: target.RoutingId,
+                DefaultMachineId: target.DefaultMachineId,
+                AssignedPersonnelId: target.AssignedPersonnelId,
                 Notes: target.Notes), null, ct);
             return target.Id;
         }
@@ -198,6 +211,8 @@ public sealed class WorkOrderService : IWorkOrderService
             AssignedUserId: null,
             WarehouseLocationId: line.LocationId,
             RoutingId: null, // CreateAsync icinde Item bazli auto-resolve
+            DefaultMachineId: null,
+            AssignedPersonnelId: null,
             Notes: null), ct);
 
         await _workOrders.AddSourceAsync(newId, request.SourceDocumentId, request.SourceLineId, request.Quantity, ct);
@@ -215,6 +230,46 @@ public sealed class WorkOrderService : IWorkOrderService
         var lines = await _documents.GetLinesAsync(documentId, ct);
         return lines.FirstOrDefault(l => l.Id == lineId);
     }
+
+    // ── Faz 2 — BOM Patlatma ────────────────────────────────────────────────────
+    public async Task<ExplodeBomResultDto> ExplodeBomAsync(int workOrderId, CancellationToken ct)
+    {
+        var wo = await _workOrders.GetAsync(workOrderId, ct)
+            ?? throw new InvalidOperationException("Iş emri bulunamadi.");
+
+        if (wo.PlannedQuantity <= 0)
+            throw new InvalidOperationException("Planlanan miktar 0'dan büyük olmalı — patlatma yapılamaz.");
+
+        var bom = await _logisticsConfig.GetBOMByItemAsync(wo.ItemId, wo.ConfigId, ct)
+            ?? throw new InvalidOperationException(
+                $"Bu mamul için tanımlı bir reçete (BOM) bulunamadı: {wo.ItemCode ?? "#" + wo.ItemId}"
+                + (wo.ConfigId.HasValue ? $" / Konfig {wo.ConfigId}" : "")
+                + ". Önce Lojistik → Ürün Ağacı'nda reçete tanımlayın.");
+
+        var components = bom.Lines.Select(l => new WorkOrderComponent
+        {
+            WorkOrderId      = workOrderId,
+            ItemId           = l.ItemId,
+            ConfigId         = l.ConfigId,
+            // RequiredQty = bomLine.Quantity × wo.PlannedQuantity × (1 + ScrapRatio)
+            RequiredQuantity = l.Quantity * wo.PlannedQuantity * (1m + l.ScrapRatio),
+            IssuedQuantity   = 0m,
+            ScrapRate        = l.ScrapRatio,
+            UnitId           = null, // BOMLineWithName birim taşımıyor; ileride Item default birimi sızdırılabilir
+            Notes            = null,
+        }).ToList();
+
+        await _workOrderComponents.ReplaceForWorkOrderAsync(workOrderId, components, ct);
+
+        return new ExplodeBomResultDto(
+            WorkOrderId:    workOrderId,
+            BomId:          bom.Id,
+            ComponentCount: components.Count,
+            Multiplier:     wo.PlannedQuantity);
+    }
+
+    public Task<IReadOnlyCollection<WorkOrderComponentDto>> GetComponentsAsync(int workOrderId, CancellationToken ct)
+        => _workOrderComponents.GetByWorkOrderAsync(workOrderId, ct);
 
     private static void ValidateTransition(WorkOrderStatus current, WorkOrderStatus next)
     {

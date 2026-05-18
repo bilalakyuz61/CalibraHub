@@ -16,7 +16,6 @@ public sealed class SqlNoteRepository : INoteRepository
     private readonly string _remindersTable;
     private readonly string _sharesTable;
     private readonly string _foldersTable;
-    private readonly string _attachmentsTable;
     private readonly string _reminderTargetsTable;
 
     public SqlNoteRepository(
@@ -31,7 +30,6 @@ public sealed class SqlNoteRepository : INoteRepository
         _remindersTable = $"[{schema}].[note_reminders]";
         _sharesTable = $"[{schema}].[note_shares]";
         _foldersTable = $"[{schema}].[note_folders]";
-        _attachmentsTable = $"[{schema}].[note_attachments]";
         _reminderTargetsTable = $"[{schema}].[note_reminder_targets]";
     }
 
@@ -630,109 +628,6 @@ public sealed class SqlNoteRepository : INoteRepository
         command.Parameters.Add(new SqlParameter("@FolderId", folderId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
-
-    public async Task<IReadOnlyCollection<NoteAttachment>> GetAttachmentsAsync(Guid noteId, CancellationToken cancellationToken)
-    {
-        var list = new List<NoteAttachment>();
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT [id], [note_id], [file_name], [stored_name], [content_type], [file_size], [uploaded_at], [description]
-            FROM {_attachmentsTable}
-            WHERE [note_id] = @NoteId
-            ORDER BY [uploaded_at];
-            """;
-        command.Parameters.Add(new SqlParameter("@NoteId", noteId));
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-            list.Add(MapAttachment(reader));
-        return list;
-    }
-
-    public async Task<NoteAttachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT [id], [note_id], [file_name], [stored_name], [content_type], [file_size], [uploaded_at], [description]
-            FROM {_attachmentsTable}
-            WHERE [id] = @Id;
-            """;
-        command.Parameters.Add(new SqlParameter("@Id", attachmentId));
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken) ? MapAttachment(reader) : null;
-    }
-
-    public async Task AddAttachmentAsync(NoteAttachment attachment, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            INSERT INTO {_attachmentsTable}
-                ([id], [note_id], [file_name], [stored_name], [content_type], [file_size], [uploaded_at], [description], [binary_content])
-            VALUES
-                (@Id, @NoteId, @FileName, @StoredName, @ContentType, @FileSize, @UploadedAt, @Description, @BinaryContent);
-            """;
-        command.Parameters.Add(new SqlParameter("@Id", attachment.Id));
-        command.Parameters.Add(new SqlParameter("@NoteId", attachment.NoteId));
-        command.Parameters.Add(new SqlParameter("@FileName", attachment.FileName));
-        command.Parameters.Add(new SqlParameter("@StoredName", attachment.StoredName));
-        command.Parameters.Add(new SqlParameter("@ContentType", (object?)attachment.ContentType ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@FileSize", attachment.FileSize));
-        command.Parameters.Add(new SqlParameter("@UploadedAt", attachment.UploadedAt));
-        command.Parameters.Add(new SqlParameter("@Description", (object?)attachment.Description ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@BinaryContent", (object?)attachment.BinaryContent ?? DBNull.Value)
-        {
-            SqlDbType = System.Data.SqlDbType.VarBinary
-        });
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Yalnizca download endpoint'inde kullanilir — varbinary(max) kolonunu doner.
-    /// Liste sorgulari hicbir zaman bu method'u cagirmaz; metadata SELECT'leri
-    /// binary_content'i hicbir zaman fetch etmiyor.
-    /// </summary>
-    public async Task<byte[]?> GetAttachmentBinaryAsync(Guid attachmentId, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT [binary_content] FROM {_attachmentsTable} WHERE [id] = @Id;";
-        command.Parameters.Add(new SqlParameter("@Id", attachmentId));
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        if (result is null || result == DBNull.Value) return null;
-        return (byte[])result;
-    }
-
-    public async Task DeleteAttachmentAsync(Guid attachmentId, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_attachmentsTable} WHERE [id] = @Id;";
-        command.Parameters.Add(new SqlParameter("@Id", attachmentId));
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    public async Task DeleteAllAttachmentsAsync(Guid noteId, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_attachmentsTable} WHERE [note_id] = @NoteId;";
-        command.Parameters.Add(new SqlParameter("@NoteId", noteId));
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static NoteAttachment MapAttachment(SqlDataReader reader) => new()
-    {
-        Id = reader.GetGuid(0),
-        NoteId = reader.GetGuid(1),
-        FileName = reader.GetString(2),
-        StoredName = reader.GetString(3),
-        ContentType = reader.IsDBNull(4) ? null : reader.GetString(4),
-        FileSize = reader.GetInt64(5),
-        UploadedAt = reader.GetDateTime(6),
-        Description = reader.IsDBNull(7) ? null : reader.GetString(7)
-    };
 
     private Note MapNote(SqlDataReader reader)
     {

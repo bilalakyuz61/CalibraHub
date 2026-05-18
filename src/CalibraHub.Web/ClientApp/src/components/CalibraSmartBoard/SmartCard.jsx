@@ -45,18 +45,20 @@ function getWidgetViolation(w) {
 }
 
 var hoverBgMap = {
-  amber: 'hover:bg-amber-100 dark:hover:bg-amber-500/10',
-  red:   'hover:bg-red-100 dark:hover:bg-red-500/10',
-  blue:  'hover:bg-blue-100 dark:hover:bg-blue-500/10',
-  green: 'hover:bg-emerald-100 dark:hover:bg-emerald-500/10',
-  slate: 'hover:bg-slate-100 dark:hover:bg-white/5',
+  amber:   'hover:bg-amber-100 dark:hover:bg-amber-500/10',
+  red:     'hover:bg-red-100 dark:hover:bg-red-500/10',
+  blue:    'hover:bg-blue-100 dark:hover:bg-blue-500/10',
+  green:   'hover:bg-emerald-100 dark:hover:bg-emerald-500/10',
+  slate:   'hover:bg-slate-100 dark:hover:bg-white/5',
   emerald: 'hover:bg-emerald-100 dark:hover:bg-emerald-500/10',
+  orange:  'hover:bg-orange-100 dark:hover:bg-orange-500/10',
 }
 var hoverTextMap = {
-  amber: 'group-hover:text-amber-600 dark:group-hover:text-amber-400/70',
-  red:   'group-hover:text-red-600 dark:group-hover:text-red-400/70',
-  blue:  'group-hover:text-blue-600 dark:group-hover:text-blue-400/70',
-  green: 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400/70',
+  amber:   'group-hover:text-amber-600 dark:group-hover:text-amber-400/70',
+  red:     'group-hover:text-red-600 dark:group-hover:text-red-400/70',
+  blue:    'group-hover:text-blue-600 dark:group-hover:text-blue-400/70',
+  green:   'group-hover:text-emerald-600 dark:group-hover:text-emerald-400/70',
+  orange:  'group-hover:text-orange-600 dark:group-hover:text-orange-400/70',
   slate: 'group-hover:text-slate-600 dark:group-hover:text-slate-400/70',
   emerald: 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400/70',
 }
@@ -78,6 +80,8 @@ export default function SmartCard(props) {
   var primaryAction = props.primaryAction || null
   var secondaryAction = props.secondaryAction || null
   var extraActions = Array.isArray(props.extraActions) ? props.extraActions : []
+  var onRefresh = typeof props.onRefresh === 'function' ? props.onRefresh : null
+  var isHighlighted = !!props.isHighlighted
 
   // Board-level user tercihleri (SmartBoard'dan gelir)
   var visibleIds = Array.isArray(props.visibleIds) ? props.visibleIds : null
@@ -302,9 +306,31 @@ export default function SmartCard(props) {
     navigateInWorkspace(url)
   }
 
+  /**
+   * Aksiyon dispatch — action.openInTab varsa Shell.openWorkspaceTab API'siyle
+   * yeni/mevcut tab'da acar (caller tab'i kapatmaz). Aksi halde aynı tab'da navigate.
+   * openInTab: { title: 'Malzeme Kartlari', matchPath: '/Logistics/MaterialCard' }
+   */
+  function dispatchActionUrl(action) {
+    if (!action || !action.url) return
+    if (action.openInTab) {
+      try {
+        if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
+          window.top.CalibraHub.openWorkspaceTab({
+            url: action.url,
+            title: action.openInTab.title || action.label || 'Yeni Sekme',
+            matchPath: action.openInTab.matchPath || null,
+          })
+          return
+        }
+      } catch (e) { /* cross-origin — fallback */ }
+    }
+    navigateInFrame(action.url)
+  }
+
   function handlePrimary(e) {
     e.stopPropagation()
-    if (primaryAction && primaryAction.url) navigateInFrame(primaryAction.url)
+    if (primaryAction) dispatchActionUrl(primaryAction)
   }
 
   function executeSecondary() {
@@ -344,8 +370,8 @@ export default function SmartCard(props) {
             return
           }
           if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('İşlem tamamlandı.', 'ok')
-          // Listeyi tazele — SmartBoard yeniden yüklensin
-          setTimeout(function() { window.location.reload() }, 600)
+          if (onRefresh) setTimeout(function () { onRefresh(id) }, 400)
+          else setTimeout(function () { window.location.reload() }, 600)
         })
         .catch(function(err) {
           if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Hata: ' + err.message, 'err')
@@ -499,6 +525,10 @@ export default function SmartCard(props) {
     }
 
     if (action.type === 'api-post') {
+      if (action.confirm) {
+        showConfirm(action.confirm, function() { handleExtraAction(e, Object.assign({}, action, { confirm: null })) })
+        return
+      }
       var postUrl = (action.url || '').replace('{id}', id)
       var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || ''
       var fd = new FormData()
@@ -507,10 +537,20 @@ export default function SmartCard(props) {
       fetch(postUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function(r) { return r.json() })
         .then(function(data) {
-          if (data && data.success === false) alert('Hata: ' + (data.message || 'Bilinmeyen'))
+          // Rapor §6.6 — toast fallback
+          if (data && data.success === false) {
+            var msg = 'Hata: ' + (data.message || 'Bilinmeyen')
+            if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'err')
+            else alert(msg)
+          }
+          else if (onRefresh) onRefresh(id)
           else window.location.reload()
         })
-        .catch(function(err) { alert('Hata: ' + err.message) })
+        .catch(function(err) {
+          var em = 'Hata: ' + err.message
+          if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
+          else alert(em)
+        })
       return
     }
 
@@ -567,12 +607,16 @@ export default function SmartCard(props) {
           background: 'rgba(255, 255, 255, 0.05)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
+          border: isHighlighted ? '1px solid rgba(99,102,241,0.7)' : '1px solid rgba(255, 255, 255, 0.12)',
+          boxShadow: isHighlighted ? '0 0 0 3px rgba(99,102,241,0.18), 0 8px 32px rgba(99,102,241,0.12)' : undefined,
+          transition: 'border-color 0.4s ease, box-shadow 0.4s ease',
         } : {
           background: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid rgba(15, 23, 42, 0.1)',
+          border: isHighlighted ? '1px solid rgba(99,102,241,0.6)' : '1px solid rgba(15, 23, 42, 0.1)',
+          boxShadow: isHighlighted ? '0 0 0 3px rgba(99,102,241,0.12), 0 4px 24px rgba(99,102,241,0.1)' : undefined,
+          transition: 'border-color 0.4s ease, box-shadow 0.4s ease',
         }}
       >
         <div className="flex items-center gap-0">
@@ -584,6 +628,7 @@ export default function SmartCard(props) {
                 {renderActionButton(primaryAction, handlePrimary, 'amber')}
                 {renderActionButton(secondaryAction, handleSecondary, 'red')}
                 {extraActions.map(function(action, i) {
+                  if (!action) return <span key={'sp' + i} style={{display:'inline-block',width:34,height:34,flexShrink:0}} />
                   return renderActionButton(action, function(e) { handleExtraAction(e, action) }, action.color || 'slate')
                 })}
               </div>
@@ -605,12 +650,12 @@ export default function SmartCard(props) {
             onClick={function(e) {
               e.preventDefault()
               e.stopPropagation()
-              if (primaryAction && primaryAction.url) navigateInFrame(primaryAction.url)
+              if (primaryAction) dispatchActionUrl(primaryAction)
             }}
             onKeyDown={function(e) {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                if (primaryAction && primaryAction.url) navigateInFrame(primaryAction.url)
+                if (primaryAction) dispatchActionUrl(primaryAction)
               }
             }}
           >

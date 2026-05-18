@@ -1,0 +1,343 @@
+@model CalibraHub.Web.Models.Logistics.UnitEditViewModel
+@{
+    var isNew = Model.Id == null;
+    ViewData["Title"] = isNew ? "Yeni Ölçü Birimi" : $"Ölçü Birimi: {Model.UnitCode}";
+    ViewData["FormCode"] = "MEASURE_UNITS";
+    ViewData["BodyClass"] = "page-unit-edit";
+}
+
+@section Styles {
+<style>
+    .ue-root {
+        --ue-bg:      #f1f5f9;
+        --ue-surface: #ffffff;
+        --ue-border:  #e2e8f0;
+        --ue-text:    #0f172a;
+        --ue-muted:   #64748b;
+        --ue-accent:  #6366f1;
+        display: flex; align-items: flex-start; justify-content: center;
+        min-height: 100%; padding: 32px 16px;
+        background: var(--ue-bg);
+    }
+    body.app-theme-dark .ue-root {
+        --ue-bg:      #080c17;
+        --ue-surface: #0d1323;
+        --ue-border:  rgba(255,255,255,.09);
+        --ue-text:    #e2e8f0;
+        --ue-muted:   #94a3b8;
+    }
+    .ue-card {
+        width: 100%; max-width: 480px;
+        background: var(--ue-surface); border: 1px solid var(--ue-border);
+        border-radius: 14px; padding: 28px 28px 24px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    .ue-header {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 24px; padding-bottom: 16px;
+        border-bottom: 1px solid var(--ue-border);
+    }
+    .ue-header h1 { font-size: 17px; font-weight: 700; margin: 0; color: var(--ue-text); }
+    .ue-back {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 8px;
+        border: 1px solid var(--ue-border); background: none;
+        color: var(--ue-muted); font-size: 13px; cursor: pointer;
+        text-decoration: none; transition: background .12s;
+    }
+    .ue-back:hover { background: var(--ue-bg); color: var(--ue-text); }
+    .ue-spacer { flex: 1; }
+
+    .ue-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .ue-label { font-size: 12px; font-weight: 600; color: var(--ue-muted); }
+    .ue-input {
+        padding: 9px 12px; border-radius: 8px;
+        border: 1px solid var(--ue-border);
+        background: var(--ue-bg); color: var(--ue-text);
+        font-size: 14px; outline: none;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    .ue-input:focus { border-color: var(--ue-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .ue-input.is-invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important; }
+    .ue-hint { font-size: 11px; color: var(--ue-muted); }
+
+    .ue-switch-row { display: flex; align-items: center; gap: 10px; }
+    .ue-switch { position: relative; width: 42px; height: 24px; display: inline-block; flex-shrink: 0; }
+    .ue-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .ue-switch-track {
+        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
+        background: #e2e8f0; transition: background .2s;
+    }
+    .ue-switch input:checked + .ue-switch-track { background: #10b981; }
+    body.app-theme-dark .ue-switch-track { background: rgba(255,255,255,.12); }
+    body.app-theme-dark .ue-switch input:checked + .ue-switch-track { background: #059669; }
+    .ue-switch-track::before {
+        content: ''; position: absolute; height: 18px; width: 18px;
+        left: 3px; top: 3px; border-radius: 50%;
+        background: #fff; transition: transform .2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .ue-switch input:checked + .ue-switch-track::before { transform: translateX(18px); }
+    .ue-switch-label { font-size: 13px; font-weight: 600; color: var(--ue-muted); }
+
+    .ue-actions {
+        display: flex; gap: 8px; margin-top: 24px;
+        padding-top: 16px; border-top: 1px solid var(--ue-border);
+    }
+    .ue-btn {
+        padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer; transition: all .12s;
+    }
+    .ue-btn--primary { background: var(--ue-accent); color: #fff; border-color: #4f46e5; }
+    .ue-btn--primary:hover { filter: brightness(1.1); }
+    .ue-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
+    .ue-btn--ghost { background: none; border-color: var(--ue-border); color: var(--ue-text); }
+    .ue-btn--ghost:hover { background: var(--ue-bg); }
+    .ue-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
+    body.app-theme-dark .ue-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
+    .ue-btn--danger:hover { background: rgba(239,68,68,.08); }
+    .ue-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
+
+    .ue-err {
+        margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+        background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
+    }
+    body.app-theme-dark .ue-err { color: #f87171; }
+
+    /* Delete modal */
+    .ue-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.48); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .ue-modal {
+        background: var(--ue-surface); border: 1px solid var(--ue-border);
+        border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw;
+        display: flex; flex-direction: column; gap: 14px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.35);
+    }
+    .ue-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+    .ue-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--ue-text); }
+    .ue-modal-msg { font-size: 13px; color: var(--ue-muted); text-align: center; line-height: 1.55; }
+    .ue-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+    .ue-modal-cancel {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: 1px solid var(--ue-border); background: var(--ue-surface);
+        color: var(--ue-text); cursor: pointer; transition: background .12s;
+    }
+    .ue-modal-cancel:hover { background: var(--ue-bg); }
+    .ue-modal-del {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: none; background: #ef4444; color: #fff; cursor: pointer; transition: filter .12s;
+    }
+    .ue-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
+    .ue-modal-del:disabled { opacity: .5; cursor: not-allowed; }
+</style>
+}
+
+<div class="ue-root">
+  <div class="ue-card">
+    <div class="ue-header">
+      <a class="ue-back" href="/Logistics/Units">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <span class="ue-spacer"></span>
+      <h1>@(isNew ? "Yeni Ölçü Birimi" : "Birimi Düzenle")</h1>
+    </div>
+
+    <input type="hidden" id="ue-id" value="@(Model.Id?.ToString() ?? "")" />
+
+    <div class="ue-field">
+      <label class="ue-label" for="ue-code">Kod *</label>
+      <input id="ue-code" class="ue-input" maxlength="20" value="@(Model.UnitCode ?? "")"
+             placeholder="Orn: KG" style="max-width:140px; text-transform:uppercase;"
+             oninput="this.value=this.value.toUpperCase()" />
+      <span class="ue-hint">Kısa ve benzersiz (en fazla 20 karakter)</span>
+    </div>
+
+    <div class="ue-field">
+      <label class="ue-label" for="ue-name">Ad *</label>
+      <input id="ue-name" class="ue-input" maxlength="100" value="@(Model.UnitName ?? "")"
+             placeholder="Orn: Kilogram" />
+    </div>
+
+    <div class="ue-field">
+      <label class="ue-label" for="ue-intl">Uluslararası Kod</label>
+      <input id="ue-intl" class="ue-input" maxlength="20" value="@(Model.IntlCode ?? "")"
+             placeholder="Orn: KGM" style="max-width:140px; text-transform:uppercase;"
+             oninput="this.value=this.value.toUpperCase()" />
+      <span class="ue-hint">e-Belge / uluslararası standart kodu (opsiyonel)</span>
+    </div>
+
+    <div class="ue-field">
+      <label class="ue-label" for="ue-sort">Sıralama</label>
+      <input id="ue-sort" class="ue-input" type="number" min="0" value="@Model.SortOrder"
+             style="max-width:100px;" />
+    </div>
+
+    <div class="ue-field">
+      <label class="ue-label">Durum</label>
+      <div class="ue-switch-row">
+        <label class="ue-switch">
+          <input type="checkbox" id="ue-active" @(Model.IsActive ? "checked" : "") />
+          <span class="ue-switch-track"></span>
+        </label>
+        <span class="ue-switch-label" id="ue-active-label">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+      </div>
+    </div>
+
+    <div id="ue-err" style="display:none;" class="ue-err"></div>
+
+    <div class="ue-actions">
+      <button class="ue-btn ue-btn--primary" id="ue-save">Kaydet</button>
+      <a class="ue-btn ue-btn--ghost" href="/Logistics/Units">İptal</a>
+      @if (!isNew)
+      {
+        <button class="ue-btn ue-btn--danger" id="ue-delete">Sil</button>
+      }
+    </div>
+  </div>
+</div>
+
+@if (!isNew)
+{
+  <div id="ue-modal" class="ue-modal-backdrop" style="display:none;" onclick="ueCloseModal()">
+    <div class="ue-modal" onclick="event.stopPropagation()">
+      <div class="ue-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="ue-modal-title">Ölçü Birimini Sil</div>
+      <div class="ue-modal-msg" id="ue-modal-msg"></div>
+      <div class="ue-modal-actions">
+        <button class="ue-modal-cancel" onclick="ueCloseModal()">Vazgeç</button>
+        <button class="ue-modal-del" id="ue-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var idVal   = document.getElementById('ue-id')?.value || '';
+    var isNew   = !idVal;
+
+    function csrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function setErr(msg) {
+        var el = document.getElementById('ue-err');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; }
+        else { el.style.display = 'none'; }
+    }
+    function shake(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('is-invalid');
+        void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
+    }
+
+    // ── Active label sync ───────────────────────────────────────
+    var activeEl = document.getElementById('ue-active');
+    var activeLabel = document.getElementById('ue-active-label');
+    if (activeEl && activeLabel) {
+        activeEl.addEventListener('change', function () {
+            activeLabel.textContent = activeEl.checked ? 'Aktif' : 'Pasif';
+        });
+    }
+
+    // ── Save ────────────────────────────────────────────────────
+    var saveBtn = document.getElementById('ue-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            var code = (document.getElementById('ue-code').value || '').trim();
+            var name = (document.getElementById('ue-name').value || '').trim();
+            var invalid = false;
+            if (!code) { shake('ue-code'); invalid = true; }
+            if (!name) { shake('ue-name'); invalid = true; }
+            if (invalid) return;
+
+            var payload = {
+                id:        idVal ? parseInt(idVal) : null,
+                unitCode:  code,
+                unitName:  name,
+                intlCode:  (document.getElementById('ue-intl').value || '').trim() || null,
+                sortOrder: parseInt(document.getElementById('ue-sort').value) || 0,
+                isActive:  document.getElementById('ue-active').checked
+            };
+            saveBtn.disabled = true;
+            setErr('');
+            fetch('/Logistics/SaveMeasureUnitJson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify(payload)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.success) {
+                    window.location.href = '/Logistics/Units';
+                } else {
+                    setErr((d && d.message) || 'Kayıt başarısız.');
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
+        });
+    }
+
+    // ── Delete modal ────────────────────────────────────────────
+    var deleteBtn = document.getElementById('ue-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            var code = document.getElementById('ue-code').value || '';
+            var name = document.getElementById('ue-name').value || '';
+            var msgEl = document.getElementById('ue-modal-msg');
+            if (msgEl) msgEl.innerHTML = '<strong>' + code + (name ? ' — ' + name : '') + '</strong> birimini silmek istediğinize emin misiniz?';
+            document.getElementById('ue-modal').style.display = 'flex';
+            document.getElementById('ue-modal-del').focus();
+        });
+
+        var modalDel = document.getElementById('ue-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled = true;
+                modalDel.textContent = 'Siliniyor…';
+                fetch('/Logistics/DeleteMeasureUnitJson?id=' + idVal, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': csrf() }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.success) {
+                        window.location.href = '/Logistics/Units';
+                    } else {
+                        ueCloseModal();
+                        setErr((d && d.message) || 'Silinemedi.');
+                    }
+                })
+                .catch(function () { ueCloseModal(); setErr('Bağlantı hatası.'); });
+            });
+        }
+    }
+
+    // Esc ile modal kapat
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') ueCloseModal();
+    });
+})();
+
+function ueCloseModal() {
+    var m = document.getElementById('ue-modal');
+    if (m) m.style.display = 'none';
+    var btn = document.getElementById('ue-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
+</script>
+}

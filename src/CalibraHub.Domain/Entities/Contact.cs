@@ -64,5 +64,8 @@ public sealed class Contact
     [Description("Bu cariyi takip eden satis temsilcisi. FK -> sales_representatives.id")]
     public int? SalesRepresentativeId { get; init; }
 
+    [Description("Cari grubu (Toptan, Perakende, VIP vb.). FK -> CariGroup.Id. Tasarim kurallari ve benzeri filtrelerde gruba gore eslestirme yapilir.")]
+    public int? ContactGroupId { get; init; }
+
     public DateTime CreatedAt { get; init; }
 }

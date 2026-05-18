@@ -42,11 +42,13 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                    w.[Status], w.[Priority],
                    w.[PlannedStartDate], w.[PlannedEndDate],
                    w.[AssignedUserId], usr.[full_name] AS AssignedUserName,
-                   w.[RevisionNo]
+                   w.[RevisionNo],
+                   w.[AssignedPersonnelId], ap.[FullName] AS AssignedPersonnelName
             FROM {_woTable} w
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = w.[UnitId]
             LEFT JOIN [{_schema}].[User] usr ON usr.[id] = w.[AssignedUserId]
+            LEFT JOIN [{_schema}].[Personnel] ap ON ap.[Id] = w.[AssignedPersonnelId]
             WHERE w.[CompanyId] = @CompanyId AND w.[IsActive] = 1
             {statusFilter}
             ORDER BY w.[OrderDate] DESC, w.[Id] DESC;";
@@ -75,7 +77,9 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 PlannedEndDate: r.IsDBNull(14) ? null : r.GetDateTime(14),
                 AssignedUserId: r.IsDBNull(15) ? null : r.GetGuid(15),
                 AssignedUserName: r.IsDBNull(16) ? null : r.GetString(16),
-                RevisionNo: r.GetInt32(17)));
+                RevisionNo: r.GetInt32(17),
+                AssignedPersonnelId: r.FieldCount > 18 && !r.IsDBNull(18) ? r.GetInt32(18) : null,
+                AssignedPersonnelName: r.FieldCount > 19 && !r.IsDBNull(19) ? r.GetString(19) : null));
         }
         return list;
     }
@@ -101,6 +105,8 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                        w.[WarehouseLocationId], loc.[LocationCode],
                        w.[RevisionNo], w.[ParentWorkOrderId], w.[RevisedFromId],
                        w.[RoutingId], rt.[Code] AS RoutingCode, rt.[Name] AS RoutingName,
+                       w.[DefaultMachineId], dm.[MachineCode] AS DefaultMachineCode, dm.[MachineName] AS DefaultMachineName,
+                       w.[AssignedPersonnelId], ap.[FullName] AS AssignedPersonnelName,
                        w.[Notes], w.[Created], w.[Updated]
                 FROM {_woTable} w
                 LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
@@ -108,6 +114,8 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 LEFT JOIN [{_schema}].[User] usr ON usr.[id] = w.[AssignedUserId]
                 LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = w.[WarehouseLocationId]
                 LEFT JOIN [{_schema}].[Routing] rt ON rt.[Id] = w.[RoutingId]
+                LEFT JOIN [{_schema}].[Machine] dm ON dm.[Id] = w.[DefaultMachineId]
+                LEFT JOIN [{_schema}].[Personnel] ap ON ap.[Id] = w.[AssignedPersonnelId]
                 WHERE w.[Id] = @Id AND w.[CompanyId] = @CompanyId;";
             cmd.Parameters.AddWithValue("@Id", id);
             cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -144,9 +152,14 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 RoutingId: r.IsDBNull(26) ? null : r.GetInt32(26),
                 RoutingCode: r.IsDBNull(27) ? null : r.GetString(27),
                 RoutingName: r.IsDBNull(28) ? null : r.GetString(28),
-                Notes: r.IsDBNull(29) ? null : r.GetString(29),
-                Created: r.GetDateTime(30),
-                Updated: r.IsDBNull(31) ? null : r.GetDateTime(31),
+                DefaultMachineId: r.IsDBNull(29) ? null : r.GetInt32(29),
+                DefaultMachineCode: r.IsDBNull(30) ? null : r.GetString(30),
+                DefaultMachineName: r.IsDBNull(31) ? null : r.GetString(31),
+                AssignedPersonnelId: r.IsDBNull(32) ? null : r.GetInt32(32),
+                AssignedPersonnelName: r.IsDBNull(33) ? null : r.GetString(33),
+                Notes: r.IsDBNull(34) ? null : r.GetString(34),
+                Created: r.GetDateTime(35),
+                Updated: r.IsDBNull(36) ? null : r.GetDateTime(36),
                 Sources: Array.Empty<WorkOrderSourceDto>());
         }
 
@@ -165,15 +178,15 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                  [ItemId],[ConfigId],[PlannedQuantity],[UnitId],
                  [PlannedStartDate],[PlannedEndDate],
                  [Status],[Priority],[AssignedUserId],[WarehouseLocationId],
-                 [RevisionNo],[ParentWorkOrderId],[RevisedFromId],[RoutingId],
-                 [Notes],[CreatedBy],[Created],[IsActive])
+                 [RevisionNo],[ParentWorkOrderId],[RevisedFromId],[RoutingId],[DefaultMachineId],
+                 [AssignedPersonnelId],[Notes],[CreatedBy],[Created],[IsActive])
             VALUES
                 (@CompanyId,@OrderNumber,@OrderDate,
                  @ItemId,@ConfigId,@PlannedQuantity,@UnitId,
                  @PlannedStartDate,@PlannedEndDate,
                  @Status,@Priority,@AssignedUserId,@WarehouseLocationId,
-                 @RevisionNo,@ParentWorkOrderId,@RevisedFromId,@RoutingId,
-                 @Notes,@CreatedBy,SYSUTCDATETIME(),1);
+                 @RevisionNo,@ParentWorkOrderId,@RevisedFromId,@RoutingId,@DefaultMachineId,
+                 @AssignedPersonnelId,@Notes,@CreatedBy,SYSUTCDATETIME(),1);
             SELECT CAST(SCOPE_IDENTITY() AS INT);";
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         cmd.Parameters.AddWithValue("@OrderNumber", e.OrderNumber);
@@ -192,6 +205,8 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         cmd.Parameters.AddWithValue("@ParentWorkOrderId", (object?)e.ParentWorkOrderId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@RevisedFromId", (object?)e.RevisedFromId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@RoutingId", (object?)e.RoutingId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@DefaultMachineId", (object?)e.DefaultMachineId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@AssignedPersonnelId", (object?)e.AssignedPersonnelId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Notes", (object?)e.Notes ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@CreatedBy", (object?)e.CreatedBy ?? DBNull.Value);
         var result = await cmd.ExecuteScalarAsync(ct);
@@ -213,6 +228,8 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 [AssignedUserId]=@AssignedUserId,
                 [WarehouseLocationId]=@WarehouseLocationId,
                 [RoutingId]=@RoutingId,
+                [DefaultMachineId]=@DefaultMachineId,
+                [AssignedPersonnelId]=@AssignedPersonnelId,
                 [Notes]=@Notes,
                 [UpdatedBy]=@UpdatedBy,
                 [Updated]=SYSUTCDATETIME()
@@ -227,6 +244,8 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         cmd.Parameters.AddWithValue("@AssignedUserId", (object?)req.AssignedUserId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@WarehouseLocationId", (object?)req.WarehouseLocationId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@RoutingId", (object?)req.RoutingId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@DefaultMachineId", (object?)req.DefaultMachineId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@AssignedPersonnelId", (object?)req.AssignedPersonnelId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Notes", (object?)req.Notes ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@UpdatedBy", (object?)updatedBy ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
@@ -271,16 +290,16 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                          [ItemId],[ConfigId],[PlannedQuantity],[UnitId],
                          [PlannedStartDate],[PlannedEndDate],
                          [Status],[Priority],[AssignedUserId],[WarehouseLocationId],
-                         [RevisionNo],[ParentWorkOrderId],[RevisedFromId],[RoutingId],
-                         [Notes],[CreatedBy],[Created],[IsActive])
+                         [RevisionNo],[ParentWorkOrderId],[RevisedFromId],[RoutingId],[DefaultMachineId],
+                         [AssignedPersonnelId],[Notes],[CreatedBy],[Created],[IsActive])
                     SELECT [CompanyId],
                            [OrderNumber] + N'-R' + CAST([RevisionNo]+1 AS NVARCHAR(4)),
                            SYSUTCDATETIME(),
                            [ItemId],[ConfigId],[PlannedQuantity],[UnitId],
                            [PlannedStartDate],[PlannedEndDate],
                            0 /* Planned */, [Priority], [AssignedUserId], [WarehouseLocationId],
-                           [RevisionNo]+1, [ParentWorkOrderId], [Id] /* RevisedFromId */, [RoutingId],
-                           [Notes], @UserId, SYSUTCDATETIME(), 1
+                           [RevisionNo]+1, [ParentWorkOrderId], [Id] /* RevisedFromId */, [RoutingId], [DefaultMachineId],
+                           [AssignedPersonnelId], [Notes], @UserId, SYSUTCDATETIME(), 1
                     FROM {_woTable}
                     WHERE [Id] = @ExistingId AND [CompanyId] = @CompanyId;
                     SELECT CAST(SCOPE_IDENTITY() AS INT);";
@@ -486,7 +505,9 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 PlannedEndDate: r.IsDBNull(14) ? null : r.GetDateTime(14),
                 AssignedUserId: r.IsDBNull(15) ? null : r.GetGuid(15),
                 AssignedUserName: r.IsDBNull(16) ? null : r.GetString(16),
-                RevisionNo: r.GetInt32(17)));
+                RevisionNo: r.GetInt32(17),
+                AssignedPersonnelId: r.FieldCount > 18 && !r.IsDBNull(18) ? r.GetInt32(18) : null,
+                AssignedPersonnelName: r.FieldCount > 19 && !r.IsDBNull(19) ? r.GetString(19) : null));
         }
         return list;
     }

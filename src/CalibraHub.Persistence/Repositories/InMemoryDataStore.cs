@@ -8,8 +8,8 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class InMemoryDataStore
 {
     private const int DefaultCompanyId = 1;
-    private static readonly Guid FinanceDepartmentId = Guid.Parse("8ad68ef8-63f8-4a26-a7fd-62c4fcbac120");
-    private static readonly Guid OperationsDepartmentId = Guid.Parse("f744af50-51f8-4f74-a89b-66bc99c79c30");
+    private const int FinanceDepartmentId = 1;
+    private const int OperationsDepartmentId = 2;
     private static readonly Guid AccountingManagerId = Guid.Parse("05fae97c-b5df-48e1-9755-2a8346a85dbc");
     private static readonly Guid AccountantId = Guid.Parse("39fa17cf-a4ea-4c95-95fb-b4972cbad358");
     private static readonly Guid OperationsLeadId = Guid.Parse("c0188522-5752-43e5-a25f-f91fb5264f17");
@@ -69,25 +69,23 @@ public sealed class InMemoryDataStore
                 })
         });
 
-    public ConcurrentDictionary<Guid, Department> Departments { get; } = new(
+    public ConcurrentDictionary<int, Department> Departments { get; } = new(
         new[]
         {
-            new KeyValuePair<Guid, Department>(
+            new KeyValuePair<int, Department>(
                 FinanceDepartmentId,
                 new Department
                 {
                     Id = FinanceDepartmentId,
                     CompanyId = DefaultCompanyId,
-                    Code = "FIN",
                     Name = "Finans"
                 }),
-            new KeyValuePair<Guid, Department>(
+            new KeyValuePair<int, Department>(
                 OperationsDepartmentId,
                 new Department
                 {
                     Id = OperationsDepartmentId,
                     CompanyId = DefaultCompanyId,
-                    Code = "OPS",
                     Name = "Operasyon"
                 })
         });

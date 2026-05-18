@@ -4,6 +4,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Application.Ui;
 using CalibraHub.Domain.Enums;
+using CalibraHub.Web.Infrastructure.Collaboration;
 using CalibraHub.Web.Models.Admin;
 using CalibraHub.Web.Models.Shared;
 using System.Security.Claims;
@@ -24,12 +25,20 @@ public sealed class AdminController : Controller
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
     private readonly IDocumentImportService _documentImportService;
     private readonly IWebHostEnvironment _webHostEnvironment;
-    private readonly IIntegrationEventService _integrationEventService;
+    private readonly IIntegrationApiProfileRepository _apiProfileRepo;
     private readonly IScheduledTaskRepository _scheduledTaskRepo;
     private readonly ICompanyParameterService _companyParameters;
+    private readonly IFormRepository _formRepository;
+    private readonly CollaborationRuntimeStore _collaborationStore;
     private static readonly JsonSerializerOptions ProjectRequestJsonOptions = new()
     {
         WriteIndented = true
+    };
+    private static readonly JsonSerializerOptions BoardConfigJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
     public AdminController(
@@ -39,9 +48,11 @@ public sealed class AdminController : Controller
         ILogisticsConfigurationService logisticsConfigurationService,
         IDocumentImportService documentImportService,
         IWebHostEnvironment webHostEnvironment,
-        IIntegrationEventService integrationEventService,
+        IIntegrationApiProfileRepository apiProfileRepo,
         IScheduledTaskRepository scheduledTaskRepo,
-        ICompanyParameterService companyParameters)
+        ICompanyParameterService companyParameters,
+        IFormRepository formRepository,
+        CollaborationRuntimeStore collaborationStore)
     {
         _adminReadService = adminReadService;
         _adminManagementService = adminManagementService;
@@ -49,9 +60,11 @@ public sealed class AdminController : Controller
         _logisticsConfigurationService = logisticsConfigurationService;
         _documentImportService = documentImportService;
         _webHostEnvironment = webHostEnvironment;
-        _integrationEventService = integrationEventService;
+        _apiProfileRepo = apiProfileRepo;
         _scheduledTaskRepo = scheduledTaskRepo;
         _companyParameters = companyParameters;
+        _formRepository = formRepository;
+        _collaborationStore = collaborationStore;
     }
 
     [HttpGet]
@@ -68,251 +81,9 @@ public sealed class AdminController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    // ==== Sirket Parametreleri ====================================================
-    // /Admin/Parameters → sabit sol-tab listesi (Genel, Onay Islemleri, Is Emri,
-    // Satis Teklifi). Her tab kodla gomulu hardcoded UI kontrollerini gosterir;
-    // dinamik (kullanicinin yeni form/parametre ekledigi) yapi kaldirildi.
-    [HttpGet]
-    public async Task<IActionResult> Parameters(CancellationToken cancellationToken)
-    {
-        SetActiveMenu("settings");
+    // NOT: Parameters + SaveGeneralParametersJson + ParametersList + SaveParameter + DeleteParameter + GeneralParametersInput + DeleteCompanyParameterRequest ParametersController'a tasindi (rapor 2.3 split).
 
-        // Genel tab'i icin: E-Belge Onay Sistemi switch'i (Sirket Ayarlari'ndan tasindi).
-        // Bu deger Company entity'sindeki IsEDocumentApprovalEnabled property'si.
-        var companyId = GetCompanyId();
-        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-        var company = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
-        ViewData["IsEDocumentApprovalEnabled"] = company?.IsEDocumentApprovalEnabled ?? false;
-
-        return View();
-    }
-
-    /// <summary>
-    /// Genel tab'indaki sirket-seviyesi parametreleri kaydeder.
-    /// Su an sadece IsEDocumentApprovalEnabled var; ileride buraya yeni
-    /// Company entity property'leri eklenebilir.
-    /// </summary>
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveGeneralParametersJson(
-        [FromBody] GeneralParametersInput input,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var companyId = GetCompanyId();
-            var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-            var company = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
-            if (company is null) return Json(new { ok = false, error = "Sirket bulunamadi." });
-
-            await _adminManagementService.SaveCompanyAsync(
-                new SaveCompanyRequest(
-                    company.Id,
-                    company.Name,
-                    company.Title,
-                    company.Address,
-                    company.City,
-                    company.District,
-                    company.PostalCode,
-                    company.TaxOffice,
-                    company.TaxNumber,
-                    input.IsEDocumentApprovalEnabled,
-                    company.IsActive,
-                    company.DatabaseConnectionString),
-                cancellationToken);
-
-            return Json(new { ok = true });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { ok = false, error = ex.Message });
-        }
-    }
-
-    public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled);
-
-    [HttpGet]
-    public async Task<IActionResult> ParametersList(string? formCode, CancellationToken ct)
-    {
-        var list = await _companyParameters.ListAsync(formCode, ct);
-        return Json(list);
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveParameter([FromBody] SetCompanyParameterRequest req, CancellationToken ct)
-    {
-        try
-        {
-            await _companyParameters.SetAsync(req, ct);
-            return Json(new { ok = true });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { ok = false, error = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteParameter([FromBody] DeleteCompanyParameterRequest req, CancellationToken ct)
-    {
-        try
-        {
-            await _companyParameters.DeleteAsync(req.FormCode, req.ParamKey, ct);
-            return Json(new { ok = true });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { ok = false, error = ex.Message });
-        }
-    }
-
-    public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);
-
-    /// <summary>
-    /// Zamanlanmis gorevler — Worker'daki hosted service'lerin kayit + calistirma durumu.
-    /// CalibraHub.Worker startup'ta her service kendi metadata'sini scheduled_tasks tablosuna
-    /// UPSERT eder; her turda LastRun/NextRun'i guncellenir. Bu ekran canli listeyi gosterir.
-    /// </summary>
-    [HttpGet]
-    public async Task<IActionResult> ScheduledTasks(CancellationToken ct)
-    {
-        var tasks = await _scheduledTaskRepo.GetAllAsync(ct);
-        return View(tasks);
-    }
-
-    /// <summary>Canli durumu AJAX ile almak icin — auto-refresh yapmak isteyen JS.</summary>
-    [HttpGet("/Admin/ScheduledTasks/List")]
-    public async Task<IActionResult> ScheduledTasksList(CancellationToken ct)
-    {
-        var tasks = await _scheduledTaskRepo.GetAllAsync(ct);
-        return Json(tasks.Select(t => new
-        {
-            t.Id,
-            t.Name,
-            t.Description,
-            TaskType     = (int)t.TaskType,
-            TaskTypeName = t.TaskType.ToString(),
-            t.ParametersJson,
-            ScheduleType     = (int)t.ScheduleType,
-            ScheduleTypeName = t.ScheduleType.ToString(),
-            t.ScheduleExpression,
-            t.ScheduleDescription,
-            t.IsEnabled,
-            t.IsRunning,
-            LastRunAtLocal = t.LastRunAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
-            t.LastRunStatus,
-            t.LastRunMessage,
-            t.LastRunDurationMs,
-            NextRunAtLocal = t.NextRunAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
-            t.PrerequisiteTaskId,
-        }));
-    }
-
-    /// <summary>Gorevi hemen calistir (MANUAL trigger).</summary>
-    [HttpPost("/Admin/ScheduledTasks/{id:int}/RunNow")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ScheduledTaskRunNow(int id,
-        [FromServices] CalibraHub.Application.Services.Scheduling.IScheduledTaskDispatcher dispatcher,
-        CancellationToken ct)
-    {
-        var (ok, message) = await dispatcher.TriggerNowAsync(id, ct);
-        return Json(new { success = ok, message });
-    }
-
-    /// <summary>Gorevi etkinlestir/devre disi birak.</summary>
-    [HttpPost("/Admin/ScheduledTasks/{id:int}/Toggle")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ScheduledTaskToggle(int id, [FromForm] bool enabled, CancellationToken ct)
-    {
-        await _scheduledTaskRepo.SetEnabledAsync(id, enabled, ct);
-        return Json(new { success = true });
-    }
-
-    /// <summary>Gorevi sil (BUILTIN gorevler silinemez — Worker startup'ta tekrar register eder).</summary>
-    [HttpPost("/Admin/ScheduledTasks/{id:int}/Delete")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ScheduledTaskDelete(int id, CancellationToken ct)
-    {
-        var task = await _scheduledTaskRepo.GetByIdAsync(id, ct);
-        if (task is null) return Json(new { success = false, message = "Gorev bulunamadi." });
-        if (task.TaskType == CalibraHub.Domain.Enums.ScheduledTaskType.Builtin)
-            return Json(new { success = false, message = "BUILTIN gorevler silinemez — sadece devre disi birakilabilir." });
-        await _scheduledTaskRepo.DeleteAsync(id, ct);
-        return Json(new { success = true });
-    }
-
-    /// <summary>Yeni gorev ekle veya mevcut gorevi duzenle.</summary>
-    [HttpPost("/Admin/ScheduledTasks/Save")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ScheduledTaskSave([FromBody] ScheduledTaskSaveRequest req, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(req.Name))
-            return Json(new { success = false, message = "Gorev adi zorunlu." });
-
-        var taskType = (CalibraHub.Domain.Enums.ScheduledTaskType)req.TaskType;
-        if (taskType == CalibraHub.Domain.Enums.ScheduledTaskType.Builtin)
-            return Json(new { success = false, message = "BUILTIN gorevler UI'dan eklenemez — Worker kodunda tanimlanir." });
-
-        // CompanyId — UI'dan kayit edilen task hangi sirket icin tanimlandiysa o claim'den alinir.
-        // Token resolver runtime'da bu deger uzerinden sirket bilgilerini ({COMPANY_ID}, {INTEGRATION_DB}) cozer.
-        int? companyId = null;
-        var companyIdClaim = User.FindFirst("company_id")?.Value;
-        if (!string.IsNullOrWhiteSpace(companyIdClaim) && int.TryParse(companyIdClaim, out var parsedCompanyId))
-            companyId = parsedCompanyId;
-
-        var task = new CalibraHub.Domain.Entities.ScheduledTask
-        {
-            Id                  = req.Id,
-            Name                = req.Name.Trim(),
-            Description         = req.Description,
-            TaskType            = taskType,
-            ParametersJson      = req.ParametersJson,
-            ScheduleType        = (CalibraHub.Domain.Enums.ScheduleType)req.ScheduleType,
-            ScheduleExpression  = req.ScheduleExpression,
-            ScheduleDescription = req.ScheduleDescription,
-            IsEnabled           = req.IsEnabled,
-            CompanyId           = companyId,
-            PrerequisiteTaskId  = req.PrerequisiteTaskId,
-        };
-        task.NextRunAt = CalibraHub.Application.Services.Scheduling.ScheduleEvaluator.ComputeNextRun(task, DateTime.UtcNow);
-        var id = await _scheduledTaskRepo.SaveAsync(task, ct);
-        return Json(new { success = true, id });
-    }
-
-    /// <summary>Sirketin DB'sindeki user-defined view adlarini doner — ViewReport task form dropdown'u icin.</summary>
-    [HttpGet("/Admin/ScheduledTasks/DbViews")]
-    public async Task<IActionResult> ScheduledTaskDbViews(
-        [FromServices] CalibraHub.Application.Abstractions.Persistence.IDbSchemaRepository dbSchema,
-        CancellationToken ct)
-    {
-        var names = await dbSchema.GetViewNamesAsync(ct);
-        return Json(names);
-    }
-
-    /// <summary>Bir gorevin son N calistirma gecmisini doner.</summary>
-    [HttpGet("/Admin/ScheduledTasks/{id:int}/History")]
-    public async Task<IActionResult> ScheduledTaskHistory(int id, int limit,
-        [FromServices] CalibraHub.Application.Abstractions.Persistence.IScheduledTaskRunRepository runRepo,
-        CancellationToken ct)
-    {
-        var takeLimit = limit > 0 && limit <= 200 ? limit : 20;
-        var runs = await runRepo.GetRecentByTaskIdAsync(id, takeLimit, ct);
-        return Json(runs.Select(r => new
-        {
-            r.Id,
-            r.TaskCode,
-            StartedAtLocal   = r.StartedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
-            CompletedAtLocal = r.CompletedAt?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss"),
-            r.Status,
-            r.Message,
-            r.DurationMs,
-            r.ExecutedCommand,
-            Trigger     = (int)r.Trigger,
-            TriggerName = r.Trigger.ToString(),
-        }));
-    }
+    // NOT: ScheduledTask* cluster (10 endpoint + BuildScheduledTasksBoardConfig/Type/Status helper'lar) ScheduledTaskController'a tasindi (rapor 2.3 AdminController split).
 
     /// <summary>
     /// ShellPreview — React tabanli yeni nesil kabuk (Navbar + Sidebar + Tabs +
@@ -454,281 +225,9 @@ public sealed class AdminController : Controller
         }
     }
 
-    // ── WhatsApp endpoint'leri (Sirket Ayarlari > WhatsApp sekmesi tarafindan kullanilir) ─
+    // NOT: WhatsApp/* cluster (Save, Test, SendTest, PairingCode, Qr) WhatsAppAdminController'a tasindi (rapor 2.3 split).
 
-    [HttpPost("/Admin/WhatsApp/Save")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveWhatsApp(
-        [FromServices] IWhatsAppService whatsAppService,
-        int provider, string? accessToken, string? phoneNumberId,
-        string? businessAccountId, string? webhookVerifyToken,
-        string? webQrBridgeUrl, bool isEnabled, bool? respectQuietHours, CancellationToken ct)
-    {
-        // Provider seçimi: 0=CloudApi, 1=WebQr
-        var existing = await whatsAppService.GetConfigAsync(ct);
-        var providerType = (CalibraHub.Domain.Entities.WhatsAppProviderType)provider;
-
-        // Mevcut config'i yeni provider değeri ile güncellemek için:
-        // SaveConfigAsync sadece Cloud API alanlari icin yapildi, simdi genisletmeliyiz.
-        // Bu MVP'de doğrudan repo üzerinden manipule ediyoruz (cleaner refactor v1.0.12'de).
-        var configRepo = HttpContext.RequestServices.GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IWhatsAppConfigRepository>();
-        var cfg = await configRepo.GetAsync(ct) ?? new CalibraHub.Domain.Entities.WhatsAppConfig
-        {
-            Id = 1,
-            CreatedAt = DateTime.UtcNow,
-        };
-        cfg.Provider           = providerType;
-        cfg.PhoneNumberId      = phoneNumberId?.Trim();
-        cfg.BusinessAccountId  = businessAccountId?.Trim();
-        cfg.WebhookVerifyToken = webhookVerifyToken?.Trim();
-        cfg.WebQrBridgeUrl     = webQrBridgeUrl?.Trim();
-        cfg.IsEnabled          = isEnabled;
-        cfg.UpdatedAt          = DateTime.UtcNow;
-        if (cfg.CreatedAt == default) cfg.CreatedAt = DateTime.UtcNow;
-
-        // Yeni token gelirse DPAPI ile şifrele
-        if (!string.IsNullOrWhiteSpace(accessToken))
-        {
-            try { cfg.AccessTokenEncrypted = CalibraHub.Application.Security.DpapiSecretDecryptor.Encrypt(accessToken.Trim()); }
-            catch { cfg.AccessTokenEncrypted = accessToken.Trim(); }
-        }
-        // Cloud API seçilip token henüz yoksa hata
-        if (providerType == CalibraHub.Domain.Entities.WhatsAppProviderType.CloudApi
-            && string.IsNullOrEmpty(cfg.AccessTokenEncrypted))
-        {
-            return Json(new { success = false, message = "Cloud API için Access Token zorunlu." });
-        }
-
-        await configRepo.SaveAsync(cfg, ct);
-
-        // Safety Rules — sessiz saatler toggle'i (opsiyonel, sadece bool gelirse guncelle)
-        if (respectQuietHours.HasValue)
-        {
-            var safetyRepo = HttpContext.RequestServices
-                .GetRequiredService<CalibraHub.Application.Abstractions.Persistence.IWhatsAppSafetyRulesRepository>();
-            var rules = await safetyRepo.GetAsync(ct);
-            if (rules is not null && rules.RespectQuietHours != respectQuietHours.Value)
-            {
-                rules.RespectQuietHours = respectQuietHours.Value;
-                rules.UpdatedAt = DateTime.UtcNow;
-                await safetyRepo.SaveAsync(rules, ct);
-            }
-        }
-
-        return Json(new { success = true, message = "Yapılandırma kaydedildi." });
-    }
-
-    [HttpPost("/Admin/WhatsApp/Test")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> TestWhatsApp([FromServices] IWhatsAppService whatsAppService, CancellationToken ct)
-    {
-        var result = await whatsAppService.TestConfigAsync(ct);
-        return Json(new
-        {
-            success      = result.Success,
-            kind         = result.Kind,                // ok | info | error
-            message      = result.Message,
-            displayPhone = result.DisplayPhoneNumber,
-        });
-    }
-
-    [HttpPost("/Admin/WhatsApp/SendTest")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SendWhatsAppTest(
-        [FromServices] IWhatsAppService whatsAppService,
-        string toPhone, string message, CancellationToken ct)
-    {
-        var result = await whatsAppService.SendTextMessageAsync(toPhone ?? "", message ?? "", ct);
-        return Json(new { success = result.Success, message = result.Message, messageId = result.MessageId });
-    }
-
-    /// <summary>Bridge'den 8 haneli pairing code iste — telefonla baglanmak icin alternatif yol.</summary>
-    [HttpPost("/Admin/WhatsApp/PairingCode")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> GetWhatsAppPairingCode(
-        [FromServices] CalibraHub.Application.Abstractions.Persistence.IWhatsAppConfigRepository configRepo,
-        [FromServices] IHttpClientFactory httpClientFactory,
-        string phone, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(phone))
-            return Json(new { success = false, message = "Telefon zorunlu (orn: 905338168150)" });
-
-        var cfg = await configRepo.GetAsync(ct);
-        if (cfg is null || string.IsNullOrWhiteSpace(cfg.WebQrBridgeUrl))
-            return Json(new { success = false, message = "Bridge URL ayarlanmamis." });
-
-        try
-        {
-            using var client = httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(10);
-            var resp = await client.PostAsJsonAsync(
-                cfg.WebQrBridgeUrl.TrimEnd('/') + "/pairing-code",
-                new { phone },
-                ct);
-            var body = await resp.Content.ReadAsStringAsync(ct);
-            using var doc = System.Text.Json.JsonDocument.Parse(body);
-            var root = doc.RootElement;
-            var ok = root.TryGetProperty("ok", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.True;
-            var code = root.TryGetProperty("code", out var c) ? c.GetString() : null;
-            var error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
-            return Json(new { success = ok, code, message = error ?? "Pairing code uretildi." });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = $"Bridge hatasi: {ex.Message}" });
-        }
-    }
-
-    /// <summary>Web QR sayfasi icin polling ucu — Bridge'in /status+/qr cevabini birlestirip frontend'e doner.</summary>
-    [HttpGet("/Admin/WhatsApp/Qr")]
-    public async Task<IActionResult> GetWhatsAppQr([FromServices] IWhatsAppService whatsAppService, CancellationToken ct)
-    {
-        var r = await whatsAppService.GetWebQrStatusAsync(ct);
-        return Json(new
-        {
-            reachable   = r.Reachable,
-            state       = r.State,
-            qr          = r.Qr,
-            phone       = r.Phone,
-            displayName = r.DisplayName,
-            error       = r.Error,
-        });
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> CompanySettings(
-        [FromServices] IWhatsAppService whatsAppService,
-        [FromServices] CalibraHub.Application.Abstractions.Persistence.IWhatsAppSafetyRulesRepository safetyRepo,
-        CancellationToken cancellationToken)
-    {
-        SetActiveMenu("company-settings");
-        ViewBag.WhatsAppConfig = await whatsAppService.GetConfigAsync(cancellationToken);
-        ViewBag.WhatsAppSafetyRules = await safetyRepo.GetAsync(cancellationToken);
-        var companyId = GetCompanyId();
-        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-        var myCompany = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
-
-        var input = myCompany is null
-            ? new CompanyInput()
-            : new CompanyInput
-            {
-                Id = myCompany.Id,
-                Name = myCompany.Name,
-                Title = myCompany.Title,
-                Address = myCompany.Address,
-                City = myCompany.City,
-                District = myCompany.District,
-                PostalCode = myCompany.PostalCode,
-                TaxOffice = myCompany.TaxOffice,
-                TaxNumber = myCompany.TaxNumber,
-                IsEDocumentApprovalEnabled = myCompany.IsEDocumentApprovalEnabled,
-                IsActive = myCompany.IsActive,
-                DatabaseConnectionString = myCompany.DatabaseConnectionString
-            };
-
-        // SMTP profili yukle
-        var smtpProfiles = snapshot.SmtpProfiles.Where(x => x.CompanyId == companyId).ToArray();
-        var currentSmtp = smtpProfiles.FirstOrDefault();
-        var smtpInput = currentSmtp != null
-            ? new SmtpProfileInput
-            {
-                Id = currentSmtp.Id,
-                CompanyId = currentSmtp.CompanyId,
-                Name = currentSmtp.Name,
-                FromEmail = currentSmtp.FromEmail,
-                FromDisplayName = currentSmtp.FromDisplayName,
-                Host = currentSmtp.Host,
-                Port = currentSmtp.Port,
-                Username = currentSmtp.Username,
-                Password = currentSmtp.Password,
-                AuthMethod = currentSmtp.AuthMethod,
-                OAuth2ClientId = currentSmtp.OAuth2ClientId,
-                OAuth2ClientSecret = currentSmtp.OAuth2ClientSecret,
-                OAuth2RefreshToken = currentSmtp.OAuth2RefreshToken,
-                UseSsl = currentSmtp.UseSsl,
-                IsActive = currentSmtp.IsActive
-            }
-            : new SmtpProfileInput { CompanyId = companyId };
-
-        return View(new CompanyManagementViewModel
-        {
-            Companies = Array.Empty<CompanyDto>(),
-            ListState = new GridListStateViewModel(),
-            Input = input,
-            SmtpInput = smtpInput,
-            CurrentSmtp = currentSmtp
-        });
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CompanySettings(
-        CompanyInput input,
-        [Bind(Prefix = "SmtpInput")] SmtpProfileInput smtpInput,
-        CancellationToken cancellationToken)
-    {
-        SetActiveMenu("company-settings");
-        input.Id ??= GetCompanyId();
-
-        ModelState.Clear();
-
-        try
-        {
-            await _adminManagementService.SaveCompanyAsync(
-                new SaveCompanyRequest(
-                    input.Id,
-                    input.Name,
-                    input.Title,
-                    input.Address,
-                    input.City,
-                    input.District,
-                    input.PostalCode,
-                    input.TaxOffice,
-                    input.TaxNumber,
-                    input.IsEDocumentApprovalEnabled,
-                    input.IsActive,
-                    input.DatabaseConnectionString),
-                cancellationToken);
-
-            // SMTP kaydet (host doluysa)
-            if (!string.IsNullOrWhiteSpace(smtpInput.Host))
-            {
-                smtpInput.CompanyId ??= input.Id;
-                smtpInput.Name = string.IsNullOrWhiteSpace(smtpInput.Name) ? "Varsayilan" : smtpInput.Name;
-                try
-                {
-                    await _adminManagementService.SaveSmtpProfileAsync(
-                        new SaveSmtpProfileRequest(
-                            smtpInput.Id, smtpInput.CompanyId!.Value,
-                            smtpInput.Name, smtpInput.FromEmail ?? "", smtpInput.FromDisplayName ?? "",
-                            smtpInput.Host, smtpInput.Port,
-                            smtpInput.Username ?? "", smtpInput.Password ?? "",
-                            smtpInput.AuthMethod ?? "Normal",
-                            smtpInput.OAuth2ClientId, smtpInput.OAuth2ClientSecret, smtpInput.OAuth2RefreshToken,
-                            smtpInput.UseSsl, smtpInput.IsActive),
-                        cancellationToken);
-                }
-                catch (ArgumentException smtpEx)
-                {
-                    TempData["AdminWarning"] = "Sirket kaydedildi ancak SMTP hatasi: " + smtpEx.Message;
-                    return RedirectToAction(nameof(CompanySettings));
-                }
-            }
-
-            TempData["AdminSuccess"] = "Sirket bilgileri kaydedildi.";
-            return RedirectToAction(nameof(CompanySettings));
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            return View(new CompanyManagementViewModel
-            {
-                Companies = Array.Empty<CompanyDto>(),
-                ListState = new GridListStateViewModel(),
-                Input = input
-            });
-        }
-    }
+    // NOT: CompanySettings GET+POST CompanySettingsController'a tasindi (rapor 2.3 split).
 
     [HttpGet]
     public async Task<IActionResult> Logs(
@@ -752,15 +251,7 @@ public sealed class AdminController : Controller
         return View(viewModel);
     }
 
-    /// <summary>
-    /// Form Tasarım Ayarları — dbo.Forms yönetim ekranı (React bileşeni mount edilir).
-    /// </summary>
-    [HttpGet]
-    public IActionResult FormManagement()
-    {
-        SetActiveMenu("form-management");
-        return View();
-    }
+    // NOT: FormManagement + FormsBoardConfig + DeleteFormJson + FormEdit + BuildFormsBoardConfigAsync/BuildFormWidgets helper FormManagementController'a tasindi (rapor 2.3 split).
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -1572,25 +1063,7 @@ public sealed class AdminController : Controller
         }
     }
 
-    // AJAX (JSON) versiyonu — CompanySettings sayfasindaki "Test Et" butonu bunu cagirir.
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> TestSmtpConnectionJson(
-        [FromBody] TestSmtpConnectionRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (request == null)
-            return Json(new { isSuccess = false, message = "Gecersiz istek." });
-        try
-        {
-            var result = await _adminManagementService.TestSmtpConnectionAsync(request, cancellationToken);
-            return Json(new { isSuccess = result.IsSuccess, message = result.Message });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { isSuccess = false, message = ex.Message });
-        }
-    }
+    // NOT: TestSmtpConnectionJson ConnectivityTestsController'a tasindi (rapor 2.3 split).
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -1750,143 +1223,9 @@ public sealed class AdminController : Controller
         }
     }
 
-    // ── ERP Settings JSON Endpoints ─────────────────────────────────────────
+    // NOT: ERP Settings JSON (Get/Get/Save/Delete/Test) ErpSettingsJsonController'a tasindi (rapor 2.3 split).
 
-    [HttpGet]
-    public async Task<IActionResult> GetErpSettingsJson(string? search, CancellationToken cancellationToken)
-    {
-        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-        var items = snapshot.ErpConnections.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            search = search.Trim().ToLowerInvariant();
-            items = items.Where(x =>
-                (x.Company ?? "").ToLowerInvariant().Contains(search) ||
-                (x.CompanyName ?? "").ToLowerInvariant().Contains(search) ||
-                (x.Business ?? "").ToLowerInvariant().Contains(search));
-        }
-        return Json(items.Select(x => new
-        {
-            x.Id, x.CompanyId, x.CompanyName, x.Provider,
-            x.Company, x.Business, x.Branch, x.Username,
-            passwordMasked = string.IsNullOrWhiteSpace(x.Password) ? "-" : "********",
-            x.IsActive
-        }).ToArray());
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetErpSettingJson(Guid id, CancellationToken cancellationToken)
-    {
-        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-        var item = snapshot.ErpConnections.FirstOrDefault(x => x.Id == id);
-        if (item is null) return Json(new { success = false, message = "Kayit bulunamadi." });
-        return Json(new
-        {
-            item.Id, item.CompanyId, item.CompanyName, item.Provider,
-            item.Company, item.Business, item.Branch, item.Username,
-            item.Password, item.IsActive
-        });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveErpSettingsJson([FromBody] ErpConnectionInput input, CancellationToken cancellationToken)
-    {
-        if (!input.CompanyId.HasValue)
-            return Json(new { success = false, message = "Sirket secimi zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Company))
-            return Json(new { success = false, message = "Sirket alani zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Business))
-            return Json(new { success = false, message = "Isletme alani zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Branch))
-            return Json(new { success = false, message = "Sube alani zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Username))
-            return Json(new { success = false, message = "Kullanici adi zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Password))
-            return Json(new { success = false, message = "Sifre zorunludur." });
-
-        try
-        {
-            await _adminManagementService.SaveErpConnectionSettingsAsync(
-                new SaveErpConnectionSettingsRequest(
-                    input.Id,
-                    input.CompanyId.Value,
-                    input.Company,
-                    input.Business,
-                    input.Branch,
-                    input.Username,
-                    input.Password,
-                    input.IsActive),
-                cancellationToken);
-            return Json(new { success = true, message = "ERP baglanti ayari kaydedildi." });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteErpSettingsJson(Guid id, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _adminManagementService.DeleteErpConnectionAsync(id, cancellationToken);
-            return Json(new { success = true, message = "Silindi." });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> TestErpConnectionJson([FromBody] ErpConnectionInput input, CancellationToken cancellationToken)
-    {
-        if (!input.CompanyId.HasValue || string.IsNullOrWhiteSpace(input.Company) ||
-            string.IsNullOrWhiteSpace(input.Business) || string.IsNullOrWhiteSpace(input.Branch) ||
-            string.IsNullOrWhiteSpace(input.Username) || string.IsNullOrWhiteSpace(input.Password))
-            return Json(new { success = false, message = "SQL testi icin tum zorunlu alanlari doldurunuz." });
-
-        try
-        {
-            var result = await _adminManagementService.TestErpConnectionAsync(
-                new TestErpConnectionRequest(
-                    input.CompanyId.Value,
-                    input.Company,
-                    input.Business,
-                    input.Branch,
-                    input.Username,
-                    input.Password),
-                cancellationToken);
-            return Json(new { success = result.IsSuccess, message = result.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    // ── Departments JSON Endpoints ──────────────────────────────────────────
-
-    [HttpGet]
-    public async Task<IActionResult> GetDepartmentsJson(string? search, int? companyId, CancellationToken cancellationToken)
-    {
-        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-        var items = snapshot.Departments.AsEnumerable();
-        if (companyId.HasValue)
-            items = items.Where(x => x.CompanyId == companyId.Value);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var q = search.Trim().ToLowerInvariant();
-            items = items.Where(x =>
-                (x.Code ?? "").ToLowerInvariant().Contains(q) ||
-                (x.Name ?? "").ToLowerInvariant().Contains(q));
-        }
-        return Json(items.Select(x => new
-        {
-            x.Id, x.CompanyId, x.CompanyName, x.Code, x.Name, x.IsActive
-        }).ToArray());
-    }
+    // NOT: GetDepartmentsJson DepartmentController'a tasindi (GetCompaniesJson burada kaldi).
 
     [HttpGet]
     public async Task<IActionResult> GetCompaniesJson(CancellationToken cancellationToken)
@@ -1899,57 +1238,15 @@ public sealed class AdminController : Controller
             .ToArray());
     }
 
-    [HttpPost]
-    public async Task<IActionResult> SaveDepartmentJson([FromBody] DepartmentCreateInput input, CancellationToken cancellationToken)
-    {
-        if (!input.CompanyId.HasValue)
-            return Json(new { success = false, message = "Sirket secimi zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Code))
-            return Json(new { success = false, message = "Kod zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Name))
-            return Json(new { success = false, message = "Ad zorunludur." });
+    // NOT: SaveDepartmentJson + GetDepartmentJson + UpdateDepartmentJson + DeleteDepartmentJson DepartmentController'a tasindi.
 
-        try
-        {
-            await _adminManagementService.CreateDepartmentAsync(
-                new CreateDepartmentRequest(input.CompanyId.Value, input.Code, input.Name),
-                cancellationToken);
-            return Json(new { success = true, message = "Departman olusturuldu." });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
+    // NOT: ToggleDepartmentJson DepartmentController'a tasindi.
 
-    // ── Project Instructions JSON Endpoints ────────────────────────────────
+    // NOT: GetDepartmentsLookup DepartmentController'a tasindi.
 
-    [HttpGet]
-    public async Task<IActionResult> GetProjectInstructionsJson(CancellationToken cancellationToken)
-    {
-        var filePath = ResolveProjectInstructionsPath();
-        var content = System.IO.File.Exists(filePath)
-            ? await System.IO.File.ReadAllTextAsync(filePath, cancellationToken)
-            : string.Empty;
-        var requestItems = await LoadProjectRequestItemsAsync(cancellationToken);
-        return Json(new
-        {
-            content,
-            completedItems = requestItems
-                .Where(x => x.IsCompleted)
-                .Select(x => new { x.RequestId, x.Category, x.Title, x.UserComment })
-                .ToArray()
-        });
-    }
+    // NOT: DepartmentEdit DepartmentController'a tasindi.
 
-    [HttpPost]
-    public async Task<IActionResult> SaveProjectInstructionsJson([FromBody] ProjectInstructionsJsonInput input, CancellationToken cancellationToken)
-    {
-        var normalizedContent = input.Content ?? string.Empty;
-        var filePath = ResolveProjectInstructionsPath();
-        await System.IO.File.WriteAllTextAsync(filePath, normalizedContent, new UTF8Encoding(false), cancellationToken);
-        return Json(new { success = true, message = "Talimat dosyasi kaydedildi." });
-    }
+    // NOT: GetProjectInstructionsJson + SaveProjectInstructionsJson ProjectInstructionsJsonController'a tasindi (rapor 2.3 split).
 
     [HttpGet]
     public async Task<IActionResult> Departments(
@@ -1959,7 +1256,100 @@ public sealed class AdminController : Controller
     {
         SetActiveMenu("departments");
         var viewModel = await BuildDepartmentViewModelAsync(new DepartmentCreateInput(), page, pageSize, cancellationToken);
-        return View(viewModel);
+        var board = await BuildDepartmentBoardConfigAsync(cancellationToken);
+        return View(new DepartmentManagementViewModel
+        {
+            Departments    = viewModel.Departments,
+            CompanyOptions = viewModel.CompanyOptions,
+            ListState      = viewModel.ListState,
+            Input          = viewModel.Input,
+            BoardConfig    = board,
+        });
+    }
+
+    // NOT: DepartmentsBoardConfig DepartmentController'a tasindi (helper duplicate olarak burada kaldi - geri uyum).
+
+    // C-Grid (SmartBoard) konfigurasyonu — Personel ekraniyla benzer pattern.
+    // Sadece aktif kullanicinin sirketine ait departmanlar listelenir
+    // (sistem genelindeki tum departmanlar gosterilmez — sirket secimi kaldirildi).
+    private async Task<object> BuildDepartmentBoardConfigAsync(CancellationToken cancellationToken)
+    {
+        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+        var currentCompanyId = GetCompanyId();
+        var departments = snapshot.Departments
+            .Where(d => currentCompanyId <= 0 || d.CompanyId == currentCompanyId)
+            .OrderBy(d => d.Name)
+            .ToArray();
+
+        var entities = new List<object>();
+        foreach (var d in departments)
+        {
+            var widgets = new List<object>
+            {
+                new
+                {
+                    id       = "w_active",
+                    type     = "data",
+                    dataType = "text",
+                    label    = "Durum",
+                    value    = d.IsActive ? "Aktif" : "Pasif",
+                    detail   = (string?)null,
+                    color    = d.IsActive ? "emerald" : "slate",
+                },
+            };
+
+            entities.Add(new
+            {
+                id            = d.Id,
+                title         = d.Name,
+                subtitle      = (string?)null,
+                description   = (string?)null,
+                imageUrl      = (string?)null,
+                statusBadge   = (object?)null,
+                widgets,
+                primaryAction = new
+                {
+                    label      = "Duzenle",
+                    icon       = "Edit",
+                    color      = "amber",
+                    url        = $"/Admin/DepartmentEdit?id={d.Id}",
+                    hideButton = true,
+                },
+                secondaryAction = new
+                {
+                    label     = "Sil",
+                    icon      = "Trash2",
+                    apiUrl    = $"/Admin/DeleteDepartmentJson?id={d.Id}",
+                    apiMethod = "POST",
+                    confirm   = $"Bu departmani silmek istediginize emin misiniz? ({d.Name})",
+                },
+            });
+        }
+
+        return new
+        {
+            boardKey          = "admin-departments",
+            title             = "Departman Tanimlamalari",
+            subtitle          = $"{entities.Count} departman",
+            icon              = "Building2",
+            iconColor         = "blue",
+            refreshUrl        = "/Admin/DepartmentsBoardConfig",
+            searchPlaceholder = "Hizli ara... (ad, sirket)",
+            emptyText         = "Henuz departman tanimlanmamis",
+            actions           = new object[]
+            {
+                new
+                {
+                    id      = "new",
+                    label   = "Yeni Departman",
+                    icon    = "Plus",
+                    variant = "primary",
+                    url     = "/Admin/DepartmentEdit",
+                },
+            },
+            masterWidgets = Array.Empty<object>(),
+            entities,
+        };
     }
 
     [HttpPost]
@@ -1981,7 +1371,7 @@ public sealed class AdminController : Controller
         try
         {
             await _adminManagementService.CreateDepartmentAsync(
-                new CreateDepartmentRequest(input.CompanyId!.Value, input.Code, input.Name),
+                new CreateDepartmentRequest(input.CompanyId!.Value, input.Name),
                 cancellationToken);
 
             TempData["AdminSuccess"] = "Departman tanimi olusturuldu.";
@@ -2057,7 +1447,7 @@ public sealed class AdminController : Controller
                     input.FullName,
                     input.Email,
                     input.EmployeeCode,
-                    input.DepartmentId!.Value,
+                    input.DepartmentId,
                     input.SupervisorUserId,
                     role,
                     permissions),
@@ -2663,9 +2053,9 @@ public sealed class AdminController : Controller
         var departmentOptions = snapshot.Departments
             .Where(x => !input.CompanyId.HasValue || x.CompanyId == input.CompanyId.Value)
             .Select(x => new SelectListItem(
-                $"{x.Code} - {x.Name}",
+                x.Name,
                 x.Id.ToString(),
-                input.DepartmentId == x.Id))
+                input.DepartmentId.HasValue && input.DepartmentId.Value == x.Id))
             .ToArray();
 
         var supervisorOptions = new List<SelectListItem>
@@ -3173,629 +2563,31 @@ public sealed class AdminController : Controller
         public List<ProjectInstructionRequestItemInput> Items { get; init; } = [];
     }
 
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> TestCompanyDatabaseConnection(
-        [FromBody] TestCompanyDatabaseConnectionRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(request?.ConnectionString))
-        {
-            return Json(new { success = false, message = "Baglanti dizesi bos birakilamaz." });
-        }
+    // NOT: TestCompanyDatabaseConnection ConnectivityTestsController'a tasindi (rapor 2.3 split).
 
-        try
-        {
-            var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(request.ConnectionString)
-            {
-                ConnectTimeout = 5,
-                Pooling = false
-            };
-            await using var connection = new Microsoft.Data.SqlClient.SqlConnection(builder.ConnectionString);
-            await connection.OpenAsync(cancellationToken);
-            return Json(new { success = true, message = "Baglanti basarili." });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = $"Baglanti kurulamadi: {ex.Message}" });
-        }
-    }
+    // NOT: Locks + LocksBoardConfig + BuildLocksBoardConfig LocksController'a tasindi (rapor 2.3 split).
 
     private void SetActiveMenu(string key)
     {
         ViewData["AdminMenu"] = key;
     }
 
-    // ── Entegrasyon Tanimlari ────────────────────────────────────────────────
+    // ── Entegrasyon API Profilleri ───────────────────────────────────────────
+    // Eski "Entegrasyon Tanimlari" (integration_event_*) ekrani kaldirildi.
+    // Tum entegrasyon islemleri yeni IntegrationsHub / IntegrationWizard
+    // uzerinden yapilir. API profil CRUD endpoint'leri wizard tarafindan
+    // kullanildigi icin korundu.
 
     private int GetCompanyId()
     {
         var raw = User.FindFirstValue("company_id");
         return int.TryParse(raw, out var id) ? id : 0;
     }
+    // NOT: TestRestApiConnectionJson + GetApiProfilesJson + GetIntegrationEndpointCatalogJson + SaveApiProfileJson + DeleteApiProfileJson ApiProfileController'a tasindi (rapor 2.3 split).
 
-    [HttpGet]
-    public async Task<IActionResult> IntegrationEvents(Guid? editId, CancellationToken ct)
-    {
-        SetActiveMenu("integration-events");
-        var companyId = GetCompanyId();
-        var definitions = await _integrationEventService.GetDefinitionsAsync(companyId, ct);
-        var logs = await _integrationEventService.GetRecentLogsAsync(companyId, 50, ct);
-
-        IntegrationEventInput? input = null;
-        if (editId.HasValue)
-        {
-            var def = definitions.FirstOrDefault(d => d.Id == editId.Value);
-            if (def != null)
-            {
-                input = new IntegrationEventInput
-                {
-                    Id = def.Id, Name = def.Name, EventSource = def.EventSource,
-                    EventType = def.EventType, EventDetail = def.EventDetail,
-                    SqlCommand = def.SqlCommand, StopOnError = def.StopOnError,
-                    IsActive = def.IsActive, ExecutionOrder = def.ExecutionOrder
-                };
-            }
-        }
-
-        return View(new IntegrationEventsViewModel
-        {
-            Definitions = definitions,
-            Logs = logs,
-            Input = input ?? new IntegrationEventInput()
-        });
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveIntegrationEvent(IntegrationEventInput input, CancellationToken ct)
-    {
-        if (!ModelState.IsValid)
-        {
-            var companyId2 = GetCompanyId();
-            var defs2 = await _integrationEventService.GetDefinitionsAsync(companyId2, ct);
-            var logs2 = await _integrationEventService.GetRecentLogsAsync(companyId2, 50, ct);
-            return View(nameof(IntegrationEvents), new IntegrationEventsViewModel
-            {
-                Definitions = defs2, Logs = logs2, Input = input
-            });
-        }
-
-        try
-        {
-            await _integrationEventService.SaveDefinitionAsync(GetCompanyId(),
-                new CalibraHub.Application.Contracts.SaveIntegrationEventRequest(
-                    input.Id, input.Name, input.EventSource, input.EventType,
-                    input.EventDetail, input.SqlCommand, input.StopOnError,
-                    input.IsActive, input.ExecutionOrder,
-                    "SqlCommand", null, null, null), ct);
-
-            TempData["Success"] = "Entegrasyon tanimi kaydedildi.";
-            return RedirectToAction(nameof(IntegrationEvents));
-        }
-        catch (InvalidOperationException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var companyId3 = GetCompanyId();
-            var defs3 = await _integrationEventService.GetDefinitionsAsync(companyId3, ct);
-            var logs3 = await _integrationEventService.GetRecentLogsAsync(companyId3, 50, ct);
-            return View(nameof(IntegrationEvents), new IntegrationEventsViewModel
-            {
-                Definitions = defs3, Logs = logs3, Input = input
-            });
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteIntegrationEvent(Guid id, CancellationToken ct)
-    {
-        await _integrationEventService.DeleteDefinitionAsync(id, ct);
-        TempData["Success"] = "Entegrasyon tanimi silindi.";
-        return RedirectToAction(nameof(IntegrationEvents));
-    }
-
-    // ── Integration Events JSON Endpoints ──────────────────────────────────
-
-    [HttpGet]
-    public async Task<IActionResult> GetIntegrationEventsJson(CancellationToken ct)
-    {
-        var companyId = GetCompanyId();
-        var definitions = await _integrationEventService.GetDefinitionsAsync(companyId, ct);
-        var logs = await _integrationEventService.GetRecentLogsAsync(companyId, 50, ct);
-        return Json(new
-        {
-            definitions = definitions.Select(d => new
-            {
-                d.Id, d.Name, d.EventSource, d.EventType, d.EventDetail,
-                d.SqlCommand, d.StopOnError, d.IsActive, d.ExecutionOrder,
-                d.ActionType, d.ProcedureName, d.ParametersJson, d.ApiConfigJson
-            }).ToArray(),
-            logs = logs.Select(l => new
-            {
-                executedAt = l.ExecutedAt.ToString("dd.MM HH:mm:ss"),
-                l.EventSource, l.EventType, l.Success, l.DurationMs,
-                l.ActionType, l.ResponseBody,
-                errorMessage = l.ErrorMessage ?? "-"
-            }).ToArray()
-        });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveIntegrationEventJson([FromBody] IntegrationEventInput input, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(input.Name))
-            return Json(new { success = false, message = "Tanim adi zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.EventSource))
-            return Json(new { success = false, message = "Kaynak zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.EventType))
-            return Json(new { success = false, message = "Event tipi zorunludur." });
-        if (input.ActionType == "SqlProcedure" && string.IsNullOrWhiteSpace(input.ProcedureName))
-            return Json(new { success = false, message = "Prosedur adi zorunludur." });
-        if (input.ActionType == "RestApi" && string.IsNullOrWhiteSpace(input.ApiConfigJson))
-            return Json(new { success = false, message = "REST API konfigurasyonu zorunludur." });
-
-        try
-        {
-            await _integrationEventService.SaveDefinitionAsync(GetCompanyId(),
-                new CalibraHub.Application.Contracts.SaveIntegrationEventRequest(
-                    input.Id, input.Name, input.EventSource, input.EventType,
-                    input.EventDetail, input.SqlCommand, input.StopOnError,
-                    input.IsActive, input.ExecutionOrder,
-                    input.ActionType ?? "SqlCommand", input.ProcedureName, input.ParametersJson, input.ApiConfigJson), ct);
-            return Json(new { success = true, message = "Entegrasyon tanimi kaydedildi." });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteIntegrationEventJson(Guid id, CancellationToken ct)
-    {
-        try
-        {
-            await _integrationEventService.DeleteDefinitionAsync(id, ct);
-            return Json(new { success = true, message = "Silindi." });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public IActionResult TestRestApiConnectionJson([FromBody] TestRestApiInput input)
-    {
-        // TODO: implement REST API connection test
-        return Json(new { success = false, message = "Baglanti testi henuz desteklenmiyor. Konfigurasyonu kaydedip entegrasyon tetiklenerek test edilebilir." });
-    }
-
-    // ── Integration API Profile Endpoints ─────────────────────────────────────
-
-    [HttpGet]
-    public async Task<IActionResult> GetApiProfilesJson(CancellationToken ct)
-    {
-        try
-        {
-            var companyId = GetCompanyId();
-            var profiles = await _integrationEventService.GetApiProfilesAsync(companyId, ct);
-            Console.WriteLine($"[GetApiProfilesJson] companyId={companyId}, count={profiles.Count}");
-            foreach (var p in profiles)
-                Console.WriteLine($"[GetApiProfilesJson]   id={p.Id}, name={p.Name}, companyId={p.CompanyId}");
-            return Json(profiles.Select(p => new
-            {
-                id = p.Id, name = p.Name, authType = p.AuthType,
-                baseUrl = p.BaseUrl, authConfigJson = p.AuthConfigJson, isActive = p.IsActive
-            }).ToArray());
-        }
-        catch (Exception ex)
-        {
-            return Json(new { error = true, message = ex.Message });
-        }
-    }
-
-    [HttpGet]
-    public IActionResult GetIntegrationEndpointCatalogJson(string vendor = "Netsis")
-    {
-        IReadOnlyList<CalibraHub.Application.Services.IntegrationEndpointEntry> entries =
-            vendor.Equals("Netsis", StringComparison.OrdinalIgnoreCase)
-                ? CalibraHub.Application.Services.IntegrationEndpointCatalog.Netsis
-                : Array.Empty<CalibraHub.Application.Services.IntegrationEndpointEntry>();
-        return Json(entries.Select(e => new
-        {
-            path = e.Path,
-            method = e.Method,
-            title = e.Title,
-            description = e.Description,
-            bodyTemplate = e.BodyTemplate
-        }).ToArray());
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveApiProfileJson([FromBody] ApiProfileInput input, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(input.Name))
-            return Json(new { success = false, message = "Profil adi zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.BaseUrl))
-            return Json(new { success = false, message = "Base URL zorunludur." });
-        try
-        {
-            await _integrationEventService.SaveApiProfileAsync(GetCompanyId(),
-                new CalibraHub.Application.Contracts.SaveIntegrationApiProfileRequest(
-                    input.Id, input.Name, input.AuthType ?? "None", input.BaseUrl,
-                    input.AuthConfigJson, input.IsActive), ct);
-            return Json(new { success = true, message = "Profil kaydedildi." });
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[SaveApiProfileJson ERROR] {ex.GetType().Name}: {ex.Message}");
-            Console.Error.WriteLine($"[SaveApiProfileJson STACK] {ex.StackTrace}");
-            if (ex.InnerException != null)
-                Console.Error.WriteLine($"[SaveApiProfileJson INNER] {ex.InnerException.Message}\n{ex.InnerException.StackTrace}");
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteApiProfileJson(Guid id, CancellationToken ct)
-    {
-        try
-        {
-            await _integrationEventService.DeleteApiProfileAsync(id, ct);
-            return Json(new { success = true, message = "Silindi." });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    // ── Admin Users JSON Endpoints ─────────────────────────────────────────
-
-    [HttpGet]
-    public async Task<IActionResult> GetAdminUsersJson(string? search, int? companyId, CancellationToken cancellationToken)
-    {
-        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-        var items = snapshot.Users.AsEnumerable();
-        if (companyId.HasValue)
-            items = items.Where(x => x.CompanyId == companyId.Value);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var q = search.Trim().ToLowerInvariant();
-            items = items.Where(x =>
-                (x.FullName ?? "").ToLowerInvariant().Contains(q) ||
-                (x.Email ?? "").ToLowerInvariant().Contains(q) ||
-                (x.EmployeeCode ?? "").ToLowerInvariant().Contains(q));
-        }
-        return Json(items.Select(x => new
-        {
-            x.Id, x.CompanyId, x.CompanyName, x.FullName, x.Email, x.EmployeeCode,
-            x.DepartmentName, supervisorName = x.SupervisorName ?? "-",
-            x.Role, permissions = string.Join(", ", x.Permissions),
-            x.IsActive,
-            grafanaRole = x.GrafanaRole // "Viewer"/"Editor"/"Admin"/null
-        }).ToArray());
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetUsersFormDataJson(int? companyId, CancellationToken cancellationToken)
-    {
-        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
-
-        var companies = snapshot.Companies
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Name)
-            .Select(x => new { id = x.Id.ToString(), name = x.Name })
-            .ToArray();
-
-        var resolvedCompanyId = companyId ?? (companies.Length > 0 ? int.Parse(companies[0].id) : (int?)null);
-
-        var departments = snapshot.Departments
-            .Where(x => !resolvedCompanyId.HasValue || x.CompanyId == resolvedCompanyId.Value)
-            .Select(x => new { id = x.Id.ToString(), name = $"{x.Code} - {x.Name}" })
-            .ToArray();
-
-        var supervisors = snapshot.Users
-            .Where(x => !resolvedCompanyId.HasValue || x.CompanyId == resolvedCompanyId.Value)
-            .Select(x => new { id = x.Id.ToString(), name = x.FullName })
-            .ToArray();
-
-        var roles = UserAuthorizationCatalog.Roles
-            .Select(r => new { value = r.ToString(), label = UserAuthorizationCatalog.GetRoleLabel(r) })
-            .ToArray();
-
-        var permissions = UserAuthorizationCatalog.Permissions
-            .Select(p => new { value = p.ToString(), label = UserAuthorizationCatalog.GetPermissionLabel(p) })
-            .ToArray();
-
-        return Json(new { companies, departments, supervisors, roles, permissions });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveAdminUserJson([FromBody] UserCreateInput input, CancellationToken cancellationToken)
-    {
-        if (!input.CompanyId.HasValue)
-            return Json(new { success = false, message = "Sirket secimi zorunludur." });
-        if (!input.DepartmentId.HasValue)
-            return Json(new { success = false, message = "Departman secimi zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.FullName))
-            return Json(new { success = false, message = "Ad Soyad zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Email))
-            return Json(new { success = false, message = "E-posta zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.EmployeeCode))
-            return Json(new { success = false, message = "Sicil kodu zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Role) || !TryParseRole(input.Role, out var role))
-            return Json(new { success = false, message = "Gecerli bir rol seciniz." });
-
-        input.Permissions ??= new List<string>();
-        input.Permissions = input.Permissions.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (!TryParsePermissions(input.Permissions, out var permissions))
-            return Json(new { success = false, message = "Secilen yetkilerden biri gecersiz." });
-
-        // Grafana yetki seviyesi (opsiyonel) — bos/null ise kullanici Grafana'ya eklenmez.
-        // Gecerli degerler: "Viewer" / "Editor" / "Admin" (case-insensitive).
-        CalibraHub.Domain.Enums.GrafanaRole? grafanaRole = null;
-        if (!string.IsNullOrWhiteSpace(input.GrafanaRole))
-        {
-            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out CalibraHub.Domain.Enums.GrafanaRole parsed))
-                grafanaRole = parsed;
-            else
-                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Editor/Admin)." });
-        }
-
-        try
-        {
-            await _adminManagementService.CreateUserAsync(
-                new CreateUserRequest(
-                    input.CompanyId.Value,
-                    input.FullName,
-                    input.Email,
-                    input.EmployeeCode,
-                    input.DepartmentId.Value,
-                    input.SupervisorUserId,
-                    role,
-                    permissions,
-                    Password: null,
-                    GrafanaRole: grafanaRole),
-                cancellationToken);
-            return Json(new { success = true, message = "Kullanici olusturuldu." });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Mevcut kullanicinin temel bilgilerini ve Grafana rolunu gunceller.
-    /// Frontend "Duzenle" akisindan cagrilir.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> UpdateAdminUserJson(
-        [FromBody] UserUpdateInput input, CancellationToken cancellationToken)
-    {
-        if (input.Id == Guid.Empty)
-            return Json(new { success = false, message = "Kullanici Id zorunlu." });
-        if (!input.CompanyId.HasValue)
-            return Json(new { success = false, message = "Sirket secimi zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.FullName))
-            return Json(new { success = false, message = "Ad Soyad zorunludur." });
-        if (string.IsNullOrWhiteSpace(input.Email))
-            return Json(new { success = false, message = "E-posta zorunludur." });
-
-        // Grafana yetki seviyesi: input.GrafanaRoleProvided = true ise "" → null (Yok),
-        // "Viewer"/"Editor"/"Admin" → enum. Provided = false ise mevcut rol korunur.
-        CalibraHub.Domain.Enums.GrafanaRole? grafanaRole = null;
-        if (input.GrafanaRoleProvided && !string.IsNullOrWhiteSpace(input.GrafanaRole))
-        {
-            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out CalibraHub.Domain.Enums.GrafanaRole parsed))
-                grafanaRole = parsed;
-            else
-                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Editor/Admin/bos)." });
-        }
-
-        try
-        {
-            await _adminManagementService.UpdateUserAsync(
-                new UpdateUserRequest(
-                    input.Id,
-                    input.CompanyId.Value,
-                    input.FullName,
-                    input.Email,
-                    Password: null,
-                    SetGrafanaRole: input.GrafanaRoleProvided,
-                    GrafanaRole: grafanaRole),
-                cancellationToken);
-            return Json(new { success = true, message = "Kullanici guncellendi." });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    // ── Appearance JSON endpoints ─────────────────────────────────────────────
-
-    [HttpGet]
-    public async Task<IActionResult> GetAppearanceFormDataJson(CancellationToken ct)
-    {
-        var currentUserId = GetCurrentUserId();
-        var preference = await _uiConfigurationService.GetUserPreferenceAsync(currentUserId, ct);
-        var languages = _uiConfigurationService.GetSupportedLanguages()
-            .Select(x => new { x.Code, x.DisplayName }).ToArray();
-        var themes = _uiConfigurationService.GetSupportedThemes()
-            .Select(x => new { x.Code, x.DisplayName }).ToArray();
-        var forms = _uiConfigurationService.GetSupportedForms()
-            .Select(x => new { x.FormKey, x.DisplayName }).ToArray();
-        return Json(new
-        {
-            languages, themes, forms,
-            currentLanguage = preference.LanguageCode,
-            currentTheme = preference.ThemeCode
-        });
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetFormLabelsJson(string formKey, string languageCode, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(formKey) || string.IsNullOrWhiteSpace(languageCode))
-            return Json(Array.Empty<object>());
-        var entries = await _uiConfigurationService.GetLabelEditorEntriesAsync(formKey, languageCode, ct);
-        return Json(entries.Select(x => new
-        {
-            x.LabelKey, x.DefaultText, x.CurrentText, overrideText = x.OverrideText ?? string.Empty
-        }).ToArray());
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveFormLabelsJson([FromBody] SaveFormLabelsJsonInput input, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(input.FormKey))
-            return Json(new { success = false, message = "Form secilmedi." });
-        try
-        {
-            await _uiConfigurationService.SaveLabelTranslationsAsync(
-                new SaveUiLabelTranslationsRequest(
-                    input.FormKey, input.LanguageCode,
-                    (input.Labels ?? []).Select(x => new SaveUiLabelTranslationEntryRequest(x.Key, x.Text)).ToArray()),
-                ct);
-            return Json(new { success = true, message = "Form etiketleri kaydedildi." });
-        }
-        catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-    }
-
-    // ── IntegratorSettings JSON endpoints ────────────────────────────────────
-
-    [HttpGet]
-    public async Task<IActionResult> GetIntegratorFormDataJson(CancellationToken ct)
-    {
-        var snapshot = await _adminReadService.GetSnapshotAsync(ct);
-        var companies = snapshot.Companies.Where(x => x.IsActive).OrderBy(x => x.Name)
-            .Select(x => new { id = x.Id, name = x.Name });
-        var providers = Enum.GetValues<CalibraHub.Domain.Enums.IntegratorProvider>()
-            .Where(p => p != CalibraHub.Domain.Enums.IntegratorProvider.Unknown)
-            .Select(p => new { value = p.ToString(), label = p.ToString() });
-        var currentCompanyId = GetCompanyId();
-        return Json(new { companies, providers, currentCompanyId });
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetIntegratorsListJson(string? search, int? companyId, CancellationToken ct)
-    {
-        var snapshot = await _adminReadService.GetSnapshotAsync(ct);
-        var q = snapshot.Integrators.AsEnumerable();
-        if (companyId.HasValue) q = q.Where(x => x.CompanyId == companyId.Value);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var s = search.Trim().ToLowerInvariant();
-            q = q.Where(x => (x.Name ?? "").ToLowerInvariant().Contains(s) ||
-                              (x.Username ?? "").ToLowerInvariant().Contains(s));
-        }
-        return Json(q.Select(x => new
-        {
-            x.Id, x.Name, x.CompanyName, x.Provider, x.BaseUrl, x.CompanyTaxNumber,
-            x.Username, hasSecret = !string.IsNullOrWhiteSpace(x.Secret),
-            x.PollingIntervalSeconds, x.MaxRecordsPerPull, x.LogRetentionDays,
-            x.IncludeReceivedDocumentsInPull, x.MarkDownloadedDocumentsAsReceived,
-            x.IncludeIssuedEInvoicesInPull, x.IncludeIssuedEArchivesInPull, x.IncludeIssuedEDispatchesInPull,
-            x.IsActive
-        }).ToArray());
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetIntegratorJson(int id, CancellationToken ct)
-    {
-        var snapshot = await _adminReadService.GetSnapshotAsync(ct);
-        var x = snapshot.Integrators.FirstOrDefault(i => i.Id == id);
-        if (x is null) return Json(null);
-        return Json(new
-        {
-            x.Id, x.CompanyId, provider = x.Provider.ToString(), x.Name, x.BaseUrl, x.CompanyTaxNumber,
-            x.Username, x.Secret, x.PollingIntervalSeconds, x.MaxRecordsPerPull, x.LogRetentionDays,
-            x.IncludeReceivedDocumentsInPull, x.MarkDownloadedDocumentsAsReceived,
-            x.IncludeIssuedEInvoicesInPull, x.IncludeIssuedEArchivesInPull, x.IncludeIssuedEDispatchesInPull,
-            x.IsActive, x.ScheduleEnabled, x.AppStr, x.Source, x.AppVersion,
-            x.TimeoutSeconds, x.LookbackDays
-        });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveIntegratorSettingsJson([FromBody] IntegratorSettingsJsonInput input, CancellationToken ct)
-    {
-        if (!TryParseIntegratorProvider(input.Provider, out var provider))
-            return Json(new { success = false, message = "Gecerli bir saglayici seciniz." });
-        var companyId = GetCompanyId();
-        if (companyId == 0)
-            return Json(new { success = false, message = "Sirket kimlik bilgisi alinamadi." });
-        try
-        {
-            var savedId = await _adminManagementService.SaveIntegratorSettingsAsync(
-                new SaveIntegratorSettingsRequest(
-                    null, companyId, provider, input.Name, input.BaseUrl,
-                    input.CompanyTaxNumber, input.Username, input.Secret,
-                    input.PollingIntervalSeconds, input.MaxRecordsPerPull, input.LogRetentionDays,
-                    input.IncludeReceivedDocumentsInPull, input.MarkDownloadedDocumentsAsReceived,
-                    input.IncludeIssuedEInvoicesInPull, input.IncludeIssuedEArchivesInPull,
-                    input.IncludeIssuedEDispatchesInPull, input.IsActive, input.ScheduleEnabled, input.AppStr, input.Source, input.AppVersion,
-                    input.TimeoutSeconds, input.LookbackDays),
-                ct);
-            return Json(new { success = true, message = "Entegrator ayari kaydedildi.", id = savedId });
-        }
-        catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-        catch (Exception ex) { return Json(new { success = false, message = "Kayit hatasi: " + ex.Message }); }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteIntegratorSettingsJson(int id, CancellationToken ct)
-    {
-        try
-        {
-            await _adminManagementService.DeleteIntegratorSettingsAsync(id, ct);
-            return Json(new { success = true, message = "Entegrator ayari silindi." });
-        }
-        catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> TestIntegratorConnectionJson([FromBody] IntegratorSettingsJsonInput input, CancellationToken ct)
-    {
-        if (!TryParseIntegratorProvider(input.Provider, out var provider))
-            return Json(new { success = false, message = "Gecerli bir saglayici seciniz." });
-        var companyId = GetCompanyId();
-        if (companyId == 0)
-            return Json(new { success = false, message = "Sirket kimlik bilgisi alinamadi." });
-        try
-        {
-            var result = await _adminManagementService.TestIntegratorConnectionAsync(
-                new TestIntegratorConnectionRequest(
-                    companyId, provider, input.Name, input.BaseUrl,
-                    input.CompanyTaxNumber, input.Username, input.Secret,
-                    input.PollingIntervalSeconds, input.MaxRecordsPerPull, input.LogRetentionDays,
-                    input.IncludeReceivedDocumentsInPull, input.MarkDownloadedDocumentsAsReceived,
-                    input.IncludeIssuedEInvoicesInPull, input.IncludeIssuedEArchivesInPull,
-                    input.IncludeIssuedEDispatchesInPull, input.AppStr, input.Source, input.AppVersion,
-                    input.TimeoutSeconds, input.LookbackDays),
-                ct);
-            return Json(new { success = result.IsSuccess, message = result.Message });
-        }
-        catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-        catch (Exception ex) { return Json(new { success = false, message = "Baglanti hatasi: " + ex.Message }); }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> PullIntegratorDataJson(CancellationToken ct)
-    {
-        try
-        {
-            var result = await _documentImportService.ImportFromActiveIntegratorsAsync(ct);
-            var msg = $"Veri cekme tamamlandi. Yeni kayit: {result.ImportedCount}, atlanan: {result.SkippedCount}.";
-            if (result.Notes.Count > 0) msg += " " + string.Join(" ", result.Notes.Take(2));
-            return Json(new { success = true, message = msg });
-        }
-        catch (Exception ex) { return Json(new { success = false, message = $"Veri cekme islemi basarisiz: {ex.Message}" }); }
-    }
+    // NOT: GetAdminUsersJson/GetUsersFormDataJson/SaveAdminUserJson/UpdateAdminUserJson → AdminUserJsonController
+    // NOT: GetAppearanceFormDataJson/GetFormLabelsJson/SaveFormLabelsJson → AppearanceLabelsController
+    // NOT: GetIntegratorFormDataJson/GetIntegratorsListJson/GetIntegratorJson/SaveIntegratorSettingsJson/DeleteIntegratorSettingsJson/TestIntegratorConnectionJson/PullIntegratorDataJson → IntegratorSettingsJsonController (rapor 2.3 split)
 }
 
 public sealed class TestRestApiInput
@@ -3803,19 +2595,6 @@ public sealed class TestRestApiInput
     public string? ApiConfigJson { get; set; }
 }
 
-public sealed class ScheduledTaskSaveRequest
-{
-    public int     Id                  { get; set; }
-    public string  Name                { get; set; } = string.Empty;
-    public string? Description         { get; set; }
-    public int     TaskType            { get; set; }
-    public string? ParametersJson      { get; set; }
-    public int     ScheduleType        { get; set; }
-    public string? ScheduleExpression  { get; set; }
-    public string? ScheduleDescription { get; set; }
-    public bool    IsEnabled           { get; set; } = true;
-    public int?    PrerequisiteTaskId  { get; set; }
-}
 
 public sealed class IntegratorSettingsJsonInput
 {
@@ -3865,4 +2644,5 @@ public sealed class ApiProfileInput
     public string? BaseUrl { get; set; }
     public string? AuthConfigJson { get; set; }
     public bool IsActive { get; set; } = true;
+    public string? ProviderCode { get; set; }
 }

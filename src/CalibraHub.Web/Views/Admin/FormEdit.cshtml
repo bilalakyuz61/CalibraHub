@@ -1,0 +1,485 @@
+@model CalibraHub.Web.Models.Admin.FormEditViewModel
+@{
+    var isNew = Model.Id == null;
+    ViewData["Title"] = isNew ? "Yeni Form" : $"Form: {Model.FormName ?? Model.FormCode}";
+    ViewData["BodyClass"] = "page-form-edit";
+}
+
+@section Styles {
+<style>
+    .fe-root {
+        --fe-bg:      #f1f5f9;
+        --fe-surface: #ffffff;
+        --fe-border:  #e2e8f0;
+        --fe-text:    #0f172a;
+        --fe-muted:   #64748b;
+        --fe-accent:  #6366f1;
+        display: flex; align-items: flex-start; justify-content: center;
+        min-height: 100vh; padding: 32px 16px;
+        background: var(--fe-bg);
+        overflow-y: auto;
+    }
+    body.page-form-edit, body.page-form-edit html {
+        overflow: auto !important; height: auto !important; min-height: 100vh;
+    }
+    body.app-theme-dark .fe-root {
+        --fe-bg:      #080c17;
+        --fe-surface: #0d1323;
+        --fe-border:  rgba(255,255,255,.09);
+        --fe-text:    #e2e8f0;
+        --fe-muted:   #94a3b8;
+    }
+
+    .fe-card {
+        width: 100%; max-width: 600px;
+        background: var(--fe-surface); border: 1px solid var(--fe-border);
+        border-radius: 14px; padding: 0 28px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+
+    .fe-header {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        position: sticky; top: 0; z-index: 20;
+        background: var(--fe-surface);
+        margin: 0 -28px 18px; padding: 12px 20px;
+        border-bottom: 1px solid var(--fe-border);
+        border-radius: 14px 14px 0 0;
+    }
+    .fe-header h1 { font-size: 15px; font-weight: 700; margin: 0; color: var(--fe-text); }
+    .fe-back {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 8px;
+        border: 1px solid var(--fe-border); background: none;
+        color: var(--fe-muted); font-size: 12px; cursor: pointer;
+        text-decoration: none; transition: background .12s;
+    }
+    .fe-back:hover { background: var(--fe-bg); color: var(--fe-text); }
+    .fe-spacer { flex: 1; }
+
+    .fe-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .fe-label { font-size: 12px; font-weight: 600; color: var(--fe-muted); }
+    .fe-input, .fe-select {
+        padding: 9px 12px; border-radius: 8px;
+        border: 1px solid var(--fe-border);
+        background: var(--fe-bg); color: var(--fe-text);
+        font-size: 14px; outline: none; width: 100%; box-sizing: border-box;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    .fe-input:focus, .fe-select:focus {
+        border-color: var(--fe-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+    }
+    .fe-input.is-invalid, .fe-select.is-invalid {
+        border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important;
+    }
+    .fe-input--mono { font-family: monospace; letter-spacing: .03em; }
+    .fe-input:disabled, .fe-select:disabled { opacity: .65; cursor: not-allowed; }
+    .fe-hint { font-size: 11px; color: var(--fe-muted); }
+    body.app-theme-dark .fe-select { color-scheme: dark; }
+    body.app-theme-dark .fe-select > * { background-color: #0d1323; color: #e2e8f0; }
+
+    .fe-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .fe-switch-row { display: flex; align-items: center; gap: 10px; }
+    .fe-switch { position: relative; width: 42px; height: 24px; display: inline-block; flex-shrink: 0; }
+    .fe-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .fe-switch-track {
+        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
+        background: #e2e8f0; transition: background .2s;
+    }
+    .fe-switch input:checked + .fe-switch-track { background: #10b981; }
+    body.app-theme-dark .fe-switch-track { background: rgba(255,255,255,.12); }
+    body.app-theme-dark .fe-switch input:checked + .fe-switch-track { background: #059669; }
+    .fe-switch-track::before {
+        content: ''; position: absolute; height: 18px; width: 18px;
+        left: 3px; top: 3px; border-radius: 50%;
+        background: #fff; transition: transform .2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .fe-switch input:checked + .fe-switch-track::before { transform: translateX(18px); }
+    .fe-switch-label { font-size: 13px; font-weight: 600; color: var(--fe-muted); }
+
+    .fe-section-sep {
+        margin: 18px -28px 18px; padding: 0 20px;
+        border-top: 1px solid var(--fe-border);
+        font-size: 11px; font-weight: 600; color: var(--fe-muted);
+        display: flex; align-items: center; gap: 8px;
+        padding-top: 16px;
+    }
+
+    .fe-btn {
+        padding: 7px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer; transition: all .12s;
+    }
+    .fe-btn--primary { background: var(--fe-accent); color: #fff; border-color: #4f46e5; }
+    .fe-btn--primary:hover { filter: brightness(1.1); }
+    .fe-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
+    .fe-btn--ghost { background: none; border-color: var(--fe-border); color: var(--fe-text); }
+    .fe-btn--ghost:hover { background: var(--fe-bg); }
+    .fe-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
+    body.app-theme-dark .fe-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
+    .fe-btn--danger:hover { background: rgba(239,68,68,.08); }
+    .fe-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
+
+    .fe-err {
+        margin: 10px 0; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+        background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
+        display: none;
+    }
+    body.app-theme-dark .fe-err { color: #f87171; }
+
+    .fe-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.48); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .fe-modal {
+        background: var(--fe-surface); border: 1px solid var(--fe-border);
+        border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw;
+        display: flex; flex-direction: column; gap: 14px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.35);
+    }
+    .fe-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+    .fe-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--fe-text); }
+    .fe-modal-msg { font-size: 13px; color: var(--fe-muted); text-align: center; line-height: 1.55; }
+    .fe-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+    .fe-modal-cancel {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: 1px solid var(--fe-border); background: var(--fe-surface);
+        color: var(--fe-text); cursor: pointer; transition: background .12s;
+    }
+    .fe-modal-cancel:hover { background: var(--fe-bg); }
+    .fe-modal-del {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: none; background: #ef4444; color: #fff; cursor: pointer; transition: filter .12s;
+    }
+    .fe-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
+    .fe-modal-del:disabled { opacity: .5; cursor: not-allowed; }
+
+    .fe-spinner {
+        display: inline-block; width: 13px; height: 13px; border: 2px solid currentColor;
+        border-top-color: transparent; border-radius: 50%;
+        animation: fe-spin .7s linear infinite; vertical-align: middle; margin-right: 4px;
+    }
+    @@keyframes fe-spin { to { transform: rotate(360deg); } }
+</style>
+}
+
+<div class="fe-root">
+  <div class="fe-card">
+    <div class="fe-header">
+      <a class="fe-back" href="/Admin/FormManagement">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <h1>@(isNew ? "Yeni Form" : "Formu Düzenle")</h1>
+      <span class="fe-spacer"></span>
+      <button class="fe-btn fe-btn--primary" id="fe-save">Kaydet</button>
+      <a class="fe-btn fe-btn--ghost" href="/Admin/FormManagement">İptal</a>
+      @if (!isNew)
+      {
+        <button class="fe-btn fe-btn--danger" id="fe-delete">Sil</button>
+      }
+    </div>
+
+    <input type="hidden" id="fe-id"       value="@(Model.Id?.ToString() ?? "")" />
+    <input type="hidden" id="fe-origcode" value="@(Model.FormCode ?? "")" />
+
+    <div class="fe-row2">
+      <div class="fe-field">
+        <label class="fe-label" for="fe-code">Form Kodu *</label>
+        <input id="fe-code" class="fe-input fe-input--mono" maxlength="60"
+               value="@(Model.FormCode ?? "")"
+               placeholder="örn. SALES_QUOTE"
+               @(isNew ? "" : "readonly") />
+        <span class="fe-hint">Sadece A-Z ve _ karakterleri</span>
+      </div>
+      <div class="fe-field">
+        <label class="fe-label" for="fe-name">Form Adı *</label>
+        <input id="fe-name" class="fe-input" maxlength="200"
+               value="@(Model.FormName ?? "")"
+               placeholder="örn. Satış Teklifi" />
+      </div>
+    </div>
+
+    <div class="fe-row2">
+      <div class="fe-field">
+        <label class="fe-label" for="fe-module">Modül</label>
+        <input id="fe-module" class="fe-input" maxlength="100"
+               value="@(Model.Module ?? "")" placeholder="örn. Satış" />
+      </div>
+      <div class="fe-field">
+        <label class="fe-label" for="fe-submodule">Alt Modül</label>
+        <input id="fe-submodule" class="fe-input" maxlength="100"
+               value="@(Model.SubModule ?? "")" placeholder="örn. Teklifler" />
+      </div>
+    </div>
+
+    <div class="fe-row2">
+      <div class="fe-field">
+        <label class="fe-label" for="fe-sort">Sıralama</label>
+        <input id="fe-sort" class="fe-input" type="number" min="0" value="@Model.SortOrder" />
+      </div>
+      <div class="fe-field">
+        <label class="fe-label">Durum</label>
+        <div class="fe-switch-row">
+          <label class="fe-switch">
+            <input type="checkbox" id="fe-active" @(Model.IsActive ? "checked" : "") />
+            <span class="fe-switch-track"></span>
+          </label>
+          <span class="fe-switch-label" id="fe-active-label">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="fe-section-sep">Fiziksel Tablo Bağlantısı</div>
+
+    <div class="fe-field">
+      <label class="fe-label" for="fe-table">Fiziksel Tablo (BaseTable)</label>
+      <select id="fe-table" class="fe-select">
+        <option value="">— Tablo yükleniyor… —</option>
+      </select>
+      <span class="fe-hint">Flat view oluşturmak için fiziksel tablo seçin (opsiyonel)</span>
+    </div>
+
+    <div class="fe-field" id="fe-key-wrap" style="display:none;">
+      <label class="fe-label" for="fe-reckey">Kayıt Anahtarı (BaseRecordKey)</label>
+      <select id="fe-reckey" class="fe-select">
+        <option value="">— PK kolonu seçin —</option>
+      </select>
+      <span class="fe-hint">WidgetTra.RecordId ile eşleşen PK kolonu</span>
+    </div>
+
+    <div id="fe-err" class="fe-err"></div>
+    <div style="height: 18px;"></div>
+  </div>
+</div>
+
+@if (!isNew)
+{
+  <div id="fe-modal" class="fe-modal-backdrop" style="display:none;" onclick="feCloseModal()">
+    <div class="fe-modal" onclick="event.stopPropagation()">
+      <div class="fe-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="fe-modal-title">Formu Sil</div>
+      <div class="fe-modal-msg" id="fe-modal-msg"></div>
+      <div class="fe-modal-actions">
+        <button class="fe-modal-cancel" onclick="feCloseModal()">Vazgeç</button>
+        <button class="fe-modal-del" id="fe-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
+@section Scripts {
+<script>
+(function () {
+    var idVal      = document.getElementById('fe-id')?.value       || '';
+    var origCode   = document.getElementById('fe-origcode')?.value || '';
+    var initTable  = '@(Model.BaseTable ?? "")';
+    var initRecKey = '@(Model.BaseRecordKey ?? "")';
+
+    function setErr(msg) {
+        var el = document.getElementById('fe-err');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; }
+        else     { el.style.display = 'none'; }
+    }
+    function shake(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('is-invalid'); void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
+    }
+
+    // ── FormCode filtresi (yeni kayıtta) ──────────────────────────────
+    var codeEl = document.getElementById('fe-code');
+    if (codeEl && !codeEl.readOnly) {
+        codeEl.addEventListener('input', function () {
+            var cur = codeEl.selectionStart;
+            var raw = codeEl.value.toUpperCase().replace(/[^A-Z_]/g, '');
+            if (codeEl.value !== raw) { codeEl.value = raw; codeEl.setSelectionRange(cur, cur); }
+        });
+    }
+
+    // ── Aktif label sync ──────────────────────────────────────────────
+    var activeEl = document.getElementById('fe-active');
+    var activeLabel = document.getElementById('fe-active-label');
+    if (activeEl && activeLabel) {
+        activeEl.addEventListener('change', function () {
+            activeLabel.textContent = activeEl.checked ? 'Aktif' : 'Pasif';
+        });
+    }
+
+    // ── BaseTable dropdown ────────────────────────────────────────────
+    function loadTables() {
+        fetch('/api/database/tables', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (data) {
+                var sel = document.getElementById('fe-table');
+                if (!sel) return;
+                var rows = Array.isArray(data) ? data : [];
+                sel.innerHTML = '<option value="">— Tablo seçin (opsiyonel) —</option>' +
+                    rows.map(function (t) {
+                        var v = typeof t === 'string' ? t : (t.fullName || t.tableName || t);
+                        return '<option value="' + v + '">' + v + '</option>';
+                    }).join('');
+                if (initTable) {
+                    sel.value = initTable;
+                    loadColumns(initTable, initRecKey);
+                }
+            })
+            .catch(function () {
+                var sel = document.getElementById('fe-table');
+                if (sel) sel.innerHTML = '<option value="">— Tablo listesi yüklenemedi —</option>';
+            });
+    }
+
+    function loadColumns(tableName, preselect) {
+        var keyWrap = document.getElementById('fe-key-wrap');
+        var keySel  = document.getElementById('fe-reckey');
+        if (!tableName) {
+            if (keyWrap) keyWrap.style.display = 'none';
+            if (keySel)  keySel.innerHTML = '<option value="">— PK kolonu seçin —</option>';
+            return;
+        }
+        if (keySel)  keySel.innerHTML = '<option value="">— Yükleniyor… —</option>';
+        if (keyWrap) keyWrap.style.display = '';
+
+        var parts = tableName.split('.');
+        var name  = parts[parts.length - 1];
+        fetch('/api/database/tables/' + encodeURIComponent(name) + '/columns', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (cols) {
+                var columns = Array.isArray(cols) ? cols : [];
+                if (!keySel) return;
+                keySel.innerHTML = '<option value="">— PK kolonu seçin —</option>' +
+                    columns.map(function (c) {
+                        var v = typeof c === 'string' ? c : (c.columnName || c.name || c);
+                        return '<option value="' + v + '">' + v + '</option>';
+                    }).join('');
+                if (preselect) keySel.value = preselect;
+            })
+            .catch(function () {
+                if (keySel) keySel.innerHTML = '<option value="">— Kolon listesi okunamadı —</option>';
+            });
+    }
+
+    var tableEl = document.getElementById('fe-table');
+    if (tableEl) {
+        tableEl.addEventListener('change', function () {
+            loadColumns(tableEl.value, '');
+        });
+    }
+
+    loadTables();
+
+    // ── Save ──────────────────────────────────────────────────────────
+    var saveBtn = document.getElementById('fe-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            setErr('');
+            var code = (document.getElementById('fe-code').value || '').trim();
+            var name = (document.getElementById('fe-name').value || '').trim();
+            var invalid = false;
+            if (!code) { shake('fe-code'); invalid = true; }
+            if (!name) { shake('fe-name'); invalid = true; }
+            if (invalid) { return; }
+
+            var tableVal  = (document.getElementById('fe-table')?.value  || '').trim() || null;
+            var reckeyVal = (document.getElementById('fe-reckey')?.value || '').trim() || null;
+            if (!tableVal) reckeyVal = null;
+
+            var payload = {
+                id:            idVal ? parseInt(idVal) : 0,
+                formCode:      code,
+                formName:      name,
+                module:        (document.getElementById('fe-module')?.value  || '').trim() || null,
+                subModule:     (document.getElementById('fe-submodule')?.value || '').trim() || null,
+                sortOrder:     parseInt(document.getElementById('fe-sort')?.value) || 0,
+                isActive:      document.getElementById('fe-active')?.checked ?? true,
+                baseTable:     tableVal,
+                baseRecordKey: reckeyVal,
+            };
+
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="fe-spinner"></span>Kaydediliyor…';
+
+            var isEdit  = Boolean(idVal);
+            var url     = isEdit ? '/api/forms/' + idVal : '/api/forms';
+            var method  = isEdit ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method:  method,
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify(payload),
+                credentials: 'same-origin',
+            })
+            .then(function (r) { return r.json().then(function(d){ return { ok: r.ok, data: d }; }); })
+            .then(function (res) {
+                if (res.ok) {
+                    window.location.href = '/Admin/FormManagement';
+                } else {
+                    setErr((res.data && (res.data.message || res.data.title)) || 'Kayıt başarısız.');
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = 'Kaydet';
+                }
+            })
+            .catch(function () {
+                setErr('Bağlantı hatası.');
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = 'Kaydet';
+            });
+        });
+    }
+
+    // ── Delete modal ──────────────────────────────────────────────────
+    var deleteBtn = document.getElementById('fe-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            var name   = (document.getElementById('fe-name')?.value || origCode);
+            var msgEl  = document.getElementById('fe-modal-msg');
+            if (msgEl) msgEl.innerHTML = '<strong>' + name + '</strong> formunu silmek istediğinize emin misiniz?';
+            var modal  = document.getElementById('fe-modal');
+            if (modal) { modal.style.display = 'flex'; }
+            var delBtn = document.getElementById('fe-modal-del');
+            if (delBtn) delBtn.focus();
+        });
+
+        var modalDel = document.getElementById('fe-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled    = true;
+                modalDel.textContent = 'Siliniyor…';
+                fetch('/Admin/DeleteFormJson?id=' + idVal, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.success) {
+                        window.location.href = '/Admin/FormManagement';
+                    } else {
+                        feCloseModal();
+                        setErr((d && d.message) || 'Silinemedi.');
+                    }
+                })
+                .catch(function () { feCloseModal(); setErr('Bağlantı hatası.'); });
+            });
+        }
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') feCloseModal();
+    });
+})();
+
+function feCloseModal() {
+    var m = document.getElementById('fe-modal');
+    if (m) m.style.display = 'none';
+    var btn = document.getElementById('fe-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
+</script>
+}

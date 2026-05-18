@@ -353,6 +353,21 @@
         });
     });
 
+    const brandLogo = document.querySelector(".brand-logo");
+    if (brandLogo) {
+        brandLogo.addEventListener("click", (e) => {
+            if (root.classList.contains(collapseClass)) {
+                e.preventDefault();
+                applyCollapseState(false);
+                try {
+                    window.localStorage.setItem(collapseStorageKey, "0");
+                } catch {
+                    // Ignore storage failures in restricted environments.
+                }
+            }
+        });
+    }
+
     const normalize = (value) => value.toLocaleLowerCase("tr-TR").trim();
     const favoritesChangedEventName = "calibra:favorites-changed";
 

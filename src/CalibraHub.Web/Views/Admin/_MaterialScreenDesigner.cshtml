@@ -63,7 +63,9 @@
 <section class="integrator-dashboard__group">
     <article class="integrator-card integrator-card--form">
         <h3 class="material-form-card__title">Alan Tanimi</h3>
-        <form method="post" asp-action="SaveMaterialCardDynamicField" class="integrator-form" id="materialFieldDesignerForm">
+        <form method="post" asp-action="SaveMaterialCardDynamicField" class="integrator-form" id="materialFieldDesignerForm"
+              data-collaboration-record-type="ADMIN_MATERIAL_FIELD"
+              data-collaboration-record-title="Alan Tanımı">
             @Html.AntiForgeryToken()
             <input asp-for="FieldInput.FieldId" type="hidden" />
             <input asp-for="FieldInput.IsSystem" type="hidden" />

@@ -1,0 +1,476 @@
+@model CalibraHub.Domain.Entities.DocumentNumberRule
+@{
+    ViewData["Title"] = Model.Id == 0 ? "Yeni Numara Kuralı" : "Numara Kuralı Düzenle";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var docTypes     = (IEnumerable<dynamic>)(ViewBag.DocumentTypes ?? Array.Empty<object>());
+    var resetPeriods = (IEnumerable<dynamic>)(ViewBag.ResetPeriods   ?? Array.Empty<object>());
+}
+
+@section Styles {
+<style>
+    /* ── Tema değişkenleri (DocLayoutRule pattern'i ile uyumlu) ───────────── */
+    .dnr-wrap {
+        --dnr-bg:        var(--app-bg, #f1f5f9);
+        --dnr-surface:   var(--app-surface, #ffffff);
+        --dnr-surface-2: var(--app-surface-alt, #fafbfc);
+        --dnr-border:    var(--app-border, #e5e7eb);
+        --dnr-text:      var(--app-text, #0f172a);
+        --dnr-muted:     var(--app-text-muted, #64748b);
+        --dnr-accent:    #6366f1;
+        --dnr-accent-soft: rgba(99,102,241,0.12);
+        --dnr-success:   #10b981;
+
+        display: flex; justify-content: center; align-items: flex-start;
+        padding: 24px 16px; min-height: 100%;
+        background: var(--dnr-bg);
+        color: var(--dnr-text);
+    }
+    /* Dark theme tonlari */
+    body.app-theme-dark .dnr-wrap,
+    body.app-theme-midnight .dnr-wrap {
+        --dnr-bg:        #0b1020;
+        --dnr-surface:   #111a2e;
+        --dnr-surface-2: #0d1424;
+        --dnr-border:    rgba(255,255,255,0.10);
+        --dnr-text:      #e2e8f0;
+        --dnr-muted:     #94a3b8;
+    }
+
+    /* Shell — yatay 3 kolon: tabs | form | preview */
+    .dnr-shell {
+        display: grid;
+        grid-template-columns: 200px 1fr 320px;
+        max-width: 1280px; width: 100%;
+        background: var(--dnr-surface);
+        border: 1px solid var(--dnr-border);
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+
+    /* Header — tum kolonlar uzerinde, baslik + Aktif switch */
+    .dnr-header {
+        grid-column: 1 / -1;
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 16px 22px;
+        border-bottom: 1px solid var(--dnr-border);
+        background: var(--dnr-surface-2);
+    }
+    .dnr-header h2 { margin: 0 0 2px; font-size: 16px; font-weight: 700; color: var(--dnr-text); }
+    .dnr-header p  { margin: 0; color: var(--dnr-muted); font-size: 12px; }
+
+    .dnr-switch {
+        display: flex; align-items: center; gap: 10px;
+        font-size: 12.5px; color: var(--dnr-text); font-weight: 500;
+    }
+    .dnr-switch input[type=checkbox] { display: none; }
+    .dnr-switch .track {
+        position: relative; width: 38px; height: 22px; border-radius: 11px;
+        background: var(--dnr-border); transition: background 0.18s; cursor: pointer;
+    }
+    .dnr-switch .thumb {
+        position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+        border-radius: 50%; background: #fff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.18); transition: transform 0.18s;
+    }
+    .dnr-switch input:checked + .track { background: var(--dnr-success); }
+    .dnr-switch input:checked + .track .thumb { transform: translateX(16px); }
+
+    /* Sol — tab listesi */
+    .dnr-tabs {
+        padding: 14px 8px;
+        background: var(--dnr-surface-2);
+        border-right: 1px solid var(--dnr-border);
+        display: flex; flex-direction: column; gap: 2px;
+        min-height: 540px;
+    }
+    .dnr-tab {
+        display: flex; align-items: center; gap: 10px;
+        padding: 9px 14px; border: none; background: transparent;
+        border-radius: 6px; cursor: pointer; text-align: left;
+        font-size: 13px; font-weight: 500; color: var(--dnr-text);
+        border-left: 3px solid transparent; transition: background .12s, color .12s;
+    }
+    .dnr-tab:hover { background: var(--dnr-accent-soft); }
+    .dnr-tab.active {
+        background: var(--dnr-accent-soft); color: var(--dnr-accent); font-weight: 700;
+        border-left-color: var(--dnr-accent);
+    }
+    .dnr-tab .ic { width: 14px; font-size: 13px; opacity: 0.85; }
+
+    /* Orta — form panel */
+    .dnr-form {
+        padding: 20px 24px; min-width: 0;
+        background: var(--dnr-surface);
+        display: flex; flex-direction: column;
+    }
+    .dnr-content { display: none; }
+    .dnr-content.active { display: block; }
+
+    /* Field rows */
+    .dnr-row {
+        display: grid; grid-template-columns: 160px 1fr; gap: 12px 14px;
+        align-items: center; margin-bottom: 12px;
+    }
+    .dnr-row label { font-size: 12.5px; color: var(--dnr-text); font-weight: 500; }
+    .dnr-row .hint { color: var(--dnr-muted); font-weight: 400; font-size: 10.5px; margin-left: 4px; }
+    .dnr-row input[type=text], .dnr-row input[type=number],
+    .dnr-row input[type=date], .dnr-row select {
+        width: 100%; padding: 8px 10px;
+        border: 1px solid var(--dnr-border);
+        border-radius: 6px; font-size: 13px; box-sizing: border-box;
+        background: var(--dnr-surface-2); color: var(--dnr-text);
+        font-family: inherit; transition: border-color .12s, box-shadow .12s;
+    }
+    .dnr-row input::placeholder, .dnr-row select option:first-child {
+        color: var(--dnr-muted); opacity: 0.7;
+    }
+    .dnr-row input:focus, .dnr-row select:focus {
+        outline: none; border-color: var(--dnr-accent);
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.18);
+    }
+    .dnr-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .dnr-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    /* Info kart */
+    .dnr-info {
+        padding: 10px 12px; border-radius: 6px; font-size: 11.5px; line-height: 1.55;
+        background: var(--dnr-accent-soft);
+        border-left: 3px solid var(--dnr-accent);
+        color: var(--dnr-text); margin-bottom: 14px;
+    }
+    .dnr-info strong { color: var(--dnr-accent); }
+
+    /* Sağ — Canli önizleme paneli */
+    .dnr-preview {
+        padding: 18px 18px;
+        background: var(--dnr-surface-2);
+        border-left: 1px solid var(--dnr-border);
+        min-height: 540px;
+        display: flex; flex-direction: column; gap: 14px;
+    }
+    .dnr-preview-title {
+        font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em;
+        text-transform: uppercase; color: var(--dnr-muted);
+    }
+    .dnr-preview-value {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 22px; font-weight: 700;
+        color: var(--dnr-success);
+        word-break: break-all; min-height: 30px;
+    }
+    body.app-theme-dark .dnr-preview-value,
+    body.app-theme-midnight .dnr-preview-value { color: #34d399; }
+    .dnr-preview-meta { font-size: 11px; color: var(--dnr-muted); }
+    .dnr-preview-parts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .dnr-prev-chip {
+        padding: 3px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 600;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .dnr-prev-chip.prefix  { background: rgba(99,102,241,0.18);  color: #6366f1; }
+    .dnr-prev-chip.year    { background: rgba(245,158,11,0.18);  color: #d97706; }
+    .dnr-prev-chip.month   { background: rgba(245,158,11,0.14);  color: #b45309; }
+    .dnr-prev-chip.counter { background: rgba(16,185,129,0.18);  color: #059669; }
+    body.app-theme-dark .dnr-prev-chip.prefix,
+    body.app-theme-midnight .dnr-prev-chip.prefix  { color: #a5b4fc; }
+    body.app-theme-dark .dnr-prev-chip.year,
+    body.app-theme-dark .dnr-prev-chip.month,
+    body.app-theme-midnight .dnr-prev-chip.year,
+    body.app-theme-midnight .dnr-prev-chip.month { color: #fbbf24; }
+    body.app-theme-dark .dnr-prev-chip.counter,
+    body.app-theme-midnight .dnr-prev-chip.counter { color: #34d399; }
+
+    .dnr-preview-hint {
+        margin-top: auto;
+        padding: 10px 12px; border-radius: 6px;
+        background: var(--dnr-accent-soft);
+        font-size: 11px; line-height: 1.5; color: var(--dnr-text);
+        border-left: 3px solid var(--dnr-accent);
+    }
+    .dnr-preview-hint strong { color: var(--dnr-accent); }
+
+    /* Footer */
+    .dnr-footer {
+        grid-column: 1 / -1;
+        padding: 12px 22px; display: flex; gap: 8px; justify-content: flex-end;
+        border-top: 1px solid var(--dnr-border);
+        background: var(--dnr-surface-2);
+    }
+    .dnr-btn {
+        padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 600;
+        cursor: pointer; border: 1px solid transparent; text-decoration: none;
+        display: inline-flex; align-items: center; gap: 6px; transition: all .12s;
+    }
+    .dnr-btn.primary {
+        background: linear-gradient(135deg, #7c3aed, #6366f1); color: #fff;
+    }
+    .dnr-btn.primary:hover { filter: brightness(1.1); color: #fff; }
+    .dnr-btn.secondary {
+        background: var(--dnr-surface); color: var(--dnr-text);
+        border-color: var(--dnr-border);
+    }
+    .dnr-btn.secondary:hover { background: var(--dnr-surface-2); }
+
+    /* Responsive — 1100px alti: preview alta katlanir */
+    @@media (max-width: 1100px) {
+        .dnr-shell { grid-template-columns: 180px 1fr; }
+        .dnr-preview { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--dnr-border); min-height: auto; }
+    }
+</style>
+}
+
+<div class="dnr-wrap">
+    <div class="dnr-shell">
+        <!-- Header — tüm kolonların üstünde -->
+        <div class="dnr-header">
+            <div>
+                <h2>@ViewData["Title"]</h2>
+                <p>Belge numarası türetme kuralı — koşula bağlı (belge tipi, cari, kullanıcı, tarih) format + sayaç.</p>
+            </div>
+            <label class="dnr-switch">
+                <input type="checkbox" id="dnrIsActive" @(Model.IsActive ? "checked" : "") />
+                <span class="track"><span class="thumb"></span></span>
+                <span>Aktif</span>
+            </label>
+        </div>
+
+        <!-- Sol — tab listesi -->
+        <nav class="dnr-tabs" role="tablist" aria-label="Numara Kuralı Bölümleri">
+            <button type="button" class="dnr-tab active" data-tab="general" role="tab">
+                <span class="ic">⚙</span><span>Genel</span>
+            </button>
+            <button type="button" class="dnr-tab" data-tab="format" role="tab">
+                <span class="ic">#</span><span>Format</span>
+            </button>
+            <button type="button" class="dnr-tab" data-tab="filters" role="tab">
+                <span class="ic">★</span><span>Filtreler</span>
+            </button>
+        </nav>
+
+        <!-- Orta — form -->
+        <form id="dnrForm" class="dnr-form" onsubmit="return false;">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Id" value="@Model.Id" />
+            <input type="hidden" name="IsActive" id="dnrActiveHidden" value="@(Model.IsActive.ToString().ToLower())" />
+
+            <!-- ─── Genel ─── -->
+            <div class="dnr-content active" data-panel="general">
+                <div class="dnr-info">
+                    <strong>Kural adı + belge tipi</strong> zorunlu. Aktif/Pasif durumu üst sağda kontrol edilir.
+                </div>
+                <div class="dnr-row">
+                    <label>Kural Adı *</label>
+                    <input type="text" name="Name" value="@Model.Name"
+                           placeholder="Örn: Standart Sipariş 2026" required />
+                </div>
+                <div class="dnr-row">
+                    <label>Belge Tipi *</label>
+                    <select name="DocumentTypeId" required>
+                        <option value="0">— Seçin —</option>
+                        @foreach (var t in docTypes)
+                        {
+                            <option value="@t.id" selected="@(Model.DocumentTypeId == (int)t.id ? "selected" : null)">@t.name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <!-- ─── Format ─── -->
+            <div class="dnr-content" data-panel="format">
+                <div class="dnr-info">
+                    <strong>Format:</strong> Prefix + Yıl + Ay + Sayaç (zero-padded). Toplam uzunluk
+                    override'ı varsa sayaç haneleri büyür. Live örnek sağdaki <em>Canlı Önizleme</em>'de.
+                </div>
+                <div class="dnr-row">
+                    <label>Önek (Prefix)</label>
+                    <input type="text" name="Prefix" id="dnrPrefix" value="@Model.Prefix"
+                           placeholder="örn. TKL- · SLS · STK" maxlength="20" />
+                </div>
+                <div class="dnr-row">
+                    <label>Yıl Formatı</label>
+                    <select name="YearFormat" id="dnrYearFormat">
+                        <option value=""    selected="@(string.IsNullOrEmpty(Model.YearFormat) ? "selected" : null)">Yok</option>
+                        <option value="yy"   selected="@(Model.YearFormat == "yy" ? "selected" : null)">yy (2 hane: 26)</option>
+                        <option value="yyyy" selected="@(Model.YearFormat == "yyyy" ? "selected" : null)">yyyy (4 hane: 2026)</option>
+                    </select>
+                </div>
+                <div class="dnr-row">
+                    <label>Ay Formatı</label>
+                    <select name="MonthFormat" id="dnrMonthFormat">
+                        <option value=""   selected="@(string.IsNullOrEmpty(Model.MonthFormat) ? "selected" : null)">Yok</option>
+                        <option value="MM" selected="@(Model.MonthFormat == "MM" ? "selected" : null)">MM (2 hane: 05)</option>
+                    </select>
+                </div>
+                <div class="dnr-row">
+                    <label>Sayaç <span class="hint">Hane / Başlangıç / Toplam (ops.)</span></label>
+                    <div class="dnr-grid-3">
+                        <input type="number" name="CounterLength" id="dnrCounterLength"
+                               value="@Model.CounterLength" min="1" max="20" placeholder="6" />
+                        <input type="number" name="CounterStart" id="dnrCounterStart"
+                               value="@Model.CounterStart" min="1" placeholder="1" />
+                        <input type="number" name="TotalLength" id="dnrTotalLength"
+                               value="@(Model.TotalLength?.ToString() ?? "")" min="0" placeholder="Toplam (ops.)" />
+                    </div>
+                </div>
+                <div class="dnr-row">
+                    <label>Sıfırlama</label>
+                    <select name="ResetPeriod" id="dnrResetPeriod">
+                        @foreach (var p in resetPeriods)
+                        {
+                            <option value="@p.value" selected="@((int)Model.ResetPeriod == (int)p.value ? "selected" : null)">@p.label</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <!-- ─── Filtreler ─── -->
+            <div class="dnr-content" data-panel="filters">
+                <div class="dnr-info">
+                    <strong>Ağırlıklı eşleşme:</strong> Doldurulan filtre kuralın ağırlığını artırır, çakışmada o kazanır.
+                    Tüm filtreler boşsa <em>tüm cariler / kullanıcılar / tarihler</em> için geçerli (wildcard).
+                    <br /><strong>Ağırlık:</strong> Cari=16 · Grup=8 · Kullanıcı=4 · Şube=2 · Tarih=1.
+                </div>
+                <div class="dnr-row">
+                    <label>Cari ID <span class="hint">·16</span></label>
+                    <input type="number" name="ContactId" value="@Model.ContactId"
+                           placeholder="Boş = tüm cariler" />
+                </div>
+                <div class="dnr-row">
+                    <label>Cari Grubu ID <span class="hint">·8</span></label>
+                    <input type="number" name="ContactGroupId" value="@Model.ContactGroupId"
+                           placeholder="Boş = tüm gruplar" />
+                </div>
+                <div class="dnr-row">
+                    <label>Kullanıcı ID <span class="hint">·4</span></label>
+                    <input type="number" name="UserId" value="@Model.UserId"
+                           placeholder="Boş = tüm kullanıcılar" />
+                </div>
+                <div class="dnr-row">
+                    <label>Şube ID <span class="hint">·2</span></label>
+                    <input type="number" name="BranchId" value="@Model.BranchId"
+                           placeholder="Boş = tüm şubeler" />
+                </div>
+                <div class="dnr-row">
+                    <label>Tarih Aralığı <span class="hint">·1</span></label>
+                    <div class="dnr-grid-2">
+                        <input type="date" name="FromDate" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" />
+                        <input type="date" name="ToDate"   value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <!-- Sağ — Canlı önizleme (her zaman görünür) -->
+        <aside class="dnr-preview" aria-label="Canlı önizleme">
+            <div class="dnr-preview-title">Canlı Önizleme</div>
+            <div class="dnr-preview-value" id="dnrPreviewValue">—</div>
+            <div class="dnr-preview-meta" id="dnrPreviewMeta">—</div>
+            <div class="dnr-preview-parts" id="dnrPreviewParts"></div>
+            <div class="dnr-preview-hint">
+                <strong>Ağırlık sistemi:</strong> Kuralın daha spesifik filtresi varsa ağırlığı yüksek, çakışmada o kazanır.<br/>
+                <strong>Format:</strong> Prefix + Yıl + Ay + Sayaç (zero-padded). Toplam uzunluk override'ı varsa sayaç haneleri büyür.<br/>
+                <strong>Sıfırlama:</strong> Yıllık seçince her 1 Ocak sayaç 1'den başlar (DocumentNumberCounter satırı dönem başına ayrı tutulur).
+            </div>
+        </aside>
+
+        <!-- Footer — tüm kolonların altında -->
+        <div class="dnr-footer">
+            <a href="/DocumentNumberRule" class="dnr-btn secondary">İptal</a>
+            <button type="button" class="dnr-btn primary" id="dnrSaveBtn">
+                @(Model.Id == 0 ? "Oluştur" : "Kaydet")
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    // ── Tab geçişleri ──
+    document.querySelectorAll('.dnr-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var key = btn.getAttribute('data-tab');
+            document.querySelectorAll('.dnr-tab').forEach(function(b) { b.classList.toggle('active', b === btn); });
+            document.querySelectorAll('.dnr-content').forEach(function(c) {
+                c.classList.toggle('active', c.getAttribute('data-panel') === key);
+            });
+        });
+    });
+
+    // ── Aktif switch (header) ↔ hidden input sync ──
+    var activeChk = document.getElementById('dnrIsActive');
+    var activeHidden = document.getElementById('dnrActiveHidden');
+    activeChk.addEventListener('change', function() {
+        activeHidden.value = activeChk.checked ? 'true' : 'false';
+    });
+
+    // ── Live preview (sağ panel) ──
+    var previewValue = document.getElementById('dnrPreviewValue');
+    var previewMeta  = document.getElementById('dnrPreviewMeta');
+    var previewParts = document.getElementById('dnrPreviewParts');
+
+    function updatePreview() {
+        var prefix        = document.getElementById('dnrPrefix').value || '';
+        var yearFmt       = document.getElementById('dnrYearFormat').value || '';
+        var monthFmt      = document.getElementById('dnrMonthFormat').value || '';
+        var counterLength = parseInt(document.getElementById('dnrCounterLength').value) || 6;
+        var counterStart  = parseInt(document.getElementById('dnrCounterStart').value) || 1;
+        var totalLength   = parseInt(document.getElementById('dnrTotalLength').value) || null;
+
+        var url = '/DocumentNumberRule/Preview'
+            + '?prefix='        + encodeURIComponent(prefix)
+            + '&yearFormat='    + encodeURIComponent(yearFmt)
+            + '&monthFormat='   + encodeURIComponent(monthFmt)
+            + '&counterLength=' + counterLength
+            + '&counterStart='  + counterStart;
+        if (totalLength) url += '&totalLength=' + totalLength;
+
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                previewValue.textContent = d.sample || '—';
+                previewMeta.textContent  = 'Toplam ' + d.length + ' karakter';
+                previewParts.innerHTML = '';
+                if (d.parts.prefix)  previewParts.innerHTML += '<span class="dnr-prev-chip prefix">'  + d.parts.prefix  + '</span>';
+                if (d.parts.year)    previewParts.innerHTML += '<span class="dnr-prev-chip year">'    + d.parts.year    + '</span>';
+                if (d.parts.month)   previewParts.innerHTML += '<span class="dnr-prev-chip month">'   + d.parts.month   + '</span>';
+                if (d.parts.counter) previewParts.innerHTML += '<span class="dnr-prev-chip counter">' + d.parts.counter + '</span>';
+            })
+            .catch(function() {});
+    }
+
+    ['dnrPrefix','dnrYearFormat','dnrMonthFormat','dnrCounterLength','dnrCounterStart','dnrTotalLength']
+        .forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener('input', updatePreview);
+        });
+    updatePreview();   // initial
+
+    // ── Save ──
+    var saveBtn = document.getElementById('dnrSaveBtn');
+    var form = document.getElementById('dnrForm');
+    saveBtn.addEventListener('click', async function() {
+        saveBtn.disabled = true;
+        var fd = new FormData(form);
+        try {
+            var r = await fetch('/DocumentNumberRule/SaveJson', {
+                method: 'POST', credentials: 'same-origin', body: fd,
+            });
+            var d = await r.json();
+            if (d.ok) {
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Kaydedildi', 'ok');
+                setTimeout(function() { window.location.href = '/DocumentNumberRule'; }, 600);
+            } else {
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(d.error || 'Hata', 'err');
+                else alert(d.error || 'Hata');
+                saveBtn.disabled = false;
+            }
+        } catch (e) {
+            alert('Sunucu hatası: ' + e.message);
+            saveBtn.disabled = false;
+        }
+    });
+})();
+</script>
+}

@@ -86,3 +86,49 @@ export function getCompanyUsers() {
       return r.json()
     })
 }
+
+export function getAttachments(noteId) {
+  return fetch(BASE + '/GetAttachments?noteId=' + encodeURIComponent(noteId), { credentials: 'same-origin' })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+}
+
+export function uploadAttachment(noteId, file, description) {
+  var fd = new FormData()
+  fd.append('noteId', noteId)
+  fd.append('file', file)
+  if (description) fd.append('description', description)
+  return fetch(BASE + '/UploadAttachment', { method: 'POST', credentials: 'same-origin', body: fd })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+}
+
+export function deleteAttachment(id) {
+  return fetch(BASE + '/DeleteAttachment?id=' + encodeURIComponent(id), { method: 'POST', credentials: 'same-origin' })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+}
+
+export function getTrashed() {
+  return fetch(BASE + '/TrashedJson', { credentials: 'same-origin' })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+}
+
+export function restoreNote(id) {
+  return postJson(BASE + '/RestoreNoteJson', { id: id })
+}
+
+export function permanentDeleteNote(id) {
+  return postJson(BASE + '/PermanentDeleteNoteJson', { id: id })
+}
+
+export function importEvernote(file, folderId) {
+  var fd = new FormData()
+  fd.append('file', file)
+  if (folderId) fd.append('folderId', folderId)
+  return fetch(BASE + '/ImportEvernote', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: fd,
+  }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status)
+    return r.json()
+  })
+}

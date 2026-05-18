@@ -20,6 +20,8 @@ public interface IAdminManagementService
         TestSmtpConnectionRequest request,
         CancellationToken cancellationToken);
     Task CreateDepartmentAsync(CreateDepartmentRequest request, CancellationToken cancellationToken);
+    Task UpdateDepartmentAsync(UpdateDepartmentRequest request, CancellationToken cancellationToken);
+    Task DeleteDepartmentAsync(int id, CancellationToken cancellationToken);
     Task CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken);
     Task UpdateUserAsync(UpdateUserRequest request, CancellationToken cancellationToken);
 }

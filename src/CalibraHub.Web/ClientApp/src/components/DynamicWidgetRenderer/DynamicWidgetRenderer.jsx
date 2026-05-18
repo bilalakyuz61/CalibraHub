@@ -45,6 +45,37 @@ function saveEnabledIds(formCode, ids) {
   try { localStorage.setItem(dwrStorageKey(formCode), JSON.stringify(ids)) } catch (e) { /* ignore */ }
 }
 
+/**
+ * resolveStaticDefault — admin'in tanimladigi sabit varsayilan ifadesini
+ * runtime degerine cevirir.
+ *
+ * Desteklenen ifadeler:
+ *   - TODAY()      → bugunun tarihi   (YYYY-MM-DD)
+ *   - YESTERDAY()  → dunun tarihi
+ *   - TOMORROW()   → yarinin tarihi
+ *   - Diger her sey literal degere donusur (string, sayi, vb.)
+ *
+ * dataType parametresi: ileride 'numeric' icin parse, 'boolean' icin true/false
+ * normalize gibi tip-bazli cozumler eklemek icin kullanilabilir.
+ */
+function resolveStaticDefault(expr, dataType) {
+  if (expr == null) return ''
+  var v = String(expr).trim()
+  if (v === '') return ''
+  // Function call'lari case-insensitive yakala, "()" opsiyonel.
+  var upper = v.toUpperCase().replace(/\(\)$/, '')
+  if (upper === 'TODAY')     return formatIsoDate(new Date())
+  if (upper === 'YESTERDAY') return formatIsoDate(new Date(Date.now() - 86400000))
+  if (upper === 'TOMORROW')  return formatIsoDate(new Date(Date.now() + 86400000))
+  return v
+}
+function formatIsoDate(d) {
+  var y = d.getFullYear()
+  var m = String(d.getMonth() + 1).padStart(2, '0')
+  var day = String(d.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + day
+}
+
 var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref) {
   var formCode    = props.formCode
   var initialRecordId = props.recordId || ''
@@ -159,6 +190,9 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           return
         }
         var ws = Array.isArray(data.widgets) ? data.widgets : []
+        // widgetsRef'i useEffect beklemeden hemen senkron tut — Kaydet
+        // anlik basildiginda valid currentWidgets snapshot'i bulsun.
+        widgetsRef.current = ws
         setWidgets(ws)
         // Initial values dict — widgetCode → value (null -> '')
         var dict = {}
@@ -177,8 +211,23 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           }
           var v = w.value
           if (v == null) v = ''
+          // Varsayilan deger (rules.defaultValue) uygulama — sadece BOS alan +
+          // YENI kayit senaryosunda. Mevcut kayit acildiginda DB'den okunan
+          // gercek deger ezilmez. Tarih alanlarinda TODAY()/YESTERDAY()/TOMORROW()
+          // gibi function call'lar runtime'da YYYY-MM-DD'ye cozulur.
+          if (v === '' && w.rules && w.rules.defaultValue) {
+            var kind = (w.rules.defaultValueKind || 'static').toLowerCase()
+            if (kind === 'static') {
+              var resolved = resolveStaticDefault(String(w.rules.defaultValue), dt)
+              console.log('[DWR] default applied', { widgetId: w.widgetId, dataType: dt, raw: w.rules.defaultValue, resolved: resolved })
+              v = resolved
+            }
+            // 'formula' kind icin rule engine zaten dependency-driven olarak
+            // formula degerini hesaplayacak; burada manual cozmuyoruz.
+          }
           dict[w.widgetId] = v
         })
+        console.log('[DWR] initial dict snapshot', JSON.parse(JSON.stringify(dict)))
         // Faz E — embedded grid row modal: initialValues ile override et
         if (initialValues) {
           Object.keys(initialValues).forEach(function (k) {
@@ -195,6 +244,11 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
         ruleGraphRef.current = graph
         if (graph.cycle) {
           setCycleError('Sonsuz dongu: ' + graph.cycle.join(' → '))
+          // valuesRef'i useEffect beklemeden hemen guncel tut — kullanici load
+          // biter bitmez Kaydet'e basabilir; ref senkronizasyonu render+useEffect
+          // sirasini bekleyemez (varsayilan deger validasyon-anında bos gorunmesin).
+          valuesRef.current = dict
+          gridsRef.current  = gDict
           setValues(dict)
           setGrids(gDict)
           setVisibility({})
@@ -203,6 +257,8 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           recordIdRef.current = activeRecordId
         } else if (graph.fatalErrors.length > 0) {
           setCycleError(graph.fatalErrors.join(' | '))
+          valuesRef.current = dict
+          gridsRef.current  = gDict
           setValues(dict)
           setGrids(gDict)
           setVisibility({})
@@ -213,17 +269,24 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
           setCycleError(null)
           if (graph.hasRules) {
             var patch = recomputeAll(graph, dict)
+            valuesRef.current      = patch.values
+            requiredRef.current    = patch.required || {}
+            visibilityRef.current  = patch.visibility
+            disabledRef.current    = patch.disabled
+            errorsRef.current      = patch.errors
             setRequiredMap(patch.required || {})
             setValues(patch.values)
             setVisibility(patch.visibility)
             setDisabledMap(patch.disabled)
             setRuleErrors(patch.errors)
           } else {
+            valuesRef.current = dict
             setValues(dict)
             setVisibility({})
             setDisabledMap({})
             setRuleErrors({})
           }
+          gridsRef.current = gDict
           setGrids(gDict)
           recordIdRef.current = activeRecordId
         }
@@ -330,25 +393,27 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
       var currentGrids   = gridsRef.current
       var currentWidgets = widgetsRef.current
 
-      // Zorunlu alan validasyonu — effective required:
-      //   statik IsRequired (widget formundaki toggle) VEYA
-      //   requiredIf kuralinin runtime'da true ettigi durum.
+      // Zorunlu alan validasyonu — opts.skipValidation=true ise atla (otomatik kayit)
       var currentRequired = requiredRef.current || {}
       var requiredErrors = []    // label listesi (hata mesaji icin)
       var requiredErrorIds = []  // widgetId listesi (gorsel hata icin)
-      currentWidgets.forEach(function (w) {
-        var dt = String(w.dataType || '').toLowerCase()
-        if (dt === 'group' || dt === 'guide-list') return
-        var effReq = w.isRequired || currentRequired[w.widgetId] === true
-        if (!effReq) return
-        var val = currentValues[w.widgetId]
-        var isEmpty = val === null || val === undefined || val === ''
-          || (Array.isArray(val) && val.length === 0)
-        if (isEmpty) {
-          requiredErrors.push(w.label || w.widgetId)
-          requiredErrorIds.push(w.widgetId)
-        }
-      })
+      console.log('[DWR] save() validation start — currentValues:', JSON.parse(JSON.stringify(currentValues)))
+      if (!(opts && opts.skipValidation)) {
+        currentWidgets.forEach(function (w) {
+          var dt = String(w.dataType || '').toLowerCase()
+          if (dt === 'group' || dt === 'guide-list') return
+          var effReq = w.isRequired || currentRequired[w.widgetId] === true
+          if (!effReq) return
+          var val = currentValues[w.widgetId]
+          var isEmpty = val === null || val === undefined || val === ''
+            || (Array.isArray(val) && val.length === 0)
+          if (effReq) console.log('[DWR] required check', { id: w.widgetId, label: w.label, val: val, isEmpty: isEmpty })
+          if (isEmpty) {
+            requiredErrors.push(w.label || w.widgetId)
+            requiredErrorIds.push(w.widgetId)
+          }
+        })
+      }
       if (requiredErrors.length > 0) {
         // Shake animasyonunu yeniden tetiklemek icin: bir frame icin saveAttemptErrors'i
         // bosalt → React class'i kaldirir → animation reset olur → sonraki tick'te

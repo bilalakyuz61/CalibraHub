@@ -1,0 +1,81 @@
+@{
+    ViewData["Title"] = "Çalıştırma Logu";
+    ViewData["FormCode"] = "INTEGRATION_RUNS";
+    ViewData["BodyClass"] = "page-integrations";
+}
+
+@*
+   Runs route artik IntegrationsHub'i Calistirma Logu tab'i acik gosterir.
+   Eski/external linkler kirilmasin diye route ayakta — sadece ayni hub render edilir.
+*@
+
+@section Styles {
+<style>
+    .page-integrations .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-integrations .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-integrations .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-integrations .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+    #integrationsHub { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
+</style>
+}
+
+<div id="integrationsHub"></div>
+
+@section Scripts {
+<script>
+(function() {
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var el = document.getElementById('integrationsHub');
+
+    function showError(msg) { if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;">' + msg + '</div>'; }
+
+    function loadCss() {
+        if (document.querySelector('link[data-integrations-hub]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-integrations-hub', '1');
+        document.head.appendChild(link);
+    }
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-integrations-hub]');
+        if (prev) { prev.addEventListener('load', cb); return; }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-integrations-hub', '1');
+        script.onload = function() { setTimeout(cb, 0); };
+        script.onerror = function() { showError('React bundle yüklenemedi.'); };
+        document.head.appendChild(script);
+    }
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountIntegrationsHub) {
+            showError('mountIntegrationsHub fonksiyonu bulunamadı.'); return;
+        }
+        window.CalibraHub.mountIntegrationsHub(el, {
+            apiBase: '/Integrations/api',
+            wizardUrlNew: '/Integrations/Wizard',
+            wizardUrlEdit: '/Integrations/Wizard/{id}',
+            initialTab: 'runs',
+        });
+    }
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountIntegrationsHub) doMount();
+    else loadScript(doMount);
+})();
+</script>
+}

@@ -1,133 +1,206 @@
-import React, { useRef, useCallback } from 'react'
-import { Stage, Layer } from 'react-konva'
+﻿import React, { useRef, useState } from 'react'
+import { Stage, Layer, Line } from 'react-konva'
 import KonvaElement from './KonvaElement'
 import { mmToPx, pxToMm } from './DesignerCanvas'
-import { BAND_TYPES } from '../designerReducer'
+import { makeDefaultElement } from '../designerReducer'
 
-export default function BandContainer({ band, dispatch, selectedElementId, selectedBandId, contentWidthMm, dataSources }) {
-  const bandDef = BAND_TYPES.find(b => b.type === band.type)
-  const label = bandDef?.label ?? band.type
-  const heightPx = mmToPx(band.height)
-  const widthPx = mmToPx(contentWidthMm)
-  const isSelected = selectedBandId === band.id
-  const resizingRef = useRef(null)
+// Tint alpha 0.05-0.07 idi → her iki temada da çok soluk kalıyordu (kullanıcı raporu).
+// 0.12'ye yükseltildi: light mode'da hafif renk imzası, dark mode'da görünürlük arttı.
+const BAND_TINT = {
+  PageHeader:        'rgba(99,102,241,0.12)',
+  DocumentHeader:    'rgba(245,158,11,0.12)',
+  TableHeader:       'rgba(16,185,129,0.13)',
+  Detail:            'rgba(139,92,246,0.11)',
+  SubDetailHeader:   'rgba(34,211,238,0.13)',
+  SubDetail:         'rgba(6,182,212,0.12)',
+  SubDetailFooter:   'rgba(14,116,144,0.13)',
+  TotalsBlock:       'rgba(236,72,153,0.12)',
+  SignatureBlock:    'rgba(59,130,246,0.11)',
+  PageFooter:        'rgba(107,114,128,0.12)',
+}
+const BAND_BORDER = {
+  PageHeader:        'rgba(99,102,241,0.55)',
+  DocumentHeader:    'rgba(245,158,11,0.55)',
+  TableHeader:       'rgba(16,185,129,0.55)',
+  Detail:            'rgba(139,92,246,0.50)',
+  SubDetailHeader:   'rgba(34,211,238,0.55)',
+  SubDetail:         'rgba(6,182,212,0.50)',
+  SubDetailFooter:   'rgba(14,116,144,0.55)',
+  TotalsBlock:       'rgba(236,72,153,0.55)',
+  SignatureBlock:    'rgba(59,130,246,0.50)',
+  PageFooter:        'rgba(107,114,128,0.55)',
+}
+const BAND_SOLID = {
+  PageHeader:        '#6366f1',
+  DocumentHeader:    '#f59e0b',
+  TableHeader:       '#10b981',
+  Detail:            '#8b5cf6',
+  SubDetailHeader:   '#22d3ee',
+  SubDetail:         '#06b6d4',
+  SubDetailFooter:   '#0e7490',
+  TotalsBlock:       '#ec4899',
+  SignatureBlock:    '#3b82f6',
+  PageFooter:        '#6b7280',
+}
+const BAND_LABELS = {
+  PageHeader:        'Sayfa Başlığı',
+  DocumentHeader:    'Belge Başlığı',
+  TableHeader:       'Tablo Başlığı',
+  Detail:            'Detay Satırı',
+  SubDetailHeader:   'Alt Detay Başlığı',
+  SubDetail:         'Alt Detay Satırı',
+  SubDetailFooter:   'Alt Detay Altı',
+  TotalsBlock:       'Toplam Bloku',
+  SignatureBlock:    'İmza Bloku',
+  PageFooter:        'Sayfa Altı',
+}
 
-  // Band yüksekliği yeniden boyutlandırma
-  const onResizeStart = useCallback((e) => {
-    e.preventDefault()
-    const startY = e.clientY
-    const startH = band.height
+export default function BandContainer({ band, innerW, zoom, selectedElementId, selectedElementIds, selectedBandId, dispatch, crossBandXTargets = [] }) {
+  const bandUnitH  = mmToPx(band.height)
+  const bandCssH   = bandUnitH * zoom
+  const isSelected = selectedBandId === band.id && !selectedElementId
+  const [resizing, setResizing] = useState(false)
+  const [dragGuides, setDragGuides] = useState(null)   // { x: number|null, y: number|null }
+  const startY = useRef(0)
+  const startH = useRef(0)
 
-    function onMove(ev) {
-      const deltaY = ev.clientY - startY
-      const newH = Math.max(5, startH + pxToMm(deltaY))
-      dispatch({ type: 'RESIZE_BAND', bandId: band.id, height: newH })
+  const handleResizeStart = e => {
+    e.stopPropagation()
+    setResizing(true)
+    startY.current = e.clientY
+    startH.current = band.height
+    const onMove = ev => {
+      const delta = pxToMm((ev.clientY - startY.current) / zoom)
+      dispatch({ type: 'RESIZE_BAND', bandId: band.id, height: Math.max(4, startH.current + delta) })
     }
-    function onUp() {
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
+    const onUp = () => {
+      setResizing(false)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
     }
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', onUp)
-  }, [band.id, band.height, dispatch])
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
 
-  // Toolbox'tan element bırakma
-  const onDropElement = useCallback((e) => {
+  const handleDrop = e => {
     e.preventDefault()
-    const kind = e.dataTransfer?.getData('element-kind')
+    const kind    = e.dataTransfer.getData('element-kind')
+    const rawBind = e.dataTransfer.getData('element-binding')
     if (!kind) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = pxToMm(e.clientX - rect.left)
-    const y = pxToMm(e.clientY - rect.top)
-    dispatch({ type: 'ADD_ELEMENT', bandId: band.id, kind, x, y })
-  }, [band.id, dispatch])
+    const rect     = e.currentTarget.getBoundingClientRect()
+    const stageTop = e.currentTarget.querySelector('canvas')?.getBoundingClientRect().top ?? rect.top
+    const xPx = (e.clientX - rect.left) / zoom
+    const yPx = (e.clientY - stageTop)  / zoom
+    const binding = rawBind ? JSON.parse(rawBind) : null
+    const el = makeDefaultElement(kind, pxToMm(xPx), pxToMm(yPx), binding)
+    dispatch({ type: 'ADD_ELEMENT', bandId: band.id, element: el })
+  }
 
-  const onDragOver = (e) => e.preventDefault()
-
-  const handleBandClick = useCallback((e) => {
-    if (e.target === e.currentTarget)
-      dispatch({ type: 'SELECT_BAND', bandId: band.id })
-  }, [band.id, dispatch])
+  const sorted = [...band.elements].sort((a, b) => a.zIndex - b.zIndex)
+  const multiSet = new Set(selectedElementIds ?? [])
+  const tint   = BAND_TINT[band.type]   ?? 'rgba(99,102,241,0.05)'
+  const bColor = BAND_BORDER[band.type] ?? 'rgba(99,102,241,0.4)'
+  const sColor = BAND_SOLID[band.type]  ?? '#6366f1'
+  const bLabel = BAND_LABELS[band.type] ?? band.type
 
   return (
-    <div
-      className="dd-band"
-      style={{
-        position: 'relative',
-        borderTop: '1px solid',
-        borderTopColor: isSelected ? '#6366f1' : '#ddd',
-        marginBottom: 0,
-      }}
-      onClick={handleBandClick}
-    >
-      {/* Band başlık etiketi */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: isSelected ? '#ede9fe' : '#f5f5f5',
-        borderBottom: '1px solid #e0e0e0',
-        padding: '2px 6px',
-        fontSize: 11,
-        color: '#666',
-        userSelect: 'none',
-        cursor: 'pointer'
-      }}
+    <div style={{ position: 'relative', marginBottom: 0 }}>
+      {/* Bant etiket şeridi (band header strip) */}
+      <div
         onClick={() => dispatch({ type: 'SELECT_BAND', bandId: band.id })}
+        style={{
+          height: 16, display: 'flex', alignItems: 'center',
+          padding: '0 7px', gap: 6, cursor: 'pointer',
+          background: sColor, color: '#fff',
+          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+          textTransform: 'uppercase', lineHeight: 1,
+          borderTop: isSelected ? `2px solid ${sColor}` : 'none',
+          boxShadow: isSelected ? `inset 0 0 0 1px rgba(255,255,255,0.5)` : 'none',
+        }}
       >
-        <span style={{ fontWeight: 600, color: isSelected ? '#6366f1' : '#555' }}>{label}</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {band.dataAlias && (
-            <span style={{ background: '#e0f2fe', color: '#0284c7', borderRadius: 3, padding: '0 4px', fontSize: 10 }}>
-              {band.dataAlias}
-            </span>
-          )}
-          <button
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 12, padding: '0 2px' }}
-            title="Bandı sil"
-            onClick={(e) => { e.stopPropagation(); dispatch({ type: 'REMOVE_BAND', bandId: band.id }) }}
-          >✕</button>
-        </div>
+        <span>{bLabel}</span>
+        {band.dataAlias && (
+          <span style={{
+            fontSize: 9, fontWeight: 700, textTransform: 'none', letterSpacing: 0.2,
+            padding: '1px 5px', borderRadius: 3,
+            background: 'rgba(255,255,255,0.25)', color: '#fff',
+          }}>
+            ⛓ {band.dataAlias}
+          </span>
+        )}
+        <span style={{ marginLeft: 'auto', opacity: 0.7, fontSize: 9, fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
+          {band.height.toFixed(1)} mm
+        </span>
       </div>
 
-      {/* Konva canvas — element katmanı */}
       <div
-        style={{ position: 'relative', height: heightPx, overflow: 'hidden' }}
-        onDrop={onDropElement}
-        onDragOver={onDragOver}
+        onDrop={handleDrop}
+        onDragOver={e => e.preventDefault()}
+        style={{
+          background: isSelected ? 'var(--dd-accent-soft, #f5f3ff)' : tint,
+          borderBottom: `1px dashed ${isSelected ? 'var(--dd-accent, #6366f1)' : bColor}`,
+          outline: isSelected ? `1.5px solid ${sColor}` : 'none',
+          outlineOffset: -1,
+          boxSizing: 'border-box',
+          lineHeight: 0,
+        }}
       >
         <Stage
-          width={widthPx}
-          height={heightPx}
-          onClick={(e) => {
-            if (e.target === e.target.getStage()) dispatch({ type: 'DESELECT' })
-          }}
+          width={innerW * zoom}
+          height={bandCssH}
+          scaleX={zoom}
+          scaleY={zoom}
+          onClick={() => dispatch({ type: 'SELECT_BAND', bandId: band.id })}
         >
           <Layer>
-            {/* z-index sırası: elements dizisindeki sıra = z-index (JSON'da zIndex alanıyla sıralanır) */}
-            {[...band.elements]
-              .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
-              .map(el => (
-                <KonvaElement
-                  key={el.id}
-                  element={el}
-                  bandId={band.id}
-                  isSelected={selectedElementId === el.id}
-                  dispatch={dispatch}
-                />
-              ))}
+            {sorted.map(el => (
+              <KonvaElement
+                key={el.id}
+                el={el}
+                bandId={band.id}
+                isSelected={selectedElementId === el.id}
+                isMultiSelected={multiSet.has(el.id)}
+                dispatch={dispatch}
+                zoom={zoom}
+                bandWidthPx={innerW}
+                bandHeightPx={bandUnitH}
+                siblings={band.elements.filter(o => o.id !== el.id)}
+                extraXTargets={crossBandXTargets}
+                onDragGuide={setDragGuides}
+              />
+            ))}
+            {/* Snap guide çizgileri — sürükleme sırasında hizalama yakalandığında */}
+            {dragGuides?.x != null && (
+              <Line
+                points={[dragGuides.x, 0, dragGuides.x, bandUnitH]}
+                stroke="#ec4899" strokeWidth={1} dash={[3, 3]}
+                strokeScaleEnabled={false}
+                listening={false}
+              />
+            )}
+            {dragGuides?.y != null && (
+              <Line
+                points={[0, dragGuides.y, innerW, dragGuides.y]}
+                stroke="#ec4899" strokeWidth={1} dash={[3, 3]}
+                strokeScaleEnabled={false}
+                listening={false}
+              />
+            )}
           </Layer>
         </Stage>
       </div>
 
-      {/* Band yüksekliği resize tutamacı */}
       <div
+        onPointerDown={handleResizeStart}
         style={{
-          height: 5, background: 'transparent', cursor: 'ns-resize',
-          borderBottom: '2px dashed #ccc',
-          transition: 'border-color 0.15s'
+          position: 'absolute', bottom: -3, left: 0, right: 0, height: 6,
+          cursor: 'ns-resize', zIndex: 10,
+          background: resizing ? 'rgba(99,102,241,0.15)' : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
-        onPointerDown={onResizeStart}
-        title={`Yükseklik: ${band.height.toFixed(1)} mm`}
-      />
+      >
+        <div style={{ width: 32, height: 2, borderRadius: 1, background: resizing ? 'var(--dd-accent, #6366f1)' : 'var(--dd-border, #d1d5db)' }} />
+      </div>
     </div>
   )
 }

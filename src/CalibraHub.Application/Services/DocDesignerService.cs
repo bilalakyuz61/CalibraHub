@@ -1,8 +1,12 @@
 using System.Text.RegularExpressions;
+using CalibraHub.Application.Abstractions.DesignProvider;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
+using CalibraHub.Domain.Enums;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Application.Services;
 
@@ -17,17 +21,23 @@ public sealed partial class DocDesignerService : IDocDesignerService
     private readonly IRptViewRepository _views;
     private readonly IReportQueryExecutor _executor;
     private readonly IDocLayoutRenderer _renderer;
+    private readonly IMemoryCache _cache;
+    private readonly ILogger<DocDesignerService> _logger;
 
     public DocDesignerService(
         IDocLayoutRepository repo,
         IRptViewRepository views,
         IReportQueryExecutor executor,
-        IDocLayoutRenderer renderer)
+        IDocLayoutRenderer renderer,
+        IMemoryCache cache,
+        ILogger<DocDesignerService> logger)
     {
         _repo = repo;
         _views = views;
         _executor = executor;
         _renderer = renderer;
+        _cache = cache;
+        _logger = logger;
     }
 
     public Task<IReadOnlyCollection<DocLayoutSummaryDto>> ListAsync(string? docType, CancellationToken ct)
@@ -46,27 +56,58 @@ public sealed partial class DocDesignerService : IDocDesignerService
     {
         var id = await _repo.UpsertAsync(req, caller.UserId, ct);
         await _repo.ReplaceDataSourcesAsync(id, req.DataSources, ct);
+
+        // IsDefault singleton kuralı: kullanıcı bu tasarımı "Varsayılan" işaretlediyse
+        // aynı DocType'taki DİĞER TÜM tasarımların IsDefault'ı false yapılır.
+        // Aksi halde her save'de var sayılan bayrakları birden fazla layout'a yapışır
+        // ve PrintDispatcher hangisini seçeceğini OrderBy UpdatedAt'a göre kararlar →
+        // kullanıcı editliyor ama print farklı tasarımı kullanıyor (yaygın yanılgı).
+        if (req.IsDefault)
+            await _repo.SetDefaultAsync(id, ct);
+
+        _cache.Remove(DesignProviderCacheKeys.Default(req.DocType));
         return id;
     }
 
-    public Task DeleteAsync(int id, CancellationToken ct)
-        => _repo.SoftDeleteAsync(id, ct);
+    public async Task DeleteAsync(int id, CancellationToken ct)
+    {
+        // Layout silindiğinde hem default fallback hem de bu layout'a referans veren
+        // rule'ların cache'i bayatlamış olabilir. DocType bilgisi gerekli.
+        var existing = await _repo.GetByIdAsync(id, ct);
+        await _repo.SoftDeleteAsync(id, ct);
+
+        if (existing != null)
+        {
+            _cache.Remove(DesignProviderCacheKeys.Default(existing.DocType));
+            _cache.Remove(DesignProviderCacheKeys.Rules(existing.DocType));
+        }
+    }
+
+    public async Task SetDefaultAsync(int id, CancellationToken ct)
+    {
+        var existing = await _repo.GetByIdAsync(id, ct);
+        await _repo.SetDefaultAsync(id, ct);
+
+        // Bu DocType'taki tüm layoutların IsDefault bayrağı güncellendi → fallback cache temizle
+        if (existing != null)
+            _cache.Remove(DesignProviderCacheKeys.Default(existing.DocType));
+    }
 
     public async Task<byte[]> RenderPdfAsync(DocLayoutRunRequest req, CancellationToken ct)
     {
-        var (layout, data) = await LoadLayoutWithDataAsync(req, ct);
-        return _renderer.RenderPdf(layout.LayoutJson, data);
+        var (layout, data, meta) = await LoadLayoutWithDataAsync(req, ct);
+        return _renderer.RenderPdf(layout.LayoutJson, data, meta);
     }
 
     public async Task<string> RenderHtmlPreviewAsync(DocLayoutRunRequest req, CancellationToken ct)
     {
-        var (layout, data) = await LoadLayoutWithDataAsync(req, ct);
-        return _renderer.RenderHtml(layout.LayoutJson, data);
+        var (layout, data, meta) = await LoadLayoutWithDataAsync(req, ct);
+        return _renderer.RenderHtml(layout.LayoutJson, data, meta);
     }
 
     // ── Internals ──────────────────────────────────────────────────────────────
 
-    private async Task<(DocLayout layout, IReadOnlyDictionary<string, ReportRawResult> data)>
+    private async Task<(DocLayout layout, IReadOnlyDictionary<string, ReportRawResult> data, IReadOnlyList<DataSourceMeta> meta)>
         LoadLayoutWithDataAsync(DocLayoutRunRequest req, CancellationToken ct)
     {
         var layout = await _repo.GetByIdAsync(req.LayoutId, ct)
@@ -74,19 +115,69 @@ public sealed partial class DocDesignerService : IDocDesignerService
 
         var sources = await _repo.GetDataSourcesAsync(req.LayoutId, ct);
         var data = new Dictionary<string, ReportRawResult>(StringComparer.OrdinalIgnoreCase);
+        // Renderer master-detail nesting için her kaynağın parent + join kolonunu
+        // bilmeli. UI'dan gelen bu metadata'yı renderer'a iletiyoruz.
+        var meta = sources.Select(s => new DataSourceMeta(s.Alias, s.ParentAlias, s.JoinOn)).ToList();
+
+        // Run isteğindeki DocumentId tüm veri kaynaklarına @DocumentId parametresi olarak
+        // geçirilir. Önizleme (preview) için DocumentId null gelir; bu durumda en son
+        // aktif belgeyi fallback olarak kullan ki kullanıcı boş preview yerine gerçek
+        // veriyle tasarımı görebilsin. Print akışı her zaman gerçek id verir.
+        int? effectiveDocId = req.DocumentId;
+        if (!effectiveDocId.HasValue)
+        {
+            try
+            {
+                var fallback = await _executor.ExecuteAsync(
+                    "SELECT TOP 1 [id] FROM [dbo].[Document] WHERE [IsActive] = 1 ORDER BY [id] DESC",
+                    Array.Empty<ReportSqlParameter>(), ct);
+                if (fallback.Rows.Count > 0 && fallback.Rows[0].Count > 0 && fallback.Rows[0][0] != null)
+                    effectiveDocId = Convert.ToInt32(fallback.Rows[0][0]);
+            }
+            catch { /* fallback bulunamazsa null kalsın, SQL'ler boş döner */ }
+        }
+
+        var globalParams = new List<ReportSqlParameter>();
+        if (effectiveDocId.HasValue)
+            globalParams.Add(new ReportSqlParameter("@DocumentId", ReportDataType.Integer, effectiveDocId.Value));
+
+        _logger.LogInformation(
+            "[DocDesigner] LayoutId={LayoutId} req.DocumentId={ReqDocId} effectiveDocId={EffectiveId} sources={SourceCount}",
+            req.LayoutId, req.DocumentId, effectiveDocId, sources.Count);
 
         foreach (var src in sources.OrderBy(s => s.Ordinal))
         {
             var sql = await BuildSqlAsync(src, ct);
 
             // ParamOverrides: alias → JSON parametreleri (gelecekte genişletilebilir)
-            var sqlParams = Array.Empty<ReportSqlParameter>();
+            var sqlParams = globalParams.Count > 0 ? globalParams : (IReadOnlyList<ReportSqlParameter>)Array.Empty<ReportSqlParameter>();
 
             var result = await _executor.ExecuteAsync(sql, sqlParams, ct);
             data[src.Alias] = result;
+
+            // DIAGNOSTIC: kullanıcı "farklı belgelerin kalemleri geliyor" diye raporladı.
+            // Her veri kaynağı için: çalıştırılan SQL, parametre değeri, dönen satır sayısı
+            // ve özel olarak Kalem alias'ı için ilk birkaç satırın BelgeId değerleri loglanır.
+            // Tek BelgeId değeri varsa filtreleme doğru; birden fazla varsa view veya WHERE bozuk.
+            var belgeIdCol = -1;
+            for (int i = 0; i < result.ColumnNames.Count; i++)
+            {
+                if (string.Equals(result.ColumnNames[i], "BelgeId", StringComparison.OrdinalIgnoreCase))
+                {
+                    belgeIdCol = i;
+                    break;
+                }
+            }
+            var distinctBelgeIds = belgeIdCol >= 0
+                ? string.Join(",", result.Rows.Select(r => r.Count > belgeIdCol ? r[belgeIdCol]?.ToString() ?? "null" : "?").Distinct().Take(10))
+                : "(BelgeId kolonu yok)";
+
+            _logger.LogInformation(
+                "[DocDesigner] alias={Alias} role={Role} rows={Rows} distinctBelgeIds=[{BelgeIds}] sql={Sql}",
+                src.Alias, src.Role, result.Rows.Count, distinctBelgeIds, sql);
         }
 
-        return (layout, data);
+        return (layout, data, meta);
     }
 
     private async Task<string> BuildSqlAsync(DocLayoutDs src, CancellationToken ct)

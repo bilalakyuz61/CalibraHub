@@ -49,12 +49,17 @@ import {
   // Link ikonlari
   ArrowUpRight, ExternalLink, ArrowRight, Link as LinkIcon,
   TreePine, Receipt, Send, FileCheck, History, BarChart3,
-  Printer, Copy, Edit, Eye, Share2, Download, List,
+  Printer, Copy, Edit, Edit2, Eye, Share2, Download, List,
   Trash, Trash2, ClipboardList, Cog,
+  // Media / Toggle ikonlari
+  Play, Pause, PlayCircle, PauseCircle, Power,
+  ToggleLeft, ToggleRight, RefreshCw, RotateCcw,
   // Lookup / Search ikonlari
   Search,
   // Grid / Master-Detail ikonlari
   Table,
+  // Genel
+  Plus, Minus,
 } from 'lucide-react'
 
 /* ── Icon registry ─────────────────────────────── */
@@ -73,12 +78,17 @@ var iconMap = {
   ArrowRight: ArrowRight, Link: LinkIcon, TreePine: TreePine,
   Receipt: Receipt, Send: Send, FileCheck: FileCheck,
   History: History, BarChart3: BarChart3, Printer: Printer,
-  Copy: Copy, Edit: Edit, Eye: Eye, Share2: Share2, Download: Download, List: List,
+  Copy: Copy, Edit: Edit, Edit2: Edit2, Eye: Eye, Share2: Share2, Download: Download, List: List,
   Trash: Trash, Trash2: Trash2, ClipboardList: ClipboardList, Cog: Cog,
+  // Media / Toggle
+  Play: Play, Pause: Pause, PlayCircle: PlayCircle, PauseCircle: PauseCircle, Power: Power,
+  ToggleLeft: ToggleLeft, ToggleRight: ToggleRight, RefreshCw: RefreshCw, RotateCcw: RotateCcw,
   // Lookup
   Search: Search,
   // Grid / Master-Detail
   Table: Table,
+  // Genel
+  Plus: Plus, Minus: Minus,
 }
 
 /* ── Color palette (DARK tema — orijinal, light pastel text) ────

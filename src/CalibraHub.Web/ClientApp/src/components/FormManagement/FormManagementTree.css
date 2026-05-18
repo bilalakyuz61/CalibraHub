@@ -1,0 +1,252 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   FormManagementTree — fmt-* sınıfları
+   3 seviyeli ağaç görünümü: Module → SubModule → SmartCard ızgara
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Kök kap ─────────────────────────────────────────────────────────────── */
+.fmt-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* ── Üst bar ─────────────────────────────────────────────────────────────── */
+.fmt-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.12);
+  flex-wrap: wrap;
+}
+
+.fmt-topbar-left  { display: flex; align-items: center; gap: 12px; }
+.fmt-topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.fmt-topbar-icon {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(99,102,241,.25), rgba(79,70,229,.35));
+  color: #a5b4fc;
+}
+
+.fmt-title    { font-size: 1.05rem; font-weight: 700; color: #f1f5f9; margin: 0; }
+.fmt-subtitle { font-size: .75rem; color: #94a3b8; margin: 2px 0 0; }
+
+/* ── Arama ───────────────────────────────────────────────────────────────── */
+.fmt-search-wrap {
+  position: relative; display: flex; align-items: center;
+}
+.fmt-search-ico {
+  position: absolute; left: 10px; color: #64748b; pointer-events: none; flex-shrink: 0;
+}
+.fmt-search {
+  padding: 7px 30px 7px 30px;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.11);
+  border-radius: 8px; color: #f1f5f9; font-size: .82rem; outline: none;
+  width: 260px; transition: border-color .15s;
+}
+.fmt-search:focus { border-color: rgba(99,102,241,.45); }
+.fmt-search::placeholder { color: #475569; }
+.fmt-search-clear {
+  position: absolute; right: 7px; background: none; border: none;
+  color: #64748b; cursor: pointer; padding: 2px; display: flex; align-items: center;
+  border-radius: 4px; transition: color .12s;
+}
+.fmt-search-clear:hover { color: #94a3b8; }
+
+/* ── Buton ───────────────────────────────────────────────────────────────── */
+.fmt-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border-radius: 8px; font-size: .82rem; font-weight: 600;
+  border: none; cursor: pointer; transition: all .15s; text-decoration: none;
+}
+.fmt-btn--primary {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff; box-shadow: 0 2px 8px rgba(99,102,241,.3);
+}
+.fmt-btn--primary:hover { background: linear-gradient(135deg, #818cf8, #6366f1); color: #fff; }
+
+/* ── Gövde (scroll) ──────────────────────────────────────────────────────── */
+.fmt-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 16px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Boş durum ───────────────────────────────────────────────────────────── */
+.fmt-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 72px 24px; text-align: center; color: #64748b;
+}
+.fmt-empty svg { opacity: .25; }
+.fmt-empty p   { margin: 0; font-size: .9rem; }
+
+/* ── Module bölümü ───────────────────────────────────────────────────────── */
+.fmt-section-wrap {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.fmt-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s;
+  border-left: 3px solid rgba(99, 102, 241, 0.4);
+  background: rgba(255, 255, 255, 0.03);
+}
+.fmt-section-header:hover { background: rgba(99, 102, 241, 0.07); }
+.fmt-section-header--open {
+  border-left-color: #6366f1;
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.fmt-chevron {
+  color: #475569; flex-shrink: 0;
+  transition: transform 0.22s ease, color 0.15s;
+}
+.fmt-chevron--open { transform: rotate(90deg); color: #818cf8; }
+
+.fmt-section-name {
+  font-size: .9rem; font-weight: 700; color: #e2e8f0; flex: 1;
+}
+.fmt-section-header--open .fmt-section-name { color: #c7d2fe; }
+
+.fmt-section-count {
+  font-size: .72rem; font-weight: 600; padding: 2px 8px;
+  border-radius: 20px; background: rgba(99,102,241,.15); color: #a5b4fc;
+  border: 1px solid rgba(99,102,241,.2);
+}
+
+.fmt-section-content {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ── SubModule bölümü ────────────────────────────────────────────────────── */
+.fmt-subsection-wrap {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.fmt-subsection-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background .15s;
+  border-left: 2px solid rgba(139, 92, 246, 0.3);
+  background: rgba(255, 255, 255, 0.02);
+}
+.fmt-subsection-header:hover { background: rgba(139, 92, 246, 0.07); }
+.fmt-subsection-header--open {
+  border-left-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.fmt-subchr {
+  color: #64748b; flex-shrink: 0;
+  transition: transform 0.2s ease, color 0.12s;
+}
+.fmt-subchr--open { transform: rotate(90deg); color: #a78bfa; }
+
+.fmt-subsection-name {
+  font-size: .82rem; font-weight: 600; color: #cbd5e1; flex: 1;
+}
+.fmt-subsection-header--open .fmt-subsection-name { color: #c4b5fd; }
+
+.fmt-subsection-content {
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Kart ızgara ─────────────────────────────────────────────────────────── */
+.fmt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 12px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Light mode
+════════════════════════════════════════════════════════════════════════════ */
+body.app-theme-light .fmt-topbar {
+  background: #f8fafc;
+  border-bottom-color: #e2e8f0;
+}
+body.app-theme-light .fmt-topbar-icon {
+  background: linear-gradient(135deg, rgba(99,102,241,.15), rgba(79,70,229,.2));
+  color: #6366f1;
+}
+body.app-theme-light .fmt-title    { color: #0f172a; }
+body.app-theme-light .fmt-subtitle { color: #64748b; }
+
+body.app-theme-light .fmt-search {
+  background: #fff; border-color: #e2e8f0; color: #0f172a;
+}
+body.app-theme-light .fmt-search:focus { border-color: rgba(99,102,241,.5); }
+body.app-theme-light .fmt-search::placeholder { color: #94a3b8; }
+body.app-theme-light .fmt-search-ico { color: #94a3b8; }
+
+body.app-theme-light .fmt-empty { color: #94a3b8; }
+
+body.app-theme-light .fmt-section-wrap {
+  background: #fff; border-color: #e2e8f0;
+}
+body.app-theme-light .fmt-section-header {
+  background: #f8fafc; border-left-color: rgba(99,102,241,.3);
+}
+body.app-theme-light .fmt-section-header:hover { background: rgba(99,102,241,.05); }
+body.app-theme-light .fmt-section-header--open {
+  background: rgba(99,102,241,.05); border-left-color: #6366f1;
+}
+body.app-theme-light .fmt-section-name { color: #1e293b; }
+body.app-theme-light .fmt-section-header--open .fmt-section-name { color: #4f46e5; }
+body.app-theme-light .fmt-chevron         { color: #94a3b8; }
+body.app-theme-light .fmt-chevron--open   { color: #6366f1; }
+
+body.app-theme-light .fmt-section-content {
+  background: #f1f5f9; border-top-color: #e2e8f0;
+}
+
+body.app-theme-light .fmt-subsection-wrap {
+  background: #fff; border-color: #e2e8f0;
+}
+body.app-theme-light .fmt-subsection-header {
+  background: #faf5ff; border-left-color: rgba(139,92,246,.3);
+}
+body.app-theme-light .fmt-subsection-header:hover { background: rgba(139,92,246,.05); }
+body.app-theme-light .fmt-subsection-header--open {
+  background: rgba(139,92,246,.05); border-left-color: #8b5cf6;
+}
+body.app-theme-light .fmt-subsection-name { color: #374151; }
+body.app-theme-light .fmt-subsection-header--open .fmt-subsection-name { color: #7c3aed; }
+body.app-theme-light .fmt-subchr       { color: #94a3b8; }
+body.app-theme-light .fmt-subchr--open { color: #7c3aed; }
+
+body.app-theme-light .fmt-subsection-content {
+  background: #f5f3ff; border-top-color: #ede9fe;
+}

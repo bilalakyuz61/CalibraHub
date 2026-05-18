@@ -246,14 +246,22 @@ export default function SmartBoardConfigPanel(props) {
       if (onSaved) onSaved({ visibleIds: visibleIds, order: order })
       if (onClose) onClose()
     } catch (e) {
-      alert('Kaydedilirken hata: ' + e.message)
+      // Rapor §6.6 — toast fallback
+      var em = 'Kaydedilirken hata: ' + e.message
+      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
+      else alert(em)
     } finally {
       setSaving(false)
     }
   }
 
   async function handleReset() {
-    if (!window.confirm('Tum widget ayarlari sifirlanacak (tum widget\'lar gorunur + varsayilan sira). Devam edilsin mi?')) return
+    // Rapor §6.6 — CalibraAlert.confirm fallback
+    var ok = window.CalibraAlert && window.CalibraAlert.confirm
+      ? await window.CalibraAlert.confirm('Tum widget ayarlari sifirlanacak (tum widget\'lar gorunur + varsayilan sira). Devam edilsin mi?',
+          { title: 'Widget Ayarlarini Sifirla', okText: 'Evet, Sifirla', cancelText: 'Vazgec', danger: true })
+      : window.confirm('Tum widget ayarlari sifirlanacak (tum widget\'lar gorunur + varsayilan sira). Devam edilsin mi?')
+    if (!ok) return
     try {
       await resetWidgetConfig(boardKey)
       var allIds = localMasterWidgets.map(function(w) { return w.id })
@@ -261,7 +269,9 @@ export default function SmartBoardConfigPanel(props) {
       setOrder(allIds.slice())
       if (onSaved) onSaved({ visibleIds: allIds.slice(), order: allIds.slice() })
     } catch (e) {
-      alert('Sifirlanamadi: ' + e.message)
+      var em2 = 'Sifirlanamadi: ' + e.message
+      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em2, 'err')
+      else alert(em2)
     }
   }
 

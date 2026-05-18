@@ -31,7 +31,6 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     private readonly string _itemLocationsTableName;
     private readonly string _locationTypesTableName;
     private readonly string _machinesTableName;
-    private readonly string _machineTypesTableName;
 
     public SqlLogisticsConfigurationRepository(
         SqlServerConnectionFactory connectionFactory,
@@ -57,7 +56,6 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         _itemLocationsTableName = $"[{_schema}].[item_locations]";
         _locationTypesTableName = $"[{_schema}].[location_types]";
         _machinesTableName = $"[{_schema}].[Machine]";
-        _machineTypesTableName = $"[{_schema}].[MachineType]";
     }
 
     public async Task<IReadOnlyCollection<Item>> GetItemsAsync(CancellationToken cancellationToken)
@@ -1240,7 +1238,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                    [SortOrder],
                    [MaxWeightCapacity],
                    [VolumeCapacity],
-                   [IsActive]
+                   [IsActive],
+                   ISNULL([IsMachinePark], 0),
+                   ISNULL([IsStorageArea], 0)
             FROM {_warehouseLocationsTableName}
             ORDER BY [SortOrder], [LocationTypeCode], [LocationCode];
             """;
@@ -1258,7 +1258,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 SortOrder = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
                 MaxWeightCapacity = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
                 VolumeCapacity = reader.IsDBNull(7) ? null : reader.GetDecimal(7),
-                IsActive = !reader.IsDBNull(8) && reader.GetBoolean(8)
+                IsActive = !reader.IsDBNull(8) && reader.GetBoolean(8),
+                IsMachinePark = !reader.IsDBNull(9) && reader.GetBoolean(9),
+                IsStorageArea = !reader.IsDBNull(10) && reader.GetBoolean(10)
             });
         }
 
@@ -1400,9 +1402,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_warehouseLocationsTableName}
-                ([ParentId], [LocationTypeCode], [LocationCode], [LocationName], [SortOrder], [MaxWeightCapacity], [VolumeCapacity], [IsActive])
+                ([ParentId], [LocationTypeCode], [LocationCode], [LocationName], [SortOrder], [MaxWeightCapacity], [VolumeCapacity], [IsActive], [IsMachinePark], [IsStorageArea])
             VALUES
-                (@ParentId, @LocationTypeCode, @LocationCode, @LocationName, @SortOrder, @MaxWeightCapacity, @VolumeCapacity, @IsActive);
+                (@ParentId, @LocationTypeCode, @LocationCode, @LocationName, @SortOrder, @MaxWeightCapacity, @VolumeCapacity, @IsActive, @IsMachinePark, @IsStorageArea);
             """;
 
         command.Parameters.Add(new SqlParameter("@ParentId", (object?)location.ParentId ?? DBNull.Value));
@@ -1413,6 +1415,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@MaxWeightCapacity", (object?)location.MaxWeightCapacity ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@VolumeCapacity", (object?)location.VolumeCapacity ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", location.IsActive));
+        command.Parameters.Add(new SqlParameter("@IsMachinePark", location.IsMachinePark));
+        command.Parameters.Add(new SqlParameter("@IsStorageArea", location.IsStorageArea));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1431,7 +1435,9 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
                 [SortOrder] = @SortOrder,
                 [MaxWeightCapacity] = @MaxWeightCapacity,
                 [VolumeCapacity] = @VolumeCapacity,
-                [IsActive] = @IsActive
+                [IsActive] = @IsActive,
+                [IsMachinePark] = @IsMachinePark,
+                [IsStorageArea] = @IsStorageArea
             WHERE [Id] = @Id;
             """;
 
@@ -1444,6 +1450,8 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.Parameters.Add(new SqlParameter("@MaxWeightCapacity", (object?)location.MaxWeightCapacity ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@VolumeCapacity", (object?)location.VolumeCapacity ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", location.IsActive));
+        command.Parameters.Add(new SqlParameter("@IsMachinePark", location.IsMachinePark));
+        command.Parameters.Add(new SqlParameter("@IsStorageArea", location.IsStorageArea));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1464,31 +1472,34 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
     // ── Machine CRUD ─────────────────────────────────────────────────────
     public async Task<IReadOnlyCollection<Machine>> GetMachinesAsync(CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         var rows = new List<Machine>();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT [Id],
+                   [CompanyId],
                    [LocationId],
                    [MachineCode],
                    [MachineName],
-                   [MachineType],
                    [HourlyCapacity],
                    [SortOrder],
                    [IsActive]
             FROM {_machinesTableName}
+            WHERE [CompanyId] = @CompanyId
             ORDER BY [SortOrder], [MachineCode];
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             rows.Add(new Machine
             {
                 Id = reader.GetInt32(0),
-                LocationId = reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
-                MachineCode = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
-                MachineName = reader.IsDBNull(3) ? null : reader.GetString(3),
-                MachineType = reader.IsDBNull(4) ? null : reader.GetString(4),
+                CompanyId = reader.GetInt32(1),
+                LocationId = reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
+                MachineCode = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                MachineName = reader.IsDBNull(4) ? null : reader.GetString(4),
                 HourlyCapacity = reader.IsDBNull(5) ? null : reader.GetDecimal(5),
                 SortOrder = reader.IsDBNull(6) ? 0 : reader.GetInt32(6),
                 IsActive = !reader.IsDBNull(7) && reader.GetBoolean(7)
@@ -1499,19 +1510,20 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task<int> AddMachineAsync(Machine machine, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_machinesTableName}
-                ([LocationId], [MachineCode], [MachineName], [MachineType], [HourlyCapacity], [SortOrder], [IsActive])
+                ([CompanyId], [LocationId], [MachineCode], [MachineName], [HourlyCapacity], [SortOrder], [IsActive])
             VALUES
-                (@LocationId, @MachineCode, @MachineName, @MachineType, @HourlyCapacity, @SortOrder, @IsActive);
+                (@CompanyId, @LocationId, @MachineCode, @MachineName, @HourlyCapacity, @SortOrder, @IsActive);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
+        command.Parameters.Add(new SqlParameter("@CompanyId", machine.CompanyId > 0 ? machine.CompanyId : companyId));
         command.Parameters.Add(new SqlParameter("@LocationId", machine.LocationId));
         command.Parameters.Add(new SqlParameter("@MachineCode", machine.MachineCode));
         command.Parameters.Add(new SqlParameter("@MachineName", (object?)machine.MachineName ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@MachineType", (object?)machine.MachineType ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@HourlyCapacity", (object?)machine.HourlyCapacity ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@SortOrder", machine.SortOrder));
         command.Parameters.Add(new SqlParameter("@IsActive", machine.IsActive));
@@ -1520,24 +1532,25 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
 
     public async Task UpdateMachineAsync(Machine machine, CancellationToken cancellationToken)
     {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // CompanyId immutable — UPDATE'te dokunulmaz; WHERE'de scope filter olarak kullanilir
         command.CommandText = $"""
             UPDATE {_machinesTableName}
             SET [LocationId]      = @LocationId,
                 [MachineCode]     = @MachineCode,
                 [MachineName]     = @MachineName,
-                [MachineType]     = @MachineType,
                 [HourlyCapacity]  = @HourlyCapacity,
                 [SortOrder]       = @SortOrder,
                 [IsActive]        = @IsActive
-            WHERE [Id] = @Id;
+            WHERE [Id] = @Id AND [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@Id", machine.Id));
+        command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         command.Parameters.Add(new SqlParameter("@LocationId", machine.LocationId));
         command.Parameters.Add(new SqlParameter("@MachineCode", machine.MachineCode));
         command.Parameters.Add(new SqlParameter("@MachineName", (object?)machine.MachineName ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@MachineType", (object?)machine.MachineType ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@HourlyCapacity", (object?)machine.HourlyCapacity ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@SortOrder", machine.SortOrder));
         command.Parameters.Add(new SqlParameter("@IsActive", machine.IsActive));
@@ -1551,96 +1564,6 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         command.CommandText = $"DELETE FROM {_machinesTableName} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", machineId));
         await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    // ── MachineType referans veri ────────────────────────────────────
-    public async Task<IReadOnlyCollection<MachineType>> GetMachineTypesAsync(CancellationToken cancellationToken)
-    {
-        var rows = new List<MachineType>();
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        // NOT: dropdown icin sadece IsActive=true beklemek admin ekraninda hatali — burada
-        // tum (aktif+pasif) satirlari donduruyoruz. Dropdown'da filtreleme client-side yapilir.
-        command.CommandText = $"""
-            SELECT [Id], [Code], [Name], [Description], [IsBuiltIn], [SortOrder], [IsActive]
-            FROM {_machineTypesTableName}
-            ORDER BY [SortOrder], [Name];
-            """;
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            rows.Add(new MachineType
-            {
-                Id = reader.GetInt32(0),
-                Code = reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
-                Name = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
-                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
-                IsBuiltIn = !reader.IsDBNull(4) && reader.GetBoolean(4),
-                SortOrder = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
-                IsActive = !reader.IsDBNull(6) && reader.GetBoolean(6)
-            });
-        }
-        return rows;
-    }
-
-    public async Task<int> AddMachineTypeAsync(MachineType type, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            INSERT INTO {_machineTypesTableName}
-                ([Code],[Name],[Description],[IsBuiltIn],[SortOrder],[IsActive])
-            VALUES
-                (@Code,@Name,@Description,@IsBuiltIn,@SortOrder,@IsActive);
-            SELECT CAST(SCOPE_IDENTITY() AS INT);
-            """;
-        command.Parameters.Add(new SqlParameter("@Code", type.Code));
-        command.Parameters.Add(new SqlParameter("@Name", type.Name));
-        command.Parameters.Add(new SqlParameter("@Description", (object?)type.Description ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@IsBuiltIn", type.IsBuiltIn));
-        command.Parameters.Add(new SqlParameter("@SortOrder", type.SortOrder));
-        command.Parameters.Add(new SqlParameter("@IsActive", type.IsActive));
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
-    }
-
-    public async Task UpdateMachineTypeAsync(MachineType type, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        // Code degisikligi yapilmaz (Built-in olsun ozel olsun) — Machine.MachineType FK gibi
-        // davraniyor. Code'u baska tabloda referans degeri oldugu icin sabit tutuyoruz.
-        command.CommandText = $"""
-            UPDATE {_machineTypesTableName}
-            SET [Name] = @Name,
-                [Description] = @Description,
-                [SortOrder] = @SortOrder,
-                [IsActive] = @IsActive
-            WHERE [Id] = @Id;
-            """;
-        command.Parameters.Add(new SqlParameter("@Id", type.Id));
-        command.Parameters.Add(new SqlParameter("@Name", type.Name));
-        command.Parameters.Add(new SqlParameter("@Description", (object?)type.Description ?? DBNull.Value));
-        command.Parameters.Add(new SqlParameter("@SortOrder", type.SortOrder));
-        command.Parameters.Add(new SqlParameter("@IsActive", type.IsActive));
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    public async Task DeleteMachineTypeAsync(int id, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DELETE FROM {_machineTypesTableName} WHERE [Id] = @Id;";
-        command.Parameters.Add(new SqlParameter("@Id", id));
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    public async Task<int> CountMachinesUsingTypeAsync(string typeCode, CancellationToken cancellationToken)
-    {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"SELECT COUNT(*) FROM {_machinesTableName} WHERE [MachineType] = @TypeCode;";
-        command.Parameters.Add(new SqlParameter("@TypeCode", typeCode));
-        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
 
     public async Task AddUnitAsync(Unit definition, CancellationToken cancellationToken)
@@ -2713,6 +2636,93 @@ public sealed class SqlLogisticsConfigurationRepository : ILogisticsConfiguratio
         }
 
         return combos.Values.ToList();
+    }
+
+    /// <summary>
+    /// "Tanımlı Kombinasyonlar" liste ekranı (SmartBoard) için tüm kombinasyonları
+    /// parent stok bilgisiyle ve özellik/değer ayrıntısıyla beraber döner.
+    /// 2 SQL: kök CONFIG + Items JOIN, sonra child rows + FeatureValue + ItemFeature.
+    /// </summary>
+    public async Task<IReadOnlyCollection<CombinationListItemDto>> GetAllCombinationsAsync(CancellationToken cancellationToken)
+    {
+        var rows = new Dictionary<int, (string Code, string? Name, int? ItemId, string? ItemCode, string? ItemName, bool IsActive, DateTime Created, List<CombinationFeatureValueDto> Features)>();
+
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+
+        // 1) Tüm aktif kök CONFIG (kombinasyon header) + parent Items JOIN
+        await using (var cmd1 = connection.CreateCommand())
+        {
+            cmd1.CommandText = $"""
+                SELECT cfg.[Id], cfg.[RecordCode], cfg.[RecordName], cfg.[IsActive], cfg.[CreatedDate],
+                       i.[Id] AS ItemId, i.[Code] AS ItemCode, i.[Name] AS ItemName
+                FROM {_itemConfigurationTableName} cfg
+                LEFT JOIN {_stockCardsTableName} i ON i.[Code] = cfg.[RelatedMaterialCode]
+                WHERE cfg.[RecordType] = 'CONFIG'
+                  AND cfg.[ParentId] IS NULL
+                  AND cfg.[IsActive] = 1
+                ORDER BY i.[Code], cfg.[RecordCode];
+                """;
+            await using var r1 = await cmd1.ExecuteReaderAsync(cancellationToken);
+            while (await r1.ReadAsync(cancellationToken))
+            {
+                var configId = r1.GetInt32(0);
+                rows[configId] = (
+                    Code:     r1.GetString(1),
+                    Name:     r1.IsDBNull(2) ? null : r1.GetString(2),
+                    ItemId:   r1.IsDBNull(5) ? null : r1.GetInt32(5),
+                    ItemCode: r1.IsDBNull(6) ? null : r1.GetString(6),
+                    ItemName: r1.IsDBNull(7) ? null : r1.GetString(7),
+                    IsActive: r1.GetBoolean(3),
+                    Created:  r1.GetDateTime(4),
+                    Features: new List<CombinationFeatureValueDto>());
+            }
+        }
+
+        if (rows.Count == 0) return Array.Empty<CombinationListItemDto>();
+
+        // 2) Child CONFIG (her özellik) → FeatureValue + ItemFeature
+        await using (var cmd2 = connection.CreateCommand())
+        {
+            cmd2.CommandText = $"""
+                SELECT
+                    child.[ParentId]                                      AS ConfigId,
+                    fv.[id]                                               AS FeatureValueId,
+                    f.[Name]                                              AS FeatureName,
+                    COALESCE(NULLIF(fv.[description], N''), fv.[value])   AS ValueDesc,
+                    fv.[code]                                             AS ValueCode
+                FROM {_itemConfigurationTableName} child
+                JOIN [{_schema}].[FeatureValue] fv
+                    ON fv.[id] = TRY_CAST(child.[RecordName] AS INT)
+                JOIN {_propertiesTableName} f
+                    ON f.[Id] = fv.[feature_id]
+                WHERE child.[RecordType] = 'CONFIG'
+                  AND child.[ParentId] IN ({string.Join(",", rows.Keys)})
+                ORDER BY child.[ParentId], f.[Name];
+                """;
+            await using var r2 = await cmd2.ExecuteReaderAsync(cancellationToken);
+            while (await r2.ReadAsync(cancellationToken))
+            {
+                var configId       = r2.GetInt32(0);
+                var featureValueId = r2.GetInt32(1);
+                var feature        = r2.IsDBNull(2) ? "" : r2.GetString(2);
+                var valueDesc      = r2.IsDBNull(3) ? "" : r2.GetString(3);
+                var valueCode      = r2.IsDBNull(4) ? "" : r2.GetString(4);
+                if (rows.TryGetValue(configId, out var row))
+                    row.Features.Add(new CombinationFeatureValueDto(featureValueId, feature, valueDesc, valueCode));
+            }
+        }
+
+        return rows.Select(kv => new CombinationListItemDto(
+            ConfigId:      kv.Key,
+            Code:          kv.Value.Code,
+            Name:          kv.Value.Name,
+            ItemId:        kv.Value.ItemId,
+            ItemCode:      kv.Value.ItemCode,
+            ItemName:      kv.Value.ItemName,
+            IsActive:      kv.Value.IsActive,
+            CreatedDate:   kv.Value.Created,
+            FeatureValues: kv.Value.Features
+        )).ToList();
     }
 
     public async Task<IReadOnlyCollection<MaterialGroup>> GetMaterialGroupsAsync(int? category, CancellationToken cancellationToken)

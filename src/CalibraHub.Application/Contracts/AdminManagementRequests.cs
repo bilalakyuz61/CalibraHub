@@ -116,14 +116,16 @@ public sealed record TestSmtpConnectionRequest(
 
 public sealed record SmtpConnectionTestResult(bool IsSuccess, string Message);
 
-public sealed record CreateDepartmentRequest(int CompanyId, string Code, string Name);
+public sealed record CreateDepartmentRequest(int CompanyId, string Name);
+
+public sealed record UpdateDepartmentRequest(int Id, string Name, bool IsActive);
 
 public sealed record CreateUserRequest(
     int CompanyId,
     string FullName,
     string Email,
     string EmployeeCode,
-    Guid DepartmentId,
+    int? DepartmentId,
     Guid? SupervisorUserId,
     UserRole Role,
     IReadOnlyCollection<UserPermission> Permissions,

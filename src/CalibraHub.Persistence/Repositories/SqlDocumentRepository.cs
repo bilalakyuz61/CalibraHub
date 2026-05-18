@@ -5,6 +5,7 @@ using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 
 namespace CalibraHub.Persistence.Repositories;
 
@@ -12,6 +13,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ILogger<SqlDocumentRepository>? _logger;
     private readonly string _quoteTable;
     private readonly string _lineTable;
     private readonly string _detailTable;
@@ -20,9 +22,11 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     public SqlDocumentRepository(
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions options,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<SqlDocumentRepository>? logger = null)
     {
         _connectionFactory = connectionFactory;
+        _logger = logger;
         _httpContextAccessor = httpContextAccessor;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _schema = schema;
@@ -67,13 +71,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 
         // Cari ismi Contact.AccountTitle'dan cekilir — contact_name kolonu Faz 2'de drop edildi.
         cmd.CommandText = $"""
-            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[ContactId],
+            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[currency],q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[notes],q.[CreatedBy],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[document_id] = q.[id]) AS [line_count]
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id]) AS [line_count]
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
             {where.Replace("[", "q.[")}
@@ -105,13 +109,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         }
 
         cmd.CommandText = $"""
-            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[ContactId],
+            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[currency],q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[notes],q.[CreatedBy],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[document_id] = q.[id]) AS [line_count]
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id]) AS [line_count]
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
             INNER JOIN [{_schema}].[document_types] dt ON dt.[id] = q.[DocumentTypeId]
@@ -160,13 +164,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         }
 
         cmd.CommandText = $"""
-            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[ContactId],
+            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[currency],q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
                    q.[PaymentTerms],q.[DeliveryTerms],q.[DeliveryAddress],q.[status],q.[RevisionNo],q.[ParentDocumentId],
                    q.[notes],q.[CreatedBy],q.[Created],q.[Updated],q.[IsActive],q.[DocumentTypeId],
-                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[document_id] = q.[id]) AS [line_count]
+                   (SELECT COUNT(*) FROM {_lineTable} l WHERE l.[DocumentId] = q.[id]) AS [line_count]
             FROM {_quoteTable} q
             LEFT JOIN [{_schema}].[Contact] ca ON ca.[Id] = q.[ContactId]
             INNER JOIN [{_schema}].[document_types] dt ON dt.[id] = q.[DocumentTypeId]
@@ -185,7 +189,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd = conn.CreateCommand();
         // Cari ismi Contact.AccountTitle'dan gelir — contact_name kolonu Faz 2'de drop edildi.
         cmd.CommandText = $"""
-            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[ContactId],
+            SELECT q.[id],q.[CompanyId],q.[DocumentNumber],q.[DocumentDate],q.[ValidUntil],q.[DeliveryDate],q.[DeliveryDays],q.[ContactId],
                    ca.[AccountTitle] AS [contact_name],
                    q.[ContactAddress],
                    q.[SalesRepId],q.[currency],q.[SubTotal],q.[DiscountRate],q.[DiscountAmount],q.[TaxRate],q.[TaxAmount],q.[GrandTotal],
@@ -208,21 +212,21 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await using var cmd = conn.CreateCommand();
         // Material/Unit/Combination/Location display alanlari JOIN ile okunur — tabloda tutulmuyor.
         cmd.CommandText = $"""
-            SELECT l.[id],l.[document_id],l.[line_no],l.[item_id],l.[unit_id],
-                   l.[quantity],l.[unit_price],l.[discount_rate],l.[line_total],
-                   l.[combination_id],l.[location_id],l.[notes],ISNULL(l.[notes_pinned], 0) AS [notes_pinned],
-                   l.[revised_from_id], l.[source_line_id],
+            SELECT l.[Id],l.[DocumentId],l.[LineNo],l.[ItemId],l.[UnitId],
+                   l.[Quantity],l.[UnitPrice],l.[DiscountRate],l.[LineTotal],
+                   l.[CombinationId],l.[LocationId],l.[Notes],ISNULL(l.[NotesPinned], 0) AS [NotesPinned],
+                   l.[RevisedFromId], l.[SourceLineId], l.[DeliveryDate], l.[DeliveryDays],
                    i.[Code] AS [material_code], i.[Name] AS [material_name],
                    u.[UnitCode] AS [unit_code], u.[UnitName] AS [unit_name],
                    pc.[RecordCode] AS [combination_code],
                    loc.[LocationCode] AS [location_code], loc.[LocationName] AS [location_name]
             FROM {_lineTable} l
-            LEFT JOIN [{_schema}].[Items] i ON i.[Id] = l.[item_id]
-            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[unit_id]
-            LEFT JOIN [{_schema}].[ItemConfiguration] pc ON pc.[Id] = l.[combination_id]
-            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = l.[location_id]
-            WHERE l.[document_id] = @DocumentId
-            ORDER BY l.[line_no];
+            LEFT JOIN [{_schema}].[Items] i ON i.[Id] = l.[ItemId]
+            LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = l.[UnitId]
+            LEFT JOIN [{_schema}].[ItemConfiguration] pc ON pc.[Id] = l.[CombinationId]
+            LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = l.[LocationId]
+            WHERE l.[DocumentId] = @DocumentId
+            ORDER BY l.[LineNo];
             """;
         cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -245,7 +249,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             cmd.CommandText = $"""
                 UPDATE {_quoteTable} SET
                     [DocumentTypeId]=@DocumentTypeId,
-                    [DocumentDate]=@DocumentDate, [ValidUntil]=@ValidUntil,
+                    [DocumentDate]=@DocumentDate, [ValidUntil]=@ValidUntil, [DeliveryDate]=@DeliveryDate, [DeliveryDays]=@DeliveryDays,
                     [ContactId]=@ContactId, [ContactAddress]=@ContactAddress,
                     [SalesRepId]=@SalesRepId,
                     [currency]=@Currency, [SubTotal]=@SubTotal, [DiscountRate]=@DiscountRate,
@@ -263,12 +267,12 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         {
             cmd.CommandText = $"""
                 INSERT INTO {_quoteTable}
-                    ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[ValidUntil],[ContactId],[ContactAddress],
+                    ([CompanyId],[DocumentNumber],[DocumentTypeId],[DocumentDate],[ValidUntil],[DeliveryDate],[DeliveryDays],[ContactId],[ContactAddress],
                      [SalesRepId],[currency],[SubTotal],[DiscountRate],[DiscountAmount],[TaxRate],[TaxAmount],[GrandTotal],
                      [PaymentTerms],[DeliveryTerms],[DeliveryAddress],[status],[RevisionNo],[ParentDocumentId],
                      [notes],[CreatedBy],[Created],[Updated],[IsActive])
                 VALUES
-                    (@CompanyId,@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@ContactId,@ContactAddress,
+                    (@CompanyId,@DocumentNumber,@DocumentTypeId,@DocumentDate,@ValidUntil,@DeliveryDate,@DeliveryDays,@ContactId,@ContactAddress,
                      @SalesRepId,@Currency,@SubTotal,@DiscountRate,@DiscountAmount,@TaxRate,@TaxAmount,@GrandTotal,
                      @PaymentTerms,@DeliveryTerms,@DeliveryAddress,@Status,@RevisionNo,@ParentDocumentId,
                      @Notes,@CreatedBy,@CreatedAt,@UpdatedAt,@IsActive);
@@ -284,6 +288,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         cmd.Parameters.Add(new SqlParameter("@DocumentTypeId", (object?)q.DocumentTypeId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@DocumentDate", q.DocumentDate));
         cmd.Parameters.Add(new SqlParameter("@ValidUntil", (object?)q.ValidUntil ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@DeliveryDate", (object?)q.DeliveryDate ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@DeliveryDays", (object?)q.DeliveryDays ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@ContactId", (object?)q.ContactId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@ContactAddress", (object?)q.ContactAddress ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SalesRepId", (object?)q.SalesRepId ?? DBNull.Value));
@@ -323,11 +329,23 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
 
+        // TANI LOG: hangi satir id'lerine hangi qty/price geliyor — revize sorunlarini
+        // takip etmek icin (kullanici "qty parent'a yaziliyor" raporu).
+        if (_logger != null)
+        {
+            foreach (var ln in lines)
+            {
+                _logger.LogInformation(
+                    "[SaveLines] docId={DocId} lineId={LineId} lineNo={LineNo} itemId={ItemId} qty={Qty} unitPrice={Price} revisedFromId={Rev}",
+                    documentId, ln.Id, ln.LineNo, ln.ItemId, ln.Quantity, ln.UnitPrice, ln.RevisedFromId);
+            }
+        }
+
         // 1) Mevcut satir Id'lerini topla
         var existingIds = new HashSet<int>();
         await using (var getCmd = conn.CreateCommand())
         {
-            getCmd.CommandText = $"SELECT [id] FROM {_lineTable} WHERE [document_id] = @DocumentId;";
+            getCmd.CommandText = $"SELECT [Id] FROM {_lineTable} WHERE [DocumentId] = @DocumentId;";
             getCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
             await using var r = await getCmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) existingIds.Add(r.GetInt32(0));
@@ -346,20 +364,22 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             {
                 cmd.CommandText = $"""
                     UPDATE {_lineTable} SET
-                        [line_no]         = @LineNo,
-                        [item_id]         = @ItemId,
-                        [unit_id]         = @UnitId,
-                        [quantity]        = @Quantity,
-                        [unit_price]      = @UnitPrice,
-                        [discount_rate]   = @DiscountRate,
-                        [line_total]      = @LineTotal,
-                        [combination_id]  = @CombinationId,
-                        [location_id]     = @LocationId,
-                        [notes]           = @Notes,
-                        [notes_pinned]    = @NotesPinned,
-                        [revised_from_id] = @RevisedFromId,
-                        [source_line_id]  = @SourceLineId
-                    WHERE [id] = @Id AND [document_id] = @DocumentId;
+                        [LineNo]         = @LineNo,
+                        [ItemId]         = @ItemId,
+                        [UnitId]         = @UnitId,
+                        [Quantity]        = @Quantity,
+                        [UnitPrice]      = @UnitPrice,
+                        [DiscountRate]   = @DiscountRate,
+                        [LineTotal]      = @LineTotal,
+                        [CombinationId]  = @CombinationId,
+                        [LocationId]     = @LocationId,
+                        [Notes]           = @Notes,
+                        [NotesPinned]    = @NotesPinned,
+                        [RevisedFromId] = @RevisedFromId,
+                        [SourceLineId]  = @SourceLineId,
+                        [DeliveryDate]  = @DeliveryDate,
+                        [DeliveryDays]  = @DeliveryDays
+                    WHERE [Id] = @Id AND [DocumentId] = @DocumentId;
                     """;
                 cmd.Parameters.Add(new SqlParameter("@Id", ln.Id));
             }
@@ -367,13 +387,13 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             {
                 cmd.CommandText = $"""
                     INSERT INTO {_lineTable}
-                        ([document_id],[line_no],[item_id],[unit_id],
-                         [quantity],[unit_price],[discount_rate],[line_total],
-                         [combination_id],[location_id],[notes],[notes_pinned],[revised_from_id],[source_line_id])
+                        ([DocumentId],[LineNo],[ItemId],[UnitId],
+                         [Quantity],[UnitPrice],[DiscountRate],[LineTotal],
+                         [CombinationId],[LocationId],[Notes],[NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays])
                     VALUES
                         (@DocumentId,@LineNo,@ItemId,@UnitId,
                          @Quantity,@UnitPrice,@DiscountRate,@LineTotal,
-                         @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId);
+                         @CombinationId,@LocationId,@Notes,@NotesPinned,@RevisedFromId,@SourceLineId,@DeliveryDate,@DeliveryDays);
                     """;
             }
             cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
@@ -390,6 +410,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             cmd.Parameters.Add(new SqlParameter("@NotesPinned", ln.NotesPinned));
             cmd.Parameters.Add(new SqlParameter("@RevisedFromId", (object?)ln.RevisedFromId ?? DBNull.Value));
             cmd.Parameters.Add(new SqlParameter("@SourceLineId", (object?)ln.SourceLineId ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@DeliveryDate", (object?)ln.DeliveryDate ?? DBNull.Value));
+            cmd.Parameters.Add(new SqlParameter("@DeliveryDays", (object?)ln.DeliveryDays ?? DBNull.Value));
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
@@ -398,7 +420,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         if (toDelete.Length > 0)
         {
             await using var delCmd = conn.CreateCommand();
-            delCmd.CommandText = $"DELETE FROM {_lineTable} WHERE [document_id] = @DocumentId AND [id] IN ({string.Join(",", toDelete)});";
+            delCmd.CommandText = $"DELETE FROM {_lineTable} WHERE [DocumentId] = @DocumentId AND [Id] IN ({string.Join(",", toDelete)});";
             delCmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
             await delCmd.ExecuteNonQueryAsync(ct);
         }
@@ -436,7 +458,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             await using (var selCmd = conn.CreateCommand())
             {
                 selCmd.Transaction = tx;
-                selCmd.CommandText = $"SELECT [document_id], [notes] FROM {_lineTable} WHERE [id] = @Id;";
+                selCmd.CommandText = $"SELECT [DocumentId], [Notes] FROM {_lineTable} WHERE [Id] = @Id;";
                 selCmd.Parameters.Add(new SqlParameter("@Id", parentLineId));
                 await using var r = await selCmd.ExecuteReaderAsync(ct);
                 if (!await r.ReadAsync(ct))
@@ -453,7 +475,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             await using (var maxCmd = conn.CreateCommand())
             {
                 maxCmd.Transaction = tx;
-                maxCmd.CommandText = $"SELECT ISNULL(MAX([line_no]), 0) + 1 FROM {_lineTable} WHERE [document_id] = @DocId;";
+                maxCmd.CommandText = $"SELECT ISNULL(MAX([LineNo]), 0) + 1 FROM {_lineTable} WHERE [DocumentId] = @DocId;";
                 maxCmd.Parameters.Add(new SqlParameter("@DocId", documentId));
                 var obj = await maxCmd.ExecuteScalarAsync(ct);
                 newLineNo = obj == null || obj == DBNull.Value ? 1 : Convert.ToInt32(obj);
@@ -463,7 +485,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             await using (var upd = conn.CreateCommand())
             {
                 upd.Transaction = tx;
-                upd.CommandText = $"UPDATE {_lineTable} SET [notes] = @Desc WHERE [id] = @Id;";
+                upd.CommandText = $"UPDATE {_lineTable} SET [Notes] = @Desc WHERE [Id] = @Id;";
                 upd.Parameters.Add(new SqlParameter("@Id", parentLineId));
                 upd.Parameters.Add(new SqlParameter("@Desc",
                     string.IsNullOrWhiteSpace(description) ? (object)DBNull.Value : description));
@@ -471,7 +493,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             }
 
             // 4) Yeni satir INSERT — SELECT ile eski satirin kolonlarini kopyala
-            //    notes = orijinal notes (eski haline sahip olsun), revised_from_id = parentId
+            //    notes = orijinal notes, revised_from_id = NULL (yeni satir her zaman aktif/son haldir)
             //    source_line_id = eski satirinki aynen tasinir (orijinal kaynak iz korunur)
             int newLineId;
             await using (var insCmd = conn.CreateCommand())
@@ -479,15 +501,15 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 insCmd.Transaction = tx;
                 insCmd.CommandText = $"""
                     INSERT INTO {_lineTable}
-                        ([document_id],[line_no],[item_id],[unit_id],[quantity],[unit_price],
-                         [discount_rate],[line_total],[combination_id],[location_id],[notes],
-                         [notes_pinned],[revised_from_id],[source_line_id])
+                        ([DocumentId],[LineNo],[ItemId],[UnitId],[Quantity],[UnitPrice],
+                         [DiscountRate],[LineTotal],[CombinationId],[LocationId],[Notes],
+                         [NotesPinned],[RevisedFromId],[SourceLineId],[DeliveryDate],[DeliveryDays])
                     SELECT
-                        [document_id], @NewLineNo, [item_id], [unit_id], [quantity], [unit_price],
-                        [discount_rate], [line_total], [combination_id], [location_id], @OrigNotes,
-                        [notes_pinned], @ParentId, [source_line_id]
+                        [DocumentId], @NewLineNo, [ItemId], [UnitId], [Quantity], [UnitPrice],
+                        [DiscountRate], [LineTotal], [CombinationId], [LocationId], @OrigNotes,
+                        [NotesPinned], NULL, [SourceLineId], [DeliveryDate], [DeliveryDays]
                     FROM {_lineTable}
-                    WHERE [id] = @ParentId;
+                    WHERE [Id] = @ParentId;
                     SELECT CAST(SCOPE_IDENTITY() AS INT);
                     """;
                 insCmd.Parameters.Add(new SqlParameter("@NewLineNo", newLineNo));
@@ -495,6 +517,16 @@ public sealed class SqlDocumentRepository : IDocumentRepository
                 insCmd.Parameters.Add(new SqlParameter("@OrigNotes", (object?)originalNotes ?? DBNull.Value));
                 var idObj = await insCmd.ExecuteScalarAsync(ct);
                 newLineId = Convert.ToInt32(idObj);
+            }
+
+            // 4b) Eski satirda revised_from_id = yeni satir id'si — eski satir artik superseded
+            await using (var markOld = conn.CreateCommand())
+            {
+                markOld.Transaction = tx;
+                markOld.CommandText = $"UPDATE {_lineTable} SET [RevisedFromId] = @NewLineId WHERE [Id] = @ParentId;";
+                markOld.Parameters.Add(new SqlParameter("@NewLineId", newLineId));
+                markOld.Parameters.Add(new SqlParameter("@ParentId", parentLineId));
+                await markOld.ExecuteNonQueryAsync(ct);
             }
 
             // 5) Kombinasyon detaylarini yeni satira kopyala
@@ -555,6 +587,8 @@ public sealed class SqlDocumentRepository : IDocumentRepository
             ? r.GetInt32(dtOrd) : null,
         DocumentDate = r.GetDateTime(r.GetOrdinal("DocumentDate")),
         ValidUntil = r.IsDBNull(r.GetOrdinal("ValidUntil")) ? null : r.GetDateTime(r.GetOrdinal("ValidUntil")),
+        DeliveryDate = SafeOrdinalDate(r, "DeliveryDate"),
+        DeliveryDays = SafeOrdinalInt(r, "DeliveryDays"),
         ContactId = r.IsDBNull(r.GetOrdinal("ContactId")) ? null : r.GetInt32(r.GetOrdinal("ContactId")),
         ContactName = r.IsDBNull(r.GetOrdinal("contact_name")) ? null : r.GetString(r.GetOrdinal("contact_name")),
         ContactAddress = r.IsDBNull(r.GetOrdinal("ContactAddress")) ? null : r.GetString(r.GetOrdinal("ContactAddress")),
@@ -584,36 +618,38 @@ public sealed class SqlDocumentRepository : IDocumentRepository
 
     private static DocumentLine MapLine(SqlDataReader r)
     {
-        var unitIdOrd  = TryGetOrdinal(r, "unit_id");
+        var unitIdOrd  = TryGetOrdinal(r, "UnitId");
         var unitCodeOrd = TryGetOrdinal(r, "unit_code");
         var unitNameOrd = TryGetOrdinal(r, "unit_name");
         var matCodeOrd = TryGetOrdinal(r, "material_code");
         var matNameOrd = TryGetOrdinal(r, "material_name");
-        var combIdOrd  = TryGetOrdinal(r, "combination_id");
+        var combIdOrd  = TryGetOrdinal(r, "CombinationId");
         var combCodeOrd = TryGetOrdinal(r, "combination_code");
-        var locIdOrd   = TryGetOrdinal(r, "location_id");
+        var locIdOrd   = TryGetOrdinal(r, "LocationId");
         var locCodeOrd = TryGetOrdinal(r, "location_code");
         var locNameOrd = TryGetOrdinal(r, "location_name");
-        var notesPinnedOrd = TryGetOrdinal(r, "notes_pinned");
-        var revisedFromIdOrd = TryGetOrdinal(r, "revised_from_id");
-        var sourceLineIdOrd = TryGetOrdinal(r, "source_line_id");
+        var notesPinnedOrd = TryGetOrdinal(r, "NotesPinned");
+        var revisedFromIdOrd = TryGetOrdinal(r, "RevisedFromId");
+        var sourceLineIdOrd = TryGetOrdinal(r, "SourceLineId");
         return new()
         {
-            Id = r.GetInt32(r.GetOrdinal("id")),
-            DocumentId = r.GetInt32(r.GetOrdinal("document_id")),
-            LineNo = r.GetInt32(r.GetOrdinal("line_no")),
-            ItemId = r.GetInt32(r.GetOrdinal("item_id")),
+            Id = r.GetInt32(r.GetOrdinal("Id")),
+            DocumentId = r.GetInt32(r.GetOrdinal("DocumentId")),
+            LineNo = r.GetInt32(r.GetOrdinal("LineNo")),
+            ItemId = r.GetInt32(r.GetOrdinal("ItemId")),
             UnitId = unitIdOrd >= 0 && !r.IsDBNull(unitIdOrd) ? r.GetInt32(unitIdOrd) : null,
-            Quantity = r.GetDecimal(r.GetOrdinal("quantity")),
-            UnitPrice = r.GetDecimal(r.GetOrdinal("unit_price")),
-            DiscountRate = r.GetDecimal(r.GetOrdinal("discount_rate")),
-            LineTotal = r.GetDecimal(r.GetOrdinal("line_total")),
+            Quantity = r.GetDecimal(r.GetOrdinal("Quantity")),
+            UnitPrice = r.GetDecimal(r.GetOrdinal("UnitPrice")),
+            DiscountRate = r.GetDecimal(r.GetOrdinal("DiscountRate")),
+            LineTotal = r.GetDecimal(r.GetOrdinal("LineTotal")),
             CombinationId = combIdOrd >= 0 && !r.IsDBNull(combIdOrd) ? r.GetInt32(combIdOrd) : null,
             LocationId = locIdOrd >= 0 && !r.IsDBNull(locIdOrd) ? r.GetInt32(locIdOrd) : null,
-            Notes = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
+            Notes = r.IsDBNull(r.GetOrdinal("Notes")) ? null : r.GetString(r.GetOrdinal("Notes")),
             NotesPinned = notesPinnedOrd >= 0 && !r.IsDBNull(notesPinnedOrd) && r.GetBoolean(notesPinnedOrd),
             RevisedFromId = revisedFromIdOrd >= 0 && !r.IsDBNull(revisedFromIdOrd) ? r.GetInt32(revisedFromIdOrd) : null,
             SourceLineId = sourceLineIdOrd >= 0 && !r.IsDBNull(sourceLineIdOrd) ? r.GetInt32(sourceLineIdOrd) : null,
+            DeliveryDate = SafeOrdinalDate(r, "DeliveryDate"),
+            DeliveryDays = SafeOrdinalInt(r, "DeliveryDays"),
             MaterialCode = matCodeOrd >= 0 && !r.IsDBNull(matCodeOrd) ? r.GetString(matCodeOrd) : null,
             MaterialName = matNameOrd >= 0 && !r.IsDBNull(matNameOrd) ? r.GetString(matNameOrd) : null,
             UnitCode = unitCodeOrd >= 0 && !r.IsDBNull(unitCodeOrd) ? r.GetString(unitCodeOrd) : null,
@@ -627,6 +663,22 @@ public sealed class SqlDocumentRepository : IDocumentRepository
     private static int TryGetOrdinal(SqlDataReader r, string name)
     {
         try { return r.GetOrdinal(name); } catch { return -1; }
+    }
+
+    /// <summary>Kolon yoksa (eski schema) veya null ise null doner — SELECT'lerde guvenli.</summary>
+    private static DateTime? SafeOrdinalDate(SqlDataReader r, string name)
+    {
+        var ord = TryGetOrdinal(r, name);
+        if (ord < 0) return null;
+        return r.IsDBNull(ord) ? null : r.GetDateTime(ord);
+    }
+
+    /// <summary>Int kolonunu guvenli oku — kolon yoksa veya null ise null doner.</summary>
+    private static int? SafeOrdinalInt(SqlDataReader r, string name)
+    {
+        var ord = TryGetOrdinal(r, name);
+        if (ord < 0) return null;
+        return r.IsDBNull(ord) ? null : r.GetInt32(ord);
     }
 
     // ── Line Details (ozellik-deger aciklamalari) ────────────────────────

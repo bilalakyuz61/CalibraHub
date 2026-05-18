@@ -142,9 +142,11 @@
                 <input asp-for="ReturnUrl" type="hidden" />
 
                 <div class="form-floating login-field mb-3">
-                    <input asp-for="Email" class="form-control" autocomplete="off" placeholder=" " />
-                    <label asp-for="Email">@ui.Text("email")</label>
-                    <span asp-validation-for="Email"></span>
+                    @* a11y (rapor §6.6): autofocus + required + aria-required + class="cb-field-error" *@
+                    <input asp-for="Email" class="form-control" autocomplete="email"
+                           placeholder=" " autofocus required aria-required="true" />
+                    <label asp-for="Email" class="cb-field-required">@ui.Text("email")</label>
+                    <span asp-validation-for="Email" class="cb-field-error"></span>
                 </div>
 
                 <div class="form-floating login-field mb-3">
@@ -156,9 +158,10 @@
                 </div>
 
                 <div class="form-floating login-field mb-3">
-                    <input asp-for="Password" class="form-control" autocomplete="off" placeholder=" " />
-                    <label asp-for="Password">@ui.Text("password")</label>
-                    <span asp-validation-for="Password"></span>
+                    <input asp-for="Password" type="password" class="form-control"
+                           autocomplete="current-password" placeholder=" " required aria-required="true" />
+                    <label asp-for="Password" class="cb-field-required">@ui.Text("password")</label>
+                    <span asp-validation-for="Password" class="cb-field-error"></span>
                 </div>
 
                 <div class="login-remember-row mb-3">

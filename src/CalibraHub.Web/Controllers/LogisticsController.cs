@@ -1,4 +1,4 @@
-﻿using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Ui;
 using CalibraHub.Domain.Enums;
@@ -17,7 +17,6 @@ public sealed class LogisticsController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
     private readonly IUiConfigurationService _uiConfigurationService;
-    private readonly IIntegrationEventService _integrationEventService;
     private readonly IFinanceService _financeService;
     private readonly IWidgetService _widgetService;
     private readonly IPriceListService _priceListService;
@@ -27,7 +26,6 @@ public sealed class LogisticsController : Controller
     public LogisticsController(
         ILogisticsConfigurationService logisticsConfigurationService,
         IUiConfigurationService uiConfigurationService,
-        IIntegrationEventService integrationEventService,
         IFinanceService financeService,
         IWidgetService widgetService,
         IPriceListService priceListService,
@@ -36,7 +34,6 @@ public sealed class LogisticsController : Controller
     {
         _logisticsConfigurationService = logisticsConfigurationService;
         _uiConfigurationService = uiConfigurationService;
-        _integrationEventService = integrationEventService;
         _financeService = financeService;
         _widgetService = widgetService;
         _priceListService = priceListService;
@@ -256,271 +253,9 @@ public sealed class LogisticsController : Controller
         return View();
     }
 
-    /* ── Urun Agaci (BOM/Recete) liste — SmartBoard pattern ────────────── */
-
-    private const int BomPageSize = 50;
-
-    private async Task<object> BuildBomsBoardConfigAsync(CancellationToken ct)
-    {
-        var allBoms = await _logisticsConfigurationService.GetBOMsAsync(ct);
-        var totalCount = allBoms.Count;
-        var pageItems = allBoms.Take(BomPageSize).ToList();
-        var masterWidgets = await BuildBomsMasterWidgetsAsync(ct);
-        var entities = BuildBomEntities(pageItems);
-
-        return new
-        {
-            boardKey = "logistics-boms",
-            title = "Urun Agaci (Receteler)",
-            subtitle = totalCount.ToString("N0") + " recete",
-            icon = "GitBranch",
-            iconColor = "emerald",
-            searchPlaceholder = "Recete ara... (mamul kodu, adi)",
-            emptyText = "Henuz recete tanimlanmamis",
-            apiUrl = "/Logistics/GetBOMsPage",
-            totalCount,
-            pageSize = BomPageSize,
-            actions = new[]
-            {
-                new
-                {
-                    id = "new",
-                    label = "Yeni Recete",
-                    icon = "Plus",
-                    variant = "primary",
-                    url = "/Logistics/BOMEdit"
-                }
-            },
-            masterWidgets,
-            entities
-        };
-    }
-
-    private async Task<List<object>> BuildBomsMasterWidgetsAsync(CancellationToken ct)
-    {
-        var masterWidgets = new List<object>();
-        var schema = await _widgetService.GetFormSchemaByCodeAsync("PRODUCT_TREES", ct);
-        if (schema != null)
-        {
-            foreach (var w in schema.Widgets.Where(w => w.IsActive
-                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
-            {
-                masterWidgets.Add(new
-                {
-                    id           = w.WidgetCode,
-                    dbId         = w.Id,
-                    isPlainField = w.IsPlainField,
-                    type         = "data",
-                    dataType     = w.DataType.ToLowerInvariant(),
-                    label        = w.Label,
-                });
-            }
-        }
-        return masterWidgets;
-    }
-
-    private static List<object> BuildBomEntities(IEnumerable<BOMDto> boms) =>
-        boms.Select(b => (object)new
-        {
-            id          = b.Id,
-            title       = string.IsNullOrEmpty(b.ItemName) ? b.ItemCode : b.ItemName,
-            // Aynı mamulün birden fazla kombinasyonu için kart üzerinde
-            // ItemCode · ConfigCode formatında ayırt edici alt başlık.
-            subtitle    = string.IsNullOrWhiteSpace(b.ConfigCode)
-                          ? b.ItemCode
-                          : $"{b.ItemCode} · {b.ConfigCode}",
-            description = string.IsNullOrEmpty(b.Description)
-                          ? $"{b.Lines.Count} bilesen"
-                          : b.Description,
-            imageUrl    = b.ImageData != null && !string.IsNullOrEmpty(b.ImageMimeType)
-                          ? $"data:{b.ImageMimeType};base64,{Convert.ToBase64String(b.ImageData)}"
-                          : (string?)null,
-            // Kombinasyon varsa görsel pill — uzaktan ayırt etmek için.
-            statusBadge = string.IsNullOrWhiteSpace(b.ConfigCode)
-                          ? (object?)null
-                          : new { label = b.ConfigCode, color = "violet" },
-            widgets     = Array.Empty<object>(),
-            primaryAction = new
-            {
-                label = "Duzenle",
-                icon  = "Edit",
-                url   = $"/Logistics/BOMEdit?id={b.Id}"
-            },
-            secondaryAction = new
-            {
-                label   = "Sil",
-                icon    = "Trash2",
-                apiUrl  = $"/Logistics/DeleteBOMJson?id={b.Id}",
-                confirm = "Bu receteyi silmek istediginizden emin misiniz?"
-            }
-        }).ToList();
-
-    // GET /Logistics/GetBOMsPage?page=2&pageSize=50&search=abc
-    [HttpGet]
-    public async Task<IActionResult> GetBOMsPage(
-        int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default)
-    {
-        if (page < 1) page = 1;
-        if (pageSize < 10) pageSize = 10;
-        if (pageSize > 200) pageSize = 200;
-
-        try
-        {
-            var allBoms = await _logisticsConfigurationService.GetBOMsAsync(ct);
-            IEnumerable<BOMDto> filtered = allBoms;
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var q = search.Trim();
-                filtered = allBoms.Where(b =>
-                    (b.ItemCode != null && b.ItemCode.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
-                    (b.ItemName != null && b.ItemName.Contains(q, StringComparison.OrdinalIgnoreCase)));
-            }
-            var list = filtered.ToList();
-            var totalCount = list.Count;
-            var pageItems = list.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-            var entities = BuildBomEntities(pageItems);
-            return Json(new { entities, totalCount, page, pageSize });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { error = ex.Message });
-        }
-    }
-    
-    [HttpGet]
-    public async Task<IActionResult> BOMs(string? mat = null, string? cfg = null, CancellationToken cancellationToken = default)
-    {
-        // Backwards-compat: eski URL formatina (BOMs?mat=X&cfg=Y) gelen kullaniciyi
-        // yeni edit ekranina yonlendir. Mevcut consumer'lar (MaterialCardEdit "Recete Ac"
-        // butonu, OptionsModal admin link'i) kirilmaz.
-        if (!string.IsNullOrWhiteSpace(mat))
-        {
-            var bom = await _logisticsConfigurationService.GetBOMByCodeAsync(mat, cfg, cancellationToken);
-            if (bom is not null)
-                return RedirectToAction(nameof(BOMEdit), new { id = bom.Id });
-            return RedirectToAction(nameof(BOMEdit));
-        }
-
-        var boardConfig = await BuildBomsBoardConfigAsync(cancellationToken);
-
-        var viewModel = new BomsViewModel
-        {
-            Boms = [],
-            ListState = new BomListStateViewModel
-            {
-                GridKey = "logistics-boms",
-                Page = 1,
-                PageSize = BomPageSize,
-                TotalCount = 0,
-                TotalPages = 0,
-                ItemLabel = "recete",
-                PageSizeOptions = BuildPageSizeOptions(BomPageSize)
-            },
-            AvailableColumns = [],
-            VisibleColumns = [],
-            BoardConfig = boardConfig
-        };
-        return View(viewModel);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> BOMEdit(int? id, CancellationToken cancellationToken)
-    {
-        ViewData["BOMEditId"] = id ?? 0;
-        ViewBag.Title = "Ürün Ağacı / Reçete Düzenle";
-        ViewBag.BOMId = id is > 0 ? id.Value.ToString() : string.Empty;
-        return View();
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetBOM(
-        string materialCode,
-        string? configCode,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(materialCode))
-            return BadRequest(new { found = false });
-
-        var tree = await _logisticsConfigurationService.GetBOMByCodeAsync(materialCode, configCode, cancellationToken);
-        if (tree is null)
-            return Ok(new { found = false });
-
-        return Ok(new
-        {
-            found         = true,
-            id            = tree.Id,
-            itemId        = tree.ItemId,
-            itemCode      = tree.ItemCode,
-            itemName      = tree.ItemName,
-            configId      = tree.ConfigId,
-            configCode    = tree.ConfigCode,
-            description   = tree.Description,
-            imageBase64   = tree.ImageData   != null ? Convert.ToBase64String(tree.ImageData) : null,
-            imageMimeType = tree.ImageMimeType,
-            imageFitMode  = tree.ImageFitMode ?? "square",
-            imageRotation = tree.ImageRotation,
-            lines         = tree.Lines.Select(l => new
-            {
-                itemId                = l.ItemId,
-                componentMaterialCode = l.ComponentMaterialCode,
-                componentMaterialName = l.ComponentMaterialName,
-                configId              = l.ConfigId,
-                componentConfigCode   = l.ComponentConfigCode,
-                quantity              = l.Quantity,
-                scrapRatio            = l.ScrapRatio
-            })
-        });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteBOMJson(int id, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteBOMAsync(id, cancellationToken);
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetBOMById(int id, CancellationToken cancellationToken)
-    {
-        if (id <= 0) return BadRequest(new { found = false });
-
-        var tree = await _logisticsConfigurationService.GetBOMByIdAsync(id, cancellationToken);
-        if (tree is null) return Ok(new { found = false });
-
-        return Ok(new
-        {
-            found         = true,
-            id            = tree.Id,
-            itemId        = tree.ItemId,
-            itemCode      = tree.ItemCode,
-            itemName      = tree.ItemName,
-            configId      = tree.ConfigId,
-            configCode    = tree.ConfigCode,
-            description   = tree.Description,
-            imageBase64   = tree.ImageData   != null ? Convert.ToBase64String(tree.ImageData) : null,
-            imageMimeType = tree.ImageMimeType,
-            imageFitMode  = tree.ImageFitMode ?? "square",
-            imageRotation = tree.ImageRotation,
-            lines         = tree.Lines.Select(l => new
-            {
-                itemId                = l.ItemId,
-                componentMaterialCode = l.ComponentMaterialCode,
-                componentMaterialName = l.ComponentMaterialName,
-                configId              = l.ConfigId,
-                componentConfigCode   = l.ComponentConfigCode,
-                quantity              = l.Quantity,
-                scrapRatio            = l.ScrapRatio
-            })
-        });
-    }
+    // NOT: BOM (Urun Agaci/Recete) endpoint'leri BomController'a tasindi (rapor §2.3).
+    // Tasinmis: BOMs, BOMEdit, GetBOMsPage, GetBOM, GetBOMById, DeleteBOMJson, SaveBOM.
+    // GetMaterialCost burada kaldi (PriceListService + CurrencyService + CardGroupRepo bagimliligi).
 
     /// <summary>
     /// Standart Maliyet Goruntuleme endpoint'i — bir malzemenin recetesindeki bilesenleri
@@ -669,24 +404,7 @@ public sealed class LogisticsController : Controller
         });
     }
 
-    [HttpPost]
-    public async Task<IActionResult> SaveBOM(
-        [FromBody] SaveBOMRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (request is null)
-            return BadRequest(new { success = false, message = "GeÃ§ersiz istek." });
-
-        try
-        {
-            var id = await _logisticsConfigurationService.SaveBOMAsync(request, cancellationToken);
-            return Ok(new { success = true, id });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-    }
+    // NOT: SaveBOM endpoint'i BomController'a tasindi (rapor §2.3).
 
     [HttpGet]
     public async Task<IActionResult> StockLookup(string? q, CancellationToken cancellationToken)
@@ -737,567 +455,190 @@ public sealed class LogisticsController : Controller
     [HttpGet]
     public IActionResult Locations() => View();
 
-    [HttpGet]
-    public IActionResult Units() => View("MeasureUnitDefinitions");
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveLocation(
-        [Bind(Prefix = "LocationInput")] LocationInput input,
-        string? search,
-        int? page,
-        int? pageSize,
-        CancellationToken cancellationToken)
-    {
-        if (!ModelState.IsValid)
-        {
-            var invalidModel = await BuildLocationsViewModelAsync(input, search, page, pageSize, cancellationToken);
-            return View(nameof(Locations), invalidModel);
-        }
-
-        try
-        {
-            if (input.Id.HasValue)
-            {
-                await _logisticsConfigurationService.UpdateLocationAsync(
-                    new UpdateLocationRequest(
-                        input.Id.Value,
-                        input.ParentId,
-                        input.LocationTypeCode,
-                        input.LocationCode,
-                        input.LocationName,
-                        input.SortOrder,
-                        input.MaxWeightCapacity,
-                        input.VolumeCapacity,
-                        input.IsActive),
-                    cancellationToken);
-
-                TempData["AdminSuccess"] = "Lokasyon kaydi guncellendi.";
-            }
-            else
-            {
-                await _logisticsConfigurationService.CreateLocationAsync(
-                    new CreateLocationRequest(
-                        input.ParentId,
-                        input.LocationTypeCode,
-                        input.LocationCode,
-                        input.LocationName,
-                        input.SortOrder,
-                        input.MaxWeightCapacity,
-                        input.VolumeCapacity,
-                        input.IsActive),
-                    cancellationToken);
-
-                TempData["AdminSuccess"] = "Lokasyon kaydi olusturuldu.";
-            }
-
-            return RedirectToAction(nameof(Locations), new { search, page, pageSize });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildLocationsViewModelAsync(input, search, page, pageSize, cancellationToken);
-            return View(nameof(Locations), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveUnit(
-        [Bind(Prefix = "Input")] UnitInput input,
-        string? search,
-        int? page,
-        int? pageSize,
-        CancellationToken cancellationToken)
-    {
-        if (!ModelState.IsValid)
-        {
-            var invalidModel = await BuildUnitsViewModelAsync(input, search, page, pageSize, cancellationToken);
-            return View(nameof(Units), invalidModel);
-        }
-
-        try
-        {
-            if (input.Id.HasValue)
-            {
-                await _logisticsConfigurationService.UpdateUnitAsync(
-                    new UpdateUnitRequest(
-                        input.Id.Value,
-                        input.UnitCode,
-                        input.UnitName,
-                        input.IntlCode,
-                        input.SortOrder,
-                        input.IsActive),
-                    cancellationToken);
-
-                TempData["AdminSuccess"] = "Olcu birimi kaydi guncellendi.";
-            }
-            else
-            {
-                await _logisticsConfigurationService.CreateUnitAsync(
-                    new CreateUnitRequest(
-                        input.UnitCode,
-                        input.UnitName,
-                        input.IntlCode,
-                        input.SortOrder,
-                        input.IsActive),
-                    cancellationToken);
-
-                TempData["AdminSuccess"] = "Olcu birimi kaydi olusturuldu.";
-            }
-
-            return RedirectToAction(nameof(Units), new { search, page, pageSize });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildUnitsViewModelAsync(input, search, page, pageSize, cancellationToken);
-            return View(nameof(Units), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteLocation(
-        int id,
-        string? search,
-        int? page,
-        int? pageSize,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteLocationAsync(id, cancellationToken);
-            TempData["AdminSuccess"] = "Lokasyon kaydi silindi.";
-            return RedirectToAction(nameof(Locations), new { search, page, pageSize });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildLocationsViewModelAsync(new LocationInput(), search, page, pageSize, cancellationToken);
-            return View(nameof(Locations), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteUnit(
-        int id,
-        string? search,
-        int? page,
-        int? pageSize,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteUnitAsync(id, cancellationToken);
-            TempData["AdminSuccess"] = "Olcu birimi kaydi silindi.";
-            return RedirectToAction(nameof(Units), new { search, page, pageSize });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildUnitsViewModelAsync(new UnitInput(), search, page, pageSize, cancellationToken);
-            return View(nameof(Units), invalidModel);
-        }
-    }
-
-    /* â"€â"€ Ã–lÃ§Ã¼ Birimi JSON Endpoint'leri â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
-
-    [HttpGet]
-    public async Task<IActionResult> GetAllMeasureUnits(string? search, CancellationToken ct)
-    {
-        var all = await _logisticsConfigurationService.GetUnitsAsync(ct);
-        var filtered = all
-            .OrderBy(x => x.SortOrder).ThenBy(x => x.UnitCode, StringComparer.OrdinalIgnoreCase)
-            .Where(x =>
-                string.IsNullOrWhiteSpace(search) ||
-                ContainsInsensitive(x.UnitCode, search) ||
-                ContainsInsensitive(x.UnitName, search))
-            .Select(x => new { x.Id, x.UnitCode, x.UnitName, x.IntlCode, x.SortOrder, x.IsActive });
-        return Json(filtered);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetMeasureUnit(int id, CancellationToken ct)
-    {
-        var all = await _logisticsConfigurationService.GetUnitsAsync(ct);
-        var item = all.FirstOrDefault(x => x.Id == id);
-        if (item is null) return NotFound();
-        return Json(new { item.Id, item.UnitCode, item.UnitName, item.IntlCode, item.SortOrder, item.IsActive });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveMeasureUnitJson([FromBody] UnitInput input, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(input.UnitCode) || string.IsNullOrWhiteSpace(input.UnitName))
-            return Json(new { success = false, message = "Kod ve ad bos olamaz." });
-        try
-        {
-            if (input.Id.HasValue && input.Id.Value > 0)
-            {
-                await _logisticsConfigurationService.UpdateUnitAsync(
-                    new UpdateUnitRequest(input.Id.Value, input.UnitCode, input.UnitName, input.IntlCode, input.SortOrder, input.IsActive), ct);
-            }
-            else
-            {
-                await _logisticsConfigurationService.CreateUnitAsync(
-                    new CreateUnitRequest(input.UnitCode, input.UnitName, input.IntlCode, input.SortOrder, input.IsActive), ct);
-            }
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteMeasureUnitJson(int id, CancellationToken ct)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteUnitAsync(id, ct);
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
+    // ── Olcu Birimi + Lokasyon (rapor §2.3 split) ─────────────────────
+    // Units, UnitsBoardEntities, UnitToggle, UnitEdit + JSON endpoint'leri
+    // UnitController'a tasindi.
+    // GetAllLocations, GetLocation, SaveLocationJson, DeleteLocationJson
+    // LocationController'a tasindi.
+    // SaveUnit/DeleteUnit/SaveLocation/DeleteLocation form-post endpoint'leri
+    // kaldirildi (modern stack JSON kullanir, kullanilmiyordu).
 
     /* â"€â"€ Lokasyon JSON Endpoint'leri â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 
+    // NOT: Lokasyon JSON endpoint'leri (GetAllLocations, GetLocation, SaveLocationJson,
+    // DeleteLocationJson) LocationController'a tasindi.
+
+    /// <summary>
+    /// LocationTree React component'i icin tree config — nested location agaci
+    /// + types lookup + widget'lar (CalibraSmartBoard standardi).
+    /// Hiyerarsinin tum seviyeleri ayni widget setini kullanir (formCode = LOCATIONS).
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetAllLocations(string? search, CancellationToken ct)
+    public async Task<IActionResult> LocationsTree(CancellationToken ct)
     {
-        var all = await _logisticsConfigurationService.GetLocationsAsync(ct);
+        const string formCode = "LOCATIONS";
+        var all   = await _logisticsConfigurationService.GetLocationsAsync(ct);
         var types = await _logisticsConfigurationService.GetLocationTypesAsync(ct);
         var typeMap = types.ToDictionary(t => t.Code, t => t.Name, StringComparer.OrdinalIgnoreCase);
 
-        string Resolve(string? code)
+        // ── Master widget şablonu (admin SmartBoardConfigPanel + filter panel için) ──
+        var masterWidgets = new List<object>();
+        // Sistem widget'ları — her zaman gösterilebilir (admin filtre/gizleme yapabilir)
+        masterWidgets.Add(new { id = "w_type",     dbId = (int?)null, isPlainField = true, type = "data", dataType = "text",    label = "Tip" });
+        masterWidgets.Add(new { id = "w_status",   dbId = (int?)null, isPlainField = true, type = "data", dataType = "text",    label = "Durum" });
+        masterWidgets.Add(new { id = "w_usage",    dbId = (int?)null, isPlainField = true, type = "data", dataType = "text",    label = "Kullanım" });
+        masterWidgets.Add(new { id = "w_children", dbId = (int?)null, isPlainField = true, type = "data", dataType = "numeric", label = "Alt Sayı" });
+        masterWidgets.Add(new { id = "w_depth",    dbId = (int?)null, isPlainField = true, type = "data", dataType = "numeric", label = "Seviye" });
+
+        // Dinamik widget'lar — LOCATIONS formundaki admin tanımları
+        var schema = await _widgetService.GetFormSchemaByCodeAsync(formCode, ct);
+        if (schema != null)
         {
-            if (!string.IsNullOrEmpty(code) && typeMap.TryGetValue(code, out var name)) return name;
-            return GetLocationTypeDisplayName(code); // fallback hardcoded
+            foreach (var w in schema.Widgets.Where(w => w.IsActive
+                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
+            {
+                masterWidgets.Add(new
+                {
+                    id           = w.WidgetCode,
+                    dbId         = (int?)w.Id,
+                    isPlainField = w.IsPlainField,
+                    type         = "data",
+                    dataType     = w.DataType.ToLowerInvariant(),
+                    label        = w.Label,
+                });
+            }
         }
 
-        var lookup = all.ToDictionary(x => x.Id);
-        var filtered = all
-            .OrderBy(x => x.SortOrder).ThenBy(x => x.LocationCode, StringComparer.OrdinalIgnoreCase)
-            .Where(x =>
-                string.IsNullOrWhiteSpace(search) ||
-                ContainsInsensitive(Resolve(x.LocationTypeCode), search) ||
-                ContainsInsensitive(x.LocationCode, search) ||
-                ContainsInsensitive(x.LocationName ?? string.Empty, search) ||
-                ContainsInsensitive(
-                    x.ParentId.HasValue && lookup.TryGetValue(x.ParentId.Value, out var p)
-                        ? string.IsNullOrWhiteSpace(p.LocationName) ? p.LocationCode : $"{p.LocationCode} {p.LocationName}"
-                        : string.Empty, search))
-            .Select(x =>
-            {
-                var parent = x.ParentId.HasValue ? lookup.GetValueOrDefault(x.ParentId.Value) : null;
-                return new
-                {
-                    x.Id, x.ParentId,
-                    x.LocationTypeCode,
-                    locationTypeDisplayName = Resolve(x.LocationTypeCode),
-                    x.LocationCode,
-                    locationName = x.LocationName ?? string.Empty,
-                    parentDisplayName = parent is null ? "-"
-                        : string.IsNullOrWhiteSpace(parent.LocationName) ? parent.LocationCode
-                        : $"{parent.LocationCode} - {parent.LocationName}",
-                    x.SortOrder, x.MaxWeightCapacity, x.VolumeCapacity, x.IsActive
-                };
-            });
-        return Json(filtered);
-    }
+        // ── Batch widget değerleri — tüm lokasyonlar için tek seferde ──
+        var recordIds = all.Select(l => l.Id.ToString()).ToArray();
+        var batchWidgets = (schema != null && recordIds.Length > 0)
+            ? await _widgetService.GetBatchRenderModelsAsync(formCode, recordIds, ct)
+            : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
 
-    [HttpGet]
-    public async Task<IActionResult> GetLocation(int id, CancellationToken ct)
-    {
-        var all = await _logisticsConfigurationService.GetLocationsAsync(ct);
-        var item = all.FirstOrDefault(x => x.Id == id);
-        if (item is null) return NotFound();
+        // ── Child sayilarini bir kerede hesapla ──
+        var childCount = all.GroupBy(l => l.ParentId ?? 0)
+                           .ToDictionary(g => g.Key, g => g.Count());
+        // ── Derinlik (seviye) hesapla ──
+        int ComputeDepth(int locId)
+        {
+            var depth = 1; var guard = 0;
+            var byIdMap = all.ToDictionary(x => x.Id);
+            var cur = byIdMap.TryGetValue(locId, out var n) ? n : null;
+            while (cur?.ParentId is int pid && byIdMap.TryGetValue(pid, out var par) && guard++ < 50)
+            { depth++; cur = par; }
+            return depth;
+        }
+
+        // Nested tree olustur — Dictionary<string,object?> kullaniyoruz cunku
+        // anonim type'lar immutable; widget'lari sonradan eklemek icin mutable lazim.
+        var nodes = new List<Dictionary<string, object?>>();
+        foreach (var l in all.OrderBy(x => x.SortOrder).ThenBy(x => x.LocationCode))
+        {
+            var typeSort = !string.IsNullOrEmpty(l.LocationTypeCode)
+                ? (types.FirstOrDefault(t => string.Equals(t.Code, l.LocationTypeCode, StringComparison.OrdinalIgnoreCase))?.SortOrder ?? 0)
+                : 0;
+            var typeName = !string.IsNullOrEmpty(l.LocationTypeCode) && typeMap.TryGetValue(l.LocationTypeCode, out var tn)
+                ? tn : GetLocationTypeDisplayName(l.LocationTypeCode);
+
+            // ── Widget değerleri ──
+            var widgets = new List<object>();
+            // Sistem widget'ları (her zaman dolu)
+            widgets.Add(new { id = "w_type",   type = "data", dataType = "text", label = "Tip", value = typeName, color = "indigo" });
+            widgets.Add(new { id = "w_status", type = "data", dataType = "text", label = "Durum",
+                value = l.IsActive ? "Aktif" : "Pasif", color = l.IsActive ? "emerald" : "slate" });
+
+            string? usageLabel = null; string usageColor = "slate";
+            if (l.IsMachinePark && l.IsStorageArea) { usageLabel = "Makine + Depo"; usageColor = "violet"; }
+            else if (l.IsMachinePark)                { usageLabel = "Makine"; usageColor = "indigo"; }
+            else if (l.IsStorageArea)                { usageLabel = "Depo";   usageColor = "emerald"; }
+            if (usageLabel != null)
+                widgets.Add(new { id = "w_usage", type = "data", dataType = "text", label = "Kullanım", value = usageLabel, color = usageColor });
+
+            var nChild = childCount.TryGetValue(l.Id, out var c) ? c : 0;
+            if (nChild > 0)
+                widgets.Add(new { id = "w_children", type = "data", dataType = "numeric", label = "Alt", value = nChild.ToString(System.Globalization.CultureInfo.InvariantCulture), detail = "adet", color = "slate" });
+            widgets.Add(new { id = "w_depth", type = "data", dataType = "numeric", label = "Seviye", value = ComputeDepth(l.Id).ToString(System.Globalization.CultureInfo.InvariantCulture), color = "slate" });
+
+            // Dinamik widget'lar (WidgetTra)
+            var recordId = l.Id.ToString();
+            if (batchWidgets.TryGetValue(recordId, out var dtos))
+            {
+                foreach (var w in dtos)
+                {
+                    widgets.Add(new
+                    {
+                        id = w.WidgetId,
+                        type = "data",
+                        dataType = w.DataType.ToLowerInvariant(),
+                        label = w.Label,
+                        value = w.Value,
+                        isPlainField = w.IsPlainField,
+                    });
+                }
+            }
+
+            nodes.Add(new Dictionary<string, object?>
+            {
+                ["id"]            = l.Id,
+                ["parentId"]      = l.ParentId,
+                ["code"]          = l.LocationCode,
+                ["name"]          = l.LocationName ?? string.Empty,
+                ["typeCode"]      = NormalizeLocationTypeCode(l.LocationTypeCode),
+                ["typeName"]      = typeName,
+                ["typeSortOrder"] = typeSort,
+                ["sortOrder"]     = l.SortOrder,
+                ["isActive"]      = l.IsActive,
+                ["isMachinePark"] = l.IsMachinePark,
+                ["isStorageArea"] = l.IsStorageArea,
+                ["widgets"]       = widgets,
+                ["children"]      = new List<Dictionary<string, object?>>(),
+            });
+        }
+
+        var byId  = nodes.ToDictionary(n => (int)n["id"]!);
+        var roots = new List<Dictionary<string, object?>>();
+        foreach (var n in nodes)
+        {
+            var pid = (int?)n["parentId"];
+            if (pid.HasValue && byId.TryGetValue(pid.Value, out var parent))
+                ((List<Dictionary<string, object?>>)parent["children"]!).Add(n);
+            else
+                roots.Add(n);
+        }
+
         return Json(new
         {
-            item.Id, item.ParentId,
-            locationTypeCode = NormalizeLocationTypeCode(item.LocationTypeCode),
-            item.LocationCode,
-            locationName = item.LocationName ?? string.Empty,
-            item.SortOrder, item.MaxWeightCapacity, item.VolumeCapacity, item.IsActive
+            boardKey   = "logistics-locations-tree",
+            formCode,
+            title      = "Lokasyon Tanımlamaları",
+            icon       = "MapPin",
+            iconColor  = "indigo",
+            roots,
+            types = types.Select(t => new { code = t.Code, name = t.Name, sortOrder = t.SortOrder })
+                         .OrderBy(t => t.sortOrder).ThenBy(t => t.code).ToArray(),
+            masterWidgets,
+            saveUrl    = "/Logistics/SaveLocationJson",
+            deleteUrl  = "/Logistics/DeleteLocationJson",
+            refreshUrl = "/Logistics/LocationsTree",
+            maxDepth   = 7,
         });
     }
 
-    [HttpPost]
-    public async Task<IActionResult> SaveLocationJson([FromBody] LocationInput input, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(input.LocationTypeCode) || string.IsNullOrWhiteSpace(input.LocationCode))
-            return Json(new { success = false, message = "Lokasyon tipi ve kod bos olamaz." });
-        try
-        {
-            var typeCode = NormalizeLocationTypeCode(input.LocationTypeCode);
-            if (input.Id.HasValue && input.Id.Value > 0)
-            {
-                await _logisticsConfigurationService.UpdateLocationAsync(
-                    new UpdateLocationRequest(input.Id.Value, input.ParentId, typeCode, input.LocationCode,
-                        input.LocationName, input.SortOrder, input.MaxWeightCapacity, input.VolumeCapacity, input.IsActive), ct);
-            }
-            else
-            {
-                await _logisticsConfigurationService.CreateLocationAsync(
-                    new CreateLocationRequest(input.ParentId, typeCode, input.LocationCode,
-                        input.LocationName, input.SortOrder, input.MaxWeightCapacity, input.VolumeCapacity, input.IsActive), ct);
-            }
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteLocationJson(int id, CancellationToken ct)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteLocationAsync(id, ct);
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    // ── Makine Tanımlamaları ─────────────────────────────────────────────
-    // Sayfa render — Locations sayfası ile ayni desen, FK olarak LocationId tasiyor.
-    [HttpGet]
-    public IActionResult Machines() => View();
-
-    [HttpGet]
-    public async Task<IActionResult> GetAllMachines(string? search, CancellationToken ct)
-    {
-        var rows = await _logisticsConfigurationService.GetMachinesAsync(ct);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var q = search.Trim().ToLowerInvariant();
-            rows = rows.Where(m =>
-                (m.MachineCode ?? "").ToLowerInvariant().Contains(q) ||
-                (m.MachineName ?? "").ToLowerInvariant().Contains(q) ||
-                (m.MachineType ?? "").ToLowerInvariant().Contains(q) ||
-                (m.LocationCode ?? "").ToLowerInvariant().Contains(q) ||
-                (m.LocationName ?? "").ToLowerInvariant().Contains(q)).ToArray();
-        }
-        return Json(rows);
-    }
-
-    public sealed class MachineInput
-    {
-        public int? Id { get; set; }
-        public int LocationId { get; set; }
-        public string MachineCode { get; set; } = string.Empty;
-        public string? MachineName { get; set; }
-        public string? MachineType { get; set; }
-        public decimal? HourlyCapacity { get; set; }
-        public int SortOrder { get; set; }
-        public bool IsActive { get; set; } = true;
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveMachineJson([FromBody] MachineInput input, CancellationToken ct)
-    {
-        if (input is null)
-            return Json(new { success = false, message = "Gecersiz istek." });
-        // MachineCode UI'da gosterilmiyor — Service tarafinda otomatik uretiliyor.
-        // Bos gelirse Create akisinda 'MAC-{6-hex}' olarak uretilir, Update'te mevcut korunur.
-        if (input.LocationId <= 0)
-            return Json(new { success = false, message = "Lokasyon secimi zorunludur." });
-
-        try
-        {
-            if (input.Id.HasValue && input.Id.Value > 0)
-            {
-                await _logisticsConfigurationService.UpdateMachineAsync(
-                    new UpdateMachineRequest(input.Id.Value, input.LocationId, input.MachineCode,
-                        input.MachineName, input.MachineType, input.HourlyCapacity,
-                        input.SortOrder, input.IsActive), ct);
-                return Json(new { success = true, id = input.Id.Value });
-            }
-            else
-            {
-                var newId = await _logisticsConfigurationService.CreateMachineAsync(
-                    new CreateMachineRequest(input.LocationId, input.MachineCode,
-                        input.MachineName, input.MachineType, input.HourlyCapacity,
-                        input.SortOrder, input.IsActive), ct);
-                return Json(new { success = true, id = newId });
-            }
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteMachineJson(int id, CancellationToken ct)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteMachineAsync(id, ct);
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    // Makine tipi referans verisi (9 built-in + ozel tipler).
-    // Description alani UI'da tooltip/hint olarak gosterilir — Logo Netsis dokumanindan
-    // turetilen kritik planlama davranisi/parametreleri orada anlatilir.
-    [HttpGet]
-    public async Task<IActionResult> GetAllMachineTypes(CancellationToken ct)
-    {
-        var rows = await _logisticsConfigurationService.GetMachineTypesAsync(ct);
-        return Json(rows);
-    }
-
-    public sealed class MachineTypeInput
-    {
-        public int? Id { get; set; }
-        public string Code { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public string? Description { get; set; }
-        public int SortOrder { get; set; }
-        public bool IsActive { get; set; } = true;
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveMachineTypeJson([FromBody] MachineTypeInput input, CancellationToken ct)
-    {
-        if (input is null) return Json(new { success = false, message = "Gecersiz istek." });
-        try
-        {
-            var id = await _logisticsConfigurationService.SaveMachineTypeAsync(
-                new SaveMachineTypeRequest(input.Id, input.Code, input.Name,
-                    input.Description, input.SortOrder, input.IsActive), ct);
-            return Json(new { success = true, id });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteMachineTypeJson(int id, CancellationToken ct)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteMachineTypeAsync(id, ct);
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
+    // ── Makine Tanımlamaları (rapor §2.3 — pilot split) ─────────────────
+    // Makine aggregate'i icin tum endpoint'ler MachineController'a tasindi.
+    // URL preservation: /Logistics/Machines, /Logistics/MachineEdit gibi rotalar
+    // MachineController'da [Route("Logistics/[action]")] ile aynen calisir.
+    // Tasinmis endpoint'ler:
+    //   GET  /Logistics/Machines, /Logistics/MachineEdit, /Logistics/GetAllMachines
+    //   POST /Logistics/SaveMachineJson, /Logistics/DeleteMachineJson
 
     /* â"€â"€ Malzeme GruplarÄ± â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 
-    [HttpGet]
-    public IActionResult MaterialGroups()
-        => View(new MaterialGroupsViewModel());
-
-    /// <summary>Belirli bir kategoriye ait grup listesini JSON dÃ¶ner.</summary>
-    [HttpGet]
-    public async Task<IActionResult> GetAllMaterialGroups(int? category, CancellationToken cancellationToken)
-    {
-        var groups = await _logisticsConfigurationService.GetMaterialGroupsAsync(category, cancellationToken);
-        return Json(groups.Select(g => new { id = g.Id, category = g.GroupCategory, code = g.GroupCode, description = g.GroupDescription ?? string.Empty }));
-    }
-
-    /// <summary>Grup oluÅŸtur/gÃ¼ncelle (JSON body, kategori zorunlu).</summary>
-    [HttpPost]
-    public async Task<IActionResult> UpsertMaterialGroup(
-        [FromBody] SaveMaterialGroupRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (request is null) return BadRequest(new { success = false, message = "GeÃ§ersiz istek." });
-        try
-        {
-            if (request.Id is > 0)
-                await _logisticsConfigurationService.UpdateMaterialGroupAsync(request, cancellationToken);
-            else
-                await _logisticsConfigurationService.CreateMaterialGroupAsync(request, cancellationToken);
-            var groups = await _logisticsConfigurationService.GetMaterialGroupsAsync(request.GroupCategory, cancellationToken);
-            return Ok(new { success = true, groups = groups.Select(g => new { id = g.Id, category = g.GroupCategory, code = g.GroupCode, description = g.GroupDescription ?? string.Empty }) });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-    }
-
-    /// <summary>Grup sil - kategorideki gÃ¼ncel listeyi dÃ¶ner.</summary>
-    [HttpPost]
-    public async Task<IActionResult> DeleteMaterialGroupInline(
-        [FromBody] DeleteMaterialGroupBody body,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteMaterialGroupAsync(body.Id, cancellationToken);
-            var groups = await _logisticsConfigurationService.GetMaterialGroupsAsync(body.Category, cancellationToken);
-            return Ok(new { success = true, groups = groups.Select(g => new { id = g.Id, category = g.GroupCategory, code = g.GroupCode, description = g.GroupDescription ?? string.Empty }) });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-    }
-
-    /// <summary>Malzeme kartÄ± iÃ§in grup kodu arama (kategori filtreli).</summary>
-    [HttpGet]
-    public async Task<IActionResult> MaterialGroupLookup(int? category, string? q, CancellationToken cancellationToken)
-    {
-        var groups = await _logisticsConfigurationService.GetMaterialGroupsAsync(category, cancellationToken);
-        var q2 = q?.Trim() ?? string.Empty;
-        var result = groups
-            .Where(g => string.IsNullOrWhiteSpace(q2) ||
-                        g.GroupCode.Contains(q2, StringComparison.OrdinalIgnoreCase) ||
-                        (g.GroupDescription?.Contains(q2, StringComparison.OrdinalIgnoreCase) ?? false))
-            .OrderBy(g => g.GroupCode)
-            .Take(30)
-            .Select(g => new { code = g.GroupCode, description = g.GroupDescription ?? string.Empty })
-            .ToArray();
-        return Json(result);
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetMaterialGroupMappings(int stockCardId, CancellationToken cancellationToken)
-    {
-        var mappings = await _logisticsConfigurationService.GetMaterialGroupMappingsAsync(stockCardId, cancellationToken);
-        return Json(mappings.Select(m => new { slotOrder = m.SlotOrder, groupCode = m.GroupCode, groupDescription = m.GroupDescription ?? string.Empty }));
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveMaterialGroupMappings(
-        [FromBody] SaveMaterialGroupMappingsRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (request is null) return BadRequest(new { success = false, message = "GeÃ§ersiz istek." });
-        try
-        {
-            await _logisticsConfigurationService.SaveMaterialGroupMappingsAsync(request, cancellationToken);
-            return Ok(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-    }
+    // NOT: Malzeme Grubu endpoint'leri MaterialGroupController'a tasindi (rapor §2.3 split).
+    // Tasinmis: MaterialGroups, MaterialGroupEdit, SaveMaterialGroupJson, DeleteMaterialGroupJson,
+    // GetAllMaterialGroups, UpsertMaterialGroup, DeleteMaterialGroupInline, MaterialGroupLookup,
+    // GetMaterialGroupMappings, SaveMaterialGroupMappings
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -1331,22 +672,8 @@ public sealed class LogisticsController : Controller
             var isUpdate = stockInput.ItemId.HasValue && stockInput.ItemId.Value != 0;
             var currentUserName = User.FindFirstValue(System.Security.Claims.ClaimTypes.Name);
 
-            var companyId = GetCompanyId();
-            var placeholders = new Dictionary<string, string>
-            {
-                ["EntityId"] = (stockInput.ItemId ?? 0).ToString(),
-                ["UserName"] = User.FindFirstValue(System.Security.Claims.ClaimTypes.Name) ?? "system",
-                ["Code"] = stockInput.Code ?? "",
-                ["Name"] = stockInput.Name ?? "",
-                ["TypeId"] = stockInput.TypeId?.ToString() ?? "",
-                ["IsActive"] = "1"
-            };
-
             if (isUpdate)
             {
-                placeholders["EntityId"] = stockInput.ItemId!.Value.ToString();
-                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeUpdate", placeholders, cancellationToken);
-
                 await _logisticsConfigurationService.UpdateItemAsync(
                     new UpdateItemRequest(
                         ItemId: stockInput.ItemId!.Value,
@@ -1356,13 +683,9 @@ public sealed class LogisticsController : Controller
                         UnitId: stockInput.UnitId,
                         Combinations: stockInput.Combinations),
                     cancellationToken);
-
-                _integrationEventService.FireAfterEvent(companyId, "Item", "AfterUpdate", placeholders);
             }
             else
             {
-                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeCreate", placeholders, cancellationToken);
-
                 await _logisticsConfigurationService.CreateItemAsync(
                     new CreateItemRequest(
                         Code: stockInput.Code,
@@ -1371,8 +694,6 @@ public sealed class LogisticsController : Controller
                         UnitId: stockInput.UnitId,
                         Combinations: stockInput.Combinations),
                     cancellationToken);
-
-                _integrationEventService.FireAfterEvent(companyId, "Item", "AfterCreate", placeholders);
             }
 
             // Kaydedilen/guncellenen kartin ID'sini bul
@@ -1389,15 +710,6 @@ public sealed class LogisticsController : Controller
                 ? "Malzeme karti guncellendi."
                 : "Malzeme karti kaydedildi.";
             return RedirectToMaterialCards(new { id = savedCardId });
-        }
-        catch (CalibraHub.Application.Services.IntegrationEventException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var ieModel = await BuildMaterialCardsViewModelAsync(
-                stockInput,
-                await GetCurrentMaterialCardListQueryAsync(cancellationToken),
-                cancellationToken);
-            return View(nameof(MaterialCards), ieModel);
         }
         catch (ArgumentException ex)
         {
@@ -1418,23 +730,7 @@ public sealed class LogisticsController : Controller
     {
         try
         {
-            var companyId = GetCompanyId();
-            // Silinecek kartin bilgilerini placeholder'lara ekle
-            var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
-            var card = snapshot.Items.FirstOrDefault(x => x.Id == stockCardId);
-            var placeholders = new Dictionary<string, string>
-            {
-                ["EntityId"] = stockCardId.ToString(),
-                ["UserName"] = User.FindFirstValue(System.Security.Claims.ClaimTypes.Name) ?? "system",
-                ["Code"] = card?.Code ?? "",
-                ["Name"] = card?.Name ?? "",
-                ["TypeId"] = card?.TypeId?.ToString() ?? "",
-                ["IsActive"] = card?.IsActive == true ? "1" : "0"
-            };
-
-            await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeDelete", placeholders, cancellationToken);
             await _logisticsConfigurationService.DeactivateItemAsync(stockCardId, cancellationToken);
-            _integrationEventService.FireAfterEvent(companyId, "Item", "AfterDelete", placeholders);
 
             if (IsAjaxRequest(Request))
             {
@@ -1446,18 +742,6 @@ public sealed class LogisticsController : Controller
             }
 
             return RedirectToMaterialCards();
-        }
-        catch (CalibraHub.Application.Services.IntegrationEventException ex)
-        {
-            if (IsAjaxRequest(Request))
-                return BadRequest(new { success = false, message = ex.Message });
-
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var ieModel = await BuildMaterialCardsViewModelAsync(
-                new MaterialCardCreateInput(),
-                await GetCurrentMaterialCardListQueryAsync(cancellationToken),
-                cancellationToken);
-            return View(nameof(MaterialCards), ieModel);
         }
         catch (ArgumentException ex)
         {
@@ -1522,6 +806,125 @@ public sealed class LogisticsController : Controller
         // ProductFeatureEdit sayfasi kullaniliyor.
         var boardConfig = await BuildProductConfigurationBoardConfigAsync(cancellationToken);
         return View(new ProductConfigurationViewModel { BoardConfig = boardConfig });
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // "Tanımlı Kombinasyonlar" liste ekranı — Lojistik > Özellik ve Kombinasyon altı.
+    // Tüm aktif kombinasyonların kart listesi (kombinasyon kodu + parent stok +
+    // özellik/değer chip'leri). Kartı tıklayınca parent stoğun kombinasyon tab'ına
+    // navigate eder (matchPath ile MaterialCard tab'ı reuse).
+    // ════════════════════════════════════════════════════════════════════
+    [HttpGet]
+    public async Task<IActionResult> Combinations(CancellationToken cancellationToken)
+    {
+        var board = await BuildCombinationsBoardConfigAsync(cancellationToken);
+        return View(new CombinationsSmartBoardViewModel { BoardConfig = board });
+    }
+
+    [HttpGet("/Logistics/CombinationsBoardConfig")]
+    public async Task<IActionResult> CombinationsBoardConfig(CancellationToken cancellationToken)
+    {
+        var board = await BuildCombinationsBoardConfigAsync(cancellationToken);
+        return Json(board);
+    }
+
+    // NOT: DeleteCombinationJson CombinationController'a tasindi (rapor §2.3 split).
+
+    private async Task<object> BuildCombinationsBoardConfigAsync(CancellationToken ct)
+    {
+        var combos = await _logisticsConfigurationService.GetAllCombinationsAsync(ct);
+
+        var entities = new List<object>();
+        foreach (var c in combos)
+        {
+            var widgets = new List<object>
+            {
+                new {
+                    id = "w_status", type = "data", dataType = "text",
+                    label = "Durum",
+                    value = c.IsActive ? "Aktif" : "Pasif",
+                    detail = (string?)null,
+                    color = c.IsActive ? "emerald" : "slate"
+                },
+                new {
+                    id = "w_item", type = "data", dataType = "text",
+                    label = "Mamul",
+                    value = c.ItemCode ?? "(?)",
+                    detail = c.ItemName,
+                    color = "blue"
+                },
+                new {
+                    id = "w_feature_count", type = "data", dataType = "numeric",
+                    label = "Özellik",
+                    value = c.FeatureValues.Count.ToString(),
+                    detail = "adet",
+                    color = "indigo"
+                },
+            };
+
+            // Her özellik/değer ciftini ayri widget olarak ekle
+            int idx = 1;
+            foreach (var fv in c.FeatureValues)
+            {
+                widgets.Add(new
+                {
+                    id = $"w_fv_{idx}",
+                    type = "data",
+                    dataType = "text",
+                    label = fv.Feature,
+                    value = fv.Value,
+                    detail = (string?)null,
+                    color = "violet"
+                });
+                idx++;
+            }
+
+            entities.Add(new
+            {
+                id            = c.ConfigId,
+                title         = c.Code,
+                subtitle      = c.ItemCode is null ? null : $"{c.ItemCode} · {c.ItemName}",
+                description   = c.Name,
+                imageUrl      = (string?)null,
+                statusBadge   = (object?)null,
+                widgets,
+                primaryAction = new
+                {
+                    label      = "Stok Kartında Aç",
+                    icon       = "ExternalLink",
+                    color      = "amber",
+                    // Kombinasyon parent stok kartının kombinasyon tab'ına yönlenir.
+                    url        = c.ItemId.HasValue ? $"/Logistics/MaterialCardEdit?id={c.ItemId.Value}#combinations" : "#",
+                    hideButton = true,
+                    // YENİ SEKMEDE aç — "Tanımlı Kombinasyonlar" listesi açık kalır,
+                    // mevcut Malzeme Kartları tab'ı varsa onu reuse eder (matchPath).
+                    openInTab  = new { title = "Malzeme Kartları", matchPath = "/Logistics/MaterialCard" },
+                },
+                secondaryAction = new
+                {
+                    label     = "Sil",
+                    icon      = "Trash2",
+                    apiUrl    = $"/Logistics/DeleteCombinationJson?id={c.ConfigId}",
+                    apiMethod = "POST",
+                    confirm   = $"Bu kombinasyonu silmek istediğinize emin misiniz? ({c.Code})",
+                },
+            });
+        }
+
+        return new
+        {
+            boardKey          = "logistics-combinations",
+            title             = "Tanımlı Kombinasyonlar",
+            subtitle          = $"{entities.Count} kombinasyon",
+            icon              = "Grid3X3",
+            iconColor         = "violet",
+            refreshUrl        = "/Logistics/CombinationsBoardConfig",
+            searchPlaceholder = "Kombinasyon kodu, mamul veya değer ara…",
+            emptyText         = "Henüz tanımlı kombinasyon yok",
+            actions           = Array.Empty<object>(),
+            masterWidgets     = Array.Empty<object>(),
+            entities,
+        };
     }
 
     // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -1751,979 +1154,13 @@ public sealed class LogisticsController : Controller
         _ => "slate",
     };
 
-    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-    // ProductFeatureEdit - yeni edit sayfasi (MaterialCardEdit pattern'i)
-    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-    [HttpGet]
-    public IActionResult ProductFeatureEdit(int? id)
-    {
-        ViewData["ProductFeatureEditId"] = id ?? 0;
-        return View(new ProductFeatureEditViewModel { FeatureId = id });
-    }
+    // NOT: ProductFeatureEdit, GetProductFeature, SaveProductFeatureJson, DeleteProductFeatureJson,
+    // SaveProductValueJson, DeleteProductValueJson, UpdateProductValueJson, SaveProductFeatureStocksJson
+    // ProductFeatureController'a tasindi (rapor §2.3 split). DTO record'lar oraya tasindi.
 
-    /// <summary>
-    /// Feature detay fetch - edit sayfasi load'da cagirir.
-    /// </summary>
-    [HttpGet]
-    public async Task<IActionResult> GetProductFeature(int id, CancellationToken ct)
-    {
-        var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
-        var feature = snapshot.Features.FirstOrDefault(f => f.Id == id);
-        if (feature is null) return NotFound();
+    // NOT: Legacy form-post cluster (SaveProductFeature, SaveProductValue, SaveProductConfig, UpdateProductFeature, DeleteProductFeature, SaveProductFeatureStocks, DeleteProductValue, DeleteProductConfig) kaldirildi - UI artik *Json variantlarini cagiriyor (rapor 2.3 split + temizlik).
 
-        var values = snapshot.Values
-            .Where(v => v.FeatureId == id && v.IsActive)
-            .OrderBy(v => v.Description)
-            .Select(v => new
-            {
-                id = v.Id,
-                code = v.Code,
-                description = v.Description,
-                value = v.Value,
-                aciklama = v.Aciklama,
-            })
-            .ToArray();
-
-        // Bu feature icin tum stok-link'leri (her link'in AllowedValueIds[] var)
-        var featureLinks = snapshot.FeatureStockLinks
-            .Where(l => l.FeatureId == id && !string.IsNullOrWhiteSpace(l.StockCode))
-            .GroupBy(l => l.StockCode, StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.First()) // her stockCode tekil olmali (header satir)
-            .ToArray();
-
-        var stockCodes = featureLinks
-            .Select(l => l.StockCode)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        // Stok adlarini cek (chip etiketi icin)
-        var stockCards = await _logisticsConfigurationService.GetItemsForLookupAsync(ct);
-        var stockByCode = stockCards
-            .GroupBy(s => (s.Code ?? string.Empty).ToUpperInvariant())
-            .ToDictionary(g => g.Key, g => g.First().Name ?? g.First().Code);
-
-        var linkedStocks = featureLinks
-            .Where(l => stockByCode.ContainsKey((l.StockCode ?? string.Empty).ToUpperInvariant()))
-            .Select(l => new
-            {
-                code = (l.StockCode ?? string.Empty).Trim(),
-                name = stockByCode.TryGetValue((l.StockCode ?? string.Empty).ToUpperInvariant(), out var n) ? n : l.StockCode,
-                printDescriptionInDesign = l.PrintDescriptionInDesign,
-                allowedValueIds = (l.AllowedValueIds ?? Array.Empty<int>()).ToArray(),
-            })
-            .ToArray();
-
-        return Json(new
-        {
-            id = feature.Id,
-            code = feature.Code,
-            name = feature.Name,
-            dataType = feature.DataType,
-            unitOfMeasure = feature.UnitOfMeasure,
-            isActive = feature.IsActive,
-            visibleInDesign = feature.VisibleInDesign,
-            values,
-            stockCodes,
-            linkedStocks,
-        });
-    }
-
-    /// <summary>
-    /// Feature kaydet - yeni veya guncelleme. Vanilla JS edit formu JSON body POST eder.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> SaveProductFeatureJson(
-        [FromBody] SaveProductFeatureJsonInput input,
-        CancellationToken ct)
-    {
-        if (input is null || string.IsNullOrWhiteSpace(input.Name))
-        {
-            return Json(new { success = false, message = "Ozellik adi bos olamaz." });
-        }
-
-        if (!Enum.TryParse<ConfigurationFieldDataType>(input.DataType, true, out var dataType))
-        {
-            return Json(new { success = false, message = "Gecerli bir veri tipi seciniz." });
-        }
-
-        try
-        {
-            int savedId;
-            if (input.Id.HasValue && input.Id.Value > 0)
-            {
-                // Update - mevcut feature
-                await _logisticsConfigurationService.UpdateProductConfigurationFeatureAsync(
-                    new UpdateProductConfigurationFeatureRequest(
-                        input.Id.Value,
-                        input.Name.Trim(),
-                        dataType,
-                        input.UnitOfMeasure,
-                        input.VisibleInDesign),
-                    ct);
-                savedId = input.Id.Value;
-            }
-            else
-            {
-                // Create - yeni feature
-                savedId = await _logisticsConfigurationService.CreateProductConfigurationFeatureAsync(
-                    new CreateProductConfigurationFeatureRequest(
-                        input.Name.Trim(),
-                        dataType,
-                        input.IsActive,
-                        input.UnitOfMeasure,
-                        input.VisibleInDesign),
-                    ct);
-            }
-
-            return Json(new { success = true, id = savedId });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// SmartCard-uyumlu delete endpoint'i - query string id, body'siz POST.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> DeleteProductFeatureJson(int id, CancellationToken ct)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteProductConfigurationFeatureAsync(id, ct);
-            return Json(new { success = true });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    public sealed record SaveProductFeatureJsonInput(
-        int? Id,
-        string Name,
-        string DataType,
-        string? UnitOfMeasure,
-        bool IsActive = true,
-        bool VisibleInDesign = true);
-
-    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-    // ProductFeatureEdit Phase 2 - Ozellik degeri ekle/sil (JSON)
-    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-
-    /// <summary>
-    /// Feature'a yeni deger ekler. React/vanilla JS inline form JSON body POST eder.
-    /// DataType'a gore Description/TextValue/NumericValue/DateValue'dan biri doldurulur.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> SaveProductValueJson(
-        [FromBody] SaveProductValueJsonInput input,
-        CancellationToken ct)
-    {
-        if (input is null || input.FeatureId <= 0)
-        {
-            return Json(new { success = false, message = "Gecersiz istek." });
-        }
-
-        try
-        {
-            var (id, code) = await _logisticsConfigurationService.CreateProductConfigurationValueAsync(
-                new CreateProductConfigurationValueRequest(
-                    input.FeatureId,
-                    input.Description,
-                    input.TextValue,
-                    input.NumericValue,
-                    input.DateValue,
-                    true,
-                    input.Aciklama),
-                ct);
-            return Json(new { success = true, id, code });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Feature degeri sil - SmartCard/inline delete ile uyumlu, body'siz query string id.
-    /// Mevcut DeleteProductValue action (antiforgery + redirect) dokunulmaz.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> DeleteProductValueJson(int id, CancellationToken ct)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteProductConfigurationValueAsync(id, ct);
-            return Json(new { success = true });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> UpdateProductValueJson(
-        [FromBody] UpdateProductValueJsonInput input, CancellationToken ct)
-    {
-        if (input is null || input.Id <= 0)
-            return Json(new { success = false, message = "Gecersiz istek." });
-        try
-        {
-            await _logisticsConfigurationService.UpdateProductConfigurationValueAsync(input.Id, input.Description, input.Aciklama, ct);
-            return Json(new { success = true });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    public sealed record UpdateProductValueJsonInput(int Id, string? Description, string? Aciklama);
-
-    public sealed record SaveProductValueJsonInput(
-        int FeatureId,
-        string? Description,
-        string? TextValue,
-        decimal? NumericValue,
-        DateTime? DateValue,
-        string? Aciklama = null);
-
-    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-    // ProductFeatureEdit Phase 3 - Ozellik stok baglama (JSON)
-    // â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-
-    /// <summary>
-    /// Feature'a bagli stok listesini tamamen yeniden yazar (full replace).
-    /// Mevcut SaveProductConfigurationFeatureStocksAsync servisi cagirilir.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> SaveProductFeatureStocksJson(
-        [FromBody] SaveProductFeatureStocksJsonInput input,
-        CancellationToken ct)
-    {
-        if (input is null || input.FeatureId <= 0)
-        {
-            return Json(new { success = false, message = "Gecersiz istek." });
-        }
-
-        try
-        {
-            // Yeni payload oncelikli: Stocks[] (StockCode + AllowedValueIds + Print)
-            // Geriye donuk uyumluluk: yalniz StockCodes[] geldiyse kisitlamasiz, Print=true
-            var stocks = (input.Stocks ?? Array.Empty<SaveProductFeatureStockInput>())
-                .Where(x => !string.IsNullOrWhiteSpace(x.StockCode))
-                .Select(x => new SaveProductConfigurationFeatureStockItem(
-                    x.StockCode!.Trim(),
-                    x.PrintDescriptionInDesign ?? true,
-                    x.AllowedValueIds ?? Array.Empty<int>()))
-                .ToList();
-
-            if (stocks.Count == 0 && input.StockCodes is not null && input.StockCodes.Count > 0)
-            {
-                stocks.AddRange(input.StockCodes
-                    .Where(c => !string.IsNullOrWhiteSpace(c))
-                    .Select(c => new SaveProductConfigurationFeatureStockItem(c.Trim(), true, Array.Empty<int>())));
-            }
-
-            await _logisticsConfigurationService.SaveProductConfigurationFeatureStocksAsync(
-                new SaveProductConfigurationFeatureStocksRequest(input.FeatureId, stocks),
-                ct);
-            return Json(new { success = true });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    public sealed record SaveProductFeatureStocksJsonInput(
-        int FeatureId,
-        IReadOnlyCollection<string>? StockCodes,
-        IReadOnlyCollection<SaveProductFeatureStockInput>? Stocks);
-
-    public sealed record SaveProductFeatureStockInput(
-        string? StockCode,
-        bool? PrintDescriptionInDesign,
-        IReadOnlyCollection<int>? AllowedValueIds);
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveProductFeature(
-        [Bind(Prefix = "FeatureInput")] ProductFeatureInput featureInput,
-        string? search,
-        int? page,
-        int? pageSize,
-        int? selectedFeatureId,
-        int? selectedValueId,
-        CancellationToken cancellationToken)
-    {
-        if (!Enum.TryParse(featureInput.DataType, true, out ConfigurationFieldDataType dataType) ||
-            !Enum.IsDefined(dataType))
-        {
-            ModelState.AddModelError(nameof(featureInput.DataType), "Gecerli bir veri tipi seciniz.");
-        }
-
-        if (!ModelState.IsValid)
-        {
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                featureInput,
-                new ProductValueInput(),
-                new ProductConfigInput(),
-                ProductConfigurationTabs.Feature,
-                search,
-                page,
-                pageSize,
-                selectedFeatureId,
-                selectedValueId,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-
-        try
-        {
-            var createdFeatureId = await _logisticsConfigurationService.CreateProductConfigurationFeatureAsync(
-                new CreateProductConfigurationFeatureRequest(
-                    featureInput.Name,
-                    dataType,
-                    featureInput.IsActive,
-                    featureInput.UnitOfMeasure),
-                cancellationToken);
-
-            TempData["AdminSuccess"] = "Ozellik tanimi kaydedildi.";
-            return RedirectToAction(
-                nameof(ProductConfiguration),
-                new
-                {
-                    tab = ProductConfigurationTabs.Feature,
-                    search,
-                    page,
-                    pageSize,
-                    selectedFeatureId = createdFeatureId,
-                    selectedValueId
-                });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                featureInput,
-                new ProductValueInput(),
-                new ProductConfigInput(),
-                ProductConfigurationTabs.Feature,
-                search,
-                page,
-                pageSize,
-                selectedFeatureId,
-                selectedValueId,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveProductValue(
-        [Bind(Prefix = "ValueInput")] ProductValueInput valueInput,
-        string? search,
-        int? page,
-        int? pageSize,
-        int? selectedFeatureId,
-        int? selectedValueId,
-        CancellationToken cancellationToken)
-    {
-        var resolvedFeatureId = valueInput.FeatureId ?? selectedFeatureId;
-        if (!valueInput.FeatureId.HasValue && resolvedFeatureId.HasValue)
-        {
-            valueInput.FeatureId = resolvedFeatureId;
-        }
-
-        var isAjax = Request.Headers.XRequestedWith == "XMLHttpRequest";
-
-        if (!ModelState.IsValid)
-        {
-            if (isAjax)
-                return BadRequest(new { error = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)) });
-
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                valueInput,
-                new ProductConfigInput(),
-                ProductConfigurationTabs.Value,
-                search,
-                page,
-                pageSize,
-                resolvedFeatureId,
-                selectedValueId,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-
-        try
-        {
-            var (newId, newCode) = await _logisticsConfigurationService.CreateProductConfigurationValueAsync(
-                new CreateProductConfigurationValueRequest(
-                    valueInput.FeatureId!.Value,
-                    valueInput.Description ?? string.Empty,
-                    valueInput.TextValue,
-                    valueInput.NumericValue,
-                    valueInput.DateValue,
-                    valueInput.IsActive),
-                cancellationToken);
-
-            if (isAjax)
-                return Ok(new { id = newId, code = newCode, description = valueInput.Description ?? string.Empty });
-
-            TempData["AdminSuccess"] = "Ozellige deger tanimi kaydedildi.";
-            return RedirectToAction(
-                nameof(ProductConfiguration),
-                new
-                {
-                    tab = ProductConfigurationTabs.Value,
-                    search,
-                    page,
-                    pageSize,
-                    selectedFeatureId = valueInput.FeatureId
-                });
-        }
-        catch (ArgumentException ex)
-        {
-            if (isAjax)
-                return BadRequest(new { error = ex.Message });
-
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                valueInput,
-                new ProductConfigInput(),
-                ProductConfigurationTabs.Value,
-                search,
-                page,
-                pageSize,
-                resolvedFeatureId,
-                selectedValueId,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveProductConfig(
-        [Bind(Prefix = "ConfigInput")] ProductConfigInput configInput,
-        string? search,
-        int? page,
-        int? pageSize,
-        int? selectedFeatureId,
-        int? selectedValueId,
-        CancellationToken cancellationToken)
-    {
-        var resolvedFeatureId = configInput.FeatureId ?? selectedFeatureId;
-        var resolvedValueId = configInput.ValueId ?? selectedValueId;
-
-        if (!configInput.FeatureId.HasValue && resolvedFeatureId.HasValue)
-        {
-            configInput.FeatureId = resolvedFeatureId;
-        }
-
-        if (!configInput.ValueId.HasValue && resolvedValueId.HasValue)
-        {
-            configInput.ValueId = resolvedValueId;
-        }
-
-        if (!ModelState.IsValid)
-        {
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                new ProductValueInput(),
-                configInput,
-                ProductConfigurationTabs.Config,
-                search,
-                page,
-                pageSize,
-                resolvedFeatureId,
-                resolvedValueId,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-
-        try
-        {
-            await _logisticsConfigurationService.CreateProductConfigurationItemAsync(
-                new CreateProductConfigurationItemRequest(
-                    configInput.RelatedMaterialCode,
-                    configInput.FeatureId!.Value,
-                    configInput.ValueId!.Value,
-                    configInput.IsActive),
-                cancellationToken);
-
-            TempData["AdminSuccess"] = "Urun konfigurasyonu kaydedildi.";
-            return RedirectToAction(
-                nameof(ProductConfiguration),
-                new
-                {
-                    tab = ProductConfigurationTabs.Config,
-                    search,
-                    page,
-                    pageSize,
-                    selectedFeatureId = configInput.FeatureId,
-                    selectedValueId = configInput.ValueId
-                });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                new ProductValueInput(),
-                configInput,
-                ProductConfigurationTabs.Config,
-                search,
-                page,
-                pageSize,
-                resolvedFeatureId,
-                resolvedValueId,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> UpdateProductFeature(
-        [Bind(Prefix = "EditInput")] FeatureEditInput editInput,
-        CancellationToken cancellationToken)
-    {
-        if (!Enum.TryParse(editInput.DataType, true, out ConfigurationFieldDataType editDataType) ||
-            !Enum.IsDefined(editDataType))
-        {
-            ModelState.AddModelError(nameof(editInput.DataType), "Gecerli bir veri tipi seciniz.");
-        }
-
-        if (!ModelState.IsValid)
-        {
-            TempData["AdminError"] = "Ozellik bilgileri gecersiz.";
-            return RedirectToAction(nameof(ProductConfiguration));
-        }
-
-        try
-        {
-            await _logisticsConfigurationService.UpdateProductConfigurationFeatureAsync(
-                new UpdateProductConfigurationFeatureRequest(editInput.Id, editInput.Name, editDataType, editInput.UnitOfMeasure),
-                cancellationToken);
-
-            TempData["AdminSuccess"] = "Ozellik guncellendi.";
-        }
-        catch (ArgumentException ex)
-        {
-            TempData["AdminError"] = ex.Message;
-        }
-
-        return RedirectToAction(nameof(ProductConfiguration));
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteProductFeature(
-        int id,
-        string? search,
-        int? page,
-        int? pageSize,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteProductConfigurationFeatureAsync(id, cancellationToken);
-            TempData["AdminSuccess"] = "Ozellik kaydi silindi.";
-            return RedirectToAction(nameof(ProductConfiguration), new
-            {
-                tab = ProductConfigurationTabs.Feature,
-                search,
-                page,
-                pageSize
-            });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                new ProductValueInput(),
-                new ProductConfigInput(),
-                ProductConfigurationTabs.Feature,
-                search,
-                page,
-                pageSize,
-                id,
-                null,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveProductFeatureStocks(
-        int? featureId,
-        string[]? selectedStockCodes,
-        string? search,
-        int? page,
-        int? pageSize,
-        CancellationToken cancellationToken)
-    {
-        if (!featureId.HasValue || featureId.Value <= 0)
-        {
-            ModelState.AddModelError(nameof(featureId), "Stok eslestirmesi icin bir ozellik secilmelidir.");
-        }
-
-        if (!ModelState.IsValid)
-        {
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                new ProductValueInput(),
-                new ProductConfigInput(),
-                ProductConfigurationTabs.Feature,
-                search,
-                page,
-                pageSize,
-                featureId ?? 0,
-                null,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-
-        try
-        {
-            var stockItems = (selectedStockCodes ?? Array.Empty<string>())
-                .Where(c => !string.IsNullOrWhiteSpace(c))
-                .Select(c => new SaveProductConfigurationFeatureStockItem(c.Trim(), true, Array.Empty<int>()))
-                .ToArray();
-            await _logisticsConfigurationService.SaveProductConfigurationFeatureStocksAsync(
-                new SaveProductConfigurationFeatureStocksRequest(
-                    featureId ?? 0,
-                    stockItems),
-                cancellationToken);
-
-            TempData["AdminSuccess"] = "Ozellige gecerli stok eslestirmesi kaydedildi.";
-            return RedirectToAction(
-                nameof(ProductConfiguration),
-                new
-                {
-                    tab = ProductConfigurationTabs.Feature,
-                    search,
-                    page,
-                    pageSize,
-                    selectedFeatureId = featureId
-                });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                new ProductValueInput(),
-                new ProductConfigInput(),
-                ProductConfigurationTabs.Feature,
-                search,
-                page,
-                pageSize,
-                featureId,
-                null,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteProductValue(
-        int id,
-        string? search,
-        int? page,
-        int? pageSize,
-        int? selectedFeatureId,
-        CancellationToken cancellationToken)
-    {
-        var isAjax = Request.Headers.ContainsKey("X-Requested-With") &&
-                     string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase);
-        try
-        {
-            await _logisticsConfigurationService.DeleteProductConfigurationValueAsync(id, cancellationToken);
-            if (isAjax) return Ok(new { success = true });
-            TempData["AdminSuccess"] = "Deger kaydi silindi.";
-            return RedirectToAction(
-                nameof(ProductConfiguration),
-                new
-                {
-                    tab = ProductConfigurationTabs.Value,
-                    search,
-                    page,
-                    pageSize,
-                    selectedFeatureId
-                });
-        }
-        catch (ArgumentException ex)
-        {
-            if (isAjax) return BadRequest(new { error = ex.Message });
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                new ProductValueInput
-                {
-                    FeatureId = selectedFeatureId
-                },
-                new ProductConfigInput
-                {
-                    FeatureId = selectedFeatureId
-                },
-                ProductConfigurationTabs.Value,
-                search,
-                page,
-                pageSize,
-                selectedFeatureId,
-                id,
-                null,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteProductConfig(
-        int id,
-        string? search,
-        int? page,
-        int? pageSize,
-        int? selectedFeatureId,
-        int? selectedValueId,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _logisticsConfigurationService.DeleteProductConfigurationItemAsync(id, cancellationToken);
-            TempData["AdminSuccess"] = "Yapilandirma kaydi silindi.";
-            return RedirectToAction(
-                nameof(ProductConfiguration),
-                new
-                {
-                    tab = ProductConfigurationTabs.Config,
-                    search,
-                    page,
-                    pageSize,
-                    selectedFeatureId,
-                    selectedValueId
-                });
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            var invalidModel = await BuildProductConfigurationViewModelAsync(
-                new ProductFeatureInput
-                {
-                    DataType = ConfigurationFieldDataType.Text.ToString()
-                },
-                new ProductValueInput
-                {
-                    FeatureId = selectedFeatureId
-                },
-                new ProductConfigInput
-                {
-                    FeatureId = selectedFeatureId,
-                    ValueId = selectedValueId
-                },
-                ProductConfigurationTabs.Config,
-                search,
-                page,
-                pageSize,
-                selectedFeatureId,
-                selectedValueId,
-                id,
-                cancellationToken);
-            return View(nameof(ProductConfiguration), invalidModel);
-        }
-    }
-
-    /// <summary>
-    /// Stok kodlarÄ± listesi - React Kombinasyon ekranÄ± iÃ§in.
-    /// YalnÄ±zca hem Ã¶zellik baÄŸlantÄ±sÄ± olan hem de stok kartÄ± bulunan kodlar dÃ¶ndÃ¼rÃ¼lÃ¼r;
-    /// bÃ¶ylece kombinasyon kaydetme sÄ±rasÄ±nda "malzeme kodu bulunamadÄ±" hatasÄ± oluÅŸmaz.
-    /// </summary>
-    [HttpGet]
-    public async Task<IActionResult> StockCodesJson(CancellationToken cancellationToken)
-    {
-        var snapshot      = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(cancellationToken);
-        var stockSnapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
-
-        // Stok kartÄ± indeksi - hÄ±zlÄ± arama iÃ§in
-        var cardIndex = stockSnapshot.Items
-            .GroupBy(s => s.Code.Trim().ToUpperInvariant())
-            .ToDictionary(g => g.Key, g => g.First());
-
-        var codes = snapshot.FeatureStockLinks
-            .Select(x => x.StockCode.Trim().ToUpperInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Where(code => cardIndex.ContainsKey(code))   // stok kartÄ± olmayanlarÄ± filtrele
-            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-            .Select(code =>
-            {
-                var card = cardIndex[code];
-                return new
-                {
-                    value = code,
-                    label = $"{code} \u2014 {card.Name}"
-                };
-            })
-            .ToArray();
-
-        return Json(codes);
-    }
-
-    /// <summary>
-    /// Stoka ait Ã¶zellikler + deÄŸerler + mevcut kombinasyonlar - React Kombinasyon Matrisi ekranÄ± iÃ§in.
-    /// Cross-product hesaplanmaz; mevcut DB kayÄ±tlarÄ± doÄŸrudan dÃ¶ndÃ¼rÃ¼lÃ¼r. Client tarafÄ± cross-product Ã¼retir.
-    /// </summary>
-    [HttpGet]
-    public async Task<IActionResult> CombinationsDataJson(
-        string stockCode,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(stockCode))
-            return Json(new { features = Array.Empty<object>(), combos = Array.Empty<object>() });
-
-        stockCode = stockCode.Trim().ToUpperInvariant();
-
-        var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(cancellationToken);
-
-        // Bu stok'a bagli her feature icin AllowedValueIds[] (kisitlamali deger seti).
-        // Bos set → kisitlama yok, tum aktif degerler izinli.
-        var stockLinks = snapshot.FeatureStockLinks
-            .Where(x => string.Equals(x.StockCode, stockCode, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        var linkedFeatureIds = stockLinks.Select(x => x.FeatureId).ToHashSet();
-        var allowedByFeature = stockLinks
-            .GroupBy(x => x.FeatureId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.SelectMany(x => x.AllowedValueIds ?? Array.Empty<int>()).ToHashSet());
-
-        var featureVms = snapshot.Features
-            .Where(f => linkedFeatureIds.Contains(f.Id) && f.IsActive)
-            .OrderBy(f => f.Code, StringComparer.OrdinalIgnoreCase)
-            .Select(f => new CombinationFeatureVm
-            {
-                Id       = f.Id,
-                Code     = f.Code,
-                Name     = f.Name,
-                DataType = f.DataType,
-                Values   = snapshot.Values
-                    .Where(v => v.FeatureId == f.Id && v.IsActive)
-                    .OrderBy(v => v.Code, StringComparer.OrdinalIgnoreCase)
-                    .Select(v => new CombinationValueVm { Id = v.Id, Code = v.Code, Description = v.Description })
-                    .ToArray()
-            })
-            .ToList();
-
-        var featuresResult = featureVms.Select(f =>
-        {
-            var allowedSet = allowedByFeature.TryGetValue(f.Id, out var s) ? s : new HashSet<int>();
-            var hasRestriction = allowedSet.Count > 0;
-            return new
-            {
-                id     = f.Id,
-                code   = f.Code,
-                name   = f.Name,
-                values = f.Values.Select(v => new
-                {
-                    id          = v.Id,
-                    code        = v.Code,
-                    description = v.Description,
-                    // Kisitlama yoksa hepsi izinli; varsa yalniz set'tekiler
-                    allowed     = !hasRestriction || allowedSet.Contains(v.Id),
-                }).ToArray()
-            };
-        }).ToArray();
-
-        // Mevcut kombinasyonlarÄ± doÄŸrudan dÃ¶ndÃ¼r (cross-product client-side Ã¼retilir)
-        var existingConfigs = snapshot.Configurations
-            .Where(c => string.Equals(c.RelatedMaterialCode, stockCode, StringComparison.OrdinalIgnoreCase)
-                     && c.ValueIds != null && c.ValueIds.Count > 0)
-            .ToList();
-
-        // valueId â†’ value bilgisi iÃ§in hÄ±zlÄ± eriÅŸim haritasÄ±
-        var valueIndex = featureVms
-            .SelectMany(f => f.Values.Select(v => new { f.Id, f.Name, v }))
-            .ToDictionary(x => x.v.Id, x => new { featureId = x.Id, featureName = x.Name, x.v.Code, x.v.Description });
-
-        var combosResult = existingConfigs
-            .Select(config =>
-            {
-                var valueIdSet = config.ValueIds.ToHashSet();
-                var cells = featureVms
-                    .Select(f =>
-                    {
-                        var matchedValue = f.Values.FirstOrDefault(v => valueIdSet.Contains(v.Id));
-                        if (matchedValue == null) return (object?)null;
-                        return (object)new
-                        {
-                            featureId        = f.Id,
-                            featureName      = f.Name,
-                            valueId          = matchedValue.Id,
-                            valueCode        = matchedValue.Code,
-                            valueDescription = matchedValue.Description
-                        };
-                    })
-                    .Where(c => c != null)
-                    .ToArray();
-                return new
-                {
-                    id          = config.Id,
-                    code        = config.ConfigCode,
-                    description = config.ConfigName,
-                    date        = config.CreatedDate.ToString("dd.MM.yyyy"),
-                    cells
-                };
-            })
-            .Where(c => c.cells.Length > 0)
-            .ToArray();
-
-        return Json(new { features = featuresResult, combos = combosResult });
-    }
+    // NOT: StockCodesJson + CombinationsDataJson CombinationController'a tasindi (rapor sec 2.3 split).
 
     [HttpGet]
     public async Task<IActionResult> ProductCombinations(
@@ -2915,176 +1352,7 @@ public sealed class LogisticsController : Controller
         return RedirectToAction(nameof(ProductCombinations), new { stockCode = resolvedStockCode });
     }
 
-    [HttpPost]
-    public async Task<IActionResult> SaveProductCombinationsJson(
-        [FromBody] SaveProductCombinationsRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(request.StockCode))
-            return Json(new { success = false, message = "Stok kodu bos olamaz." });
-
-        var resolvedStockCode = request.StockCode.Contains(',')
-            ? request.StockCode.Split(',')[0].Trim()
-            : request.StockCode.Trim();
-
-        var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(cancellationToken);
-
-        var requiredFeatureIds = snapshot.FeatureStockLinks
-            .Where(x => string.Equals(x.StockCode, resolvedStockCode, StringComparison.OrdinalIgnoreCase))
-            .Select(x => x.FeatureId)
-            .ToHashSet();
-
-        var activeRequiredFeatureIds = snapshot.Features
-            .Where(f => requiredFeatureIds.Contains(f.Id) && f.IsActive)
-            .Select(f => f.Id)
-            .ToHashSet();
-
-        var selectedValueIds = (request.SelectedCombinations ?? Array.Empty<string>())
-            .Select(x => int.TryParse(x, out var id) ? id : 0)
-            .Where(x => x > 0)
-            .ToHashSet();
-
-        var selectedFeatureIds = snapshot.Values
-            .Where(v => selectedValueIds.Contains(v.Id))
-            .Select(v => v.FeatureId)
-            .ToHashSet();
-
-        if (activeRequiredFeatureIds.Count > 0 && selectedFeatureIds.Count < activeRequiredFeatureIds.Count)
-            return Json(new { success = false, message = "Stoga bagli ozelliklerin tamamindan en az birer deger secmelisiniz." });
-
-        var existingConfigs = snapshot.Configurations
-            .Where(x => string.Equals(x.RelatedMaterialCode, resolvedStockCode, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        foreach (var exist in existingConfigs)
-            await _logisticsConfigurationService.DeleteProductConfigurationItemAsync(exist.Id, cancellationToken);
-
-        if (selectedValueIds.Count > 0)
-        {
-            var selectedValuesByFeature = snapshot.Values
-                .Where(v => selectedValueIds.Contains(v.Id))
-                .GroupBy(v => v.FeatureId)
-                .ToList();
-
-            if (selectedValuesByFeature.Count > 0)
-            {
-                var permutations = new List<List<int>> { new List<int>() };
-                foreach (var featureGroup in selectedValuesByFeature)
-                {
-                    var newPermutations = new List<List<int>>();
-                    foreach (var existing in permutations)
-                        foreach (var val in featureGroup)
-                            newPermutations.Add(new List<int>(existing) { val.Id });
-                    permutations = newPermutations;
-                }
-
-                foreach (var comboIds in permutations)
-                    if (comboIds.Count > 0)
-                        await _logisticsConfigurationService.CreateProductConfigurationCombinationAsync(
-                            new CreateProductConfigurationCombinationRequest(resolvedStockCode, comboIds.ToArray(), true),
-                            cancellationToken);
-            }
-        }
-
-        return Json(new { success = true, message = "Kombinasyon secimleri basariyla kaydedildi." });
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteProductCombination(int id, CancellationToken cancellationToken)
-    {
-        await _logisticsConfigurationService.DeleteProductConfigurationItemAsync(id, cancellationToken);
-        return Json(new { success = true });
-    }
-
-    public sealed record UpdateCombinationDescriptionRequest(int Id, string? Description);
-
-    [HttpPost]
-    public async Task<IActionResult> UpdateCombinationDescriptionJson(
-        [FromBody] UpdateCombinationDescriptionRequest request,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _logisticsConfigurationService.UpdateProductCombinationDescriptionAsync(
-                request.Id, request.Description, cancellationToken);
-            return Json(new { success = true });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    public sealed record AddSingleCombinationRequest(string StockCode, int[] ValueIds);
-
-    [HttpPost]
-    public async Task<IActionResult> AddSingleCombinationJson(
-        [FromBody] AddSingleCombinationRequest request,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(request.StockCode))
-                return Json(new { success = false, message = "Stok kodu bos olamaz." });
-            if (request.ValueIds == null || request.ValueIds.Length == 0)
-                return Json(new { success = false, message = "En az bir deger secilmelidir." });
-
-            var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(cancellationToken);
-            var stockCode = request.StockCode.Trim().ToUpperInvariant();
-
-            var requiredFeatureIds = snapshot.FeatureStockLinks
-                .Where(x => string.Equals(x.StockCode, stockCode, StringComparison.OrdinalIgnoreCase))
-                .Select(x => x.FeatureId)
-                .ToHashSet();
-
-            var activeFeatureIds = snapshot.Features
-                .Where(f => requiredFeatureIds.Contains(f.Id) && f.IsActive)
-                .Select(f => f.Id)
-                .ToHashSet();
-
-            var selectedValueIds = request.ValueIds.Where(v => v > 0).ToHashSet();
-
-            var coveredFeatureIds = snapshot.Values
-                .Where(v => selectedValueIds.Contains(v.Id))
-                .Select(v => v.FeatureId)
-                .ToHashSet();
-
-            if (activeFeatureIds.Count > 0 && !activeFeatureIds.All(f => coveredFeatureIds.Contains(f)))
-                return Json(new { success = false, message = "Her ozellik icin bir deger secilmelidir." });
-
-            // Ayni kombinasyon zaten var mi kontrol et
-            var existing = snapshot.Configurations
-                .Where(c => string.Equals(c.RelatedMaterialCode, stockCode, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            var selectedSorted = selectedValueIds.OrderBy(x => x).ToArray();
-            var isDuplicate = existing.Any(c =>
-            {
-                var ids = (c.ValueIds ?? Array.Empty<int>()).OrderBy(x => x).ToArray();
-                return ids.SequenceEqual(selectedSorted);
-            });
-
-            if (isDuplicate)
-                return Json(new { success = false, message = "Bu kombinasyon zaten mevcut." });
-
-            var (id, code) = await _logisticsConfigurationService.CreateProductConfigurationCombinationAsync(
-                new CreateProductConfigurationCombinationRequest(stockCode, selectedValueIds.ToArray(), true),
-                cancellationToken);
-
-            // Olusturulan kombinasyonun degerlerini donus icin hazirla
-            var cells = snapshot.Values
-                .Where(v => selectedValueIds.Contains(v.Id))
-                .Select(v => new { featureName = v.FeatureName, valueDesc = v.Description, valueCode = v.Code })
-                .ToArray();
-
-            return Json(new { success = true, id, code, cells });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
+    // NOT: SaveProductCombinationsJson + UpdateCombinationDescriptionJson + AddSingleCombinationJson CombinationController'a tasindi (rapor 2.3 split).
 
     private static List<CombinationRowVm> BuildCombinations(
         string stockCode,
@@ -3139,310 +1407,7 @@ public sealed class LogisticsController : Controller
         }).ToList();
     }
 
-    private async Task<ProductConfigurationViewModel> BuildProductConfigurationViewModelAsync(
-        ProductFeatureInput featureInput,
-        ProductValueInput valueInput,
-        ProductConfigInput configInput,
-        string activeTab,
-        string? search,
-        int? page,
-        int? pageSize,
-        int? selectedFeatureId,
-        int? selectedValueId,
-        int? selectedConfigId,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(featureInput.DataType))
-        {
-            featureInput.DataType = ConfigurationFieldDataType.Text.ToString();
-        }
-
-        var normalizedActiveTab = NormalizeProductConfigurationTab(activeTab);
-        var normalizedSearch = search?.Trim() ?? string.Empty;
-        var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(cancellationToken);
-        var stockSnapshot = await _logisticsConfigurationService.GetSnapshotAsync(cancellationToken);
-
-        var selectedConfig = selectedConfigId.HasValue
-            ? snapshot.Configurations.FirstOrDefault(x => x.Id == selectedConfigId.Value)
-            : null;
-
-        var resolvedFeatureId = valueInput.FeatureId ?? configInput.FeatureId ?? selectedFeatureId;
-        var resolvedValueId = configInput.ValueId ?? selectedValueId;
-
-        if (selectedConfig is not null)
-        {
-            resolvedFeatureId ??= selectedConfig.FeatureId;
-            resolvedValueId ??= selectedConfig.ValueId;
-        }
-
-        if (!valueInput.FeatureId.HasValue && resolvedFeatureId.HasValue)
-        {
-            valueInput.FeatureId = resolvedFeatureId;
-        }
-
-        if (!configInput.FeatureId.HasValue && resolvedFeatureId.HasValue)
-        {
-            configInput.FeatureId = resolvedFeatureId;
-        }
-
-        var availableValues = snapshot.Values
-            .Where(x => !resolvedFeatureId.HasValue || x.FeatureId == resolvedFeatureId.Value)
-            .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (resolvedValueId.HasValue && availableValues.All(x => x.Id != resolvedValueId.Value))
-        {
-            resolvedValueId = null;
-            configInput.ValueId = null;
-        }
-        else if (!configInput.ValueId.HasValue && resolvedValueId.HasValue)
-        {
-            configInput.ValueId = resolvedValueId;
-        }
-
-        if (selectedConfig is not null &&
-            (selectedConfig.FeatureId != resolvedFeatureId || selectedConfig.ValueId != resolvedValueId))
-        {
-            selectedConfig = null;
-        }
-
-        var dataTypeOptions = Enum.GetValues<ConfigurationFieldDataType>()
-            .Select(x => new SelectListItem(
-                GetDataTypeLabel(x),
-                x.ToString(),
-                string.Equals(featureInput.DataType, x.ToString(), StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
-
-        var featureOptions = snapshot.Features
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-            .Select(x => new SelectListItem(
-                $"{x.Code} - {x.Name} ({x.DataType})",
-                x.Id.ToString(),
-                resolvedFeatureId == x.Id))
-            .ToArray();
-
-        var valueOptions = availableValues
-            .Select(x => new SelectListItem(
-                $"{x.Code} - {x.Description} ({x.Value})",
-                x.Id.ToString(),
-                resolvedValueId == x.Id))
-            .ToArray();
-
-        var selectedFeatureStockCodes = snapshot.FeatureStockLinks
-            .Where(x => x.FeatureId == resolvedFeatureId)
-            .Select(x => x.StockCode)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var featureStockOptions = stockSnapshot.Items
-            .Where(x => x.IsActive && x.Combinations)
-            .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-            .Select(x => new ProductFeatureStockOptionViewModel
-            {
-                StockCode = x.Code,
-                StockName = x.Name,
-                IsSelected = selectedFeatureStockCodes.Contains(x.Code)
-            })
-            .ToArray();
-
-        var materialCodeOptions = stockSnapshot.Items
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-            .Select(x => new SelectListItem(
-                $"{x.Code} - {x.Name}",
-                x.Code,
-                string.Equals(configInput.RelatedMaterialCode, x.Code, StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
-
-        var featureGridSource = snapshot.Features
-            .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-            .Where(x =>
-                string.IsNullOrWhiteSpace(normalizedSearch) ||
-                ContainsInsensitive(x.Code, normalizedSearch) ||
-                ContainsInsensitive(x.Name, normalizedSearch) ||
-                ContainsInsensitive(x.DataType, normalizedSearch))
-            .ToArray();
-        var featurePageSize = await ResolveGridPageSizeAsync(
-            "logistics-product-features",
-            string.Equals(normalizedActiveTab, ProductConfigurationTabs.Feature, StringComparison.Ordinal)
-                ? pageSize
-                : null,
-            cancellationToken);
-        var featureTotalCount = featureGridSource.Length;
-        var featureTotalPages = featureTotalCount == 0 ? 0 : (int)Math.Ceiling(featureTotalCount / (double)featurePageSize);
-        var featurePage = string.Equals(normalizedActiveTab, ProductConfigurationTabs.Feature, StringComparison.Ordinal)
-            ? (featureTotalPages == 0 ? 1 : Math.Min(Math.Max(page.GetValueOrDefault(1), 1), featureTotalPages))
-            : 1;
-        var gridFeatures = featureGridSource
-            .Skip((featurePage - 1) * featurePageSize)
-            .Take(featurePageSize)
-            .ToArray();
-
-        var valueGridSource = snapshot.Values
-            .Where(x => !resolvedFeatureId.HasValue || x.FeatureId == resolvedFeatureId.Value)
-            .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.Description ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .Where(x =>
-                string.IsNullOrWhiteSpace(normalizedSearch) ||
-                ContainsInsensitive(x.FeatureCode, normalizedSearch) ||
-                ContainsInsensitive(x.FeatureName, normalizedSearch) ||
-                ContainsInsensitive(x.Code, normalizedSearch) ||
-                ContainsInsensitive(x.Description ?? string.Empty, normalizedSearch) ||
-                ContainsInsensitive(x.Value ?? string.Empty, normalizedSearch))
-            .ToArray();
-        var valuePageSize = await ResolveGridPageSizeAsync(
-            "logistics-product-values",
-            string.Equals(normalizedActiveTab, ProductConfigurationTabs.Value, StringComparison.Ordinal)
-                ? pageSize
-                : null,
-            cancellationToken);
-        var valueTotalCount = valueGridSource.Length;
-        var valueTotalPages = valueTotalCount == 0 ? 0 : (int)Math.Ceiling(valueTotalCount / (double)valuePageSize);
-        var valuePage = string.Equals(normalizedActiveTab, ProductConfigurationTabs.Value, StringComparison.Ordinal)
-            ? (valueTotalPages == 0 ? 1 : Math.Min(Math.Max(page.GetValueOrDefault(1), 1), valueTotalPages))
-            : 1;
-        var gridValues = valueGridSource
-            .Skip((valuePage - 1) * valuePageSize)
-            .Take(valuePageSize)
-            .ToArray();
-
-        var configurationGridSource = snapshot.Configurations
-            .OrderBy(x => x.ConfigCode, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.RelatedMaterialCode, StringComparer.OrdinalIgnoreCase)
-            .Where(x =>
-                string.IsNullOrWhiteSpace(normalizedSearch) ||
-                ContainsInsensitive(x.ConfigCode, normalizedSearch) ||
-                ContainsInsensitive(x.RelatedMaterialCode, normalizedSearch) ||
-                ContainsInsensitive(x.FeatureCode, normalizedSearch) ||
-                ContainsInsensitive(x.FeatureName, normalizedSearch) ||
-                ContainsInsensitive(x.ValueCode, normalizedSearch) ||
-                ContainsInsensitive(x.ValueDescription, normalizedSearch) ||
-                ContainsInsensitive(x.Value ?? string.Empty, normalizedSearch))
-            .ToArray();
-        var configurationPageSize = await ResolveGridPageSizeAsync(
-            "logistics-product-configurations",
-            string.Equals(normalizedActiveTab, ProductConfigurationTabs.Config, StringComparison.Ordinal)
-                ? pageSize
-                : null,
-            cancellationToken);
-        var configurationTotalCount = configurationGridSource.Length;
-        var configurationTotalPages = configurationTotalCount == 0
-            ? 0
-            : (int)Math.Ceiling(configurationTotalCount / (double)configurationPageSize);
-        var configurationPage = string.Equals(normalizedActiveTab, ProductConfigurationTabs.Config, StringComparison.Ordinal)
-            ? (configurationTotalPages == 0
-                ? 1
-                : Math.Min(Math.Max(page.GetValueOrDefault(1), 1), configurationTotalPages))
-            : 1;
-        var gridConfigurations = configurationGridSource
-            .Skip((configurationPage - 1) * configurationPageSize)
-            .Take(configurationPageSize)
-            .ToArray();
-
-        var featureValueCounts = snapshot.Values
-            .GroupBy(x => x.FeatureId)
-            .ToDictionary(g => g.Key, g => g.Count());
-        var featureStockLinkLookup = snapshot.FeatureStockLinks
-            .GroupBy(x => x.FeatureId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(x => x.StockCode).ToArray());
-        var valuesByFeature = snapshot.Values
-            .GroupBy(x => x.FeatureId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<FeatureValueItemViewModel>)g
-                .OrderBy(v => v.Code, StringComparer.OrdinalIgnoreCase)
-                .Select(v => new FeatureValueItemViewModel
-                {
-                    Id = v.Id,
-                    Code = v.Code,
-                    Description = v.Description,
-                    Value = v.Value
-                })
-                .ToArray());
-        var featureRows = snapshot.Features
-            .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-            .Select(x => new ProductFeatureRowViewModel
-            {
-                Id = x.Id,
-                Code = x.Code,
-                Name = x.Name,
-                DataType = x.DataType switch
-                {
-                    "NUMBER" => "Numeric",
-                    "DATE" => "Date",
-                    _ => "Text"
-                },
-                UnitOfMeasure = x.UnitOfMeasure,
-                IsActive = x.IsActive,
-                ValueCount = featureValueCounts.GetValueOrDefault(x.Id, 0),
-                LinkedStockCodes = featureStockLinkLookup.TryGetValue(x.Id, out var stocks)
-                    ? stocks
-                    : Array.Empty<string>(),
-                Values = valuesByFeature.TryGetValue(x.Id, out var vals)
-                    ? vals
-                    : Array.Empty<FeatureValueItemViewModel>()
-            })
-            .ToArray();
-
-        var measureUnits = await _logisticsConfigurationService.GetUnitsAsync(cancellationToken);
-        var unitOfMeasureOptions = measureUnits
-            .Where(x => x.IsActive)
-            .Select(x => new SelectListItem($"{x.UnitCode} - {x.UnitName}", x.UnitCode))
-            .ToArray();
-
-        return new ProductConfigurationViewModel
-        {
-            Features = snapshot.Features,
-            Values = snapshot.Values,
-            Configurations = snapshot.Configurations,
-            GridFeatures = gridFeatures,
-            GridValues = gridValues,
-            GridConfigurations = gridConfigurations,
-            DataTypeOptions = dataTypeOptions,
-            UnitOfMeasureOptions = unitOfMeasureOptions,
-            FeatureOptions = featureOptions,
-            ValueOptions = valueOptions,
-            MaterialCodeOptions = materialCodeOptions,
-            FeatureStockOptions = featureStockOptions,
-            FeatureRows = featureRows,
-            FeaturesListState = BuildGridListState(
-                gridKey: "logistics-product-features",
-                searchTerm: string.Equals(normalizedActiveTab, ProductConfigurationTabs.Feature, StringComparison.Ordinal)
-                    ? normalizedSearch
-                    : string.Empty,
-                page: featurePage,
-                pageSize: featurePageSize,
-                totalCount: featureTotalCount,
-                totalPages: featureTotalPages,
-                itemLabel: "ozellik"),
-            ValuesListState = BuildGridListState(
-                gridKey: "logistics-product-values",
-                searchTerm: string.Equals(normalizedActiveTab, ProductConfigurationTabs.Value, StringComparison.Ordinal)
-                    ? normalizedSearch
-                    : string.Empty,
-                page: valuePage,
-                pageSize: valuePageSize,
-                totalCount: valueTotalCount,
-                totalPages: valueTotalPages,
-                itemLabel: "deger"),
-            ConfigurationsListState = BuildGridListState(
-                gridKey: "logistics-product-configurations",
-                searchTerm: string.Equals(normalizedActiveTab, ProductConfigurationTabs.Config, StringComparison.Ordinal)
-                    ? normalizedSearch
-                    : string.Empty,
-                page: configurationPage,
-                pageSize: configurationPageSize,
-                totalCount: configurationTotalCount,
-                totalPages: configurationTotalPages,
-                itemLabel: "yapilandirma"),
-            ActiveTab = normalizedActiveTab,
-            SelectedFeatureId = resolvedFeatureId,
-            SelectedValueId = resolvedValueId,
-            SelectedConfigId = selectedConfig?.Id,
-            FeatureInput = featureInput,
-            ValueInput = valueInput,
-            ConfigInput = configInput
-        };
-    }
+    // NOT: BuildProductConfigurationViewModelAsync kaldirildi (sadece form-post legacy cluster kullaniyordu).
 
 
     private async Task<LocationsViewModel> BuildLocationsViewModelAsync(
@@ -3840,29 +1805,7 @@ public sealed class LogisticsController : Controller
         return new Guid(bytes);
     }
 
-    private static string GetDataTypeLabel(ConfigurationFieldDataType dataType) =>
-        dataType switch
-        {
-            ConfigurationFieldDataType.Text => "Metin",
-            ConfigurationFieldDataType.Numeric => "Sayisal",
-            ConfigurationFieldDataType.Date => "Tarih",
-            _ => dataType.ToString()
-        };
-
-    private static string NormalizeProductConfigurationTab(string? tab)
-    {
-        if (string.Equals(tab, ProductConfigurationTabs.Value, StringComparison.OrdinalIgnoreCase))
-        {
-            return ProductConfigurationTabs.Value;
-        }
-
-        if (string.Equals(tab, ProductConfigurationTabs.Config, StringComparison.OrdinalIgnoreCase))
-        {
-            return ProductConfigurationTabs.Config;
-        }
-
-        return ProductConfigurationTabs.Feature;
-    }
+    // NOT: GetDataTypeLabel + NormalizeProductConfigurationTab kaldirildi (legacy form-post cluster ile birlikte).
 
     private static IReadOnlyCollection<SelectListItem> BuildLocationTypeOptions(string? selectedValue)
     {
@@ -4201,267 +2144,11 @@ public sealed class LogisticsController : Controller
         });
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetMaterialCard(int id, CancellationToken ct)
-    {
-        var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-        var card = snapshot.Items.FirstOrDefault(x => x.Id == id);
-        if (card is null) return NotFound();
+    // NOT: GetMaterialCard MaterialController'a tasindi (rapor §2.3 split).
 
-        // Kombinasyonlar
-        var combinations = new List<object>();
-        if (card.Combinations)
-        {
-            var productSnapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
-            var stockCombinations = productSnapshot.Configurations
-                .Where(x => string.Equals(x.RelatedMaterialCode, card.Code, StringComparison.OrdinalIgnoreCase)
-                          && x.ValueIds != null && x.ValueIds.Any())
-                .ToList();
-            foreach (var c in stockCombinations)
-            {
-                var valObjs = productSnapshot.Values
-                    .Where(v => c.ValueIds.Contains(v.Id))
-                    .OrderBy(v => v.FeatureId)
-                    .ToList();
-                var valNames = valObjs
-                    .Select(v => $"{v.FeatureName}: {v.Description ?? v.Code}")
-                    .ToList();
-                // Zenginlestirilmis ozellik listesi — popup'ta tek tek duzenlenebilir
-                // alanlar icin featureId (VisibleInDesign duzenlemek icin) ve valueId
-                // (Aciklama duzenlemek icin) bilgileri dahil edilir.
-                var features = valObjs.Select(v =>
-                {
-                    var feat = productSnapshot.Features.FirstOrDefault(f => f.Id == v.FeatureId);
-                    return new
-                    {
-                        featureId       = v.FeatureId,
-                        featureName     = v.FeatureName,
-                        visibleInDesign = feat?.VisibleInDesign ?? true,
-                        valueId         = v.Id,
-                        valueName       = v.Description ?? v.Code,
-                        aciklama        = v.Aciklama ?? string.Empty
-                    };
-                }).ToList();
-                combinations.Add(new
-                {
-                    id = c.Id,
-                    combinationCode = c.ConfigCode ?? string.Empty,
-                    // combinationName = otomatik uretilen ozellik detay ("Motor Gucu: 100 | Renk: Kirmizi | ...")
-                    // description   = kullaniciya ozel aciklama (ConfigName = RecordName)
-                    combinationName = valNames.Count > 0 ? string.Join(" | ", valNames) : string.Empty,
-                    description     = c.ConfigName ?? string.Empty,
-                    features
-                });
-            }
-        }
+    // NOT: UpdateFeatureVisibilityJson + UpdateValueAciklamaJson ProductFeatureController'a tasindi (rapor §2.3 split).
 
-        return Json(new
-        {
-            stockCardId = card.Id,
-            materialCode = card.Code,
-            materialName = card.Name,
-            materialTypeId = card.TypeId,
-            unitId = card.UnitId,
-            trackCombinations = card.Combinations,
-            taxRate = card.TaxRate,
-            meta = new
-            {
-                createdDate = card.CreateDate,
-                modifiedDate = card.ModifyDate
-            },
-            combinations
-        });
-    }
-
-    // ── Kombinasyon popup inline edit icin kisa-yol endpoint'leri ─────────
-    // "Dizaynda gorunsun" flag'i feature seviyesindedir; tum kombinasyonlari etkiler.
-    public sealed class UpdateFeatureVisibilityInput
-    {
-        public int FeatureId { get; set; }
-        public bool VisibleInDesign { get; set; }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> UpdateFeatureVisibilityJson(
-        [FromBody] UpdateFeatureVisibilityInput input,
-        CancellationToken ct)
-    {
-        try
-        {
-            var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
-            var feature = snapshot.Features.FirstOrDefault(f => f.Id == input.FeatureId);
-            if (feature is null) return Json(new { success = false, message = "Ozellik bulunamadi." });
-
-            // feature.DataType servis icinde "TEXT"/"NUMBER"/"DATE" formatinda saklanir;
-            // Enum.TryParse bunlari tanimaz — manuel map.
-            var normalized = (feature.DataType ?? string.Empty).Trim().ToUpperInvariant();
-            var dataType = normalized switch
-            {
-                "TEXT"    => CalibraHub.Domain.Enums.ConfigurationFieldDataType.Text,
-                "NUMBER"  => CalibraHub.Domain.Enums.ConfigurationFieldDataType.Numeric,
-                "NUMERIC" => CalibraHub.Domain.Enums.ConfigurationFieldDataType.Numeric,
-                "DATE"    => CalibraHub.Domain.Enums.ConfigurationFieldDataType.Date,
-                _         => CalibraHub.Domain.Enums.ConfigurationFieldDataType.Text
-            };
-
-            await _logisticsConfigurationService.UpdateProductConfigurationFeatureAsync(
-                new UpdateProductConfigurationFeatureRequest(
-                    feature.Id, feature.Name, dataType, feature.UnitOfMeasure, input.VisibleInDesign),
-                ct);
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-    }
-
-    // Deger (value) seviyesinde Aciklama duzenlemesi — CombinationValue.Aciklama.
-    public sealed class UpdateValueAciklamaInput
-    {
-        public int ValueId { get; set; }
-        public string? Aciklama { get; set; }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> UpdateValueAciklamaJson(
-        [FromBody] UpdateValueAciklamaInput input,
-        CancellationToken ct)
-    {
-        try
-        {
-            await _logisticsConfigurationService.UpdateProductConfigurationValueAsync(
-                input.ValueId, null, input.Aciklama, ct);
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex) { return Json(new { success = false, message = ex.Message }); }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveMaterialCardJson(
-        [FromBody] SaveMaterialCardJsonInput input,
-        CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(input.Code) || string.IsNullOrWhiteSpace(input.Name))
-            return Json(new { success = false, message = "Malzeme kodu ve adi bos olamaz." });
-
-        try
-        {
-            // Ayni kodla mevcut kart varsa guncellemeye yonlendir
-            if (!input.ItemId.HasValue || input.ItemId.Value == 0)
-            {
-                var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-                var existing = snapshot.Items.FirstOrDefault(x =>
-                    string.Equals(x.Code, input.Code.Trim(), StringComparison.OrdinalIgnoreCase));
-                if (existing is not null)
-                    input.ItemId = existing.Id;
-            }
-
-            var isUpdate = input.ItemId.HasValue && input.ItemId.Value != 0;
-
-            var companyId = GetCompanyId();
-            var placeholders = new Dictionary<string, string>
-            {
-                ["EntityId"] = (input.ItemId ?? 0).ToString(),
-                ["UserName"] = User.FindFirstValue(ClaimTypes.Name) ?? "system",
-                ["Code"] = input.Code ?? "",
-                ["Name"] = input.Name ?? "",
-                ["TypeId"] = input.TypeId?.ToString() ?? "",
-                ["IsActive"] = "1"
-            };
-
-            if (isUpdate)
-            {
-                placeholders["EntityId"] = input.ItemId!.Value.ToString();
-                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeUpdate", placeholders, ct);
-
-                await _logisticsConfigurationService.UpdateItemAsync(
-                    new UpdateItemRequest(
-                        ItemId: input.ItemId!.Value,
-                        Code: input.Code,
-                        Name: input.Name,
-                        TypeId: input.TypeId,
-                        UnitId: input.UnitId,
-                        Combinations: input.Combinations,
-                        TaxRate: input.TaxRate),
-                    ct);
-
-                _integrationEventService.FireAfterEvent(companyId, "Item", "AfterUpdate", placeholders);
-            }
-            else
-            {
-                await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeCreate", placeholders, ct);
-
-                await _logisticsConfigurationService.CreateItemAsync(
-                    new CreateItemRequest(
-                        Code: input.Code,
-                        Name: input.Name,
-                        TypeId: input.TypeId,
-                        UnitId: input.UnitId,
-                        Combinations: input.Combinations,
-                        TaxRate: input.TaxRate),
-                    ct);
-
-                _integrationEventService.FireAfterEvent(companyId, "Item", "AfterCreate", placeholders);
-            }
-
-            // Kaydedilen kartin ID'sini dondur
-            var savedCardId = input.ItemId;
-            if (!isUpdate && (savedCardId == null || savedCardId == 0))
-            {
-                var refreshed = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-                var created = refreshed.Items
-                    .FirstOrDefault(x => string.Equals(x.Code, input.Code, StringComparison.OrdinalIgnoreCase));
-                if (created != null) savedCardId = created.Id;
-            }
-
-            return Json(new
-            {
-                success = true,
-                message = isUpdate ? "Malzeme karti guncellendi." : "Malzeme karti kaydedildi.",
-                id = savedCardId
-            });
-        }
-        catch (CalibraHub.Application.Services.IntegrationEventException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ToMaterialMessage(ex.Message) });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteMaterialCardJson(int id, CancellationToken ct)
-    {
-        try
-        {
-            var companyId = GetCompanyId();
-            var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-            var card = snapshot.Items.FirstOrDefault(x => x.Id == id);
-            var placeholders = new Dictionary<string, string>
-            {
-                ["EntityId"] = id.ToString(),
-                ["UserName"] = User.FindFirstValue(ClaimTypes.Name) ?? "system",
-                ["Code"] = card?.Code ?? "",
-                ["Name"] = card?.Name ?? "",
-                ["TypeId"] = card?.TypeId?.ToString() ?? "",
-                ["IsActive"] = card?.IsActive == true ? "1" : "0"
-            };
-
-            await _integrationEventService.ExecuteBeforeEventAsync(companyId, "Item", "BeforeDelete", placeholders, ct);
-            await _logisticsConfigurationService.DeactivateItemAsync(id, ct);
-            _integrationEventService.FireAfterEvent(companyId, "Item", "AfterDelete", placeholders);
-
-            return Json(new { success = true, message = "Malzeme karti silindi." });
-        }
-        catch (CalibraHub.Application.Services.IntegrationEventException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ToMaterialMessage(ex.Message) });
-        }
-    }
+    // NOT: SaveMaterialCardJson + DeleteMaterialCardJson MaterialController'a tasindi (rapor §2.3 split).
 
     [HttpPost]
     public async Task<IActionResult> SaveMaterialCardGridColumns([FromBody] string[] columns, CancellationToken ct)
@@ -4513,256 +2200,9 @@ public sealed class LogisticsController : Controller
         return Json(new { success = true });
     }
 
-    // ── Lokasyon Tipleri (dinamik) ─────────────────────────────────────
+    // NOT: GetLocationTypes + SaveLocationType + DeleteLocationType + GetItemLocations + SaveItemLocations LocationController'a tasindi (rapor 2.3 split).
 
-    [HttpGet]
-    public async Task<IActionResult> GetLocationTypes(CancellationToken ct)
-    {
-        var types = await _logisticsConfigurationService.GetLocationTypesAsync(ct);
-        return Json(types.Select(t => new
-        {
-            id = t.Id,
-            code = t.Code,
-            name = t.Name,
-            sortOrder = t.SortOrder,
-            isActive = t.IsActive,
-        }));
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveLocationType([FromBody] SaveLocationTypeInput input, CancellationToken ct)
-    {
-        try
-        {
-            var req = new Application.Contracts.SaveLocationTypeRequest(
-                input.Id,
-                input.Code ?? string.Empty,
-                input.Name ?? string.Empty,
-                input.SortOrder,
-                input.IsActive);
-            var id = await _logisticsConfigurationService.SaveLocationTypeAsync(req, ct);
-            return Json(new { success = true, id });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteLocationType(int id, CancellationToken ct)
-    {
-        var (ok, err) = await _logisticsConfigurationService.DeleteLocationTypeAsync(id, ct);
-        return Json(new { success = ok, message = err });
-    }
-
-    // ── Malzeme - Lokasyon eslestirmesi (cok-cogu + bir varsayilan) ──
-
-    [HttpGet]
-    public async Task<IActionResult> GetItemLocations(int itemId, CancellationToken ct)
-    {
-        var links = await _logisticsConfigurationService.GetItemLocationsAsync(itemId, ct);
-        var allLocations = await _logisticsConfigurationService.GetLocationsAsync(ct);
-
-        // Yalniz yaprak (alt kirilimi olmayan) lokasyonlar secilebilir — parent kirilimlar
-        // gruplama/raporlama icindir, stok fiziksel olarak leaf'te tutulur.
-        var parentIds = allLocations
-            .Where(x => x.ParentId.HasValue)
-            .Select(x => x.ParentId!.Value)
-            .ToHashSet();
-
-        // Ata zincirini (breadcrumb) hesaplamak icin id -> entity map
-        var byId = allLocations.ToDictionary(x => x.Id);
-        string buildPath(int id)
-        {
-            var parts = new List<string>();
-            var guard = 0;
-            int? cur = id;
-            while (cur.HasValue && guard++ < 10 && byId.TryGetValue(cur.Value, out var node))
-            {
-                var label = string.IsNullOrWhiteSpace(node.LocationName)
-                    ? node.LocationCode
-                    : node.LocationCode + " - " + node.LocationName;
-                parts.Insert(0, label);
-                cur = node.ParentId;
-            }
-            return string.Join(" › ", parts);
-        }
-
-        return Json(new
-        {
-            links = links.Select(l => new
-            {
-                locationId = l.LocationId,
-                locationCode = l.LocationCode,
-                locationName = l.LocationName,
-                locationTypeCode = l.LocationTypeCode,
-                locationPath = buildPath(l.LocationId),
-                isDefault = l.IsDefault,
-                sortOrder = l.SortOrder
-            }),
-            availableLocations = allLocations
-                .Where(x => x.IsActive && !parentIds.Contains(x.Id))
-                .OrderBy(x => x.SortOrder).ThenBy(x => x.LocationCode)
-                .Select(x => new
-                {
-                    id = x.Id,
-                    locationCode = x.LocationCode,
-                    locationName = x.LocationName,
-                    locationTypeCode = x.LocationTypeCode,
-                    locationPath = buildPath(x.Id)
-                })
-        });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveItemLocations([FromBody] SaveItemLocationsInput input, CancellationToken ct)
-    {
-        if (input.ItemId <= 0)
-            return Json(new { success = false, message = "Malzeme karti ID gerekli." });
-
-        var items = (input.Items ?? [])
-            .Where(x => x.LocationId > 0)
-            .Select(x => new Application.Contracts.SaveItemLocationItem(x.LocationId, x.IsDefault))
-            .ToList();
-
-        // Tekrar eden lokasyon kontrolu
-        var ids = items.Select(x => x.LocationId).ToList();
-        if (ids.Distinct().Count() != ids.Count)
-            return Json(new { success = false, message = "Ayni lokasyon birden fazla kez secilemez." });
-
-        // En fazla bir default
-        if (items.Count(x => x.IsDefault) > 1)
-            return Json(new { success = false, message = "Yalnizca bir lokasyon varsayilan olabilir." });
-
-        await _logisticsConfigurationService.SaveItemLocationsAsync(input.ItemId, items, ct);
-        return Json(new { success = true });
-    }
-
-    // ── Stok Karti <-> Ozellik Eslestirmesi (Kombinasyon Takibi acik iken) ──
-
-    /// <summary>
-    /// Bir stok karti için mevcut tum FEATURE listesini + bu karta bagli olanlari doner.
-    /// </summary>
-    [HttpGet]
-    public async Task<IActionResult> GetStockFeatures(int stockCardId, CancellationToken ct)
-    {
-        var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-        var card = snapshot.Items.FirstOrDefault(s => s.Id == stockCardId);
-        if (card is null) return NotFound(new { success = false, message = "Stok karti bulunamadi." });
-
-        var productCfg = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
-        // Bu stoğun aktif kombinasyonlarda kullandığı feature ID'leri — switchkey'i kilitleyecek
-        var usedFeatureIdsInCombinations = await _logisticsConfigurationService
-            .GetUsedFeatureIdsInCombinationsAsync(stockCardId, ct);
-        var usedFeatureValuePairs = await _logisticsConfigurationService
-            .GetUsedFeatureValueIdsInCombinationsAsync(stockCardId, ct);
-        var combinationCount = await _logisticsConfigurationService
-            .GetCombinationCountForItemAsync(stockCardId, ct);
-        // Feature -> ValueIds (kombinasyonda kullanilan, kilitli)
-        var usedValueIdsByFeature = usedFeatureValuePairs
-            .GroupBy(x => x.FeatureId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.ValueId).Distinct().ToArray());
-
-        // Bu stok'a baglanmis (header) feature linkleri — her birinde AllowedValueIds[] var
-        var stockLinks = productCfg.FeatureStockLinks
-            .Where(l => string.Equals(l.StockCode, card.Code.Trim(), StringComparison.OrdinalIgnoreCase))
-            .GroupBy(l => l.FeatureId)
-            .ToDictionary(g => g.Key, g => g.First());
-
-        // Tum feature degerleri (her feature'in dropdown chip'leri icin)
-        var valuesByFeature = productCfg.Values
-            .Where(v => v.IsActive)
-            .GroupBy(v => v.FeatureId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.OrderBy(v => v.Description).Select(v => new
-                {
-                    id = v.Id,
-                    code = v.Code,
-                    description = v.Description,
-                    value = v.Value,
-                }).ToArray());
-
-        var allFeatures = productCfg.Features
-            .Where(f => f.IsActive)
-            .OrderBy(f => f.Name)
-            .Select(f =>
-            {
-                var hasLink = stockLinks.TryGetValue(f.Id, out var link);
-                var usedValueIds = usedValueIdsByFeature.TryGetValue(f.Id, out var uv) ? uv : Array.Empty<int>();
-                return new
-                {
-                    id = f.Id,
-                    code = f.Code,
-                    name = f.Name,
-                    dataType = f.DataType,
-                    unitOfMeasure = f.UnitOfMeasure,
-                    linked = hasLink,
-                    printDescription = hasLink ? link!.PrintDescriptionInDesign : true,
-                    allowedValueIds = hasLink ? (link!.AllowedValueIds ?? Array.Empty<int>()).ToArray() : Array.Empty<int>(),
-                    availableValues = valuesByFeature.TryGetValue(f.Id, out var vs) ? vs : Array.Empty<object>().Select(_ => new { id = 0, code = string.Empty, description = string.Empty, value = string.Empty }).ToArray(),
-                    inUseInCombination = usedFeatureIdsInCombinations.Contains(f.Id),
-                    usedValueIds = usedValueIds,
-                };
-            })
-            .ToArray();
-
-        return Json(new
-        {
-            materialCode = card.Code,
-            combinationCount = combinationCount,
-            features = allFeatures,
-        });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveStockFeatures([FromBody] SaveStockFeaturesInput input, CancellationToken ct)
-    {
-        if (input is null || input.ItemId <= 0)
-            return Json(new { success = false, message = "Stok karti ID gerekli." });
-
-        try
-        {
-            var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
-            var card = snapshot.Items.FirstOrDefault(s => s.Id == input.ItemId);
-            if (card is null) return Json(new { success = false, message = "Stok karti bulunamadi." });
-
-            // Yeni format: Items[{featureId, printDescriptionInDesign, allowedValueIds[]}]
-            // Geri uyumluluk: yalniz FeatureIds[] geldiyse kisitlamasiz, Print=true
-            (int FeatureId, bool PrintDescriptionInDesign, int[] AllowedValueIds)[] tuples;
-            if (input.Items != null && input.Items.Length > 0)
-            {
-                tuples = input.Items
-                    .Select(x => (
-                        x.FeatureId,
-                        x.PrintDescriptionInDesign,
-                        AllowedValueIds: (x.AllowedValueIds ?? Array.Empty<int>()).Where(v => v > 0).Distinct().ToArray()))
-                    .ToArray();
-            }
-            else
-            {
-                tuples = (input.FeatureIds ?? Array.Empty<int>())
-                    .Select(id => (FeatureId: id, PrintDescriptionInDesign: true, AllowedValueIds: Array.Empty<int>()))
-                    .ToArray();
-            }
-
-            await _logisticsConfigurationService.SetFeaturesForItemAsync(
-                card.Code,
-                tuples,
-                ct);
-
-            return Json(new { success = true });
-        }
-        catch (ArgumentException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Json(new { success = false, message = "Sunucu hatası: " + ex.Message });
-        }
-    }
+    // NOT: GetStockFeatures + SaveStockFeatures ProductFeatureController'a tasindi (rapor 2.3 split).
 }
 
 public sealed record SaveItemUnitsInput(int ItemId, SaveItemUnitLineInput[]? Items);

@@ -24,7 +24,8 @@ public sealed record ContactDto(
     string? Neighborhood = null,
     int? SalesRepresentativeId = null,
     string? WaPhone = null,
-    string? WaName = null);
+    string? WaName = null,
+    int? ContactGroupId = null);
 
 public sealed record SaveContactRequest(
     int? Id,
@@ -49,6 +50,7 @@ public sealed record SaveContactRequest(
     string? Neighborhood = null,
     int? SalesRepresentativeId = null,
     string? WaPhone = null,
-    string? WaName = null);
+    string? WaName = null,
+    int? ContactGroupId = null);
 
 public sealed record DeleteContactBody(int Id);

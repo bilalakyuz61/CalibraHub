@@ -109,20 +109,22 @@ public sealed class SqlCardGroupRepository : ICardGroupRepository
         return Convert.ToInt32(result) > 0;
     }
 
-    public async Task AddAsync(CardGroup group, CancellationToken ct)
+    public async Task<int> AddAsync(CardGroup group, CancellationToken ct)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_table} ([card_type], [level], [parent_id], [code], [description])
             VALUES (@CardType, @Level, @ParentId, @Code, @Description);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         command.Parameters.Add(new SqlParameter("@CardType", group.CardType));
         command.Parameters.Add(new SqlParameter("@Level", group.Level));
         command.Parameters.Add(new SqlParameter("@ParentId", (object?)group.ParentId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@Code", group.Code));
         command.Parameters.Add(new SqlParameter("@Description", (object?)group.Description ?? DBNull.Value));
-        await command.ExecuteNonQueryAsync(ct);
+        var result = await command.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
     }
 
     public async Task UpdateAsync(CardGroup group, CancellationToken ct)

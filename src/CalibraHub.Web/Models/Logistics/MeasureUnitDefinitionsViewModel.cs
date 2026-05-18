@@ -3,6 +3,21 @@ using CalibraHub.Web.Models.Shared;
 
 namespace CalibraHub.Web.Models.Logistics;
 
+public sealed class MeasureUnitsSmartBoardViewModel
+{
+    public object? BoardConfig { get; init; }
+}
+
+public sealed class UnitEditViewModel
+{
+    public int? Id { get; init; }
+    public string? UnitCode { get; init; }
+    public string? UnitName { get; init; }
+    public string? IntlCode { get; init; }
+    public int SortOrder { get; init; }
+    public bool IsActive { get; init; } = true;
+}
+
 public sealed class UnitsViewModel
 {
     public required IReadOnlyCollection<UnitRowViewModel> Definitions { get; init; }

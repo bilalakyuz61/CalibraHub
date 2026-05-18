@@ -440,6 +440,77 @@ export default function AdminWidgetRegistryPanel(props) {
   var editingId = editingField ? editingField.id : null
 
   /* ── Reorder — iki widget'in sortOrder'ini takas et ──── */
+  // Grup sirasini swap et — sortOrder degerlerini iki grup arasinda yer
+  // degistirir. UpsertWidget required alanlari: WidgetCode, Label, DataType,
+  // SortOrder, FormId. Raw widget objesinden alip yeni sortOrder ile gonderiyoruz.
+  var handleGroupReorder = useCallback(async function(groupA, groupB) {
+    if (!groupA || !groupB || !currentFormId) return
+    var rawA = widgets.find(function(w) { return w.id === groupA.id })
+    var rawB = widgets.find(function(w) { return w.id === groupB.id })
+    if (!rawA || !rawB) {
+      console.warn('[GroupReorder] raw widget bulunamadi', { groupA, groupB })
+      return
+    }
+
+    var sortA = rawA.sortOrder != null ? rawA.sortOrder : 0
+    var sortB = rawB.sortOrder != null ? rawB.sortOrder : 0
+    if (sortA === sortB) sortB = sortA + 1
+
+    // Optimistic UI update
+    setWidgets(function(prev) {
+      return prev.map(function(w) {
+        if (w.id === rawA.id) return Object.assign({}, w, { sortOrder: sortB })
+        if (w.id === rawB.id) return Object.assign({}, w, { sortOrder: sortA })
+        return w
+      })
+    })
+
+    function buildPayload(raw, newSort) {
+      return {
+        id: raw.id,
+        formId: currentFormId,
+        parentId: raw.parentId != null ? raw.parentId : null,
+        widgetCode: raw.widgetCode,
+        label: raw.label,
+        dataType: raw.dataType,
+        maxLength: raw.maxLength != null ? raw.maxLength : null,
+        sortOrder: newSort,
+        options: Array.isArray(raw.options) ? raw.options.map(function(o){ return typeof o === 'string' ? o : (o.optionCode || o.code || '') }).filter(Boolean) : null,
+        isActive: raw.isActive !== false,
+        rules: raw.rules || null,
+        isPlainField: !!raw.isPlainField,
+        isRequired: !!raw.isRequired,
+        minLength: raw.minLength != null ? raw.minLength : null,
+        expectedLength: raw.expectedLength != null ? raw.expectedLength : null,
+        minValue: raw.minValue != null ? raw.minValue : null,
+        maxValue: raw.maxValue != null ? raw.maxValue : null,
+        colorType: raw.colorType || 0,
+        colorValue: raw.colorValue || null,
+        colSpan: raw.colSpan != null ? raw.colSpan : null,
+        labelStyle: raw.labelStyle || null
+      }
+    }
+
+    try {
+      var resA = await upsertWidgetApi(buildPayload(rawA, sortB))
+      console.debug('[GroupReorder] A->', resA)
+      var resB = await upsertWidgetApi(buildPayload(rawB, sortA))
+      console.debug('[GroupReorder] B->', resB)
+      if (!resA || resA.success === false) throw new Error((resA && resA.message) || 'Grup A kaydedilemedi')
+      if (!resB || resB.success === false) throw new Error((resB && resB.message) || 'Grup B kaydedilemedi')
+    } catch (e) {
+      console.error('[GroupReorder] error:', e)
+      // Rollback
+      setWidgets(function(prev) {
+        return prev.map(function(w) {
+          if (w.id === rawA.id) return Object.assign({}, w, { sortOrder: sortA })
+          if (w.id === rawB.id) return Object.assign({}, w, { sortOrder: sortB })
+          return w
+        })
+      })
+    }
+  }, [currentFormId, widgets])
+
   var handleReorder = useCallback(async function(fieldA, fieldB) {
     if (!fieldA || !fieldB || !currentFormId) return
     var sortA = fieldA.sortOrder != null ? fieldA.sortOrder : 0
@@ -584,6 +655,7 @@ export default function AdminWidgetRegistryPanel(props) {
                 onPlainFieldToggle={handlePlainFieldToggle}
                 onListableToggle={handleListableToggle}
                 onReorder={handleReorder}
+                onGroupReorder={handleGroupReorder}
                 editingId={editingId}
                 savingId={savingId}
                 searchQuery={searchQuery}

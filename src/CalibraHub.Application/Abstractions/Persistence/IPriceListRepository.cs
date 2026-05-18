@@ -22,6 +22,15 @@ public interface IPriceListRepository
     Task UpdateEntryAsync(PriceList entry, CancellationToken ct);
     Task DeleteEntryAsync(int id, CancellationToken ct);
 
+    /// <summary>
+    /// Aynı (Group + Item + Config + Currency + PriceType + ValidFrom) kombinasyonuna sahip
+    /// AKTİF kayıt arar — varsa duplicate engellemek için kullanılır. excludeId kendisini hariç tutar.
+    /// </summary>
+    Task<PriceList?> FindActiveDuplicateAsync(
+        int groupId, int itemId, int? configId, int currencyId,
+        string priceType, DateTime validFrom,
+        int excludeId, CancellationToken ct);
+
     // Upsert (bulk) — Ayni grup+item+config+tarih varsa guncelle, yoksa ekle
     Task<BulkUpsertResult> UpsertBulkEntriesAsync(
         IReadOnlyCollection<PriceList> entries, CancellationToken ct);

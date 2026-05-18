@@ -1,10 +1,23 @@
+@model CalibraHub.Web.Models.Logistics.MeasureUnitsSmartBoardViewModel
+@using System.Text.Json
 @{
     ViewData["Title"] = "Ölçü Birimleri";
     ViewData["FormCode"] = "MEASURE_UNITS";
     ViewData["BodyClass"] = "page-measure-units";
-    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
-        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>measure_unit_definitions</td><td style='padding:6px 8px;'>Olcu birimi tanimlari (kod, ad, sira, durum)</td></tr>"
+    ViewData["DbInfo"] =
+        "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>measure_unit_definitions</td><td style='padding:6px 8px;'>Ölçü birimi tanımları (kod, ad, uluslararası kod, sıra, durum)</td></tr>"
         + "</table>";
+
+    var jsonOpts = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = Model.BoardConfig != null
+        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
+        : "null";
 }
 
 @section Styles {
@@ -28,387 +41,73 @@
     .workspace-frame-body.page-measure-units .integrator-dashboard {
         flex: 1 1 auto; min-height: 0; height: 100%;
     }
-
-    .mu-shell {
-        flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
-        background: #0c0f1a;
-        background-image:
-            radial-gradient(at 20% 30%, rgba(99,102,241,.12) 0, transparent 50%),
-            radial-gradient(at 80% 20%, rgba(14,165,233,.08) 0, transparent 50%);
-    }
-    body.app-theme-light .mu-shell { background: #f8fafc; background-image: none; }
-
-    .mu-action-bar {
-        display: flex; align-items: center; gap: 8px;
-        padding: 8px 16px; flex-shrink: 0;
-        background: rgba(15,15,26,.85); border-bottom: 1px solid rgba(255,255,255,.06);
-        backdrop-filter: blur(16px);
-    }
-    body.app-theme-light .mu-action-bar { background: rgba(248,250,252,.92); border-bottom-color: #e2e8f0; }
-    .mu-btn {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 7px 14px; border-radius: 8px; border: 1px solid;
-        font-size: .78rem; font-weight: 600; cursor: pointer;
-        transition: all .12s; background: transparent;
-    }
-    .mu-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
-    .mu-btn--primary:hover { background: #4f46e5; }
-    .mu-btn--secondary { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.1); color: rgba(255,255,255,.65); }
-    body.app-theme-light .mu-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
-    .mu-btn--secondary:hover { background: rgba(255,255,255,.1); color: #fff; }
-
-    .mu-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-
-    .mu-form-panel {
-        width: 340px; flex-shrink: 0;
-        border-right: 1px solid rgba(255,255,255,.07);
-        background: rgba(255,255,255,.02);
-        display: flex; flex-direction: column;
-        padding: 16px; overflow-y: auto;
-    }
-    body.app-theme-light .mu-form-panel { background: #f8fafc; border-right-color: #e2e8f0; }
-    .mu-form-title {
-        font-size: .85rem; font-weight: 700;
-        color: rgba(255,255,255,.85); margin-bottom: 14px;
-    }
-    body.app-theme-light .mu-form-title { color: #94a3b8; }
-
-    .mu-rows { display: flex; flex-direction: column; gap: 0; }
-    .mu-row {
-        display: flex; align-items: center; gap: 12px;
-        padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04);
-    }
-    .mu-row:last-child { border-bottom: none; }
-    body.app-theme-light .mu-row { border-bottom-color: rgba(15,23,42,.06); }
-    .mu-row > label {
-        width: 60px; min-width: 60px; flex-shrink: 0;
-        font-size: .75rem; font-weight: 600; color: rgba(255,255,255,.55);
-        text-align: right; padding-right: 4px;
-    }
-    body.app-theme-light .mu-row > label { color: #64748b; }
-    .mu-input {
-        flex: 1; padding: 8px 10px; border-radius: 8px;
-        background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
-        color: rgba(255,255,255,.85); font-size: .84rem;
-        transition: border-color .15s;
-    }
-    body.app-theme-light .mu-input { background: #fff; border-color: #e2e8f0; color: #1e293b; }
-    .mu-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
-    .mu-input::placeholder { color: rgba(255,255,255,.25); }
-    body.app-theme-light .mu-input::placeholder { color: #94a3b8; }
-    .mu-input[type="number"] { -moz-appearance: textfield; }
-    .mu-input[type="number"]::-webkit-outer-spin-button,
-    .mu-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-
-    .mu-switch-wrap { display: flex; align-items: center; gap: 8px; }
-    .mu-switch { position: relative; width: 44px; height: 24px; display: inline-block; flex-shrink: 0; }
-    .mu-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-    .mu-switch-track {
-        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
-        background: #ef4444; border: 1px solid #f87171; transition: .25s;
-    }
-    .mu-switch input:checked + .mu-switch-track { background: #10b981; border-color: #34d399; }
-    .mu-switch-track::before {
-        content: ''; position: absolute; height: 18px; width: 18px;
-        left: 2px; top: 2px; border-radius: 50%;
-        background: rgba(255,255,255,.85); transition: .25s;
-    }
-    .mu-switch input:checked + .mu-switch-track::before { transform: translateX(20px); background: #fff; }
-    body.app-theme-light .mu-switch-track { background: #fca5a5; border-color: #f87171; }
-    body.app-theme-light .mu-switch input:checked + .mu-switch-track { background: #10b981; border-color: #34d399; }
-    .mu-switch-label { font-size: .76rem; font-weight: 600; color: #ef4444; transition: color .25s; }
-    .mu-switch-label--active { color: #10b981; }
-    body.app-theme-light .mu-switch-label { color: #dc2626; }
-    body.app-theme-light .mu-switch-label--active { color: #059669; }
-
-    .mu-msg { margin-top: 10px; padding: 6px 10px; border-radius: 8px; font-size: .76rem; font-weight: 500; }
-    .mu-msg--ok { background: rgba(16,185,129,.1); color: #6ee7b7; border: 1px solid rgba(16,185,129,.3); }
-    .mu-msg--err { background: rgba(239,68,68,.1); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
-    body.app-theme-light .mu-msg--ok { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
-    body.app-theme-light .mu-msg--err { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
-
-    .mu-input.is-invalid {
-        border-color: #ef4444 !important;
-        background: rgba(239,68,68,.06) !important;
-        box-shadow: 0 0 0 3px rgba(239,68,68,.15) !important;
-        animation: muShake .4s cubic-bezier(.36,.07,.19,.97);
-    }
-    @@keyframes muShake {
-        10%, 90% { transform: translateX(-2px); }
-        20%, 80% { transform: translateX(3px); }
-        30%, 50%, 70% { transform: translateX(-4px); }
-        40%, 60% { transform: translateX(4px); }
-    }
-
-    .mu-grid-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
-    .mu-search-bar { padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.06); flex-shrink: 0; }
-    body.app-theme-light .mu-search-bar { border-bottom-color: #e2e8f0; }
-    .mu-table-wrap { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
-    .mu-grid { width: 100%; border-collapse: collapse; font-size: .82rem; }
-    .mu-grid thead th {
-        position: sticky; top: 0; z-index: 1;
-        text-align: left; padding: 8px 12px;
-        font-weight: 700; font-size: .78rem;
-        color: rgba(255,255,255,.7);
-        background: rgba(15,15,26,.9); border-bottom: 1px solid rgba(255,255,255,.06);
-    }
-    body.app-theme-light .mu-grid thead th { background: #f8fafc; color: #64748b; border-bottom-color: #e2e8f0; }
-    .mu-grid tbody tr {
-        cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04); transition: background .1s;
-    }
-    .mu-grid tbody tr:hover { background: rgba(99,102,241,.06); }
-    body.app-theme-light .mu-grid tbody tr:hover { background: rgba(99,102,241,.04); }
-    .mu-grid tbody tr.is-sel { background: rgba(99,102,241,.12); }
-    body.app-theme-light .mu-grid tbody tr.is-sel { background: rgba(99,102,241,.08); }
-    .mu-grid td { padding: 7px 12px; color: rgba(255,255,255,.8); }
-    body.app-theme-light .mu-grid td { color: #334155; }
-    .mu-grid .mu-code { font-weight: 700; color: #a5b4fc; }
-    body.app-theme-light .mu-grid .mu-code { color: #4f46e5; }
-    .mu-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .68rem; font-weight: 600; }
-    .mu-badge--ok { background: rgba(16,185,129,.12); color: #6ee7b7; }
-    .mu-badge--off { background: rgba(239,68,68,.1); color: #fca5a5; }
-    body.app-theme-light .mu-badge--ok { background: #dcfce7; color: #15803d; }
-    body.app-theme-light .mu-badge--off { background: #fef2f2; color: #dc2626; }
-    .mu-row-btn {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 26px; height: 26px; border-radius: 6px; border: none; cursor: pointer;
-        transition: background .12s;
-    }
-    .mu-row-btn--edit { background: rgba(99,102,241,.08); color: #a5b4fc; }
-    .mu-row-btn--edit:hover { background: rgba(99,102,241,.2); }
-    .mu-row-btn--del { background: rgba(239,68,68,.08); color: #f87171; }
-    .mu-row-btn--del:hover { background: rgba(239,68,68,.2); }
-    body.app-theme-light .mu-row-btn--edit { background: rgba(99,102,241,.06); color: #4f46e5; }
-    body.app-theme-light .mu-row-btn--del { background: rgba(239,68,68,.06); color: #dc2626; }
-    .mu-empty { text-align: center; padding: 32px; color: rgba(255,255,255,.3); font-size: .84rem; }
-    body.app-theme-light .mu-empty { color: #94a3b8; }
 </style>
 }
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
-    <div class="mu-shell">
-        <div class="mu-action-bar" data-no-proxy>
-            <button type="button" class="mu-btn mu-btn--primary" onclick="muSave()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                Kaydet
-            </button>
-            <button type="button" class="mu-btn mu-btn--secondary" onclick="muNew()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                Yeni
-            </button>
-        </div>
-
-        <div class="mu-body">
-            <div class="mu-form-panel">
-                <div class="mu-form-title">Birim Bilgileri</div>
-                <input type="hidden" id="muId" value="" />
-                <div class="mu-rows">
-                    <div class="mu-row">
-                        <label>Kod *</label>
-                        <input id="muCode" class="mu-input" maxlength="20" placeholder="Orn: KG" style="max-width:120px;" />
-                    </div>
-                    <div class="mu-row">
-                        <label>Ad *</label>
-                        <input id="muName" class="mu-input" maxlength="100" placeholder="Orn: Kilogram" />
-                    </div>
-                    <div class="mu-row">
-                        <label>Intl Kod</label>
-                        <input id="muIntlCode" class="mu-input" maxlength="20" placeholder="Orn: KGM, LTR" style="max-width:120px;" />
-                    </div>
-                    <div class="mu-row">
-                        <label>Sira</label>
-                        <input id="muSortOrder" class="mu-input" type="number" min="0" value="0" style="max-width:80px;" />
-                    </div>
-                    <div class="mu-row">
-                        <label>Durum</label>
-                        <div class="mu-switch-wrap">
-                            <label class="mu-switch" for="muIsActive">
-                                <input type="checkbox" id="muIsActive" checked onchange="var lbl=document.getElementById('muSwitchLabel'); if(this.checked){lbl.textContent='Aktif';lbl.className='mu-switch-label mu-switch-label--active';}else{lbl.textContent='Pasif';lbl.className='mu-switch-label';}" />
-                                <span class="mu-switch-track"></span>
-                            </label>
-                            <span id="muSwitchLabel" class="mu-switch-label mu-switch-label--active">Aktif</span>
-                        </div>
-                    </div>
-                </div>
-                <div id="muMsg"></div>
-            </div>
-
-            <div class="mu-grid-panel">
-                <div class="mu-search-bar">
-                    <input type="text" id="muSearch" class="mu-input" placeholder="Kod veya ada gore ara..." oninput="muLoad()" style="max-width:260px;" />
-                </div>
-                <div class="mu-table-wrap">
-                    <table class="mu-grid">
-                        <thead><tr>
-                            <th style="width:70px;"></th>
-                            <th>Kod</th>
-                            <th>Ad</th>
-                            <th>Intl Kod</th>
-                            <th>Durum</th>
-                        </tr></thead>
-                        <tbody id="muBody"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 </section>
 
 @section Scripts {
 <script>
 (function() {
-    var selId = 0;
-    var $id = function(id) { return document.getElementById(id); };
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
 
-    function escHtml(s) {
-        var d = document.createElement('div');
-        d.appendChild(document.createTextNode(s || ''));
-        return d.innerHTML;
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[Units] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayı Yenile</button>'
+            + '</div>';
     }
 
-    function muMarkInvalid(ids) {
-        ids.forEach(function(id) {
-            var el = $id(id);
-            if (!el) return;
-            el.classList.remove('is-invalid');
-            void el.offsetWidth;
-            el.classList.add('is-invalid');
-            var clear = function() { el.classList.remove('is-invalid'); el.removeEventListener('input', clear); };
-            el.addEventListener('input', clear);
-        });
-        var first = $id(ids[0]);
-        if (first) first.focus();
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadı');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            console.log('[Units] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'birim');
+        } catch (ex) {
+            console.error('[Units] Mount exception:', ex);
+            showError('Mount hatası: ' + (ex.message || ex));
+        }
     }
 
-    function muMsg(msg, ok) {
-        var el = $id('muMsg');
-        if (!msg) { el.innerHTML = ''; return; }
-        el.innerHTML = '<div class="mu-msg ' + (ok ? 'mu-msg--ok' : 'mu-msg--err') + '">' + escHtml(msg) + '</div>';
-        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    function loadCss() {
+        var prev = document.querySelector('link[data-units-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-units-sb', '1');
+        document.head.appendChild(link);
     }
 
-    window.muLoad = function() {
-        var s = $id('muSearch').value;
-        fetch('/Logistics/GetAllMeasureUnits?search=' + encodeURIComponent(s), { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                var body = $id('muBody');
-                if (!data || data.length === 0) {
-                    body.innerHTML = '<tr><td colspan="5" class="mu-empty">Henuz olcu birimi tanimlanmamis.</td></tr>';
-                    return;
-                }
-                body.innerHTML = data.map(function(d) {
-                    return '<tr class="' + (d.id === selId ? 'is-sel' : '') + '">' +
-                        '<td onclick="event.stopPropagation()" style="white-space:nowrap;">' +
-                            '<button type="button" class="mu-row-btn mu-row-btn--edit" title="Duzenle" onclick="muSelect(' + d.id + ')">' +
-                                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-                            '</button> ' +
-                            '<button type="button" class="mu-row-btn mu-row-btn--del" title="Sil" onclick="muDeleteRow(' + d.id + ')">' +
-                                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>' +
-                            '</button>' +
-                        '</td>' +
-                        '<td class="mu-code">' + escHtml(d.unitCode) + '</td>' +
-                        '<td>' + escHtml(d.unitName) + '</td>' +
-                        '<td style="opacity:.6">' + escHtml(d.intlCode || '') + '</td>' +
-                        '<td><span class="mu-badge ' + (d.isActive ? 'mu-badge--ok' : 'mu-badge--off') + '">' + (d.isActive ? 'Aktif' : 'Pasif') + '</span></td></tr>';
-                }).join('');
-            })
-            .catch(function(e) { console.error('[MU] load error:', e); });
-    };
-
-    function muClearInvalid() {
-        document.querySelectorAll('.mu-input.is-invalid').forEach(function(el) {
-            el.classList.remove('is-invalid');
-        });
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-units-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-units-sb', '1');
+        script.onload  = function() { setTimeout(cb, 0); };
+        script.onerror = function() { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(script);
     }
 
-    window.muSelect = function(id) {
-        selId = id;
-        muClearInvalid();
-        muMsg('');
-        fetch('/Logistics/GetMeasureUnit?id=' + id, { credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                $id('muId').value = d.id;
-                $id('muCode').value = d.unitCode;
-                $id('muName').value = d.unitName;
-                $id('muIntlCode').value = d.intlCode || '';
-                $id('muSortOrder').value = d.sortOrder;
-                $id('muIsActive').checked = !!d.isActive;
-                var sl = $id('muSwitchLabel');
-                if (sl) { sl.textContent = d.isActive ? 'Aktif' : 'Pasif'; sl.className = 'mu-switch-label' + (d.isActive ? ' mu-switch-label--active' : ''); }
-                muLoad();
-            });
-    };
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
 
-    window.muNew = function() {
-        selId = 0;
-        muClearInvalid();
-        $id('muId').value = '';
-        $id('muCode').value = '';
-        $id('muName').value = '';
-        $id('muIntlCode').value = '';
-        $id('muSortOrder').value = '0';
-        $id('muIsActive').checked = true;
-        muMsg('');
-        muLoad();
-    };
-
-    window.muSave = function() {
-        var code = $id('muCode').value.trim();
-        var name = $id('muName').value.trim();
-        var invalid = [];
-        if (!code) invalid.push('muCode');
-        if (!name) invalid.push('muName');
-        if (invalid.length > 0) { muMarkInvalid(invalid); return; }
-
-        var payload = {
-            id: parseInt($id('muId').value) || null,
-            unitCode: code,
-            unitName: name,
-            intlCode: $id('muIntlCode').value.trim() || null,
-            sortOrder: parseInt($id('muSortOrder').value) || 0,
-            isActive: $id('muIsActive').checked
-        };
-
-        fetch('/Logistics/SaveMeasureUnitJson', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify(payload)
-        })
-        .then(function(r) {
-            if (r.redirected || !r.ok) {
-                return r.text().then(function(t) {
-                    console.error('[MU] save response:', r.status, t.substring(0, 200));
-                    throw new Error('Sunucu hatasi (HTTP ' + r.status + '). Sayfayi yenileyip tekrar deneyin.');
-                });
-            }
-            return r.json();
-        })
-        .then(function(d) {
-            if (d && d.success) { muMsg('Kaydedildi.', true); muNew(); }
-            else muMsg((d && d.message) || 'Bilinmeyen hata', false);
-        })
-        .catch(function(e) { muMsg(e.message || 'Baglanti hatasi', false); });
-    };
-
-    window.muDeleteRow = function(id) {
-        if (!confirm('Bu olcu birimini silmek istediginize emin misiniz?')) return;
-        fetch('/Logistics/DeleteMeasureUnitJson?id=' + id, { method: 'POST', credentials: 'same-origin' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d && d.success) {
-                    if (selId === id) muNew();
-                    else muLoad();
-                } else {
-                    muMsg((d && d.message) || 'Silinemedi', false);
-                }
-            })
-            .catch(function(e) { muMsg(e.message || 'Baglanti hatasi', false); });
-    };
-
-    muLoad();
+    window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
 })();
 </script>
 }

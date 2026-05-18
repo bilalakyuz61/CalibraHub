@@ -24,7 +24,12 @@ public sealed record WorkOrderOperationDto(
     int? CompletedByPersonnelId,
     string? CompletedByPersonnelName,
     DateTime? CompletedAt,
-    string? Notes);
+    string? Notes,
+    // Faz 3 — ShopFloor UX zenginlik alanları (WO + Item JOIN ile)
+    string? WorkOrderNumber,
+    string? ItemCode,
+    string? ItemName,
+    decimal WorkOrderPlannedQuantity);
 
 public sealed record SaveWorkOrderOperationRequest(
     int Id,

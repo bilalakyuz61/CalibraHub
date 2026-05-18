@@ -53,4 +53,23 @@ public sealed class RoutingService : IRoutingService
 
     public Task<IReadOnlyCollection<RoutingDto>> ListByOperationAsync(int operationId, CancellationToken ct)
         => _repo.ListByOperationAsync(operationId, ct);
+
+    public async Task<IReadOnlyList<RoutingWithOpsDto>> GetAllWithOperationsAsync(CancellationToken ct)
+    {
+        var routings = await _repo.ListAsync(null, ct);
+        var allOps   = await _repo.GetAllOperationsAsync(ct);
+        var byId     = allOps.GroupBy(o => o.RoutingId)
+                             .ToDictionary(g => g.Key, g => (IReadOnlyList<RoutingOperationDto>)g.ToList());
+        return routings.Select(r => new RoutingWithOpsDto(
+            r, byId.TryGetValue(r.Id, out var ops) ? ops : [])).ToList();
+    }
+
+    public Task<IReadOnlyCollection<RoutingItemMapDto>> GetItemMapsAsync(int routingId, CancellationToken ct)
+        => _repo.GetItemMapsAsync(routingId, ct);
+
+    public Task<int> AddItemMapAsync(int routingId, int itemId, int? configId, CancellationToken ct)
+        => _repo.AddItemMapAsync(routingId, itemId, configId, ct);
+
+    public Task DeleteItemMapAsync(int id, CancellationToken ct)
+        => _repo.DeleteItemMapAsync(id, ct);
 }

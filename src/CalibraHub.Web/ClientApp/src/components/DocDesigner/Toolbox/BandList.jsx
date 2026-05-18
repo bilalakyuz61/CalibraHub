@@ -16,12 +16,11 @@ export default function BandList({ state, dispatch }) {
           onClick={() => dispatch({ type: 'ADD_BAND', bandType: type })}
           disabled={existingTypes.has(type)}
           style={{
-            display: 'block', width: '100%', textAlign: 'left',
-            padding: '6px 10px', marginBottom: 4, borderRadius: 6,
-            border: '1px solid #e0e0e0', background: existingTypes.has(type) ? '#f9fafb' : '#fff',
+            display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px',
+            marginBottom: 4, borderRadius: 6, border: '1px solid #e0e0e0',
+            background: existingTypes.has(type) ? '#f9fafb' : '#fff',
             fontSize: 12, cursor: existingTypes.has(type) ? 'not-allowed' : 'pointer',
-            color: existingTypes.has(type) ? '#bbb' : '#444',
-            transition: 'all 0.15s'
+            color: existingTypes.has(type) ? '#bbb' : '#444', transition: 'all 0.15s',
           }}
           onMouseEnter={e => { if (!existingTypes.has(type)) e.currentTarget.style.background = '#ede9fe' }}
           onMouseLeave={e => { if (!existingTypes.has(type)) e.currentTarget.style.background = '#fff' }}
@@ -38,10 +37,8 @@ export default function BandList({ state, dispatch }) {
           {bands.map(b => {
             const def = BAND_TYPES.find(d => d.type === b.type)
             return (
-              <div key={b.id} style={{
-                padding: '4px 8px', fontSize: 11, color: '#555',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-              }}>
+              <div key={b.id} style={{ padding: '4px 8px', fontSize: 11, color: '#555',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{def?.label ?? b.type}</span>
                 <span style={{ color: '#bbb' }}>{b.height.toFixed(0)}mm</span>
               </div>

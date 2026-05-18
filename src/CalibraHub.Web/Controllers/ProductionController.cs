@@ -74,6 +74,14 @@ public sealed class ProductionController : Controller
     private async Task<object> BuildWorkOrdersBoardConfigAsync(WorkOrderStatus? statusFilter, CancellationToken ct)
     {
         var orders = await _service.ListAsync(statusFilter, ct);
+        // Iptal/Kapali emirler default listede gizli — kullanici "Cancelled/Closed" filtresi
+        // ile aciktan istemedikce kart akisini bulanik gostermesinler.
+        if (!statusFilter.HasValue)
+        {
+            orders = orders
+                .Where(o => o.Status != WorkOrderStatus.Cancelled && o.Status != WorkOrderStatus.Closed)
+                .ToArray();
+        }
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
 
         // Master widget şablonu — admin SmartBoardConfigPanel için
@@ -130,10 +138,12 @@ public sealed class ProductionController : Controller
                     label = "Plan Bitiş", value = o.PlannedEndDate.Value.ToLocalTime().ToString("dd.MM.yyyy", trCulture),
                     detail = (string?)null, color = future ? "emerald" : "rose" });
             }
-            if (!string.IsNullOrWhiteSpace(o.AssignedUserName))
+            // Sorumlu — once Personnel adi (yeni atama), yoksa User adi (legacy fallback)
+            var assignedDisplay = o.AssignedPersonnelName ?? o.AssignedUserName;
+            if (!string.IsNullOrWhiteSpace(assignedDisplay))
             {
                 widgets.Add(new { id = "w_assigned", type = "data", dataType = "text",
-                    label = "Sorumlu", value = o.AssignedUserName, detail = (string?)null, color = "slate" });
+                    label = "Sorumlu", value = assignedDisplay, detail = (string?)null, color = "slate" });
             }
 
             // Dinamik widget'lar (WidgetTra)
@@ -190,6 +200,8 @@ public sealed class ProductionController : Controller
             subtitle = $"{entities.Count} emir",
             icon = "ClipboardList",
             iconColor = "indigo",
+            // In-place refresh — secondaryAction sonrasi SmartBoard board'u yeniden ceker.
+            refreshUrl = "/Production/WorkOrdersBoardConfig",
             searchPlaceholder = "Hızlı ara... (emir no, mamul)",
             emptyText = "Henüz iş emri yok",
             actions = new object[]
@@ -206,6 +218,17 @@ public sealed class ProductionController : Controller
             masterWidgets,
             entities,
         };
+    }
+
+    // In-place refresh — kart aksiyonu (Iptal Et / Status change) sonrasi tum config'i tekrar ceker.
+    [HttpGet]
+    public async Task<IActionResult> WorkOrdersBoardConfig(string? status, CancellationToken ct)
+    {
+        WorkOrderStatus? filter = null;
+        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<WorkOrderStatus>(status, true, out var s))
+            filter = s;
+        var board = await BuildWorkOrdersBoardConfigAsync(filter, ct);
+        return Json(board);
     }
 
     private static string WorkOrderStatusLabel(WorkOrderStatus s) => s switch
@@ -352,6 +375,39 @@ public sealed class ProductionController : Controller
         return View(new OperationsViewModel { BoardConfig = boardConfig });
     }
 
+    [HttpGet("/Production/OperationsBoardConfig")]
+    public async Task<IActionResult> OperationsBoardConfig(CancellationToken ct)
+    {
+        var boardConfig = await BuildOperationsBoardConfigAsync(ct);
+        return Json(boardConfig);
+    }
+
+    private async Task<object> BuildOperationsGridConfigAsync(CancellationToken ct)
+    {
+        var ops = await _operations.ListAsync(includeInactive: true, ct);
+        return new
+        {
+            operations = ops.Select(o => new
+            {
+                id               = o.Id,
+                code             = o.Code,
+                name             = o.Name,
+                description      = o.Description,
+                standardDuration = o.StandardDuration,
+                durationUnit     = (int)o.DurationUnit,
+                hourlyRate       = o.HourlyRate,
+                sortOrder        = o.SortOrder,
+                isActive         = o.IsActive,
+            }),
+            urls = new
+            {
+                save    = "/Production/SaveOperation",
+                delete  = "/Production/DeleteOperation",
+                refresh = "/Production/OperationsGridConfig",
+            },
+        };
+    }
+
     // ════════════════════════════════════════════════════════════════
     // BuildOperationsBoardConfigAsync — operasyon kartlari icin SmartBoard
     // config. Sistem widget'lari (status, sure, ucret) + admin tanimli
@@ -387,97 +443,55 @@ public sealed class ProductionController : Controller
             ? await _widgetService.GetBatchRenderModelsAsync("OPERATION_EDIT", recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
 
-        var entities = new List<object>();
-        foreach (var o in ops)
-        {
-            var widgets = new List<object>();
-            widgets.Add(new { id = "w_active", type = "data", dataType = "text",
-                label = "Durum", value = o.IsActive ? "Aktif" : "Pasif", detail = (string?)null,
-                color = o.IsActive ? "emerald" : "slate" });
-
-            if (o.StandardDuration.HasValue)
+        // SmartBoardBuilder ile yeniden yazildi (rapor §2.5) — eski 100+ satir anonymous type
+        // boilerplate fluent API ile ~50 satira indi.
+        return CalibraHub.Application.SmartBoard.SmartBoard.For(ops)
+            .WithBoardKey("production-operations")
+            .WithTitle("Operasyon Tanımlamaları", subtitle: $"{ops.Count} operasyon")
+            .WithIcon("Hammer", "indigo")
+            .WithRefreshUrl("/Production/OperationsBoardConfig")
+            .WithSearchPlaceholder("Hızlı ara... (kod, ad)")
+            .WithEmptyText("Henüz operasyon tanımlanmamış")
+            .AddHeaderAction("new", "Yeni Operasyon", "Plus", "/Production/OperationEdit")
+            .WithMasterWidgets(masterWidgets)
+            .MapEntities(o =>
             {
-                var unit = o.DurationUnit == DurationUnit.Hour ? "saat" : "dk";
-                widgets.Add(new { id = "w_duration", type = "data", dataType = "numeric",
-                    label = "Std. Süre", value = o.StandardDuration.Value.ToString("N2", trCulture),
-                    detail = unit, color = "indigo" });
-            }
+                var eb = CalibraHub.Application.SmartBoard.SmartBoardEntity
+                    .For(o.Id, o.Name, subtitle: o.Code)
+                    .WithDescription(o.Description ?? string.Empty)
+                    .AddStatusWidget("w_active", "Durum", o.IsActive);
 
-            if (o.HourlyRate.HasValue)
-            {
-                widgets.Add(new { id = "w_rate", type = "data", dataType = "currency",
-                    label = "Saatlik Ücret", value = o.HourlyRate.Value.ToString("N2", trCulture),
-                    detail = "TL/saat", color = "blue" });
-            }
-
-            // Dinamik widget'lar
-            var recordId = o.Id.ToString();
-            if (batchWidgets.TryGetValue(recordId, out var dtos))
-            {
-                foreach (var w in dtos)
+                if (o.StandardDuration.HasValue)
                 {
-                    widgets.Add(new {
-                        id = w.WidgetId,
-                        type = "data",
-                        dataType = w.DataType.ToLowerInvariant(),
-                        label = w.Label,
-                        value = w.Value,
-                        isPlainField = w.IsPlainField,
-                    });
+                    var unit = o.DurationUnit == DurationUnit.Hour ? "saat" : "dk";
+                    eb.AddNumericWidget("w_duration", "Std. Süre",
+                        o.StandardDuration.Value.ToString("N2", trCulture), detail: unit, color: "indigo");
                 }
-            }
+                if (o.HourlyRate.HasValue)
+                {
+                    eb.AddNumericWidget("w_rate", "Saatlik Ücret",
+                        o.HourlyRate.Value.ToString("N2", trCulture), detail: "TL/saat", color: "blue");
+                }
 
-            entities.Add(new
-            {
-                id = o.Id,
-                title = o.Name,
-                subtitle = o.Code,
-                description = o.Description ?? string.Empty,
-                imageUrl = (string?)null,
-                statusBadge = (object?)null,
-                widgets,
-                primaryAction = new
+                if (batchWidgets.TryGetValue(o.Id.ToString(), out var dtos))
                 {
-                    label = "Düzenle",
-                    icon = "Edit",
-                    color = "amber",
-                    url = $"/Production/OperationEdit?id={o.Id}",
-                    hideButton = true,
-                },
-                secondaryAction = new
-                {
-                    label = "Sil",
-                    icon = "Trash2",
-                    apiUrl = $"/Production/DeleteOperation/{o.Id}",
-                    apiMethod = "POST",
-                    confirm = $"Bu operasyonu silmek istediğinize emin misiniz? ({o.Code})",
-                },
-            });
-        }
+                    eb.AppendWidgets(dtos.Select(w => (object)new
+                    {
+                        id           = w.WidgetId,
+                        type         = "data",
+                        dataType     = w.DataType.ToLowerInvariant(),
+                        label        = w.Label,
+                        value        = w.Value,
+                        isPlainField = w.IsPlainField,
+                    }));
+                }
 
-        return new
-        {
-            boardKey = "production-operations",
-            title = "Operasyon Tanımlamaları",
-            subtitle = $"{entities.Count} operasyon",
-            icon = "Hammer",
-            iconColor = "indigo",
-            searchPlaceholder = "Hızlı ara... (kod, ad)",
-            emptyText = "Henüz operasyon tanımlanmamış",
-            actions = new object[]
-            {
-                new
-                {
-                    id = "new",
-                    label = "Yeni Operasyon",
-                    icon = "Plus",
-                    variant = "primary",
-                    url = "/Production/OperationEdit",
-                },
-            },
-            masterWidgets,
-            entities,
-        };
+                return eb.WithEditAndDelete(
+                    editUrl:       $"/Production/OperationEdit?id={o.Id}",
+                    deleteApiUrl:  $"/Production/DeleteOperation/{o.Id}",
+                    deleteConfirm: $"Bu operasyonu silmek istediğinize emin misiniz? ({o.Code})");
+            })
+            .Build();
     }
 
     [HttpGet]
@@ -538,18 +552,187 @@ public sealed class ProductionController : Controller
         return View(dto);
     }
 
-    // ── Routing CRUD ekranı (Faz 3a-2) ──────────────────────────────────────
-    // GET  /Production/Routings                  → SmartBoard liste view
-    // GET  /Production/RoutingEdit?id=           → master-detail form (yeni/edit)
+    // ── Routing CRUD ekranı ──────────────────────────────────────────────────
+    // GET  /Production/Routings                  → RoutingTree view
+    // GET  /Production/RoutingTreeConfig         → JSON (in-place refresh)
+    // POST /Production/RoutingToggle?id=&enabled=→ JSON (aktif/pasif toggle)
+    // GET  /Production/RoutingEdit?id=           → legacy master-detail form (bağlantısız)
     // GET  /Production/RoutingsList?itemId=      → JSON liste (filtreli)
     // GET  /Production/Routing/{id}              → JSON tekil (header + operations)
     // POST /Production/SaveRouting               → JSON (id=0 yeni, id>0 update — header + operations)
     // POST /Production/DeleteRouting/{id}        → JSON
+    // GET  /Production/RoutingItemMaps?routingId → JSON mamul eşleştirme listesi
+    // POST /Production/AddRoutingItemMap         → JSON ekle
+    // POST /Production/DeleteRoutingItemMap      → JSON sil
     [HttpGet]
     public async Task<IActionResult> Routings(CancellationToken ct)
     {
-        var boardConfig = await BuildRoutingsBoardConfigAsync(ct);
-        return View(new RoutingsViewModel { BoardConfig = boardConfig });
+        var treeConfig = await BuildRoutingTreeConfigAsync(ct);
+        return View(new RoutingsViewModel { BoardConfig = treeConfig });
+    }
+
+    [HttpGet("/Production/RoutingTreeConfig")]
+    public async Task<IActionResult> RoutingTreeConfig(CancellationToken ct)
+    {
+        var treeConfig = await BuildRoutingTreeConfigAsync(ct);
+        return Json(treeConfig);
+    }
+
+    private async Task<object> BuildRoutingTreeConfigAsync(CancellationToken ct)
+    {
+        var withOps = await _routings.GetAllWithOperationsAsync(ct);
+
+        // ── Machine lookup (operation row uzerinde gostermek icin) ─────
+        var machines = await _logisticsConfig.GetMachinesAsync(ct);
+        var machineById = machines.ToDictionary(m => m.Id, m => new
+        {
+            id = m.Id,
+            code = m.MachineCode,
+            name = string.IsNullOrWhiteSpace(m.MachineName) ? m.MachineCode : m.MachineName,
+        });
+
+        // ── Item lookup (rota → mamul eslestirme icin) ─────────────────
+        var items = await _logisticsConfig.GetItemsForLookupAsync(ct);
+        var itemById = items.ToDictionary(i => i.Id, i => new
+        {
+            id = i.Id,
+            code = (i.Code ?? string.Empty).Trim(),
+            name = i.Name ?? string.Empty,
+        });
+
+        // ── Routing widget şeması (ROUTING_EDIT) ──────────────────────
+        var routingMasterWidgets = new List<object>();
+        var routingSchema = await _widgetService.GetFormSchemaByCodeAsync("ROUTING_EDIT", ct);
+        if (routingSchema != null)
+        {
+            foreach (var w in routingSchema.Widgets.Where(w => w.IsActive
+                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
+            {
+                routingMasterWidgets.Add(new
+                {
+                    id           = w.WidgetCode,
+                    dbId         = w.Id,
+                    isPlainField = w.IsPlainField,
+                    type         = "data",
+                    dataType     = w.DataType.ToLowerInvariant(),
+                    label        = w.Label,
+                });
+            }
+        }
+
+        var routingIds = withOps.Select(r => r.Header.Id.ToString()).ToArray();
+        var routingBatchWidgets = routingMasterWidgets.Count > 0 && routingIds.Length > 0
+            ? await _widgetService.GetBatchRenderModelsAsync("ROUTING_EDIT", routingIds, ct)
+            : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
+
+        // ── Routing operation widget şeması (ROUTING_OPERATION_EDIT) ──
+        var opMasterWidgets = new List<object>();
+        var opSchema = await _widgetService.GetFormSchemaByCodeAsync("ROUTING_OPERATION_EDIT", ct);
+        if (opSchema != null)
+        {
+            foreach (var w in opSchema.Widgets.Where(w => w.IsActive
+                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
+            {
+                opMasterWidgets.Add(new
+                {
+                    id           = w.WidgetCode,
+                    dbId         = w.Id,
+                    isPlainField = w.IsPlainField,
+                    type         = "data",
+                    dataType     = w.DataType.ToLowerInvariant(),
+                    label        = w.Label,
+                });
+            }
+        }
+
+        var allOpIds = withOps.SelectMany(r => r.Operations).Select(o => o.Id.ToString()).ToArray();
+        var opBatchWidgets = opMasterWidgets.Count > 0 && allOpIds.Length > 0
+            ? await _widgetService.GetBatchRenderModelsAsync("ROUTING_OPERATION_EDIT", allOpIds, ct)
+            : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
+
+        static List<object> BuildDynamicWidgets(string id, IReadOnlyDictionary<string, IReadOnlyCollection<WidgetRenderDto>> batch)
+        {
+            var list = new List<object>();
+            if (batch.TryGetValue(id, out var dtos))
+            {
+                foreach (var w in dtos)
+                {
+                    list.Add(new
+                    {
+                        id = w.WidgetId,
+                        type = "data",
+                        dataType = w.DataType.ToLowerInvariant(),
+                        label = w.Label,
+                        value = w.Value,
+                        isPlainField = w.IsPlainField,
+                    });
+                }
+            }
+            return list;
+        }
+
+        return new
+        {
+            routings = withOps.Select(r => new
+            {
+                id          = r.Header.Id,
+                code        = r.Header.Code,
+                name        = r.Header.Name,
+                description = r.Header.Description,
+                isActive    = r.Header.IsActive,
+                itemId      = r.Header.ItemId,
+                itemCode    = r.Header.ItemId.HasValue && itemById.TryGetValue(r.Header.ItemId.Value, out var itm) ? itm.code : null,
+                itemName    = r.Header.ItemId.HasValue && itemById.TryGetValue(r.Header.ItemId.Value, out var itn) ? itn.name : null,
+                widgets     = BuildDynamicWidgets(r.Header.Id.ToString(), routingBatchWidgets),
+                operations  = r.Operations.Select(o => new
+                {
+                    id              = o.Id,
+                    routingId       = o.RoutingId,
+                    sequence        = o.Sequence,
+                    operationId     = o.OperationId,
+                    operationCode   = o.OperationCode,
+                    operationName   = o.OperationName,
+                    machineId       = o.MachineId,
+                    machineCode     = o.MachineId.HasValue && machineById.TryGetValue(o.MachineId.Value, out var mc) ? mc.code : null,
+                    machineName     = o.MachineId.HasValue && machineById.TryGetValue(o.MachineId.Value, out var mn) ? mn.name : null,
+                    overrideDuration= o.OverrideDuration,
+                    durationUnit    = (int)o.DurationUnit,
+                    notes           = o.Notes,
+                    widgets         = BuildDynamicWidgets(o.Id.ToString(), opBatchWidgets),
+                }),
+            }),
+            routingMasterWidgets,
+            opMasterWidgets,
+            routingFormCode    = "ROUTING_EDIT",
+            opFormCode         = "ROUTING_OPERATION_EDIT",
+            urls = new
+            {
+                save             = "/Production/SaveRouting",
+                delete           = "/Production/DeleteRouting",
+                toggle           = "/Production/RoutingToggle",
+                operationsLookup = "/Production/OperationsList?includeInactive=false",
+                machinesLookup   = "/Logistics/GetAllMachines",
+                itemsLookup      = "/Logistics/StockLookup",
+                refresh          = "/Production/RoutingTreeConfig",
+            },
+        };
+    }
+
+    [HttpPost("/Production/RoutingToggle")]
+    public async Task<IActionResult> RoutingToggle([FromQuery] int id, [FromQuery] bool enabled, CancellationToken ct)
+    {
+        var dto = await _routings.GetAsync(id, ct);
+        if (dto is null) return Json(new { ok = false, error = "Rota bulunamadı" });
+        var ops = await _routings.GetOperationsAsync(id, ct);
+        var req = new SaveRoutingRequest(
+            Id: dto.Id, Code: dto.Code, Name: dto.Name, ItemId: dto.ItemId,
+            ConfigId: dto.ConfigId, Description: dto.Description, IsActive: enabled,
+            Operations: ops.Select(o => new SaveRoutingOperationLine(
+                o.Sequence, o.OperationId, o.MachineId, o.OverrideDuration, o.DurationUnit, o.Notes)).ToList());
+        await _routings.SaveAsync(req, ct);
+        return Json(new { ok = true });
     }
 
     private async Task<object> BuildRoutingsBoardConfigAsync(CancellationToken ct)
@@ -640,6 +823,7 @@ public sealed class ProductionController : Controller
                 }
             }
 
+            var editUrl = $"/Production/RoutingEdit?id={r.Id}";
             entities.Add(new
             {
                 id = r.Id,
@@ -647,23 +831,21 @@ public sealed class ProductionController : Controller
                 subtitle = r.Code,
                 description = r.Description ?? string.Empty,
                 imageUrl = (string?)null,
-                statusBadge = (object?)null,
+                statusBadge = new { label = r.IsActive ? "Aktif" : "Pasif", color = r.IsActive ? "emerald" : "slate" },
                 widgets,
-                primaryAction = new
+                primaryAction = new { type = "navigate", hideButton = true, url = editUrl },
+                secondaryAction = (object?)null,
+                extraActions = new object?[]
                 {
-                    label = "Düzenle",
-                    icon = "Edit",
-                    color = "amber",
-                    url = $"/Production/RoutingEdit?id={r.Id}",
-                    hideButton = true,
-                },
-                secondaryAction = new
-                {
-                    label = "Sil",
-                    icon = "Trash2",
-                    apiUrl = $"/Production/DeleteRouting/{r.Id}",
-                    apiMethod = "POST",
-                    confirm = $"Bu rotayı silmek istediğinize emin misiniz? ({r.Code})",
+                    new { icon = "Edit2", color = "amber", tooltip = "Düzenle", type = "navigate", url = editUrl },
+                    r.IsActive
+                        ? (object)new { icon = "ToggleRight", color = "orange", tooltip = "Pasife Al", type = "api-post",
+                            url = $"/Production/RoutingToggle?id={r.Id}&enabled=false" }
+                        : (object)new { icon = "ToggleLeft", color = "emerald", tooltip = "Aktife Al", type = "api-post",
+                            url = $"/Production/RoutingToggle?id={r.Id}&enabled=true" },
+                    new { icon = "Trash2", color = "red", tooltip = "Sil", type = "api-post",
+                        url = $"/Production/DeleteRouting/{r.Id}",
+                        confirm = $"Bu rotayı silmek istediğinize emin misiniz? ({r.Code})" },
                 },
             });
         }
@@ -675,18 +857,12 @@ public sealed class ProductionController : Controller
             subtitle = $"{entities.Count} rota",
             icon = "Workflow",
             iconColor = "indigo",
+            refreshUrl = "/Production/Routings/BoardEntities",
             searchPlaceholder = "Hızlı ara... (kod, ad, mamul)",
             emptyText = "Henüz rota tanımlanmamış",
             actions = new object[]
             {
-                new
-                {
-                    id = "new",
-                    label = "Yeni Rota",
-                    icon = "Plus",
-                    variant = "primary",
-                    url = "/Production/RoutingEdit",
-                },
+                new { id = "new", label = "Yeni Rota", icon = "Plus", variant = "primary", url = "/Production/RoutingEdit" },
             },
             masterWidgets,
             entities,
@@ -754,6 +930,47 @@ public sealed class ProductionController : Controller
         try
         {
             await _routings.DeleteAsync(id, ct);
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    [HttpGet("/Production/RoutingItemMaps")]
+    public async Task<IActionResult> RoutingItemMaps([FromQuery] int routingId, CancellationToken ct)
+    {
+        var maps = await _routings.GetItemMapsAsync(routingId, ct);
+        return Json(maps);
+    }
+
+    [HttpPost("/Production/AddRoutingItemMap")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddRoutingItemMap(
+        [FromQuery] int routingId, [FromQuery] int itemId, [FromQuery] int? configId, CancellationToken ct)
+    {
+        if (routingId <= 0 || itemId <= 0)
+            return Json(new { ok = false, error = "Geçersiz parametre" });
+        try
+        {
+            var id = await _routings.AddItemMapAsync(routingId, itemId, configId, ct);
+            return Json(new { ok = true, id });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost("/Production/DeleteRoutingItemMap")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteRoutingItemMap([FromQuery] int id, CancellationToken ct)
+    {
+        if (id <= 0) return Json(new { ok = false, error = "Geçersiz ID" });
+        try
+        {
+            await _routings.DeleteItemMapAsync(id, ct);
             return Json(new { ok = true });
         }
         catch (Exception ex)
@@ -844,138 +1061,52 @@ public sealed class ProductionController : Controller
             ? await _widgetService.GetBatchRenderModelsAsync("PERSONNEL_EDIT", recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<WidgetRenderDto>>();
 
-        var entities = new List<object>();
-        foreach (var p in people)
-        {
-            var widgets = new List<object>();
-
-            // Sistem widget'lari
-            widgets.Add(new
+        // SmartBoardBuilder ile yeniden yazildi (rapor §2.5) — eski 150+ satir anonymous
+        // type boilerplate fluent API ile ~55 satira indi.
+        return CalibraHub.Application.SmartBoard.SmartBoard.For(people)
+            .WithBoardKey("production-personnel")
+            .WithTitle("Personel Tanımlamaları", subtitle: $"{people.Count} personel")
+            .WithIcon("Users", "indigo")
+            .WithSearchPlaceholder("Hızlı ara... (kod, ad, departman, ünvan)")
+            .WithEmptyText("Henüz personel tanımlanmamış")
+            .AddHeaderAction("new", "Yeni Personel", "Plus", "/Production/PersonnelEdit")
+            .WithMasterWidgets(masterWidgets)
+            .MapEntities(p =>
             {
-                id = "w_active", type = "data", dataType = "text",
-                label = "Durum", value = p.IsActive ? "Aktif" : "Pasif", detail = (string?)null,
-                color = p.IsActive ? "emerald" : "slate"
-            });
+                var eb = CalibraHub.Application.SmartBoard.SmartBoardEntity
+                    .For(p.Id, p.FullName, subtitle: p.Title ?? p.Department ?? string.Empty)
+                    .AddStatusWidget("w_active", "Durum", p.IsActive);
 
-            if (p.IsProductionOperator)
-            {
-                widgets.Add(new
+                if (p.IsProductionOperator)
+                    eb.AddTextWidget("w_operator", "Üretim Operatörü", "Evet", color: "indigo");
+                if (!string.IsNullOrWhiteSpace(p.Title))
+                    eb.AddTextWidget("w_title", "Ünvan", p.Title!, color: "slate");
+                if (!string.IsNullOrWhiteSpace(p.Department))
+                    eb.AddTextWidget("w_dept", "Departman", p.Department!, color: "blue");
+                if (!string.IsNullOrWhiteSpace(p.PinCode))
+                    eb.AddTextWidget("w_pin", "PIN", "•••••", detail: "Tablet girişi", color: "amber");
+                if (!string.IsNullOrWhiteSpace(p.CardNo))
+                    eb.AddTextWidget("w_card", "Kart No", p.CardNo!, detail: "NFC", color: "rose");
+
+                if (batchWidgets.TryGetValue(p.Id.ToString(), out var dtos))
                 {
-                    id = "w_operator", type = "data", dataType = "text",
-                    label = "Üretim Operatörü", value = "Evet", detail = (string?)null,
-                    color = "indigo"
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(p.Title))
-            {
-                widgets.Add(new
-                {
-                    id = "w_title", type = "data", dataType = "text",
-                    label = "Ünvan", value = p.Title!, detail = (string?)null,
-                    color = "slate"
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(p.Department))
-            {
-                widgets.Add(new
-                {
-                    id = "w_dept", type = "data", dataType = "text",
-                    label = "Departman", value = p.Department!, detail = (string?)null,
-                    color = "blue"
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(p.PinCode))
-            {
-                widgets.Add(new
-                {
-                    id = "w_pin", type = "data", dataType = "text",
-                    label = "PIN", value = "•••••", detail = "Tablet girişi",
-                    color = "amber"
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(p.CardNo))
-            {
-                widgets.Add(new
-                {
-                    id = "w_card", type = "data", dataType = "text",
-                    label = "Kart No", value = p.CardNo!, detail = "NFC",
-                    color = "rose"
-                });
-            }
-
-            // Dinamik widget'lar
-            var recordId = p.Id.ToString();
-            if (batchWidgets.TryGetValue(recordId, out var dtos))
-            {
-                foreach (var w in dtos)
-                {
-                    widgets.Add(new
+                    eb.AppendWidgets(dtos.Select(w => (object)new
                     {
-                        id = w.WidgetId,
-                        type = "data",
-                        dataType = w.DataType.ToLowerInvariant(),
-                        label = w.Label,
-                        value = w.Value,
+                        id           = w.WidgetId,
+                        type         = "data",
+                        dataType     = w.DataType.ToLowerInvariant(),
+                        label        = w.Label,
+                        value        = w.Value,
                         isPlainField = w.IsPlainField,
-                    });
+                    }));
                 }
-            }
 
-            entities.Add(new
-            {
-                id = p.Id,
-                title = p.FullName,
-                subtitle = p.Code,
-                description = p.Title ?? p.Department ?? string.Empty,
-                imageUrl = (string?)null,
-                statusBadge = (object?)null,
-                widgets,
-                primaryAction = new
-                {
-                    label = "Düzenle",
-                    icon = "Edit",
-                    color = "amber",
-                    url = $"/Production/PersonnelEdit?id={p.Id}",
-                    hideButton = true,
-                },
-                secondaryAction = new
-                {
-                    label = "Sil",
-                    icon = "Trash2",
-                    apiUrl = $"/Production/DeletePersonnel/{p.Id}",
-                    apiMethod = "POST",
-                    confirm = $"Bu personeli silmek istediğinize emin misiniz? ({p.FullName})",
-                },
-            });
-        }
-
-        return new
-        {
-            boardKey = "production-personnel",
-            title = "Personel Tanımlamaları",
-            subtitle = $"{entities.Count} personel",
-            icon = "Users",
-            iconColor = "indigo",
-            searchPlaceholder = "Hızlı ara... (kod, ad, departman, ünvan)",
-            emptyText = "Henüz personel tanımlanmamış",
-            actions = new object[]
-            {
-                new
-                {
-                    id = "new",
-                    label = "Yeni Personel",
-                    icon = "Plus",
-                    variant = "primary",
-                    url = "/Production/PersonnelEdit",
-                },
-            },
-            masterWidgets,
-            entities,
-        };
+                return eb.WithEditAndDelete(
+                    editUrl:       $"/Production/PersonnelEdit?id={p.Id}",
+                    deleteApiUrl:  $"/Production/DeletePersonnel/{p.Id}",
+                    deleteConfirm: $"Bu personeli silmek istediğinize emin misiniz? ({p.FullName})");
+            })
+            .Build();
     }
 
     [HttpGet]
@@ -1105,6 +1236,31 @@ public sealed class ProductionController : Controller
         }
     }
 
+    // ─── Faz 2: BOM Patlatma (WorkOrderComponent) ────────────────────────────────
+    // POST /Production/ExplodeBom/{workOrderId}                → reçeteyi patlat (idempotent)
+    // GET  /Production/WorkOrderComponents?workOrderId=        → patlatılmış bileşen listesi
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ExplodeBom(int workOrderId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _service.ExplodeBomAsync(workOrderId, ct);
+            return Json(new { ok = true, result });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> WorkOrderComponents(int workOrderId, CancellationToken ct)
+    {
+        var list = await _service.GetComponentsAsync(workOrderId, ct);
+        return Json(list);
+    }
+
     // ─── Faz 3b: Shop-floor tablet kiosk ─────────────────────────────────────────
     // GET  /Production/ShopFloor                              → kiosk view (tek SPA)
     // POST /Production/AuthOperator                           → PIN/NFC ile Personnel doğrulama (Faz 3a-7)
@@ -1125,10 +1281,11 @@ public sealed class ProductionController : Controller
         var locations = await _logisticsConfig.GetLocationsAsync(ct);
         var lookup = locations.ToDictionary(l => l.Id);
 
-        // Sadece aktif + bu lokasyon altında en az bir aktif makine VEYA bir alt lokasyonu olanlar görünür.
-        // Hiyerarşi yerine düz liste — operatör doğrudan makineye gidecek.
+        // Sadece AKTİF + KULLANIM=Makine Parkuru (IsMachinePark=true) olan lokasyonlar
+        // — shop-floor terminali sadece üretim makinelerinin bulunduğu lokasyonlarda
+        // anlamlıdır; depo/kabul/sevkiyat alanları operatör görünümünde olmamalı.
         var rows = locations
-            .Where(l => l.IsActive)
+            .Where(l => l.IsActive && l.IsMachinePark)
             .OrderBy(l => l.SortOrder).ThenBy(l => l.LocationCode)
             .Select(l => new
             {
@@ -1167,7 +1324,6 @@ public sealed class ProductionController : Controller
                 id = m.Id,
                 code = m.MachineCode,
                 name = m.MachineName ?? m.MachineCode,
-                machineType = m.MachineType,
                 pendingCount = pending,
                 inProgressCount = inProgress,
                 totalQueue = queue.Count,

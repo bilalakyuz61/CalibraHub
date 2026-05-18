@@ -788,55 +788,9 @@ export default function GuideCustomizationModal(props) {
                 fontSize: 10, fontWeight: 700, color: lblClr,
                 textTransform: 'uppercase', letterSpacing: '.06em', flex: 1,
               }}>SQL Kısıtı (WHERE Fragment)</label>
-              {/* Standart yap — bu filtreyi rehberin global default'una kaydet.
-                  Token icermeyen filtre olmali (global, form-bagimsiz). */}
-              {viewCode && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const trimmed = (rawSqlConstraint || '').trim()
-                    if (trimmed && /\{#/.test(trimmed)) {
-                      const m = 'Standart filtre token ({#...}) içeremez — token\'lar form-bağımlı, standart filtre tüm formlarda geçerli.'
-                      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(m, 'warn')
-                      else alert(m)
-                      return
-                    }
-                    try {
-                      const csrf = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || ''
-                      const r = await fetch('/api/guides/' + encodeURIComponent(viewCode) + '/default-filter', {
-                        method: 'PUT', credentials: 'same-origin',
-                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf },
-                        body: JSON.stringify({ filter: trimmed || null }),
-                      })
-                      const txt = await r.text()
-                      let data = null; try { data = txt ? JSON.parse(txt) : null } catch(_) {}
-                      if (!r.ok || (data && data.success === false)) {
-                        const msg = (data && (data.message || data.error)) || ('İstek başarısız (' + r.status + ')')
-                        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, 'err')
-                        else alert(msg)
-                        return
-                      }
-                      const ok = trimmed
-                        ? 'Rehber standardı güncellendi: bu kısıt artık ' + viewCode + ' kullanan tüm formlarda geçerli.'
-                        : 'Rehber standardı temizlendi.'
-                      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(ok, 'ok')
-                      else alert(ok)
-                    } catch (e) {
-                      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Hata: ' + e.message, 'err')
-                      else alert('Hata: ' + e.message)
-                    }
-                  }}
-                  title="Bu kısıtı rehberin standart filtresi yap — bu rehberin kullanıldığı tüm formlarda otomatik uygulanır."
-                  style={{
-                    height: 24, padding: '0 10px', fontSize: 10, fontWeight: 600,
-                    background: 'rgba(99,102,241,0.18)', border: '1px solid rgba(99,102,241,0.4)',
-                    borderRadius: 4, color: accent, cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                  }}
-                >
-                  ⚙ Standart Yap
-                </button>
-              )}
+              {/* "Standart Yap" özelliği tamamen kaldırıldı —
+                  hem Tip 1 hem Tip 2 rehberlerde global filtre yazımı admin akışında
+                  yer almaz. Per-form bazında SQL kısıt (FilterJson) kaydetmek yeterli. */}
               {formFields.length > 0 && (
                 <div ref={fieldDropdownRef} style={{ position: 'relative' }}>
                   <button
@@ -894,9 +848,10 @@ export default function GuideCustomizationModal(props) {
                                 key={(f.token || '') + '-' + fi}
                                 type="button"
                                 onClick={() => { insertFormField(f.token); setFieldDropdownOpen(false) }}
+                                title={f.secondary || f.token}
                                 style={{
-                                  display: 'flex', flexDirection: 'column', gap: 2,
-                                  width: '100%', padding: '7px 10px',
+                                  display: 'flex', alignItems: 'center', gap: 8,
+                                  width: '100%', padding: '5px 10px',
                                   background: 'transparent', border: 'none',
                                   textAlign: 'left', cursor: 'pointer',
                                   transition: 'background 0.12s',
@@ -904,12 +859,9 @@ export default function GuideCustomizationModal(props) {
                                 onMouseEnter={e => { e.currentTarget.style.background = isLight ? '#f1f5f9' : 'rgba(99,102,241,0.10)' }}
                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                               >
-                                <span style={{ fontSize: 11.5, fontWeight: 600, color: iClr }}>{f.label}</span>
-                                {f.secondary && f.secondary !== f.label && (
-                                  <span style={{ fontSize: 9.5, fontFamily: 'monospace', color: lblClr, opacity: 0.7 }}>
-                                    {f.secondary}
-                                  </span>
-                                )}
+                                <span style={{ fontSize: 11.5, fontWeight: 600, color: iClr, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {f.label}
+                                </span>
                               </button>
                             ))}
                           </div>
@@ -982,22 +934,18 @@ export default function GuideCustomizationModal(props) {
                             <div key={(f.token || '') + '-' + i}
                               onMouseDown={(e) => { e.preventDefault(); selectMention(f) }}
                               onMouseEnter={() => setMentionIndex(i)}
+                              title={f.secondary || f.token}
                               style={{
-                                padding: '6px 10px', fontSize: 11, cursor: 'pointer',
+                                padding: '5px 10px', fontSize: 11, cursor: 'pointer',
                                 background: i === mentionIndex
                                   ? (isLight ? 'rgba(99,102,241,.10)' : 'rgba(99,102,241,.20)')
                                   : 'transparent',
                                 color: i === mentionIndex ? accent : iClr,
-                                display: 'flex', flexDirection: 'column', gap: 1,
+                                display: 'flex', alignItems: 'center', gap: 8,
                               }}>
-                              <span style={{ fontWeight: 600 }}>
+                              <span style={{ fontWeight: 600, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {f.label}
                               </span>
-                              {f.secondary && (
-                                <span style={{ fontFamily: 'monospace', fontSize: 9.5, color: lblClr, opacity: 0.85 }}>
-                                  {f.secondary}
-                                </span>
-                              )}
                             </div>
                           )
                         })}
@@ -1014,9 +962,6 @@ export default function GuideCustomizationModal(props) {
               Tokenler: <code style={{ fontFamily: 'monospace' }}>{'{#fieldId}'}</code> form, {' '}
               <code style={{ fontFamily: 'monospace' }}>{'{#row.fieldKey}'}</code> kalem,{' '}
               <code style={{ fontFamily: 'monospace' }}>{'{#row.combo.attr}'}</code> kombinasyon — runtime'da değerleri yerine geçer.
-              <br />
-              <strong style={{ color: accent }}>Standart Yap</strong>: bu kısıtı bu rehberin global standardı yapar —
-              kullanıldığı tüm formlarda otomatik uygulanır. (Token içermemeli.)
             </div>
           </div>
         </div>

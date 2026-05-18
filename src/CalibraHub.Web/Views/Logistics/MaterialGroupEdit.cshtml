@@ -1,0 +1,308 @@
+@model CalibraHub.Web.Models.Logistics.MaterialGroupEditViewModel
+@{
+    var isNew = Model.Id == null;
+    ViewData["Title"] = isNew ? "Yeni Malzeme Grubu" : $"Grup: {Model.GroupCode}";
+    ViewData["FormCode"] = "MATERIAL_GROUPS";
+    ViewData["BodyClass"] = "page-mg-edit";
+}
+
+@section Styles {
+<style>
+    .mge-root {
+        --mge-bg:      #f1f5f9;
+        --mge-surface: #ffffff;
+        --mge-border:  #e2e8f0;
+        --mge-text:    #0f172a;
+        --mge-muted:   #64748b;
+        --mge-accent:  #6366f1;
+        display: flex; align-items: flex-start; justify-content: center;
+        min-height: 100%; padding: 32px 16px;
+        background: var(--mge-bg);
+    }
+    body.app-theme-dark .mge-root {
+        --mge-bg:      #080c17;
+        --mge-surface: #0d1323;
+        --mge-border:  rgba(255,255,255,.09);
+        --mge-text:    #e2e8f0;
+        --mge-muted:   #94a3b8;
+    }
+    .mge-card {
+        width: 100%; max-width: 480px;
+        background: var(--mge-surface); border: 1px solid var(--mge-border);
+        border-radius: 14px; padding: 28px 28px 24px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    .mge-header {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 24px; padding-bottom: 16px;
+        border-bottom: 1px solid var(--mge-border);
+    }
+    .mge-header h1 { font-size: 17px; font-weight: 700; margin: 0; color: var(--mge-text); }
+    .mge-back {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 8px;
+        border: 1px solid var(--mge-border); background: none;
+        color: var(--mge-muted); font-size: 13px; cursor: pointer;
+        text-decoration: none; transition: background .12s;
+    }
+    .mge-back:hover { background: var(--mge-bg); color: var(--mge-text); }
+    .mge-spacer { flex: 1; }
+
+    .mge-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .mge-label { font-size: 12px; font-weight: 600; color: var(--mge-muted); }
+    .mge-input {
+        padding: 9px 12px; border-radius: 8px;
+        border: 1px solid var(--mge-border);
+        background: var(--mge-bg); color: var(--mge-text);
+        font-size: 14px; outline: none;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    .mge-input:focus { border-color: var(--mge-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .mge-input.is-invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important; }
+    .mge-select {
+        padding: 9px 12px; border-radius: 8px;
+        border: 1px solid var(--mge-border);
+        background: var(--mge-bg); color: var(--mge-text);
+        font-size: 14px; outline: none;
+        transition: border-color .15s;
+        appearance: none; -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 10px center;
+        padding-right: 32px;
+    }
+    .mge-select:focus { border-color: var(--mge-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    body.app-theme-dark .mge-select {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    }
+
+    .mge-actions {
+        display: flex; gap: 8px; margin-top: 24px;
+        padding-top: 16px; border-top: 1px solid var(--mge-border);
+    }
+    .mge-btn {
+        padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer; transition: all .12s;
+    }
+    .mge-btn--primary { background: var(--mge-accent); color: #fff; border-color: #4f46e5; }
+    .mge-btn--primary:hover { filter: brightness(1.1); }
+    .mge-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
+    .mge-btn--ghost { background: none; border-color: var(--mge-border); color: var(--mge-text); }
+    .mge-btn--ghost:hover { background: var(--mge-bg); }
+    .mge-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
+    body.app-theme-dark .mge-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
+    .mge-btn--danger:hover { background: rgba(239,68,68,.08); }
+    .mge-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
+
+    .mge-err {
+        margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+        background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
+    }
+    body.app-theme-dark .mge-err { color: #f87171; }
+
+    /* Delete modal */
+    .mge-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.48); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .mge-modal {
+        background: var(--mge-surface); border: 1px solid var(--mge-border);
+        border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw;
+        display: flex; flex-direction: column; gap: 14px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.35);
+    }
+    .mge-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+    .mge-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--mge-text); }
+    .mge-modal-msg { font-size: 13px; color: var(--mge-muted); text-align: center; line-height: 1.55; }
+    .mge-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+    .mge-modal-cancel {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: 1px solid var(--mge-border); background: var(--mge-surface);
+        color: var(--mge-text); cursor: pointer; transition: background .12s;
+    }
+    .mge-modal-cancel:hover { background: var(--mge-bg); }
+    .mge-modal-del {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: none; background: #ef4444; color: #fff; cursor: pointer; transition: filter .12s;
+    }
+    .mge-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
+    .mge-modal-del:disabled { opacity: .5; cursor: not-allowed; }
+</style>
+}
+
+<div class="mge-root">
+  <div class="mge-card">
+    <div class="mge-header">
+      <a class="mge-back" href="/Logistics/MaterialGroups">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <span class="mge-spacer"></span>
+      <h1>@(isNew ? "Yeni Malzeme Grubu" : "Grubu Düzenle")</h1>
+    </div>
+
+    <input type="hidden" id="mge-id" value="@(Model.Id?.ToString() ?? "")" />
+
+    <div class="mge-field">
+      <label class="mge-label" for="mge-cat">Kategori *</label>
+      <select id="mge-cat" class="mge-select" style="max-width:180px;">
+        <option value="1">Grup 1</option>
+        <option value="2">Grup 2</option>
+        <option value="3">Grup 3</option>
+        <option value="4">Grup 4</option>
+        <option value="5">Grup 5</option>
+      </select>
+    </div>
+
+    <div class="mge-field">
+      <label class="mge-label" for="mge-code">Grup Kodu *</label>
+      <input id="mge-code" class="mge-input" maxlength="10" value="@(Model.GroupCode ?? "")"
+             placeholder="Örn: METAL" style="max-width:180px; text-transform:uppercase;"
+             oninput="this.value=this.value.toUpperCase()" />
+    </div>
+
+    <div class="mge-field">
+      <label class="mge-label" for="mge-desc">Grup Açıklaması</label>
+      <input id="mge-desc" class="mge-input" maxlength="100"
+             value="@(Model.GroupDescription ?? "")" placeholder="Açıklama giriniz" />
+    </div>
+
+    <div id="mge-err" style="display:none;" class="mge-err"></div>
+
+    <div class="mge-actions">
+      <button class="mge-btn mge-btn--primary" id="mge-save">Kaydet</button>
+      <a class="mge-btn mge-btn--ghost" href="/Logistics/MaterialGroups">İptal</a>
+      @if (!isNew)
+      {
+        <button class="mge-btn mge-btn--danger" id="mge-delete">Sil</button>
+      }
+    </div>
+  </div>
+</div>
+
+@if (!isNew)
+{
+  <div id="mge-modal" class="mge-modal-backdrop" style="display:none;" onclick="mgeCloseModal()">
+    <div class="mge-modal" onclick="event.stopPropagation()">
+      <div class="mge-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="mge-modal-title">Malzeme Grubunu Sil</div>
+      <div class="mge-modal-msg" id="mge-modal-msg"></div>
+      <div class="mge-modal-actions">
+        <button class="mge-modal-cancel" onclick="mgeCloseModal()">Vazgeç</button>
+        <button class="mge-modal-del" id="mge-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var idVal = document.getElementById('mge-id')?.value || '';
+    var isNew = !idVal;
+
+    // Set initial category selection
+    var catEl = document.getElementById('mge-cat');
+    if (catEl) catEl.value = '@Model.GroupCategory';
+
+    function csrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function setErr(msg) {
+        var el = document.getElementById('mge-err');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; }
+        else { el.style.display = 'none'; }
+    }
+    function shake(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('is-invalid');
+        void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
+    }
+
+    var saveBtn = document.getElementById('mge-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            var code = (document.getElementById('mge-code').value || '').trim().toUpperCase();
+            if (!code) { shake('mge-code'); return; }
+
+            var payload = {
+                id:               idVal ? parseInt(idVal) : null,
+                groupCategory:    parseInt(document.getElementById('mge-cat').value),
+                groupCode:        code,
+                groupDescription: (document.getElementById('mge-desc').value || '').trim() || null
+            };
+            saveBtn.disabled = true;
+            setErr('');
+            fetch('/Logistics/SaveMaterialGroupJson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify(payload)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.success) {
+                    window.location.href = '/Logistics/MaterialGroups';
+                } else {
+                    setErr((d && d.message) || 'Kayıt başarısız.');
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
+        });
+    }
+
+    var deleteBtn = document.getElementById('mge-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            var code = document.getElementById('mge-code').value || '';
+            var msgEl = document.getElementById('mge-modal-msg');
+            if (msgEl) msgEl.innerHTML = '<strong>' + code + '</strong> kodlu grubu silmek istediğinize emin misiniz?';
+            document.getElementById('mge-modal').style.display = 'flex';
+            document.getElementById('mge-modal-del').focus();
+        });
+
+        var modalDel = document.getElementById('mge-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled = true;
+                modalDel.textContent = 'Siliniyor…';
+                fetch('/Logistics/DeleteMaterialGroupJson?id=' + idVal, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': csrf() }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.success) {
+                        window.location.href = '/Logistics/MaterialGroups';
+                    } else {
+                        mgeCloseModal();
+                        setErr((d && d.message) || 'Silinemedi.');
+                    }
+                })
+                .catch(function () { mgeCloseModal(); setErr('Bağlantı hatası.'); });
+            });
+        }
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') mgeCloseModal();
+    });
+})();
+
+function mgeCloseModal() {
+    var m = document.getElementById('mge-modal');
+    if (m) m.style.display = 'none';
+    var btn = document.getElementById('mge-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
+</script>
+}

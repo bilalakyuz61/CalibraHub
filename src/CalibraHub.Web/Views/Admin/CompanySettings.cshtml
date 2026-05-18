@@ -290,7 +290,8 @@
             <div class="cs-tab-nav">
                 <button type="button" class="cs-tab-btn is-active" data-cs-tab="general">Genel Bilgiler</button>
                 <button type="button" class="cs-tab-btn" data-cs-tab="mail">Mail Ayarlari</button>
-                <button type="button" class="cs-tab-btn" data-cs-tab="apiprofile">Entegrasyon API</button>
+                @* Entegrasyon API tab'ı kaldırıldı — yönetim Hub'a tasindi:
+                   /Integrations#profiles (Entegrasyon Wizard > Profiller tab) *@
                 <button type="button" class="cs-tab-btn" data-cs-tab="integrator">Entegrator Ayarlari</button>
                 @* "Genel Parametreler" sekmesi /Admin/Parameters > Genel altina tasindi (E-Belge Onay Sistemi). *@
                 <button type="button" class="cs-tab-btn" data-cs-tab="addresses">Adres Kataloğu</button>
@@ -444,72 +445,11 @@
                    gizli input olarak burada tutuluyor (CompanySettings save action onu yine bekliyor). *@
                 <input asp-for="Input.IsEDocumentApprovalEnabled" type="hidden" />
 
-                <!-- Entegrasyon API -->
-                <div class="cs-tab-pane" id="cs-pane-apiprofile">
-                    <div id="ap-msg" style="margin-bottom:8px;"></div>
-                    <div style="display:flex;gap:16px;height:100%;min-height:0;">
-                        <!-- Form -->
-                        <div style="width:360px;flex-shrink:0;">
-                            <input type="hidden" id="apId" />
-                            <div class="cs-section-title" style="margin-bottom:8px;">Profil Bilgileri</div>
-                            <div class="cs-line"><label>Profil Adi</label><input type="text" id="apName" class="form-control form-control-sm" /></div>
-                            <div class="cs-line"><label>Base URL</label><input type="text" id="apBaseUrl" class="form-control form-control-sm" placeholder="http://localhost:7070" /></div>
-                            <div class="cs-line"><label>Auth Tipi</label>
-                                <select id="apAuthType" class="form-select form-select-sm" onchange="apAuthChange()">
-                                    <option value="None">Yok</option>
-                                    <option value="OAuth2Password">OAuth2 Password</option>
-                                    <option value="BearerStatic">Bearer (Sabit Token)</option>
-                                    <option value="BasicAuth">Basic Auth</option>
-                                    <option value="ApiKey">API Key</option>
-                                </select>
-                            </div>
-                            <div id="apAuthOAuth2" style="display:none;">
-                                <div class="cs-section-title" style="margin-top:8px;">OAuth2 Ayarlari</div>
-                                <div class="cs-line"><label>Token URL</label><input type="text" id="apOAuthTokenEndpoint" class="form-control form-control-sm" placeholder="/api/v2/token" /></div>
-                                <div class="cs-line"><label>Kullanici</label><input type="text" id="apOAuthUsername" class="form-control form-control-sm" /></div>
-                                <div class="cs-line"><label>Sifre</label><input type="password" id="apOAuthPassword" class="form-control form-control-sm" /></div>
-                                <div class="cs-section-title" style="margin-top:6px;font-size:0.68rem;">Netsis Ek Alanlar (NOXRest)</div>
-                                <div class="cs-line"><label>BranchCode</label><input type="text" id="apOAuthBranchCode" class="form-control form-control-sm" value="0" /></div>
-                                <div class="cs-line"><label>DbName</label><input type="text" id="apOAuthDbName" class="form-control form-control-sm" /></div>
-                                <div class="cs-line"><label>DbUser</label><input type="text" id="apOAuthDbUser" class="form-control form-control-sm" value="sa" /></div>
-                                <div class="cs-line"><label>DbPassword</label><input type="password" id="apOAuthDbPassword" class="form-control form-control-sm" /></div>
-                                <div class="cs-line"><label>DbType</label><input type="text" id="apOAuthDbType" class="form-control form-control-sm" value="0" /></div>
-                            </div>
-                            <div id="apAuthBearer" style="display:none;">
-                                <div class="cs-section-title" style="margin-top:8px;">Bearer Token</div>
-                                <div class="cs-line"><label>Token</label><input type="text" id="apBearerToken" class="form-control form-control-sm" /></div>
-                            </div>
-                            <div id="apAuthBasic" style="display:none;">
-                                <div class="cs-section-title" style="margin-top:8px;">Basic Auth</div>
-                                <div class="cs-line"><label>Kullanici</label><input type="text" id="apBasicUsername" class="form-control form-control-sm" /></div>
-                                <div class="cs-line"><label>Sifre</label><input type="password" id="apBasicPassword" class="form-control form-control-sm" /></div>
-                            </div>
-                            <div id="apAuthApiKey" style="display:none;">
-                                <div class="cs-section-title" style="margin-top:8px;">API Key</div>
-                                <div class="cs-line"><label>Header Adi</label><input type="text" id="apApiKeyHeader" class="form-control form-control-sm" placeholder="X-Api-Key" /></div>
-                                <div class="cs-line"><label>Deger</label><input type="text" id="apApiKeyValue" class="form-control form-control-sm" /></div>
-                            </div>
-                            <div class="cs-line" style="margin-top:8px;border:none;">
-                                <label>Aktif</label>
-                                <div class="form-check form-switch" style="margin:0;"><input type="checkbox" id="apIsActive" class="form-check-input" checked /></div>
-                            </div>
-                        </div>
-                        <!-- Grid -->
-                        <div style="flex:1 1 auto;min-width:0;overflow-y:auto;">
-                            <div class="cs-section-title" style="margin-bottom:6px;">Kayitli Profiller</div>
-                            <table style="width:100%;border-collapse:collapse;" id="apTable">
-                                <thead><tr>
-                                    <th style="width:44px;"></th>
-                                    <th style="text-align:left;">Ad</th>
-                                    <th style="text-align:left;">Tip</th>
-                                    <th style="text-align:left;">Base URL</th>
-                                    <th style="text-align:center;">Aktif</th>
-                                </tr></thead>
-                                <tbody id="apTableBody"><tr><td colspan="5" class="ap-td" style="text-align:center;color:#94a3b8;">Yukleniyor...</td></tr></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+                @* "Entegrasyon API" tab pane'i kaldirildi — tum profil yonetimi
+                   /Integrations#profiles (Hub > Profiller tab) altinda yapiliyor.
+                   Backend AdminController.SaveApiProfileJson/DeleteApiProfileJson
+                   geriye uyum icin DURUYOR (eski JS ya da scripts cagiriyor olabilir),
+                   sadece bu UI tab'i kaldirildi. *@
 
                 <!-- Entegrator Ayarlari -->
                 <div class="cs-tab-pane" id="cs-pane-integrator">
@@ -905,7 +845,8 @@
         var active = document.querySelector('.cs-tab-btn.is-active');
         var tab = active ? active.getAttribute('data-cs-tab') : 'general';
         if (tab === 'integrator') { isrSave(); return; }
-        if (tab === 'apiprofile') { apSave(); return; }
+        // 'apiprofile' tab'i kaldirildi (Hub'a tasindi). Eski deger gelirse
+        // sessizce ana form submit'e dus.
         document.getElementById('company-form').submit();
     };
 
@@ -955,8 +896,17 @@
                         })
                     });
                     var data = await resp.json();
-                    alert(data.isSuccess ? '✓ ' + data.message : '✗ ' + data.message);
-                } catch (e) { alert('Test hatasi: ' + e.message); }
+                    // Rapor §6.6 — toast / CalibraAlert tercih
+                    var msg = (data.isSuccess ? '✓ ' : '✗ ') + (data.message || '');
+                    if (window.CalibraAlert && CalibraAlert[data.isSuccess ? 'success' : 'error']) CalibraAlert[data.isSuccess ? 'success' : 'error'](msg);
+                    else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(msg, data.isSuccess ? 'ok' : 'err');
+                    else alert(msg);
+                } catch (e) {
+                    var em = 'Test hatasi: ' + e.message;
+                    if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(em);
+                    else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(em, 'err');
+                    else alert(em);
+                }
                 finally { testBtn.disabled = false; testBtn.textContent = 'Baglanti Test Et'; }
             });
         }
@@ -970,7 +920,7 @@
                 var tab = btn.getAttribute('data-cs-tab');
                 var pane = document.getElementById('cs-pane-' + tab);
                 if (pane) pane.classList.add('is-active');
-                if (tab === 'apiprofile') apLoad();
+                // 'apiprofile' tab'i kaldirildi (Hub'a tasindi).
                 if (tab === 'integrator' && !window._isrInited) { window._isrInited = true; isrInit(); }
             });
         });
@@ -1063,8 +1013,10 @@
         }).catch(function(e) { apMsg('err', 'Kayit hatasi: ' + e.message); });
     };
 
-    window.apDeleteById = function(id) {
-        if (!confirm('Bu profili silmek istediginizden emin misiniz?')) return;
+    window.apDeleteById = async function(id) {
+        var ok = await CalibraAlert.confirm('Bu profili silmek istediginizden emin misiniz?',
+            { title: 'Profil Sil', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true });
+        if (!ok) return;
         fetch('/Admin/DeleteApiProfileJson?id=' + id, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
@@ -1259,9 +1211,12 @@
           }).catch(function(e) { isrToolbarMsg('Hata: ' + e.message, false); });
     };
 
-    window.isrDelete = function() {
+    window.isrDelete = async function() {
         var id = document.getElementById('isrId').value;
-        if (!id || !confirm('Bu entegrator ayarini silmek istediginize emin misiniz?')) return;
+        if (!id) return;
+        var ok = await CalibraAlert.confirm('Bu entegrator ayarini silmek istediginize emin misiniz?',
+            { title: 'Entegrator Sil', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true });
+        if (!ok) return;
         fetch(ISR_API('DeleteIntegratorSettingsJson') + '?id=' + id, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
@@ -1544,10 +1499,16 @@
     function waSetupPairingButton() {
         var btn = document.getElementById('waPairBtn');
         if (!btn) return;
+        // Rapor §6.6 — native alert → CalibraAlert/toast (fallback alert)
+        function _waNotify(msg, kind) {
+            if (window.CalibraAlert && CalibraAlert[kind]) { CalibraAlert[kind](msg); return; }
+            if (window.CalibraHub && CalibraHub.toast) { CalibraHub.toast(msg, kind === 'error' ? 'err' : (kind === 'warn' ? 'warn' : 'ok')); return; }
+            alert(msg);
+        }
         btn.addEventListener('click', function () {
             var phoneEl = document.getElementById('waPairPhone');
             var raw = (phoneEl?.value || '').replace(/[^\d]/g, '');
-            if (raw.length < 10) { alert('Telefon en az 10 basamak olmali (ulke kodu dahil)'); return; }
+            if (raw.length < 10) { _waNotify('Telefon en az 10 basamak olmali (ulke kodu dahil)', 'warn'); return; }
 
             btn.disabled = true; btn.textContent = 'Kod aliniyor...';
             var fd = new FormData();
@@ -1568,12 +1529,12 @@
                             });
                         } catch (e) { /* ignore */ }
                     } else {
-                        alert('Kod alinamadi: ' + (d.message || 'bilinmeyen hata'));
+                        _waNotify('Kod alinamadi: ' + (d.message || 'bilinmeyen hata'), 'error');
                     }
                 })
                 .catch(function (err) {
                     btn.disabled = false; btn.textContent = 'Kod Al';
-                    alert('Aglar hatasi: ' + err.message);
+                    _waNotify('Aglar hatasi: ' + err.message, 'error');
                 });
         });
     }

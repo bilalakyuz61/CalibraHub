@@ -14,4 +14,6 @@ public sealed class Location
     public decimal? MaxWeightCapacity { get; init; }
     public decimal? VolumeCapacity { get; init; }
     public bool IsActive { get; init; } = true;
+    public bool IsMachinePark { get; init; }
+    public bool IsStorageArea { get; init; }
 }

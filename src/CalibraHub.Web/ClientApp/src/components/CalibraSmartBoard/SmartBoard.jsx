@@ -48,11 +48,17 @@ export default function SmartBoard(props) {
   var searchable = props.searchable !== false
   var searchPlaceholder = props.searchPlaceholder || 'Ara...'
 
+  // In-place refresh
+  var refreshUrl = props.refreshUrl || null
+
   // Pagination props
   var apiUrl = props.apiUrl || null
   var initialTotalCount = props.totalCount || 0
   var pageSize = props.pageSize || 50
   var isPaginated = !!apiUrl
+  // skipInitialFetch — initial entities zaten dolu, mount aninda fetchPage(1) atlanir.
+  // Combined payload pattern: config + ilk sayfa tek istek geldiginde aktif edilir.
+  var skipInitialFetch = props.skipInitialFetch === true
 
   var HeaderIcon = resolveIcon(iconHint)
   var headerPalette = resolveColor(iconColor)
@@ -87,6 +93,26 @@ export default function SmartBoard(props) {
   var [searchQuery, setSearchQuery] = useState('') // debounced + committed search
   var searchTimerRef = useRef(null)
   var sentinelRef = useRef(null)
+
+  // In-place refresh state
+  var [recentIds, setRecentIds] = useState(function () { return new Set() })
+
+  var refreshBoard = useCallback(function (highlightId) {
+    if (!refreshUrl) { window.location.reload(); return }
+    fetch(refreshUrl, { credentials: 'same-origin' })
+      .then(function (r) { return r.json() })
+      .then(function (data) {
+        var newEntities = Array.isArray(data.entities) ? data.entities : []
+        setEntities(newEntities)
+        if (highlightId != null) {
+          setRecentIds(function (prev) { var n = new Set(prev); n.add(highlightId); return n })
+          setTimeout(function () {
+            setRecentIds(function (prev) { var n = new Set(prev); n.delete(highlightId); return n })
+          }, 1800)
+        }
+      })
+      .catch(function () { window.location.reload() })
+  }, [refreshUrl])
 
   // Theme detection
   var [isDark, setIsDark] = useState(function () {
@@ -144,6 +170,10 @@ export default function SmartBoard(props) {
   }, [entities, props.masterWidgets])
 
   // ── Fetch page from API ──
+  // İlk fetch tamamlandiginda dis dinleyicilere haber vermek icin
+  var firstReadyFiredRef = useRef(false)
+  var onReadyCb = props.onReady
+
   var fetchPage = useCallback(function (page, searchTerm, append) {
     if (!apiUrl || loading) return
     setLoading(true)
@@ -168,8 +198,17 @@ export default function SmartBoard(props) {
         setHasMore(loadedCount < total && newEntities.length > 0)
       })
       .catch(function (err) { console.error('[SmartBoard] fetch error:', err) })
-      .finally(function () { setLoading(false) })
-  }, [apiUrl, pageSize, loading])
+      .finally(function () {
+        setLoading(false)
+        // Ilk fetch tamamlandi — onReady callback'i bir kez tetikle
+        if (!firstReadyFiredRef.current) {
+          firstReadyFiredRef.current = true
+          if (typeof onReadyCb === 'function') {
+            try { onReadyCb() } catch (e) { console.warn('[SmartBoard] onReady callback hata:', e) }
+          }
+        }
+      })
+  }, [apiUrl, pageSize, loading, onReadyCb])
 
   // ── Debounced search → server ──
   useEffect(function () {
@@ -182,10 +221,24 @@ export default function SmartBoard(props) {
   }, [search, isPaginated])
 
   // When searchQuery changes, reset and fetch page 1
+  // Initial mount + skipInitialFetch=true → fetch atlanir, onReady hemen tetiklenir
+  // (initial entities config payload icinde geldi, double-fetch onlenir).
+  var firstSearchEffectRef = useRef(true)
   useEffect(function () {
     if (!isPaginated) return
-    // searchQuery === '' and currentPage === 1 and no search → initial load already has data
-    // But if searchQuery changed we need to refetch
+    if (firstSearchEffectRef.current) {
+      firstSearchEffectRef.current = false
+      if (skipInitialFetch) {
+        // Initial veri zaten var — onReady'i bir kez tetikle, fetch atma.
+        if (!firstReadyFiredRef.current) {
+          firstReadyFiredRef.current = true
+          if (typeof onReadyCb === 'function') {
+            try { onReadyCb() } catch (e) { console.warn('[SmartBoard] onReady callback hata:', e) }
+          }
+        }
+        return
+      }
+    }
     fetchPage(1, searchQuery, false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery])
@@ -305,7 +358,9 @@ export default function SmartBoard(props) {
       }
 
       if (!allRows || allRows.length === 0) {
-        try { window.alert('Aktarılacak satır yok.') } catch (_) { /* ignore */ }
+        // Rapor §6.6 — toast fallback
+        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Aktarılacak satır yok.', 'warn')
+        else try { window.alert('Aktarılacak satır yok.') } catch (_) { /* ignore */ }
         return
       }
 
@@ -396,7 +451,10 @@ export default function SmartBoard(props) {
       }, 1500)
     } catch (err) {
       console.error('[SmartBoard] Export hatasi:', err)
-      try { window.alert('Aktarma sırasında hata: ' + (err && err.message ? err.message : err)) } catch (_) { /* ignore */ }
+      // Rapor §6.6 — toast fallback
+      var em = 'Aktarma sırasında hata: ' + (err && err.message ? err.message : err)
+      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
+      else try { window.alert(em) } catch (_) { /* ignore */ }
     } finally {
       setExporting(false)
     }
@@ -620,6 +678,8 @@ export default function SmartBoard(props) {
                   {...entity}
                   visibleIds={visibleIds}
                   order={order}
+                  onRefresh={refreshUrl ? refreshBoard : undefined}
+                  isHighlighted={recentIds.has(entity.id)}
                 />
               )
             })}

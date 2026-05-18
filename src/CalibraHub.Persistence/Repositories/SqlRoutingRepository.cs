@@ -14,6 +14,7 @@ public sealed class SqlRoutingRepository : IRoutingRepository
     private readonly string _schema;
     private readonly string _routingTable;
     private readonly string _opTable;
+    private readonly string _mapTable;
 
     public SqlRoutingRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
     {
@@ -22,6 +23,7 @@ public sealed class SqlRoutingRepository : IRoutingRepository
         var s = _schema.Replace("]", "]]");
         _routingTable = $"[{s}].[Routing]";
         _opTable = $"[{s}].[RoutingOperation]";
+        _mapTable = $"[{s}].[RoutingItemMap]";
     }
 
     public async Task<IReadOnlyCollection<RoutingDto>> ListAsync(int? itemId, CancellationToken ct)
@@ -215,6 +217,111 @@ public sealed class SqlRoutingRepository : IRoutingRepository
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         cmd.Parameters.AddWithValue("@OperationId", operationId);
         return await ReadListAsync(cmd, ct);
+    }
+
+    public async Task<IReadOnlyCollection<RoutingOperationDto>> GetAllOperationsAsync(CancellationToken ct)
+    {
+        var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT ro.[Id], ro.[RoutingId], ro.[Sequence],
+                   ro.[OperationId], op.[Code], op.[Name],
+                   ro.[MachineId], NULL AS MachineCode, NULL AS MachineName,
+                   ro.[OverrideDuration], ro.[DurationUnit], ro.[Notes]
+            FROM {_opTable} ro
+            INNER JOIN [{_schema}].[Operation] op ON op.[Id] = ro.[OperationId]
+            WHERE EXISTS (
+                SELECT 1 FROM {_routingTable} r
+                WHERE r.[Id] = ro.[RoutingId] AND r.[CompanyId] = @CompanyId
+            )
+            ORDER BY ro.[RoutingId], ro.[Sequence];";
+        cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        var list = new List<RoutingOperationDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new RoutingOperationDto(
+                Id: r.GetInt32(0),
+                RoutingId: r.GetInt32(1),
+                Sequence: r.GetInt32(2),
+                OperationId: r.GetInt32(3),
+                OperationCode: r.IsDBNull(4) ? null : r.GetString(4),
+                OperationName: r.IsDBNull(5) ? null : r.GetString(5),
+                MachineId: r.IsDBNull(6) ? null : r.GetInt32(6),
+                MachineCode: r.IsDBNull(7) ? null : r.GetString(7),
+                MachineName: r.IsDBNull(8) ? null : r.GetString(8),
+                OverrideDuration: r.IsDBNull(9) ? null : r.GetDecimal(9),
+                DurationUnit: (DurationUnit)r.GetByte(10),
+                Notes: r.IsDBNull(11) ? null : r.GetString(11)));
+        }
+        return list;
+    }
+
+    public async Task<IReadOnlyCollection<RoutingItemMapDto>> GetItemMapsAsync(int routingId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            SELECT m.[Id], m.[RoutingId], m.[ItemId],
+                   i.[Code] AS ItemCode, i.[Name] AS ItemName,
+                   m.[ConfigId], ic.[Code] AS CombinationCode, ic.[Name] AS CombinationName
+            FROM {_mapTable} m
+            INNER JOIN [{_schema}].[Items] i ON i.[Id] = m.[ItemId]
+            LEFT JOIN [{_schema}].[ItemConfiguration] ic ON ic.[Id] = m.[ConfigId]
+            WHERE m.[RoutingId] = @RoutingId
+            ORDER BY i.[Code], ic.[Code];";
+        cmd.Parameters.AddWithValue("@RoutingId", routingId);
+        var list = new List<RoutingItemMapDto>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new RoutingItemMapDto(
+                Id: r.GetInt32(0),
+                RoutingId: r.GetInt32(1),
+                ItemId: r.GetInt32(2),
+                ItemCode: r.IsDBNull(3) ? null : r.GetString(3),
+                ItemName: r.IsDBNull(4) ? null : r.GetString(4),
+                ConfigId: r.IsDBNull(5) ? null : r.GetInt32(5),
+                CombinationCode: r.IsDBNull(6) ? null : r.GetString(6),
+                CombinationName: r.IsDBNull(7) ? null : r.GetString(7)));
+        }
+        return list;
+    }
+
+    public async Task<int> AddItemMapAsync(int routingId, int itemId, int? configId, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $@"
+            IF NOT EXISTS (
+                SELECT 1 FROM {_mapTable}
+                WHERE [RoutingId]=@RoutingId AND [ItemId]=@ItemId
+                  AND ((@ConfigId IS NULL AND [ConfigId] IS NULL) OR [ConfigId]=@ConfigId)
+            )
+            BEGIN
+                INSERT INTO {_mapTable} ([RoutingId],[ItemId],[ConfigId])
+                VALUES (@RoutingId,@ItemId,@ConfigId);
+            END
+            SELECT ISNULL(
+                (SELECT [Id] FROM {_mapTable}
+                 WHERE [RoutingId]=@RoutingId AND [ItemId]=@ItemId
+                   AND ((@ConfigId IS NULL AND [ConfigId] IS NULL) OR [ConfigId]=@ConfigId)),
+                0);";
+        cmd.Parameters.AddWithValue("@RoutingId", routingId);
+        cmd.Parameters.AddWithValue("@ItemId", itemId);
+        cmd.Parameters.AddWithValue("@ConfigId", (object?)configId ?? DBNull.Value);
+        var res = await cmd.ExecuteScalarAsync(ct);
+        return res != null && res != DBNull.Value ? Convert.ToInt32(res) : 0;
+    }
+
+    public async Task DeleteItemMapAsync(int id, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"DELETE FROM {_mapTable} WHERE [Id]=@Id;";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static async Task<IReadOnlyCollection<RoutingDto>> ReadListAsync(SqlCommand cmd, CancellationToken ct)

@@ -8,6 +8,7 @@
         "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
         + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>Routing</td><td style='padding:6px 8px;'>Üretim rotası header (kod/ad/item/aktif)</td></tr>"
         + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>RoutingOperation</td><td style='padding:6px 8px;'>Rota içi operasyon adımları (sequence sıralı)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>RoutingItemMap</td><td style='padding:6px 8px;'>Rota → mamul/kombinasyon eşleştirme tablosu (çoka-çok)</td></tr>"
         + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>WorkOrder.RoutingId</td><td style='padding:6px 8px;'>Release sırasında auto-explosion kaynağı</td></tr>"
         + "</table>";
 
@@ -68,14 +69,14 @@
     }
 
     function doMount() {
-        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
-        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
-            showError('SmartBoard mount fonksiyonu bulunamadı');
+        if (!BOARD_CONFIG) { showError('Tree config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountRoutingTree) {
+            showError('RoutingTree mount fonksiyonu bulunamadı');
             return;
         }
         try {
-            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
-            console.log('[Routings] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'rota');
+            window.CalibraHub.mountRoutingTree(el, BOARD_CONFIG);
+            console.log('[Routings] RoutingTree mounted,', (BOARD_CONFIG.routings || []).length, 'rota');
         } catch (ex) {
             console.error('[Routings] Mount exception:', ex);
             showError('Mount hatası: ' + (ex.message || ex));
@@ -106,8 +107,11 @@
         document.head.appendChild(script);
     }
 
+    // Shell'e sidebar'ı tamamen gizlemesini söyle
+    try { window.parent.postMessage({ type: 'calibra:sidebarHide' }, '*'); } catch(e) {}
+
     loadCss();
-    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+    if (window.CalibraHub && window.CalibraHub.mountRoutingTree) {
         doMount();
     } else {
         loadScript(doMount);

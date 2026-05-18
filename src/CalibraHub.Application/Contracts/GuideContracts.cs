@@ -14,7 +14,10 @@ public sealed record GuideSchemaDto(
     string ValueColumn,
     string DisplayColumn,
     IReadOnlyCollection<string> Columns,
-    string? DefaultSortColumn);
+    string? DefaultSortColumn,
+    /// <summary>Kolon adı → SQL veri tipi (nvarchar, int, decimal, datetime2, bit vb.).
+    /// Frontend Alan Ayarları modal'ında kolon yanında küçük chip olarak gösterir.</summary>
+    IReadOnlyDictionary<string, string>? ColumnTypes = null);
 
 /// <summary>
 /// Infinite-scroll dostu arama sonucu. HasMore=true ise React bir sonraki

@@ -9,17 +9,49 @@
 @section Scripts {
 <script>
 (function () {
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
     var el = document.getElementById('doc-designer-editor-root');
-    if (!el || !window.CalibraHub || !window.CalibraHub.mountDocDesigner) {
-        console.error('DocDesigner mount noktası bulunamadı.');
-        return;
+    if (!el) { console.error('[DocDesigner] Mount element yok'); return; }
+
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDocDesigner) {
+            el.innerHTML = '<div style="padding:24px;color:#dc2626;">mountDocDesigner bulunamadı.</div>';
+            return;
+        }
+        window.CalibraHub.mountDocDesigner(el, {
+            layoutId: @Model,
+            apiBase: '/api/doc-designer',
+            reportingApiBase: '/api/reporting',
+            listUrl: '/DocDesigner'
+        });
     }
-    window.CalibraHub.mountDocDesigner(el, {
-        layoutId: @Model,
-        apiBase: '/api/doc-designer',
-        reportingApiBase: '/api/reporting',
-        listUrl: '/DocDesigner'
-    });
+
+    function loadCss() {
+        if (document.querySelector('link[data-doc-designer-sb]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-doc-designer-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-doc-designer-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-doc-designer-sb', '1');
+        script.onload  = function () { setTimeout(cb, 0); };
+        script.onerror = function () { el.innerHTML = '<div style="padding:24px;color:#dc2626;">Bundle yüklenemedi.</div>'; };
+        document.head.appendChild(script);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountDocDesigner) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
 })();
 </script>
 }

@@ -1041,6 +1041,13 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                         </select>
                     </div>
                     <div class="ca-row">
+                        <label class="ca-label" for="contactGroupId">Cari Grubu</label>
+                        <select id="contactGroupId" name="contactGroupId" class="ca-select"
+                                data-selected="@(existing?.ContactGroupId?.ToString() ?? "")">
+                            <option value="">— Seçiniz —</option>
+                        </select>
+                    </div>
+                    <div class="ca-row">
                         <label class="ca-label" for="isActive">Durum</label>
                         <label class="ca-toggle" for="isActive" style="margin:0;">
                             <input type="checkbox" id="isActive" name="isActive"
@@ -1392,19 +1399,25 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
     }
 
     // WhatsApp "Sohbeti Aç" butonu — waPhone alanını WhatsApp sayfasına query string olarak gönderir
+    // Rapor §6.6 — native alert → CalibraAlert.warn (toast fallback)
+    function _waChatNotify(msg) {
+        if (window.CalibraAlert && CalibraAlert.warn) CalibraAlert.warn(msg);
+        else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(msg, 'warn');
+        else alert(msg);
+    }
     var waOpenBtn = document.getElementById('waOpenChat');
     if (waOpenBtn) {
         waOpenBtn.addEventListener('click', function () {
             var raw = getVal('waPhone');
             if (!raw) {
-                alert('Önce WhatsApp Numarası alanını doldur ve kaydet.');
+                _waChatNotify('Önce WhatsApp Numarası alanını doldur ve kaydet.');
                 var waInp = document.getElementById('waPhone');
                 if (waInp) waInp.focus();
                 return;
             }
             var digits = raw.replace(/[^\d]/g, '');
             if (digits.length < 10) {
-                alert('WhatsApp numarası en az 10 rakam içermeli (ülke kodu dahil).');
+                _waChatNotify('WhatsApp numarası en az 10 rakam içermeli (ülke kodu dahil).');
                 return;
             }
             // Yeni sekmede aç ki müşteri kartı kaybolmasın
@@ -1472,6 +1485,11 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
             priceGroupId:   null,
             salesRepresentativeId: (function() {
                 var v = document.getElementById('salesRepresentativeId');
+                var n = v ? parseInt(v.value, 10) : 0;
+                return n > 0 ? n : null;
+            })(),
+            contactGroupId: (function() {
+                var v = document.getElementById('contactGroupId');
                 var n = v ? parseInt(v.value, 10) : 0;
                 return n > 0 ? n : null;
             })()
@@ -1868,6 +1886,27 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 });
             })
             .catch(function (e) { console.warn('[CA] Satis temsilcisi listesi yuklenemedi:', e); });
+    })();
+
+    // ══════════════════════════════════════════════════════════════
+    // Cari Grubu dropdown — Temel Bilgiler kartinda
+    // ══════════════════════════════════════════════════════════════
+    (function () {
+        var sel = document.getElementById('contactGroupId');
+        if (!sel) return;
+        var preselect = sel.getAttribute('data-selected') || '';
+        fetch('/GeneralDefinitions/GetCariGroups', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                (data || []).forEach(function (g) {
+                    var opt = document.createElement('option');
+                    opt.value = String(g.id);
+                    opt.textContent = g.name;
+                    if (preselect && String(g.id) === preselect) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+            })
+            .catch(function (e) { console.warn('[CA] Cari grup listesi yuklenemedi:', e); });
     })();
 
     // ══════════════════════════════════════════════════════════════

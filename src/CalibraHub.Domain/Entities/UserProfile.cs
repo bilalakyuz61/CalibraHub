@@ -12,7 +12,7 @@ public sealed class UserProfile : Entity
     public required string FullName { get; init; }
     public required string Email { get; init; }
     public required string EmployeeCode { get; init; }
-    public Guid DepartmentId { get; init; }
+    public int? DepartmentId { get; init; }
     public Guid? SupervisorUserId { get; init; }
     public UserRole Role { get; init; } = UserRole.Operator;
     public IReadOnlyCollection<UserPermission> Permissions { get; init; } = Array.Empty<UserPermission>();

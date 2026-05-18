@@ -47,3 +47,17 @@ public sealed record SaveRoutingOperationLine(
     decimal? OverrideDuration,
     DurationUnit DurationUnit,
     string? Notes);
+
+public sealed record RoutingItemMapDto(
+    int Id,
+    int RoutingId,
+    int ItemId,
+    string? ItemCode,
+    string? ItemName,
+    int? ConfigId,
+    string? CombinationCode,
+    string? CombinationName);
+
+public sealed record RoutingWithOpsDto(
+    RoutingDto Header,
+    IReadOnlyList<RoutingOperationDto> Operations);

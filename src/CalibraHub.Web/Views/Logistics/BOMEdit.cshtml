@@ -2025,39 +2025,59 @@
             var parentInput = document.getElementById('ptParentCode');
             if (!parentInput) return;
 
-            // Mamul (parent) — LookupCard secimi sonrasi gizli input change event
-            // dispatch eder; ozet alanlarini ve config row'u burada doldur.
-            // data-display: bridge'in attribute'u (rehber view'inden gelen ad).
-            // StockLookup: hasConfig bilgisi icin gerekli (Items view'i her zaman donmez).
-            parentInput.addEventListener('change', function () {
-                var code = (parentInput.value || '').trim();
+            // Mamul (parent) kodu resolve — hem LookupCard change hem blur/Enter'dan çağrılır.
+            function ptResolveParent(code, bridgeDisplay) {
                 var nameEl = document.getElementById('ptParentName');
                 if (!code) {
                     if (nameEl) nameEl.value = '';
+                    var cfgRowClr = document.getElementById('ptConfigRow');
+                    if (cfgRowClr) cfgRowClr.style.display = 'none';
+                    window.ptCurrentMaterialCode = null;
                     return;
                 }
-                // Bridge data-display'i hemen yansit — ad gecikmesiz gorunsun.
-                var bridgeDisplay = parentInput.getAttribute('data-display');
                 if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
                 fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
                     .then(function (r) { return r.json(); })
                     .then(function (list) {
                         var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
-                        var cfgRow  = document.getElementById('ptConfigRow');
-                        var cfgInput = document.getElementById('ptConfigCode');
+                        var cfgRow    = document.getElementById('ptConfigRow');
+                        var cfgInput  = document.getElementById('ptConfigCode');
                         var cfgDescRow = document.getElementById('ptConfigDescRow');
-                        if (match) {
-                            // StockLookup match'i bulduysa daha kesin bilgiyi tercih et
-                            if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
-                            var isCfg = match.hasConfig === true || match.hasConfig === 'true';
-                            if (cfgRow) cfgRow.style.display = isCfg ? 'flex' : 'none';
+                        var cfgDesc   = document.getElementById('ptConfigDesc');
+                        if (!match) return;
+                        if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
+                        var isCfg = match.hasConfig === true || match.hasConfig === 'true';
+                        if (cfgRow) cfgRow.style.display = isCfg ? 'flex' : 'none';
+                        if (cfgDescRow) cfgDescRow.style.display = 'none';
+                        window.ptCurrentMaterialCode = isCfg ? match.code : null;
+                        if (isCfg) {
+                            // Kombinasyon seçimi bekleniyor — config alanlarını temizle
                             if (cfgInput) cfgInput.value = '';
-                            if (cfgDescRow) cfgDescRow.style.display = 'none';
-                            window.ptCurrentMaterialCode = isCfg ? match.code : null;
-                            if (!isCfg && typeof ptLoadExistingTree === 'function') ptLoadExistingTree(match.code, null);
+                            if (cfgDesc) cfgDesc.value = '';
+                        } else {
+                            if (typeof ptLoadExistingTree === 'function') ptLoadExistingTree(match.code, null);
                         }
                     })
                     .catch(function () {});
+            }
+
+            // LookupCard bridge → change event
+            parentInput.addEventListener('change', function () {
+                var code = (parentInput.value || '').trim();
+                ptResolveParent(code, parentInput.getAttribute('data-display'));
+            });
+
+            // Manuel yazım → blur ve Enter
+            parentInput.addEventListener('blur', function () {
+                var code = (parentInput.value || '').trim();
+                ptResolveParent(code, null);
+            });
+            parentInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var code = (parentInput.value || '').trim();
+                    ptResolveParent(code, null);
+                }
             });
 
             // Bilesen (component) — LookupCard secimi sonrasi gizli input change

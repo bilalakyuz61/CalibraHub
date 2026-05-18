@@ -34,3 +34,30 @@ app.log
 
 # ASP.NET Core Data Protection keys (local, not safe to commit)
 .app-data-protection/
+
+# ── Scratch / dev hijyeni ───────────────────────────────────────────────
+# Windows path leak (yanlis path quoting sonucu olusan dosyalar)
+C:*
+# Test session cookies (security: kullanici cookie'sini repo'ya koyma)
+_cookies.txt
+.test-cookies.txt
+# Geçici sayfa render / debug HTML
+_pg_render*.html
+combo-screen.html
+# DOCX/PDF extract gibi geçici klasörler
+.tmp_*
+# Hangi run prefixi ile baslarsa baslasin tum log dosyalari
+.run-*.log
+.web-*.log
+.claude-*.log
+calibra-run.*
+server_*.log
+sln-build*.log
+build*.log
+run*.log
+worker-*.log
+worker.err.log
+bridge.*.log
+# Build verification ciktilari (PowerShell hookundan)
+build-*.log
+web-*.log

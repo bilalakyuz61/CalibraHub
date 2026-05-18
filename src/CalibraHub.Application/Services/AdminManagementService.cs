@@ -668,13 +668,7 @@ public sealed class AdminManagementService : IAdminManagementService
 
     public async Task CreateDepartmentAsync(CreateDepartmentRequest request, CancellationToken cancellationToken)
     {
-        var code = request.Code.Trim();
-        var name = request.Name.Trim();
-
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            throw new ArgumentException("Departman kodu zorunludur.");
-        }
+        var name = (request.Name ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -693,21 +687,60 @@ public sealed class AdminManagementService : IAdminManagementService
         }
 
         var departments = await _departmentRepository.GetAllAsync(cancellationToken);
+
+        // Ayni isimli departman kontrolu (sirket bazinda)
         if (departments.Any(x =>
                 x.CompanyId == request.CompanyId &&
-                string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)))
+                string.Equals(x.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
         {
-            throw new ArgumentException("Bu sirkette ayni kodda departman zaten tanimli.");
+            throw new ArgumentException($"Bu sirkette ayni isimde departman zaten tanimli: '{name}'");
         }
 
         var department = new Department
         {
             CompanyId = request.CompanyId,
-            Code = code,
             Name = name
         };
 
         await _departmentRepository.AddAsync(department, cancellationToken);
+    }
+
+    public async Task UpdateDepartmentAsync(UpdateDepartmentRequest request, CancellationToken cancellationToken)
+    {
+        var name = (request.Name ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Departman adi zorunludur.");
+
+        var existing = await _departmentRepository.GetByIdAsync(request.Id, cancellationToken);
+        if (existing is null)
+            throw new ArgumentException("Departman bulunamadi.");
+
+        var all = await _departmentRepository.GetAllAsync(cancellationToken);
+
+        // Ayni isimli baska departman var mi (kendisi haric, sirket bazinda)
+        if (all.Any(x =>
+                x.Id != request.Id &&
+                x.CompanyId == existing.CompanyId &&
+                string.Equals(x.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException($"Bu sirkette ayni isimde departman zaten tanimli: '{name}'");
+        }
+
+        // Code mevcut value'yu koru (UI'dan gelmiyor)
+        existing.Update(name, existing.ParentDepartmentId);
+        if (request.IsActive) existing.Activate(); else existing.Deactivate();
+
+        await _departmentRepository.UpdateAsync(existing, cancellationToken);
+    }
+
+    public async Task DeleteDepartmentAsync(int id, CancellationToken cancellationToken)
+    {
+        var existing = await _departmentRepository.GetByIdAsync(id, cancellationToken);
+        if (existing is null)
+            throw new ArgumentException("Departman bulunamadi.");
+
+        await _departmentRepository.DeleteAsync(id, cancellationToken);
     }
 
     public async Task CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken)
@@ -778,12 +811,16 @@ public sealed class AdminManagementService : IAdminManagementService
             throw new ArgumentException("Secilen sirket pasif durumda.");
         }
 
-        var departments = await _departmentRepository.GetAllAsync(cancellationToken);
-        if (!departments.Any(x =>
-                x.Id == request.DepartmentId &&
-                x.CompanyId == request.CompanyId))
+        // Departman opsiyonel — secilmediyse atlanir.
+        if (request.DepartmentId.HasValue)
         {
-            throw new ArgumentException("Secilen departman bulunamadi veya farkli bir sirket kaydi.");
+            var departments = await _departmentRepository.GetAllAsync(cancellationToken);
+            if (!departments.Any(x =>
+                    x.Id == request.DepartmentId.Value &&
+                    x.CompanyId == request.CompanyId))
+            {
+                throw new ArgumentException("Secilen departman bulunamadi veya farkli bir sirket kaydi.");
+            }
         }
 
         var users = await _userProfileRepository.GetAllAsync(cancellationToken);
@@ -901,8 +938,8 @@ public sealed class AdminManagementService : IAdminManagementService
             throw new ArgumentException("Bu sirkette ayni e-posta ile kullanici zaten tanimli.");
         }
 
-        // Şirket değişti ise yeni şirkette bir departman bulup ata; yoksa default YNT olustur.
-        var departmentId = existing.DepartmentId;
+        // Şirket değişti ise yeni şirkette bir departman bulup ata; yoksa default 'Yonetim' olustur.
+        int? departmentId = existing.DepartmentId;
         if (existing.CompanyId != request.CompanyId)
         {
             var departments = await _departmentRepository.GetAllAsync(cancellationToken);
@@ -910,7 +947,7 @@ public sealed class AdminManagementService : IAdminManagementService
             if (dept is null)
             {
                 await CreateDepartmentAsync(
-                    new CreateDepartmentRequest(request.CompanyId, "YNT", "Yonetim"),
+                    new CreateDepartmentRequest(request.CompanyId, "Yonetim"),
                     cancellationToken);
                 departments = await _departmentRepository.GetAllAsync(cancellationToken);
                 dept = departments.First(x => x.CompanyId == request.CompanyId);

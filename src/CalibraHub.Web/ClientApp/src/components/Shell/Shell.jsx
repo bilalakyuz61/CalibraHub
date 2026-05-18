@@ -221,6 +221,10 @@ export default function Shell(props) {
   }, [sidebarOpen])
   function toggleSidebar() { setSidebarOpen(function(v) { return !v }) }
 
+  /* ── Sidebar tamamen gizle — hangi tab'larin sidebar istegi var ── */
+  var [sidebarHideTabKeys, setSidebarHideTabKeys] = useState(function() { return new Set() })
+  var forceSidebarHidden = sidebarHideTabKeys.has(activeTabKey)
+
 
   /* ── Baglanti durumu izleme ──────────────────────────────────────
      Sunucu duser (ornek dotnet restart) tarayici iframe icinde
@@ -399,7 +403,15 @@ export default function Shell(props) {
     } catch (e) { /* sessiz gec */ }
   }, [activeTabKey, tabs])
 
-  /* ── Menu click → tab ac veya mevcut tab'a gec ── */
+  /* ── Menu click → tab ac veya mevcut tab'a gec ──
+     Match stratejisi:
+       1) Exact URL match — tam ayni URL'li tab varsa onu aktive et
+       2) MatchPath prefix match — node.matchPath set ise, mevcut tablar arasinda
+          URL'i bu prefix ile baslayanlari ara. Varsa tab'i AS-IS aktive et
+          (URL degistirilmez — kullanicinin edit context'i korunur). Boylece
+          ornek: /Logistics/MaterialCardEdit?id=5 acik iken sol menuden
+          "Malzeme Kartlari"na tiklayinca yeni tab acmaz, mevcut edit tab'ini aktive eder.
+       3) Hicbiri yoksa yeni tab ac. */
   function openNodeAsTab(node) {
     if (!node || !node.url) return
     var existing = tabs.find(function(t) { return t.url === node.url })
@@ -407,6 +419,20 @@ export default function Shell(props) {
       setActiveTabKey(existing.key)
       setActiveMenuKey(node.key)
       return
+    }
+    if (node.matchPath) {
+      var prefix = String(node.matchPath).toLowerCase()
+      var matched = tabs.find(function(t) {
+        try {
+          var tPath = (t.url || '').split('?')[0].toLowerCase()
+          return tPath === prefix || tPath.indexOf(prefix) === 0
+        } catch (_) { return false }
+      })
+      if (matched) {
+        setActiveTabKey(matched.key)
+        setActiveMenuKey(node.key)
+        return
+      }
     }
     var newTab = {
       key: 'tab-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
@@ -508,6 +534,10 @@ export default function Shell(props) {
       if (!prev[key]) return prev
       var next = Object.assign({}, prev); delete next[key]; return next
     })
+    setSidebarHideTabKeys(function(prev) {
+      if (!prev.has(key)) return prev
+      var next = new Set(prev); next.delete(key); return next
+    })
     delete iframeRefs.current[key]
   }
 
@@ -515,6 +545,7 @@ export default function Shell(props) {
     setTabs([])
     setActiveTabKey(null)
     setDirtyTabs({})
+    setSidebarHideTabKeys(new Set())
     iframeRefs.current = {}
   }
 
@@ -556,7 +587,7 @@ export default function Shell(props) {
     setCloseConfirm(null)
   }
 
-  /* ── Iframe → parent mesaj dinleyicisi (dirty state) ─────── */
+  /* ── Iframe → parent mesaj dinleyicisi (dirty state + sidebar kontrol) ─── */
   useEffect(function() {
     function onMsg(e) {
       var d = e && e.data
@@ -570,6 +601,24 @@ export default function Shell(props) {
           if (isDirty) next[d.key] = true; else delete next[d.key]
           return next
         })
+      }
+      if (d.type === 'calibra:sidebarHide' || d.type === 'calibra:sidebarShow') {
+        var sourceKey = null
+        var refs = iframeRefs.current
+        if (refs) {
+          Object.keys(refs).forEach(function(k) {
+            var el = refs[k]
+            if (el && el.contentWindow && el.contentWindow === e.source) sourceKey = k
+          })
+        }
+        if (sourceKey) {
+          setSidebarHideTabKeys(function(prev) {
+            var next = new Set(prev)
+            if (d.type === 'calibra:sidebarHide') next.add(sourceKey)
+            else next.delete(sourceKey)
+            return next
+          })
+        }
       }
     }
     window.addEventListener('message', onMsg)
@@ -642,6 +691,7 @@ export default function Shell(props) {
         system={system}
         onCollapse={toggleSidebar}
         collapsed={!sidebarOpen}
+        hidden={forceSidebarHidden}
       />
 
       {/* Sag: Ana alan */}
@@ -651,8 +701,9 @@ export default function Shell(props) {
           isDark={isDark}
           user={user}
           tabsCount={tabs.length}
-          sidebarOpen={sidebarOpen}
+          sidebarOpen={sidebarOpen && !forceSidebarHidden}
           onToggleSidebar={toggleSidebar}
+          hideSidebarToggle={forceSidebarHidden}
           onProfileClick={function() { setProfileOpen(function(o) { return !o }); setOpenTabsOpen(false) }}
           onOpenTabsClick={function() { setOpenTabsOpen(function(o) { return !o }); setProfileOpen(false) }}
         />
@@ -1019,6 +1070,7 @@ function filterMenuTree(menu, term) {
 function Sidebar(props) {
   var isDark = props.isDark
   var collapsed = !!props.collapsed
+  var hidden = !!props.hidden
   var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
   var bgColor = isDark ? 'bg-[#0c0f1a]/70' : 'bg-white/70'
 
@@ -1040,7 +1092,9 @@ function Sidebar(props) {
         userSelect: 'none',
         WebkitUserSelect: 'none',
         overflow: 'hidden',
-        width: collapsed ? 64 : 260,
+        width: hidden ? 0 : (collapsed ? 64 : 260),
+        transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
+        borderRightWidth: hidden ? 0 : undefined,
       }}
     >
       {/* Brand — collapsed iken sadece logo + toggle (dikey), aksi halde
@@ -1730,15 +1784,6 @@ function OpenTabsPopover(props) {
             }
             title="Tum sekmeleri kapat"
           >
-            <span
-              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
-              style={{
-                background: isDark ? 'rgba(244,63,94,0.25)' : 'rgba(244,63,94,0.12)',
-                boxShadow: '0 0 8px rgba(244,63,94,0.35)',
-              }}
-            >
-              <X size={12} strokeWidth={2.6} />
-            </span>
             <span className="flex-1 text-[12.5px] font-semibold">
               Tümünü Kapat
             </span>

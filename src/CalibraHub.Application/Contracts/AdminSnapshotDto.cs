@@ -79,10 +79,9 @@ public sealed record ErpConnectionSettingsDto(
     bool IsActive);
 
 public sealed record DepartmentDto(
-    Guid Id,
+    int Id,
     int CompanyId,
     string CompanyName,
-    string Code,
     string Name,
     bool IsActive);
 

@@ -41,65 +41,121 @@
     .mce-header { display: none; }
 
     .mce-action-bar {
-        display: flex; align-items: center; gap: 8px;
-        padding: 8px 16px; flex-shrink: 0;
-        background: rgba(15,15,26,0.85); border-bottom: 1px solid rgba(255,255,255,0.06);
-        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        display: flex; align-items: center; gap: 10px;
+        padding: 0 16px; height: 52px; flex-shrink: 0;
+        background: rgba(8,10,20,0.92); border-bottom: 1px solid rgba(255,255,255,0.07);
+        backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
         position: relative; overflow: hidden;
     }
+    .mce-action-bar::after {
+        content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+        background: linear-gradient(90deg, rgba(99,102,241,0.5) 0%, rgba(6,182,212,0.25) 40%, transparent 100%);
+        pointer-events: none;
+    }
     body.app-theme-light .mce-action-bar {
-        background: rgba(248,250,252,0.92); border-bottom-color: #e2e8f0;
+        background: rgba(248,250,252,0.96); border-bottom-color: #e2e8f0;
     }
-    .mce-action-bar .mce-meta {
-        margin-right: auto; font-size: 0.85rem; color: rgba(255,255,255,0.65);
-        font-weight: 500;
+    body.app-theme-light .mce-action-bar::after {
+        background: linear-gradient(90deg, rgba(99,102,241,0.25) 0%, transparent 60%);
     }
-    body.app-theme-light .mce-action-bar .mce-meta { color: #94a3b8; }
-    .mce-action-bar .mce-meta strong { color: rgba(255,255,255,0.7); font-weight: 700; }
-    body.app-theme-light .mce-action-bar .mce-meta strong { color: #334155; }
+
+    /* Kimlik alani */
+    .mce-bar-identity {
+        display: flex; align-items: center; gap: 10px;
+        margin-right: auto; min-width: 0;
+    }
+    .mce-bar-icon-box {
+        width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+        background: linear-gradient(135deg, #4f46e5 0%, #0891b2 100%);
+        display: flex; align-items: center; justify-content: center;
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(79,70,229,0.35);
+    }
+    .mce-bar-id-info {
+        display: flex; flex-direction: column; gap: 1px; min-width: 0;
+    }
+    .mce-bar-id-code {
+        font-size: 0.88rem; font-weight: 700;
+        color: rgba(255,255,255,0.92); letter-spacing: 0.01em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.app-theme-light .mce-bar-id-code { color: #1e293b; }
+    .mce-bar-id-name {
+        font-size: 0.72rem; font-weight: 400;
+        color: rgba(255,255,255,0.42);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.app-theme-light .mce-bar-id-name { color: #94a3b8; }
+    .mce-bar-sep {
+        width: 1px; height: 24px; flex-shrink: 0;
+        background: rgba(255,255,255,0.09); margin: 0 4px;
+    }
+    body.app-theme-light .mce-bar-sep { background: #e2e8f0; }
+
+    /* Legacy meta span (artik kullanilmiyor ama JS uyumu icin) */
+    .mce-action-bar .mce-meta { display: none; }
 
     .mce-btn {
         display: inline-flex; align-items: center; gap: 6px;
-        padding: 7px 14px; border-radius: 8px; border: 1px solid;
+        padding: 7px 15px; border-radius: 8px; border: 1px solid;
         font-size: 0.78rem; font-weight: 600; cursor: pointer;
-        transition: all 0.12s ease; background: transparent;
+        transition: all 0.14s ease; background: transparent;
+        white-space: nowrap;
     }
-    .mce-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .mce-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
-    .mce-btn--primary:hover:not(:disabled) { background: #4f46e5; }
+    .mce-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .mce-btn--primary {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border-color: #4338ca; color: #fff;
+        box-shadow: 0 1px 4px rgba(99,102,241,0.35);
+    }
+    .mce-btn--primary:hover:not(:disabled) {
+        background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+        box-shadow: 0 2px 8px rgba(99,102,241,0.5);
+    }
     .mce-btn--secondary {
         background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);
-        color: rgba(255,255,255,0.65);
+        color: rgba(255,255,255,0.6);
     }
     body.app-theme-light .mce-btn--secondary {
         background: #fff; border-color: #e2e8f0; color: #475569;
     }
-    .mce-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,0.1); color: #fff; }
+    .mce-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,0.09); color: rgba(255,255,255,0.88); border-color: rgba(255,255,255,0.18); }
     body.app-theme-light .mce-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
     .mce-btn--danger {
-        background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.25); color: #f87171;
+        background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.22); color: #f87171;
     }
-    .mce-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,0.18); }
+    .mce-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.4); }
 
     /* Card */
     .mce-card {
-        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+        border-top-color: rgba(255,255,255,0.14);
         border-radius: 14px; padding: 22px;
-        backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         margin-bottom: 16px;
+        box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
     }
     body.app-theme-light .mce-card {
-        background: rgba(255,255,255,0.8); border-color: rgba(15,23,42,0.08);
+        background: rgba(255,255,255,0.9); border-color: rgba(15,23,42,0.08);
+        border-top-color: rgba(15,23,42,0.12);
         box-shadow: 0 2px 6px rgba(15,23,42,0.04);
     }
     .mce-card-title {
-        font-size: 0.85rem; font-weight: 700;
-        color: rgba(255,255,255,0.85);
-        margin: 0 0 14px 0; display: flex; align-items: center; gap: 8px;
+        font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        color: rgba(255,255,255,0.38);
+        margin: 0 0 18px 0; display: flex; align-items: center; gap: 10px;
     }
-    body.app-theme-light .mce-card-title { color: #64748b; }
+    body.app-theme-light .mce-card-title { color: #94a3b8; }
     .mce-card-title::before {
-        content: ''; width: 6px; height: 6px; border-radius: 50%; background: #6366f1;
+        content: ''; width: 3px; height: 14px; border-radius: 2px; flex-shrink: 0;
+        background: linear-gradient(180deg, #6366f1 0%, #06b6d4 100%);
+    }
+    .mce-card-title::after {
+        content: ''; flex: 1; height: 1px;
+        background: linear-gradient(90deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+    }
+    body.app-theme-light .mce-card-title::after {
+        background: linear-gradient(90deg, #e2e8f0 0%, transparent 100%);
     }
 
     /* Form fields — horizontal rows (label left, input right) */
@@ -1193,32 +1249,40 @@
         display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden;
     }
     .mce-sidenav {
-        width: 200px; flex-shrink: 0;
-        border-right: 1px solid rgba(255,255,255,0.07);
-        background: rgba(255,255,255,0.02);
+        width: 216px; flex-shrink: 0;
+        border-right: 1px solid rgba(255,255,255,0.06);
+        background: rgba(6,8,18,0.55);
         display: flex; flex-direction: column;
-        padding: 10px 8px; gap: 4px; overflow-y: auto;
+        padding: 10px 0 14px; gap: 1px; overflow-y: auto;
     }
     body.app-theme-light .mce-sidenav {
-        background: #f8fafc; border-right-color: #e2e8f0;
+        background: #f1f5f9; border-right-color: #e2e8f0;
     }
+
     .mce-sidenav-label {
-        font-size: 0.7rem; font-weight: 700;
-        color: rgba(255,255,255,0.55);
-        padding: 6px 8px 2px; margin-top: 6px;
+        display: flex; align-items: center; gap: 8px;
+        font-size: 0.63rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+        color: rgba(255,255,255,0.28);
+        padding: 10px 16px 5px; margin-top: 10px;
     }
     .mce-sidenav-label:first-child { margin-top: 0; }
+    .mce-sidenav-label::after {
+        content: ''; flex: 1; height: 1px;
+        background: rgba(255,255,255,0.07);
+    }
     body.app-theme-light .mce-sidenav-label { color: #94a3b8; }
+    body.app-theme-light .mce-sidenav-label::after { background: #e2e8f0; }
+
     /* Widget gruplarini varsayilan olarak gizle — JS activateSection onlari acacak */
     .mce-content [data-dyn-group-id] { display: none; }
 
-    /* Sidenav skeleton — dinamik widget gruplari yuklenene kadar */
+    /* Sidenav skeleton */
     .mce-nav-skeleton-row {
-        height: 32px; margin: 4px 0; border-radius: 8px;
+        height: 34px; margin: 2px 16px; border-radius: 6px;
         background: linear-gradient(90deg,
-            rgba(255,255,255,0.04) 0%,
-            rgba(255,255,255,0.10) 50%,
-            rgba(255,255,255,0.04) 100%);
+            rgba(255,255,255,0.03) 0%,
+            rgba(255,255,255,0.08) 50%,
+            rgba(255,255,255,0.03) 100%);
         background-size: 200% 100%;
         animation: mceSkeletonShimmer 1.4s ease-in-out infinite;
     }
@@ -1230,55 +1294,67 @@
         0%   { background-position: 200% 0; }
         100% { background-position: -200% 0; }
     }
+
+    /* Nav button — flat, left-border indicator */
     .mce-nav-btn {
-        display: flex; align-items: center; gap: 8px;
-        width: 100%; padding: 9px 12px;
-        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 8px;
-        color: rgba(255,255,255,0.6);
-        font-size: 0.85rem; font-weight: 500; text-align: left;
+        display: flex; align-items: center; gap: 10px;
+        width: 100%; padding: 9px 16px;
+        background: transparent;
+        border: none; border-left: 2px solid transparent; border-radius: 0;
+        color: rgba(255,255,255,0.42);
+        font-size: 0.83rem; font-weight: 500; text-align: left;
         cursor: pointer; transition: all 0.15s; line-height: 1.4;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    body.app-theme-light .mce-nav-btn {
-        color: #64748b; background: #f1f5f9; border-color: #e2e8f0;
-    }
+    body.app-theme-light .mce-nav-btn { color: #94a3b8; }
     .mce-nav-btn:hover {
-        background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85);
-        border-color: rgba(255,255,255,0.15);
+        background: rgba(255,255,255,0.04);
+        color: rgba(255,255,255,0.78);
+        border-left-color: rgba(255,255,255,0.18);
     }
     body.app-theme-light .mce-nav-btn:hover {
-        background: #e2e8f0; color: #1e293b; border-color: #cbd5e1;
+        background: rgba(0,0,0,0.04); color: #334155;
+        border-left-color: #cbd5e1;
     }
     .mce-nav-btn.is-active {
-        background: rgba(16,185,129,0.12);
-        border-color: rgba(16,185,129,0.35);
-        color: #34d399; font-weight: 600;
+        background: rgba(99,102,241,0.09);
+        border-left-color: #6366f1;
+        color: #a5b4fc; font-weight: 600;
     }
     body.app-theme-light .mce-nav-btn.is-active {
-        background: rgba(16,185,129,0.1);
-        border-color: rgba(16,185,129,0.3);
-        color: #059669;
+        background: rgba(99,102,241,0.07);
+        border-left-color: #6366f1; color: #6366f1;
     }
+
+    /* Dot — halka (inactive) → dolu+glow (active) */
     .mce-nav-dot {
-        width: 6px; height: 6px; border-radius: 50%;
-        background: currentColor; flex-shrink: 0; opacity: 0.5;
+        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        border: 1.5px solid rgba(255,255,255,0.22);
+        background: transparent;
+        transition: all 0.18s;
     }
-    .mce-nav-btn.is-active .mce-nav-dot { opacity: 1; }
+    body.app-theme-light .mce-nav-dot { border-color: #cbd5e1; }
+    .mce-nav-btn:hover .mce-nav-dot { border-color: rgba(255,255,255,0.48); }
+    body.app-theme-light .mce-nav-btn:hover .mce-nav-dot { border-color: #94a3b8; }
+    .mce-nav-btn.is-active .mce-nav-dot {
+        background: #6366f1; border-color: #6366f1;
+        box-shadow: 0 0 7px rgba(99,102,241,0.65);
+    }
+    body.app-theme-light .mce-nav-btn.is-active .mce-nav-dot {
+        background: #6366f1; border-color: #6366f1;
+        box-shadow: 0 0 7px rgba(99,102,241,0.4);
+    }
+
     .mce-nav-count {
         margin-left: auto; padding: 1px 6px; border-radius: 999px;
         font-size: 0.6rem; font-weight: 700; font-family: monospace;
-        background: rgba(16,185,129,0.12); color: #34d399;
-        border: 1px solid rgba(16,185,129,0.25); flex-shrink: 0;
-        min-width: 22px; text-align: center;            /* rakam degisirken genislik kaymasin */
-        transition: opacity .12s, background .12s;       /* yumusak gecis */
+        background: rgba(99,102,241,0.15); color: #a5b4fc;
+        border: 1px solid rgba(99,102,241,0.28); flex-shrink: 0;
+        min-width: 22px; text-align: center;
+        transition: opacity .12s, background .12s;
     }
-    /* Sayi 0 ise: layout'ta yer kaplamaya devam etsin ama "pasif" gorunsun (kayma engellenir) */
-    .mce-nav-count.is-empty {
-        opacity: 0;
-        pointer-events: none;
-    }
-    body.app-theme-light .mce-nav-count { background: rgba(16,185,129,0.08); color: #059669; }
+    .mce-nav-count.is-empty { opacity: 0; pointer-events: none; }
+    body.app-theme-light .mce-nav-count { background: rgba(99,102,241,0.08); color: #6366f1; border-color: rgba(99,102,241,0.2); }
 
     /* Kombinasyonlar tablosu */
     .mce-comb-table {
@@ -1519,9 +1595,19 @@
 
 @Html.AntiForgeryToken()
 
-    <!-- Aksiyon Seridi — tabsheet altinda sabit -->
-    <div class="mce-action-bar" data-no-proxy>
-        <button type="button" class="mce-btn mce-btn--primary" id="mceSaveBtn" onclick="mceSave()">
+    <!-- Aksiyon Seridi — tabsheet altinda sabit + lock banner host -->
+    <div class="mce-action-bar" data-no-proxy data-collaboration-banner-host>
+        <div class="mce-bar-identity" id="mceMeta">
+            <div class="mce-bar-icon-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            </div>
+            <div class="mce-bar-id-info">
+                <span class="mce-bar-id-code">Yeni Malzeme</span>
+                <span class="mce-bar-id-name"></span>
+            </div>
+        </div>
+        <div class="mce-bar-sep"></div>
+        <button type="button" class="mce-btn mce-btn--primary" id="mceSaveBtn" data-collaboration-write="true" onclick="mceSave()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             Kaydet
         </button>
@@ -1529,11 +1615,10 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             Liste
         </button>
-        <button type="button" class="mce-btn mce-btn--danger" id="mceDeleteBtn" style="display:none;" onclick="mceDelete()">
+        <button type="button" class="mce-btn mce-btn--danger" id="mceDeleteBtn" data-collaboration-write="true" style="display:none;" onclick="mceDelete()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
             Sil
         </button>
-        <span class="mce-meta" id="mceMeta"></span>
     </div>
 
     <div class="mce-body">
@@ -1934,12 +2019,13 @@
         }, 4000);
     }
 
-    // ── Ust bilgi seridi: ID / Stok Kodu / Stok Adi formati ──
+    // ── Ust bilgi seridi: kimlik alani dogrudan DOM elemanlarina yazilir ──
     function mceFormatMeta(id, code, name) {
-        var idPart   = id != null ? ('ID: <strong>' + id + '</strong>') : '';
-        var codePart = code ? '<strong>' + escHtml(code) + '</strong>' : '';
-        var namePart = name ? escHtml(name) : '';
-        return [idPart, codePart, namePart].filter(function (p) { return p; }).join(' &nbsp;/&nbsp; ');
+        var codeEl = document.querySelector('#mceMeta .mce-bar-id-code');
+        var nameEl = document.querySelector('#mceMeta .mce-bar-id-name');
+        if (codeEl) codeEl.textContent = code || 'Yeni Malzeme';
+        if (nameEl) nameEl.textContent = name || '';
+        return '';
     }
 
     // ── populate() — Master alanlari doldurur ──
@@ -1957,7 +2043,7 @@
         // degisiklikleri sonrasi) populate icinde beklenmeyen DOM hatalarina yol acabilir;
         // bunlari yutup console'a logla, "Yuklenirken hata" toast'unu kullaniciya gosterme.
         try {
-            _setHTML('mceMeta', mceFormatMeta(data.stockCardId, data.materialCode, data.materialName));
+            mceFormatMeta(data.stockCardId, data.materialCode, data.materialName);
             _setVal('mceMaterialCode',         data.materialCode || '');
             _setVal('mceMaterialName',         data.materialName || '');
             _setVal('mceMaterialTypeId',       data.materialTypeId != null ? String(data.materialTypeId) : '');
@@ -2516,7 +2602,7 @@
                     history.replaceState({}, '', newUrl);
                 }
                 _setDisp('mceDeleteBtn', 'inline-flex');
-                _setHTML('mceMeta', mceFormatMeta(data.id, code, name));
+                mceFormatMeta(data.id, code, name);
             }
 
             // ── Ek alanlari (WidgetMas/WidgetTra) kaydet ──
@@ -2711,6 +2797,62 @@
             setTimeout(function() { window.mceLocLoad(); }, 0);
         }
     }
+
+    // Malzeme Kodu alaninda blur veya Enter: mevcut kart varsa in-place yukle, yoksa formu temizle
+    (function initCodeLookup() {
+        var codeInput = document.getElementById('mceMaterialCode');
+        if (!codeInput) return;
+
+        var _lastCheckedCode = '';
+
+        function resetForm(keepCode) {
+            currentId = 0;
+            mceFormatMeta(null, keepCode || '', '');
+            _setVal('mceMaterialCode', keepCode || '');
+            _setVal('mceMaterialName', '');
+            _setVal('mceMaterialTypeId', '');
+            _setChk('mceTrackCombinations', false);
+            _setVal('mceTaxRate', 20);
+            _setDisp('mceDeleteBtn', 'none');
+            var pendingUnitId = '';
+            window._mceApplyUnitId = function() {
+                var el = $('mceUnitId');
+                if (!el) return;
+                el.value = pendingUnitId;
+                if (typeof mceCbxRebuild === 'function') mceCbxRebuild(el);
+                if (typeof mceUnitRefreshSelects === 'function') mceUnitRefreshSelects();
+            };
+            if (window._mceUnitsLoaded) window._mceApplyUnitId();
+            renderCombinations([]);
+            updateCombNav(false, 0);
+            history.replaceState(null, '', '/Logistics/MaterialCardEdit');
+        }
+
+        function lookupByCode() {
+            var code = (codeInput.value || '').trim();
+            if (!code || code === _lastCheckedCode) return;
+            _lastCheckedCode = code;
+
+            fetch('/Logistics/GetMaterialCard?code=' + encodeURIComponent(code), { credentials: 'same-origin' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(data) {
+                    if (!data || !data.stockCardId) {
+                        if (currentId > 0) resetForm(code);
+                        return;
+                    }
+                    if (data.stockCardId === currentId) return;
+                    currentId = data.stockCardId;
+                    populate(data);
+                    history.replaceState(null, '', '/Logistics/MaterialCardEdit?id=' + currentId);
+                })
+                .catch(function() { });
+        }
+
+        codeInput.addEventListener('blur', lookupByCode);
+        codeInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); lookupByCode(); }
+        });
+    })();
 
     // ── Sidebar navigasyon — tab-panel modeli ─────────────────────────
     // Her nav butonu yalnizca kendi bolumunu gosterir, digerleri gizlenir.

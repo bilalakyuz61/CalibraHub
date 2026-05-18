@@ -1,0 +1,203 @@
+@*
+    _IntegrationActionItems — Form ekranlarının "Islemler" (gear) dropdown menusu
+    icinde aktif Manual entegrasyonlari menu-item style ile listeleyen partial.
+
+    Bu partial, sayfaya bir <div data-integration-action-items> placeholder yerlestirir;
+    sayfa yuklenince JS GET /Integrations/api/by-form/{formCode} cagirip donen her
+    entegrasyon icin parent dropdown'a uygun stilde bir <button class="sqe-actions-item">
+    ekler. Hicbir entegrasyon yoksa hicbir sey gorunmez (placeholder gizli kalir).
+
+    Kullanim (DocumentEdit.cshtml gibi formlardaki #sqActionsDropdown icine):
+        @await Html.PartialAsync("_IntegrationActionItems",
+            new CalibraHub.Web.Models.IntegrationButtonsModel {
+                FormCode = headerFormCode,
+                RecordId = (editId ?? 0).ToString()
+            })
+
+    Akis:
+      1. Sayfa yuklenince GET /Integrations/api/by-form/{formCode} cagrilir
+      2. Donen her entegrasyon icin bir menu item render edilir (placeholder'in HEMEN ARDINDA,
+         ayni parent altinda — sqe-actions-item style + divider once)
+      3. Item tiklaninca dropdown kapatilir + POST /Integration/Run/{integrationId}?recordId=...
+      4. Sonuc bir toast ile bildirilir
+*@
+@model CalibraHub.Web.Models.IntegrationButtonsModel
+
+@if (Model is not null && !string.IsNullOrWhiteSpace(Model.FormCode))
+{
+    <!-- Placeholder — Sayfa yuklenince JS, parent'a butonlari ekler ve bu node'u kaldirir.
+         data-record-id dinamik degisebilir (formId render sonrasi gelir); bunun icin
+         CalibraHub.scanIntegrationActionItems(formId) public API ile yeniden tetiklenir. -->
+    <div data-integration-action-items
+         data-form-code="@Model.FormCode"
+         data-record-id="@(Model.RecordId ?? "")"
+         style="display:none;"></div>
+
+    <style>
+        /* Dropdown header + divider — sqe-actions-* stilini takip eder */
+        .ch-int-action-divider {
+            height: 1px; margin: 6px 0;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,.08), transparent);
+        }
+        .ch-int-action-header {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+            color: rgba(255,255,255,0.4); font-weight: 600;
+            padding: 4px 14px 2px;
+        }
+        body.app-theme-light .ch-int-action-header { color: rgba(0,0,0,0.4); }
+        /* Spinner — disabled state'te buton icinde donen ikon */
+        .ch-int-spin { display: inline-block; animation: ch-int-rotate .9s linear infinite; }
+        @@keyframes ch-int-rotate {
+            from { transform: rotate(0deg); } to { transform: rotate(360deg); }
+        }
+    </style>
+
+    <script>
+        (function () {
+            // Sayfa basina tek defa bootstrap — birden fazla placeholder olursa hepsini tek scan halleder
+            if (window.__chIntActionItemsBootstrapped) {
+                if (window.CalibraHub && window.CalibraHub.scanIntegrationActionItems) {
+                    window.CalibraHub.scanIntegrationActionItems();
+                }
+                return;
+            }
+            window.__chIntActionItemsBootstrapped = true;
+
+            function getCsrf() {
+                var el = document.querySelector('input[name="__RequestVerificationToken"]');
+                return el ? el.value : '';
+            }
+            function toast(msg, kind) {
+                // Toast altyapisi her sayfada hazir; native alert kullanmiyoruz (CLAUDE.md kurali).
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, kind || 'info');
+                else console.warn('[IntegrationActions] toast yok:', msg);
+            }
+
+            function closeParentDropdown(node) {
+                // Sales DocumentEdit: sqe-actions-menu container'inin "is-open" class'i kaldirilirsa kapanir.
+                // Genel cozum: en yakin role="menu" parent'i bul ve gorunmez yap.
+                var menu = node.closest('.sqe-actions-dropdown') || node.closest('[role="menu"]');
+                if (menu) menu.style.display = 'none';
+                // Sales DocumentEdit ozel API'si varsa onu cagir (state'i de senkronla)
+                if (typeof window.sqCloseActionsMenu === 'function') window.sqCloseActionsMenu();
+            }
+
+            function buildItem(integration, recordId, host) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'sqe-actions-item ch-int-action-item';
+                btn.setAttribute('role', 'menuitem');
+                btn.title = (integration.description || integration.name) + ' — ' +
+                            (integration.httpMethod || '') + ' ' + (integration.endpointName || '');
+                btn.innerHTML =
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+                    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                    '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>' +
+                    '<span>' + escapeHtml(integration.name || 'Entegrasyon') + '</span>';
+
+                btn.onclick = function () {
+                    if (btn.disabled) return;
+                    // Record id en guncel haliyle (formdan re-fetch — host'taki data-record-id JS ile guncellenebilir)
+                    var rid = host.getAttribute('data-record-id') || recordId || '';
+                    // Yeni kayit (rid yok) -> kayit uyarisi
+                    if (!rid || rid === '0') {
+                        toast('Once kaydi olusturun (Kaydet) — sonra "ERP\'ye Aktar" calistirin.', 'err');
+                        closeParentDropdown(btn);
+                        return;
+                    }
+                    btn.disabled = true;
+                    var origHtml = btn.innerHTML;
+                    btn.innerHTML = '<span class="ch-int-spin">⌛</span><span>Calistiriliyor…</span>';
+                    closeParentDropdown(btn);
+
+                    var url = '/Integration/Run/' + integration.id + '?recordId=' + encodeURIComponent(rid);
+                    fetch(url, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'RequestVerificationToken': getCsrf() },
+                    })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (d.success) {
+                            toast('✓ ' + integration.name + ' basarili (HTTP ' + (d.statusCode || '?') + ')', 'ok');
+                        } else {
+                            toast('✗ ' + integration.name + ': ' + (d.error || 'Hata'), 'err');
+                        }
+                    })
+                    .catch(function (e) { toast('Sunucu hatasi: ' + e.message, 'err'); })
+                    .finally(function () {
+                        btn.disabled = false;
+                        btn.innerHTML = origHtml;
+                    });
+                };
+                return btn;
+            }
+
+            function escapeHtml(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+            }
+
+            function renderHost(host) {
+                var formCode = host.getAttribute('data-form-code');
+                if (!formCode) return;
+
+                fetch('/Integrations/api/by-form/' + encodeURIComponent(formCode), { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        // Onceki render'da eklenmis itemleri temizle
+                        var parent = host.parentNode;
+                        if (!parent) return;
+                        Array.prototype.slice.call(parent.querySelectorAll('.ch-int-action-item, .ch-int-action-divider, .ch-int-action-header'))
+                             .forEach(function (el) { el.remove(); });
+
+                        if (!d.success || !(d.items && d.items.length > 0)) {
+                            host.setAttribute('data-rendered', 'empty');
+                            return;
+                        }
+
+                        // Items host'tan HEMEN sonra parent'a insert et (sira korunur)
+                        var divider = document.createElement('div');
+                        divider.className = 'ch-int-action-divider';
+                        var header = document.createElement('div');
+                        header.className = 'ch-int-action-header';
+                        header.textContent = 'Entegrasyonlar';
+
+                        var nodes = [divider, header];
+                        var recordId = host.getAttribute('data-record-id') || '';
+                        d.items.forEach(function (it) {
+                            nodes.push(buildItem(it, recordId, host));
+                        });
+
+                        // host'un HEMEN ARDINA insert et — siralama bozulmaz
+                        var after = host.nextSibling;
+                        nodes.forEach(function (n) {
+                            if (after) parent.insertBefore(n, after);
+                            else       parent.appendChild(n);
+                        });
+                        host.setAttribute('data-rendered', '1');
+                    })
+                    .catch(function () { host.setAttribute('data-rendered', 'error'); });
+            }
+
+            function scan() {
+                document.querySelectorAll('[data-integration-action-items]').forEach(function (h) {
+                    // Her scan'de yeniden render — recordId guncel olsun (form initial load sonrasi)
+                    renderHost(h);
+                });
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', scan);
+            } else {
+                scan();
+            }
+
+            // Public API — sayfa formId'sini set ettikten sonra yeniden tetikle:
+            //   window.CalibraHub.scanIntegrationActionItems();
+            window.CalibraHub = window.CalibraHub || {};
+            window.CalibraHub.scanIntegrationActionItems = scan;
+        })();
+    </script>
+}

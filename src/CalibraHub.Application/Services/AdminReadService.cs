@@ -126,7 +126,6 @@ public sealed class AdminReadService : IAdminReadService
                     x.Id,
                     x.CompanyId,
                     companyLookup.GetValueOrDefault(x.CompanyId, "Tanimsiz"),
-                    x.Code,
                     x.Name,
                     x.IsActive))
                 .ToArray(),
@@ -138,7 +137,7 @@ public sealed class AdminReadService : IAdminReadService
                     x.FullName,
                     x.Email,
                     x.EmployeeCode,
-                    departmentLookup.GetValueOrDefault(x.DepartmentId, "Tanimsiz"),
+                    x.DepartmentId.HasValue ? departmentLookup.GetValueOrDefault(x.DepartmentId.Value, "Tanimsiz") : "Tanimsiz",
                     x.SupervisorUserId.HasValue ? userLookup.GetValueOrDefault(x.SupervisorUserId.Value) : null,
                     UserAuthorizationCatalog.GetRoleLabel(x.Role),
                     x.Permissions.Select(UserAuthorizationCatalog.GetPermissionLabel).ToArray(),

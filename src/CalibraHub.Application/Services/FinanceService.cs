@@ -73,6 +73,7 @@ public sealed class FinanceService : IFinanceService
                 IsActive = request.IsActive,
                 PriceGroupId = request.PriceGroupId > 0 ? request.PriceGroupId : null,
                 SalesRepresentativeId = request.SalesRepresentativeId > 0 ? request.SalesRepresentativeId : null,
+                ContactGroupId = request.ContactGroupId > 0 ? request.ContactGroupId : null,
                 WaPhone = NullIfEmpty(request.WaPhone),
                 WaName = NullIfEmpty(request.WaName),
                 CreatedAt = existing.CreatedAt
@@ -104,6 +105,7 @@ public sealed class FinanceService : IFinanceService
                 IsActive = request.IsActive,
                 PriceGroupId = request.PriceGroupId > 0 ? request.PriceGroupId : null,
                 SalesRepresentativeId = request.SalesRepresentativeId > 0 ? request.SalesRepresentativeId : null,
+                ContactGroupId = request.ContactGroupId > 0 ? request.ContactGroupId : null,
                 WaPhone = NullIfEmpty(request.WaPhone),
                 WaName = NullIfEmpty(request.WaName),
                 CreatedAt = DateTime.Now
@@ -132,6 +134,7 @@ public sealed class FinanceService : IFinanceService
                 IsActive = entity.IsActive,
                 PriceGroupId = entity.PriceGroupId,
                 SalesRepresentativeId = entity.SalesRepresentativeId,
+                ContactGroupId = entity.ContactGroupId,
                 WaPhone = entity.WaPhone,
                 WaName = entity.WaName,
                 CreatedAt = entity.CreatedAt
@@ -171,7 +174,7 @@ public sealed class FinanceService : IFinanceService
         a.TaxNumber, a.IdentityNumber, a.TaxOffice, a.Phone, a.Email, a.Address, a.City, a.District,
         a.IsActive, a.PriceGroupId, a.CreatedAt, a.CountryCode,
         a.Mobile, a.Website, a.PostalCode, a.ContactPerson, a.Neighborhood, a.SalesRepresentativeId,
-        a.WaPhone, a.WaName);
+        a.WaPhone, a.WaName, a.ContactGroupId);
 
     private static string? NullIfEmpty(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();

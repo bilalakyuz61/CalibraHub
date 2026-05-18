@@ -21,7 +21,9 @@ public sealed record WorkOrderListItemDto(
     DateTime? PlannedEndDate,
     Guid? AssignedUserId,
     string? AssignedUserName,
-    int RevisionNo);
+    int RevisionNo,
+    int? AssignedPersonnelId = null,
+    string? AssignedPersonnelName = null);
 
 public sealed record WorkOrderSourceDto(
     int Id,
@@ -62,6 +64,11 @@ public sealed record WorkOrderDto(
     int? RoutingId,
     string? RoutingCode,
     string? RoutingName,
+    int? DefaultMachineId,
+    string? DefaultMachineCode,
+    string? DefaultMachineName,
+    int? AssignedPersonnelId,
+    string? AssignedPersonnelName,
     string? Notes,
     DateTime Created,
     DateTime? Updated,
@@ -78,7 +85,15 @@ public sealed record CreateWorkOrderRequest(
     Guid? AssignedUserId,
     int? WarehouseLocationId,
     int? RoutingId,
-    string? Notes);
+    int? DefaultMachineId,
+    int? AssignedPersonnelId,
+    string? Notes,
+    /// <summary>
+    /// "Üretime Planla" switch'i — true ise WO doğrudan Released statüsüne yazılır
+    /// (operasyonlar otomatik patlatılır, üretim sahasına açılır). NULL ise
+    /// CompanyParameter "AutoRelease" değeri kullanılır.
+    /// </summary>
+    bool? AutoRelease = null);
 
 public sealed record UpdateWorkOrderRequest(
     decimal PlannedQuantity,
@@ -89,6 +104,8 @@ public sealed record UpdateWorkOrderRequest(
     Guid? AssignedUserId,
     int? WarehouseLocationId,
     int? RoutingId,
+    int? DefaultMachineId,
+    int? AssignedPersonnelId,
     string? Notes);
 
 public sealed record ChangeWorkOrderStatusRequest(int WorkOrderId, WorkOrderStatus NewStatus);

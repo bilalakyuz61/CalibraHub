@@ -1,0 +1,274 @@
+@model CalibraHub.Web.Models.Definitions.CardGroupEditViewModel
+@{
+    var isNew = !Model.Id.HasValue;
+    ViewData["Title"] = isNew ? "Yeni Kart Grubu" : $"Kart Grubu: {Model.Code}";
+    ViewData["BodyClass"] = "page-card-group-edit";
+}
+
+@section Styles {
+<style>
+.cge-page {
+    --cge-bg:           #f8fafc;
+    --cge-surface:      #ffffff;
+    --cge-surface2:     #f1f5f9;
+    --cge-border:       #e2e8f0;
+    --cge-text:         #0f172a;
+    --cge-text-muted:   #64748b;
+    --cge-input-bg:     #ffffff;
+    --cge-input-dis:    #f8fafc;
+    --cge-accent:       #7c3aed;
+}
+body.app-theme-dark .cge-page {
+    --cge-bg:           #080c17;
+    --cge-surface:      #0d1323;
+    --cge-surface2:     #111827;
+    --cge-border:       rgba(255,255,255,.09);
+    --cge-text:         #e2e8f0;
+    --cge-text-muted:   #94a3b8;
+    --cge-input-bg:     rgba(255,255,255,.06);
+    --cge-input-dis:    rgba(255,255,255,.03);
+    --cge-accent:       #a78bfa;
+}
+.cge-page {
+    padding: 16px 24px; height: 100%;
+    display: flex; flex-direction: column; min-height: 0; gap: 12px;
+    overflow: auto; background: var(--cge-bg); color: var(--cge-text);
+}
+.cge-toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding-bottom: 10px; border-bottom: 1px solid var(--cge-border);
+}
+.cge-toolbar h1 { font-size: 18px; margin: 0; }
+.cge-toolbar .spacer { flex: 1; }
+.cge-back { color: var(--cge-text-muted); text-decoration: none; font-size: 13px; }
+.cge-back:hover { color: var(--cge-text); }
+.cge-btn {
+    padding: 7px 14px; border-radius: 7px; border: 1px solid var(--cge-border);
+    background: var(--cge-surface); color: var(--cge-text);
+    cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: background .12s, border-color .12s;
+}
+.cge-btn:hover:not(:disabled) { background: var(--cge-surface2); border-color: var(--cge-accent); }
+.cge-btn:disabled { opacity: .4; cursor: not-allowed; }
+.cge-btn--primary {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border-color: #6d28d9;
+}
+.cge-btn--primary:hover:not(:disabled) { filter: brightness(1.07); border-color: #6d28d9; }
+
+.cge-card {
+    background: var(--cge-surface); border: 1px solid var(--cge-border);
+    border-radius: 10px; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px;
+    max-width: 600px;
+}
+.cge-row { display: flex; flex-direction: column; gap: 4px; }
+.cge-row label { font-size: 12px; font-weight: 600; color: var(--cge-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.cge-row input, .cge-row select {
+    padding: 8px 10px; border-radius: 7px; border: 1px solid var(--cge-border);
+    background: var(--cge-input-bg); color: var(--cge-text);
+    font-size: 14px; outline: none; width: 100%;
+    transition: border-color .15s;
+}
+.cge-row input:focus, .cge-row select:focus { border-color: var(--cge-accent); }
+.cge-row input:disabled, .cge-row select:disabled {
+    background: var(--cge-input-dis); color: var(--cge-text-muted); cursor: not-allowed;
+}
+.cge-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cge-hint { font-size: 11px; color: var(--cge-text-muted); margin-top: 2px; }
+
+.cge-toast {
+    position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .2s, transform .2s;
+    pointer-events: none;
+}
+.cge-toast.show { opacity: 1; transform: translateY(0); }
+.cge-toast--ok { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.cge-toast--err { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+body.app-theme-dark .cge-toast--ok  { background: rgba(34,197,94,.18); color: #4ade80; border-color: rgba(34,197,94,.3); }
+body.app-theme-dark .cge-toast--err { background: rgba(239,68,68,.18); color: #f87171; border-color: rgba(239,68,68,.3); }
+</style>
+}
+
+<div class="cge-page">
+    <div class="cge-toolbar">
+        <a href="/Definitions/CardGroups" class="cge-back">← Kart Grupları</a>
+        <h1>@(isNew ? "Yeni Kart Grubu" : $"Düzenle: {Model.Code}")</h1>
+        <div class="spacer"></div>
+        <button id="btnSave" class="cge-btn cge-btn--primary" onclick="saveGroup()">Kaydet</button>
+    </div>
+
+    <div class="cge-card">
+
+        @if (isNew)
+        {
+            <div class="cge-row-inline">
+                <div class="cge-row">
+                    <label>Kart Tipi</label>
+                    <select id="selCardType" onchange="onTypeOrLevelChange()">
+                        <option value="1">Malzeme</option>
+                        <option value="2">Cari</option>
+                    </select>
+                </div>
+                <div class="cge-row">
+                    <label>Seviye</label>
+                    <select id="selLevel" onchange="onTypeOrLevelChange()">
+                        <option value="1">Seviye 1</option>
+                        <option value="2">Seviye 2</option>
+                        <option value="3">Seviye 3</option>
+                        <option value="4">Seviye 4</option>
+                        <option value="5">Seviye 5</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cge-row" id="rowParent" style="display:none;">
+                <label>Üst Grup</label>
+                <select id="selParent">
+                    <option value="">— Üst grup yok —</option>
+                </select>
+                <div class="cge-hint">Boş bırakırsanız bu seviyede bağımsız grup oluşturulur.</div>
+            </div>
+        }
+        else
+        {
+            <div class="cge-row-inline">
+                <div class="cge-row">
+                    <label>Kart Tipi</label>
+                    <input type="text" value="@(Model.CardType == 1 ? "Malzeme" : "Cari")" disabled />
+                </div>
+                <div class="cge-row">
+                    <label>Seviye</label>
+                    <input type="text" value="Seviye @Model.Level" disabled />
+                </div>
+            </div>
+            if (Model.ParentCode != null)
+            {
+                <div class="cge-row">
+                    <label>Üst Grup</label>
+                    <input type="text" value="@Model.ParentCode" disabled />
+                </div>
+            }
+        }
+
+        <div class="cge-row">
+            <label>Grup Kodu <span style="color:#f87171">*</span></label>
+            <input id="txtCode" type="text" maxlength="20"
+                   value="@Model.Code"
+                   placeholder="Örn: A01"
+                   oninput="this.value=this.value.toUpperCase()" />
+            <div class="cge-hint">En fazla 20 karakter, otomatik büyük harfe çevrilir.</div>
+        </div>
+
+        <div class="cge-row">
+            <label>Açıklama</label>
+            <input id="txtDesc" type="text" maxlength="200"
+                   value="@Model.Description"
+                   placeholder="Opsiyonel açıklama" />
+        </div>
+
+    </div>
+</div>
+
+<div id="toast" class="cge-toast"></div>
+
+@section Scripts {
+<script>
+(function() {
+    var MODEL_ID       = @(Model.Id.HasValue ? Model.Id.Value.ToString() : "null");
+    var MODEL_CARDTYPE = @Model.CardType;
+    var MODEL_LEVEL    = @Model.Level;
+    var MODEL_PARENTID = @(Model.ParentId.HasValue ? Model.ParentId.Value.ToString() : "null");
+    var IS_NEW         = @(isNew ? "true" : "false");
+
+    // Parent dropdown — yalnızca yeni kayıt modunda kullanılır
+    function onTypeOrLevelChange() {
+        var level = parseInt(document.getElementById('selLevel').value, 10);
+        var rowParent = document.getElementById('rowParent');
+        if (level < 2) { rowParent.style.display = 'none'; return; }
+        rowParent.style.display = '';
+        loadParents();
+    }
+
+    function loadParents() {
+        var cardType = document.getElementById('selCardType').value;
+        var level    = document.getElementById('selLevel').value;
+        fetch('/Definitions/GetParentCandidates?cardType=' + cardType + '&level=' + level)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sel = document.getElementById('selParent');
+                sel.innerHTML = '<option value="">— Üst grup yok —</option>';
+                data.forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.code + (p.description ? ' — ' + p.description : '');
+                    sel.appendChild(opt);
+                });
+            })
+            .catch(function() { showToast('Üst grup listesi yüklenemedi.', false); });
+    }
+
+    window.saveGroup = function() {
+        var code = (document.getElementById('txtCode').value || '').trim();
+        if (!code) { showToast('Grup kodu boş olamaz.', false); return; }
+
+        var payload = { code: code, description: document.getElementById('txtDesc').value || '' };
+
+        if (IS_NEW) {
+            payload.cardType = parseInt(document.getElementById('selCardType').value, 10);
+            payload.level    = parseInt(document.getElementById('selLevel').value, 10);
+            var pSel = document.getElementById('selParent');
+            payload.parentId = pSel && pSel.value ? parseInt(pSel.value, 10) : null;
+        } else {
+            payload.id       = MODEL_ID;
+            payload.cardType = MODEL_CARDTYPE;
+            payload.level    = MODEL_LEVEL;
+            payload.parentId = MODEL_PARENTID;
+        }
+
+        var btn = document.getElementById('btnSave');
+        btn.disabled = true;
+
+        var token = document.querySelector('input[name="__RequestVerificationToken"]');
+
+        fetch('/Definitions/SaveCardGroup', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': token ? token.value : ''
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) {
+            if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Sunucu hatası'); });
+            return r.json();
+        })
+        .then(function() {
+            showToast('Kaydedildi.', true);
+            setTimeout(function() { window.location.href = '/Definitions/CardGroups'; }, 700);
+        })
+        .catch(function(err) {
+            showToast(err.message || 'Kayıt başarısız.', false);
+            btn.disabled = false;
+        });
+    };
+
+    function showToast(msg, ok) {
+        var t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'cge-toast ' + (ok ? 'cge-toast--ok' : 'cge-toast--err');
+        t.classList.add('show');
+        setTimeout(function() { t.classList.remove('show'); }, 3000);
+    }
+
+    // Klavye kısayolu
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            window.saveGroup();
+        }
+    });
+})();
+</script>
+
+@Html.AntiForgeryToken()
+}

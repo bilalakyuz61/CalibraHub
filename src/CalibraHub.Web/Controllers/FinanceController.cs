@@ -88,21 +88,95 @@ public sealed class FinanceController : Controller
     public async Task<IActionResult> GetSalesRepsList(CancellationToken ct)
     {
         var reps = await _salesRepService.GetAllAsync(ct);
-        return Json(reps.Where(r => r.IsActive).Select(r => new { id = r.Id, code = r.RepCode, name = r.RepName }));
+        return Json(reps.Where(r => r.IsActive).Select(r => new { id = r.Id, name = r.RepName }));
     }
 
-    // GET /Finance/Contacts — sayfa hemen render, veri AJAX ile gelir
+    // GET /Finance/Contacts — anlik render (DB cagirisi YOK). HTML tarayiciya
+    // <100ms icinde dusuyor, spinner hemen gorunur. Tum config + ilk sayfa
+    // verisi tek bir combined AJAX (`GetContactsInitialPayload`) ile yuklenir.
     public IActionResult Contacts()
     {
         return View(new ContactsViewModel { BoardConfig = null });
     }
 
-    // GET /Finance/GetContactsBoardConfig — ilk yuklemede AJAX ile cagrilir
+    // GET /Finance/GetContactsInitialPayload — tek atista config + ilk sayfa.
+    // Frontend bu cagri ile mount yapar; SmartBoard initialEntities ile gelir,
+    // useEffect[searchQuery]'in mount ek fetch tetiklemesini engellemek icin
+    // skipInitialFetch=true bayragi config'e gomulur.
+    [HttpGet]
+    public async Task<IActionResult> GetContactsInitialPayload(CancellationToken ct)
+    {
+        var (accounts, totalCount) = await _financeService.GetContactsPagedAsync(
+            null, null, 0, DefaultPageSize, ct);
+        var masterWidgets = await BuildMasterWidgetsAsync(ct);
+        var entities = await BuildEntitiesAsync(accounts, ct);
+
+        return Json(new
+        {
+            boardKey = "contact-accounts",
+            title = "Cari Hesaplar",
+            subtitle = $"{totalCount:N0} cari",
+            icon = "Building2",
+            iconColor = "cyan",
+            searchPlaceholder = "Cari ara... (kod, unvan, vergi no)",
+            emptyText = "Henuz cari hesap eklenmemis",
+            apiUrl = "/Finance/GetContactsPage",
+            totalCount,
+            pageSize = DefaultPageSize,
+            skipInitialFetch = true,   // SmartBoard mount'ta ek fetchPage(1) atmasin
+            actions = new[]
+            {
+                new
+                {
+                    id = "new",
+                    label = "Yeni Cari",
+                    icon = "Plus",
+                    variant = "primary",
+                    url = "/Finance/ContactEdit",
+                },
+            },
+            masterWidgets,
+            entities,
+        });
+    }
+
+    // GET /Finance/GetContactsBoardConfig — eski endpoint, deprecated; yeni
+    // initial payload akisina gectik. Yine de refresh icin korunuyor (sadece
+    // config doner, entities bos).
     [HttpGet]
     public async Task<IActionResult> GetContactsBoardConfig(CancellationToken ct)
     {
-        var boardConfig = await BuildContactsBoardConfigAsync(null, 0, DefaultPageSize, ct);
-        return Json(boardConfig);
+        // Sadece count icin minimal sorgu — pageSize=1 ile satir okuma maliyeti
+        // ihmal edilebilir; COUNT(*) OVER() totalCount'i tek sorguda doner.
+        var (_, totalCount) = await _financeService.GetContactsPagedAsync(null, null, 0, 1, ct);
+        var masterWidgets = await BuildMasterWidgetsAsync(ct);
+
+        return Json(new
+        {
+            boardKey = "contact-accounts",
+            title = "Cari Hesaplar",
+            subtitle = $"{totalCount:N0} cari",
+            icon = "Building2",
+            iconColor = "cyan",
+            searchPlaceholder = "Cari ara... (kod, unvan, vergi no)",
+            emptyText = "Henuz cari hesap eklenmemis",
+            apiUrl = "/Finance/GetContactsPage",
+            totalCount,
+            pageSize = DefaultPageSize,
+            actions = new[]
+            {
+                new
+                {
+                    id = "new",
+                    label = "Yeni Cari",
+                    icon = "Plus",
+                    variant = "primary",
+                    url = "/Finance/ContactEdit",
+                },
+            },
+            masterWidgets,
+            entities = Array.Empty<object>(),  // SmartBoard fetchPage(1)'i kendi cagirir
+        });
     }
 
     // GET /Finance/GetContactsPage?page=1&pageSize=50&search=abc

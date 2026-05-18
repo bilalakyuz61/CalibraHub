@@ -12,4 +12,10 @@ public interface IRoutingRepository
     Task DeleteAsync(int id, CancellationToken ct);
     /// <summary>Bir operasyonun kullanıldığı rotaları döner — operasyon detay tab'ında listelenir.</summary>
     Task<IReadOnlyCollection<RoutingDto>> ListByOperationAsync(int operationId, CancellationToken ct);
+
+    Task<IReadOnlyCollection<RoutingOperationDto>> GetAllOperationsAsync(CancellationToken ct);
+
+    Task<IReadOnlyCollection<RoutingItemMapDto>> GetItemMapsAsync(int routingId, CancellationToken ct);
+    Task<int> AddItemMapAsync(int routingId, int itemId, int? configId, CancellationToken ct);
+    Task DeleteItemMapAsync(int id, CancellationToken ct);
 }

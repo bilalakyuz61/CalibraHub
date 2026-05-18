@@ -29,4 +29,14 @@ public interface IWorkOrderService
 
     /// <summary>Bir sipariş satırı için atanmış toplam miktar (açık bakiye hesabı).</summary>
     Task<decimal> GetAllocatedQuantityForLineAsync(int sourceLineId, CancellationToken ct);
+
+    /// <summary>
+    /// Faz 2 — İş emrinin reçetesini patlatır. Her bileşen için
+    /// <c>RequiredQty = bomLine.Quantity × wo.PlannedQuantity × (1 + ScrapRatio)</c>
+    /// hesaplanır ve WorkOrderComponent tablosuna yazılır (idempotent re-explode).
+    /// </summary>
+    Task<ExplodeBomResultDto> ExplodeBomAsync(int workOrderId, CancellationToken ct);
+
+    /// <summary>İş emrinin patlatılmış bileşen listesi.</summary>
+    Task<IReadOnlyCollection<WorkOrderComponentDto>> GetComponentsAsync(int workOrderId, CancellationToken ct);
 }

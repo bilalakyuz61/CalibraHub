@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
@@ -30,6 +31,12 @@ public sealed class DocumentLine
     [Description("Lokasyon referansi (depo/raf/goz). FK -> Location.Id. Malzeme kartindaki varsayilan lokasyondan turer — kullanici override edebilir.")]
     public int? LocationId { get; set; }
 
+    [Description("Kalem bazlı teslim tarihi (sipariş satırı için). NULL ise üst belge Document.DeliveryDate geçerli olur (fallback).")]
+    public DateTime? DeliveryDate { get; set; }
+
+    [Description("Kalem bazlı teslim süresi (gün). UI'da DeliveryDate ile çift yönlü senkron. NULL ise üst belge Document.DeliveryDays geçerli olur.")]
+    public int? DeliveryDays { get; set; }
+
     public string? Notes { get; set; }
 
     [Description("Not panelinin satir acilislarinda otomatik acik gelmesi icin pinli mi?")]
@@ -49,4 +56,64 @@ public sealed class DocumentLine
     public string? CombinationCode { get; set; }
     public string? LocationCode { get; set; }
     public string? LocationName { get; set; }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Domain davranis metotlari (rapor §2.2 — rich domain, additive)
+    //
+    // Mevcut setter'lar GERIYE UYUM icin acik birakildi; eski service'ler
+    // (DocumentService, DocumentImportService) dogrudan set ediyor.
+    // Yeni kod bu metotlari cagirip invariant garantilerini alir.
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Satir toplamini (LineTotal) hesaplar: Quantity * UnitPrice * (1 - DiscountRate/100).
+    /// Invariant'lar: Quantity > 0, UnitPrice >= 0, DiscountRate 0-100. Yuvarlama 2 ondalik.
+    /// </summary>
+    public void CalculateLineTotal()
+    {
+        DomainException.ThrowIf(Quantity <= 0,
+            $"Quantity pozitif olmali (su an: {Quantity})");
+        DomainException.ThrowIf(UnitPrice < 0,
+            $"UnitPrice negatif olamaz (su an: {UnitPrice})");
+        DomainException.ThrowIf(DiscountRate < 0 || DiscountRate > 100,
+            $"DiscountRate 0-100 araliginda olmali (su an: {DiscountRate})");
+
+        var gross = Quantity * UnitPrice;
+        var discountAmount = gross * (DiscountRate / 100m);
+        LineTotal = Math.Round(gross - discountAmount, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// Miktar degisikligi + otomatik recalculate. ChangeQuantity(0) yasak — line silmek
+    /// icin Document.RemoveLine kullanin.
+    /// </summary>
+    public void ChangeQuantity(decimal newQuantity)
+    {
+        DomainException.ThrowIf(newQuantity <= 0,
+            $"Quantity sifir veya negatif olamaz. Satiri silmek icin Document.RemoveLine kullanin.");
+        Quantity = newQuantity;
+        CalculateLineTotal();
+    }
+
+    /// <summary>
+    /// Iskonto orani degisikligi + otomatik recalculate.
+    /// </summary>
+    public void ApplyDiscount(decimal discountRate)
+    {
+        DomainException.ThrowIf(discountRate < 0 || discountRate > 100,
+            $"DiscountRate 0-100 araliginda olmali (verilen: {discountRate})");
+        DiscountRate = discountRate;
+        CalculateLineTotal();
+    }
+
+    /// <summary>
+    /// Birim fiyat degisikligi + otomatik recalculate.
+    /// </summary>
+    public void ChangeUnitPrice(decimal newPrice)
+    {
+        DomainException.ThrowIf(newPrice < 0,
+            $"UnitPrice negatif olamaz (verilen: {newPrice})");
+        UnitPrice = newPrice;
+        CalculateLineTotal();
+    }
 }

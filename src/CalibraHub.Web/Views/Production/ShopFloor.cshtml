@@ -94,21 +94,21 @@
         /* ── PIN entry screen ── */
         .pin-screen {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: 28px; min-height: 100%;
+            gap: 20px; min-height: 100%;
             padding: 24px;
         }
         .pin-title { font-size: 28px; font-weight: 700; text-align: center; margin: 0; }
         .pin-subtitle { font-size: 16px; color: rgba(255,255,255,.6); text-align: center; margin: 0; max-width: 480px; }
         .pin-display {
-            display: flex; gap: 12px; justify-content: center;
-            min-height: 72px; align-items: center;
+            display: flex; gap: 14px; justify-content: center;
+            min-height: 80px; align-items: center;
         }
         .pin-dot {
-            width: 48px; height: 48px; border-radius: 50%;
+            width: 64px; height: 64px; border-radius: 50%;
             background: rgba(255,255,255,.06);
             border: 2px solid rgba(255,255,255,.14);
             display: flex; align-items: center; justify-content: center;
-            font-size: 24px; font-weight: 700; transition: all .15s;
+            font-size: 30px; font-weight: 700; transition: all .15s;
         }
         .pin-dot.filled {
             background: rgba(99,102,241,.28); border-color: #6366f1;
@@ -163,8 +163,8 @@
             flex-wrap: wrap;
         }
         .pin-error {
-            color: #fca5a5; font-size: 15px; min-height: 22px; text-align: center;
-            font-weight: 500;
+            color: #fca5a5; font-size: 15px; min-height: 16px; text-align: center;
+            font-weight: 500; margin-top: -6px; margin-bottom: -6px;
         }
         .pin-nfc-hint {
             margin-top: 8px;
@@ -246,6 +246,89 @@
         }
         .queue-row .status-pill.is-pending { background: rgba(251,191,36,.18); color: #fcd34d; }
         .queue-row .status-pill.is-progress { background: rgba(59,130,246,.22); color: #93c5fd; }
+
+        /* ── Faz 3 ShopFloor UX zenginlikleri ── */
+        /* Mamul satırı — operasyon başlığı altında gri ufak metin */
+        .queue-row .item-line {
+            font-size: 13px; color: rgba(255,255,255,.65);
+            margin-top: 3px; font-weight: 500;
+        }
+        .queue-row .item-line strong { color: rgba(255,255,255,.9); font-weight: 700; }
+
+        /* Notlar badge'i — operasyonda not varsa amber kart üstünde */
+        .queue-row .notes-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 5px 10px; border-radius: 8px;
+            font-size: 12.5px; font-weight: 600;
+            background: rgba(251,191,36,.14); color: #fcd34d;
+            border: 1px solid rgba(251,191,36,.32);
+            margin-top: 6px; max-width: 100%;
+        }
+        .queue-row .notes-badge::before { content: '📝'; }
+
+        /* İlerleme bar — üretilen/planlanan oran */
+        .queue-row .progress-block {
+            margin-top: 8px;
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .queue-row .progress-bar {
+            height: 8px; border-radius: 999px;
+            background: rgba(255,255,255,.08);
+            overflow: hidden;
+        }
+        .queue-row .progress-bar > span {
+            display: block; height: 100%;
+            background: linear-gradient(90deg, #16a34a, #22d3ee);
+            border-radius: 999px;
+            transition: width .3s ease;
+        }
+        .queue-row .progress-bar.is-over > span {
+            background: linear-gradient(90deg, #f59e0b, #ef4444);
+        }
+        .queue-row .progress-info {
+            display: flex; justify-content: space-between;
+            font-size: 12px; color: rgba(255,255,255,.6);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Canlı timer — "Devam ediyor" satırlarında StartedAt'tan beri geçen süre */
+        .queue-row .timer-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; border-radius: 999px;
+            font-size: 12px; font-weight: 700;
+            background: rgba(59,130,246,.18); color: #93c5fd;
+            border: 1px solid rgba(59,130,246,.32);
+            font-variant-numeric: tabular-nums;
+            margin-left: 8px;
+        }
+        .queue-row .timer-pill.is-over {
+            background: rgba(239,68,68,.18); color: #fca5a5;
+            border-color: rgba(239,68,68,.4);
+            animation: timerPulse 1.4s ease-in-out infinite;
+        }
+        @@keyframes timerPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+            50%      { box-shadow: 0 0 0 6px rgba(239,68,68,.15); }
+        }
+        .queue-row .timer-pill::before { content: '⏱'; font-size: 14px; }
+
+        /* Modal — Kısmi bitir hızlı butonlar (Tüm + ayarla) */
+        .modal-quick-btns {
+            display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;
+        }
+        .modal-quick-btns button {
+            flex: 1 1 auto; min-height: 44px; min-width: 64px;
+            padding: 8px 14px; font-size: 13px; font-weight: 600;
+            background: rgba(99,102,241,.16); color: #a5b4fc;
+            border: 1px solid rgba(99,102,241,.32); border-radius: 8px;
+            cursor: pointer; transition: background .12s, color .12s;
+        }
+        .modal-quick-btns button:hover { background: rgba(99,102,241,.28); color: #fff; }
+        .modal-quick-btns .quick-all {
+            background: rgba(34,197,94,.18); color: #86efac;
+            border-color: rgba(34,197,94,.4);
+        }
+        .modal-quick-btns .quick-all:hover { background: rgba(34,197,94,.32); color: #fff; }
 
         .empty {
             text-align: center; padding: 60px 20px;
@@ -720,6 +803,50 @@
     function fmtNum(v) { return Number(v || 0).toFixed(2); }
     function fmtDur(d, unit) { if (d == null) return '—'; return Number(d).toFixed(2) + (unit === 2 ? ' sa' : ' dk'); }
 
+    // Faz 3 ShopFloor UX — küçük yardımcılar
+    function vibrate(pattern) {
+        try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (_) { /* ignore */ }
+    }
+    var _audioCtx = null;
+    function beep(freq, durationMs, vol) {
+        // Web Audio API ile kısa bip — gürültülü atölyede toast'a ek işitsel geri bildirim.
+        try {
+            if (!_audioCtx) {
+                var Ctx = window.AudioContext || window.webkitAudioContext;
+                if (!Ctx) return;
+                _audioCtx = new Ctx();
+            }
+            var osc = _audioCtx.createOscillator();
+            var gain = _audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq || 800;
+            gain.gain.value = vol == null ? 0.06 : vol;
+            osc.connect(gain); gain.connect(_audioCtx.destination);
+            osc.start();
+            osc.stop(_audioCtx.currentTime + (durationMs || 120) / 1000);
+        } catch (_) { /* ignore */ }
+    }
+    function notify(msg, ok) {
+        toast(msg, ok);
+        if (ok) { vibrate(40); beep(880, 100, 0.05); }
+        else    { vibrate([60, 40, 60]); beep(220, 200, 0.07); }
+    }
+
+    // Planlanan süreyi (dk/sa) saniye'ye çevir — timer karşılaştırması için.
+    function plannedSeconds(d, unit) {
+        if (d == null) return null;
+        var n = Number(d) || 0;
+        return Number(unit) === 2 ? n * 3600 : n * 60;
+    }
+    function fmtElapsed(secs) {
+        if (secs == null || secs < 0) return '—';
+        var s = Math.floor(secs);
+        var h = Math.floor(s / 3600); s -= h * 3600;
+        var m = Math.floor(s / 60);   s -= m * 60;
+        var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+        return (h > 0 ? h + ':' + pad(m) : m) + ':' + pad(s);
+    }
+
     async function loadQueue() {
         var list = document.getElementById('queueList');
         list.innerHTML = '<div class="loader"></div>';
@@ -733,13 +860,51 @@
             list.innerHTML = arr.map(function (op) {
                 var s = statusLabel(op.status);
                 var isInProgress = (op.status || 0) === 1;
-                return '<div class="queue-row' + (isInProgress ? ' is-progress' : '') + '" data-id="' + op.id + '">'
+
+                // Mamul satırı (Faz 3 UX zenginlik)
+                var woNum = op.workOrderNumber ? escapeHtml(op.workOrderNumber) : ('#' + op.workOrderId);
+                var itemLine = (op.itemCode || op.itemName)
+                    ? '<div class="item-line"><strong>' + escapeHtml(op.itemCode || '') + '</strong>'
+                        + (op.itemName ? ' · ' + escapeHtml(op.itemName) : '') + '</div>'
+                    : '';
+
+                // İlerleme bar (üretilen / WO planlanan miktar)
+                var planned  = Number(op.workOrderPlannedQuantity || 0);
+                var produced = Number(op.producedQuantity || 0);
+                var pct      = planned > 0 ? Math.min(100, (produced / planned) * 100) : 0;
+                var isOverQty = planned > 0 && produced > planned;
+                var progressBlock = planned > 0
+                    ? '<div class="progress-block">'
+                        + '<div class="progress-bar' + (isOverQty ? ' is-over' : '') + '"><span style="width:' + pct.toFixed(1) + '%;"></span></div>'
+                        + '<div class="progress-info">'
+                        +   '<span>Üretilen ' + fmtNum(produced) + ' / Planlanan ' + fmtNum(planned) + '</span>'
+                        +   '<span>%' + pct.toFixed(1) + (isOverQty ? ' • aşım' : '') + '</span>'
+                        + '</div>'
+                      + '</div>'
+                    : '';
+
+                // Notlar badge'i (rota/op notu)
+                var notesBadge = op.notes
+                    ? '<div class="notes-badge">' + escapeHtml(op.notes) + '</div>'
+                    : '';
+
+                // Canlı timer placeholder — startedAt ISO ve plannedSec data-attribute'larında
+                var timerHtml = '';
+                if (isInProgress && op.startedAt) {
+                    var ps = plannedSeconds(op.plannedDuration, op.durationUnit);
+                    timerHtml = '<span class="timer-pill" data-timer-start="' + escapeHtml(op.startedAt)
+                        + '" data-planned-sec="' + (ps == null ? '' : ps) + '">⏱ —</span>';
+                }
+
+                return '<div class="queue-row' + (isInProgress ? ' is-progress' : '') + '" data-id="' + op.id + '" data-planned-qty="' + planned + '" data-produced-qty="' + produced + '">'
                     + '<div class="info">'
-                    +   '<div class="status-pill ' + s.cls + '">' + s.label + '</div>'
-                    +   '<div class="order">İŞ EMRİ #' + op.workOrderId + ' · Sıra ' + (op.sequence || 0) + ' — ' + escapeHtml(op.operationName || op.operationCode || ('Op#' + op.operationId)) + '</div>'
+                    +   '<div class="status-pill ' + s.cls + '">' + s.label + '</div>' + timerHtml
+                    +   '<div class="order">İŞ EMRİ ' + woNum + ' · Sıra ' + (op.sequence || 0) + ' — ' + escapeHtml(op.operationName || op.operationCode || ('Op#' + op.operationId)) + '</div>'
+                    +   itemLine
+                    +   notesBadge
+                    +   progressBlock
                     +   '<div class="meta">'
                     +     '<span><strong>Süre:</strong> ' + fmtDur(op.plannedDuration, op.durationUnit) + '</span>'
-                    +     '<span><strong>Üretilen:</strong> ' + fmtNum(op.producedQuantity) + '</span>'
                     +     '<span><strong>Fire:</strong> ' + fmtNum(op.scrapQuantity) + '</span>'
                     +     (op.startedByPersonnelName ? '<span><strong>Başlatan:</strong> ' + escapeHtml(op.startedByPersonnelName) + '</span>' : '')
                     +   '</div>'
@@ -757,6 +922,8 @@
                 row.querySelector('[data-act="partial"]')?.addEventListener('click', function () { actPartial(opId); });
                 row.querySelector('[data-act="complete"]')?.addEventListener('click', function () { actComplete(opId); });
             });
+            // İlk timer tickini hemen at — sonra setInterval canlı tutar
+            tickTimers();
         } catch (e) {
             list.innerHTML = '<div class="empty">Yüklenemedi: ' + escapeHtml(e.message) + '</div>';
         }
@@ -768,6 +935,28 @@
     }
     function stopQueueRefresh() { if (state.refreshTimer) { clearInterval(state.refreshTimer); state.refreshTimer = null; } }
 
+    // ── Canlı timer — 1 sn'lik interval, "Devam ediyor" satırlarındaki ⏱ pill'ini günceller.
+    // Başlama anından beri geçen süreyi hh:mm:ss / mm:ss biçiminde basar; planlanan
+    // süre aşıldıysa rose renge geçer + pulse animasyonu (CSS'te tanımlı).
+    function tickTimers() {
+        var now = Date.now();
+        document.querySelectorAll('.timer-pill[data-timer-start]').forEach(function (el) {
+            var startedIso = el.getAttribute('data-timer-start');
+            if (!startedIso) return;
+            var startedMs = Date.parse(startedIso);
+            if (isNaN(startedMs)) return;
+            var elapsedSec = (now - startedMs) / 1000;
+            el.textContent = '⏱ ' + fmtElapsed(elapsedSec);
+            var plannedSec = parseFloat(el.getAttribute('data-planned-sec'));
+            if (!isNaN(plannedSec) && plannedSec > 0 && elapsedSec > plannedSec) {
+                el.classList.add('is-over');
+            } else {
+                el.classList.remove('is-over');
+            }
+        });
+    }
+    setInterval(tickTimers, 1000);
+
     async function actStart(opId) {
         try {
             var r = await fetch('/Production/ShopFloor/Start', {
@@ -776,19 +965,37 @@
                 body: JSON.stringify({ workOrderOperationId: opId, operatorPersonnelId: state.operator.id })
             });
             var d = await r.json();
-            if (!d.ok) { toast(d.error || 'Başlatılamadı.', false); return; }
-            toast('Başlatıldı.', true); loadQueue();
-        } catch (e) { toast('Hata: ' + e.message, false); }
+            if (!d.ok) { notify(d.error || 'Başlatılamadı.', false); return; }
+            notify('Başlatıldı.', true); loadQueue();
+        } catch (e) { notify('Hata: ' + e.message, false); }
     }
 
     function showQuantityModal(opts) {
         return new Promise(function (resolve) {
             var bd = document.createElement('div');
             bd.className = 'modal-backdrop';
+
+            // Quick butonlar — "Tüm" (kalanı tek tıkla doldur), ½, ¼ kısayolları.
+            // remainingQty (planlanan - üretilen) verildiyse oluşturulur.
+            var remaining = opts.remainingQty;
+            var hasRemaining = (remaining != null && Number(remaining) > 0);
+            var quickHtml = '';
+            if (hasRemaining) {
+                var half    = (Number(remaining) / 2).toFixed(2);
+                var quarter = (Number(remaining) / 4).toFixed(2);
+                quickHtml = '<div class="modal-quick-btns">'
+                    + '<button type="button" data-quick="' + quarter + '">¼ · ' + quarter + '</button>'
+                    + '<button type="button" data-quick="' + half + '">½ · ' + half + '</button>'
+                    + '<button type="button" class="quick-all" data-quick="' + Number(remaining).toFixed(2) + '">Tüm · ' + Number(remaining).toFixed(2) + '</button>'
+                    + '</div>';
+            }
+
             bd.innerHTML = '<div class="modal-card">'
                 + '<h2>' + escapeHtml(opts.title) + '</h2>'
                 + '<div class="modal-hint">' + escapeHtml(opts.hint || '') + '</div>'
-                + '<div class="modal-row"><label>' + escapeHtml(opts.qtyLabel || 'Miktar') + '</label><input type="number" inputmode="decimal" id="modalQty" step="0.01" min="0" value="' + (opts.defaultQty != null ? opts.defaultQty : '') + '" /></div>'
+                + '<div class="modal-row"><label>' + escapeHtml(opts.qtyLabel || 'Miktar') + '</label><input type="number" inputmode="decimal" id="modalQty" step="0.01" min="0" value="' + (opts.defaultQty != null ? opts.defaultQty : '') + '" />'
+                +   quickHtml
+                + '</div>'
                 + (opts.showScrap ? '<div class="modal-row"><label>Fire (opsiyonel)</label><input type="number" inputmode="decimal" id="modalScrap" step="0.01" min="0" value="" /></div>' : '')
                 + '<div class="modal-actions">'
                 +   '<button class="shop-touch-btn is-secondary" id="modalCancel">Vazgeç</button>'
@@ -800,9 +1007,24 @@
             setTimeout(function () { qtyEl.focus(); qtyEl.select(); }, 50);
             function close(val) { document.body.removeChild(bd); resolve(val); }
             bd.querySelector('#modalCancel').addEventListener('click', function () { close(null); });
-            bd.querySelector('#modalOk').addEventListener('click', function () {
+            bd.querySelectorAll('[data-quick]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    qtyEl.value = btn.getAttribute('data-quick');
+                    qtyEl.focus(); qtyEl.select();
+                });
+            });
+            bd.querySelector('#modalOk').addEventListener('click', async function () {
                 var q = parseFloat(qtyEl.value);
                 if (Number.isNaN(q)) { qtyEl.focus(); return; }
+                // Aşma onayı — hasRemaining ise ve girilen miktar kalan miktardan büyükse uyar (rapor §6.6 — CalibraAlert.confirm).
+                if (hasRemaining && q > Number(remaining) + 0.0001) {
+                    var msg = 'Girilen miktar (' + q.toFixed(2)
+                        + ') planlanan kalan miktarı (' + Number(remaining).toFixed(2) + ') aşıyor.';
+                    var ok = window.CalibraAlert && window.CalibraAlert.confirm
+                        ? await window.CalibraAlert.confirm({ title: 'Miktar aşımı', message: msg, okLabel: 'Devam Et' })
+                        : confirm(msg + '\n\nDevam edilsin mi?');
+                    if (!ok) { qtyEl.focus(); qtyEl.select(); return; }
+                }
                 var s = scrapEl ? parseFloat(scrapEl.value) : NaN;
                 close({ quantity: q, scrap: Number.isNaN(s) ? null : s });
             });
@@ -810,15 +1032,30 @@
         });
     }
 
+    // Kuyruk satırından kalan miktarı hesapla — modal'da quick button + aşma onayı için.
+    function remainingFor(opId) {
+        var row = document.querySelector('.queue-row[data-id="' + opId + '"]');
+        if (!row) return null;
+        var planned  = parseFloat(row.getAttribute('data-planned-qty')) || 0;
+        var produced = parseFloat(row.getAttribute('data-produced-qty')) || 0;
+        if (planned <= 0) return null;
+        var rem = planned - produced;
+        return rem > 0 ? rem : null;
+    }
+
     async function actPartial(opId) {
+        var rem = remainingFor(opId);
         var v = await showQuantityModal({
             title: 'Kısmi Bitir',
-            hint: 'Bu seferki üretim miktarını ve varsa fireyi girin.',
+            hint: rem != null
+                ? 'Bu seferki üretim miktarını ve varsa fireyi girin. Kalan: ' + rem.toFixed(2)
+                : 'Bu seferki üretim miktarını ve varsa fireyi girin.',
             qtyLabel: 'Üretilen Miktar', okLabel: 'Kısmi Bitir',
             showScrap: true,
+            remainingQty: rem,
         });
         if (!v) return;
-        if (v.quantity <= 0) { toast('Miktar 0\'dan büyük olmalı.', false); return; }
+        if (v.quantity <= 0) { notify('Miktar 0\'dan büyük olmalı.', false); return; }
         try {
             var r = await fetch('/Production/ShopFloor/PartialComplete', {
                 method: 'POST', credentials: 'same-origin',
@@ -829,17 +1066,21 @@
                 })
             });
             var d = await r.json();
-            if (!d.ok) { toast(d.error || 'Hata.', false); return; }
-            toast('Kısmi bitiş kaydedildi.', true); loadQueue();
-        } catch (e) { toast('Hata: ' + e.message, false); }
+            if (!d.ok) { notify(d.error || 'Hata.', false); return; }
+            notify('Kısmi bitiş kaydedildi.', true); loadQueue();
+        } catch (e) { notify('Hata: ' + e.message, false); }
     }
 
     async function actComplete(opId) {
+        var rem = remainingFor(opId);
         var v = await showQuantityModal({
             title: 'Operasyonu Bitir',
-            hint: 'Final üretim miktarını girin (boş bırakılırsa mevcut üretilen miktar kullanılır).',
+            hint: rem != null
+                ? 'Final üretim miktarını girin. Kalan: ' + rem.toFixed(2) + ' (boş bırakılırsa mevcut üretilen miktar kullanılır).'
+                : 'Final üretim miktarını girin (boş bırakılırsa mevcut üretilen miktar kullanılır).',
             qtyLabel: 'Final Miktar', okLabel: 'Bitir',
             showScrap: false, defaultQty: '',
+            remainingQty: rem,
         });
         if (!v) return;
         try {
@@ -852,9 +1093,9 @@
                 })
             });
             var d = await r.json();
-            if (!d.ok) { toast(d.error || 'Hata.', false); return; }
-            toast('Operasyon tamamlandı.', true); loadQueue();
-        } catch (e) { toast('Hata: ' + e.message, false); }
+            if (!d.ok) { notify(d.error || 'Hata.', false); return; }
+            notify('Operasyon tamamlandı.', true); loadQueue();
+        } catch (e) { notify('Hata: ' + e.message, false); }
     }
 
     /* ── Header navigation ── */
@@ -925,6 +1166,11 @@
     /* Boot */
     renderPinDisplay();
     state.nfcSupported = ('NDEFReader' in window);
+    if (!state.nfcSupported) {
+        document.getElementById('pinNfcBtn').style.display = 'none';
+        var sub = document.querySelector('.pin-subtitle');
+        if (sub) sub.textContent = 'PIN kodunuzu girin.';
+    }
 })();
 </script>
 </body>

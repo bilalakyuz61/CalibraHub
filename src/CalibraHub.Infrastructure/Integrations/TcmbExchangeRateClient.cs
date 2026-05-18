@@ -7,9 +7,16 @@ namespace CalibraHub.Infrastructure.Integrations;
 
 public sealed class TcmbExchangeRateClient : ITcmbExchangeRateClient
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    // IHttpClientFactory — socket exhaustion + DNS staleness'i onler. Static HttpClient anti-pattern
+    // yerine .NET'in onerdigi yontem. Named client "tcmb" Program.cs'te 30s timeout ile kayitli.
+    private readonly IHttpClientFactory _httpFactory;
     private const string TcmbTodayUrl = "https://www.tcmb.gov.tr/kurlar/today.xml";
     // Gecmis tarih formati: https://www.tcmb.gov.tr/kurlar/202604/07042026.xml (yyyyMM/ddMMyyyy.xml)
+
+    public TcmbExchangeRateClient(IHttpClientFactory httpFactory)
+    {
+        _httpFactory = httpFactory;
+    }
 
     public async Task<IReadOnlyCollection<ExchangeRate>> GetDailyRatesAsync(CancellationToken ct)
     {
@@ -22,7 +29,8 @@ public sealed class TcmbExchangeRateClient : ITcmbExchangeRateClient
             ? TcmbTodayUrl
             : $"https://www.tcmb.gov.tr/kurlar/{date:yyyyMM}/{date:ddMMyyyy}.xml";
 
-        var response = await Http.GetStringAsync(url, ct);
+        var http = _httpFactory.CreateClient("tcmb");
+        var response = await http.GetStringAsync(url, ct);
         var doc = XDocument.Parse(response);
         var rates = new List<ExchangeRate>();
         var today = DateTime.Today;

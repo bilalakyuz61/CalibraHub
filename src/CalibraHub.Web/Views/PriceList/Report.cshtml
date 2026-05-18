@@ -47,9 +47,10 @@
     .plr-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,.10); color: #fff; }
     body.app-theme-light .plr-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
 
-    /* Filter bar */
+    /* Filter bar — 6 sütun: Stok geniş, geri kalan beşi eşit pay (1fr).
+       Baz Tarih son kolonu da 1fr olsun (eski "auto" content-fit yüzünden ufak kaliyordu). */
     .plr-filters {
-        display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 10px;
+        display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr; gap: 10px;
         padding: 12px 18px; flex-shrink: 0;
         background: rgba(255,255,255,.025); border-bottom: 1px solid rgba(255,255,255,.07);
     }
@@ -68,6 +69,30 @@
     body.app-theme-light .plr-input,
     body.app-theme-light .plr-select { background: #fff; border-color: #cbd5e1; color: #0f172a; }
     .plr-input:focus, .plr-select:focus { border-color: #6366f1; }
+
+    /* Date input + temizleme butonu wrapper'ı.
+       BOŞ → sadece native takvim ikonu (sağ kenar)
+       DOLU → SOL'da × butonu + sağda native takvim ikonu (ikisi birden, ayrı slot).
+       × native picker'ın soluna oturur, padding ile alan ayrıldı. */
+    .plr-date-wrap { position: relative; }
+    /* Sağda native picker ikonu (~22px) + solunda × için yer (~26px) ayır. */
+    .plr-input--date { padding-right: 50px; }
+    .plr-date-clear {
+        position: absolute; top: 50%; right: 26px; /* native takvim ikonunun SOLUNDA */
+        transform: translateY(-50%);
+        width: 18px; height: 18px;
+        display: none; /* default gizli, JS dolu/boş kontrolüyle açar */
+        align-items: center; justify-content: center;
+        padding: 0; border: none; border-radius: 50%;
+        background: rgba(99,102,241,.18); color: #c7d2fe;
+        cursor: pointer; font-size: 13px; font-weight: 600; line-height: 1;
+        transition: background .12s, color .12s;
+        z-index: 2;
+    }
+    .plr-date-clear:hover { background: rgba(239,68,68,.30); color: #fff; }
+    .plr-date-wrap.is-filled .plr-date-clear { display: inline-flex; }
+    body.app-theme-light .plr-date-clear { background: #eef2ff; color: #4338ca; }
+    body.app-theme-light .plr-date-clear:hover { background: #fee2e2; color: #b91c1c; }
 
     /* Dropdown secenek tema rengi — browser default'u koyu temada gri/beyaz karisimi
        oluyor. Solid arka plan + light text ile sayfayla uyumlu yap. NOT: Razor 'opt'
@@ -165,14 +190,39 @@
         font-family: 'JetBrains Mono','Consolas',monospace; font-size: 12px; text-align: right;
         /* number input spinner ok'larini kaldir (Chrome/Safari + Firefox) */
         -moz-appearance: textfield; appearance: textfield;
+        /* Date input takvim ikonu + Select dropdown ok'u koyu temada gorunsun */
+        color-scheme: dark;
     }
     .plr-edit-input::-webkit-outer-spin-button,
     .plr-edit-input::-webkit-inner-spin-button {
         -webkit-appearance: none; margin: 0;
     }
-    body.app-theme-light .plr-edit-input { background: #eef2ff; border-color: #818cf8; color: #1e293b; }
+    body.app-theme-light .plr-edit-input { background: #eef2ff; border-color: #818cf8; color: #1e293b; color-scheme: light; }
     .plr-edit-input:focus { outline: none; border-color: #6366f1; }
     .plr-edit-input.is-invalid { border-color: #ef4444; background: rgba(239,68,68,.10); }
+
+    /* SELECT (döviz, tip) — sol hizali metin + native dropdown opsiyon temasi.
+       Native opsiyon elemanlarina background/color uygulamak browser tarafinda
+       her zaman calismaz (Chrome native picker'i temayi yutar); color-scheme
+       en saglam yontem. Asagidaki kurallar custom popup'lar icin bonus. */
+    select.plr-edit-input { text-align: left; width: auto; min-width: 90px; cursor: pointer; }
+    /* Razor parser "option" kelimesini OptionTagHelper olarak yorumlamasin diye
+       universal child selector kullaniyoruz (GuideCustomizationModal'daki gibi).
+       !important — Chrome OS-level dropdown panel'i bazen CSS'i atlar; yine de
+       en saglam yontem select.color-scheme:dark (asagida zaten var).  */
+    select.plr-edit-input > * {
+        background-color: #1e293b !important;
+        color: #f1f5f9 !important;
+        padding: 4px 8px;
+    }
+    body.app-theme-light select.plr-edit-input > * {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+    /* Select KENDISI icin de inline color-scheme — body'den inheritance bazen
+       iframe icinde drop oluyor, element'e dogrudan koymak en garanti. */
+    select.plr-edit-input { color-scheme: dark; }
+    body.app-theme-light select.plr-edit-input { color-scheme: light; }
 
     /* Pagination */
     .plr-pagination {
@@ -302,15 +352,24 @@
         </div>
         <div class="plr-filter">
             <label>Başlangıç ≥</label>
-            <input id="plrFltStart" type="date" class="plr-input" />
+            <div class="plr-date-wrap">
+                <input id="plrFltStart" type="date" class="plr-input plr-input--date" />
+                <button type="button" class="plr-date-clear" data-clear-target="plrFltStart" title="Tarihi temizle" aria-label="Temizle">×</button>
+            </div>
         </div>
         <div class="plr-filter">
             <label>Bitiş ≤</label>
-            <input id="plrFltEnd" type="date" class="plr-input" />
+            <div class="plr-date-wrap">
+                <input id="plrFltEnd" type="date" class="plr-input plr-input--date" />
+                <button type="button" class="plr-date-clear" data-clear-target="plrFltEnd" title="Tarihi temizle" aria-label="Temizle">×</button>
+            </div>
         </div>
         <div class="plr-filter">
             <label>Baz Tarih</label>
-            <input id="plrFltBase" type="date" class="plr-input" title="Bu tarihte yürürlükte olan fiyatları göster (ValidFrom ≤ Baz ≤ ValidTo)" />
+            <div class="plr-date-wrap">
+                <input id="plrFltBase" type="date" class="plr-input plr-input--date" title="Bu tarihte yürürlükte olan fiyatları göster (ValidFrom ≤ Baz ≤ ValidTo)" />
+                <button type="button" class="plr-date-clear" data-clear-target="plrFltBase" title="Tarihi temizle" aria-label="Temizle">×</button>
+            </div>
         </div>
     </div>
 
@@ -509,11 +568,14 @@
             }
         }).catch(function () {});
 
+    // Currencies hem filter dropdown'una hem inline edit için global state'e yüklenir.
+    var currenciesById = {};
     fetch('/PriceList/GetCurrencies', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (list) {
             var sel = document.getElementById('plrFltCurrency');
             (Array.isArray(list) ? list : []).forEach(function (c) {
+                currenciesById[c.id] = c;
                 var opt = document.createElement('option');
                 opt.value = String(c.id);
                 opt.textContent = c.code + (c.symbol ? ' (' + c.symbol + ')' : '');
@@ -596,7 +658,14 @@
 
         var html = state.items.map(function (e) {
             var t = typeLabel(e.priceType);
-            return '<tr data-id="' + e.id + '" data-price="' + e.price + '">'
+            // Inline edit için tüm orijinal değerler row attribute'larında — cancel için snapshot.
+            var validFromIso = (e.validFrom || '').toString().slice(0, 10);
+            var validToIso   = (e.validTo   || '').toString().slice(0, 10);
+            return '<tr data-id="' + e.id + '" data-price="' + e.price + '"'
+                + ' data-currency-id="' + (e.currencyId || '') + '"'
+                + ' data-type-code="'   + escHtml(e.priceType || '') + '"'
+                + ' data-valid-from="'  + validFromIso + '"'
+                + ' data-valid-to="'    + validToIso   + '">'
                 + '<td>'
                 +   '<div class="plr-row-actions">'
                 +     '<button type="button" class="plr-icon-btn" data-act="edit" title="Fiyatı düzenle">'
@@ -610,11 +679,11 @@
                 + '<td><strong>' + escHtml(e.itemCode) + '</strong></td>'
                 + '<td>' + escHtml(e.itemName) + '</td>'
                 + '<td style="font-family:monospace;font-size:11.5px;color:#94a3b8;">' + escHtml(e.configCode || '—') + '</td>'
-                + '<td>' + escHtml(e.currencyCode || '—') + '</td>'
-                + '<td><span class="plr-chip ' + t[1] + '">' + t[0] + '</span></td>'
+                + '<td data-currency-cell="1">' + escHtml(e.currencyCode || '—') + '</td>'
+                + '<td data-type-cell="1"><span class="plr-chip ' + t[1] + '">' + t[0] + '</span></td>'
                 + '<td class="plr-num" data-price-cell="1"><strong>' + fmtMoney(e.price) + '</strong></td>'
-                + '<td>' + fmtDate(e.validFrom) + '</td>'
-                + '<td>' + fmtDate(e.validTo) + '</td>'
+                + '<td data-from-cell="1">' + fmtDate(e.validFrom) + '</td>'
+                + '<td data-to-cell="1">'   + fmtDate(e.validTo)   + '</td>'
                 + '</tr>';
         }).join('');
         body.innerHTML = html;
@@ -672,78 +741,201 @@
         btn('»', pageCount,   { disabled: page >= pageCount });
     }
 
-    // ── Inline edit (Price) ─────────────────────────────────────────────────
+    // ── Inline edit (Döviz / Tip / Fiyat / Geçerlilik tarihleri) ─────────────
+    // 5 sütunu birden input/select'e dönüştürür. Save/Cancel butonları
+    // satır aksiyon hücresinde görünür. Blur-cancel YOK (kullanıcı kafası karışmasın).
     function startEdit(tr) {
-        var cell = tr.querySelector('[data-price-cell]');
-        if (!cell) return;
-        var orig = Number(tr.getAttribute('data-price'));
-        // min=0.0001 — HTML5 hint olsun; gercek validasyon JS'te 0/negatif reddediyor.
-        cell.innerHTML = '<input type="number" min="0.0001" step="0.0001" inputmode="decimal" class="plr-edit-input" value="' + orig + '" />';
-        var input = cell.querySelector('input');
-        input.focus(); input.select();
+        if (tr.classList.contains('is-editing')) return;
+        tr.classList.add('is-editing');
 
-        // Enter: validate + (gecersizse) input acik kalsin; Blur: sessiz iptal (eski deger).
-        // strict: 0 ve negatif degerler reddedilir.
-        var isCancelling = false;
-        function tryCommit() {
-            var newVal = parseFloat(input.value);
-            if (isNaN(newVal) || newVal <= 0) {
-                input.classList.add('is-invalid');
-                toast('Fiyat 0\'dan büyük olmalı', 'err');
-                input.focus(); input.select();
-                return false;
-            }
-            if (newVal === orig) { cancel(); return true; }
-            saveEdit(tr, newVal, orig);
-            return true;
-        }
-        function cancel() {
-            isCancelling = true;
-            // Eger tablo bu sirada re-render edildiyse cell DOM'dan ayrilmis olabilir;
-            // innerHTML setter NotFoundError firlatir. Once isConnected kontrol et.
-            if (cell.isConnected) {
-                cell.innerHTML = '<strong>' + fmtMoney(orig) + '</strong>';
-            }
-        }
-        // Negatif/sifir yazilirken anlik gorsel uyari kalksin.
-        input.addEventListener('input', function () {
-            var v = parseFloat(input.value);
-            if (!isNaN(v) && v > 0) input.classList.remove('is-invalid');
+        var origPrice    = Number(tr.getAttribute('data-price'));
+        var origCurId    = parseInt(tr.getAttribute('data-currency-id'), 10) || 0;
+        var origTypeCode = tr.getAttribute('data-type-code') || 's';
+        var origFrom     = tr.getAttribute('data-valid-from') || '';
+        var origTo       = tr.getAttribute('data-valid-to')   || '';
+
+        // Currency select
+        var curOpts = '';
+        Object.keys(currenciesById).forEach(function (cid) {
+            var c = currenciesById[cid];
+            curOpts += '<option value="' + cid + '"' + (Number(cid) === origCurId ? ' selected' : '') + '>'
+                     + escHtml(c.code) + '</option>';
         });
-        input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter')  { e.preventDefault(); tryCommit(); }
-            else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-            // Yukari/asagi ok ile spinner artisini engelle.
-            else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault();
-        });
-        // Blur: focus baska yere giderse sessizce iptal et (eski degeri koru).
-        input.addEventListener('blur', function () {
-            if (isCancelling) return;
-            cancel();
+        tr.querySelector('[data-currency-cell]').innerHTML =
+            '<select class="plr-edit-input" data-edit-cur>' + curOpts + '</select>';
+
+        // PriceType select
+        function typeOpt(v, lbl) {
+            return '<option value="' + v + '"' + (v === origTypeCode ? ' selected' : '') + '>' + lbl + '</option>';
+        }
+        tr.querySelector('[data-type-cell]').innerHTML =
+            '<select class="plr-edit-input" data-edit-type>'
+            + typeOpt('b', 'Alış') + typeOpt('s', 'Satış') + typeOpt('m', 'Maliyet')
+            + '</select>';
+
+        // Price input
+        tr.querySelector('[data-price-cell]').innerHTML =
+            '<input type="number" min="0.0001" step="0.0001" inputmode="decimal" class="plr-edit-input" data-edit-price value="' + origPrice + '" />';
+
+        // Date inputs (YYYY-MM-DD)
+        tr.querySelector('[data-from-cell]').innerHTML =
+            '<input type="date" class="plr-edit-input" data-edit-from value="' + origFrom + '" />';
+        tr.querySelector('[data-to-cell]').innerHTML =
+            '<input type="date" class="plr-edit-input" data-edit-to value="' + origTo + '" placeholder="(boş)" />';
+
+        // Action cell — KALEM butonu DİSKET'e dönüşür (aynı pozisyon, farklı ikon).
+        // Disket'e basmadan kaydetmez ve düzenleme modundan çıkmaz. Yan tarafta
+        // ✗ Vazgeç butonu (explicit cancel) — başka alana tıklamak edit modundan
+        // çıkarmaz (blur-cancel kaldırıldı).
+        var actionsCell = tr.querySelector('td:first-child .plr-row-actions');
+        if (actionsCell) {
+            actionsCell.innerHTML =
+                '<button type="button" class="plr-icon-btn" data-act="save" title="Kaydet" style="color:#16a34a;">'
+                +   // Disket (floppy) ikonu
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+                +     '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>'
+                +     '<polyline points="17 21 17 13 7 13 7 21"/>'
+                +     '<polyline points="7 3 7 8 15 8"/>'
+                +   '</svg>'
+                + '</button>'
+                + '<button type="button" class="plr-icon-btn" data-act="cancel" title="Vazgeç">'
+                +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+                + '</button>';
+        }
+
+        // Esc ile iptal — kullanıcı isterse keyboard ile
+        var escHandler = function (e) {
+            if (e.key === 'Escape') { e.preventDefault(); cancelEdit(tr); document.removeEventListener('keydown', escHandler); }
+        };
+        document.addEventListener('keydown', escHandler);
+        tr._escHandler = escHandler;
+
+        // Fiyat input'una odaklan
+        var priceInput = tr.querySelector('[data-edit-price]');
+        if (priceInput) { priceInput.focus(); priceInput.select(); }
+    }
+
+    // Tek bir row'u edit modundan çıkarıp display moduna döndürür.
+    // restored: { price, currencyId, currencyCode, priceType, validFromIso, validToIso }
+    // Tüm sayfayı reload etmez — yalnız etkilenen satırın hücreleri güncellenir.
+    function restoreRowDisplay(tr, restored) {
+        var t = typeLabel(restored.priceType);
+        // Display hücreleri
+        tr.querySelector('[data-currency-cell]').innerHTML = escHtml(restored.currencyCode || '—');
+        tr.querySelector('[data-type-cell]').innerHTML =
+            '<span class="plr-chip ' + t[1] + '">' + t[0] + '</span>';
+        tr.querySelector('[data-price-cell]').innerHTML =
+            '<strong>' + fmtMoney(restored.price) + '</strong>';
+        tr.querySelector('[data-from-cell]').innerHTML = fmtDate(restored.validFromIso);
+        tr.querySelector('[data-to-cell]').innerHTML   = fmtDate(restored.validToIso);
+
+        // Data attribute'larını güncel snapshot ile sync et
+        tr.setAttribute('data-price',       String(restored.price));
+        tr.setAttribute('data-currency-id', String(restored.currencyId || ''));
+        tr.setAttribute('data-type-code',   String(restored.priceType || ''));
+        tr.setAttribute('data-valid-from',  restored.validFromIso || '');
+        tr.setAttribute('data-valid-to',    restored.validToIso   || '');
+
+        // Action hücresinde Düzenle / Sil butonlarını geri koy
+        var actionsCell = tr.querySelector('td:first-child .plr-row-actions');
+        if (actionsCell) {
+            actionsCell.innerHTML =
+                '<button type="button" class="plr-icon-btn" data-act="edit" title="Fiyatı düzenle">'
+                + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>'
+                + '</button>'
+                + '<button type="button" class="plr-icon-btn plr-icon-btn--danger" data-act="del" title="Sil">'
+                + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>'
+                + '</button>';
+        }
+        tr.classList.remove('is-editing');
+        if (tr._escHandler) {
+            document.removeEventListener('keydown', tr._escHandler);
+            tr._escHandler = null;
+        }
+    }
+
+    function cancelEdit(tr) {
+        // Snapshot — orijinal değerler row data attribute'larında saklanıyor
+        var origCurId = parseInt(tr.getAttribute('data-currency-id'), 10) || 0;
+        var origCur   = currenciesById[origCurId] || {};
+        restoreRowDisplay(tr, {
+            price:        Number(tr.getAttribute('data-price')),
+            currencyId:   origCurId,
+            currencyCode: origCur.code || '',
+            priceType:    tr.getAttribute('data-type-code') || 's',
+            validFromIso: tr.getAttribute('data-valid-from') || '',
+            validToIso:   tr.getAttribute('data-valid-to')   || '',
         });
     }
-    function saveEdit(tr, newVal, orig) {
-        var id = parseInt(tr.getAttribute('data-id'));
+
+    function saveEdit(tr) {
+        var id          = parseInt(tr.getAttribute('data-id'));
+        var priceEl     = tr.querySelector('[data-edit-price]');
+        var curEl       = tr.querySelector('[data-edit-cur]');
+        var typeEl      = tr.querySelector('[data-edit-type]');
+        var fromEl      = tr.querySelector('[data-edit-from]');
+        var toEl        = tr.querySelector('[data-edit-to]');
+
+        var price       = parseFloat(priceEl.value);
+        var currencyId  = parseInt(curEl.value, 10) || 0;
+        var priceType   = typeEl.value || 's';
+        var validFrom   = fromEl.value || null;
+        var validToVal  = toEl.value || '';
+        var clearValidTo = (validToVal === '');
+        var validTo     = clearValidTo ? null : validToVal;
+
+        if (isNaN(price) || price <= 0) {
+            priceEl.classList.add('is-invalid');
+            toast('Fiyat 0\'dan büyük olmalı', 'err');
+            priceEl.focus(); priceEl.select();
+            return;
+        }
+        if (!currencyId) { toast('Döviz seçin', 'err'); curEl.focus(); return; }
+        if (!validFrom)  { toast('Başlangıç tarihi zorunlu', 'err'); fromEl.focus(); return; }
+
+        var saveBtn = tr.querySelector('button[data-act="save"]');
+        if (saveBtn) saveBtn.disabled = true;
+
         fetch('/PriceList/UpdatePriceListJson', {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id, price: newVal })
+            body: JSON.stringify({
+                id:           id,
+                price:        price,
+                currencyId:   currencyId,
+                priceType:    priceType,
+                validFrom:    validFrom,
+                validTo:      validTo,
+                clearValidTo: clearValidTo
+            })
         })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                return r.json().catch(function () {
+                    return { success: false, message: 'Geçersiz sunucu yanıtı (HTTP ' + r.status + ')' };
+                });
+            })
             .then(function (resp) {
                 if (resp && resp.success) {
-                    tr.setAttribute('data-price', String(newVal));
-                    tr.querySelector('[data-price-cell]').innerHTML = '<strong>' + fmtMoney(newVal) + '</strong>';
-                    toast('Fiyat güncellendi', 'ok');
+                    toast('Kayıt güncellendi', 'ok');
+                    // Tüm sayfayı reload etmeden satırı in-place yenile (UX flicker yok).
+                    var cur = currenciesById[currencyId] || {};
+                    restoreRowDisplay(tr, {
+                        price:        price,
+                        currencyId:   currencyId,
+                        currencyCode: cur.code || '',
+                        priceType:    priceType,
+                        validFromIso: validFrom || '',
+                        validToIso:   clearValidTo ? '' : (validTo || ''),
+                    });
                 } else {
-                    tr.querySelector('[data-price-cell]').innerHTML = '<strong>' + fmtMoney(orig) + '</strong>';
-                    toast(resp && resp.message ? resp.message : 'Güncelleme başarısız', 'err');
+                    if (saveBtn) saveBtn.disabled = false;
+                    toast((resp && resp.message) || 'Güncelleme başarısız', 'err');
                 }
             })
-            .catch(function () {
-                tr.querySelector('[data-price-cell]').innerHTML = '<strong>' + fmtMoney(orig) + '</strong>';
-                toast('Sunucu hatası', 'err');
+            .catch(function (e) {
+                if (saveBtn) saveBtn.disabled = false;
+                toast('Bağlantı hatası: ' + (e && e.message || ''), 'err');
             });
     }
     function deleteRow(tr) {
@@ -781,15 +973,17 @@
         });
     }
 
-    // Tablo body click delegation
+    // Tablo body click delegation — Düzenle / Save / Cancel / Sil
     document.getElementById('plrTableBody').addEventListener('click', function (e) {
         var btn = e.target.closest('button[data-act]');
         if (!btn) return;
         var tr = btn.closest('tr[data-id]');
         if (!tr) return;
         var act = btn.getAttribute('data-act');
-        if (act === 'edit') startEdit(tr);
-        else if (act === 'del') deleteRow(tr);
+        if      (act === 'edit')   startEdit(tr);
+        else if (act === 'save')   saveEdit(tr);
+        else if (act === 'cancel') cancelEdit(tr);
+        else if (act === 'del')    deleteRow(tr);
     });
 
     // ── Filtre değişince → page=1 + debounced reload ────────────────────────
@@ -802,6 +996,33 @@
         if (!el) return;
         el.addEventListener('input', onFilterChange);
         el.addEventListener('change', onFilterChange);
+    });
+
+    // ── Date input × temizleme butonu — wrapper'a is-filled class'ı toggle eder ────
+    function syncDateClearVisibility(input) {
+        var wrap = input.closest('.plr-date-wrap');
+        if (!wrap) return;
+        if (input.value) wrap.classList.add('is-filled');
+        else wrap.classList.remove('is-filled');
+    }
+    ['plrFltStart','plrFltEnd','plrFltBase'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        syncDateClearVisibility(el);                         // initial state
+        el.addEventListener('input',  function () { syncDateClearVisibility(el); });
+        el.addEventListener('change', function () { syncDateClearVisibility(el); });
+    });
+    document.querySelectorAll('button[data-clear-target]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            var targetId = btn.getAttribute('data-clear-target');
+            var el = document.getElementById(targetId);
+            if (!el) return;
+            el.value = '';
+            syncDateClearVisibility(el);
+            // Filtre yeniden tetikle (debounced loadPage)
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        });
     });
     document.getElementById('plrPgSize').addEventListener('change', function (e) {
         state.pageSize = parseInt(e.target.value) || 50;

@@ -1,0 +1,78 @@
+@{
+    ViewData["Title"] = "Aktarım Kuyruğu";
+    ViewData["FormCode"] = "INTEGRATION_QUEUE";
+    ViewData["BodyClass"] = "page-integration-queue";
+}
+
+@section Styles {
+<style>
+    .page-integration-queue .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-integration-queue .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-integration-queue .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-integration-queue .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+    #integrationQueue { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; height: 100%; }
+</style>
+}
+
+<div id="integrationQueue"></div>
+
+@section Scripts {
+<script>
+(function() {
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var el = document.getElementById('integrationQueue');
+
+    function showError(msg) {
+        if (el) el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">' + msg + '</div>';
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-integration-queue]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-integration-queue', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-integration-queue]');
+        if (prev) { prev.addEventListener('load', cb); return; }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-integration-queue', '1');
+        script.onload = function() { setTimeout(cb, 0); };
+        script.onerror = function() { showError('React bundle yüklenemedi.'); };
+        document.head.appendChild(script);
+    }
+
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountIntegrationQueue) {
+            showError('mountIntegrationQueue fonksiyonu bulunamadı.'); return;
+        }
+        window.CalibraHub.mountIntegrationQueue(el, {
+            apiBase: '/Integrations/api',
+        });
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountIntegrationQueue) doMount();
+    else loadScript(doMount);
+})();
+</script>
+}

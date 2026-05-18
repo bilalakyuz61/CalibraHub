@@ -227,14 +227,23 @@ export default function WidgetConfigPanel(props) {
       if (onSaved) onSaved()
       if (onClose) onClose()
     } catch (e) {
-      alert('Ayarlar kaydedilirken hata olustu: ' + e.message)
+      // Rapor §6.6 — toast fallback
+      var em = 'Ayarlar kaydedilirken hata olustu: ' + e.message
+      if (window.CalibraAlert && window.CalibraAlert.error) window.CalibraAlert.error(em)
+      else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
+      else alert(em)
     } finally {
       setSaving(false)
     }
   }
 
   async function handleReset() {
-    if (!window.confirm('Widget ayarlari varsayilana sifirlanacak. Devam edilsin mi?')) return
+    // Rapor §6.6 — CalibraAlert.confirm fallback
+    var ok = window.CalibraAlert && window.CalibraAlert.confirm
+      ? await window.CalibraAlert.confirm('Widget ayarlari varsayilana sifirlanacak. Devam edilsin mi?',
+          { title: 'Sıfırla', okText: 'Evet, Sıfırla', cancelText: 'Vazgeç', danger: true })
+      : window.confirm('Widget ayarlari varsayilana sifirlanacak. Devam edilsin mi?')
+    if (!ok) return
     try {
       await resetWidgetConfig(gridKey)
       setVisibleIds(DEFAULT_CONFIG.visibleIds.slice())
@@ -242,7 +251,10 @@ export default function WidgetConfigPanel(props) {
       setColors(Object.assign({}, DEFAULT_CONFIG.colors))
       if (onSaved) onSaved()
     } catch (e) {
-      alert('Sifirlanirken hata olustu: ' + e.message)
+      var em2 = 'Sifirlanirken hata olustu: ' + e.message
+      if (window.CalibraAlert && window.CalibraAlert.error) window.CalibraAlert.error(em2)
+      else if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em2, 'err')
+      else alert(em2)
     }
   }
 

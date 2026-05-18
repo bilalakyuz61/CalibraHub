@@ -715,7 +715,11 @@
             .then(function(d) {
                 showLoading(false);
                 showMsg(d.message || (d.success ? 'Tamamlandi.' : 'Kur bilgisi alinamadi.'), d.success);
-                if (d.success) crLoadRates();
+                // Başarı/başarısızlıktan bağımsız: filtre tarihlerini bulk aralığıyla
+                // senkronize et ve listeyi yenile (veriler kısmen kaydedilmiş olabilir).
+                document.getElementById('crFromDate').value = from;
+                document.getElementById('crToDate').value = to;
+                crLoadRates();
             })
             .catch(function() { showLoading(false); showMsg('TCMB ile baglanti kurulamadi. Internet baglantinizi kontrol edin.', false); });
     };

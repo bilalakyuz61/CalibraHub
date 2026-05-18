@@ -15,6 +15,21 @@ public sealed record CombinationLookupRow(
     IReadOnlyCollection<CombinationFeatureValueDto> FeatureValues);
 
 /// <summary>
+/// "Tanımlı Kombinasyonlar" liste ekranı için DTO — tüm stok kartlarındaki tüm aktif
+/// kombinasyonları parent stok bilgisi ve özellik/değer ayrıntısıyla beraber döner.
+/// </summary>
+public sealed record CombinationListItemDto(
+    int ConfigId,
+    string Code,
+    string? Name,
+    int? ItemId,
+    string? ItemCode,
+    string? ItemName,
+    bool IsActive,
+    DateTime CreatedDate,
+    IReadOnlyCollection<CombinationFeatureValueDto> FeatureValues);
+
+/// <summary>
 /// Satış teklifi satırında "yeni kombinasyon oluştur" akışı için request/response.
 /// Dedup check: aynı özellik/değer setine sahip mevcut CONFIG varsa onu döner; yoksa yeni CONFIG üretir.
 /// </summary>
@@ -146,7 +161,9 @@ public sealed record LocationDto(
     int SortOrder,
     decimal? MaxWeightCapacity,
     decimal? VolumeCapacity,
-    bool IsActive);
+    bool IsActive,
+    bool IsMachinePark,
+    bool IsStorageArea);
 
 public sealed record UnitDto(
     int Id,
@@ -156,27 +173,10 @@ public sealed record UnitDto(
     int SortOrder,
     bool IsActive);
 
-// ── MachineType (referans veri — Logo Netsis 9 standart tip + ozel tipler) ──
-public sealed record MachineTypeDto(
-    int Id,
-    string Code,
-    string Name,
-    string? Description,
-    bool IsBuiltIn,
-    int SortOrder,
-    bool IsActive);
-
-public sealed record SaveMachineTypeRequest(
-    int? Id,            // null = create, dolu = update
-    string Code,        // create'te zorunlu, update'te kullanilmaz (degistirilemez)
-    string Name,
-    string? Description,
-    int SortOrder,
-    bool IsActive);
-
 // ── Machine (uretim/depo makineleri) ────────────────────────────────────────
 // LocationId FK ile bir lokasyona bagli; iş emri rotalama, kapasite planlama,
-// OEE hesabi bu kayitlardan beslenir.
+// OEE hesabi bu kayitlardan beslenir. Makine tipi/kategori bilgisi widget
+// (form-code: MACHINES) uzerinden parametre olarak yonetilir — entity'de yok.
 
 public sealed record MachineDto(
     int Id,
@@ -185,7 +185,6 @@ public sealed record MachineDto(
     string? LocationName,
     string MachineCode,
     string? MachineName,
-    string? MachineType,
     decimal? HourlyCapacity,
     int SortOrder,
     bool IsActive);
@@ -194,7 +193,6 @@ public sealed record CreateMachineRequest(
     int LocationId,
     string MachineCode,
     string? MachineName,
-    string? MachineType,
     decimal? HourlyCapacity,
     int SortOrder,
     bool IsActive);
@@ -204,7 +202,6 @@ public sealed record UpdateMachineRequest(
     int LocationId,
     string MachineCode,
     string? MachineName,
-    string? MachineType,
     decimal? HourlyCapacity,
     int SortOrder,
     bool IsActive);
@@ -217,7 +214,9 @@ public sealed record CreateLocationRequest(
     int SortOrder,
     decimal? MaxWeightCapacity,
     decimal? VolumeCapacity,
-    bool IsActive);
+    bool IsActive,
+    bool IsMachinePark,
+    bool IsStorageArea);
 
 public sealed record CreateUnitRequest(
     string UnitCode,
@@ -235,7 +234,9 @@ public sealed record UpdateLocationRequest(
     int SortOrder,
     decimal? MaxWeightCapacity,
     decimal? VolumeCapacity,
-    bool IsActive);
+    bool IsActive,
+    bool IsMachinePark,
+    bool IsStorageArea);
 
 public sealed record UpdateUnitRequest(
     int Id,

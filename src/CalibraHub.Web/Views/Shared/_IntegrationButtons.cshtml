@@ -1,0 +1,148 @@
+@*
+    _IntegrationButtons — Form ekranlarinda kayit uzerinden aktif Manual
+    entegrasyonlari listeleyip "Simdi Calistir" butonu render eden partial.
+
+    Kullanim (örn. Sales/Orders/Edit.cshtml içinde):
+        @await Html.PartialAsync("_IntegrationButtons",
+            new IntegrationButtonsModel { FormCode = "SALES_ORDER_NEW", RecordId = Model.Id.ToString() })
+
+    Veya HTML attribute pattern (kayit ID dinamik ise — JS bagimli sayfalarda):
+        <div data-integration-buttons
+             data-form-code="SALES_ORDER_NEW"
+             data-record-id="@Model.Id"></div>
+
+    Akis:
+      1. Sayfa yuklenince GET /Integrations/api/by-form/{formCode} cagrilir
+      2. Donen her entegrasyon icin bir buton render edilir
+      3. Tıklandığında POST /Integration/Run/{integrationId}?recordId=...
+      4. Sonuc bir mini-toast ile bildirilir; opsiyonel detail link Run Log'a gider
+*@
+@model CalibraHub.Web.Models.IntegrationButtonsModel
+
+@if (string.IsNullOrWhiteSpace(Model?.FormCode))
+{
+    <!-- _IntegrationButtons: FormCode bos — render skipped -->
+}
+else
+{
+    <div class="ch-int-btns"
+         data-integration-buttons
+         data-form-code="@Model.FormCode"
+         data-record-id="@(Model.RecordId ?? "")">
+        <!-- React tarafi mountIntegrationButtons ile doldurur -->
+    </div>
+}
+
+@if (Model is not null && !string.IsNullOrWhiteSpace(Model.FormCode))
+{
+    <style>
+        .ch-int-btns {
+            display: inline-flex; gap: 6px; flex-wrap: wrap;
+            align-items: center;
+        }
+        .ch-int-btn {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 5px 12px; border-radius: 6px;
+            font-size: 12px; font-weight: 500;
+            background: linear-gradient(135deg,#7c3aed,#6d28d9);
+            color: #fff; border: none; cursor: pointer;
+            transition: filter .15s;
+        }
+        .ch-int-btn:hover { filter: brightness(1.1); }
+        .ch-int-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .ch-int-btn-secondary {
+            background: transparent;
+            color: #7c3aed; border: 1px solid #7c3aed;
+        }
+        .ch-int-btn-secondary:hover { background: rgba(124,58,237,.08); }
+        body.app-theme-dark .ch-int-btn-secondary { color: #a78bfa; border-color: #a78bfa; }
+        body.app-theme-dark .ch-int-btn-secondary:hover { background: rgba(167,139,250,.12); }
+    </style>
+
+    <script>
+        (function () {
+            // Sayfa basina tek defa boostrap — birden fazla _IntegrationButtons varsa hepsi paylasir
+            if (window.__integrationButtonsBootstrapped) { return; }
+            window.__integrationButtonsBootstrapped = true;
+
+            function getCsrf() {
+                var el = document.querySelector('input[name="__RequestVerificationToken"]');
+                return el ? el.value : '';
+            }
+
+            function toast(msg, kind) {
+                // CLAUDE.md kurali: native alert/confirm yasak — toast yoksa konsola log.
+                if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(msg, kind || 'info');
+                else console.warn('[IntegrationButtons] toast yok:', msg);
+            }
+
+            function renderHost(host) {
+                var formCode = host.getAttribute('data-form-code');
+                var recordId = host.getAttribute('data-record-id') || '';
+                if (!formCode) return;
+
+                fetch('/Integrations/api/by-form/' + encodeURIComponent(formCode), { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d.success) { host.innerHTML = ''; return; }
+                        var items = (d.items || []);
+                        if (items.length === 0) { host.innerHTML = ''; return; }
+                        host.innerHTML = '';
+                        items.forEach(function (it) {
+                            var btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'ch-int-btn';
+                            btn.title = (it.description || it.name) + ' — ' + (it.httpMethod || '') + ' ' + (it.endpointName || '');
+                            btn.innerHTML = '<span style="font-size:11px;">⚡</span> ' + (it.name || 'Entegrasyon');
+                            btn.onclick = function () {
+                                if (btn.disabled) return;
+                                btn.disabled = true;
+                                var origHtml = btn.innerHTML;
+                                btn.innerHTML = '<span class="iw-spin" style="display:inline-block">⌛</span> Çalıştırılıyor…';
+
+                                var url = '/Integration/Run/' + it.id + (recordId ? '?recordId=' + encodeURIComponent(recordId) : '');
+                                fetch(url, {
+                                    method: 'POST',
+                                    credentials: 'same-origin',
+                                    headers: { 'RequestVerificationToken': getCsrf() }
+                                })
+                                .then(function (r) { return r.json(); })
+                                .then(function (d) {
+                                    if (d.success) {
+                                        toast('✓ ' + it.name + ' başarılı (HTTP ' + (d.statusCode || '?') + ')', 'ok');
+                                    } else {
+                                        toast('✗ ' + it.name + ': ' + (d.error || 'Hata'), 'err');
+                                    }
+                                })
+                                .catch(function (e) { toast('Sunucu hatası: ' + e.message, 'err'); })
+                                .finally(function () {
+                                    btn.disabled = false;
+                                    btn.innerHTML = origHtml;
+                                });
+                            };
+                            host.appendChild(btn);
+                        });
+                    })
+                    .catch(function () { host.innerHTML = ''; });
+            }
+
+            function scan() {
+                var hosts = document.querySelectorAll('[data-integration-buttons]:not([data-rendered])');
+                hosts.forEach(function (h) {
+                    h.setAttribute('data-rendered', '1');
+                    renderHost(h);
+                });
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', scan);
+            } else {
+                scan();
+            }
+
+            // Public API — dinamik olarak host eklenirse manuel scan
+            window.CalibraHub = window.CalibraHub || {};
+            window.CalibraHub.scanIntegrationButtons = scan;
+        })();
+    </script>
+}

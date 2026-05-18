@@ -311,12 +311,18 @@ public sealed class DocumentMailController : Controller
                         + '</div>';
                 } else {
                     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Gonder'; }
-                    alert('Gonderilemedi: ' + (d && d.message ? d.message : 'Bilinmeyen hata'));
+                    var m = 'Gonderilemedi: ' + (d && d.message ? d.message : 'Bilinmeyen hata');
+                    if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(m);
+                    else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(m, 'err');
+                    else alert(m);
                 }
             })
             .catch(function (err) {
                 if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Gonder'; }
-                alert('Hata: ' + err.message);
+                var em = 'Hata: ' + err.message;
+                if (window.CalibraAlert && CalibraAlert.error) CalibraAlert.error(em);
+                else if (window.CalibraHub && CalibraHub.toast) CalibraHub.toast(em, 'err');
+                else alert(em);
             });
         return false;
     };

@@ -152,7 +152,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         command.Parameters.Add(new SqlParameter("@FullName", userProfile.FullName));
         command.Parameters.Add(new SqlParameter("@Email", userProfile.Email));
         command.Parameters.Add(new SqlParameter("@EmployeeCode", userProfile.EmployeeCode));
-        command.Parameters.Add(new SqlParameter("@DepartmentId", userProfile.DepartmentId));
+        command.Parameters.Add(new SqlParameter("@DepartmentId", (object?)userProfile.DepartmentId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@SupervisorUserId", (object?)userProfile.SupervisorUserId ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@Role", userProfile.Role.ToString()));
         command.Parameters.Add(new SqlParameter("@Permissions", SerializePermissions(userProfile.Permissions)));
@@ -196,7 +196,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
             FullName = reader.GetString(2),
             Email = reader.GetString(3),
             EmployeeCode = reader.GetString(4),
-            DepartmentId = reader.GetGuid(5),
+            DepartmentId = reader.IsDBNull(5) ? (int?)null : reader.GetInt32(5),
             SupervisorUserId = reader.IsDBNull(6) ? null : reader.GetGuid(6),
             Role = role,
             Permissions = DeserializePermissions(permissionsRaw),

@@ -140,7 +140,16 @@ export function mergeConstraints(staticConstraint, runtimeConstraint, distinctSe
     if (typeof src === 'string') {
       var trimmed = src.trim()
       if (!trimmed) return
-      try { parsed = JSON.parse(trimmed) } catch (e) { return }
+      // 1) Once JSON parse dene — `[{field,operator,value}]` veya `{rawSql}` formati.
+      // 2) Hata olursa raw SQL fragment olarak ele al — `TYPEID IN (2,3)` gibi
+      //    Alan Ayarlari WHERE kisitlari boyle JSON disi formatta saklanir.
+      //    Backend GuideConstraintDto.RawSql alani bunu dogrudan WHERE'a ekler.
+      try {
+        parsed = JSON.parse(trimmed)
+      } catch (e) {
+        arr.push({ rawSql: trimmed })
+        return
+      }
     }
     if (Array.isArray(parsed)) {
       parsed.forEach(function (item) { if (item) arr.push(item) })

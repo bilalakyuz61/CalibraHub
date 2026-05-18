@@ -118,8 +118,14 @@
                                 </div>
                             </div>
                             <div class="integrator-collapsible-card__content">
+                                @{
+                                    var _colRecordId = Model.Input.Id.HasValue ? Model.Input.Id.Value.ToString() : $"new-{Guid.NewGuid():N}";
+                                }
                                 <form method="post" asp-action="SaveCompany" asp-controller="Setup"
-                                      class="integrator-form" autocomplete="off">
+                                      class="integrator-form" autocomplete="off"
+                                      data-collaboration-record-type="SETUP_COMPANY"
+                                      data-collaboration-record-id="@_colRecordId"
+                                      data-collaboration-record-title="@(Model.Input.Id.HasValue ? $"Şirket #{Model.Input.Id}" : "Yeni Şirket")">
                                     @Html.AntiForgeryToken()
                                     <input asp-for="Input.Id" type="hidden" />
                                     <input type="hidden" name="page" value="@listState.Page" />
@@ -463,14 +469,23 @@
             });
         };
 
-        window.erpDelete = function() {
+        // Rapor §6.6 — native confirm → CalibraAlert.confirm
+        async function _erpConfirmDelete() {
+            return window.CalibraAlert && CalibraAlert.confirm
+                ? await CalibraAlert.confirm('Bu ERP baglantisini silmek istediginize emin misiniz?',
+                    { title: 'ERP Baglanti Sil', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true })
+                : confirm('Bu ERP baglantisini silmek istediginize emin misiniz?');
+        }
+
+        window.erpDelete = async function() {
             var id = document.getElementById('erpId').value;
-            if (!id || !confirm('Bu ERP baglantisini silmek istediginize emin misiniz?')) return;
+            if (!id) return;
+            if (!await _erpConfirmDelete()) return;
             erpDeleteById(id);
         };
 
-        window.erpDeleteById = function(id) {
-            if (!confirm('Bu ERP baglantisini silmek istediginize emin misiniz?')) return;
+        window.erpDeleteById = async function(id) {
+            if (!await _erpConfirmDelete()) return;
             fetch(API('DeleteErpSettingsJson') + '?id=' + id, { method: 'POST' })
                 .then(function(r) { return r.json(); })
                 .then(function(d) {

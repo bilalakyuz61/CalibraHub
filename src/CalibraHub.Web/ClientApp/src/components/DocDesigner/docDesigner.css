@@ -1,0 +1,38 @@
+/* DocDesigner — light (default) */
+.doc-designer-root {
+  --dd-bg:          #eef0f5;
+  --dd-paper-bg:    #ffffff;
+  --dd-surface:     #ffffff;
+  --dd-surface-alt: #f8f9fb;
+  --dd-border:      #e5e7eb;
+  --dd-border-strong: #d1d5db;
+  --dd-text:        #111827;
+  --dd-text-muted:  #6b7280;
+  --dd-ruler-bg:    #f8f9fb;
+  --dd-ruler-tick:  #94a3b8;
+  --dd-ruler-text:  #64748b;
+  --dd-accent:      #6366f1;
+  --dd-accent-soft: rgba(99,102,241,0.08);
+  --dd-section-bg:  #f4f5f9;
+}
+
+body.app-theme-dark .doc-designer-root {
+  --dd-bg:          #0e1116;
+  /* Kâğıt arka planı dark mode'da da AÇIK kalır — Figma/Adobe gibi profesyonel
+     tasarım araçlarındaki yaklaşım. Kullanıcının siyah/koyu element renkleri
+     karanlık kanvasta görünmüyordu. Paper "kâğıt" semantiği taşır → her zaman beyaz.
+     Eye strain için pure white değil, hafif kırık beyaz (slate-50). */
+  --dd-paper-bg:    #f8fafc;
+  --dd-surface:     #161b27;
+  --dd-surface-alt: #1c2336;
+  --dd-border:      #2a3347;
+  --dd-border-strong: #374360;
+  --dd-text:        #e2e8f0;
+  --dd-text-muted:  #94a3b8;
+  --dd-ruler-bg:    #131822;
+  --dd-ruler-tick:  #2a3347;
+  --dd-ruler-text:  #556070;
+  --dd-accent:      #818cf8;
+  --dd-accent-soft: rgba(129,140,248,0.12);
+  --dd-section-bg:  #1c2336;
+}

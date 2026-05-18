@@ -1,0 +1,145 @@
+@model string
+@{
+    ViewData["Title"] = "Aktif Kilitler";
+    ViewData["AdminMenu"] = "locks";
+    ViewData["BodyClass"] = "page-admin-locks";
+}
+
+@section Styles {
+<style>
+    .page-admin-locks .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+        position: relative;
+    }
+    .page-admin-locks .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    /* Manuel yenileme butonu — sayfa yenilemeden veriyi tazeler */
+    #locksRefreshBtn {
+        position: absolute; top: 14px; right: 28px; z-index: 10;
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 14px; border-radius: 8px;
+        border: 1px solid rgba(99, 102, 241, 0.45);
+        background: rgba(99, 102, 241, 0.10); color: #818cf8;
+        font-size: 12.5px; font-weight: 600; cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    #locksRefreshBtn:hover {
+        background: rgba(99, 102, 241, 0.18);
+        border-color: rgba(99, 102, 241, 0.7);
+    }
+    #locksRefreshBtn:disabled { opacity: 0.55; cursor: wait; }
+    #locksRefreshBtn svg { transition: transform 0.4s ease; }
+    #locksRefreshBtn.is-spinning svg { animation: locksSpin 0.7s linear infinite; }
+    @@keyframes locksSpin { to { transform: rotate(360deg); } }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <button type="button" id="locksRefreshBtn" title="Listeyi yenile">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/>
+            <path d="M3 21v-5h5"/>
+        </svg>
+        <span>Yenile</span>
+    </button>
+    <div id="reactLocksBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@section Scripts {
+<script>
+(function() {
+    var BOARD_CONFIG = @Html.Raw(Model ?? "null");
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var el = document.getElementById('reactLocksBoard');
+
+    if (!el) { return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#f87171;font-size:14px;">' + msg + '</div>';
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('SmartBoard yüklenemedi'); return; }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+        } catch (ex) {
+            showError('Hata: ' + (ex.message || ex));
+        }
+    }
+
+    function loadCss() {
+        var prev = document.querySelector('link[data-locks-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-locks-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-locks-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL;
+        s.setAttribute('data-locks-sb', '1');
+        s.onload  = function() { setTimeout(cb, 0); };
+        s.onerror = function() { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(s);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
+
+    // Board verisini sunucudan tazeleyip mevcut SmartBoard'u remount eder.
+    // Hem 30sn'lik otomatik tazeleme hem de "Yenile" butonu bu fonksiyonu kullanir.
+    function refreshLocksBoard() {
+        return fetch('/Admin/LocksBoardConfig', { credentials: 'same-origin', cache: 'no-store' })
+            .then(function(r) { return r.json(); })
+            .then(function(cfg) {
+                if (window.CalibraHub && window.CalibraHub.mountSmartBoard && el) {
+                    window.CalibraHub.mountSmartBoard(el, cfg);
+                }
+            });
+    }
+
+    // Manuel yenileme butonu — kullanici tarafindan tetiklenir.
+    var btn = document.getElementById('locksRefreshBtn');
+    if (btn) {
+        btn.addEventListener('click', function() {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.classList.add('is-spinning');
+            refreshLocksBoard()
+                .catch(function() {})
+                .finally(function() {
+                    // Animasyonun en az ~500ms gorunmesi icin kucuk bir delay
+                    setTimeout(function() {
+                        btn.classList.remove('is-spinning');
+                        btn.disabled = false;
+                    }, 500);
+                });
+        });
+    }
+
+    // 30sn'lik otomatik tazeleme — kilit durumu kullanici beklemeden de guncellensin
+    window.setInterval(function() { refreshLocksBoard().catch(function() {}); }, 30000);
+
+    window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
+})();
+</script>
+}

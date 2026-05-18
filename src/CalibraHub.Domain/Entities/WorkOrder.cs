@@ -31,8 +31,21 @@ public sealed class WorkOrder
 
     public WorkOrderStatus Status { get; init; }
     public WorkOrderPriority Priority { get; init; } = WorkOrderPriority.Medium;
+
+    /// <summary>Eski User-bazli atama — backward compat icin tutuluyor, runtime'da kullanilmiyor.</summary>
     public Guid? AssignedUserId { get; init; }
+
+    /// <summary>Yeni atama — dogrudan Personnel.Id (User hesabi gerekmez).</summary>
+    public int? AssignedPersonnelId { get; init; }
+
     public int? WarehouseLocationId { get; init; }
+
+    /// <summary>
+    /// Header tercihi olarak default makine. Patlatma sırasında her operasyona
+    /// fallback olarak yansır (RoutingOperation kendi MachineId'sini taşımıyorsa).
+    /// Operasyon satır seviyesinde override edilebilir (Faz 3).
+    /// </summary>
+    public int? DefaultMachineId { get; init; }
 
     public int RevisionNo { get; init; }
     public int? ParentWorkOrderId { get; init; }

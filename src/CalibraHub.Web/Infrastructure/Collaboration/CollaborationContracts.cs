@@ -92,3 +92,5 @@ public sealed record CollaborationExpirationResult(
 public sealed record CollaborationDisconnectResult(
     bool PresenceChanged,
     IReadOnlyCollection<CollaborationRecordLockChangedEvent> ReleasedLocks);
+
+public sealed record CollaborationBreakLockRequest(string RecordType, string RecordId);

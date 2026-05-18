@@ -300,7 +300,8 @@ public sealed class PriceListController : Controller
         var groups = await _svc.GetAllGroupsAsync(ct);
         return Json(groups.Where(g => g.IsActive).Select(g => new
         {
-            g.Id, g.Code, g.Name, g.Description
+            g.Id, g.Code, g.Name, g.Description,
+            g.AllowsBuying, g.AllowsSelling, g.AllowsCost
         }));
     }
 
@@ -613,10 +614,19 @@ public sealed class PriceListController : Controller
     public async Task<IActionResult> UpdatePriceListJson(
         [FromBody] UpdatePriceEntryRequest request, CancellationToken ct)
     {
-        if (request.Id <= 0)
+        if (request is null || request.Id <= 0)
             return Json(new { success = false, message = "Gecersiz kayit." });
-        var (ok, err) = await _svc.UpdateEntryPricesAsync(request, ct);
-        return Json(new { success = ok, message = ok ? "Fiyat guncellendi." : err });
+        try
+        {
+            var (ok, err) = await _svc.UpdateEntryPricesAsync(request, ct);
+            return Json(new { success = ok, message = ok ? "Fiyat guncellendi." : err });
+        }
+        catch (Exception ex)
+        {
+            // Eski silent-500: persist OLDU ama exception sonrasi UI "sunucu hatasi" diyordu.
+            // Simdi exception'i yakaliyor + JSON donuyoruz; kayit yine de DB'de kayitli kalir.
+            return Json(new { success = false, message = "Sunucu hatasi: " + ex.Message });
+        }
     }
 
     [HttpPost]

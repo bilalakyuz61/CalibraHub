@@ -1,0 +1,741 @@
+@model CalibraHub.Web.Models.Admin.ScheduledTaskEditViewModel
+@{
+    var isNew = Model.Id == null;
+    ViewData["Title"]    = isNew ? "Yeni Görev" : $"Görev: {Model.Name}";
+    ViewData["FormCode"] = "SCHEDULED_TASKS";
+    ViewData["BodyClass"] = "page-st-edit";
+}
+
+@section Styles {
+<style>
+.ste-root {
+    --ste-bg:      #f1f5f9; --ste-surface: #ffffff; --ste-border: #e2e8f0;
+    --ste-text:    #0f172a; --ste-muted:   #64748b; --ste-accent: #6366f1;
+    display: flex; align-items: flex-start; justify-content: center;
+    min-height: 100%; padding: 32px 16px; background: var(--ste-bg);
+}
+body.app-theme-dark .ste-root {
+    --ste-bg: #080c17; --ste-surface: #0d1323;
+    --ste-border: rgba(255,255,255,.09); --ste-text: #e2e8f0; --ste-muted: #94a3b8;
+}
+.ste-card {
+    width: 100%; max-width: 760px; background: var(--ste-surface);
+    border: 1px solid var(--ste-border); border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08); overflow: hidden;
+}
+.ste-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 18px 24px; border-bottom: 1px solid var(--ste-border);
+}
+.ste-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ste-text); }
+.ste-back {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border-radius: 8px; border: 1px solid var(--ste-border); background: none;
+    color: var(--ste-muted); font-size: 13px; cursor: pointer;
+    text-decoration: none; transition: background .12s;
+}
+.ste-back:hover { background: var(--ste-bg); color: var(--ste-text); }
+.ste-spacer { flex: 1; }
+.ste-builtin-note {
+    margin: 16px 24px 0; padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    background: rgba(251,191,36,.1); color: #d97706; border: 1px solid rgba(251,191,36,.25);
+}
+body.app-theme-dark .ste-builtin-note { color: #fbbf24; }
+
+/* ── Tabs (st-modal-body--tabbed pattern) ── */
+.ste-body { display: flex; min-height: 0; }
+.ste-tabs {
+    width: 160px; flex-shrink: 0; border-right: 1px solid var(--ste-border);
+    display: flex; flex-direction: column; padding: 12px 0;
+}
+.ste-tab {
+    display: flex; align-items: center; gap: 8px; padding: 9px 16px;
+    font-size: 13px; font-weight: 500; cursor: pointer; transition: all .12s;
+    color: var(--ste-muted); border: none; background: none; text-align: left;
+    border-left: 2px solid transparent; white-space: nowrap;
+}
+.ste-tab:hover { background: var(--ste-bg); color: var(--ste-text); }
+.ste-tab.active { color: var(--ste-accent); border-left-color: var(--ste-accent); background: rgba(99,102,241,.06); }
+.ste-panels { flex: 1; padding: 20px 24px; overflow-y: auto; }
+.ste-panel { display: none; }
+.ste-panel.active { display: block; }
+
+/* ── Form fields ── */
+.ste-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
+.ste-field-row { display: flex; gap: 12px; }
+.ste-field-row .ste-field { flex: 1; }
+.ste-label { font-size: 12px; font-weight: 600; color: var(--ste-muted); }
+.ste-input, .ste-select, .ste-textarea {
+    padding: 9px 12px; border-radius: 8px; border: 1px solid var(--ste-border);
+    background: var(--ste-bg); color: var(--ste-text); font-size: 13px;
+    outline: none; transition: border-color .15s; font-family: inherit;
+}
+.ste-input:focus, .ste-select:focus, .ste-textarea:focus { border-color: var(--ste-accent); }
+.ste-textarea { resize: vertical; min-height: 80px; }
+.ste-select {
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px;
+}
+.ste-hint { font-size: 11px; color: var(--ste-muted); margin-top: 2px; }
+.ste-check-row { display: flex; align-items: center; gap: 8px; }
+.ste-check-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--ste-accent); cursor: pointer; }
+.ste-check-row label { font-size: 13px; color: var(--ste-text); cursor: pointer; }
+
+/* ── Task type cards ── */
+.ste-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+.ste-type-card {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    border: 1px solid var(--ste-border); border-radius: 9px; cursor: pointer;
+    transition: all .12s; background: var(--ste-bg);
+}
+.ste-type-card:hover { background: var(--ste-surface); border-color: var(--ste-accent); }
+.ste-type-card.selected { border-color: var(--ste-accent); background: rgba(99,102,241,.07); }
+.ste-type-card input { display: none; }
+.ste-type-icon { font-size: 18px; }
+.ste-type-label { font-size: 13px; font-weight: 600; color: var(--ste-text); }
+.ste-type-desc  { font-size: 11px; color: var(--ste-muted); }
+
+/* ── Schedule type ── */
+.ste-sched-row {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+}
+.ste-sched-btn {
+    padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 500;
+    border: 1px solid var(--ste-border); background: var(--ste-bg);
+    color: var(--ste-muted); cursor: pointer; transition: all .12s;
+}
+.ste-sched-btn:hover { background: var(--ste-surface); color: var(--ste-text); }
+.ste-sched-btn.selected { background: rgba(99,102,241,.1); color: var(--ste-accent); border-color: rgba(99,102,241,.3); }
+.ste-sched-panel { display: none; }
+.ste-sched-panel.active { display: block; }
+
+/* ── KV list ── */
+.ste-kv-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.ste-kv-row { display: flex; gap: 6px; align-items: center; }
+.ste-kv-row .ste-input { flex: 1; padding: 7px 10px; font-size: 12px; }
+.ste-kv-del { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--ste-border); background: none; color: var(--ste-muted); cursor: pointer; flex-shrink: 0; }
+.ste-kv-del:hover { background: rgba(239,68,68,.1); color: #ef4444; border-color: transparent; }
+.ste-kv-add { font-size: 12px; font-weight: 500; color: var(--ste-accent); background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; gap: 4px; }
+.ste-kv-add:hover { opacity: .8; }
+
+/* ── Actions ── */
+.ste-actions {
+    display: flex; gap: 8px; padding: 16px 24px;
+    border-top: 1px solid var(--ste-border);
+}
+.ste-btn { padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: all .12s; }
+.ste-btn--primary { background: var(--ste-accent); color: #fff; border-color: #4f46e5; }
+.ste-btn--primary:hover { filter: brightness(1.1); }
+.ste-btn--primary:disabled { opacity: .5; cursor: not-allowed; }
+.ste-btn--ghost { background: none; border-color: var(--ste-border); color: var(--ste-text); }
+.ste-btn--ghost:hover { background: var(--ste-bg); }
+.ste-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
+body.app-theme-dark .ste-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
+.ste-btn--danger:hover { background: rgba(239,68,68,.08); }
+.ste-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
+.ste-err { margin: 0 24px 12px; padding: 8px 12px; border-radius: 8px; font-size: 13px; background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2); }
+body.app-theme-dark .ste-err { color: #f87171; }
+
+/* ── Delete modal ── */
+.ste-modal-backdrop { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,.48); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; }
+.ste-modal { background: var(--ste-surface); border: 1px solid var(--ste-border); border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 24px 64px rgba(0,0,0,.35); }
+.ste-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+.ste-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--ste-text); }
+.ste-modal-msg { font-size: 13px; color: var(--ste-muted); text-align: center; line-height: 1.55; }
+.ste-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+.ste-modal-cancel { padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500; border: 1px solid var(--ste-border); background: var(--ste-surface); color: var(--ste-text); cursor: pointer; }
+.ste-modal-cancel:hover { background: var(--ste-bg); }
+.ste-modal-del { padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500; border: none; background: #ef4444; color: #fff; cursor: pointer; }
+.ste-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
+.ste-modal-del:disabled { opacity: .5; cursor: not-allowed; }
+.ste-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ste-muted); margin-bottom: 12px; margin-top: 4px; }
+.ste-day-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.ste-day-btn { padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid var(--ste-border); background: var(--ste-bg); color: var(--ste-muted); cursor: pointer; transition: all .1s; user-select: none; }
+.ste-day-btn.on { background: rgba(99,102,241,.1); color: var(--ste-accent); border-color: rgba(99,102,241,.3); }
+</style>
+}
+
+<div class="ste-root">
+  <div class="ste-card">
+
+    <div class="ste-header">
+      <a class="ste-back" href="/Admin/ScheduledTasks">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Görevler
+      </a>
+      <span class="ste-spacer"></span>
+      <h1>@(isNew ? "Yeni Görev" : "Görevi Düzenle")</h1>
+    </div>
+
+    @if (Model.IsBuiltin)
+    {
+      <div class="ste-builtin-note">
+        Bu bir BUILTIN sistem görevidir. Parametreler Worker kodunda tanımlanmıştır; yalnızca aktif/pasif durumu değiştirilebilir.
+      </div>
+    }
+
+    <input type="hidden" id="ste-id" value="@(Model.Id?.ToString() ?? "")" />
+    <input type="hidden" id="ste-is-builtin" value="@(Model.IsBuiltin ? "1" : "0")" />
+
+    <div class="ste-body">
+      <!-- Tab list -->
+      <div class="ste-tabs">
+        <button class="ste-tab active" data-tab="general">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Genel
+        </button>
+        @if (!Model.IsBuiltin)
+        {
+          <button class="ste-tab" data-tab="tasktype">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            Görev Türü
+          </button>
+          <button class="ste-tab" data-tab="schedule">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Zamanlama
+          </button>
+        }
+      </div>
+
+      <!-- Panels -->
+      <div class="ste-panels">
+
+        <!-- GENEL -->
+        <div class="ste-panel active" id="panel-general">
+          <div class="ste-field">
+            <label class="ste-label" for="ste-name">Görev Adı *</label>
+            <input id="ste-name" class="ste-input" maxlength="120" value="@Model.Name" @(Model.IsBuiltin ? "disabled" : "") placeholder="Görev adı giriniz" />
+          </div>
+          <div class="ste-field">
+            <label class="ste-label" for="ste-desc">Açıklama</label>
+            <input id="ste-desc" class="ste-input" maxlength="500" value="@(Model.Description ?? "")" @(Model.IsBuiltin ? "disabled" : "") placeholder="İsteğe bağlı açıklama" />
+          </div>
+          <div class="ste-field">
+            <label class="ste-label" for="ste-prereq">Ön Koşul Görev</label>
+            <select id="ste-prereq" class="ste-select" style="max-width:320px;" @(Model.IsBuiltin ? "disabled" : "")>
+              <option value="">— Yok —</option>
+              @foreach (var t in Model.AllTasks)
+              {
+                <option value="@t.Id">@t.Name</option>
+              }
+            </select>
+            <span class="ste-hint">Bu görev çalıştırılmadan önce seçilen görev tamamlanmalıdır.</span>
+          </div>
+          <div class="ste-check-row">
+            <input type="checkbox" id="ste-enabled" @(Model.IsEnabled ? "checked" : "") />
+            <label for="ste-enabled">Etkin</label>
+          </div>
+        </div>
+
+        <!-- GÖREV TÜRÜ -->
+        @if (!Model.IsBuiltin)
+        {
+          <div class="ste-panel" id="panel-tasktype">
+            <div class="ste-type-grid" id="ste-type-grid">
+              @{
+                var types = new[] {
+                  (1, "🗄️", "SQL Prosedür",    "Veritabanı prosedürü çalıştırır"),
+                  (2, "🌐", "HTTP API",         "Dış servise HTTP isteği gönderir"),
+                  (4, "💱", "Kur Güncelleme",  "TCMB'den döviz kurlarını çeker"),
+                  (5, "📊", "Rapor",           "View'dan Excel/CSV raporu gönderir"),
+                };
+              }
+              @foreach (var (val, icon, label, desc) in types)
+              {
+                <label class="ste-type-card @(Model.TaskType == val ? "selected" : "")">
+                  <input type="radio" name="ste-task-type" value="@val" @(Model.TaskType == val ? "checked" : "") />
+                  <span class="ste-type-icon">@icon</span>
+                  <div>
+                    <div class="ste-type-label">@label</div>
+                    <div class="ste-type-desc">@desc</div>
+                  </div>
+                </label>
+              }
+            </div>
+
+            <!-- SQL params -->
+            <div id="tp-sql" style="display:@(Model.TaskType == 1 ? "block" : "none")">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-proc">Prosedür Adı *</label>
+                <input id="ste-proc" class="ste-input" placeholder="sp_ProcedureName" style="max-width:280px;" />
+              </div>
+              <div class="ste-section-title">Parametreler</div>
+              <div class="ste-kv-list" id="kv-sql-params"></div>
+              <button class="ste-kv-add" onclick="kvAdd('kv-sql-params')">+ Parametre Ekle</button>
+              <div class="ste-hint" style="margin-top:8px;">Token'lar: <code>{COMPANY_ID}</code> <code>{INTEGRATION_DB}</code> <code>{NOW}</code> <code>{TODAY}</code></div>
+            </div>
+
+            <!-- HTTP params -->
+            <div id="tp-http" style="display:@(Model.TaskType == 2 ? "block" : "none")">
+              <div class="ste-field-row">
+                <div class="ste-field" style="flex:0 0 100px;">
+                  <label class="ste-label" for="ste-http-method">Metot</label>
+                  <select id="ste-http-method" class="ste-select">
+                    <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+                  </select>
+                </div>
+                <div class="ste-field">
+                  <label class="ste-label" for="ste-http-url">URL *</label>
+                  <input id="ste-http-url" class="ste-input" placeholder="https://api.example.com/endpoint" />
+                </div>
+              </div>
+              <div class="ste-section-title">Headers</div>
+              <div class="ste-kv-list" id="kv-http-headers"></div>
+              <button class="ste-kv-add" onclick="kvAdd('kv-http-headers')">+ Header Ekle</button>
+              <div class="ste-field" style="margin-top:14px;">
+                <label class="ste-label" for="ste-http-body">Body (JSON)</label>
+                <textarea id="ste-http-body" class="ste-textarea" style="font-family:monospace;min-height:100px;" placeholder='{"key":"value"}'></textarea>
+              </div>
+            </div>
+
+            <!-- Currency — no config -->
+            <div id="tp-currency" style="display:@(Model.TaskType == 4 ? "block" : "none")">
+              <p style="font-size:13px;color:var(--ste-muted);">Bu görev türü için ek parametre gerekmez. TCMB servisinden döviz kurlarını otomatik çeker.</p>
+            </div>
+
+            <!-- ViewReport params -->
+            <div id="tp-report" style="display:@(Model.TaskType == 5 ? "block" : "none")">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-view-name">Veritabanı View'ı *</label>
+                <select id="ste-view-name" class="ste-select" style="max-width:320px;">
+                  <option value="">— Yükleniyor… —</option>
+                </select>
+              </div>
+              <div class="ste-field">
+                <label class="ste-label" for="ste-report-format">Format</label>
+                <select id="ste-report-format" class="ste-select" style="max-width:140px;">
+                  <option value="xlsx">Excel (.xlsx)</option>
+                  <option value="csv">CSV</option>
+                </select>
+              </div>
+              <div class="ste-field">
+                <label class="ste-label" for="ste-report-subject">E-posta Konusu</label>
+                <input id="ste-report-subject" class="ste-input" placeholder="Rapor: {VIEW_NAME} — {TODAY}" />
+              </div>
+              <div class="ste-section-title">Alıcılar</div>
+              <div class="ste-kv-list" id="kv-recipients"></div>
+              <button class="ste-kv-add" onclick="kvAddSingle('kv-recipients','E-posta adresi')">+ Alıcı Ekle</button>
+            </div>
+          </div>
+        }
+
+        <!-- ZAMANLAMA -->
+        @if (!Model.IsBuiltin)
+        {
+          <div class="ste-panel" id="panel-schedule">
+            <div class="ste-sched-row" id="ste-sched-row">
+              @{
+                var schedTypes = new[] {
+                  (0,"Aralık"),(1,"Cron"),(2,"Günlük Saat"),(3,"Bir Kez"),(4,"Manuel"),(5,"Haftalık"),(6,"Aylık"),
+                };
+              }
+              @foreach (var (sv, sl) in schedTypes)
+              {
+                <button class="ste-sched-btn @(Model.ScheduleType == sv ? "selected" : "")" data-sched="@sv">@sl</button>
+              }
+            </div>
+
+            <!-- Interval -->
+            <div class="ste-sched-panel @(Model.ScheduleType == 0 ? "active" : "")" id="sp-0">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-interval">Aralık (saniye) *</label>
+                <input id="ste-interval" class="ste-input" type="number" min="10" style="max-width:160px;" placeholder="60" />
+              </div>
+            </div>
+            <!-- Cron -->
+            <div class="ste-sched-panel @(Model.ScheduleType == 1 ? "active" : "")" id="sp-1">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-cron">Cron İfadesi *</label>
+                <input id="ste-cron" class="ste-input" style="max-width:240px;font-family:monospace;" placeholder="0 9 * * *" />
+                <span class="ste-hint">5 alan: dakika saat gün ay haftaGünü — Örn: <code>0 9 * * 1-5</code> (haftaiçi 09:00)</span>
+              </div>
+            </div>
+            <!-- DailyAt -->
+            <div class="ste-sched-panel @(Model.ScheduleType == 2 ? "active" : "")" id="sp-2">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-daily-time">Saat *</label>
+                <input id="ste-daily-time" class="ste-input" type="time" style="max-width:140px;" />
+              </div>
+            </div>
+            <!-- Once -->
+            <div class="ste-sched-panel @(Model.ScheduleType == 3 ? "active" : "")" id="sp-3">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-once-dt">Tarih ve Saat *</label>
+                <input id="ste-once-dt" class="ste-input" type="datetime-local" style="max-width:220px;" />
+                <span class="ste-hint">Belirtilen zamanda bir kez çalışır, ardından otomatik pasif olur.</span>
+              </div>
+            </div>
+            <!-- Manual -->
+            <div class="ste-sched-panel @(Model.ScheduleType == 4 ? "active" : "")" id="sp-4">
+              <p style="font-size:13px;color:var(--ste-muted);">Bu görev yalnızca "Şimdi Çalıştır" ile manuel olarak tetiklenir.</p>
+            </div>
+            <!-- Weekly -->
+            <div class="ste-sched-panel @(Model.ScheduleType == 5 ? "active" : "")" id="sp-5">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-weekly-time">Saat *</label>
+                <input id="ste-weekly-time" class="ste-input" type="time" style="max-width:140px;" />
+              </div>
+              <div class="ste-section-title">Günler</div>
+              <div class="ste-day-grid" id="weekly-days">
+                @foreach (var (dv, dl) in new[]{(0,"Paz"),(1,"Pzt"),(2,"Sal"),(3,"Çar"),(4,"Per"),(5,"Cum"),(6,"Cmt")})
+                {<span class="ste-day-btn" data-day="@dv">@dl</span>}
+              </div>
+            </div>
+            <!-- Monthly -->
+            <div class="ste-sched-panel @(Model.ScheduleType == 6 ? "active" : "")" id="sp-6">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-monthly-time">Saat *</label>
+                <input id="ste-monthly-time" class="ste-input" type="time" style="max-width:140px;" />
+              </div>
+              <div class="ste-field">
+                <label class="ste-label" for="ste-monthly-days">Ayın Günleri *</label>
+                <input id="ste-monthly-days" class="ste-input" style="max-width:220px;" placeholder="1,15" />
+                <span class="ste-hint">Virgülle ayrılmış gün numaraları, örn: <code>1,15</code></span>
+              </div>
+            </div>
+
+            <div class="ste-field" style="margin-top:16px;">
+              <label class="ste-label" for="ste-sched-desc">Açıklama (görüntüleme için)</label>
+              <input id="ste-sched-desc" class="ste-input" style="max-width:380px;" placeholder="Zamanlama açıklaması" value="@(Model.ScheduleDescription ?? "")" />
+            </div>
+          </div>
+        }
+
+      </div>
+    </div>
+
+    <div id="ste-err" style="display:none;" class="ste-err"></div>
+
+    <div class="ste-actions">
+      @if (!Model.IsBuiltin)
+      {
+        <button class="ste-btn ste-btn--primary" id="ste-save">Kaydet</button>
+      }
+      <a class="ste-btn ste-btn--ghost" href="/Admin/ScheduledTasks">İptal</a>
+      @if (!isNew && !Model.IsBuiltin)
+      {
+        <button class="ste-btn ste-btn--danger" id="ste-delete">Sil</button>
+      }
+    </div>
+  </div>
+</div>
+
+@if (!isNew && !Model.IsBuiltin)
+{
+  <div id="ste-modal" class="ste-modal-backdrop" style="display:none;" onclick="steCloseModal()">
+    <div class="ste-modal" onclick="event.stopPropagation()">
+      <div class="ste-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="ste-modal-title">Görevi Sil</div>
+      <div class="ste-modal-msg"><strong>@Model.Name</strong> görevini silmek istediğinize emin misiniz?</div>
+      <div class="ste-modal-actions">
+        <button class="ste-modal-cancel" onclick="steCloseModal()">Vazgeç</button>
+        <button class="ste-modal-del" id="ste-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var idVal     = document.getElementById('ste-id')?.value || '';
+    var isBuiltin = document.getElementById('ste-is-builtin')?.value === '1';
+    var initType  = @Model.TaskType;
+    var initSched = @Model.ScheduleType;
+    var initParams = @Html.Raw(string.IsNullOrWhiteSpace(Model.ParametersJson) ? "null" : Model.ParametersJson);
+
+    /* ── Tabs ── */
+    document.querySelectorAll('.ste-tab').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.ste-tab').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('.ste-panel').forEach(function (p) { p.classList.remove('active'); });
+            btn.classList.add('active');
+            var panel = document.getElementById('panel-' + btn.dataset.tab);
+            if (panel) panel.classList.add('active');
+        });
+    });
+
+    /* ── Task type cards ── */
+    document.querySelectorAll('.ste-type-card').forEach(function (card) {
+        card.addEventListener('click', function () {
+            document.querySelectorAll('.ste-type-card').forEach(function (c) { c.classList.remove('selected'); });
+            card.classList.add('selected');
+            var val = card.querySelector('input').value;
+            showTypePanel(val);
+        });
+    });
+
+    function showTypePanel(val) {
+        ['tp-sql','tp-http','tp-currency','tp-report'].forEach(function (id) {
+            var el = document.getElementById(id); if (el) el.style.display = 'none';
+        });
+        var map = {'1':'tp-sql','2':'tp-http','4':'tp-currency','5':'tp-report'};
+        var target = document.getElementById(map[val]);
+        if (target) target.style.display = 'block';
+        if (val === '5') loadDbViews();
+    }
+    showTypePanel(String(initType));
+
+    /* ── Schedule type buttons ── */
+    document.querySelectorAll('.ste-sched-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.ste-sched-btn').forEach(function (b) { b.classList.remove('selected'); });
+            document.querySelectorAll('.ste-sched-panel').forEach(function (p) { p.classList.remove('active'); });
+            btn.classList.add('selected');
+            var sp = document.getElementById('sp-' + btn.dataset.sched);
+            if (sp) sp.classList.add('active');
+        });
+    });
+
+    /* ── Day toggle ── */
+    document.querySelectorAll('.ste-day-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () { btn.classList.toggle('on'); });
+    });
+
+    /* ── KV list helpers ── */
+    window.kvAdd = function (listId) {
+        var list = document.getElementById(listId); if (!list) return;
+        var row = document.createElement('div'); row.className = 'ste-kv-row';
+        row.innerHTML = '<input class="ste-input" placeholder="Anahtar" />'
+            + '<input class="ste-input" placeholder="Değer" />'
+            + '<button class="ste-kv-del" onclick="this.parentNode.remove()" title="Kaldır">'
+            + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+            + '</button>';
+        list.appendChild(row);
+    };
+    window.kvAddSingle = function (listId, ph) {
+        var list = document.getElementById(listId); if (!list) return;
+        var row = document.createElement('div'); row.className = 'ste-kv-row';
+        row.innerHTML = '<input class="ste-input" placeholder="' + ph + '" />'
+            + '<button class="ste-kv-del" onclick="this.parentNode.remove()" title="Kaldır">'
+            + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+            + '</button>';
+        list.appendChild(row);
+    };
+
+    function kvGetPairs(listId) {
+        var obj = {}; var rows = document.querySelectorAll('#' + listId + ' .ste-kv-row');
+        rows.forEach(function (r) {
+            var inputs = r.querySelectorAll('input');
+            var k = (inputs[0]?.value || '').trim();
+            var v = (inputs[1]?.value || '').trim();
+            if (k) obj[k] = v;
+        });
+        return obj;
+    }
+    function kvGetList(listId) {
+        return Array.from(document.querySelectorAll('#' + listId + ' input')).map(function (i) { return i.value.trim(); }).filter(Boolean);
+    }
+    function kvSetPairs(listId, obj) {
+        if (!obj) return;
+        Object.entries(obj).forEach(function (e) {
+            kvAdd(listId);
+            var rows = document.querySelectorAll('#' + listId + ' .ste-kv-row');
+            var last = rows[rows.length - 1];
+            if (last) {
+                var inputs = last.querySelectorAll('input');
+                if (inputs[0]) inputs[0].value = e[0];
+                if (inputs[1]) inputs[1].value = e[1];
+            }
+        });
+    }
+    function kvSetList(listId, arr, ph) {
+        if (!arr) return;
+        arr.forEach(function (v) {
+            kvAddSingle(listId, ph || '');
+            var rows = document.querySelectorAll('#' + listId + ' .ste-kv-row');
+            var last = rows[rows.length - 1];
+            if (last) { var inp = last.querySelector('input'); if (inp) inp.value = v; }
+        });
+    }
+
+    /* ── Load DB views for ViewReport ── */
+    var dbViewsLoaded = false;
+    function loadDbViews() {
+        if (dbViewsLoaded) return; dbViewsLoaded = true;
+        fetch('/Admin/ScheduledTasks/DbViews').then(function (r) { return r.json(); }).then(function (views) {
+            var sel = document.getElementById('ste-view-name'); if (!sel) return;
+            sel.innerHTML = '<option value="">— Seçiniz —</option>';
+            views.forEach(function (v) {
+                var opt = document.createElement('option');
+                opt.value = v; opt.textContent = v;
+                sel.appendChild(opt);
+            });
+            if (initParams?.viewName) sel.value = initParams.viewName;
+        }).catch(function () {});
+    }
+
+    /* ── Init existing params ── */
+    (function initExistingParams() {
+        if (!initParams || isBuiltin) return;
+        var p = initParams;
+        if (initType === 1) {
+            var procEl = document.getElementById('ste-proc'); if (procEl) procEl.value = p.procedureName || '';
+            kvSetPairs('kv-sql-params', p.parameters);
+        } else if (initType === 2) {
+            var mEl = document.getElementById('ste-http-method'); if (mEl && p.method) mEl.value = p.method;
+            var uEl = document.getElementById('ste-http-url'); if (uEl) uEl.value = p.url || '';
+            kvSetPairs('kv-http-headers', p.headers);
+            var bEl = document.getElementById('ste-http-body'); if (bEl) bEl.value = p.body || '';
+        } else if (initType === 5) {
+            loadDbViews();
+            var fEl = document.getElementById('ste-report-format'); if (fEl && p.format) fEl.value = p.format;
+            var sEl = document.getElementById('ste-report-subject'); if (sEl) sEl.value = p.subject || '';
+            kvSetList('kv-recipients', p.recipients, 'E-posta adresi');
+        }
+    })();
+
+    /* ── Init schedule expression ── */
+    (function initSchedExpr() {
+        var expr = @Html.Raw(Model.ScheduleExpression != null ? $"\"{Model.ScheduleExpression}\"" : "null");
+        if (!expr) return;
+        if (initSched === 0) { var el = document.getElementById('ste-interval'); if (el) el.value = expr; }
+        else if (initSched === 1) { var el = document.getElementById('ste-cron'); if (el) el.value = expr; }
+        else if (initSched === 2) { var el = document.getElementById('ste-daily-time'); if (el) el.value = expr; }
+        else if (initSched === 3) {
+            var el = document.getElementById('ste-once-dt');
+            if (el) { try { el.value = new Date(expr).toISOString().slice(0,16); } catch(e){} }
+        }
+        else if (initSched === 5) {
+            var parts = expr.split('|');
+            var tEl = document.getElementById('ste-weekly-time'); if (tEl) tEl.value = parts[0] || '';
+            var days = (parts[1] || '').split(',').map(function (d) { return d.trim(); });
+            document.querySelectorAll('#weekly-days .ste-day-btn').forEach(function (btn) {
+                if (days.includes(btn.dataset.day)) btn.classList.add('on');
+            });
+        }
+        else if (initSched === 6) {
+            var parts = expr.split('|');
+            var tEl = document.getElementById('ste-monthly-time'); if (tEl) tEl.value = parts[0] || '';
+            var dEl = document.getElementById('ste-monthly-days'); if (dEl) dEl.value = parts[1] || '';
+        }
+    })();
+
+    /* ── Init prereq select ── */
+    (function () {
+        var prereqEl = document.getElementById('ste-prereq');
+        if (prereqEl && @(Model.PrerequisiteTaskId.HasValue ? Model.PrerequisiteTaskId.Value.ToString() : "0")) {
+            prereqEl.value = '@(Model.PrerequisiteTaskId ?? 0)';
+        }
+    })();
+
+    /* ── Collect parameters JSON ── */
+    function collectParamsJson(taskType) {
+        if (taskType === 1) {
+            return JSON.stringify({ procedureName: (document.getElementById('ste-proc')?.value || '').trim(), parameters: kvGetPairs('kv-sql-params') });
+        } else if (taskType === 2) {
+            return JSON.stringify({ url: (document.getElementById('ste-http-url')?.value || '').trim(), method: document.getElementById('ste-http-method')?.value || 'POST', headers: kvGetPairs('kv-http-headers'), body: (document.getElementById('ste-http-body')?.value || '').trim() });
+        } else if (taskType === 4) {
+            return '{}';
+        } else if (taskType === 5) {
+            return JSON.stringify({ viewName: document.getElementById('ste-view-name')?.value || '', format: document.getElementById('ste-report-format')?.value || 'xlsx', subject: (document.getElementById('ste-report-subject')?.value || '').trim(), recipients: kvGetList('kv-recipients') });
+        }
+        return null;
+    }
+
+    /* ── Collect schedule expression ── */
+    function collectScheduleExpression(schedType) {
+        if (schedType === 0) return (document.getElementById('ste-interval')?.value || '').trim();
+        if (schedType === 1) return (document.getElementById('ste-cron')?.value || '').trim();
+        if (schedType === 2) return (document.getElementById('ste-daily-time')?.value || '').trim();
+        if (schedType === 3) {
+            var v = document.getElementById('ste-once-dt')?.value;
+            return v ? new Date(v).toISOString() : '';
+        }
+        if (schedType === 4) return '';
+        if (schedType === 5) {
+            var t = document.getElementById('ste-weekly-time')?.value || '';
+            var days = Array.from(document.querySelectorAll('#weekly-days .ste-day-btn.on')).map(function (b) { return b.dataset.day; }).join(',');
+            return t + '|' + days;
+        }
+        if (schedType === 6) {
+            var t = document.getElementById('ste-monthly-time')?.value || '';
+            var d = (document.getElementById('ste-monthly-days')?.value || '').trim();
+            return t + '|' + d;
+        }
+        return '';
+    }
+
+    /* ── CSRF ── */
+    function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function setErr(msg) { var el = document.getElementById('ste-err'); if (!el) return; if (msg) { el.textContent = msg; el.style.display = ''; } else { el.style.display = 'none'; } }
+
+    /* ── Save ── */
+    var saveBtn = document.getElementById('ste-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            var name = (document.getElementById('ste-name')?.value || '').trim();
+            if (!name) { setErr('Görev adı zorunludur.'); return; }
+
+            var selectedTypeCard = document.querySelector('.ste-type-card.selected input');
+            var taskType = selectedTypeCard ? parseInt(selectedTypeCard.value) : initType;
+            var selectedSchedBtn = document.querySelector('.ste-sched-btn.selected');
+            var schedType = selectedSchedBtn ? parseInt(selectedSchedBtn.dataset.sched) : initSched;
+
+            var payload = {
+                id:                 idVal ? parseInt(idVal) : 0,
+                name:               name,
+                description:        (document.getElementById('ste-desc')?.value || '').trim() || null,
+                taskType:           taskType,
+                parametersJson:     collectParamsJson(taskType),
+                scheduleType:       schedType,
+                scheduleExpression: collectScheduleExpression(schedType),
+                scheduleDescription: (document.getElementById('ste-sched-desc')?.value || '').trim() || null,
+                isEnabled:          document.getElementById('ste-enabled')?.checked ?? true,
+                prerequisiteTaskId: parseInt(document.getElementById('ste-prereq')?.value) || null,
+            };
+
+            saveBtn.disabled = true; setErr('');
+            fetch('/Admin/ScheduledTasks/Save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify(payload),
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.success) { window.location.href = '/Admin/ScheduledTasks'; }
+                else { setErr((d && d.message) || 'Kayıt başarısız.'); saveBtn.disabled = false; }
+            })
+            .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
+        });
+    }
+
+    /* ── Delete ── */
+    var deleteBtn = document.getElementById('ste-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            document.getElementById('ste-modal').style.display = 'flex';
+            document.getElementById('ste-modal-del').focus();
+        });
+        var modalDel = document.getElementById('ste-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled = true; modalDel.textContent = 'Siliniyor…';
+                fetch('/Admin/ScheduledTasks/' + idVal + '/Delete', {
+                    method: 'POST', headers: { 'RequestVerificationToken': csrf() }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.success) { window.location.href = '/Admin/ScheduledTasks'; }
+                    else { steCloseModal(); setErr((d && d.message) || 'Silinemedi.'); }
+                })
+                .catch(function () { steCloseModal(); setErr('Bağlantı hatası.'); });
+            });
+        }
+    }
+
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') steCloseModal(); });
+})();
+
+function steCloseModal() {
+    var m = document.getElementById('ste-modal'); if (m) m.style.display = 'none';
+    var btn = document.getElementById('ste-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
+</script>
+}

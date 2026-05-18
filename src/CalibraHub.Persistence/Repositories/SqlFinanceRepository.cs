@@ -47,7 +47,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
 
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt]
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],[ContactGroupId]
             FROM {_tableName}
             {where}
             ORDER BY [AccountCode];
@@ -74,7 +74,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
 
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],[ContactGroupId],
                    COUNT(*) OVER() AS [_TotalCount]
             FROM {_tableName}
             {where}
@@ -131,7 +131,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt]
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],[ContactGroupId]
             FROM {_tableName}
             WHERE [CompanyId] = @CompanyId AND [Id] = @Id;
             """;
@@ -162,9 +162,9 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_tableName}
-                ([CompanyId],[AccountType],[AccountCode],[AccountTitle],[TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt])
+                ([CompanyId],[AccountType],[AccountCode],[AccountTitle],[TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],[ContactGroupId])
             VALUES
-                (@CompanyId,@AccountType,@AccountCode,@AccountTitle,@TaxNumber,@IdentityNumber,@TaxOffice,@Phone,@Mobile,@Email,@Website,@Address,@PostalCode,@City,@District,@Neighborhood,@CountryCode,@ContactPerson,@IsActive,@PriceGroupId,@SalesRepresentativeId,@WaPhone,@WaName,@CreatedAt);
+                (@CompanyId,@AccountType,@AccountCode,@AccountTitle,@TaxNumber,@IdentityNumber,@TaxOffice,@Phone,@Mobile,@Email,@Website,@Address,@PostalCode,@City,@District,@Neighborhood,@CountryCode,@ContactPerson,@IsActive,@PriceGroupId,@SalesRepresentativeId,@WaPhone,@WaName,@CreatedAt,@ContactGroupId);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
         // Kayit anindaki oturum kullanicisinin sirketinden cek; claim yoksa 1 (default).
@@ -204,7 +204,8 @@ public sealed class SqlFinanceRepository : IFinanceRepository
                 [PriceGroupId]   = @PriceGroupId,
                 [SalesRepresentativeId] = @SalesRepresentativeId,
                 [WaPhone]        = @WaPhone,
-                [WaName]         = @WaName
+                [WaName]         = @WaName,
+                [ContactGroupId] = @ContactGroupId
             WHERE [CompanyId] = @CompanyId AND [Id] = @Id;
             """;
         AddParams(cmd, account);
@@ -241,7 +242,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
-                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt]
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],[ContactGroupId]
             FROM {_tableName}
             WHERE [CompanyId] = @CompanyId AND [IsActive] = 1 AND [PriceGroupId] = @PriceGroupId
             ORDER BY [AccountCode];
@@ -278,6 +279,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         cmd.Parameters.Add(new SqlParameter("@SalesRepresentativeId", (object?)a.SalesRepresentativeId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@WaPhone",        (object?)a.WaPhone        ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@WaName",         (object?)a.WaName         ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@ContactGroupId", (object?)a.ContactGroupId ?? DBNull.Value));
     }
 
     private static Contact MapRow(SqlDataReader r) => new()
@@ -306,6 +308,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         SalesRepresentativeId = r.IsDBNull(21) ? null : r.GetInt32(21),
         WaPhone        = r.IsDBNull(22) ? null : r.GetString(22),
         WaName         = r.IsDBNull(23) ? null : r.GetString(23),
-        CreatedAt      = r.GetDateTime(24)
+        CreatedAt      = r.GetDateTime(24),
+        ContactGroupId = r.IsDBNull(25) ? null : r.GetInt32(25)
     };
 }

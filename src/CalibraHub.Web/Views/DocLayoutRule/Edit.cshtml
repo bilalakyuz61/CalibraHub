@@ -1,0 +1,892 @@
+@model CalibraHub.Web.Controllers.DocLayoutRuleController.DocLayoutRuleEditVm
+@{
+    ViewData["Title"] = Model.Id == 0 ? "Yeni Tasarım Kuralı" : "Tasarım Kuralı Düzenle";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var docTypes  = (Dictionary<string, string>)(ViewBag.DocTypes ?? new Dictionary<string, string>());
+    var layouts   = (IEnumerable<CalibraHub.Application.Contracts.DocLayoutSummaryDto>)(ViewBag.Layouts ?? Array.Empty<CalibraHub.Application.Contracts.DocLayoutSummaryDto>());
+    var users     = (IEnumerable<dynamic>)(ViewBag.Users ?? Array.Empty<object>());
+    var locations = (IEnumerable<dynamic>)(ViewBag.Locations ?? Array.Empty<object>());
+    var selectedCustomerName = (string?)(ViewBag.SelectedCustomerName as string);
+}
+
+@*
+    Tasarım Kuralı Editör — tab-sheet layout (DataSourceModal patern'i ile uyumlu).
+    Sol sidebar: tab menü (Hedef / Cariler / Kullanıcılar / Diğer)
+    Sağ panel: aktif tab içeriği
+    Header: başlık + Aktif switch
+    Çoklu seçim: Cari ve Kullanıcı için chip-based multi-select; backend cartesian product ile N kural oluşturur.
+*@
+
+<style>
+    .trf-shell {
+        /* SABIT GENISLIK — tab degisince icerik miktari shell'i daraltmasin.
+           width:100% + max-width ikilisi: dar ekranda taşmasin (responsive),
+           geniş ekranda 920'ye kilitli kalsin. */
+        width: 100%; max-width: 920px; margin: 24px auto;
+        background: var(--app-surface, #fff);
+        border: 1px solid var(--app-border, #e5e7eb);
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        overflow: hidden;
+        color: var(--app-text, #111827);
+        display: flex; flex-direction: column;
+    }
+
+    /* Header — başlık + Aktif switch */
+    .trf-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--app-border, #e5e7eb);
+        background: var(--app-surface-alt, #fafbfc);
+    }
+    .trf-header h2 { margin: 0 0 2px; font-size: 16px; font-weight: 700; color: var(--app-text, #111827); }
+    .trf-header p  { margin: 0; color: var(--app-text-muted, #6b7280); font-size: 12px; }
+
+    /* Aktif switch */
+    .trf-switch {
+        display: flex; align-items: center; gap: 10px;
+        font-size: 12.5px; color: var(--app-text, #374151); font-weight: 500;
+    }
+    .trf-switch input[type=checkbox] { display: none; }
+    .trf-switch .track {
+        position: relative; width: 38px; height: 22px; border-radius: 11px;
+        background: var(--app-border, #d1d5db); transition: background 0.18s;
+        cursor: pointer;
+    }
+    .trf-switch .thumb {
+        position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+        border-radius: 50%; background: #fff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+        transition: transform 0.18s;
+    }
+    .trf-switch input:checked + .track { background: #10b981; }
+    .trf-switch input:checked + .track .thumb { transform: translateX(16px); }
+
+    /* Body: sol tabs + sağ form
+       SABİT YÜKSEKLİK — tab değişince modal boyutu büyüyüp küçülmesin (kullanıcı raporu).
+       İçerik gerekirse sağ panel kendi içinde scroll olur (overflow-y:auto). */
+    .trf-body { display: flex; height: 520px; }
+
+    .trf-tabs {
+        width: 180px; padding: 12px 8px; flex-shrink: 0;
+        background: var(--app-surface-alt, #f8f9fb);
+        border-right: 1px solid var(--app-border, #e5e7eb);
+        display: flex; flex-direction: column; gap: 2px;
+    }
+    .trf-tab {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 12px; border: none; background: transparent;
+        border-radius: 6px; cursor: pointer; text-align: left;
+        font-size: 12.5px; font-weight: 500; color: var(--app-text, #374151);
+        border-left: 3px solid transparent;
+    }
+    .trf-tab:hover { background: rgba(99,102,241,0.06); }
+    .trf-tab.active {
+        background: rgba(99,102,241,0.12); color: #6366f1; font-weight: 700;
+        border-left-color: #6366f1;
+    }
+    .trf-tab .ic { width: 14px; text-align: center; font-size: 13px; }
+    .trf-tab .badge {
+        margin-left: auto; min-width: 18px; padding: 1px 6px;
+        background: #6366f1; color: #fff; border-radius: 9px;
+        font-size: 10px; font-weight: 700; text-align: center;
+    }
+
+    .trf-content {
+        flex: 1; padding: 18px 22px; overflow-y: auto; min-width: 0;
+    }
+    .trf-content.hidden { display: none; }
+
+    /* Field grid */
+    .trf-row { display: grid; grid-template-columns: 160px 1fr; gap: 12px 14px; align-items: center; margin-bottom: 12px; }
+    .trf-row label { font-size: 12.5px; color: var(--app-text, #374151); font-weight: 500; }
+    .trf-row .hint { color: var(--app-text-muted, #9ca3af); font-weight: 400; font-size: 10.5px; margin-left: 4px; }
+    .trf-row input[type=text], .trf-row input[type=number], .trf-row select {
+        width: 100%; padding: 8px 10px; border: 1px solid var(--app-border, #d1d5db);
+        border-radius: 6px; font-size: 13px; box-sizing: border-box;
+        background: var(--app-surface, #fff); color: var(--app-text, #111);
+    }
+    .trf-row input:focus, .trf-row select:focus {
+        outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+
+    /* Açıklama kartları */
+    .trf-info {
+        padding: 10px 12px; border-radius: 6px; font-size: 11.5px; line-height: 1.5;
+        background: rgba(99,102,241,0.08); border-left: 3px solid #6366f1;
+        color: var(--app-text, #4338ca);
+        margin-bottom: 14px;
+    }
+    .trf-info strong { color: #4338ca; }
+
+    /* Weight bilgi kartı */
+    .weight-card {
+        padding: 12px 14px;
+        background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25);
+        border-radius: 8px;
+    }
+    .weight-card .title { font-size: 12.5px; font-weight: 700; color: #047857; }
+    .weight-card .desc  { font-size: 11px; color: #065f46; margin-top: 4px; line-height: 1.5; }
+    .weight-card.wildcard { background: rgba(107,114,128,0.08); border-color: rgba(107,114,128,0.25); }
+    .weight-card.wildcard .title { color: #4b5563; }
+    .weight-card.wildcard .desc  { color: #6b7280; }
+
+    /* Multi-select — search üstte, eklenen kayıtlar altta liste şeklinde.
+       Liste sabit yükseklik + kendi scroll'u; tab geçişinde panel boyu sabit kalir. */
+    .chip-wrap { position: relative; }
+    .chip-list {
+        margin-top: 10px;
+        display: flex; flex-direction: column; gap: 4px;
+        max-height: 280px; overflow-y: auto;
+        padding: 4px;
+        border: 1px dashed var(--app-border, #e5e7eb);
+        border-radius: 8px;
+        background: var(--app-surface-alt, #fafbfc);
+    }
+    .chip-list:empty::before {
+        content: 'Henüz eklenmedi — yukarıdan arayıp seçin';
+        display: block; text-align: center;
+        padding: 16px 8px; font-size: 12px;
+        color: var(--app-text-muted, #9ca3af); font-style: italic;
+    }
+    .chip {
+        display: flex; align-items: center; gap: 10px;
+        padding: 6px 10px; border-radius: 6px;
+        background: var(--app-surface, #fff);
+        border: 1px solid var(--app-border, #e5e7eb);
+        color: var(--app-text, #111827); font-size: 12.5px; font-weight: 500;
+        transition: background 0.12s, border-color 0.12s;
+    }
+    .chip:hover { background: rgba(99,102,241,0.06); border-color: rgba(99,102,241,0.30); }
+    /* Kod + isim TEK SATIR, yan yana — code monospace pill, sonra label.
+       Uzun isim ellipsis ile kisalir; satir boyu sabit. */
+    .chip .chip-main {
+        flex: 1; min-width: 0;
+        display: flex; flex-direction: row; align-items: center; gap: 8px;
+        overflow: hidden;
+    }
+    .chip .code {
+        flex-shrink: 0;
+        font-family: 'JetBrains Mono','Consolas',monospace;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+        padding: 2px 7px; border-radius: 4px;
+        background: rgba(99,102,241,0.10); color: #4338ca;
+        white-space: nowrap;
+    }
+    .chip .chip-label {
+        flex: 1; min-width: 0;
+        color: var(--app-text, #111827); font-weight: 600;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .chip .x {
+        flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 22px; height: 22px; border-radius: 4px;
+        cursor: pointer; color: #9ca3af; font-size: 16px; line-height: 1;
+        user-select: none; border: 1px solid transparent;
+        transition: all 0.12s;
+    }
+    .chip .x:hover { color: #fff; background: #dc2626; border-color: #dc2626; }
+
+    /* Autocomplete dropdown */
+    .ac-input {
+        width: 100%; padding: 8px 10px; border: 1px solid var(--app-border, #d1d5db);
+        border-radius: 6px; font-size: 13px; box-sizing: border-box;
+        background: var(--app-surface, #fff); color: var(--app-text, #111);
+    }
+    .ac-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+    .ac-results {
+        position: absolute; left: 0; right: 0; top: 100%; z-index: 20;
+        background: var(--app-surface, #fff); border: 1px solid var(--app-border, #e5e7eb);
+        border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+        max-height: 240px; overflow-y: auto; margin-top: 2px;
+    }
+    .ac-results .item {
+        padding: 7px 11px; font-size: 12.5px; cursor: pointer;
+        border-bottom: 1px solid var(--app-border, #f3f4f6);
+        color: var(--app-text, #374151);
+    }
+    .ac-results .item:last-child { border-bottom: none; }
+    .ac-results .item:hover, .ac-results .item.focused { background: rgba(99,102,241,0.10); }
+    .ac-results .item .code { color: var(--app-text-muted, #9ca3af); font-size: 11px; margin-left: 6px; }
+    .ac-results .empty { padding: 10px 12px; color: var(--app-text-muted, #9ca3af); font-size: 12px; text-align: center; }
+
+    /* Footer */
+    .trf-footer {
+        display: flex; justify-content: flex-end; gap: 8px;
+        padding: 12px 20px;
+        border-top: 1px solid var(--app-border, #e5e7eb);
+        background: var(--app-surface-alt, #fafbfc);
+    }
+    .btn-primary {
+        /* min-width ile "Oluştur" ↔ "Kaydediliyor…" gecisinde boyut atlamasi olmasin. */
+        padding: 8px 18px; min-width: 140px; border-radius: 6px; border: 1px solid #6366f1;
+        background: #6366f1; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+        text-align: center;
+    }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary {
+        padding: 8px 18px; border-radius: 6px; border: 1px solid var(--app-border, #d1d5db);
+        background: var(--app-surface, #fff); color: var(--app-text, #374151);
+        font-size: 13px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center;
+    }
+
+    /* Toast */
+    .toast {
+        position: fixed; top: 16px; right: 16px; z-index: 9999;
+        padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    }
+    .toast.error  { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .toast.success{ background: #f0fdf4; color: #047857; border: 1px solid #86efac; }
+
+    /* ── Dark theme — body.app-theme-dark için kapsamlı override ──
+       --app-* değişkenleri site.css'te dark mode için tanımlı değil; fallback'ler (#fff, #111)
+       düşer ve form karanlık kanvasta beyaz blok görünür. Tüm yüzey/text/border renklerini
+       açıkça override ediyoruz. */
+    body.app-theme-dark .trf-shell {
+        background: #161b27; color: #e2e8f0; border-color: #2a3347;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+    }
+    body.app-theme-dark .trf-header {
+        background: #1c2336; border-bottom-color: #2a3347;
+    }
+    body.app-theme-dark .trf-header h2 { color: #e2e8f0; }
+    body.app-theme-dark .trf-header p  { color: #94a3b8; }
+
+    body.app-theme-dark .trf-tabs {
+        background: #1c2336; border-right-color: #2a3347;
+    }
+    body.app-theme-dark .trf-tab { color: #cbd5e1; }
+    body.app-theme-dark .trf-tab:hover { background: rgba(129,140,248,0.12); }
+    body.app-theme-dark .trf-tab.active {
+        background: rgba(129,140,248,0.20); color: #c7d2fe;
+        border-left-color: #818cf8;
+    }
+
+    body.app-theme-dark .trf-content { background: #161b27; color: #e2e8f0; }
+    body.app-theme-dark .trf-row label { color: #cbd5e1; }
+    body.app-theme-dark .trf-row .hint { color: #64748b; }
+    body.app-theme-dark .trf-row input[type=text],
+    body.app-theme-dark .trf-row input[type=number],
+    body.app-theme-dark .trf-row select {
+        background: #0e1116; color: #e2e8f0; border-color: #2a3347;
+    }
+    body.app-theme-dark .trf-row input:focus,
+    body.app-theme-dark .trf-row select:focus {
+        border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129,140,248,0.20);
+    }
+
+    body.app-theme-dark .trf-switch .track { background: #374360; }
+    body.app-theme-dark #activeLabel { color: #cbd5e1; }
+
+    body.app-theme-dark .trf-info {
+        background: rgba(129,140,248,0.12); border-left-color: #818cf8; color: #c7d2fe;
+    }
+    body.app-theme-dark .trf-info strong { color: #c7d2fe; }
+
+    body.app-theme-dark #multiNote {
+        background: rgba(245,158,11,0.14) !important;
+        border-left-color: #f59e0b !important;
+        color: #fcd34d !important;
+    }
+
+    body.app-theme-dark .weight-card {
+        background: rgba(16,185,129,0.14); border-color: rgba(16,185,129,0.30);
+    }
+    body.app-theme-dark .weight-card .title { color: #6ee7b7; }
+    body.app-theme-dark .weight-card .desc  { color: #a7f3d0; }
+    body.app-theme-dark .weight-card.wildcard {
+        background: rgba(148,163,184,0.10); border-color: rgba(148,163,184,0.30);
+    }
+    body.app-theme-dark .weight-card.wildcard .title { color: #cbd5e1; }
+    body.app-theme-dark .weight-card.wildcard .desc  { color: #94a3b8; }
+
+    body.app-theme-dark .chip-list {
+        background: rgba(15,19,30,0.45);
+        border-color: rgba(148,163,184,0.20);
+    }
+    body.app-theme-dark .chip-list:empty::before { color: #64748b; }
+    body.app-theme-dark .chip {
+        background: rgba(30,38,57,0.65); border-color: rgba(148,163,184,0.18); color: #e2e8f0;
+    }
+    body.app-theme-dark .chip:hover {
+        background: rgba(99,102,241,0.16); border-color: rgba(129,140,248,0.45);
+    }
+    body.app-theme-dark .chip .chip-label { color: #f1f5f9; }
+    body.app-theme-dark .chip .code {
+        background: rgba(129,140,248,0.18); color: #c7d2fe;
+    }
+    body.app-theme-dark .chip .x { color: #94a3b8; }
+    body.app-theme-dark .chip .x:hover { color: #fff; background: #ef4444; border-color: #ef4444; }
+
+    body.app-theme-dark .ac-input {
+        background: #0e1116; color: #e2e8f0; border-color: #2a3347;
+    }
+    body.app-theme-dark .ac-input:focus {
+        border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129,140,248,0.20);
+    }
+    body.app-theme-dark .ac-results {
+        background: #161b27; border-color: #2a3347;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+    body.app-theme-dark .ac-results .item {
+        color: #cbd5e1; border-bottom-color: #2a3347;
+    }
+    body.app-theme-dark .ac-results .item:hover,
+    body.app-theme-dark .ac-results .item.focused {
+        background: rgba(129,140,248,0.16);
+    }
+    body.app-theme-dark .ac-results .item .code { color: #64748b; }
+    body.app-theme-dark .ac-results .empty { color: #64748b; }
+
+    body.app-theme-dark .trf-footer {
+        background: #1c2336; border-top-color: #2a3347;
+    }
+    body.app-theme-dark .btn-secondary {
+        background: #1c2336; color: #cbd5e1; border-color: #2a3347;
+    }
+    body.app-theme-dark .btn-secondary:hover {
+        background: #2a3347; border-color: #374360;
+    }
+    body.app-theme-dark .btn-primary {
+        background: #818cf8; border-color: #818cf8; color: #0a0d17;
+    }
+    body.app-theme-dark .btn-primary:hover { background: #a5b4fc; }
+
+    body.app-theme-dark .toast.error  {
+        background: rgba(220,38,38,0.18); color: #fca5a5; border-color: rgba(220,38,38,0.5);
+    }
+    body.app-theme-dark .toast.success {
+        background: rgba(16,185,129,0.18); color: #6ee7b7; border-color: rgba(16,185,129,0.5);
+    }
+</style>
+
+<div class="trf-shell">
+    @* Header: başlık + Aktif switch *@
+    <div class="trf-header">
+        <div>
+            <h2>@(Model.Id == 0 ? "Yeni Tasarım Kuralı" : "Tasarım Kuralı Düzenle")</h2>
+            <p>Belge basılırken hangi tasarımın kullanılacağını belirler. Boş kriter = "tüm değerler" anlamına gelir.</p>
+        </div>
+        <label class="trf-switch" title="Aktif kuralları belge basımında kullanılır">
+            <span id="activeLabel">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+            <input id="IsActive" name="IsActive" type="checkbox" value="true" @(Model.IsActive ? "checked" : "") onchange="onActiveToggle()" />
+            <span class="track"><span class="thumb"></span></span>
+        </label>
+    </div>
+
+    <form id="ruleForm" method="post" action="/DocLayoutRule/SaveJson" onsubmit="return saveRule(event)" style="display:contents">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="Id" value="@Model.Id" />
+
+        @* Aktif checkbox header'a taşındı; hidden field gerekmiyor — header'daki gerçek checkbox form'a dahil. *@
+
+        @* Multi-select payloads (CSV) *@
+        <input type="hidden" id="CustomerIds" name="CustomerIds" value="@(Model.CustomerId?.ToString() ?? "")" />
+        <input type="hidden" id="UserIds"     name="UserIds"     value="@(Model.UserId ?? "")" />
+
+        @* Backward-compat: tek değer ile mevcut backend desteği *@
+        <input type="hidden" id="CustomerId"  name="CustomerId"  value="@(Model.CustomerId?.ToString() ?? "")" />
+        <input type="hidden" id="UserId"      name="UserId"      value="@(Model.UserId ?? "")" />
+
+        @* Şube — UI'dan gizli *@
+        <input type="hidden" id="BranchId"    name="BranchId"    value="@(Model.BranchId?.ToString() ?? "")" />
+
+        <div class="trf-body">
+            @* Sol tab menü *@
+            <div class="trf-tabs">
+                <button type="button" class="trf-tab active" data-tab="target">
+                    <span class="ic">◎</span><span>Hedef</span>
+                </button>
+                <button type="button" class="trf-tab" data-tab="customers">
+                    <span class="ic">★</span><span>Cariler</span>
+                    <span class="badge" id="badgeCustomers" style="display:none">0</span>
+                </button>
+                <button type="button" class="trf-tab" data-tab="users">
+                    <span class="ic">👥</span><span>Kullanıcılar</span>
+                    <span class="badge" id="badgeUsers" style="display:none">0</span>
+                </button>
+                <button type="button" class="trf-tab" data-tab="other">
+                    <span class="ic">⚙</span><span>Diğer</span>
+                </button>
+                <button type="button" class="trf-tab" data-tab="summary">
+                    <span class="ic">⚖</span><span>Özet</span>
+                </button>
+            </div>
+
+            @* Sağ içerik panelleri *@
+            <div class="trf-content" data-panel="target">
+                <div class="trf-row">
+                    <label for="DocType">Belge Tipi <span class="hint">*</span></label>
+                    <select id="DocType" name="DocType" required onchange="onDocTypeChange()">
+                        <option value="">— Seçin —</option>
+                        @foreach (var kvp in docTypes)
+                        {
+                            <option value="@kvp.Key" selected="@(Model.DocType == kvp.Key)">@kvp.Value</option>
+                        }
+                    </select>
+                </div>
+                <div class="trf-row">
+                    <label for="LayoutId">Tasarım <span class="hint">*</span></label>
+                    <select id="LayoutId" name="LayoutId" required>
+                        <option value="0">— Seçin —</option>
+                        @foreach (var l in layouts)
+                        {
+                            <option value="@l.Id" selected="@(Model.LayoutId == l.Id)" data-doctype="@l.DocType">
+                                @l.Name (@l.Code)
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="trf-info">
+                    <strong>Hedef:</strong> Hangi belge tipi basılırken hangi tasarımın kullanılacağı.
+                    Kriterler boş bırakılırsa tüm değerler için (wildcard) geçerli olur.
+                </div>
+            </div>
+
+            <div class="trf-content hidden" data-panel="customers">
+                <div class="trf-row" style="align-items:flex-start">
+                    <label>Cariler <span class="hint">(ağırlık: 16)</span></label>
+                    <div class="chip-wrap">
+                        <input id="customerSearch" type="text" class="ac-input" autocomplete="off"
+                               placeholder="Cari adı/kodu ile ara… (boş = tüm cariler)"
+                               oninput="onCustomerSearch(this.value)"
+                               onfocus="onCustomerSearch(this.value)"
+                               onblur="setTimeout(hideCustomerResults, 200)" />
+                        <div id="customerResults" class="ac-results" style="display:none"></div>
+                        <div id="customerChips" class="chip-list"></div>
+                    </div>
+                </div>
+                <div class="trf-info">
+                    <strong>Çoklu seçim:</strong> Birden fazla cari eklerseniz, her cari için ayrı bir kural oluşturulur
+                    (cartesian product). 3 cari + 2 kullanıcı = 6 kural. Hiç eklemezseniz "tüm cariler" anlamına gelir.
+                </div>
+            </div>
+
+            <div class="trf-content hidden" data-panel="users">
+                <div class="trf-row" style="align-items:flex-start">
+                    <label>Kullanıcılar <span class="hint">(ağırlık: 4)</span></label>
+                    <div class="chip-wrap">
+                        <input id="userSearch" type="text" class="ac-input" autocomplete="off"
+                               placeholder="Kullanıcı adı/e-posta ile ara…"
+                               oninput="onUserSearch(this.value)"
+                               onfocus="onUserSearch(this.value)"
+                               onblur="setTimeout(hideUserResults, 200)" />
+                        <div id="userResults" class="ac-results" style="display:none"></div>
+                        <div id="userChips" class="chip-list"></div>
+                    </div>
+                </div>
+                <div class="trf-info">
+                    <strong>Çoklu seçim:</strong> Birden fazla kullanıcı seçerseniz her biri için ayrı kural oluşur.
+                    Hiç seçmezseniz "tüm kullanıcılar" anlamına gelir.
+                </div>
+            </div>
+
+            <div class="trf-content hidden" data-panel="other">
+                <div class="trf-row">
+                    <label for="ContactGroupId">Cari Grubu <span class="hint">(ağırlık: 8)</span></label>
+                    <select id="ContactGroupId" name="ContactGroupId" onchange="updateWeight()" data-selected="@(Model.ContactGroupId?.ToString() ?? "")">
+                        <option value="">— Tüm gruplar (wildcard) —</option>
+                    </select>
+                </div>
+                <div class="trf-row">
+                    <label for="WarehouseId">Depo <span class="hint">(ağırlık: 1)</span></label>
+                    <select id="WarehouseId" name="WarehouseId" onchange="updateWeight()">
+                        <option value="">— Tüm depolar (wildcard) —</option>
+                        @foreach (var loc in locations)
+                        {
+                            string locId = loc.id.ToString();
+                            <option value="@locId" selected="@(Model.WarehouseId.HasValue && Model.WarehouseId.Value.ToString() == locId)">
+                                @loc.name
+                            </option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="trf-content hidden" data-panel="summary">
+                <div id="weightCard" class="weight-card wildcard">
+                    <div class="title" id="weightTitle">⚖ Ağırlık: 0 — Wildcard</div>
+                    <div class="desc" id="weightDesc">Bu kural tüm değerler için geçerli. Aynı belge tipinde daha spesifik kural varsa onlar öncelikli olur.</div>
+                </div>
+                <div class="trf-info" style="margin-top:14px">
+                    <strong>Ağırlık sistemi (2^n):</strong> Cari=16, Grup=8, Kullanıcı=4, Şube=2, Depo=1.
+                    Her kriter eklenince ağırlığa katkı verir. Toplam ağırlığı en yüksek olan kural seçilir.
+                </div>
+                <div id="multiNote" class="trf-info" style="display:none; margin-top:10px; background:rgba(245,158,11,0.10); border-left-color:#f59e0b; color:#92400e">
+                    <strong>Çoklu kural önizleme:</strong> <span id="multiCount">0</span> kural oluşturulacak
+                    (<span id="multiCustomers">0</span> cari × <span id="multiUsers">0</span> kullanıcı).
+                </div>
+            </div>
+        </div>
+
+        <div class="trf-footer">
+            <a href="/DocLayoutRule" class="btn-secondary">İptal</a>
+            <button type="submit" class="btn-primary" id="saveBtn">
+                @(Model.Id == 0 ? "Oluştur" : "Kaydet")
+            </button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+<script>
+    // ── Tab geçişleri ─────────────────────────────────────────────────────
+    document.querySelectorAll('.trf-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var key = btn.getAttribute('data-tab');
+            document.querySelectorAll('.trf-tab').forEach(function(b) { b.classList.toggle('active', b === btn); });
+            document.querySelectorAll('.trf-content').forEach(function(c) {
+                c.classList.toggle('hidden', c.getAttribute('data-panel') !== key);
+            });
+        });
+    });
+
+    // ── Toast ─────────────────────────────────────────────────────────────
+    // Not: global `toast` ismini kullanmiyoruz — Layout veya widget bundle
+    // başka bir global `toast` (string/objesi) tanimliyor ve fonksiyonu gölge ediyor.
+    function dlrToast(message, kind) {
+        var t = document.createElement('div');
+        t.className = 'toast ' + (kind || 'success');
+        t.textContent = message;
+        document.body.appendChild(t);
+        setTimeout(function() { t.style.opacity = '0'; setTimeout(function() { t.remove(); }, 200); }, 3500);
+    }
+
+    // ── Aktif switch label senkronu ───────────────────────────────────────
+    function onActiveToggle() {
+        var v = document.getElementById('IsActive').checked;
+        document.getElementById('activeLabel').textContent = v ? 'Aktif' : 'Pasif';
+    }
+
+    // ── Cascading: DocType değişince Layout'ları filtrele ─────────────────
+    function onDocTypeChange() {
+        var docType = document.getElementById('DocType').value;
+        var layoutSel = document.getElementById('LayoutId');
+        Array.from(layoutSel.options).forEach(function(opt) {
+            if (!opt.value || opt.value === '0') { opt.hidden = false; return; }
+            opt.hidden = docType && opt.dataset.doctype !== docType;
+        });
+        var sel = layoutSel.options[layoutSel.selectedIndex];
+        if (sel && sel.hidden) layoutSel.value = '0';
+    }
+
+    // ── Multi-select state ───────────────────────────────────────────────
+    var selectedCustomers = []; // [{id, label, code}]
+    var selectedUsers     = []; // [{id, label, email}]
+
+    // İlk yükleme — Model'den gelen single değerleri chip listesine koy
+    @if (Model.CustomerId.HasValue)
+    {
+        <text>
+        selectedCustomers.push({
+            id: @Model.CustomerId.Value,
+            label: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(selectedCustomerName ?? $"Cari #{Model.CustomerId.Value}")),
+            code: ''
+        });
+        </text>
+    }
+    @if (!string.IsNullOrEmpty(Model.UserId))
+    {
+        var matchedUser = users.FirstOrDefault(u => u.id.ToString() == Model.UserId);
+        var userLabel = matchedUser != null ? $"{matchedUser.name}" : $"Kullanıcı";
+        var userEmail = matchedUser != null ? $"{matchedUser.email}" : "";
+        <text>
+        selectedUsers.push({
+            id: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.UserId)),
+            label: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(userLabel)),
+            email: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(userEmail))
+        });
+        </text>
+    }
+
+    function renderCustomerChips() {
+        var box = document.getElementById('customerChips');
+        box.innerHTML = selectedCustomers.map(function(c, i) {
+            var codeStr = c.code ? '<span class="code">' + escapeHtml(c.code) + '</span>' : '';
+            return '<div class="chip">'
+                +    '<span class="chip-main">'
+                +        codeStr
+                +        '<span class="chip-label">' + escapeHtml(c.label) + '</span>'
+                +    '</span>'
+                +    '<span class="x" data-idx="' + i + '" title="Kaldır">×</span>'
+                + '</div>';
+        }).join('');
+        box.querySelectorAll('.x').forEach(function(el) {
+            el.addEventListener('click', function() {
+                var idx = parseInt(el.getAttribute('data-idx'), 10);
+                selectedCustomers.splice(idx, 1);
+                renderCustomerChips(); syncHiddenFields(); updateWeight();
+            });
+        });
+        // Badge
+        var b = document.getElementById('badgeCustomers');
+        b.textContent = selectedCustomers.length;
+        b.style.display = selectedCustomers.length > 0 ? 'inline-block' : 'none';
+    }
+    function renderUserChips() {
+        var box = document.getElementById('userChips');
+        box.innerHTML = selectedUsers.map(function(u, i) {
+            // Kullanıcı tarafında "kod karşılığı" yok — e-posta sağda, isim solda (daha okunaklı).
+            var em = u.email ? '<span class="code">' + escapeHtml(u.email) + '</span>' : '';
+            return '<div class="chip">'
+                +    '<span class="chip-main">'
+                +        '<span class="chip-label">' + escapeHtml(u.label) + '</span>'
+                +        em
+                +    '</span>'
+                +    '<span class="x" data-idx="' + i + '" title="Kaldır">×</span>'
+                + '</div>';
+        }).join('');
+        box.querySelectorAll('.x').forEach(function(el) {
+            el.addEventListener('click', function() {
+                var idx = parseInt(el.getAttribute('data-idx'), 10);
+                selectedUsers.splice(idx, 1);
+                renderUserChips(); syncHiddenFields(); updateWeight();
+            });
+        });
+        var b = document.getElementById('badgeUsers');
+        b.textContent = selectedUsers.length;
+        b.style.display = selectedUsers.length > 0 ? 'inline-block' : 'none';
+    }
+
+    function syncHiddenFields() {
+        // CSV array fields
+        document.getElementById('CustomerIds').value = selectedCustomers.map(c => c.id).join(',');
+        document.getElementById('UserIds').value     = selectedUsers.map(u => u.id).join(',');
+        // Backward-compat single fields — birinci seçili değer
+        document.getElementById('CustomerId').value  = selectedCustomers[0]?.id ?? '';
+        document.getElementById('UserId').value      = selectedUsers[0]?.id     ?? '';
+    }
+
+    // ── Cari autocomplete (AJAX) ──────────────────────────────────────────
+    var customerSearchTimer = null;
+    function onCustomerSearch(q) {
+        clearTimeout(customerSearchTimer);
+        var trimmed = (q || '').trim();
+        customerSearchTimer = setTimeout(function() {
+            var url = '/DocLayoutRule/SearchContactsJson' + (trimmed.length > 0 ? '?q=' + encodeURIComponent(trimmed) : '');
+            fetch(url, { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(rows) { renderCustomerResults(rows || []); })
+                .catch(function() { renderCustomerResults([]); });
+        }, 250);
+    }
+
+    function renderCustomerResults(rows) {
+        var box = document.getElementById('customerResults');
+        var existing = new Set(selectedCustomers.map(c => c.id));
+        var filtered = rows.filter(r => !existing.has(r.id));
+        if (!filtered.length) {
+            box.innerHTML = '<div class="empty">Eşleşen veya kalan cari yok</div>';
+        } else {
+            box.innerHTML = filtered.map(function(r) {
+                return '<div class="item" data-id="' + r.id + '"'
+                    + ' data-label="' + escapeHtml(r.label) + '"'
+                    + ' data-code="'  + escapeHtml(r.code || '') + '">'
+                    + escapeHtml(r.label)
+                    + (r.code ? '<span class="code">' + escapeHtml(r.code) + '</span>' : '')
+                    + '</div>';
+            }).join('');
+        }
+        box.style.display = 'block';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var cBox = document.getElementById('customerResults');
+        cBox?.addEventListener('mousedown', function(e) {
+            var item = e.target.closest('.item');
+            if (!item || !cBox.contains(item)) return;
+            e.preventDefault();
+            var id = parseInt(item.getAttribute('data-id'), 10);
+            var label = item.getAttribute('data-label') || '';
+            var code  = item.getAttribute('data-code')  || '';
+            if (!selectedCustomers.find(c => c.id === id)) {
+                selectedCustomers.push({ id, label, code });
+                renderCustomerChips(); syncHiddenFields(); updateWeight();
+            }
+            document.getElementById('customerSearch').value = '';
+            hideCustomerResults();
+        });
+
+        var uBox = document.getElementById('userResults');
+        uBox?.addEventListener('mousedown', function(e) {
+            var item = e.target.closest('.item');
+            if (!item || !uBox.contains(item)) return;
+            e.preventDefault();
+            var id    = item.getAttribute('data-id');
+            var label = item.getAttribute('data-label') || '';
+            var email = item.getAttribute('data-code')  || '';
+            if (!selectedUsers.find(u => u.id === id)) {
+                selectedUsers.push({ id, label, email });
+                renderUserChips(); syncHiddenFields(); updateWeight();
+            }
+            document.getElementById('userSearch').value = '';
+            hideUserResults();
+        });
+
+        renderCustomerChips();
+        renderUserChips();
+        loadContactGroups();
+        onDocTypeChange();
+        updateWeight();
+    });
+
+    function hideCustomerResults() { document.getElementById('customerResults').style.display = 'none'; }
+    function hideUserResults()     { document.getElementById('userResults').style.display     = 'none'; }
+
+    // ── Kullanıcı search (statik liste lokal filter) ─────────────────────
+    var ALL_USERS = [
+        @foreach (var u in users)
+        {
+            string userIdStr = u.id.ToString();
+            <text>{ id: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(userIdStr)),
+                    label: @Html.Raw(System.Text.Json.JsonSerializer.Serialize((string)u.name)),
+                    email: @Html.Raw(System.Text.Json.JsonSerializer.Serialize((string)u.email)) },</text>
+        }
+    ];
+
+    function onUserSearch(q) {
+        var trimmed = (q || '').trim().toLowerCase();
+        var existing = new Set(selectedUsers.map(u => u.id));
+        var filtered = ALL_USERS
+            .filter(u => !existing.has(u.id))
+            .filter(u => !trimmed || (u.label && u.label.toLowerCase().includes(trimmed))
+                                  || (u.email && u.email.toLowerCase().includes(trimmed)))
+            .slice(0, 30);
+        var box = document.getElementById('userResults');
+        if (filtered.length === 0) {
+            box.innerHTML = '<div class="empty">Eşleşen veya kalan kullanıcı yok</div>';
+        } else {
+            box.innerHTML = filtered.map(function(u) {
+                return '<div class="item" data-id="' + escapeHtml(u.id) + '"'
+                    + ' data-label="' + escapeHtml(u.label) + '"'
+                    + ' data-code="'  + escapeHtml(u.email) + '">'
+                    + escapeHtml(u.label)
+                    + '<span class="code">' + escapeHtml(u.email) + '</span>'
+                    + '</div>';
+            }).join('');
+        }
+        box.style.display = 'block';
+    }
+
+    // ── Cari Grubu (AJAX yükleme) ─────────────────────────────────────────
+    function loadContactGroups() {
+        var sel = document.getElementById('ContactGroupId');
+        if (!sel) return;
+        var currentSelected = sel.getAttribute('data-selected') || '';
+        fetch('/DocLayoutRule/ContactGroupsJson', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : [])
+            .then(rows => {
+                (rows || []).forEach(function(g) {
+                    var o = document.createElement('option');
+                    o.value = String(g.id);
+                    o.textContent = g.name + (g.code ? ' (' + g.code + ')' : '');
+                    if (currentSelected && String(g.id) === currentSelected) o.selected = true;
+                    sel.appendChild(o);
+                });
+                updateWeight();
+            })
+            .catch(function() {});
+    }
+
+    // ── Ağırlık önizlemesi ────────────────────────────────────────────────
+    function updateWeight() {
+        var hasCustomer = selectedCustomers.length > 0;
+        var hasUser     = selectedUsers.length > 0;
+        var group       = (document.getElementById('ContactGroupId')?.value || '').trim();
+        var branch      = (document.getElementById('BranchId')?.value || '').trim();
+        var warehouse   = (document.getElementById('WarehouseId')?.value || '').trim();
+
+        var weight = 0, crits = [];
+        if (hasCustomer) { weight += 16; crits.push('Cari'); }
+        if (group)       { weight += 8;  crits.push('Grup'); }
+        if (hasUser)     { weight += 4;  crits.push('Kullanıcı'); }
+        if (branch)      { weight += 2;  crits.push('Şube'); }
+        if (warehouse)   { weight += 1;  crits.push('Depo'); }
+
+        var card  = document.getElementById('weightCard');
+        var title = document.getElementById('weightTitle');
+        var desc  = document.getElementById('weightDesc');
+
+        if (weight === 0) {
+            card.classList.add('wildcard');
+            title.textContent = '⚖ Ağırlık: 0 — Wildcard';
+            desc.textContent  = 'Bu kural tüm değerler için geçerli. Aynı belge tipinde daha spesifik kural varsa onlar öncelikli olur.';
+        } else {
+            card.classList.remove('wildcard');
+            title.textContent = '⚖ Ağırlık: ' + weight + ' — ' + crits.join(' + ');
+            var compare;
+            if      (weight >= 24) compare = 'Çok yüksek öncelikli — neredeyse hep bu kural seçilir.';
+            else if (weight >= 16) compare = 'Yüksek öncelikli — Cari-bazlı kurallar bunu seçer.';
+            else if (weight >= 8)  compare = 'Orta öncelikli — Grup-bazlı kurallar bunu seçer.';
+            else                   compare = 'Düşük öncelikli — sadece tamamen wildcard kuralları geçer.';
+            desc.textContent = compare;
+        }
+
+        // Çoklu kural önizleme
+        var ccount = Math.max(1, selectedCustomers.length);
+        var ucount = Math.max(1, selectedUsers.length);
+        var total  = ccount * ucount;
+        var note = document.getElementById('multiNote');
+        if (selectedCustomers.length > 1 || selectedUsers.length > 1) {
+            note.style.display = 'block';
+            document.getElementById('multiCount').textContent     = total;
+            document.getElementById('multiCustomers').textContent = ccount;
+            document.getElementById('multiUsers').textContent     = ucount;
+        } else {
+            note.style.display = 'none';
+        }
+    }
+
+    // ── Save (AJAX) ──────────────────────────────────────────────────────
+    function saveRule(e) {
+        e.preventDefault();
+        var btn = document.getElementById('saveBtn');
+        var origText = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+        var navigatedAway = false;
+        function resetBtn() { if (!navigatedAway) { btn.disabled = false; btn.textContent = origText; } }
+
+        syncHiddenFields();
+        var form = document.getElementById('ruleForm');
+        var fd   = new FormData(form);
+        if (!fd.has('IsActive')) fd.append('IsActive', 'false');
+
+        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var timeoutId = setTimeout(function() { try { ctrl?.abort(); } catch (_) {} }, 30000);
+
+        fetch('/DocLayoutRule/SaveJson', {
+            method: 'POST', body: fd, credentials: 'same-origin',
+            redirect: 'manual', signal: ctrl ? ctrl.signal : undefined,
+        })
+        .then(function(r) {
+            if (r.type === 'opaqueredirect' || r.status === 0) throw new Error('Oturum süreniz dolmuş olabilir.');
+            return r.text().then(function(body) {
+                if (!r.ok) throw new Error('Sunucu hatası (HTTP ' + r.status + ').');
+                try { return JSON.parse(body); } catch { throw new Error('Geçersiz sunucu yanıtı.'); }
+            });
+        })
+        .then(function(res) {
+            if (res && res.ok) {
+                var msg = res.count > 1 ? (res.count + ' kural kaydedildi.') : 'Kural başarıyla kaydedildi.';
+                dlrToast(msg, 'success');
+                navigatedAway = true;
+                setTimeout(function() { window.location.href = '/DocLayoutRule'; }, 700);
+            } else {
+                dlrToast((res && res.error) || 'Kayıt sırasında hata.', 'error');
+            }
+        })
+        .catch(function(err) { dlrToast(err?.message || 'Ağ hatası.', 'error'); })
+        .finally(function() { clearTimeout(timeoutId); resetBtn(); });
+        return false;
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function(c) {
+            return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+        });
+    }
+</script>
+}

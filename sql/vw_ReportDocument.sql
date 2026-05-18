@@ -165,39 +165,45 @@ SELECT
                                            AS SirketVergiSatiri,
 
     dl.[id]                                AS KalemId,
-    dl.[line_no]                           AS SiraNo,
-    dl.[quantity]                          AS Miktar,
-    dl.[unit_price]                        AS BirimFiyat,
-    dl.[discount_rate]                     AS KalemIskontoOrani,
-    dl.[line_total]                        AS SatirToplami,
-    dl.[combination_id]                    AS KombinasyonId,
-    dl.[notes]                             AS KalemNotu,
-    dl.[notes_pinned]                      AS KalemNotuSabitli,
+    dl.[LineNo]                            AS SiraNo,
+    dl.[Quantity]                          AS Miktar,
+    dl.[UnitPrice]                         AS BirimFiyat,
+    dl.[DiscountRate]                      AS KalemIskontoOrani,
+    dl.[LineTotal]                         AS SatirToplami,
+    dl.[CombinationId]                     AS KombinasyonId,
+    dl.[Notes]                             AS KalemNotu,
+    dl.[NotesPinned]                       AS KalemNotuSabitli,
 
-    dl.[item_id]                           AS MalzemeId,
+    dl.[ItemId]                            AS MalzemeId,
     i.[code]                               AS MalzemeKodu,
     i.[name]                               AS MalzemeAdi,
     i.[description]                        AS MalzemeAciklamasi,
     i.[tax_rate]                           AS MalzemeKdvOrani,
 
-    dl.[unit_id]                           AS BirimId,
+    dl.[UnitId]                            AS BirimId,
     mu.[code]                              AS BirimKodu,
     mu.[name]                              AS BirimAdi,
 
-    dl.[location_id]                       AS LokasyonId,
+    dl.[LocationId]                        AS LokasyonId,
     loc.[code]                             AS LokasyonKodu,
     loc.[name]                             AS LokasyonAdi
 ' + @HwColsSql + @LwColsSql + N'
 FROM [dbo].[Document] d
-LEFT JOIN [dbo].[DocumentLine]   dl   ON dl.[document_id] = d.[id]
+-- Revize edilmis eski satirlar (revised_from_id dolu ve > 0) raporda gorunmez;
+-- yalnizca orijinal / aktif satirlar (NULL veya 0) JOIN e girer. ON icine konuyor
+-- ki revisyon olmayan belgeler de gorunmeye devam etsin (LEFT JOIN korunsun).
+LEFT JOIN [dbo].[DocumentLine]   dl   ON dl.[DocumentId] = d.[id]
+                                      AND (dl.[RevisedFromId] IS NULL OR dl.[RevisedFromId] = 0)
 LEFT JOIN [dbo].[Contact]        c    ON c.[Id]           = d.[contact_id]
 LEFT JOIN [dbo].[sales_reps]     sr   ON sr.[id]          = d.[sales_rep_id]
 LEFT JOIN [dbo].[document_types] dt   ON dt.[id]          = d.[document_type_id]
-LEFT JOIN [dbo].[Items]          i    ON i.[id]           = dl.[item_id]
-LEFT JOIN [dbo].[measure_units]  mu   ON mu.[id]          = dl.[unit_id]
-LEFT JOIN [dbo].[locations]      loc  ON loc.[id]         = dl.[location_id]
+LEFT JOIN [dbo].[Items]          i    ON i.[id]           = dl.[ItemId]
+LEFT JOIN [dbo].[measure_units]  mu   ON mu.[id]          = dl.[UnitId]
+LEFT JOIN [dbo].[locations]      loc  ON loc.[id]         = dl.[LocationId]
 ' + @HwJoin + @LwJoin + N'
-LEFT JOIN [' + @MasterDbName + N'].[dbo].[Company] comp ON comp.[id] = d.[company_id];';
+LEFT JOIN [' + @MasterDbName + N'].[dbo].[Company] comp ON comp.[id] = d.[company_id]
+-- Sadece aktif belgeler: silinmis/pasif (IsActive = 0) Document kayitlari raporda gorunmez.
+WHERE d.[IsActive] = 1;';
 
     EXEC sp_executesql @Sql;
 END;

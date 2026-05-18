@@ -1,0 +1,243 @@
+@model CalibraHub.Web.Models.SalesRepEditViewModel
+@{
+    var isNew = Model.Id == null;
+    ViewData["Title"]    = isNew ? "Yeni Satış Temsilcisi" : $"Temsilci: {Model.RepName}";
+    ViewData["FormCode"] = "SALES_REPS";
+    ViewData["BodyClass"] = "page-sre";
+}
+
+@section Styles {
+<style>
+.sre-root {
+    --sre-bg:      #f1f5f9; --sre-surface: #ffffff; --sre-border: #e2e8f0;
+    --sre-text:    #0f172a; --sre-muted:   #64748b; --sre-accent: #6366f1;
+    display: flex; align-items: flex-start; justify-content: center;
+    min-height: 100%; padding: 32px 16px; background: var(--sre-bg);
+}
+body.app-theme-dark .sre-root {
+    --sre-bg: #080c17; --sre-surface: #0d1323;
+    --sre-border: rgba(255,255,255,.09); --sre-text: #e2e8f0; --sre-muted: #94a3b8;
+}
+.sre-card {
+    width: 100%; max-width: 560px; background: var(--sre-surface);
+    border: 1px solid var(--sre-border); border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08); overflow: hidden;
+}
+.sre-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 18px 24px; border-bottom: 1px solid var(--sre-border);
+}
+.sre-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--sre-text); flex: 1; }
+.sre-back {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border-radius: 8px; border: 1px solid var(--sre-border); background: none;
+    color: var(--sre-muted); font-size: 13px; cursor: pointer;
+    text-decoration: none; transition: background .12s; flex-shrink: 0;
+}
+.sre-back:hover { background: var(--sre-bg); color: var(--sre-text); }
+.sre-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 18px; border-radius: 8px; border: 1px solid transparent;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: all .12s; flex-shrink: 0;
+}
+.sre-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
+.sre-btn--primary:hover { background: #4f46e5; }
+.sre-btn--danger { background: transparent; border-color: rgba(239,68,68,.35); color: #ef4444; }
+.sre-btn--danger:hover { background: rgba(239,68,68,.08); }
+.sre-body { padding: 24px; }
+.sre-rows { display: flex; flex-direction: column; }
+.sre-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 0; border-bottom: 1px solid var(--sre-border);
+}
+.sre-row:last-child { border-bottom: none; }
+.sre-row > label:first-child {
+    width: 120px; min-width: 120px; flex-shrink: 0;
+    font-size: 13px; font-weight: 600; color: var(--sre-muted);
+}
+.sre-required::after { content: ' *'; color: #ef4444; }
+.sre-input {
+    padding: 8px 12px; border-radius: 8px;
+    background: var(--sre-bg); border: 1px solid var(--sre-border);
+    color: var(--sre-text); font-size: 14px;
+    transition: border-color .15s; outline: none;
+}
+.sre-input:focus {
+    border-color: var(--sre-accent);
+    box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+.sre-input.is-invalid {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 3px rgba(239,68,68,.15) !important;
+    animation: sreShake 0.4s ease both;
+}
+@@keyframes sreShake {
+    10%, 90% { transform: translateX(-2px); }
+    20%, 80% { transform: translateX(3px); }
+    30%, 50%, 70% { transform: translateX(-3px); }
+    40%, 60% { transform: translateX(3px); }
+}
+.sre-msg { margin-top: 14px; padding: 8px 14px; border-radius: 8px; font-size: 13px; }
+.sre-msg.ok  { background: rgba(16,185,129,.1); color: #059669; border: 1px solid rgba(16,185,129,.25); }
+.sre-msg.err { background: rgba(239,68,68,.1);  color: #dc2626; border: 1px solid rgba(239,68,68,.25); }
+body.app-theme-dark .sre-msg.ok  { color: #34d399; }
+body.app-theme-dark .sre-msg.err { color: #f87171; }
+/* Confirm modal */
+.sre-modal-backdrop {
+    position: fixed; inset: 0; z-index: 9990;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+}
+.sre-modal {
+    background: var(--sre-surface); border: 1px solid var(--sre-border);
+    border-radius: 14px; padding: 28px 32px; max-width: 420px; width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3); text-align: center;
+}
+.sre-modal-icon { margin-bottom: 12px; display: flex; justify-content: center; }
+.sre-modal h2 { font-size: 18px; font-weight: 700; color: var(--sre-text); margin: 0 0 8px; }
+.sre-modal p { font-size: 14px; color: var(--sre-muted); margin: 0 0 20px; }
+.sre-modal-btns { display: flex; gap: 10px; justify-content: center; }
+</style>
+}
+
+<div class="sre-root">
+    <div class="sre-card">
+        <div class="sre-header">
+            <a href="/GeneralDefinitions/SalesRepresentatives" class="sre-back">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                Geri
+            </a>
+            <h1>@(isNew ? "Yeni Satış Temsilcisi" : Model.RepName)</h1>
+            @if (!isNew)
+            {
+                <button type="button" class="sre-btn sre-btn--danger" onclick="sreDelete()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    Sil
+                </button>
+            }
+            <button type="button" class="sre-btn sre-btn--primary" onclick="sreSave()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Kaydet
+            </button>
+        </div>
+        <div class="sre-body">
+            <input type="hidden" id="sreId" value="@Model.Id" />
+            <div class="sre-rows">
+                <div class="sre-row">
+                    <label for="sreName" class="sre-required">Ad</label>
+                    <input id="sreName" class="sre-input" value="@Model.RepName" maxlength="200" style="flex:1 1 auto;min-width:0;" />
+                </div>
+                <div class="sre-row">
+                    <label>Durum</label>
+                    <div class="form-check form-switch" style="margin:0;">
+                        <input id="sreIsActive" class="form-check-input" type="checkbox" role="switch" @(Model.IsActive ? "checked" : "") />
+                    </div>
+                </div>
+            </div>
+            <div id="sreMsg"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    window.sreSave = function() {
+        var nameEl = document.getElementById('sreName');
+        var name = nameEl.value.trim();
+        if (!name) { shakeInvalid(nameEl); return; }
+        var idVal = document.getElementById('sreId').value;
+        var payload = {
+            id: idVal ? parseInt(idVal) : null,
+            repName: name,
+            isActive: document.getElementById('sreIsActive').checked
+        };
+        fetch('/GeneralDefinitions/SaveSalesRepJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) {
+                window.location.href = '/GeneralDefinitions/SalesRepresentatives';
+            } else {
+                sreMsg(d.message || 'Kaydetme başarısız.', false);
+            }
+        })
+        .catch(function() { sreMsg('Sunucu hatası.', false); });
+    };
+
+    window.sreDelete = function() {
+        var id = parseInt(document.getElementById('sreId').value);
+        if (!id) return;
+        var repName = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.RepName));
+        showConfirm(repName).then(function(ok) {
+            if (!ok) return;
+            fetch('/GeneralDefinitions/DeleteSalesRepJson?id=' + id, { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.success) {
+                    window.location.href = '/GeneralDefinitions/SalesRepresentatives';
+                } else {
+                    sreMsg(d.message || 'Silinemedi.', false);
+                }
+            });
+        });
+    };
+
+    function showConfirm(repName) {
+        return new Promise(function(resolve) {
+            var backdrop = document.createElement('div');
+            backdrop.className = 'sre-modal-backdrop';
+            backdrop.innerHTML =
+                '<div class="sre-modal">' +
+                '<div class="sre-modal-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></div>' +
+                '<h2>Temsilci Silinsin Mi?</h2>' +
+                '<p>&ldquo;' + escHtml(repName) + '&rdquo; temsilcisini silmek istediğinizden emin misiniz?</p>' +
+                '<div class="sre-modal-btns">' +
+                    '<button class="sre-btn sre-btn--danger" id="sreConfirmOk">Evet, Sil</button>' +
+                    '<button class="sre-btn" style="border:1px solid var(--sre-border);background:none;color:var(--sre-muted);" id="sreConfirmCancel">Vazgeç</button>' +
+                '</div>' +
+                '</div>';
+            document.body.appendChild(backdrop);
+            function cleanup(result) { document.body.removeChild(backdrop); resolve(result); }
+            var okBtn = backdrop.querySelector('#sreConfirmOk');
+            okBtn.focus();
+            okBtn.onclick = function() { cleanup(true); };
+            backdrop.querySelector('#sreConfirmCancel').onclick = function() { cleanup(false); };
+            backdrop.onclick = function(e) { if (e.target === backdrop) cleanup(false); };
+            function keyHandler(e) {
+                if (e.key === 'Escape') { document.removeEventListener('keydown', keyHandler); cleanup(false); }
+                if (e.key === 'Enter')  { document.removeEventListener('keydown', keyHandler); cleanup(true); }
+            }
+            document.addEventListener('keydown', keyHandler);
+        });
+    }
+
+    function escHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function shakeInvalid(el) {
+        el.classList.remove('is-invalid');
+        void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function() { el.classList.remove('is-invalid'); }, 1200);
+    }
+
+    ['sreName'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { el.classList.remove('is-invalid'); });
+    });
+
+    function sreMsg(msg, ok) {
+        var el = document.getElementById('sreMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="sre-msg ' + (ok ? 'ok' : 'err') + '">' + escHtml(msg) + '</div>';
+        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    }
+})();
+</script>
+}

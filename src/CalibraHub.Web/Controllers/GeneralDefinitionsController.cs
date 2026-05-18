@@ -11,89 +11,83 @@ public sealed class GeneralDefinitionsController : Controller
 {
     private readonly ISalesRepresentativeService _salesRepService;
     private readonly ICurrencyService _currencyService;
+    private readonly ICariGroupService _cariGroupService;
 
-    public GeneralDefinitionsController(ISalesRepresentativeService salesRepService, ICurrencyService currencyService)
+    public GeneralDefinitionsController(
+        ISalesRepresentativeService salesRepService,
+        ICurrencyService currencyService,
+        ICariGroupService cariGroupService)
     {
-        _currencyService = currencyService;
-        _salesRepService = salesRepService;
+        _currencyService  = currencyService;
+        _salesRepService  = salesRepService;
+        _cariGroupService = cariGroupService;
     }
 
     [HttpGet]
-    public async Task<IActionResult> SalesRepresentatives(int? id, string? search, CancellationToken ct)
+    public async Task<IActionResult> SalesRepresentatives(CancellationToken ct)
     {
-        var all = await _salesRepService.GetAllAsync(ct);
-        var filtered = all.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            filtered = filtered.Where(x =>
-                x.RepCode.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                x.RepName.Contains(search, StringComparison.OrdinalIgnoreCase));
-        }
-
-        SalesRepresentativeInput input;
-        if (id.HasValue)
-        {
-            var existing = await _salesRepService.GetByIdAsync(id.Value, ct);
-            input = existing is not null
-                ? new SalesRepresentativeInput { Id = existing.Id, RepCode = existing.RepCode, RepName = existing.RepName, IsActive = existing.IsActive }
-                : new SalesRepresentativeInput();
-        }
-        else
-        {
-            input = new SalesRepresentativeInput();
-        }
-
-        return View(new SalesRepresentativeViewModel
-        {
-            Items = filtered.ToArray(),
-            Input = input,
-            Search = search,
-        });
+        var reps = await _salesRepService.GetAllAsync(ct);
+        return View(new SalesRepSmartBoardViewModel { BoardConfig = BuildSalesRepsBoardConfig(reps) });
     }
 
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveSalesRepresentative(
-        [Bind(Prefix = "Input")] SalesRepresentativeInput input,
-        string? search, CancellationToken ct)
+    [HttpGet("/GeneralDefinitions/SalesReps/BoardEntities")]
+    public async Task<IActionResult> SalesRepsBoardEntities(CancellationToken ct)
     {
-        if (!ModelState.IsValid)
-            return View(nameof(SalesRepresentatives), await BuildViewModel(input, search, ct));
-
-        int? savedId = input.Id;
-
-        if (input.Id.HasValue && input.Id.Value > 0)
-        {
-            var (ok, err) = await _salesRepService.UpdateAsync(
-                new UpdateSalesRepresentativeRequest(input.Id.Value, input.RepCode, input.RepName, input.IsActive), ct);
-            if (!ok) { ModelState.AddModelError("", err ?? "Guncelleme basarisiz."); return View(nameof(SalesRepresentatives), await BuildViewModel(input, search, ct)); }
-        }
-        else
-        {
-            var (ok, err, newId) = await _salesRepService.CreateAsync(
-                new CreateSalesRepresentativeRequest(input.RepCode, input.RepName, input.IsActive), ct);
-            if (!ok) { ModelState.AddModelError("", err ?? "Kayit basarisiz."); return View(nameof(SalesRepresentatives), await BuildViewModel(input, search, ct)); }
-            savedId = newId;
-        }
-
-        return RedirectToAction(nameof(SalesRepresentatives), new { id = savedId, search });
+        var reps = await _salesRepService.GetAllAsync(ct);
+        return Json(BuildSalesRepsBoardConfig(reps));
     }
 
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> DeleteSalesRepresentative(int id, string? search, CancellationToken ct)
+    [HttpGet("/GeneralDefinitions/SalesRepEdit")]
+    public async Task<IActionResult> SalesRepEdit(int? id, CancellationToken ct)
     {
-        await _salesRepService.DeleteAsync(id, ct);
-        return RedirectToAction(nameof(SalesRepresentatives), new { search });
+        if (!id.HasValue || id.Value <= 0)
+            return View(new SalesRepEditViewModel());
+        var item = await _salesRepService.GetByIdAsync(id.Value, ct);
+        if (item is null) return RedirectToAction(nameof(SalesRepresentatives));
+        return View(new SalesRepEditViewModel { Id = item.Id, RepName = item.RepName, IsActive = item.IsActive });
     }
 
-    private async Task<SalesRepresentativeViewModel> BuildViewModel(SalesRepresentativeInput input, string? search, CancellationToken ct)
+    [HttpPost("/GeneralDefinitions/SalesRepToggle")]
+    public async Task<IActionResult> SalesRepToggle([FromQuery] int id, [FromQuery] bool enabled, CancellationToken ct)
     {
-        var all = await _salesRepService.GetAllAsync(ct);
-        var filtered = all.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(search))
-            filtered = filtered.Where(x => x.RepCode.Contains(search, StringComparison.OrdinalIgnoreCase) || x.RepName.Contains(search, StringComparison.OrdinalIgnoreCase));
-        return new SalesRepresentativeViewModel { Items = filtered.ToArray(), Input = input, Search = search };
+        var item = await _salesRepService.GetByIdAsync(id, ct);
+        if (item is null) return Json(new { success = false, message = "Bulunamadı" });
+        var (ok, err) = await _salesRepService.UpdateAsync(
+            new UpdateSalesRepresentativeRequest(id, item.RepName, enabled), ct);
+        return Json(new { success = ok, message = err });
+    }
+
+    private static object BuildSalesRepsBoardConfig(IReadOnlyCollection<SalesRepresentativeDto> reps)
+    {
+        return new {
+            boardKey   = "sales-reps",
+            title      = "Satış Temsilcileri",
+            icon       = "Users",
+            iconColor  = "indigo",
+            emptyText  = "Henüz satış temsilcisi tanımlanmamış.",
+            refreshUrl = "/GeneralDefinitions/SalesReps/BoardEntities",
+            actions    = new[] {
+                new { id = "new", label = "Yeni Temsilci", icon = "Plus", variant = "primary", url = "/GeneralDefinitions/SalesRepEdit" }
+            },
+            entities = reps.Select(r => {
+                var editUrl = $"/GeneralDefinitions/SalesRepEdit?id={r.Id}";
+                return (object)new {
+                    id           = r.Id,
+                    title        = r.RepName,
+                    subtitle     = (string?)null,
+                    statusBadge  = new { label = r.IsActive ? "Aktif" : "Pasif", color = r.IsActive ? "emerald" : "slate" },
+                    primaryAction = new { type = "navigate", hideButton = true, url = editUrl },
+                    widgets      = Array.Empty<object>(),
+                    extraActions = new object[] {
+                        new { icon = "Edit2",  color = "amber",  tooltip = "Düzenle", type = "navigate", url = editUrl },
+                        r.IsActive
+                            ? (object)new { icon = "ToggleRight", color = "orange",  tooltip = "Devre Dışı Bırak", type = "api-post", url = $"/GeneralDefinitions/SalesRepToggle?id={r.Id}&enabled=false" }
+                            : (object)new { icon = "ToggleLeft",  color = "emerald", tooltip = "Etkinleştir",       type = "api-post", url = $"/GeneralDefinitions/SalesRepToggle?id={r.Id}&enabled=true"  },
+                        new { icon = "Trash2", color = "red",    tooltip = "Sil",    type = "api-post", url = $"/GeneralDefinitions/DeleteSalesRepJson?id={r.Id}", confirm = $"\"{r.RepName}\" temsilcisini silmek istediğinizden emin misiniz?" }
+                    }
+                };
+            }).ToArray()
+        };
     }
 
     // ── Satis Temsilcileri JSON API ─────────────────────────────────────
@@ -103,7 +97,7 @@ public sealed class GeneralDefinitionsController : Controller
     {
         var all = await _salesRepService.GetAllAsync(ct);
         if (!string.IsNullOrWhiteSpace(search))
-            all = all.Where(x => x.RepCode.Contains(search, StringComparison.OrdinalIgnoreCase) || x.RepName.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
+            all = all.Where(x => x.RepName.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
         return Json(all);
     }
 
@@ -117,16 +111,16 @@ public sealed class GeneralDefinitionsController : Controller
     [HttpPost]
     public async Task<IActionResult> SaveSalesRepJson([FromBody] SalesRepresentativeInput input, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(input.RepCode) || string.IsNullOrWhiteSpace(input.RepName))
-            return Json(new { success = false, message = "Kod ve ad bos olamaz." });
+        if (string.IsNullOrWhiteSpace(input.RepName))
+            return Json(new { success = false, message = "Ad boş olamaz." });
         if (input.Id.HasValue && input.Id.Value > 0)
         {
-            var (ok, err) = await _salesRepService.UpdateAsync(new UpdateSalesRepresentativeRequest(input.Id.Value, input.RepCode, input.RepName, input.IsActive), ct);
+            var (ok, err) = await _salesRepService.UpdateAsync(new UpdateSalesRepresentativeRequest(input.Id.Value, input.RepName, input.IsActive), ct);
             return Json(new { success = ok, message = err });
         }
         else
         {
-            var (ok, err, newId) = await _salesRepService.CreateAsync(new CreateSalesRepresentativeRequest(input.RepCode, input.RepName, input.IsActive), ct);
+            var (ok, err, newId) = await _salesRepService.CreateAsync(new CreateSalesRepresentativeRequest(input.RepName, input.IsActive), ct);
             return Json(new { success = ok, message = err, id = newId });
         }
     }
@@ -136,6 +130,112 @@ public sealed class GeneralDefinitionsController : Controller
     {
         var (ok, err) = await _salesRepService.DeleteAsync(id, ct);
         return Json(new { success = ok, message = err });
+    }
+
+    // ── Cari Gruplari ─────────────────────────────────────────────────────
+
+    [HttpGet]
+    public async Task<IActionResult> CariGroups(CancellationToken ct)
+    {
+        var groups = await _cariGroupService.GetAllAsync(ct);
+        return View(new CariGroupSmartBoardViewModel { BoardConfig = BuildCariGroupsBoardConfig(groups) });
+    }
+
+    [HttpGet("/GeneralDefinitions/CariGroups/BoardEntities")]
+    public async Task<IActionResult> CariGroupsBoardEntities(CancellationToken ct)
+    {
+        var groups = await _cariGroupService.GetAllAsync(ct);
+        return Json(BuildCariGroupsBoardConfig(groups));
+    }
+
+    [HttpGet("/GeneralDefinitions/CariGroupEdit")]
+    public async Task<IActionResult> CariGroupEdit(int? id, CancellationToken ct)
+    {
+        if (!id.HasValue || id.Value <= 0)
+            return View(new CariGroupEditViewModel());
+        var item = await _cariGroupService.GetByIdAsync(id.Value, ct);
+        if (item is null) return RedirectToAction(nameof(CariGroups));
+        return View(new CariGroupEditViewModel
+        {
+            Id = item.Id, Name = item.Name, SortOrder = item.SortOrder, IsActive = item.IsActive
+        });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveCariGroupJson([FromBody] CariGroupInput input, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(input.Name))
+            return Json(new { success = false, message = "Grup adi bos olamaz." });
+        if (input.Id.HasValue && input.Id.Value > 0)
+        {
+            var (ok, err) = await _cariGroupService.UpdateAsync(
+                new UpdateCariGroupRequest(input.Id.Value, input.Name, input.SortOrder, input.IsActive), ct);
+            return Json(new { success = ok, message = err });
+        }
+        else
+        {
+            var (ok, err, newId) = await _cariGroupService.CreateAsync(
+                new CreateCariGroupRequest(input.Name, input.SortOrder, input.IsActive), ct);
+            return Json(new { success = ok, message = err, id = newId });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteCariGroupJson(int id, CancellationToken ct)
+    {
+        var (ok, err) = await _cariGroupService.DeleteAsync(id, ct);
+        return Json(new { success = ok, message = err });
+    }
+
+    /// <summary>Cari grup dropdown'u icin JSON liste — ContactEdit ve DocLayoutRule/Edit ekranlari kullanir.</summary>
+    [HttpGet]
+    public async Task<IActionResult> GetCariGroups(CancellationToken ct)
+    {
+        var all = await _cariGroupService.GetAllAsync(ct);
+        return Json(all.Where(g => g.IsActive).Select(g => new { id = g.Id, name = g.Name, code = g.Code }));
+    }
+
+    private static object BuildCariGroupsBoardConfig(IReadOnlyCollection<CariGroupDto> groups)
+    {
+        return new {
+            boardKey   = "cari-groups",
+            title      = "Cari Gruplari",
+            icon       = "Users",
+            iconColor  = "indigo",
+            emptyText  = "Henuz cari grup tanimlanmamis.",
+            refreshUrl = "/GeneralDefinitions/CariGroups/BoardEntities",
+            actions    = new[] {
+                new { id = "new", label = "Yeni Grup", icon = "Plus", variant = "primary", url = "/GeneralDefinitions/CariGroupEdit" }
+            },
+            entities = groups.Select(g => {
+                var editUrl = $"/GeneralDefinitions/CariGroupEdit?id={g.Id}";
+                return (object)new {
+                    id            = g.Id,
+                    title         = g.Name,
+                    subtitle      = (string?)null,
+                    description   = (string?)null,
+                    statusBadge   = new { label = g.IsActive ? "Aktif" : "Pasif", color = g.IsActive ? "emerald" : "slate" },
+                    primaryAction = new { type = "navigate", hideButton = true, url = editUrl },
+                    widgets       = new object[] {
+                        new {
+                            id       = "w_sort",
+                            type     = "data",
+                            dataType = "numeric",
+                            label    = "Sira",
+                            value    = g.SortOrder.ToString(),
+                            detail   = (string?)null,
+                            color    = "indigo",
+                        }
+                    },
+                    extraActions = new object[] {
+                        new { icon = "Edit2",  color = "amber", tooltip = "Duzenle", type = "navigate", url = editUrl },
+                        new { icon = "Trash2", color = "red",   tooltip = "Sil",    type = "api-post",
+                              url = $"/GeneralDefinitions/DeleteCariGroupJson?id={g.Id}",
+                              confirm = $"\"{g.Name}\" grubunu silmek istediginizden emin misiniz?" }
+                    }
+                };
+            }).ToArray()
+        };
     }
 
     // ── Doviz Tanimlamalari ──────────────────────────────────────────────

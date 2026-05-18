@@ -1,0 +1,472 @@
+@model CalibraHub.Web.Controllers.IntegrationDocCatalogEnumEditViewModel
+@{
+    var isNew = Model.Enum == null;
+    ViewData["Title"]    = isNew ? "Yeni Enum Tanımı" : $"Enum: {Model.Enum!.Code}";
+    ViewData["FormCode"] = "INTEGRATION_DOC_ENUM_EDIT";
+    ViewData["BodyClass"] = "page-ide";
+}
+
+@section Styles {
+<style>
+    .ide-wrap {
+        --ide-bg: var(--app-bg, #f1f5f9);
+        --ide-surface: var(--app-surface, #ffffff);
+        --ide-surface-2: var(--app-surface-alt, #fafbfc);
+        --ide-border: var(--app-border, #e2e8f0);
+        --ide-text: var(--app-text, #0f172a);
+        --ide-muted: var(--app-text-muted, #64748b);
+        --ide-accent: #6366f1;
+        display: flex; align-items: flex-start; justify-content: center;
+        min-height: 100%; padding: 24px 16px; background: var(--ide-bg);
+        color: var(--ide-text);
+    }
+    body.app-theme-dark .ide-wrap, body.app-theme-midnight .ide-wrap {
+        --ide-bg: #080c17; --ide-surface: #0d1323; --ide-surface-2: #0a1020;
+        --ide-border: rgba(255,255,255,.09); --ide-text: #e2e8f0; --ide-muted: #94a3b8;
+    }
+    .ide-card { width: 100%; max-width: 980px; background: var(--ide-surface);
+        border: 1px solid var(--ide-border); border-radius: 14px; overflow: hidden; }
+    .ide-header { display: flex; align-items: center; gap: 10px;
+        padding: 18px 22px; border-bottom: 1px solid var(--ide-border);
+        background: var(--ide-surface-2); }
+    .ide-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ide-text); flex: 1; }
+    .ide-back, .ide-btn { display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 8px; border: 1px solid var(--ide-border);
+        background: none; color: var(--ide-muted); font-size: 13px; cursor: pointer;
+        text-decoration: none; }
+    .ide-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; padding: 8px 18px; font-weight: 600; }
+    .ide-btn--danger { background: transparent; border-color: rgba(239,68,68,.35); color: #ef4444; padding: 8px 18px; }
+    .ide-body { padding: 20px 24px; }
+    .ide-row { display: grid; grid-template-columns: 160px 1fr; gap: 10px 14px;
+        align-items: center; margin-bottom: 12px; }
+    .ide-row label { font-size: 12.5px; color: var(--ide-muted); font-weight: 600; }
+    .ide-row .hint { color: var(--ide-muted); font-size: 11px; margin-top: 2px; }
+    .ide-input { padding: 8px 12px; border-radius: 8px; background: var(--ide-surface-2);
+        border: 1px solid var(--ide-border); color: var(--ide-text); font-size: 13px;
+        width: 100%; box-sizing: border-box; font-family: inherit; outline: none; }
+    .ide-input:focus { border-color: var(--ide-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+    .ide-section { margin-top: 18px; padding: 14px;
+        background: var(--ide-surface-2); border: 1px solid var(--ide-border); border-radius: 10px; }
+    .ide-section-title { display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 10px; font-size: 13px; font-weight: 700; color: var(--ide-text); }
+    .ide-vrow { display: grid; grid-template-columns: 90px 1fr 140px 50px 36px;
+        gap: 6px; align-items: center; margin-bottom: 6px; }
+    .ide-vrow input { padding: 6px 10px; border-radius: 6px; background: var(--ide-surface);
+        border: 1px solid var(--ide-border); color: var(--ide-text); font-size: 12px;
+        font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .ide-vrow input:focus { outline: none; border-color: var(--ide-accent); }
+    .ide-del { width: 32px; height: 30px; border-radius: 6px;
+        border: 1px solid transparent; background: transparent;
+        color: var(--ide-muted); cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; }
+    .ide-del:hover { background: rgba(239,68,68,.10); color: #ef4444; }
+    .ide-msg { margin-top: 14px; padding: 8px 14px; border-radius: 8px; font-size: 13px; }
+    .ide-msg.ok  { background: rgba(16,185,129,.1); color: #059669; border: 1px solid rgba(16,185,129,.25); }
+    .ide-msg.err { background: rgba(239,68,68,.1);  color: #dc2626; border: 1px solid rgba(239,68,68,.25); }
+
+    /* Inline Provider modal */
+    .ide-prov-bd { position: fixed; inset: 0; z-index: 9990;
+        background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center; }
+    .ide-prov-modal { width: 92%; max-width: 460px;
+        background: var(--ide-surface); border: 1px solid var(--ide-border);
+        border-radius: 14px; padding: 22px 24px;
+        box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+    .ide-prov-modal h2 { margin: 0 0 4px; font-size: 16px; font-weight: 700; color: var(--ide-text); }
+    .ide-prov-modal .hint { font-size: 11.5px; color: var(--ide-muted); margin-bottom: 16px; display: block; }
+    .ide-prov-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; align-items: center; margin-bottom: 10px; }
+    .ide-prov-row label { font-size: 12px; color: var(--ide-muted); font-weight: 600; }
+    .ide-prov-row input, .ide-prov-row select { padding: 7px 10px; border-radius: 6px;
+        background: var(--ide-surface-2); border: 1px solid var(--ide-border);
+        color: var(--ide-text); font-size: 12.5px; outline: none; font-family: inherit; }
+    .ide-prov-row input:focus, .ide-prov-row select:focus { border-color: var(--ide-accent); }
+    .ide-prov-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .ide-prov-btn { padding: 7px 16px; border-radius: 7px; font-size: 12.5px; font-weight: 600;
+        cursor: pointer; border: 1px solid var(--ide-border); }
+    .ide-prov-btn--ghost { background: transparent; color: var(--ide-muted); }
+    .ide-prov-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
+</style>
+}
+
+<div class="ide-wrap">
+    <div class="ide-card">
+        <div class="ide-header">
+            <a href="/IntegrationDocCatalog/Enums" class="ide-back">← Geri</a>
+            <h1>@(isNew ? "Yeni Enum Tanımı" : Model.Enum!.Code)</h1>
+            @if (!isNew)
+            {
+                <button type="button" class="ide-btn ide-btn--danger" onclick="ideDelete()">Sil</button>
+            }
+            <button type="button" class="ide-btn ide-btn--primary" onclick="ideSave()">Kaydet</button>
+        </div>
+        <div class="ide-body">
+            <input type="hidden" id="ideId" value="@(Model.Enum?.Id ?? 0)" />
+
+            <div class="ide-row">
+                <label for="ideProvider">Provider *</label>
+                <div style="display:flex;gap:6px;align-items:stretch;">
+                    <select id="ideProvider" class="ide-input" style="flex:1 1 auto;">
+                        @foreach (var p in Model.Providers)
+                        {
+                            var selected = Model.Enum?.ProviderId == p.Id ? "selected" : "";
+                            <option value="@p.Id" selected="@(selected == "selected")">@p.Label (@p.Code)</option>
+                        }
+                    </select>
+                    <button type="button" id="ideAddProviderBtn" class="ide-btn"
+                            title="Yeni Provider Ekle (ör. SAP, Logo)"
+                            style="padding:0 14px;font-size:18px;line-height:1;flex:0 0 auto;color:var(--ide-accent);border:1px dashed var(--ide-border);background:transparent;cursor:pointer;border-radius:8px;font-weight:300;">
+                        +
+                    </button>
+                </div>
+            </div>
+
+            <div class="ide-row">
+                <label for="ideCode">Kod *</label>
+                <input id="ideCode" class="ide-input" value="@(Model.Enum?.Code ?? "")"
+                       maxlength="80" placeholder="Örn: TFaturaTip"
+                       style="font-family: ui-monospace, Menlo, Consolas, monospace;" />
+            </div>
+
+            <div class="ide-row">
+                <label for="ideLabel">Etiket *</label>
+                <input id="ideLabel" class="ide-input" value="@(Model.Enum?.Label ?? "")"
+                       maxlength="160" placeholder="Örn: Belge Tipi" />
+            </div>
+
+            <div class="ide-row">
+                <label for="ideDesc">Açıklama</label>
+                <input id="ideDesc" class="ide-input" value="@(Model.Enum?.Description ?? "")"
+                       maxlength="1000" placeholder="Kısa açıklama" />
+            </div>
+
+            <div class="ide-row">
+                <label for="ideSrc">Kaynak Bilgi</label>
+                <input id="ideSrc" class="ide-input" value="@(Model.Enum?.SourceInfo ?? "")"
+                       maxlength="500" placeholder="Örn: Interop.NetOpenX50.dll v8.0.6" />
+            </div>
+
+            <div class="ide-row">
+                <label>Durum</label>
+                <div class="form-check form-switch" style="margin:0;">
+                    <input id="ideIsActive" class="form-check-input" type="checkbox" role="switch"
+                           @(Model.Enum?.IsActive ?? true ? "checked" : "") />
+                </div>
+            </div>
+
+            <div class="ide-section">
+                <div class="ide-section-title">
+                    <span>Değerler <span class="hint" style="font-weight:400;font-size:11px;color:var(--ide-muted);">en az 1 değer</span></span>
+                    <button type="button" class="ide-btn" onclick="ideAddValue()">+ Değer Ekle</button>
+                </div>
+                <div class="ide-vrow" style="font-size:10px;font-weight:600;color:var(--ide-muted);text-transform:uppercase;">
+                    <div>Value</div><div>Label</div><div>Technical Code</div><div>Sıra</div><div></div>
+                </div>
+                <div id="ideValues"></div>
+            </div>
+
+            <div class="ide-section">
+                <div class="ide-section-title">
+                    <span>Hangi Alanlarda Kullanılıyor
+                        <span class="hint" style="font-weight:400;font-size:11px;color:var(--ide-muted);">
+                            Wizard tooltip'inde bu alanların yanına bu enum'un değerleri görünür
+                        </span>
+                    </span>
+                    <button type="button" class="ide-btn" onclick="ideAddFieldPath()">+ Alan Ekle</button>
+                </div>
+                <div id="ideFieldPaths"></div>
+                <div class="hint" style="margin-top:6px;font-size:11px;color:var(--ide-muted);">
+                    Örn: <code>FatUst.Tip</code>, <code>Kalemler[].Tip</code>, <code>Header.DocType</code>
+                </div>
+            </div>
+
+            <div id="ideMsg"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var initialValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.Enum?.Values.Select(v => new { value = v.Value, label = v.Label, technicalCode = v.TechnicalCode, sortOrder = v.SortOrder }).ToArray()
+        ?? Array.Empty<object>()));
+    var values = (initialValues && initialValues.length > 0) ? initialValues.slice() : [{ value: '0', label: '', technicalCode: '', sortOrder: 10 }];
+
+    // YENI: "Hangi alanlarda kullaniliyor" — field path listesi
+    var initialPaths = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.Enum?.UsedInFieldPaths ?? Array.Empty<string>()));
+    var fieldPaths = (initialPaths && initialPaths.length > 0) ? initialPaths.slice() : [];
+
+    function renderFieldPaths() {
+        var host = document.getElementById('ideFieldPaths');
+        host.innerHTML = '';
+        if (fieldPaths.length === 0) {
+            var empty = document.createElement('div');
+            empty.style.cssText = 'font-size:11px;color:var(--ide-muted);padding:8px 4px;font-style:italic;';
+            empty.textContent = 'Henüz alan eklenmedi. "+ Alan Ekle" ile hedef path tanımla.';
+            host.appendChild(empty);
+            return;
+        }
+        fieldPaths.forEach(function(path, idx) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:grid;grid-template-columns:1fr 36px;gap:6px;align-items:center;margin-bottom:6px;';
+            row.innerHTML =
+                '<input data-fp placeholder="Örn: FatUst.Tip" value="' + esc(path) + '" ' +
+                'style="padding:6px 10px;border-radius:6px;background:var(--ide-surface);' +
+                'border:1px solid var(--ide-border);color:var(--ide-text);font-size:12px;' +
+                'font-family:ui-monospace,Menlo,Consolas,monospace;" />' +
+                '<button type="button" class="ide-del" title="Kaldir">×</button>';
+            row.querySelector('[data-fp]').oninput = e => fieldPaths[idx] = e.target.value;
+            row.querySelector('.ide-del').onclick = () => { fieldPaths.splice(idx, 1); renderFieldPaths(); };
+            host.appendChild(row);
+        });
+    }
+    renderFieldPaths();
+
+    window.ideAddFieldPath = function() { fieldPaths.push(''); renderFieldPaths(); };
+
+    // ── Inline Provider Create modal ──────────────────────────────────────
+    document.getElementById('ideAddProviderBtn').addEventListener('click', function() {
+        showProviderModal();
+    });
+
+    function showProviderModal() {
+        var bd = document.createElement('div');
+        bd.className = 'ide-prov-bd';
+        bd.innerHTML =
+            '<div class="ide-prov-modal" role="dialog" aria-modal="true">' +
+              '<h2 id="pmTitle">Yeni Provider Ekle</h2>' +
+              '<span class="hint" id="pmHint">Yeni ERP / API kaynağı (ör. SAP, Logo, Custom REST) — kayıt sonrası Provider dropdown güncellenir. Mevcut bir Kod yazarsanız düzenleme moduna geçer.</span>' +
+              '<div class="ide-prov-row"><label for="pmCode">Kod *</label>' +
+                '<input id="pmCode" placeholder="SAP" maxlength="50" style="font-family:ui-monospace,Menlo,Consolas,monospace;" /></div>' +
+              '<div class="ide-prov-row"><label for="pmLabel">Etiket *</label>' +
+                '<input id="pmLabel" placeholder="SAP S/4HANA" maxlength="120" /></div>' +
+              '<div class="ide-prov-row"><label for="pmColor">İkon Rengi</label>' +
+                '<select id="pmColor">' +
+                  '<option value="indigo">indigo (mor)</option>' +
+                  '<option value="emerald">emerald (yeşil)</option>' +
+                  '<option value="blue">blue (mavi)</option>' +
+                  '<option value="amber">amber (turuncu)</option>' +
+                  '<option value="rose">rose (kırmızı)</option>' +
+                  '<option value="violet">violet (mor)</option>' +
+                  '<option value="slate">slate (gri)</option>' +
+                '</select></div>' +
+              '<div class="ide-prov-row"><label for="pmDesc">Açıklama</label>' +
+                '<input id="pmDesc" placeholder="SAP REST entegrasyonu" maxlength="500" /></div>' +
+              '<div id="pmMsg"></div>' +
+              '<div class="ide-prov-btns" style="justify-content:space-between;">' +
+                '<button type="button" class="ide-prov-btn" id="pmDelete" ' +
+                  'style="display:none;color:#ef4444;border-color:rgba(239,68,68,.35);background:transparent;">Sil</button>' +
+                '<div style="display:flex;gap:8px;">' +
+                  '<button type="button" class="ide-prov-btn ide-prov-btn--ghost" id="pmCancel">Vazgeç</button>' +
+                  '<button type="button" class="ide-prov-btn ide-prov-btn--primary" id="pmSave">Kaydet</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+        document.body.appendChild(bd);
+
+        var providersList = [];     // [{id, code, label, description, iconColor, ...}]
+        var matchedId = null;        // mevcut provider'a eslesince set edilir
+        var titleEl  = bd.querySelector('#pmTitle');
+        var hintEl   = bd.querySelector('#pmHint');
+        var codeEl   = bd.querySelector('#pmCode');
+        var labelEl  = bd.querySelector('#pmLabel');
+        var colorEl  = bd.querySelector('#pmColor');
+        var descEl   = bd.querySelector('#pmDesc');
+        var saveEl   = bd.querySelector('#pmSave');
+        var delEl    = bd.querySelector('#pmDelete');
+        var msgEl    = bd.querySelector('#pmMsg');
+
+        function close() { document.body.removeChild(bd); document.removeEventListener('keydown', onKey); }
+        function onKey(e) { if (e.key === 'Escape') close(); }
+        document.addEventListener('keydown', onKey);
+        bd.addEventListener('click', function(e) { if (e.target === bd) close(); });
+        bd.querySelector('#pmCancel').onclick = close;
+        codeEl.focus();
+
+        // Provider listesini cek (modal acilinca taze veri)
+        fetch('/Integrations/api/doc-catalog/providers?includeInactive=true', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { if (d && d.success && Array.isArray(d.items)) providersList = d.items; });
+
+        // Kod input'unda detection (input + blur)
+        function syncMode() {
+            var typed = (codeEl.value || '').trim().toLowerCase();
+            if (!typed) { setMode(null); return; }
+            var match = providersList.find(function(p) { return (p.code || '').toLowerCase() === typed; });
+            setMode(match || null);
+        }
+        function setMode(match) {
+            if (match) {
+                matchedId = match.id;
+                titleEl.textContent  = 'Provider Düzenle — ' + match.label;
+                hintEl.textContent   = '"' + match.code + '" mevcut. Etiket / İkon Rengi / Açıklama değiştirilebilir. "Sil" ile pasife alınır.';
+                // Sadece bos alanlari doldur (kullanici override yapmissa silmeyelim)
+                if (!labelEl.value.trim()) labelEl.value = match.label || '';
+                if (!descEl.value.trim())  descEl.value  = match.description || '';
+                colorEl.value = match.iconColor || 'indigo';
+                saveEl.textContent = 'Güncelle';
+                delEl.style.display = '';
+            } else {
+                matchedId = null;
+                titleEl.textContent  = 'Yeni Provider Ekle';
+                hintEl.textContent   = 'Yeni ERP / API kaynağı (ör. SAP, Logo, Custom REST). Mevcut bir Kod yazarsanız düzenleme moduna geçer.';
+                saveEl.textContent = 'Kaydet';
+                delEl.style.display = 'none';
+            }
+        }
+        codeEl.addEventListener('input', syncMode);
+        codeEl.addEventListener('blur', syncMode);
+
+        saveEl.onclick = function() {
+            var code  = codeEl.value.trim();
+            var label = labelEl.value.trim();
+            var color = colorEl.value;
+            var desc  = descEl.value.trim();
+            if (!code)  { showPmMsg(msgEl, 'Kod zorunlu', 'err'); return; }
+            if (!label) { showPmMsg(msgEl, 'Etiket zorunlu', 'err'); return; }
+
+            // matchedId varsa update, yoksa insert (endpoint ayni; id farkli)
+            var payload = {
+                id: matchedId,            // null => INSERT, dolu => UPDATE
+                code: code,
+                label: label,
+                description: desc || null,
+                iconColor: color,
+                sortOrder: 100,
+                isActive: true,
+            };
+            fetch('/Integrations/api/doc-catalog/providers/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                credentials: 'same-origin',
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.success) { showPmMsg(msgEl, d?.error || 'Kayit basarisiz', 'err'); return; }
+                var pid = d.id || matchedId;
+                if (!pid) { showPmMsg(msgEl, 'Sunucu id donmedi', 'err'); return; }
+                refreshProviderDropdown(pid, code, label);
+                close();
+            })
+            .catch(function(ex) { showPmMsg(msgEl, 'Sunucu hatasi: ' + ex.message, 'err'); });
+        };
+
+        delEl.onclick = async function() {
+            if (!matchedId) return;
+            // Native confirm yerine global CalibraAlert.confirm helper (Layout'tan yuklenir).
+            var pCode = codeEl.value.trim();
+            var ok = await CalibraAlert.confirm(
+                '"' + pCode + '" pasife alinacak. Buna bagli enum/field-doc kayitlari etkilenmez.',
+                { title: 'Provider Silinsin Mi?', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true });
+            if (!ok) return;
+            fetch('/Integrations/api/doc-catalog/providers/delete/' + matchedId, {
+                method: 'POST', credentials: 'same-origin',
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.success) { showPmMsg(msgEl, d?.error || 'Silinemedi', 'err'); return; }
+                // Mevcut dropdown'dan opsiyonu kaldir + ilk kalani sec
+                var sel = document.getElementById('ideProvider');
+                var opt = sel.querySelector('option[value="' + matchedId + '"]');
+                if (opt) opt.remove();
+                if (sel.options.length > 0) sel.value = sel.options[0].value;
+                close();
+            })
+            .catch(function(ex) { showPmMsg(msgEl, 'Sunucu hatasi: ' + ex.message, 'err'); });
+        };
+    }
+
+    function refreshProviderDropdown(pid, code, label) {
+        var sel = document.getElementById('ideProvider');
+        var existing = sel.querySelector('option[value="' + pid + '"]');
+        if (existing) {
+            existing.textContent = label + ' (' + code + ')';
+        } else {
+            var opt = document.createElement('option');
+            opt.value = String(pid);
+            opt.textContent = label + ' (' + code + ')';
+            sel.appendChild(opt);
+        }
+        sel.value = String(pid);
+    }
+
+    function showPmMsg(el, msg, type) {
+        el.innerHTML = '<div class="ide-msg ' + type + '" style="margin-top:10px;">' + esc(msg) + '</div>';
+    }
+
+    function renderValues() {
+        var host = document.getElementById('ideValues');
+        host.innerHTML = '';
+        values.forEach(function(v, idx) {
+            var row = document.createElement('div');
+            row.className = 'ide-vrow';
+            row.innerHTML =
+                '<input data-val placeholder="0" value="' + esc(v.value) + '" />' +
+                '<input data-lbl placeholder="Etiket" value="' + esc(v.label) + '" />' +
+                '<input data-tc placeholder="ftSFat" value="' + esc(v.technicalCode || '') + '" style="font-family:ui-monospace,Menlo,Consolas,monospace;" />' +
+                '<input data-so type="number" min="0" value="' + (v.sortOrder || (idx+1)*10) + '" />' +
+                '<button type="button" class="ide-del" title="Sil">×</button>';
+            row.querySelector('[data-val]').oninput = e => values[idx].value = e.target.value;
+            row.querySelector('[data-lbl]').oninput = e => values[idx].label = e.target.value;
+            row.querySelector('[data-tc]').oninput  = e => values[idx].technicalCode = e.target.value;
+            row.querySelector('[data-so]').oninput  = e => values[idx].sortOrder = parseInt(e.target.value, 10) || 0;
+            row.querySelector('.ide-del').onclick   = () => { if (values.length <= 1) { ideMsg('En az 1 deger olmali','err'); return; } values.splice(idx,1); renderValues(); };
+            host.appendChild(row);
+        });
+    }
+    renderValues();
+
+    window.ideAddValue = function() { values.push({ value:'', label:'', technicalCode:'', sortOrder: (values.length+1)*10 }); renderValues(); };
+
+    window.ideSave = function() {
+        var providerId = parseInt(document.getElementById('ideProvider').value, 10);
+        var code  = document.getElementById('ideCode').value.trim();
+        var label = document.getElementById('ideLabel').value.trim();
+        if (!providerId) { ideMsg('Provider zorunlu','err'); return; }
+        if (!code)  { ideMsg('Kod zorunlu','err'); return; }
+        if (!label) { ideMsg('Etiket zorunlu','err'); return; }
+        var idVal = parseInt(document.getElementById('ideId').value, 10) || null;
+        var payload = {
+            id: idVal,
+            providerId: providerId,
+            code: code,
+            label: label,
+            description: document.getElementById('ideDesc').value || null,
+            sourceInfo: document.getElementById('ideSrc').value || null,
+            isActive: document.getElementById('ideIsActive').checked,
+            values: values.filter(v => v.value !== ''),
+            usedInFieldPaths: fieldPaths.map(p => (p || '').trim()).filter(p => p !== ''),
+        };
+        fetch('/Integrations/api/doc-catalog/enums/save', {
+            method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload), credentials:'same-origin'
+        }).then(r => r.json()).then(d => {
+            if (d.success) window.location.href = '/IntegrationDocCatalog/Enums';
+            else ideMsg(d.error || 'Hata','err');
+        }).catch(e => ideMsg('Sunucu hatası: ' + e.message, 'err'));
+    };
+
+    window.ideDelete = async function() {
+        var id = parseInt(document.getElementById('ideId').value, 10);
+        if (!id) return;
+        var ok = await CalibraAlert.confirm('Bu enum tanimini pasife alalim mi?',
+            { title: 'Enum Silinsin Mi?', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true });
+        if (!ok) return;
+        fetch('/Integrations/api/doc-catalog/enums/delete/' + id, { method:'POST', credentials:'same-origin' })
+            .then(r => r.json()).then(d => {
+                if (d.success) window.location.href = '/IntegrationDocCatalog/Enums';
+                else ideMsg(d.error || 'Silinemedi','err');
+            });
+    };
+
+    function ideMsg(msg, type) {
+        var el = document.getElementById('ideMsg');
+        if (!msg) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div class="ide-msg ' + type + '">' + esc(msg) + '</div>';
+        if (type === 'ok') setTimeout(() => { el.innerHTML = ''; }, 3000);
+    }
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+})();
+</script>
+}

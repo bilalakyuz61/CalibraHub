@@ -12,6 +12,11 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
     <!-- DPAPI ile sifreli secret cozme — DpapiSecretDecryptor kullanir -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <!-- Entegrasyon Wizard Mapping Engine expression evaluator (Step 3 Formul tipi) -->
+    <PackageReference Include="NCalcSync" Version="5.5.0" />
+    <!-- DTO mapping (rapor §2.4) — Application/Mapping/MapsterConfig.cs ile birleştirilir -->
+    <PackageReference Include="Mapster" Version="7.4.0" />
+    <PackageReference Include="Mapster.DependencyInjection" Version="1.0.1" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -33,6 +33,42 @@ public sealed class DatabaseMetadataController : ControllerBase
         _logger = logger;
     }
 
+    // GET /api/database/views
+    // Şemadaki view'ları döner.
+    [HttpGet("views")]
+    public async Task<IActionResult> GetViews(CancellationToken ct)
+    {
+        try
+        {
+            await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                SELECT TABLE_SCHEMA, TABLE_NAME
+                  FROM INFORMATION_SCHEMA.TABLES
+                 WHERE TABLE_TYPE = 'VIEW'
+                   AND TABLE_SCHEMA NOT IN ('sys')
+                 ORDER BY TABLE_SCHEMA, TABLE_NAME
+                """;
+            var views = new List<object>();
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                views.Add(new
+                {
+                    schema   = reader.GetString(0),
+                    name     = reader.GetString(1),
+                    fullName = reader.GetString(0) + "." + reader.GetString(1),
+                });
+            }
+            return Ok(views);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "View listesi alınırken hata");
+            return StatusCode(500, new { success = false, message = "View listesi alınamadı: " + ex.Message });
+        }
+    }
+
     // GET /api/database/tables
     // Şemadaki fiziksel tabloları döner (sistem tabloları ve view'lar hariç).
     [HttpGet("tables")]

@@ -30,85 +30,48 @@
         flex: 1 1 auto; min-height: 0; height: 100%;
     }
 
-    /* ── Calibra loading overlay ── */
+    /* ── Single page-level loader ── HTML render edilir edilmez gorunur,
+       SmartBoard ilk fetch tamamlayincaya kadar kalir. SmartBoard'un kendi
+       inline spinner'i bu sayfada GIZLI (cift gosterge olmasin). */
     .ca-loading-overlay {
         position: absolute; inset: 0; z-index: 50;
         display: flex; flex-direction: column;
-        align-items: center; justify-content: center; gap: 18px;
-        background: rgba(12,15,26,.85);
-        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-        transition: opacity .4s ease;
+        align-items: center; justify-content: center; gap: 16px;
+        background: rgba(12,15,26,.92);
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        transition: opacity .35s ease;
     }
-    body.app-theme-light .ca-loading-overlay { background: rgba(248,250,252,.85); }
+    body.app-theme-light .ca-loading-overlay { background: rgba(248,250,252,.92); }
     .ca-loading-overlay.is-hidden { opacity: 0; pointer-events: none; }
 
-    .ca-calibra-ring {
-        width: 56px; height: 56px; position: relative;
-    }
-    .ca-calibra-ring svg {
-        width: 100%; height: 100%;
-        animation: caRingSpin 1.8s linear infinite;
+    .ca-loading-ring {
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        border: 3px solid rgba(99,102,241,.18);
+        border-top-color: #6366f1;
+        animation: caRingSpin 0.9s linear infinite;
     }
     @@keyframes caRingSpin { to { transform: rotate(360deg); } }
-
-    .ca-calibra-icon {
-        position: absolute; inset: 0;
-        display: flex; align-items: center; justify-content: center;
-    }
-    .ca-calibra-icon svg {
-        width: 22px; height: 22px; color: #818cf8;
-        animation: caPulse 1.8s ease-in-out infinite;
-    }
-    body.app-theme-light .ca-calibra-icon svg { color: #6366f1; }
-    @@keyframes caPulse {
-        0%, 100% { transform: scale(1); opacity: .7; }
-        50% { transform: scale(1.15); opacity: 1; }
-    }
-
     .ca-loading-text {
-        font-size: .78rem; font-weight: 600; letter-spacing: .04em;
-        color: rgba(255,255,255,.4);
+        font-size: 12px; font-weight: 600;
+        color: rgba(255,255,255,.55);
+        letter-spacing: .04em;
     }
-    body.app-theme-light .ca-loading-text { color: #94a3b8; }
-    .ca-loading-dots::after {
-        content: ''; display: inline-block; width: 1.2em; text-align: left;
-        animation: caDots 1.4s steps(4,end) infinite;
-    }
-    @@keyframes caDots {
-        0% { content: ''; }
-        25% { content: '.'; }
-        50% { content: '..'; }
-        75% { content: '...'; }
-    }
+    body.app-theme-light .ca-loading-text { color: #64748b; }
+
+    /* SmartBoard'un kendi inline loading spinner'ini gizle — sadece overlay */
+    #reactSmartBoard .flex.items-center.justify-center.py-20 { display: none !important; }
 </style>
 }
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content" style="position:relative;">
     <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 
-    <!-- Loading overlay — SmartBoard mount oldugunda gizlenir -->
+    <!-- Tek loading overlay — Razor render olur olmaz gorunur, SmartBoard
+         ilk fetch tamamladiginda (onReady) kapatilir. -->
     <div class="ca-loading-overlay" id="caLoadingOverlay">
-        <div class="ca-calibra-ring">
-            <!-- Donen halka -->
-            <svg viewBox="0 0 56 56" fill="none">
-                <circle cx="28" cy="28" r="24" stroke="rgba(99,102,241,.12)" stroke-width="3" />
-                <path d="M28 4 A24 24 0 0 1 52 28" stroke="url(#caGrad)" stroke-width="3" stroke-linecap="round" />
-                <defs>
-                    <linearGradient id="caGrad" x1="28" y1="4" x2="52" y2="28" gradientUnits="userSpaceOnUse">
-                        <stop stop-color="#6366f1" />
-                        <stop offset="1" stop-color="#818cf8" stop-opacity=".3" />
-                    </linearGradient>
-                </defs>
-            </svg>
-            <!-- Merkez ikon — kalibrasyon/crosshair -->
-            <div class="ca-calibra-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-                </svg>
-            </div>
-        </div>
-        <span class="ca-loading-text">Yukleniyor<span class="ca-loading-dots"></span></span>
+        <div class="ca-loading-ring"></div>
+        <span class="ca-loading-text">Cariler yükleniyor…</span>
     </div>
 </section>
 
@@ -117,13 +80,24 @@
 (function () {
     var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
     var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
-    var CONFIG_URL = '/Finance/GetContactsBoardConfig';
-    var el         = document.getElementById('reactSmartBoard');
+    // Combined payload endpoint — config + ilk sayfa verisi tek istek.
+    // HTML response anlik (DB cagirisi yok), spinner hemen gorunur, bundle ve
+    // veri PARALEL yuklenir (eskiden HTML render 3 sn DB bekliyordu).
+    var PAYLOAD_URL = '/Finance/GetContactsInitialPayload';
+    var el          = document.getElementById('reactSmartBoard');
 
     if (!el) { console.error('[CA] Mount element yok'); return; }
 
+    function hideOverlay() {
+        var overlay = document.getElementById('caLoadingOverlay');
+        if (overlay) {
+            overlay.classList.add('is-hidden');
+            setTimeout(function () { if (overlay.parentNode) overlay.remove(); }, 400);
+        }
+    }
+
     function showError(msg) {
-        hideLoading();
+        hideOverlay();
         el.innerHTML =
             '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
             'height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">' +
@@ -133,14 +107,6 @@
             'Sayfayi Yenile</button></div>';
     }
 
-    function hideLoading() {
-        var overlay = document.getElementById('caLoadingOverlay');
-        if (overlay) {
-            overlay.classList.add('is-hidden');
-            setTimeout(function () { overlay.remove(); }, 500);
-        }
-    }
-
     function doMount(config) {
         if (!config) { showError('Board config bulunamadi'); return; }
         if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
@@ -148,8 +114,13 @@
             return;
         }
         try {
-            window.CalibraHub.mountSmartBoard(el, config);
-            hideLoading();
+            // SmartBoard ilk fetch tamamlayinca hideOverlay'i tetikle
+            var configWithReady = Object.assign({}, config, {
+                onReady: hideOverlay
+            });
+            window.CalibraHub.mountSmartBoard(el, configWithReady);
+            // Guvenlik: 8 saniye sonra hala overlay varsa kapat (donmasin)
+            setTimeout(hideOverlay, 8000);
         } catch (ex) {
             console.error('[CA] Mount exception:', ex);
             showError('Mount hatasi: ' + (ex.message || ex));
@@ -182,36 +153,37 @@
         document.head.appendChild(script);
     }
 
-    // Paralel: bundle + veri ayni anda yukle
+    // Bundle ve combined payload PARALEL yuklenir, ikisi de hazir olunca mount.
+    // Bu sayede toplam bekleme = max(bundle, payload) yerine bundle+payload degil.
     loadCss();
 
-    var _config = null;
-    var _bundleReady = false;
+    var bundleReady = false;
+    var payloadData = null;
+    var payloadError = null;
 
     function tryMount() {
-        if (_config && _bundleReady) doMount(_config);
+        if (!bundleReady) return;
+        if (payloadError) { showError(payloadError); return; }
+        if (payloadData)  { doMount(payloadData); }
     }
 
-    // 1) Bundle yukle
-    ensureBundle(function () {
-        _bundleReady = true;
-        tryMount();
-    });
-
-    // 2) BoardConfig'i AJAX ile cek (sayfa hemen render oldu, animasyon gorunuyor)
-    fetch(CONFIG_URL, { credentials: 'same-origin' })
+    // Payload fetch — bundle ile paralel
+    fetch(PAYLOAD_URL, { credentials: 'same-origin' })
         .then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         })
-        .then(function (data) {
-            _config = data;
-            tryMount();
-        })
+        .then(function (data) { payloadData = data; tryMount(); })
         .catch(function (e) {
-            console.error('[CA] Config fetch error:', e);
-            showError('Veri yuklenemedi: ' + e.message);
+            payloadError = 'Veri yuklenemedi: ' + (e.message || e);
+            console.error('[CA] Payload fetch error:', e);
+            tryMount();
         });
+
+    ensureBundle(function () {
+        bundleReady = true;
+        tryMount();
+    });
 
     window.addEventListener('pageshow', function (e) {
         if (e.persisted) location.reload();

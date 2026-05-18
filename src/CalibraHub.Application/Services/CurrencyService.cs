@@ -229,9 +229,14 @@ public sealed class CurrencyService : ICurrencyService
 
         if (totalCount > 0)
         {
-            // Ilk basta cekilen kurlardan doviz isimlerini guncelle
-            await UpdateCurrencyNamesFromRatesAsync(
-                (await _tcmbClient.GetRatesForDateAsync(from > DateTime.Today ? DateTime.Today : from, ct)), ct);
+            // Doviz isimlerini guncelle — loop sirasinda bellekte tuttugumuz son business
+            // rate'lari kullan; ekstra TCMB cagrisi yapma. `from` resmi tatil ise (orn. 1 Mayis)
+            // TCMB ilgili XML'i yayinlamaz (404), bu da bulk islemini tamamen patlatir.
+            if (lastBusinessRates is not null && lastBusinessRates.Count > 0)
+            {
+                try { await UpdateCurrencyNamesFromRatesAsync(lastBusinessRates, ct); }
+                catch { /* isim guncelleme best-effort — bulk basarisini bozma */ }
+            }
 
             var msg = $"{totalCount} kur guncellendi ({fetchedDays} gun).";
             if (skippedDays.Count > 0)

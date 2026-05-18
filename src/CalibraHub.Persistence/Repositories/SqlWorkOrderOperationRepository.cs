@@ -144,6 +144,9 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
             }
 
             // RoutingOperation'dan WorkOrderOperation'a kopyala.
+            // MachineId fallback: rota satirinda makine tanimli degilse, WO header'daki
+            // DefaultMachineId kullanilir. Boylece tek noktadan tum operasyonlara
+            // makine atanabilir; rota satirinda override edilmemisse calisir.
             await using (var ins = conn.CreateCommand())
             {
                 ins.Transaction = tx;
@@ -151,11 +154,15 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                     INSERT INTO {_table}
                         ([WorkOrderId],[Sequence],[OperationId],[MachineId],
                          [PlannedDuration],[DurationUnit],[Status],[Notes])
-                    SELECT @WorkOrderId, [Sequence], [OperationId], [MachineId],
-                           [OverrideDuration], [DurationUnit], 0, [Notes]
-                    FROM {_routingOpTable}
-                    WHERE [RoutingId] = @RoutingId
-                    ORDER BY [Sequence];";
+                    SELECT @WorkOrderId, ro.[Sequence], ro.[OperationId],
+                           COALESCE(ro.[MachineId], wo.[DefaultMachineId]),
+                           ro.[OverrideDuration], ro.[DurationUnit], 0, ro.[Notes]
+                    FROM {_routingOpTable} ro
+                    CROSS JOIN (SELECT [DefaultMachineId]
+                                FROM [{_schema}].[WorkOrder]
+                                WHERE [Id] = @WorkOrderId) wo
+                    WHERE ro.[RoutingId] = @RoutingId
+                    ORDER BY ro.[Sequence];";
                 ins.Parameters.AddWithValue("@WorkOrderId", workOrderId);
                 ins.Parameters.AddWithValue("@RoutingId", routingId);
                 await ins.ExecuteNonQueryAsync(ct);
@@ -232,12 +239,18 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                wo.[ProducedQuantity], wo.[ScrapQuantity], wo.[Status],
                wo.[StartedByPersonnelId],   sp.[FullName] AS StartedByName,   wo.[StartedAt],
                wo.[CompletedByPersonnelId], cp.[FullName] AS CompletedByName, wo.[CompletedAt],
-               wo.[Notes]
+               wo.[Notes],
+               -- Faz 3 ShopFloor UX: mamul + planlanan miktar bağlamı
+               w.[OrderNumber] AS WoNumber,
+               i.[Code] AS ItemCode, i.[Name] AS ItemName,
+               w.[PlannedQuantity] AS WoPlannedQty
         FROM {_table} wo
         LEFT JOIN [{_schema}].[Operation] op ON op.[Id] = wo.[OperationId]
         LEFT JOIN [{_schema}].[Machine]   m  ON m.[Id]  = wo.[MachineId]
         LEFT JOIN [{_schema}].[Personnel] sp ON sp.[Id] = wo.[StartedByPersonnelId]
         LEFT JOIN [{_schema}].[Personnel] cp ON cp.[Id] = wo.[CompletedByPersonnelId]
+        LEFT JOIN [{_schema}].[WorkOrder] w  ON w.[Id]  = wo.[WorkOrderId]
+        LEFT JOIN [{_schema}].[Items]     i  ON i.[Id]  = w.[ItemId]
         {filter};";
 
     private static async Task<IReadOnlyCollection<WorkOrderOperationDto>> ReadListAsync(SqlCommand cmd, CancellationToken ct)
@@ -268,7 +281,11 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 CompletedByPersonnelId: r.IsDBNull(18) ? null : r.GetInt32(18),
                 CompletedByPersonnelName: r.IsDBNull(19) ? null : r.GetString(19),
                 CompletedAt: r.IsDBNull(20) ? null : r.GetDateTime(20),
-                Notes: r.IsDBNull(21) ? null : r.GetString(21)));
+                Notes: r.IsDBNull(21) ? null : r.GetString(21),
+                WorkOrderNumber: r.IsDBNull(22) ? null : r.GetString(22),
+                ItemCode: r.IsDBNull(23) ? null : r.GetString(23),
+                ItemName: r.IsDBNull(24) ? null : r.GetString(24),
+                WorkOrderPlannedQuantity: r.IsDBNull(25) ? 0m : r.GetDecimal(25)));
         }
         return list;
     }

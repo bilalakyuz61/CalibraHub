@@ -349,7 +349,9 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 x.SortOrder,
                 x.MaxWeightCapacity,
                 x.VolumeCapacity,
-                x.IsActive))
+                x.IsActive,
+                x.IsMachinePark,
+                x.IsStorageArea))
             .ToArray();
     }
 
@@ -1193,9 +1195,38 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var locations = await _repository.GetLocationsAsync(cancellationToken);
         ValidateParentLocation(request.ParentId, locations);
 
+        // Hiyerarsi: child tipi parent tipinden daha alt seviyede olmali
+        var typesForHierarchy = await _repository.GetLocationTypesAsync(cancellationToken);
+        ValidateLocationTypeHierarchy(locationTypeCode, request.ParentId, locations, typesForHierarchy);
+
         if (locations.Any(x => string.Equals(x.LocationCode, locationCode, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Ayni lokasyon kodu ile kayit zaten mevcut.");
+        }
+
+        // Yeni eklenen lokasyon parent'inin "leaf" olma kuralini bozar — eger
+        // parent'a IsMachinePark/IsStorageArea atanmissa, child eklendigi anda
+        // parent artik leaf degil; flag'lerini sessizce KAPAT (data tutarliligi).
+        if (request.ParentId.HasValue && request.ParentId.Value > 0)
+        {
+            var parent = locations.FirstOrDefault(x => x.Id == request.ParentId.Value);
+            if (parent is not null && (parent.IsMachinePark || parent.IsStorageArea))
+            {
+                var clearedParent = new Location
+                {
+                    Id = parent.Id, ParentId = parent.ParentId,
+                    LocationTypeCode = parent.LocationTypeCode,
+                    LocationCode = parent.LocationCode,
+                    LocationName = parent.LocationName,
+                    SortOrder = parent.SortOrder,
+                    MaxWeightCapacity = parent.MaxWeightCapacity,
+                    VolumeCapacity = parent.VolumeCapacity,
+                    IsActive = parent.IsActive,
+                    IsMachinePark = false,
+                    IsStorageArea = false,
+                };
+                await _repository.UpdateLocationAsync(clearedParent, cancellationToken);
+            }
         }
 
         var location = new Location
@@ -1207,7 +1238,9 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             SortOrder = sortOrder,
             MaxWeightCapacity = maxWeightCapacity,
             VolumeCapacity = volumeCapacity,
-            IsActive = request.IsActive
+            IsActive = request.IsActive,
+            IsMachinePark = request.IsMachinePark,
+            IsStorageArea = request.IsStorageArea
         };
 
         await _repository.AddLocationAsync(location, cancellationToken);
@@ -1244,11 +1277,55 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         ValidateParentLocation(request.ParentId, locations);
         ValidateNoCircularParent(request.Id, request.ParentId, locations);
 
+        // Hiyerarsi: child tipi parent tipinden daha alt seviyede olmali
+        var typesForHierarchyU = await _repository.GetLocationTypesAsync(cancellationToken);
+        ValidateLocationTypeHierarchy(locationTypeCode, request.ParentId, locations, typesForHierarchyU);
+
+        // Bu lokasyonun kendi child'lari icin de kontrol: eger tipi degistirilirse,
+        // child'larin tipinin sortOrder'i bu yeni tipinkinden buyuk olmali.
+        var directChildren = locations.Where(x => x.ParentId == request.Id).ToList();
+        if (directChildren.Count > 0)
+        {
+            var newType = typesForHierarchyU.FirstOrDefault(t =>
+                string.Equals(t.Code, locationTypeCode, StringComparison.OrdinalIgnoreCase));
+            if (newType is not null)
+            {
+                foreach (var ch in directChildren)
+                {
+                    var chType = typesForHierarchyU.FirstOrDefault(t =>
+                        string.Equals(t.Code, ch.LocationTypeCode, StringComparison.OrdinalIgnoreCase));
+                    if (chType is not null && chType.SortOrder <= newType.SortOrder)
+                    {
+                        throw new ArgumentException(
+                            $"Bu lokasyonun tipini '{newType.Name}' yapamayiz: alt lokasyon " +
+                            $"'{ch.LocationCode}' tipi '{chType.Name}' ayni veya daha ust seviyede.");
+                    }
+                }
+            }
+        }
+
         if (locations.Any(x =>
                 x.Id != request.Id &&
                 string.Equals(x.LocationCode, locationCode, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Ayni lokasyon kodu ile baska bir kayit mevcut.");
+        }
+
+        // Leaf-only kuralı: bu lokasyonun child'i varsa IsMachinePark/IsStorageArea
+        // FALSE'a zorlanır. Sadece yaprak (alt kırılımı olmayan) lokasyonlar makine
+        // parkuru veya depolama alanı olabilir.
+        var hasChildren = locations.Any(x => x.ParentId == request.Id);
+        var isMachinePark = hasChildren ? false : request.IsMachinePark;
+        var isStorageArea = hasChildren ? false : request.IsStorageArea;
+
+        // Maks 7 kırılım — yeni parent zincirinde derinlik kontrolü
+        if (request.ParentId.HasValue && request.ParentId.Value > 0)
+        {
+            var depth = ComputeLocationDepth(request.ParentId.Value, locations);
+            if (depth + 1 > 7)
+            {
+                throw new ArgumentException("Maksimum 7 seviye kırılım izinlidir.");
+            }
         }
 
         var location = new Location
@@ -1261,10 +1338,100 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             SortOrder = sortOrder,
             MaxWeightCapacity = maxWeightCapacity,
             VolumeCapacity = volumeCapacity,
-            IsActive = request.IsActive
+            IsActive = request.IsActive,
+            IsMachinePark = isMachinePark,
+            IsStorageArea = isStorageArea
         };
 
         await _repository.UpdateLocationAsync(location, cancellationToken);
+    }
+
+    /// <summary>
+    /// Tip kodunu Ad'dan tureti̇r (TR karakter -> ASCII, ucasing, alfanumerik+_).
+    /// Bos kalirsa TYPE_{6hex} fallback. Cakisirsa _2, _3 … ekler.
+    /// </summary>
+    private static string DeriveLocationTypeCode(string name, IReadOnlyCollection<LocationType> existing)
+    {
+        // TR karakter eslemesi + ASCII'ye dusur
+        var src = name?.Trim() ?? string.Empty;
+        var sb = new System.Text.StringBuilder(src.Length);
+        foreach (var ch in src.ToUpperInvariant())
+        {
+            char m = ch switch
+            {
+                'Ç' => 'C', 'Ğ' => 'G', 'İ' => 'I', 'I' => 'I',
+                'Ö' => 'O', 'Ş' => 'S', 'Ü' => 'U',
+                _ => ch,
+            };
+            if (char.IsLetterOrDigit(m)) sb.Append(m);
+            else if (m == ' ' || m == '-' || m == '_') sb.Append('_');
+        }
+        var baseCode = sb.ToString().Trim('_');
+        if (baseCode.Length == 0)
+            baseCode = "TYPE_" + Guid.NewGuid().ToString("N").Substring(0, 6).ToUpperInvariant();
+        if (baseCode.Length > 50) baseCode = baseCode.Substring(0, 50);
+
+        var candidate = baseCode;
+        var i = 2;
+        while (existing.Any(x => string.Equals(x.Code, candidate, StringComparison.OrdinalIgnoreCase)))
+        {
+            var suffix = "_" + i++;
+            candidate = (baseCode.Length + suffix.Length > 50)
+                ? baseCode.Substring(0, 50 - suffix.Length) + suffix
+                : baseCode + suffix;
+        }
+        return candidate;
+    }
+
+    /// <summary>
+    /// Hi̇yerarsi̇ validasyonu: child lokasyonun ti̇p sortOrder'i parent lokasyonun
+    /// ti̇p sortOrder'indan kesi̇nli̇kle BUYUK olmali. Esi̇t veya kucuk olamaz.
+    /// Ornek: Bolum (3) altina Bolum (3) konamaz, Fabrika (1) altinda Bolum (3) olur.
+    /// </summary>
+    private static void ValidateLocationTypeHierarchy(
+        string childTypeCode,
+        int? parentLocationId,
+        IReadOnlyCollection<Location> locations,
+        IReadOnlyCollection<LocationType> types)
+    {
+        if (!parentLocationId.HasValue || parentLocationId.Value <= 0) return;
+        if (string.IsNullOrWhiteSpace(childTypeCode)) return;
+
+        var parent = locations.FirstOrDefault(x => x.Id == parentLocationId.Value);
+        if (parent is null || string.IsNullOrWhiteSpace(parent.LocationTypeCode)) return;
+
+        var childType  = types.FirstOrDefault(t =>
+            string.Equals(t.Code, childTypeCode, StringComparison.OrdinalIgnoreCase));
+        var parentType = types.FirstOrDefault(t =>
+            string.Equals(t.Code, parent.LocationTypeCode, StringComparison.OrdinalIgnoreCase));
+
+        if (childType is null || parentType is null) return;
+
+        if (childType.SortOrder <= parentType.SortOrder)
+        {
+            var parentLabel = string.IsNullOrWhiteSpace(parent.LocationName) ? parent.LocationCode : parent.LocationName;
+            throw new ArgumentException(
+                $"'{childType.Name}' tipindeki bir lokasyon '{parentType.Name}' (parent: {parentLabel}) altina eklenemez. " +
+                $"Hiyerarsi: child tipi parent tipinden daha alt seviyede olmalidir.");
+        }
+    }
+
+    /// <summary>
+    /// ParentId'den koke kadar derinligi hesaplar (1 = root, 2 = altinda, …).
+    /// Maks 7 kirilim kontrolunu Update sirasinda yapmak icin kullanilir.
+    /// </summary>
+    private static int ComputeLocationDepth(int locationId, IReadOnlyCollection<Location> all)
+    {
+        var depth = 1;
+        var byId = all.ToDictionary(x => x.Id);
+        var current = byId.TryGetValue(locationId, out var n) ? n : null;
+        var guard = 0;
+        while (current?.ParentId is int pid && byId.TryGetValue(pid, out var parent) && guard++ < 50)
+        {
+            depth++;
+            current = parent;
+        }
+        return depth;
     }
 
     public async Task DeleteLocationAsync(int locationId, CancellationToken cancellationToken)
@@ -1284,6 +1451,28 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         if (locations.Any(x => x.ParentId == locationId))
         {
             throw new ArgumentException("Secilen lokasyonun alt kirilimlari var. Once alt kirilimlari siliniz.");
+        }
+
+        // FK kontrolü — Machine.LocationId NOT NULL FK var; bu lokasyon herhangi
+        // bir makine tarafindan referansli ise SQL FK violation'a takiliriz.
+        // Once kontrol et, kullaniciya "hangi makineler bagli" mesaji ver.
+        var machines = await _repository.GetMachinesAsync(cancellationToken);
+        var blockingMachines = machines
+            .Where(m => m.LocationId == locationId)
+            .Take(5)
+            .Select(m => m.MachineName)
+            .ToList();
+        if (blockingMachines.Count > 0)
+        {
+            var blockingCount = machines.Count(m => m.LocationId == locationId);
+            var sample = string.Join(", ", blockingMachines);
+            var suffix = blockingCount > blockingMachines.Count ? $" (+{blockingCount - blockingMachines.Count} daha)" : "";
+            var label = string.IsNullOrWhiteSpace(existingLocation.LocationName)
+                ? existingLocation.LocationCode
+                : $"{existingLocation.LocationCode} — {existingLocation.LocationName}";
+            throw new ArgumentException(
+                $"'{label}' lokasyonu {blockingCount} makine tarafindan kullaniliyor; " +
+                $"once makineleri baska bir lokasyona tasiyin. Ornek: {sample}{suffix}");
         }
 
         await _repository.DeleteLocationAsync(locationId, cancellationToken);
@@ -1306,7 +1495,6 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 loc?.LocationName,
                 m.MachineCode,
                 m.MachineName,
-                m.MachineType,
                 m.HourlyCapacity,
                 m.SortOrder,
                 m.IsActive);
@@ -1317,41 +1505,34 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     {
         if (request.LocationId <= 0)
             throw new ArgumentException("Lokasyon secimi zorunludur.");
+        if (string.IsNullOrWhiteSpace(request.MachineName))
+            throw new ArgumentException("Makine adi zorunludur.");
 
         var locations = await _repository.GetLocationsAsync(cancellationToken);
         if (locations.All(l => l.Id != request.LocationId))
             throw new ArgumentException("Secilen lokasyon bulunamadi.");
 
         var existing = await _repository.GetMachinesAsync(cancellationToken);
+        var name = request.MachineName.Trim();
 
-        // Makine Kodu UI'dan kaldirildi — kullanici girmediyse otomatik uretilir.
-        // Format: MAC-{6-hex}. Carpisirsa yeni Guid kismi ile yeniden dene.
-        var code = (request.MachineCode ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(code))
+        // Ayni isimli makine kontrolu
+        if (existing.Any(m => string.Equals(m.MachineName?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
         {
-            for (var attempt = 0; attempt < 5; attempt++)
-            {
-                var candidate = "MAC-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-                if (existing.All(m => !string.Equals(m.MachineCode, candidate, StringComparison.OrdinalIgnoreCase)))
-                {
-                    code = candidate;
-                    break;
-                }
-            }
-            if (string.IsNullOrWhiteSpace(code))
-                throw new InvalidOperationException("Otomatik makine kodu uretilemedi (5 deneme basarisiz).");
+            throw new ArgumentException($"Aynı isimde başka bir makine zaten tanımlı: '{name}'");
         }
-        else if (existing.Any(m => string.Equals(m.MachineCode, code, StringComparison.OrdinalIgnoreCase)))
+
+        // Code DB'de var ama UI'dan kaldirildi — auto-uretilir (MAC-{6-hex})
+        var code = "MAC-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        for (var attempt = 0; attempt < 5 && existing.Any(m => string.Equals(m.MachineCode, code, StringComparison.OrdinalIgnoreCase)); attempt++)
         {
-            throw new ArgumentException("Ayni makine kodu ile kayit zaten mevcut.");
+            code = "MAC-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         }
 
         var machine = new Domain.Entities.Machine
         {
             LocationId = request.LocationId,
             MachineCode = code,
-            MachineName = string.IsNullOrWhiteSpace(request.MachineName) ? null : request.MachineName.Trim(),
-            MachineType = string.IsNullOrWhiteSpace(request.MachineType) ? null : request.MachineType.Trim(),
+            MachineName = name,
             HourlyCapacity = request.HourlyCapacity,
             SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
             IsActive = request.IsActive
@@ -1365,37 +1546,36 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Makine secimi zorunludur.");
         if (request.LocationId <= 0)
             throw new ArgumentException("Lokasyon secimi zorunludur.");
+        if (string.IsNullOrWhiteSpace(request.MachineName))
+            throw new ArgumentException("Makine adi zorunludur.");
 
         var locations = await _repository.GetLocationsAsync(cancellationToken);
         if (locations.All(l => l.Id != request.LocationId))
             throw new ArgumentException("Secilen lokasyon bulunamadi.");
 
         var all = await _repository.GetMachinesAsync(cancellationToken);
-
-        // Makine Kodu UI'da gosterilmedigi icin update'te bos gelebilir — bu durumda
-        // mevcut kodu koru. Dolu gelirse uniqueness kontrolu yap (manuel degistirilmis ise).
         var existingMachine = all.FirstOrDefault(m => m.Id == request.Id);
         if (existingMachine is null)
             throw new ArgumentException("Guncellenecek makine bulunamadi.");
 
-        var code = (request.MachineCode ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(code))
+        var name = request.MachineName.Trim();
+
+        // Ayni isimli baska makine var mi (kendisi haric)
+        if (all.Any(m => m.Id != request.Id &&
+                         string.Equals(m.MachineName?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
         {
-            code = existingMachine.MachineCode;   // mevcut kodu koru
+            throw new ArgumentException($"Aynı isimde başka bir makine zaten tanımlı: '{name}'");
         }
-        else if (all.Any(m => m.Id != request.Id &&
-                              string.Equals(m.MachineCode, code, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new ArgumentException("Bu makine kodu zaten baska bir kayitta kullaniliyor.");
-        }
+
+        // Mevcut kodu koru (UI'dan gelmiyor)
+        var code = existingMachine.MachineCode;
 
         var machine = new Domain.Entities.Machine
         {
             Id = request.Id,
             LocationId = request.LocationId,
             MachineCode = code,
-            MachineName = string.IsNullOrWhiteSpace(request.MachineName) ? null : request.MachineName.Trim(),
-            MachineType = string.IsNullOrWhiteSpace(request.MachineType) ? null : request.MachineType.Trim(),
+            MachineName = name,
             HourlyCapacity = request.HourlyCapacity,
             SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
             IsActive = request.IsActive
@@ -1408,75 +1588,6 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         if (machineId <= 0)
             throw new ArgumentException("Makine secimi zorunludur.");
         await _repository.DeleteMachineAsync(machineId, cancellationToken);
-    }
-
-    public async Task<IReadOnlyCollection<MachineTypeDto>> GetMachineTypesAsync(CancellationToken cancellationToken)
-    {
-        var rows = await _repository.GetMachineTypesAsync(cancellationToken);
-        return rows.Select(t => new MachineTypeDto(
-            t.Id, t.Code, t.Name, t.Description, t.IsBuiltIn, t.SortOrder, t.IsActive)).ToArray();
-    }
-
-    public async Task<int> SaveMachineTypeAsync(SaveMachineTypeRequest request, CancellationToken cancellationToken)
-    {
-        var name = (request.Name ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(name))
-            throw new ArgumentException("Tip adi zorunludur.");
-
-        var existing = await _repository.GetMachineTypesAsync(cancellationToken);
-
-        if (request.Id.HasValue && request.Id.Value > 0)
-        {
-            // UPDATE — Code degistirilemez (built-in olsun ozel olsun); sadece
-            // Name/Description/SortOrder/IsActive alanlari guncellenir.
-            var current = existing.FirstOrDefault(x => x.Id == request.Id.Value);
-            if (current is null) throw new ArgumentException("Tip bulunamadi.");
-
-            await _repository.UpdateMachineTypeAsync(new Domain.Entities.MachineType
-            {
-                Id = current.Id,
-                Code = current.Code,
-                Name = name,
-                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-                IsBuiltIn = current.IsBuiltIn,
-                SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
-                IsActive = request.IsActive
-            }, cancellationToken);
-            return current.Id;
-        }
-
-        // CREATE — yeni ozel tip (IsBuiltIn=false)
-        var code = (request.Code ?? string.Empty).Trim().ToUpperInvariant();
-        if (string.IsNullOrWhiteSpace(code))
-            throw new ArgumentException("Tip kodu zorunludur.");
-        if (existing.Any(x => string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)))
-            throw new ArgumentException("Bu kod ile baska bir tip zaten kayitli.");
-
-        return await _repository.AddMachineTypeAsync(new Domain.Entities.MachineType
-        {
-            Code = code,
-            Name = name,
-            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-            IsBuiltIn = false,
-            SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
-            IsActive = request.IsActive
-        }, cancellationToken);
-    }
-
-    public async Task DeleteMachineTypeAsync(int id, CancellationToken cancellationToken)
-    {
-        if (id <= 0) throw new ArgumentException("Tip secimi zorunludur.");
-        var all = await _repository.GetMachineTypesAsync(cancellationToken);
-        var current = all.FirstOrDefault(x => x.Id == id);
-        if (current is null) throw new ArgumentException("Tip bulunamadi.");
-        if (current.IsBuiltIn)
-            throw new ArgumentException("Standart (built-in) tipler silinemez. Pasife alabilirsin.");
-
-        var inUse = await _repository.CountMachinesUsingTypeAsync(current.Code, cancellationToken);
-        if (inUse > 0)
-            throw new ArgumentException($"Bu tip {inUse} makinede kullanildigi icin silinemez. Once makinelerin tipini degistir.");
-
-        await _repository.DeleteMachineTypeAsync(id, cancellationToken);
     }
 
     public async Task CreateUnitAsync(
@@ -1624,14 +1735,35 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
     public async Task<int> SaveLocationTypeAsync(SaveLocationTypeRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Code))
-            throw new ArgumentException("Tip kodu zorunludur.");
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Tip adi zorunludur.");
 
-        var normalizedCode = request.Code.Trim().ToUpperInvariant();
-
+        var trimmedName = request.Name.Trim();
         var existing = await _repository.GetLocationTypesAsync(cancellationToken);
+
+        // Ad uniqueness (kullanici kod girmiyor — uniqueness ad uzerinden)
+        var nameClash = existing.FirstOrDefault(x =>
+            string.Equals(x.Name?.Trim(), trimmedName, StringComparison.OrdinalIgnoreCase) &&
+            (!request.Id.HasValue || x.Id != request.Id.Value));
+        if (nameClash != null)
+            throw new ArgumentException($"Ayni isimde baska bir tip zaten tanimli: '{trimmedName}'");
+
+        // Kod auto-derive: update'te eski kodu koru, yeni'de ad'dan turet
+        string normalizedCode;
+        if (request.Id.HasValue)
+        {
+            var current = existing.FirstOrDefault(x => x.Id == request.Id.Value);
+            normalizedCode = current?.Code ?? DeriveLocationTypeCode(trimmedName, existing);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Code))
+        {
+            normalizedCode = request.Code.Trim().ToUpperInvariant();
+        }
+        else
+        {
+            normalizedCode = DeriveLocationTypeCode(trimmedName, existing);
+        }
+
         var clash = existing.FirstOrDefault(x =>
             string.Equals(x.Code, normalizedCode, StringComparison.OrdinalIgnoreCase) &&
             (!request.Id.HasValue || x.Id != request.Id.Value));
@@ -1651,7 +1783,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         {
             Id = request.Id ?? 0,
             Code = normalizedCode,
-            Name = request.Name.Trim(),
+            Name = trimmedName,
             SortOrder = request.SortOrder,
             IsActive = request.IsActive,
         };
@@ -2582,6 +2714,9 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     public async Task<IReadOnlyCollection<CombinationLookupRow>> GetCombinationsForLookupAsync(
         string materialCode, CancellationToken cancellationToken)
         => await _repository.GetCombinationsByMaterialCodeAsync(materialCode, cancellationToken);
+
+    public Task<IReadOnlyCollection<CombinationListItemDto>> GetAllCombinationsAsync(CancellationToken cancellationToken)
+        => _repository.GetAllCombinationsAsync(cancellationToken);
 
     public async Task<ResolveCombinationResponse> ResolveOrCreateCombinationAsync(
         ResolveCombinationRequest request, CancellationToken cancellationToken)

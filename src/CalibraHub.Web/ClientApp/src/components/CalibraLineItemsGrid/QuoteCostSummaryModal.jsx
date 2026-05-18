@@ -222,7 +222,20 @@ export default function QuoteCostSummaryModal() {
           }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: 10, fontWeight: 600, color: mutedText, textTransform: 'uppercase', letterSpacing: '.04em' }}>Fiyat Grubu</span>
-              <select value={priceGroupId || ''} onChange={function (e) { setPriceGroupId(e.target.value ? parseInt(e.target.value, 10) : null) }} style={inputStyle} disabled={paramsLoading}>
+              <select value={priceGroupId || ''} onChange={function (e) {
+                var newId = e.target.value ? parseInt(e.target.value, 10) : null
+                setPriceGroupId(newId)
+                var ng = priceGroups.find(function (g) { return g.id === newId })
+                if (ng) {
+                  var allowed = []
+                  if (ng.allowsCost)    allowed.push('m')
+                  if (ng.allowsBuying)  allowed.push('b')
+                  if (ng.allowsSelling) allowed.push('s')
+                  setPriceType(function (cur) {
+                    return allowed.length > 0 && allowed.indexOf(cur) === -1 ? allowed[0] : cur
+                  })
+                }
+              }} style={inputStyle} disabled={paramsLoading}>
                 {priceGroups.length === 0 && <option value="" style={optionStyle}>— Yok —</option>}
                 {priceGroups.map(function (g) { return <option key={g.id} value={g.id} style={optionStyle}>{g.code} · {g.name}</option> })}
               </select>
@@ -234,14 +247,26 @@ export default function QuoteCostSummaryModal() {
                 {currencies.map(function (c) { return <option key={c.id} value={c.id} style={optionStyle}>{c.code} {c.symbol ? '(' + c.symbol + ')' : ''}</option> })}
               </select>
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: mutedText, textTransform: 'uppercase', letterSpacing: '.04em' }}>Fiyat Tipi</span>
-              <select value={priceType} onChange={function (e) { setPriceType(e.target.value) }} style={inputStyle}>
-                <option value="m" style={optionStyle}>Maliyet</option>
-                <option value="b" style={optionStyle}>Alış</option>
-                <option value="s" style={optionStyle}>Satış</option>
-              </select>
-            </label>
+            {(function () {
+              var selGroup = priceGroups.find(function (g) { return g.id === priceGroupId })
+              var typeOpts = selGroup
+                ? (function () {
+                    var t = []
+                    if (selGroup.allowsCost)    t.push({ v: 'm', l: 'Maliyet' })
+                    if (selGroup.allowsBuying)  t.push({ v: 'b', l: 'Alış' })
+                    if (selGroup.allowsSelling) t.push({ v: 's', l: 'Satış' })
+                    return t.length > 0 ? t : [{ v: 'm', l: 'Maliyet' }, { v: 'b', l: 'Alış' }, { v: 's', l: 'Satış' }]
+                  })()
+                : [{ v: 'm', l: 'Maliyet' }, { v: 'b', l: 'Alış' }, { v: 's', l: 'Satış' }]
+              return (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: mutedText, textTransform: 'uppercase', letterSpacing: '.04em' }}>Fiyat Tipi</span>
+                  <select value={priceType} onChange={function (e) { setPriceType(e.target.value) }} style={inputStyle}>
+                    {typeOpts.map(function (t) { return <option key={t.v} value={t.v} style={optionStyle}>{t.l}</option> })}
+                  </select>
+                </label>
+              )
+            })()}
             {/* Bilesen Gruplama — coklu secim (checkbox), dinamik level (tum kalemlerin
                 bilesenlerinden derlenmis benzersiz seviyeler). */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6, borderTop: '1px dashed ' + panelBdr, marginTop: 4 }}>

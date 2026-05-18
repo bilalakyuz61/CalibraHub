@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Notes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,18 +14,25 @@ namespace CalibraHub.Web.Controllers;
 public sealed class NotesController : Controller
 {
     private readonly INoteRepository _noteRepository;
+    private readonly IAttachmentRepository _attachmentRepository;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IWebHostEnvironment _env;
     private const long MaxAttachmentBytes = 20L * 1024 * 1024; // 20 MB
+    private const string NoteEntityType = "Note";
 
-    public NotesController(INoteRepository noteRepository, IUserProfileRepository userProfileRepository, IWebHostEnvironment env)
+    public NotesController(
+        INoteRepository noteRepository,
+        IAttachmentRepository attachmentRepository,
+        IUserProfileRepository userProfileRepository,
+        IWebHostEnvironment env)
     {
         _noteRepository = noteRepository;
+        _attachmentRepository = attachmentRepository;
         _userProfileRepository = userProfileRepository;
         _env = env;
     }
 
-    private string AttachmentDir(Guid noteId) =>
+    private string LegacyAttachmentDir(Guid noteId) =>
         Path.Combine(_env.ContentRootPath, "note-attachments", noteId.ToString("N"));
 
     [HttpGet]
@@ -191,6 +199,7 @@ public sealed class NotesController : Controller
     {
         var (_, userId) = GetCurrentUser();
         await _noteRepository.PermanentDeleteNoteAsync(id, userId, cancellationToken);
+        await _attachmentRepository.DeleteByEntityAsync(NoteEntityType, id.ToString(), cancellationToken);
         return RedirectToAction(nameof(Index), new { trash = true });
     }
 
@@ -325,20 +334,19 @@ public sealed class NotesController : Controller
         var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
         if (!IsOwner(note, companyId, userId)) return Forbid();
 
-        var attachments = await _noteRepository.GetAttachmentsAsync(noteId, cancellationToken);
+        var attachments = await _attachmentRepository.GetByEntityAsync(NoteEntityType, noteId.ToString(), cancellationToken);
         return Json(attachments.Select(a => new
         {
             id          = a.Id,
             fileName    = a.FileName,
             fileSize    = a.FileSize,
             contentType = a.ContentType,
-            uploadedAt  = a.UploadedAt.ToString("dd.MM.yyyy HH:mm"),
+            uploadedAt  = a.Created.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
             description = a.Description
         }));
     }
 
     [HttpPost]
-    [ValidateAntiForgeryToken]
     [RequestSizeLimit(20 * 1024 * 1024 + 65536)]
     public async Task<IActionResult> UploadAttachment(Guid noteId, IFormFile file, string? description, CancellationToken cancellationToken)
     {
@@ -353,9 +361,6 @@ public sealed class NotesController : Controller
         if (file.Length > MaxAttachmentBytes)
             return Json(new { success = false, error = "Dosya boyutu 20 MB sınırını aşıyor." });
 
-        // Dosya icerigini DB'ye yaz (binary_content varbinary(max)). File system'e
-        // yazmiyoruz — multi-server senkronizasyon ve backup tutarliligi icin
-        // tek dogruluk kaynagi: DB.
         byte[] bytes;
         await using (var ms = new MemoryStream())
         {
@@ -363,21 +368,21 @@ public sealed class NotesController : Controller
             bytes = ms.ToArray();
         }
 
-        var ext        = Path.GetExtension(file.FileName);
-        var storedName = Guid.NewGuid().ToString("N") + ext;
-        var attachment = new NoteAttachment
+        var storedName = Guid.NewGuid().ToString("N") + Path.GetExtension(file.FileName);
+        var attachment = new Attachment
         {
-            NoteId        = noteId,
+            EntityType    = NoteEntityType,
+            EntityId      = noteId.ToString(),
             FileName      = Path.GetFileName(file.FileName),
             StoredName    = storedName,
             ContentType   = file.ContentType,
             FileSize      = file.Length,
-            UploadedAt    = DateTime.Now,
             Description   = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+            CreatedBy     = userId.ToString(),
             BinaryContent = bytes
         };
 
-        await _noteRepository.AddAttachmentAsync(attachment, cancellationToken);
+        await _attachmentRepository.AddAsync(attachment, cancellationToken);
         return Json(new
         {
             success    = true,
@@ -386,7 +391,7 @@ public sealed class NotesController : Controller
                 id          = attachment.Id,
                 fileName    = attachment.FileName,
                 fileSize    = attachment.FileSize,
-                uploadedAt  = attachment.UploadedAt.ToString("dd.MM.yyyy HH:mm"),
+                uploadedAt  = attachment.Created.ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
                 description = attachment.Description
             }
         });
@@ -396,19 +401,19 @@ public sealed class NotesController : Controller
     public async Task<IActionResult> DownloadAttachment(Guid id, CancellationToken cancellationToken)
     {
         var (companyId, userId) = GetCurrentUser();
-        var attachment = await _noteRepository.GetAttachmentByIdAsync(id, cancellationToken);
-        if (attachment is null) return NotFound();
+        var attachment = await _attachmentRepository.GetByIdAsync(id, cancellationToken);
+        if (attachment is null || attachment.EntityType != NoteEntityType) return NotFound();
 
-        var note = await _noteRepository.GetByIdAsync(attachment.NoteId, cancellationToken);
+        if (!Guid.TryParse(attachment.EntityId, out var noteId)) return NotFound();
+        var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
         if (!IsOwner(note, companyId, userId)) return Forbid();
 
-        // 1. Once DB'den binary'yi cek (yeni upload'lar burada).
-        var bytes = await _noteRepository.GetAttachmentBinaryAsync(id, cancellationToken);
+        var bytes = await _attachmentRepository.GetBinaryAsync(id, cancellationToken);
         if (bytes is { Length: > 0 })
             return File(bytes, attachment.ContentType ?? "application/octet-stream", attachment.FileName);
 
-        // 2. Legacy fallback — eski upload'lar file system'de.
-        var path = Path.Combine(AttachmentDir(attachment.NoteId), attachment.StoredName);
+        // Legacy fallback — eski upload'lar file system'de (note_attachments tablosundan kopyalanmamis).
+        var path = Path.Combine(LegacyAttachmentDir(noteId), attachment.StoredName);
         if (System.IO.File.Exists(path))
             return PhysicalFile(path, attachment.ContentType ?? "application/octet-stream", attachment.FileName);
 
@@ -416,22 +421,21 @@ public sealed class NotesController : Controller
     }
 
     [HttpPost]
-    [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteAttachment(Guid id, CancellationToken cancellationToken)
     {
         var (companyId, userId) = GetCurrentUser();
-        var attachment = await _noteRepository.GetAttachmentByIdAsync(id, cancellationToken);
-        if (attachment is null) return Json(new { success = false, error = "Dosya bulunamadı." });
+        var attachment = await _attachmentRepository.GetByIdAsync(id, cancellationToken);
+        if (attachment is null || attachment.EntityType != NoteEntityType)
+            return Json(new { success = false, error = "Dosya bulunamadı." });
 
-        var note = await _noteRepository.GetByIdAsync(attachment.NoteId, cancellationToken);
+        if (!Guid.TryParse(attachment.EntityId, out var noteId))
+            return Json(new { success = false, error = "Dosya bulunamadı." });
+
+        var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
         if (!IsOwner(note, companyId, userId))
             return Json(new { success = false, error = "Erişim reddedildi." });
 
-        // Legacy file system temizligi (yeni upload'larda dosya zaten yok)
-        var path = Path.Combine(AttachmentDir(attachment.NoteId), attachment.StoredName);
-        if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
-
-        await _noteRepository.DeleteAttachmentAsync(id, cancellationToken);
+        await _attachmentRepository.DeleteAsync(id, cancellationToken);
         return Json(new { success = true });
     }
 
@@ -524,12 +528,14 @@ public sealed class NotesController : Controller
         var (companyId, userId) = GetCurrentUser();
         var notes = await _noteRepository.GetByUserAsync(companyId, userId, null, cancellationToken);
         var folders = await _noteRepository.GetFoldersAsync(companyId, userId, cancellationToken);
+        var currentUser = await _userProfileRepository.GetByIdAsync(userId, cancellationToken);
 
         var noteIds = notes.Select(n => n.Id).ToArray();
         var reminderCounts = await _noteRepository.GetActiveReminderCountsAsync(noteIds, cancellationToken);
 
         return Json(new
         {
+            currentUserName = currentUser?.FullName ?? string.Empty,
             folders = folders.Select(f => new
             {
                 id = f.Id,
@@ -542,6 +548,7 @@ public sealed class NotesController : Controller
                 folderId = n.FolderId,
                 title = n.Title,
                 content = n.Content,
+                createdAt = n.CreatedAt,
                 updatedAt = n.UpdatedAt,
                 isPinned = n.IsPinned,
                 isFullyEncrypted = n.IsFullyEncrypted,
@@ -792,6 +799,143 @@ public sealed class NotesController : Controller
         return Json(new { success = true });
     }
 
+    /// <summary>Evernote .enex dosyasından notları içe aktarır.</summary>
+    [HttpPost]
+    [RequestSizeLimit(200 * 1024 * 1024)]   // 200 MB — büyük .enex dosyaları için
+    public async Task<IActionResult> ImportEvernote(IFormFile file, Guid? folderId, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+            return Json(new { success = false, error = "Dosya boş olamaz." });
+
+        if (!file.FileName.EndsWith(".enex", StringComparison.OrdinalIgnoreCase))
+            return Json(new { success = false, error = "Yalnızca .enex dosyaları desteklenir." });
+
+        var (companyId, userId) = GetCurrentUser();
+
+        List<EnexNote> enexNotes;
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            enexNotes = EnexImporter.Parse(stream);
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, error = $"Dosya okunamadı: {ex.Message}" });
+        }
+
+        if (enexNotes.Count == 0)
+            return Json(new { success = true, imported = 0, folderId = (Guid?)null });
+
+        NoteFolder folder;
+        var existingFolders = await _noteRepository.GetFoldersAsync(companyId, userId, cancellationToken);
+
+        if (folderId.HasValue)
+        {
+            // Seçili klasör — sahiplik kontrolü
+            var target = existingFolders.FirstOrDefault(f => f.Id == folderId.Value);
+            if (target is null)
+                return Json(new { success = false, error = "Klasör bulunamadı." });
+            folder = target;
+        }
+        else
+        {
+            // Klasör seçili değil — dosya adından türet, yoksa oluştur
+            var folderName = Path.GetFileNameWithoutExtension(file.FileName).Trim();
+            if (string.IsNullOrWhiteSpace(folderName)) folderName = "Evernote İçe Aktarma";
+
+            folder = existingFolders.FirstOrDefault(f =>
+                string.Equals(f.Name, folderName, StringComparison.OrdinalIgnoreCase))
+                ?? new NoteFolder { CompanyId = companyId, UserId = userId, Name = folderName };
+
+            if (folder.Id == Guid.Empty)
+                await _noteRepository.SaveFolderAsync(folder, cancellationToken);
+        }
+
+        int imported = 0, failed = 0;
+        foreach (var enexNote in enexNotes)
+        {
+            try
+            {
+                var note = new Note
+                {
+                    CompanyId  = companyId,
+                    UserId     = userId,
+                    FolderId   = folder.Id,
+                    Title      = string.IsNullOrWhiteSpace(enexNote.Title) ? "Adsız Not" : enexNote.Title.Trim(),
+                    Content    = enexNote.HtmlContent,
+                    CreatedAt  = enexNote.Created ?? DateTime.Now,
+                    UpdatedAt  = enexNote.Created ?? DateTime.Now
+                };
+                await _noteRepository.SaveAsync(note, cancellationToken);
+
+                foreach (var res in enexNote.Attachments)
+                {
+                    if (res.Data.Length > MaxAttachmentBytes) continue;   // 20 MB sınırı
+                    var storedName = Guid.NewGuid().ToString("N") + Path.GetExtension(res.FileName);
+                    var attachment = new Attachment
+                    {
+                        EntityType    = NoteEntityType,
+                        EntityId      = note.Id.ToString(),
+                        FileName      = res.FileName,
+                        StoredName    = storedName,
+                        ContentType   = res.Mime,
+                        FileSize      = res.Data.Length,
+                        CreatedBy     = userId.ToString(),
+                        BinaryContent = res.Data
+                    };
+                    await _attachmentRepository.AddAsync(attachment, cancellationToken);
+                }
+
+                imported++;
+            }
+            catch
+            {
+                failed++;
+            }
+        }
+
+        return Json(new { success = true, imported, failed, folderId = folder.Id });
+    }
+
+    /// <summary>Çöp kutusundaki (is_deleted=1) notları döner — JSON.</summary>
+    [HttpGet]
+    public async Task<IActionResult> TrashedJson(CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var trashed = await _noteRepository.GetTrashedAsync(companyId, userId, cancellationToken);
+        return Json(trashed.Select(n => new
+        {
+            id               = n.Id,
+            folderId         = n.FolderId,
+            title            = n.Title,
+            content          = n.Content,
+            createdAt        = n.CreatedAt,
+            updatedAt        = n.UpdatedAt,
+            isPinned         = n.IsPinned,
+            isFullyEncrypted = n.IsFullyEncrypted,
+        }));
+    }
+
+    /// <summary>Çöp kutusundan notu geri yükler — JSON.</summary>
+    [HttpPost]
+    public async Task<IActionResult> RestoreNoteJson([FromBody] NoteIdInput input, CancellationToken cancellationToken)
+    {
+        var (_, userId) = GetCurrentUser();
+        await _noteRepository.RestoreNoteAsync(input.Id, userId, cancellationToken);
+        return Json(new { success = true });
+    }
+
+    /// <summary>Notu kalıcı olarak siler (DB'den kaldırır) — JSON.</summary>
+    [HttpPost]
+    public async Task<IActionResult> PermanentDeleteNoteJson([FromBody] NoteIdInput input, CancellationToken cancellationToken)
+    {
+        var (_, userId) = GetCurrentUser();
+        await _noteRepository.PermanentDeleteNoteAsync(input.Id, userId, cancellationToken);
+        await _attachmentRepository.DeleteByEntityAsync(NoteEntityType, input.Id.ToString(), cancellationToken);
+        return Json(new { success = true });
+    }
+
+    public sealed record NoteIdInput(Guid Id);
     public sealed record DeleteNoteJsonInput(Guid Id);
     public sealed record TogglePinInput(Guid Id);
     public sealed record SaveFolderJsonInput(string Name, Guid? ParentFolderId);

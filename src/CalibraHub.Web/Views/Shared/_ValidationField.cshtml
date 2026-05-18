@@ -1,0 +1,89 @@
+@*
+    Validation Field partial (rapor §6.1 cozumu).
+    Tek componentte input + label + hata mesaji + aria-invalid bag(lama.
+
+    Kullanim:
+        @await Html.PartialAsync("_ValidationField", new CalibraHub.Web.Models.Shared.ValidationFieldModel
+        {
+            For        = nameof(Input.Email),
+            Label      = "E-Posta",
+            InputType  = "email",
+            Required   = true,
+            Autocomplete = "email",
+            Value      = Model.Email,
+            Placeholder = "ornek@firma.com",
+        })
+
+    Sonuc:
+        <div class="cb-field">
+            <label for="Email" class="cb-field-label cb-field-required">E-Posta <span aria-hidden="true">*</span></label>
+            <input id="Email" name="Email" type="email" required aria-required="true"
+                   value="..." class="cb-field-input ?is-invalid?" aria-invalid="?true?"
+                   aria-describedby="Email-error" autocomplete="email" />
+            <span id="Email-error" class="cb-field-error" data-valmsg-for="Email">{server-side hata}</span>
+        </div>
+
+    Bu partial gerekli a11y attribute'larini (aria-required, aria-invalid, aria-describedby) ve
+    cb-field-* CSS class'larini otomatik uygular — projeyi WCAG 2.1 ile uyumlu hale getirir.
+*@
+@model CalibraHub.Web.Models.Shared.ValidationFieldModel
+@{
+    var hasError = ViewData.ModelState.TryGetValue(Model.For, out var entry) && entry.Errors.Count > 0;
+    var errorText = hasError ? entry!.Errors[0].ErrorMessage : null;
+    var inputId = Model.InputId ?? Model.For;
+    var errorId = inputId + "-error";
+    var describedBy = (hasError ? errorId + " " : "") + (Model.HelpText != null ? inputId + "-help" : "");
+    describedBy = describedBy.Trim();
+}
+
+<div class="cb-field @(hasError ? "is-invalid" : "")">
+    @if (!string.IsNullOrEmpty(Model.Label))
+    {
+        <label for="@inputId" class="cb-field-label @(Model.Required ? "cb-field-required" : "")">
+            @Model.Label
+            @if (Model.Required)
+            {
+                <span aria-hidden="true">*</span>
+            }
+        </label>
+    }
+
+    @if (Model.IsTextarea)
+    {
+        <textarea id="@inputId"
+                  name="@Model.For"
+                  rows="@(Model.Rows ?? 3)"
+                  class="cb-field-input @(hasError ? "is-invalid" : "")"
+                  placeholder="@Model.Placeholder"
+                  @(Model.Required ? "required aria-required=\"true\"" : "")
+                  @(hasError ? "aria-invalid=\"true\"" : "")
+                  @(string.IsNullOrEmpty(describedBy) ? "" : $"aria-describedby=\"{describedBy}\"")
+                  @(Model.Autofocus ? "autofocus" : "")>@Model.Value</textarea>
+    }
+    else
+    {
+        <input id="@inputId"
+               name="@Model.For"
+               type="@Model.InputType"
+               value="@Model.Value"
+               class="cb-field-input @(hasError ? "is-invalid" : "")"
+               placeholder="@Model.Placeholder"
+               @(Model.Required ? "required aria-required=\"true\"" : "")
+               @(hasError ? "aria-invalid=\"true\"" : "")
+               @(string.IsNullOrEmpty(describedBy) ? "" : $"aria-describedby=\"{describedBy}\"")
+               @(string.IsNullOrEmpty(Model.Autocomplete) ? "" : $"autocomplete=\"{Model.Autocomplete}\"")
+               @(Model.Autofocus ? "autofocus" : "")
+               @(Model.Readonly ? "readonly" : "")
+               @(Model.Maxlength.HasValue ? $"maxlength=\"{Model.Maxlength.Value}\"" : "") />
+    }
+
+    @if (!string.IsNullOrEmpty(Model.HelpText))
+    {
+        <small id="@inputId-help" class="cb-field-help">@Model.HelpText</small>
+    }
+
+    @* Client-side validation icin data-valmsg-for; server-side errorText burada gosterilir *@
+    <span id="@errorId" class="cb-field-error" data-valmsg-for="@Model.For" data-valmsg-replace="true">
+        @errorText
+    </span>
+</div>

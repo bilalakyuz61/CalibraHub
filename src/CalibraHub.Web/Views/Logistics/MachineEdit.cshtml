@@ -1,0 +1,739 @@
+﻿@model CalibraHub.Web.Models.Logistics.MachineEditViewModel
+@{
+    var isNew = Model.Id == null;
+    ViewData["Title"] = isNew ? "Yeni Makine" : $"Makine: {Model.MachineName ?? Model.MachineCode}";
+    ViewData["FormCode"] = "MACHINES";
+    ViewData["BodyClass"] = "page-machine-edit";
+}
+
+@section Styles {
+<style>
+    .me-root {
+        --me-bg:      #f1f5f9;
+        --me-surface: #ffffff;
+        --me-border:  #e2e8f0;
+        --me-text:    #0f172a;
+        --me-muted:   #64748b;
+        --me-accent:  #6366f1;
+        display: flex; align-items: flex-start; justify-content: center;
+        min-height: 100vh; padding: 32px 16px;
+        background: var(--me-bg);
+        overflow-y: auto;   /* PC'de scroll calismasi icin */
+    }
+    /* iframe body'sinin scroll edilebilir olmasini garanti et */
+    body.page-machine-edit, body.page-machine-edit html {
+        overflow: auto !important;
+        height: auto !important;
+        min-height: 100vh;
+    }
+    body.app-theme-dark .me-root {
+        --me-bg:      #080c17;
+        --me-surface: #0d1323;
+        --me-border:  rgba(255,255,255,.09);
+        --me-text:    #e2e8f0;
+        --me-muted:   #94a3b8;
+    }
+    .me-card {
+        width: 100%; max-width: 520px;
+        background: var(--me-surface); border: 1px solid var(--me-border);
+        border-radius: 14px; padding: 0 28px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    /* ── Sticky action bar — Listeye Dön + Title + Kaydet/İptal/Sil ── */
+    .me-header {
+        display: flex; align-items: center; gap: 8px;
+        flex-wrap: wrap;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--me-surface);
+        margin: 0 -28px 18px;
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--me-border);
+        border-radius: 14px 14px 0 0;
+    }
+    .me-header h1 {
+        font-size: 15px;
+        flex-shrink: 0;
+    }
+    .me-header .me-back {
+        font-size: 12px;
+        padding: 6px 10px;
+    }
+    .me-header .me-btn {
+        padding: 7px 16px;
+        font-size: 12.5px;
+    }
+    /* Action bardaki Sil butonu margin-left:auto kaldırılır; flex spacer pozisyonlar */
+    .me-header .me-btn--in-header { margin-left: 0; }
+    /* Sticky iken golge ekle (scroll algilanir) */
+    .me-header::after {
+        content: '';
+        position: absolute;
+        left: 0; right: 0; bottom: -8px;
+        height: 8px;
+        background: linear-gradient(180deg, rgba(15,23,42,.05) 0%, transparent 100%);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity .2s ease;
+    }
+    .me-card.is-scrolled .me-header::after { opacity: 1; }
+    body.app-theme-dark .me-header::after {
+        background: linear-gradient(180deg, rgba(0,0,0,.4) 0%, transparent 100%);
+    }
+    .me-header h1 { font-size: 17px; font-weight: 700; margin: 0; color: var(--me-text); }
+    .me-back {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 8px;
+        border: 1px solid var(--me-border); background: none;
+        color: var(--me-muted); font-size: 13px; cursor: pointer;
+        text-decoration: none; transition: background .12s;
+    }
+    .me-back:hover { background: var(--me-bg); color: var(--me-text); }
+    .me-spacer { flex: 1; }
+
+    .me-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .me-label { font-size: 12px; font-weight: 600; color: var(--me-muted); }
+    .me-input, .me-select {
+        padding: 9px 12px; border-radius: 8px;
+        border: 1px solid var(--me-border);
+        background: var(--me-bg); color: var(--me-text);
+        font-size: 14px; outline: none;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    .me-input:focus, .me-select:focus { border-color: var(--me-accent); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    .me-input.is-invalid, .me-select.is-invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important; }
+    .me-hint { font-size: 11px; color: var(--me-muted); }
+    .me-type-hint { font-size: 11px; color: var(--me-muted); min-height: 14px; margin-top: 3px; }
+    body.app-theme-dark .me-select { color-scheme: dark; }
+    body.app-theme-dark .me-select > * { background-color: #0d1323; color: #e2e8f0; }
+
+    .me-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    .me-switch-row { display: flex; align-items: center; gap: 10px; }
+    .me-switch { position: relative; width: 42px; height: 24px; display: inline-block; flex-shrink: 0; }
+    .me-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .me-switch-track {
+        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
+        background: #e2e8f0; transition: background .2s;
+    }
+    .me-switch input:checked + .me-switch-track { background: #10b981; }
+    body.app-theme-dark .me-switch-track { background: rgba(255,255,255,.12); }
+    body.app-theme-dark .me-switch input:checked + .me-switch-track { background: #059669; }
+    .me-switch-track::before {
+        content: ''; position: absolute; height: 18px; width: 18px;
+        left: 3px; top: 3px; border-radius: 50%;
+        background: #fff; transition: transform .2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .me-switch input:checked + .me-switch-track::before { transform: translateX(18px); }
+    .me-switch-label { font-size: 13px; font-weight: 600; color: var(--me-muted); }
+
+    /* me-actions sticky bottom kaldirildi — butonlar ust action bar'a tasindi. */
+    .me-btn {
+        padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer; transition: all .12s;
+    }
+    .me-btn--primary { background: var(--me-accent); color: #fff; border-color: #4f46e5; }
+    .me-btn--primary:hover { filter: brightness(1.1); }
+    .me-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
+    .me-btn--ghost { background: none; border-color: var(--me-border); color: var(--me-text); }
+    .me-btn--ghost:hover { background: var(--me-bg); }
+    .me-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
+    body.app-theme-dark .me-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
+    .me-btn--danger:hover { background: rgba(239,68,68,.08); }
+    .me-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
+
+    .me-err {
+        margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+        background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
+    }
+    body.app-theme-dark .me-err { color: #f87171; }
+
+    /* Delete modal */
+    .me-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.48); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .me-modal {
+        background: var(--me-surface); border: 1px solid var(--me-border);
+        border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw;
+        display: flex; flex-direction: column; gap: 14px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.35);
+    }
+    .me-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+    .me-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--me-text); }
+    .me-modal-msg { font-size: 13px; color: var(--me-muted); text-align: center; line-height: 1.55; }
+    .me-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+    .me-modal-cancel {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: 1px solid var(--me-border); background: var(--me-surface);
+        color: var(--me-text); cursor: pointer; transition: background .12s;
+    }
+    .me-modal-cancel:hover { background: var(--me-bg); }
+    .me-modal-del {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: none; background: #ef4444; color: #fff; cursor: pointer; transition: filter .12s;
+    }
+    .me-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
+    .me-modal-del:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ════════════════════════════════════════════════════════════════
+       Ek Alanlar — Premium ERP kart listesi
+       Her widget grubu ayri kart; basliklar her zaman gorunur (48px
+       yuksek, mobil/tablet dostu tap target). Tiklayinca icerik acilir
+       (accordion). Smooth transitions, gradient accent, soft shadows.
+       ════════════════════════════════════════════════════════════════ */
+    #meDynamicWidgetsCard { padding-top: 16px; border-top: none !important; }
+    #meDynamicWidgets {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .me-card {
+        position: relative;
+        width: 100%;             /* Form ile ayni genislikte (520px container) */
+        border-radius: 10px;
+        background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+        border: 1px solid rgba(15, 23, 42, .07);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+        transition: box-shadow .18s ease, border-color .15s ease, transform .15s ease;
+        overflow: hidden;
+    }
+
+    /* Sol accent stripe — kapali iken yari saydam, acik iken tam */
+    .me-card::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: linear-gradient(180deg, #6366f1 0%, #8b5cf6 100%);
+        opacity: .4;
+        transition: opacity .2s ease;
+        z-index: 1;
+    }
+    .me-card[open]::before { opacity: 1; }
+
+    /* ── Baslik bar ── 40px tap target, kompakt ── */
+    .me-card-title {
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 40px;
+        padding: 0 14px 0 18px;
+        margin: 0 !important;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--me-text);
+        list-style: none !important;
+        cursor: pointer;
+        user-select: none;
+        outline: none;
+        position: relative;
+        transition: background .15s ease, color .15s ease;
+    }
+    .me-card-title::-webkit-details-marker { display: none; }
+    .me-card-title:hover {
+        background: rgba(99, 102, 241, .04);
+    }
+    .me-card-title:focus-visible {
+        background: rgba(99, 102, 241, .08);
+        box-shadow: inset 0 0 0 2px rgba(99, 102, 241, .35);
+    }
+
+    /* Sag chevron — acilinca 90 derece doner */
+    .me-card-title::after {
+        content: '';
+        flex-shrink: 0;
+        width: 8px; height: 8px;
+        border-right: 2px solid var(--me-muted);
+        border-bottom: 2px solid var(--me-muted);
+        transform: rotate(-45deg);
+        transition: transform .25s cubic-bezier(.4,0,.2,1), border-color .15s ease;
+        margin-left: 6px;
+    }
+    .me-card[open] .me-card-title::after {
+        transform: rotate(45deg);
+        border-color: var(--me-accent);
+    }
+
+    /* Acik kart — header rengi + glow */
+    .me-card[open] {
+        border-color: rgba(99, 102, 241, .25);
+        box-shadow:
+            0 4px 12px rgba(99, 102, 241, .08),
+            0 12px 32px rgba(99, 102, 241, .06);
+    }
+    .me-card[open] .me-card-title {
+        background: linear-gradient(90deg, rgba(99,102,241,.06) 0%, transparent 100%);
+        color: var(--me-accent);
+        border-bottom: 1px solid rgba(99, 102, 241, .12);
+    }
+
+    /* Hover — kapali kart hafif kalkar */
+    .me-card:not([open]):hover {
+        transform: translateY(-1px);
+        border-color: rgba(99, 102, 241, .2);
+        box-shadow:
+            0 2px 4px rgba(15, 23, 42, .04),
+            0 6px 16px rgba(99, 102, 241, .08);
+    }
+
+    /* Icerik alani */
+    .me-card .wf-grid {
+        padding: 12px 14px 14px 18px;
+        animation: meCardFadeIn .2s ease-out both;
+    }
+    @@keyframes meCardFadeIn {
+        from { opacity: 0; transform: translateY(-2px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Dark mode ── */
+    body.app-theme-dark .me-card {
+        background: linear-gradient(180deg, #131a2b 0%, #0e1422 100%);
+        border-color: rgba(255, 255, 255, .06);
+        box-shadow:
+            0 1px 2px rgba(0, 0, 0, .3),
+            0 2px 8px rgba(0, 0, 0, .25);
+    }
+    body.app-theme-dark .me-card::before {
+        background: linear-gradient(180deg, #818cf8 0%, #a78bfa 100%);
+        opacity: .45;
+    }
+    body.app-theme-dark .me-card[open]::before { opacity: 1; }
+
+    body.app-theme-dark .me-card-title:hover {
+        background: rgba(129, 140, 248, .06);
+    }
+    body.app-theme-dark .me-card-title:focus-visible {
+        background: rgba(129, 140, 248, .1);
+        box-shadow: inset 0 0 0 2px rgba(129, 140, 248, .4);
+    }
+
+    body.app-theme-dark .me-card[open] {
+        border-color: rgba(129, 140, 248, .35);
+        box-shadow:
+            0 4px 12px rgba(0, 0, 0, .35),
+            0 16px 40px rgba(99, 102, 241, .2);
+    }
+    body.app-theme-dark .me-card[open] .me-card-title {
+        background: linear-gradient(90deg, rgba(129,140,248,.1) 0%, transparent 100%);
+        color: #a5b4fc;
+        border-bottom-color: rgba(129, 140, 248, .18);
+    }
+
+    body.app-theme-dark .me-card:not([open]):hover {
+        border-color: rgba(129, 140, 248, .28);
+        box-shadow:
+            0 2px 4px rgba(0, 0, 0, .3),
+            0 8px 20px rgba(99, 102, 241, .16);
+    }
+
+    /* ── Mobile/tablet (≤640px) — daha buyuk tap target ── */
+    @@media (max-width: 640px) {
+        .me-card-title { min-height: 48px; padding: 0 14px 0 18px; font-size: 14px; }
+        .me-card-title::after { width: 9px; height: 9px; }
+        .me-card .wf-grid { padding: 14px; }
+        #meDynamicWidgets { gap: 6px; }
+    }
+</style>
+}
+
+@{
+    var _colId = (Model.Id ?? 0) > 0 ? Model.Id!.Value.ToString() : $"new-{Guid.NewGuid():N}";
+    var _colTitle = isNew ? "Yeni Makine" : $"Makine: {Model.MachineName ?? Model.MachineCode}";
+}
+<form class="integrator-form" style="display:none" aria-hidden="true"
+      data-collaboration-record-type="MACHINE_EDIT"
+      data-collaboration-record-id="@_colId"
+      data-collaboration-record-title="@_colTitle"></form>
+
+<div class="me-root">
+  <div class="me-card">
+    <div class="me-header">
+      <a class="me-back" href="/Logistics/Machines" title="Listeye Dön">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <h1>@(isNew ? "Yeni Makine" : "Makineyi Düzenle")</h1>
+      <span class="me-spacer"></span>
+      <button class="me-btn me-btn--primary" id="me-save">Kaydet</button>
+      <a class="me-btn me-btn--ghost" href="/Logistics/Machines">İptal</a>
+      @if (!isNew)
+      {
+        <button class="me-btn me-btn--danger me-btn--in-header" id="me-delete">Sil</button>
+      }
+    </div>
+
+    <input type="hidden" id="me-id"   value="@(Model.Id?.ToString() ?? "")" />
+    <input type="hidden" id="me-code" value="@(Model.MachineCode ?? "")" />
+
+    <div class="me-field">
+      <label class="me-label" for="me-location">Lokasyon *</label>
+      <select id="me-location" class="me-select">
+        <option value="">— Lokasyon seçiniz —</option>
+      </select>
+    </div>
+
+    <div class="me-field">
+      <label class="me-label" for="me-name">Makine Adı *</label>
+      <input id="me-name" class="me-input" maxlength="150"
+             value="@(Model.MachineName ?? "")" placeholder="Orn: CNC Torna 1" />
+    </div>
+
+    <div class="me-row2">
+      <div class="me-field">
+        <label class="me-label" for="me-sort">Sıralama</label>
+        <input id="me-sort" class="me-input" type="number" min="0" value="@Model.SortOrder" />
+      </div>
+      <div class="me-field">
+        <label class="me-label">Durum</label>
+        <div class="me-switch-row">
+          <label class="me-switch">
+            <input type="checkbox" id="me-active" @(Model.IsActive ? "checked" : "") />
+            <span class="me-switch-track"></span>
+          </label>
+          <span class="me-switch-label" id="me-active-label">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="me-err" style="display:none;" class="me-err"></div>
+
+    <!-- Ek Alanlar — Admin → Widget Tanımları → MACHINES form code'una eklenen
+         widget'lar burada kart şeklinde otomatik render edilir. -->
+    <div id="meDynamicWidgetsCard" style="margin-top:18px; padding-top:18px; border-top:1px solid var(--me-border);">
+      <div id="meDynamicWidgets"
+           data-form-code="MACHINES"
+           data-record-id="@(Model.Id?.ToString() ?? "")">
+      </div>
+    </div>
+
+    <div style="height: 18px;"></div>
+  </div>
+</div>
+
+@if (!isNew)
+{
+  <div id="me-modal" class="me-modal-backdrop" style="display:none;" onclick="meCloseModal()">
+    <div class="me-modal" onclick="event.stopPropagation()">
+      <div class="me-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="me-modal-title">Makineyi Sil</div>
+      <div class="me-modal-msg" id="me-modal-msg"></div>
+      <div class="me-modal-actions">
+        <button class="me-modal-cancel" onclick="meCloseModal()">Vazgeç</button>
+        <button class="me-modal-del" id="me-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var idVal   = document.getElementById('me-id')?.value   || '';
+    var codeVal = document.getElementById('me-code')?.value || '';
+    var initLocId = @(Model.LocationId);
+
+    function csrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function setErr(msg) {
+        var el = document.getElementById('me-err');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; }
+        else el.style.display = 'none';
+    }
+    function shake(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('is-invalid'); void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
+    }
+
+    // ── Active label sync ───────────────────────────────────────
+    var activeEl = document.getElementById('me-active');
+    var activeLabel = document.getElementById('me-active-label');
+    if (activeEl && activeLabel) {
+        activeEl.addEventListener('change', function () {
+            activeLabel.textContent = activeEl.checked ? 'Aktif' : 'Pasif';
+        });
+    }
+
+    // ── Load dropdowns ──────────────────────────────────────────
+    async function loadLocations() {
+        var r = await fetch('/Logistics/GetAllLocations', { credentials: 'same-origin' });
+        var all = r.ok ? await r.json() : [];
+        var active = (all || []).filter(function (l) { return l.isActive; });
+
+        var byId = {};
+        active.forEach(function (l) { byId[l.id] = l; });
+
+        var hasMpCache = {};
+        function hasMachineParkInSubtree(nodeId) {
+            if (hasMpCache[nodeId] !== undefined) return hasMpCache[nodeId];
+            var node = byId[nodeId];
+            if (node && node.isMachinePark === true) { hasMpCache[nodeId] = true; return true; }
+            var children = active.filter(function (l) { return l.parentId === nodeId; });
+            for (var i = 0; i < children.length; i++) {
+                if (hasMachineParkInSubtree(children[i].id)) { hasMpCache[nodeId] = true; return true; }
+            }
+            hasMpCache[nodeId] = false;
+            return false;
+        }
+
+        var visible = active.filter(function (l) { return hasMachineParkInSubtree(l.id); });
+        if (visible.length === 0) {
+            var sel0 = document.getElementById('me-location');
+            sel0.innerHTML = '<option value="">— Makine parkuru lokasyonu yok —</option>';
+            return;
+        }
+
+        var byParent = {};
+        visible.forEach(function (l) {
+            var p = l.parentId == null ? 0 : l.parentId;
+            if (!byParent[p]) byParent[p] = [];
+            byParent[p].push(l);
+        });
+        Object.keys(byParent).forEach(function (k) {
+            byParent[k].sort(function (a, b) {
+                if ((a.sortOrder || 0) !== (b.sortOrder || 0)) return (a.sortOrder || 0) - (b.sortOrder || 0);
+                return (a.locationCode || '').localeCompare(b.locationCode || '');
+            });
+        });
+
+        var BAR = "│  ";
+        var TEE = "├─ ";
+        var ELL = "└─ ";
+        var SPC = "   ";
+
+        var ordered = [];
+        function walk(pid, depth, ancestorHasMore) {
+            var siblings = byParent[pid] || [];
+            siblings.forEach(function (node, idx) {
+                var isLast = idx === siblings.length - 1;
+                var prefix = '';
+                for (var i = 0; i < depth - 1; i++) prefix += ancestorHasMore[i] ? BAR : SPC;
+                if (depth > 0) prefix += isLast ? ELL : TEE;
+                var label = prefix + (node.locationCode || '') + (node.locationName ? ' - ' + node.locationName : '');
+                ordered.push({ id: node.id, label: label, selectable: node.isMachinePark === true });
+                walk(node.id, depth + 1, ancestorHasMore.concat(!isLast));
+            });
+        }
+        walk(0, 0, []);
+
+        var sel = document.getElementById('me-location');
+        sel.innerHTML = '<option value="">— Lokasyon seçiniz —</option>' +
+            ordered.map(function (x) {
+                var disAttr = x.selectable ? '' : ' disabled';
+                return '<option value="' + x.id + '"' + disAttr + '>' + x.label + '</option>';
+            }).join('');
+        if (initLocId) sel.value = initLocId;
+    }
+
+    loadLocations();
+
+    // ── Save ────────────────────────────────────────────────────
+    var saveBtn = document.getElementById('me-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            var locId = parseInt(document.getElementById('me-location').value) || 0;
+            var name  = (document.getElementById('me-name').value || '').trim();
+            var invalid = false;
+            if (!locId) { shake('me-location'); invalid = true; }
+            if (!name)  { shake('me-name');     invalid = true; }
+            if (invalid) return;
+
+            var payload = {
+                id:           idVal ? parseInt(idVal) : null,
+                locationId:   locId,
+                machineCode:  codeVal,
+                machineName:  name,
+                hourlyCapacity: null,
+                sortOrder:    parseInt(document.getElementById('me-sort').value) || 0,
+                isActive:     document.getElementById('me-active').checked
+            };
+            saveBtn.disabled = true;
+            setErr('');
+            fetch('/Logistics/SaveMachineJson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify(payload)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.success) {
+                    // Dinamik widget'lari da kaydet (recordId bilinen update modunda
+                    // veya yeni kayittan donen id ile)
+                    var newId = (d && d.id) || (idVal ? parseInt(idVal) : 0);
+                    var dyn = window._meDynRenderer;
+                    var widgetSavePromise = Promise.resolve();
+                    if (dyn && typeof dyn.save === 'function' && newId > 0) {
+                        try {
+                            widgetSavePromise = Promise.resolve(dyn.save({ recordId: String(newId) }))
+                                .catch(function (err) {
+                                    console.warn('[ME] widget save hata:', err);
+                                });
+                        } catch (e) { console.warn('[ME] widget save catch:', e); }
+                    }
+                    widgetSavePromise.then(function () {
+                        window.location.href = '/Logistics/Machines';
+                    });
+                } else {
+                    setErr((d && d.message) || 'Kayıt başarısız.');
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
+        });
+    }
+
+    // ── Delete modal ────────────────────────────────────────────
+    var deleteBtn = document.getElementById('me-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            var name = document.getElementById('me-name').value || codeVal;
+            var msgEl = document.getElementById('me-modal-msg');
+            if (msgEl) msgEl.innerHTML = '<strong>' + name + '</strong> makinesini silmek istediğinize emin misiniz?';
+            document.getElementById('me-modal').style.display = 'flex';
+            document.getElementById('me-modal-del').focus();
+        });
+
+        var modalDel = document.getElementById('me-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled = true;
+                modalDel.textContent = 'Siliniyor…';
+                fetch('/Logistics/DeleteMachineJson?id=' + idVal, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': csrf() }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.success) {
+                        window.location.href = '/Logistics/Machines';
+                    } else {
+                        meCloseModal();
+                        setErr((d && d.message) || 'Silinemedi.');
+                    }
+                })
+                .catch(function () { meCloseModal(); setErr('Bağlantı hatası.'); });
+            });
+        }
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') meCloseModal();
+    });
+})();
+
+// ── Sticky header/actions shadow tetikleyici (scroll'a gore) ────────
+(function () {
+    var card = document.querySelector('.me-card');
+    var scroller = document.querySelector('.me-root');
+    if (!card || !scroller) return;
+    function update() {
+        if (scroller.scrollTop > 4) card.classList.add('is-scrolled');
+        else card.classList.remove('is-scrolled');
+        // Alt sticky golge — alt sona ulasilmadiysa goster
+        var atBottom = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < 4;
+        if (!atBottom) card.classList.add('is-scrolled-end-not-reached');
+        else card.classList.remove('is-scrolled-end-not-reached');
+    }
+    scroller.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    setTimeout(update, 100);
+})();
+
+function meCloseModal() {
+    var m = document.getElementById('me-modal');
+    if (m) m.style.display = 'none';
+    var btn = document.getElementById('me-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
+
+// ── Ek Alanlar — Dinamik Widget Renderer (Admin → Widget Tanımları → MACHINES)
+(function initMeDynRenderer() {
+    var el = document.getElementById('meDynamicWidgets');
+    if (!el) return;
+
+    // Renderer mount edildikten sonra <details> elementlerini Wallet-style
+    // accordion davranisina cevirir: sadece bir kart acik, digerleri kapali.
+    // MutationObserver ile dynamic eklemelere de uyar.
+    function applyWalletAccordion() {
+        var details = el.querySelectorAll('details.me-card');
+        if (!details.length) return;
+        details.forEach(function (d, i) {
+            if (d.dataset.meWalletBound === '1') return;
+            d.dataset.meWalletBound = '1';
+            // Ilk kart acik baslasin, digerleri kapali
+            if (i === 0) d.setAttribute('open', '');
+            else d.removeAttribute('open');
+            d.addEventListener('toggle', function () {
+                if (d.open) {
+                    // Diger acik kartlari kapat (accordion)
+                    details.forEach(function (x) {
+                        if (x !== d && x.open) x.open = false;
+                    });
+                }
+            });
+        });
+    }
+
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) {
+            console.warn('[ME] mountDynamicWidgetRenderer bulunamadi');
+            return;
+        }
+        try {
+            window._meDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode:    el.getAttribute('data-form-code') || 'MACHINES',
+                recordId:    el.getAttribute('data-record-id') || '',
+                classPrefix: 'me',
+                containerId: 'meDynamicWidgetsCard'
+            });
+            // Renderer async render eder — kartlar DOM'a gelene kadar gozle
+            var obs = new MutationObserver(function () {
+                applyWalletAccordion();
+            });
+            obs.observe(el, { childList: true, subtree: true });
+            // Ilk denemede zaten gelmis olabilir
+            setTimeout(applyWalletAccordion, 50);
+            setTimeout(applyWalletAccordion, 300);
+        } catch (e) { console.warn('[ME] mountDynamicWidgetRenderer hatasi:', e); }
+    }
+
+    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+        doMount();
+    } else {
+        var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+        var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+
+        if (!document.querySelector('link[data-me-bundle]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = cssUrl;
+            link.setAttribute('data-me-bundle', '1');
+            document.head.appendChild(link);
+        }
+        if (!document.querySelector('script[data-me-bundle]')) {
+            var script = document.createElement('script');
+            script.src = jsUrl;
+            script.setAttribute('data-me-bundle', '1');
+            script.onload  = function () { setTimeout(doMount, 0); };
+            script.onerror = function () { console.error('[ME] Bundle yuklenemedi'); };
+            document.head.appendChild(script);
+        }
+    }
+})();
+</script>
+}

@@ -43,4 +43,12 @@ public enum ScheduledTaskType
     /// "subject":"...","bodyText":"...","maxRows":10000}.
     /// </summary>
     ViewReport = 5,
+
+    /// <summary>
+    /// Bir entegrasyonu cron/interval ile zamanli calistirir (IntegrationRunner).
+    /// Parameters: {"integrationId": 12, "recordId": "optional source record id"}.
+    /// recordId verilmezse Integration'in tum kayitlari icin (V2 batch) calismaz —
+    /// V1'de tek bir "manuel calistir" semantigi (recordId=null ise wizard test akisi).
+    /// </summary>
+    Integration = 6,
 }

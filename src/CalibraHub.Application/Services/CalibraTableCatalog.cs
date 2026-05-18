@@ -57,7 +57,7 @@ public static class CalibraTableCatalog
 
         // Entegrasyon
         "erp_connection_settings", "incoming_documents",
-        "integration_api_profiles", "integration_event_definitions", "integration_event_logs",
+        "integration_api_profiles",
         "integrator_settings", "smtp_profiles",
         "CBT_EBELGEMAS", // Legacy ERP e-belge tablosu — IncomingDocumentRepository kullaniyor
 

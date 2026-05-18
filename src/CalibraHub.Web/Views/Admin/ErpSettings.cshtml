@@ -32,7 +32,7 @@
 </style>
 }
 
-<div class="entity-form-toolbar" data-no-proxy="1">
+<div class="entity-form-toolbar cb-sticky-toolbar cb-sticky-toolbar--top" data-no-proxy="1">
     <button type="button" class="btn btn-primary btn-sm" onclick="erpSave()">Kaydet</button>
     <button type="button" class="btn btn-outline-danger btn-sm" id="erpBtnDelete" disabled onclick="erpDelete()">Sil</button>
     <button type="button" class="btn btn-secondary btn-sm" onclick="erpNew()">Yeni</button>
@@ -161,21 +161,30 @@
             });
     };
 
-    window.erpDelete = function() {
+    window.erpDelete = async function() {
         var id = document.getElementById('erpId').value;
-        if (!id || !confirm('Bu ERP baglantisini silmek istediginize emin misiniz?')) return;
-        erpDeleteById(id);
+        if (!id) return;
+        var ok = await CalibraAlert.confirm('Bu ERP baglantisini silmek istediginize emin misiniz?',
+            { title: 'ERP Baglanti Sil', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true });
+        if (!ok) return;
+        _erpDeleteSilent(id);
     };
 
-    window.erpDeleteById = function(id) {
-        if (!confirm('Bu ERP baglantisini silmek istediginize emin misiniz?')) return;
+    window.erpDeleteById = async function(id) {
+        var ok = await CalibraAlert.confirm('Bu ERP baglantisini silmek istediginize emin misiniz?',
+            { title: 'ERP Baglanti Sil', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true });
+        if (!ok) return;
+        _erpDeleteSilent(id);
+    };
+
+    function _erpDeleteSilent(id) {
         fetch(API('DeleteErpSettingsJson') + '?id=' + id, { method: 'POST' })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (d.success) { erpMsg('Silindi.', true); erpNew(); }
                 else erpMsg(d.message || 'Silinemedi', false);
             });
-    };
+    }
 
     window.erpTest = function() {
         var payload = buildPayload();

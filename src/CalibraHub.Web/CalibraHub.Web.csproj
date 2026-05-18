@@ -10,6 +10,14 @@
     <Folder Include="wwwroot\Document\" />
   </ItemGroup>
 
+  <!-- Integration endpoint katalog (Netsis NetOpenX REST). EndpointCatalogService
+       startup'ta okur ve in-memory cache'ler. UI'daki URL combobox'ı bu katalogtan
+       beslenir — DB'ye kaydedilmiş olsun olmasın 320 endpoint listede gözükür. -->
+  <ItemGroup>
+    <Content Include="Resources\Integration\*.csv" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="Resources\Integration\Seed\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>

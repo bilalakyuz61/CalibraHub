@@ -1,0 +1,816 @@
+@model CalibraHub.Web.Models.Warehouse.StockDocEditViewModel
+@{
+    var isTransfer = Model.DocType == "TRANSFER";
+    var isStockIn  = Model.DocType == "STOCK_IN";
+    var isEdit     = Model.DocId.HasValue;
+
+    var pageTitle = Model.DocType switch
+    {
+        "TRANSFER"  => isEdit ? "Transfer Düzenle"         : "Yeni Transfer",
+        "STOCK_IN"  => isEdit ? "Giriş Belgesi Düzenle"    : "Yeni Giriş Belgesi",
+        "STOCK_OUT" => isEdit ? "Çıkış Belgesi Düzenle"    : "Yeni Çıkış Belgesi",
+        _ => "Depo Belgesi",
+    };
+    var listUrl    = isTransfer ? "/Warehouse/Transfer" : "/Warehouse/StockEntry";
+    var bodyClass  = "page-wh-doc-edit";
+
+    ViewData["Title"]     = pageTitle;
+    ViewData["BodyClass"] = bodyClass;
+}
+
+@section Styles {
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
+<style>
+    /* ── Viewport iskelet ─────────────────────────────────────────────── */
+    .page-wh-doc-edit .integrator-dashboard { height: 100%; min-height: 0; }
+    .page-wh-doc-edit .integrator-dashboard__content {
+        display: flex !important; flex-direction: column;
+        width: 100% !important; max-width: none !important;
+        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
+    }
+    .workspace-frame-body.page-wh-doc-edit .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-wh-doc-edit .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+
+    /* ── Aksiyon seridi (DocumentEdit standart) ────────────────────── */
+    .sqe-action-bar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 16px; flex-shrink: 0;
+        background: rgba(15,15,26,0.85); border-bottom: 1px solid rgba(255,255,255,0.06);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        position: relative; overflow: hidden;
+    }
+    body.app-theme-light .sqe-action-bar {
+        background: rgba(248,250,252,0.92); border-bottom-color: #e2e8f0;
+    }
+    .sqe-action-bar::before {
+        content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+        height: 2px; pointer-events: none; opacity: 0;
+        background: linear-gradient(90deg,rgba(0,60,20,0) 0%,rgba(10,120,40,.55) 50%,rgba(0,60,20,0) 100%);
+    }
+    .sqe-action-bar::after {
+        content: ''; position: absolute; left: 0; bottom: -1px;
+        width: 18%; height: 4px; pointer-events: none; opacity: 0;
+        background: linear-gradient(90deg,transparent 0%,rgba(34,197,94,.35) 18%,rgba(74,255,140,1) 50%,rgba(34,197,94,.35) 82%,transparent 100%);
+        box-shadow: 0 0 10px 2px rgba(34,197,94,.95),0 0 22px 6px rgba(34,197,94,.55),0 0 40px 12px rgba(34,197,94,.22);
+        border-radius: 50%;
+    }
+    .sqe-action-bar.is-save-flash::before { animation: sqeKittBg   1800ms ease-out forwards; }
+    .sqe-action-bar.is-save-flash::after  { animation: sqeKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+    @@keyframes sqeKittBg { 0%,100%{opacity:0;} 10%,90%{opacity:1;} }
+    @@keyframes sqeKittScan {
+        0%  {opacity:0;left:0;} 8%{opacity:1;} 48%{opacity:1;left:82%;} 52%{opacity:1;left:82%;} 92%{opacity:1;left:0;} 100%{opacity:0;left:0;}
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────────── */
+    .sqe-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 14px; border-radius: 10px; border: 1px solid;
+        font-size: 0.8rem; font-weight: 600; cursor: pointer;
+        text-decoration: none; transition: all .14s;
+    }
+    .sqe-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .sqe-btn--primary  { background: #6366f1; border-color: #4f46e5; color: #fff; }
+    .sqe-btn--primary:hover { background: #4f46e5; color: #fff; }
+    .sqe-btn--secondary {
+        background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.75);
+    }
+    body.app-theme-light .sqe-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
+    .sqe-btn--secondary:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    body.app-theme-light .sqe-btn--secondary:hover { background: #f1f5f9; color: #1e293b; }
+    .sqe-btn--danger {
+        background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: #f87171;
+    }
+    body.app-theme-light .sqe-btn--danger { color: #dc2626; }
+    .sqe-btn--danger:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+
+    /* ── İşlemler dropdown ────────────────────────────────────────────── */
+    .sqe-actions-menu {
+        position: relative; margin-left: auto;
+        display: flex; align-items: center;
+    }
+    .sqe-actions-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; font-size: 0.78rem; font-weight: 600;
+        color: rgba(255,255,255,0.78);
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 8px; cursor: pointer;
+        transition: background .12s, color .12s, border-color .12s;
+    }
+    .sqe-actions-btn:hover { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.18); }
+    .sqe-actions-menu.is-open .sqe-actions-btn { background: rgba(99,102,241,0.16); color: #c7d2fe; border-color: rgba(99,102,241,0.40); }
+    body.app-theme-light .sqe-actions-btn { color: #334155; background: #fff; border-color: #e2e8f0; }
+    body.app-theme-light .sqe-actions-btn:hover { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
+    body.app-theme-light .sqe-actions-menu.is-open .sqe-actions-btn { background: rgba(99,102,241,0.08); color: #4338ca; border-color: rgba(99,102,241,0.45); }
+    .sqe-actions-caret { transition: transform .15s; opacity: 0.7; }
+    .sqe-actions-menu.is-open .sqe-actions-caret { transform: rotate(180deg); opacity: 1; }
+
+    .sqe-actions-dropdown {
+        position: fixed; top: 0; left: 0;
+        min-width: 180px; display: none; flex-direction: column;
+        gap: 2px; padding: 6px; border-radius: 10px;
+        background: rgba(15,19,30,0.98); border: 1px solid rgba(255,255,255,0.10);
+        box-shadow: 0 16px 48px rgba(0,0,0,0.45),0 0 0 1px rgba(99,102,241,0.08);
+        z-index: 10000;
+        animation: sqeActionsDropIn 140ms cubic-bezier(.2,.8,.3,1);
+    }
+    .sqe-actions-dropdown.is-open { display: flex; }
+    body.app-theme-light .sqe-actions-dropdown { background: #fff; border-color: #e2e8f0; box-shadow: 0 12px 40px rgba(15,23,42,0.16); }
+    @@keyframes sqeActionsDropIn { from{opacity:0;transform:translateY(-4px) scale(0.98);} to{opacity:1;transform:translateY(0) scale(1);} }
+    .sqe-actions-item {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 10px; font-size: 0.78rem; font-weight: 500;
+        color: rgba(255,255,255,0.82); background: transparent;
+        border: 1px solid transparent; border-radius: 7px;
+        cursor: pointer; text-align: left; transition: background .1s,color .1s,border-color .1s;
+    }
+    .sqe-actions-item:hover { background: rgba(99,102,241,0.14); color: #c7d2fe; border-color: rgba(99,102,241,0.28); }
+    body.app-theme-light .sqe-actions-item { color: #334155; }
+    body.app-theme-light .sqe-actions-item:hover { background: rgba(99,102,241,0.08); color: #4338ca; border-color: rgba(99,102,241,0.25); }
+
+    /* ── Belge bilgisi (meta) ────────────────────────────────────────── */
+    .wde-docinfo {
+        display: flex; align-items: center; gap: 10px;
+        margin-right: auto;
+    }
+    .wde-docno {
+        font-size: 0.88rem; font-weight: 700;
+        color: rgba(255,255,255,0.85);
+    }
+    body.app-theme-light .wde-docno { color: #1e293b; }
+    .wde-type-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 10px; border-radius: 20px; font-size: 0.73rem; font-weight: 600;
+    }
+    .wde-type-badge--transfer  { background: rgba(99,102,241,.15); color: #818cf8; }
+    .wde-type-badge--stock-in  { background: rgba(16,185,129,.15); color: #34d399; }
+    .wde-type-badge--stock-out { background: rgba(239,68,68,.12);  color: #f87171; }
+    body.app-theme-light .wde-type-badge--transfer  { color: #4f46e5; }
+    body.app-theme-light .wde-type-badge--stock-in  { color: #059669; }
+    body.app-theme-light .wde-type-badge--stock-out { color: #dc2626; }
+
+    /* ── Sol tab + sağ içerik ────────────────────────────────────────── */
+    .sqe-body { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .sqe-tab-nav {
+        width: 200px; flex-shrink: 0;
+        border-right: 1px solid var(--app-border,#dde3ee);
+        background: var(--app-surface,#fff);
+        padding: 10px;
+        display: flex; flex-direction: column;
+        overflow-y: auto;
+    }
+    body.app-theme-dark .sqe-tab-nav { background: rgba(255,255,255,.02); border-right-color: rgba(255,255,255,.06); }
+    .sqe-tab-btn {
+        display: block; width: 100%; text-align: left;
+        padding: 10px 16px; font-size: 0.9rem; font-weight: 600;
+        color: var(--app-text-muted,#64748b); background: none;
+        border: 1px solid transparent; border-radius: 8px;
+        margin-bottom: 4px; border-left: 3px solid transparent;
+        cursor: pointer; transition: color .12s, background .12s, border-color .12s;
+    }
+    .sqe-tab-btn:hover { background: var(--app-muted-surface,#f3f5f7); color: var(--app-text,#333); border-color: var(--app-border,#e2e8f0); }
+    body.app-theme-dark .sqe-tab-btn:hover { background: rgba(255,255,255,.06); color: #e2e8f0; border-color: rgba(255,255,255,.1); }
+    .sqe-tab-btn.is-active { color: #4f46e5; background: rgba(99,102,241,.10); border-color: rgba(99,102,241,.30); box-shadow: 0 1px 4px rgba(99,102,241,.15); }
+    body.app-theme-dark .sqe-tab-btn.is-active { color: #a5b4fc; background: rgba(99,102,241,.14); border-color: rgba(99,102,241,.35); }
+    .sqe-tab-content {
+        flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 20px;
+        scrollbar-gutter: stable;
+    }
+    .sqe-tab-pane { display: none; }
+    .sqe-tab-pane.is-active { display: block; }
+
+    /* Tab 2 (kalemler) tüm yüksekliği kaplasın */
+    .sqe-tab-pane--lines {
+        display: none; flex-direction: column;
+        height: calc(100vh - 90px);
+    }
+    .sqe-tab-pane--lines.is-active { display: flex; }
+    #reactDocLineGrid { flex: 1 1 auto; min-height: 0; }
+
+    /* ── Üst bilgi formu ─────────────────────────────────────────────── */
+    .sqe-hform {
+        display: flex; flex-direction: column; gap: 10px;
+        max-width: 680px;
+    }
+    .sqe-hrow { display: flex; align-items: center; gap: 12px; min-height: 38px; }
+    .sqe-hlabel {
+        flex: 0 0 140px; text-align: left;
+        font-size: 0.85rem; font-weight: 600;
+        color: var(--app-text-muted,#64748b);
+        white-space: nowrap; user-select: none;
+    }
+    body.app-theme-dark .sqe-hlabel { color: rgba(255,255,255,.78); }
+    .sqe-hinput { flex: 1; max-width: 320px; }
+    .sqe-hform .form-control,
+    .sqe-hform .form-select {
+        background: var(--app-input-bg,#f8fafc);
+        border: 1px solid var(--app-border,#d4dfeb);
+        border-radius: 8px; font-size: .88rem;
+        color: var(--app-text,#1e293b); outline: none;
+        transition: border-color .15s, box-shadow .15s;
+        padding: 7px 10px;
+    }
+    .sqe-hform .form-control:focus,
+    .sqe-hform .form-select:focus {
+        border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+    }
+    .sqe-hform .form-control[readonly] {
+        background: var(--app-surface-2,#f1f5f9); color: var(--app-text-muted,#64748b); cursor: default;
+    }
+    body.app-theme-dark .sqe-hform .form-control,
+    body.app-theme-dark .sqe-hform .form-select {
+        background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.10);
+        color: rgba(255,255,255,.88);
+    }
+    body.app-theme-dark .sqe-hform .form-control[readonly] {
+        background: rgba(255,255,255,.02); color: rgba(255,255,255,.45);
+    }
+    body.app-theme-dark .sqe-hform .form-select option { background: #0c0f1a; color: #fff; }
+
+    /* ── Onay modal ──────────────────────────────────────────────────── */
+    .wde-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9990;
+        background: rgba(15,23,42,.6); backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .wde-modal {
+        background: var(--app-surface,#fff); border: 1px solid var(--app-border,#d4dfeb);
+        border-radius: 16px; padding: 28px 32px;
+        min-width: 340px; max-width: 440px; width: 100%;
+        box-shadow: 0 20px 60px rgba(0,0,0,.18);
+        display: flex; flex-direction: column; gap: 16px;
+    }
+    .wde-modal__icon { width: 52px; height: 52px; border-radius: 14px; background: #fef2f2; display: flex; align-items: center; justify-content: center; font-size: 26px; margin: 0 auto; }
+    .wde-modal__title { text-align: center; font-size: 1.05rem; font-weight: 700; color: var(--app-text,#1e293b); margin: 0; }
+    .wde-modal__msg { text-align: center; font-size: .88rem; color: var(--app-text-muted,#64748b); margin: 0; }
+    .wde-modal__actions { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
+    .wde-modal__cancel { flex: 1; padding: 9px; border-radius: 8px; font-size: .88rem; font-weight: 600; border: 1px solid var(--app-border,#d4dfeb); background: transparent; cursor: pointer; color: var(--app-text-muted,#64748b); transition: all .15s; }
+    .wde-modal__cancel:hover { background: var(--app-surface-2,#f1f5f9); }
+    .wde-modal__ok { flex: 1; padding: 9px; border-radius: 8px; font-size: .88rem; font-weight: 600; border: none; background: #ef4444; color: #fff; cursor: pointer; transition: all .15s; }
+    .wde-modal__ok:hover { background: #dc2626; }
+
+    /* ── Loading mask ────────────────────────────────────────────────── */
+    .sqe-loading-mask {
+        position: absolute; inset: 0; z-index: 50;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 12px; background: rgba(255,255,255,.65);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        transition: opacity .2s;
+    }
+    body.app-theme-dark .sqe-loading-mask { background: rgba(10,13,23,.65); }
+    .sqe-loading-mask.is-hidden { display: none; }
+    .sqe-loading-mask__spinner {
+        width: 32px; height: 32px; border-radius: 50%;
+        border: 3px solid rgba(99,102,241,.2); border-top-color: #6366f1;
+        animation: sqeSpinLoading .75s linear infinite;
+    }
+    @@keyframes sqeSpinLoading { to { transform: rotate(360deg); } }
+    .sqe-loading-mask__text { font-size: .8rem; color: #64748b; }
+    body.app-theme-dark .sqe-loading-mask__text { color: rgba(255,255,255,.55); }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+
+  <!-- Aksiyon Seridi -->
+  <div class="sqe-action-bar" id="wdeActionBar">
+    <button type="button" class="sqe-btn sqe-btn--primary" id="wdeSaveBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Kaydet
+    </button>
+    <a href="@listUrl" class="sqe-btn sqe-btn--secondary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Listeye Dön
+    </a>
+    @if (isEdit)
+    {
+        <button type="button" class="sqe-btn sqe-btn--danger" id="wdeDeleteBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          Sil
+        </button>
+    }
+
+    <!-- Belge no + tür rozeti -->
+    <div class="wde-docinfo">
+      <span class="wde-docno" id="wdeDocNoDisplay"></span>
+      @if (isTransfer)
+      {
+          <span class="wde-type-badge wde-type-badge--transfer">Transfer</span>
+      }
+      else if (isStockIn)
+      {
+          <span class="wde-type-badge wde-type-badge--stock-in">Ambar Giriş</span>
+      }
+      else
+      {
+          <span class="wde-type-badge wde-type-badge--stock-out">Ambar Çıkış</span>
+      }
+    </div>
+
+    <!-- İşlemler menüsü -->
+    <div class="sqe-actions-menu" id="wdeActionsMenu">
+      <button type="button" class="sqe-actions-btn" id="wdeActionsBtn"
+              aria-haspopup="menu" aria-expanded="false"
+              onclick="wdeToggleActionsMenu(event)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>İşlemler</span>
+        <svg class="sqe-actions-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- İşlemler Dropdown -->
+  <div class="sqe-actions-dropdown" id="wdeActionsDropdown">
+    <button type="button" class="sqe-actions-item" onclick="wdePrint()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      <span>Yazdır</span>
+    </button>
+  </div>
+
+  <!-- Sol tab + sağ içerik -->
+  <div class="sqe-body" style="position:relative;">
+
+    <!-- Loading mask (edit modunda yükleme sırasında) -->
+    <div id="sqLoadingMask" class="sqe-loading-mask@(isEdit ? "" : " is-hidden")" aria-hidden="true">
+      <div class="sqe-loading-mask__spinner"></div>
+      <span class="sqe-loading-mask__text">Yükleniyor…</span>
+    </div>
+
+    <nav class="sqe-tab-nav">
+      <button type="button" class="sqe-tab-btn is-active" data-wde-tab-btn="general"
+              onclick="wdeSwitchTab('general')">Üst Bilgi</button>
+      <button type="button" class="sqe-tab-btn" data-wde-tab-btn="lines"
+              onclick="wdeSwitchTab('lines')">Kalem Bilgileri</button>
+    </nav>
+
+    <div class="sqe-tab-content" id="wdeTabContent">
+
+      <!-- TAB 1: Üst Bilgi -->
+      <div class="sqe-tab-pane is-active" data-wde-pane="general">
+        <div class="sqe-hform">
+
+          <div class="sqe-hrow">
+            <label class="sqe-hlabel">Belge No</label>
+            <input type="text" id="wdeDocNoInput" class="form-control form-control-sm sqe-hinput"
+                   placeholder="Kaydedilince oluşturulur" readonly />
+          </div>
+
+          <div class="sqe-hrow">
+            <label class="sqe-hlabel">Tarih</label>
+            <input type="text" id="wdeDocDate" class="form-control form-control-sm sqe-hinput"
+                   placeholder="gg.aa.yyyy" autocomplete="off" />
+          </div>
+
+          @if (!isTransfer)
+          {
+              <div class="sqe-hrow">
+                <label class="sqe-hlabel">@(isStockIn ? "Giriş Deposu" : "Çıkış Deposu")</label>
+                <select id="wdeLocation" class="form-select form-select-sm sqe-hinput">
+                  <option value="">-- Seçiniz --</option>
+                </select>
+              </div>
+          }
+
+          <div class="sqe-hrow">
+            <label class="sqe-hlabel">Referans No</label>
+            <input type="text" id="wdeRefNo" class="form-control form-control-sm sqe-hinput"
+                   placeholder="Opsiyonel" />
+          </div>
+
+          <div class="sqe-hrow" style="align-items:flex-start;">
+            <label class="sqe-hlabel" style="padding-top:8px;">Notlar</label>
+            <textarea id="wdeNotes" class="form-control sqe-hinput"
+                      placeholder="Açıklama…" style="max-width:400px;resize:vertical;min-height:72px;"></textarea>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- TAB 2: Kalem Bilgileri -->
+      <div class="sqe-tab-pane sqe-tab-pane--lines" data-wde-pane="lines">
+        <div id="reactDocLineGrid" style="height:100%;"></div>
+      </div>
+
+    </div><!-- /sqe-tab-content -->
+  </div><!-- /sqe-body -->
+
+  <!-- Silme onay modal -->
+  <div id="wdeDeleteModal" class="wde-modal-backdrop" style="display:none;">
+    <div class="wde-modal">
+      <div class="wde-modal__icon">🗑️</div>
+      <h3 class="wde-modal__title">Belgeyi Sil</h3>
+      <p class="wde-modal__msg">Bu işlem geri alınamaz. Belgeyi silmek istiyor musunuz?</p>
+      <div class="wde-modal__actions">
+        <button type="button" class="wde-modal__cancel" id="wdeModalCancel">Vazgeç</button>
+        <button type="button" class="wde-modal__ok"     id="wdeModalOk">Sil</button>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+@section Scripts {
+<script>
+(function() {
+    var DOC_ID      = @Html.Raw(Model.DocId.HasValue ? Model.DocId.Value.ToString() : "null");
+    var DOC_TYPE    = '@Model.DocType';
+    var IS_TRANSFER = DOC_TYPE === 'TRANSFER';
+    var LIST_URL    = '@listUrl';
+    var LINE_GRID_CONFIG = @Html.Raw(Model.LineGridConfigJson);
+    var BUNDLE_URL  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL     = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var TOKEN = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+    // ── State ─────────────────────────────────────────────────────────
+    var _gridReady    = false;
+    var _pendingRows  = null;
+    window.__WH_LINES__ = [];
+
+    // ── Tab geçişi ────────────────────────────────────────────────────
+    window.wdeSwitchTab = function(tabKey) {
+        document.querySelectorAll('[data-wde-tab-btn]').forEach(function(btn) {
+            btn.classList.toggle('is-active', btn.getAttribute('data-wde-tab-btn') === tabKey);
+        });
+        document.querySelectorAll('[data-wde-pane]').forEach(function(pane) {
+            pane.classList.toggle('is-active', pane.getAttribute('data-wde-pane') === tabKey);
+        });
+        // Grid mount: Kalem Bilgileri sekmesine ilk geçişte grid henüz mount edilmemiş olabilir
+        if (tabKey === 'lines' && !_gridMounted) {
+            mountLineGrid();
+        }
+    };
+
+    // ── İşlemler dropdown ─────────────────────────────────────────────
+    window.wdeToggleActionsMenu = function(e) {
+        e.stopPropagation();
+        var menu = document.getElementById('wdeActionsMenu');
+        var drop = document.getElementById('wdeActionsDropdown');
+        var isOpen = menu.classList.toggle('is-open');
+        var btn = document.getElementById('wdeActionsBtn');
+        btn.setAttribute('aria-expanded', isOpen);
+        if (isOpen) {
+            var rect = btn.getBoundingClientRect();
+            drop.style.top  = (rect.bottom + 6) + 'px';
+            drop.style.left = rect.left + 'px';
+            drop.classList.add('is-open');
+        } else {
+            drop.classList.remove('is-open');
+        }
+    };
+    document.addEventListener('click', function(e) {
+        var drop = document.getElementById('wdeActionsDropdown');
+        if (!document.getElementById('wdeActionsMenu').contains(e.target)) {
+            document.getElementById('wdeActionsMenu').classList.remove('is-open');
+            if (drop) drop.classList.remove('is-open');
+        }
+    });
+
+    window.wdePrint = function() {
+        window.print();
+    };
+
+    // ── Konum dropdown'larını doldur ──────────────────────────────────
+    async function loadLocations() {
+        if (IS_TRANSFER) return; // Transfer: lokasyon kalem seviyesinde
+        try {
+            var r = await fetch('/Warehouse/GetLocationsJson', { credentials: 'same-origin' });
+            var locs = await r.json();
+            var makeOption = function(loc) {
+                var o = document.createElement('option');
+                o.value = loc.id;
+                o.textContent = (loc.locationName || loc.locationCode || '').trim();
+                return o;
+            };
+            var el = document.getElementById('wdeLocation');
+            if (el) locs.forEach(function(l) { el.appendChild(makeOption(l)); });
+        } catch (e) {
+            console.warn('[WDE] Lokasyon yüklenemedi:', e);
+        }
+    }
+
+    // ── Belgeyi yükle (edit mod) ──────────────────────────────────────
+    async function loadDoc() {
+        if (!DOC_ID) {
+            hideMask();
+            return;
+        }
+        try {
+            var r = await fetch('/Warehouse/GetDocJson?id=' + DOC_ID, { credentials: 'same-origin' });
+            if (!r.ok) { hideMask(); return; }
+            var data = await r.json();
+            var doc   = data.doc;
+            var lines = data.lines || [];
+
+            if (doc) {
+                var noEl = document.getElementById('wdeDocNoInput');
+                if (noEl) noEl.value = doc.docNo || '';
+                document.getElementById('wdeDocNoDisplay').textContent = doc.docNo || '';
+
+                var dateFp = document.getElementById('wdeDocDate')?._flatpickr;
+                if (dateFp && doc.docDate) dateFp.setDate(doc.docDate.substring(0, 10));
+
+                if (!IS_TRANSFER) {
+                    var locId = doc.fromLocationId || doc.toLocationId;
+                    var locEl = document.getElementById('wdeLocation');
+                    if (locEl && locId) locEl.value = String(locId);
+                }
+
+                var refEl = document.getElementById('wdeRefNo');
+                if (refEl) refEl.value = doc.refNo || '';
+                var notesEl = document.getElementById('wdeNotes');
+                if (notesEl) notesEl.value = doc.notes || '';
+            }
+
+            var rows = lines.map(function(l) {
+                return {
+                    stockCardId:       l.itemId,
+                    materialCode:      l.materialCode || '',
+                    materialName:      l.materialName || '',
+                    unitId:            l.unitId,
+                    quantity:          l.qty,
+                    combinationCode:   l.combinationCode || '',
+                    trackCombinations: false,
+                    notes:             l.notes || '',
+                    fromLocationId:    l.fromLocationId || null,
+                    toLocationId:      l.toLocationId || null,
+                };
+            });
+
+            setGridRows(rows);
+        } catch (e) {
+            console.warn('[WDE] Belge yüklenemedi:', e);
+        } finally {
+            hideMask();
+        }
+    }
+
+    function hideMask() {
+        var m = document.getElementById('sqLoadingMask');
+        if (m) m.classList.add('is-hidden');
+    }
+
+    // ── Grid satırları ────────────────────────────────────────────────
+    function setGridRows(rows) {
+        if (_gridReady && window.CalibraHub && window.CalibraHub.whLineGrid) {
+            window.CalibraHub.whLineGrid.setRows(rows || []);
+        } else {
+            _pendingRows = rows || [];
+        }
+    }
+
+    function getGridRows() {
+        if (window.CalibraHub && window.CalibraHub.whLineGrid &&
+            typeof window.CalibraHub.whLineGrid.getRows === 'function') {
+            try { return window.CalibraHub.whLineGrid.getRows() || []; } catch(_) {}
+        }
+        return window.__WH_LINES__ || [];
+    }
+
+    // ── Kaydet ───────────────────────────────────────────────────────
+    async function save() {
+        var btn = document.getElementById('wdeSaveBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Kaydediliyor...'; }
+
+        try {
+            var fromLocId = null, toLocId = null;
+            if (!IS_TRANSFER) {
+                var locEl = document.getElementById('wdeLocation');
+                if (locEl && locEl.value) {
+                    var locVal = parseInt(locEl.value, 10);
+                    if (DOC_TYPE === 'STOCK_IN') toLocId = locVal;
+                    else fromLocId = locVal;
+                }
+            }
+
+            var docDateEl = document.getElementById('wdeDocDate');
+            var docDate = docDateEl?._flatpickr?.selectedDates?.[0]
+                ? docDateEl._flatpickr.selectedDates[0].toISOString()
+                : new Date().toISOString();
+
+            var rawLines = getGridRows();
+            var lines = rawLines
+                .filter(function(r) { return r && r.materialCode && String(r.materialCode).trim(); })
+                .map(function(r) {
+                    return {
+                        id:             null,
+                        itemId:         r.stockCardId || null,
+                        materialCode:   r.materialCode,
+                        materialName:   r.materialName,
+                        unitId:         r.unitId || null,
+                        qty:            parseFloat(r.quantity) || 0,
+                        combinationId:  r.combinationId || null,
+                        notes:          r.notes || null,
+                        fromLocationId: r.fromLocationId || null,
+                        toLocationId:   r.toLocationId || null,
+                    };
+                });
+
+            var body = {
+                id:             DOC_ID,
+                docType:        DOC_TYPE,
+                docDate:        docDate,
+                fromLocationId: fromLocId,
+                toLocationId:   toLocId,
+                refNo:          (document.getElementById('wdeRefNo')?.value || '').trim() || null,
+                notes:          (document.getElementById('wdeNotes')?.value || '').trim() || null,
+                lines:          lines,
+            };
+
+            var resp = await fetch('/Warehouse/SaveDocJson', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            var json = await resp.json();
+
+            if (json && json.success) {
+                var noEl = document.getElementById('wdeDocNoInput');
+                if (noEl) noEl.value = json.docNo || '';
+                document.getElementById('wdeDocNoDisplay').textContent = json.docNo || '';
+                if (!DOC_ID) {
+                    DOC_ID = json.id;
+                    history.replaceState(null, '', window.location.pathname + '?id=' + DOC_ID);
+                    var delBtn = document.getElementById('wdeDeleteBtn');
+                    if (delBtn) delBtn.style.display = '';
+                }
+                // K.I.T.T. flash
+                var bar = document.getElementById('wdeActionBar');
+                if (bar) {
+                    bar.classList.remove('is-save-flash');
+                    void bar.offsetWidth;
+                    bar.classList.add('is-save-flash');
+                    setTimeout(function() { bar.classList.remove('is-save-flash'); }, 1900);
+                }
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast('Belge kaydedildi.', 'ok');
+            } else {
+                var msg = (json && json.message) || 'Kayıt başarısız.';
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast(msg, 'err');
+                else alert(msg);
+            }
+        } catch (ex) {
+            if (window.CalibraHub && window.CalibraHub.toast)
+                window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
+            else alert('Hata: ' + ex.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Kaydet';
+            }
+        }
+    }
+
+    // ── Sil ──────────────────────────────────────────────────────────
+    function showDeleteModal() { document.getElementById('wdeDeleteModal').style.display = 'flex'; document.getElementById('wdeModalOk').focus(); }
+    function hideDeleteModal() { document.getElementById('wdeDeleteModal').style.display = 'none'; }
+    async function doDelete() {
+        hideDeleteModal();
+        if (!DOC_ID) return;
+        try {
+            var resp = await fetch('/Warehouse/DeleteDocJson?id=' + DOC_ID, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': TOKEN },
+            });
+            var json = await resp.json();
+            if (json && json.ok) {
+                window.location.href = LIST_URL;
+            } else {
+                var msg = (json && json.error) || 'Silme başarısız.';
+                if (window.CalibraHub && window.CalibraHub.toast)
+                    window.CalibraHub.toast(msg, 'err');
+                else alert(msg);
+            }
+        } catch (ex) {
+            if (window.CalibraHub && window.CalibraHub.toast)
+                window.CalibraHub.toast('Hata: ' + (ex.message || ex), 'err');
+        }
+    }
+
+    // ── Line Grid ────────────────────────────────────────────────────
+    var _gridMounted = false;
+    function patchGridKey() {
+        Object.defineProperty(window.CalibraHub, 'salesLineGrid', {
+            get: function() { return window.CalibraHub.__wh_grid; },
+            set: function(v) {
+                window.CalibraHub.__wh_grid  = v;
+                window.CalibraHub.whLineGrid = v;
+            },
+            configurable: true,
+        });
+    }
+
+    function mountLineGrid() {
+        if (_gridMounted) return;
+        var el = document.getElementById('reactDocLineGrid');
+        if (!el) return;
+        if (!window.CalibraHub || !window.CalibraHub.mountLineItemsGrid) {
+            console.error('[WDE] mountLineItemsGrid yok');
+            return;
+        }
+        _gridMounted = true;
+        try {
+            window.CalibraHub.mountLineItemsGrid(el, LINE_GRID_CONFIG, {
+                onRowsChange: function(rows) { window.__WH_LINES__ = rows || []; }
+            });
+            var tries = 0;
+            var timer = setInterval(function() {
+                if (window.CalibraHub && window.CalibraHub.whLineGrid) {
+                    clearInterval(timer);
+                    _gridReady = true;
+                    if (_pendingRows) {
+                        window.CalibraHub.whLineGrid.setRows(_pendingRows);
+                        _pendingRows = null;
+                    }
+                } else if (++tries > 80) {
+                    clearInterval(timer);
+                }
+            }, 25);
+        } catch (ex) {
+            console.error('[WDE] grid mount exception:', ex);
+            _gridMounted = false;
+        }
+    }
+
+    // ── Bootstrap ────────────────────────────────────────────────────
+    function bootstrap() {
+        // Flatpickr tarih
+        function initFlatpickr() {
+            flatpickr('#wdeDocDate', {
+                dateFormat: 'd.m.Y', locale: 'tr', defaultDate: new Date(),
+            });
+        }
+        if (window.flatpickr) {
+            initFlatpickr();
+        } else {
+            var s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js';
+            s.onload = function() {
+                var l = document.createElement('script');
+                l.src = 'https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/tr.js';
+                l.onload = initFlatpickr;
+                document.head.appendChild(l);
+            };
+            document.head.appendChild(s);
+        }
+
+        // React bundle + grid (Kalem sekmesi ilk kez açıldığında mount edilir)
+        if (!document.querySelector('link[data-wh-grid-css]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = CSS_URL;
+            link.setAttribute('data-wh-grid-css', '1');
+            document.head.appendChild(link);
+        }
+
+        function ensureBundle(cb) {
+            if (window.CalibraHub && window.CalibraHub.mountLineItemsGrid) { cb(); return; }
+            var sc = document.createElement('script');
+            sc.src = BUNDLE_URL;
+            sc.setAttribute('data-wh-grid', '1');
+            sc.onload  = function() { setTimeout(cb, 0); };
+            sc.onerror = function() { console.error('[WDE] Bundle yüklenemedi'); };
+            document.head.appendChild(sc);
+        }
+
+        // Lokasyonları yükle, ardından belgeyi yükle
+        loadLocations().then(function() {
+            ensureBundle(function() {
+                patchGridKey();
+                // Grid'i hemen mount et (Kalem sekmesine gitmeden önce de hazır olsun)
+                mountLineGrid();
+                loadDoc();
+            });
+        });
+
+        // Buton olayları
+        document.getElementById('wdeSaveBtn')?.addEventListener('click', save);
+        var delBtn = document.getElementById('wdeDeleteBtn');
+        if (delBtn) delBtn.addEventListener('click', showDeleteModal);
+        document.getElementById('wdeModalCancel')?.addEventListener('click', hideDeleteModal);
+        document.getElementById('wdeModalOk')?.addEventListener('click', doDelete);
+        document.getElementById('wdeDeleteModal')?.addEventListener('click', function(e) {
+            if (e.target === this) hideDeleteModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') hideDeleteModal();
+        });
+
+        if (!DOC_ID) {
+            if (delBtn) delBtn.style.display = 'none';
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootstrap);
+    } else {
+        bootstrap();
+    }
+
+    window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
+})();
+</script>
+}

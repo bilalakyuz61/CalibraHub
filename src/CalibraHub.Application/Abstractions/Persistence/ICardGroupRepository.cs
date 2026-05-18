@@ -8,7 +8,7 @@ public interface ICardGroupRepository
     Task<IReadOnlyCollection<CardGroup>> GetByParentAsync(int parentId, CancellationToken ct);
     Task<CardGroup?> GetByIdAsync(int id, CancellationToken ct);
     Task<bool> HasChildrenAsync(int id, CancellationToken ct);
-    Task AddAsync(CardGroup group, CancellationToken ct);
+    Task<int> AddAsync(CardGroup group, CancellationToken ct);
     Task UpdateAsync(CardGroup group, CancellationToken ct);
     Task DeleteAsync(int id, CancellationToken ct);
 

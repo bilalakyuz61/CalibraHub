@@ -1,0 +1,73 @@
+@*
+    Sticky Save Bar partial (rapor §6.2 cozumu).
+    Uzun edit form'larin altinda yapisik kalan Kaydet/Iptal cubugu.
+
+    Kullanim (basit):
+        @await Html.PartialAsync("_StickySaveBar", new CalibraHub.Web.Models.Shared.StickySaveBarModel
+        {
+            CancelUrl = Url.Action("Documents", "Sales"),
+        })
+
+    Kullanim (Kaydet ve Yeni dahil):
+        @await Html.PartialAsync("_StickySaveBar", new CalibraHub.Web.Models.Shared.StickySaveBarModel
+        {
+            SaveLabel = "Kaydet",
+            SaveAndNewLabel = "Kaydet ve Yeni",
+            CancelUrl = Url.Action("MaterialCards", "Logistics"),
+            ShowSaveAndNew = true,
+            FormId = "materialCardForm",
+            EnableCtrlS = true,
+        })
+
+    Bu partial Ctrl+S klavye kisayolunu otomatik bag(layabilir; EnableCtrlS=true ise.
+*@
+@model CalibraHub.Web.Models.Shared.StickySaveBarModel
+
+<div class="cb-sticky-toolbar" role="toolbar" aria-label="Form aksiyonlari">
+    @if (!string.IsNullOrEmpty(Model.CancelUrl))
+    {
+        <a href="@Model.CancelUrl" class="cb-btn cb-btn-secondary" aria-label="Iptal et ve geri don">@Model.CancelLabel</a>
+    }
+    else
+    {
+        <button type="button" class="cb-btn cb-btn-secondary" data-action="cancel" aria-label="Iptal et">@Model.CancelLabel</button>
+    }
+
+    @if (Model.ShowSaveAndNew)
+    {
+        <button type="submit"
+                class="cb-btn cb-btn-secondary"
+                name="@Model.SubmitButtonName"
+                value="save-and-new"
+                @(string.IsNullOrEmpty(Model.FormId) ? "" : $"form=\"{Model.FormId}\"")>
+            @Model.SaveAndNewLabel
+        </button>
+    }
+
+    <button type="submit"
+            class="cb-btn cb-btn-primary"
+            name="@Model.SubmitButtonName"
+            value="save"
+            @(string.IsNullOrEmpty(Model.FormId) ? "" : $"form=\"{Model.FormId}\"")
+            data-default-action>
+        @Model.SaveLabel
+    </button>
+</div>
+
+@if (Model.EnableCtrlS)
+{
+    <script>
+    (function() {
+        // Ctrl+S ile Kaydet butonunu tetikle (rapor §6.2)
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                var btn = document.querySelector('[data-default-action]');
+                if (btn) {
+                    e.preventDefault();
+                    btn.click();
+                }
+            }
+        });
+    })();
+    </script>
+}

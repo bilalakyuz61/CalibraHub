@@ -42,8 +42,7 @@ public sealed class UserCreateInput
     [MaxLength(30, ErrorMessage = "Sicil kodu en fazla 30 karakter olabilir.")]
     public string EmployeeCode { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Departman secimi zorunludur.")]
-    public Guid? DepartmentId { get; set; }
+    public int? DepartmentId { get; set; }
 
     public Guid? SupervisorUserId { get; set; }
 

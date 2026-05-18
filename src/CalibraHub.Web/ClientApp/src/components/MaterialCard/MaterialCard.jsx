@@ -151,11 +151,14 @@ export default function MaterialCard(props) {
             )}
             {onDelete && (
               <button
-                onClick={function(e) {
+                onClick={async function(e) {
                   e.stopPropagation()
-                  if (window.confirm('"' + materialName + '" silmek istediginizden emin misiniz?')) {
-                    onDelete(materialId)
-                  }
+                  // Rapor §6.6 — CalibraAlert.confirm fallback
+                  var ok = window.CalibraAlert && window.CalibraAlert.confirm
+                    ? await window.CalibraAlert.confirm('"' + materialName + '" silmek istediginizden emin misiniz?',
+                        { title: 'Malzeme Sil', okText: 'Evet, Sil', cancelText: 'Vazgeç', danger: true })
+                    : window.confirm('"' + materialName + '" silmek istediginizden emin misiniz?')
+                  if (ok) onDelete(materialId)
                 }}
                 className="p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-500/10 transition-colors group"
                 title="Sil"

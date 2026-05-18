@@ -1,153 +1,256 @@
-import { v4 as uuidv4 } from 'crypto'
+export const BAND_TYPES = [
+  { type: 'PageHeader',       label: 'Sayfa Başlığı',     defaultHeight: 25 },
+  { type: 'DocumentHeader',   label: 'Belge Başlığı',     defaultHeight: 40 },
+  { type: 'TableHeader',      label: 'Tablo Başlığı',     defaultHeight: 8  },
+  { type: 'Detail',           label: 'Detay Satırı',      defaultHeight: 7  },
+  { type: 'SubDetailHeader',  label: 'Alt Detay Başlığı', defaultHeight: 7  },
+  { type: 'SubDetail',        label: 'Alt Detay Satırı',  defaultHeight: 6  },
+  { type: 'SubDetailFooter',  label: 'Alt Detay Altı',    defaultHeight: 8  },
+  { type: 'TotalsBlock',      label: 'Toplam Bloku',      defaultHeight: 30 },
+  { type: 'SignatureBlock',   label: 'İmza Bloku',        defaultHeight: 25 },
+  { type: 'PageFooter',       label: 'Sayfa Altı',        defaultHeight: 15 },
+]
 
-// Basit UUID üretici (crypto bağımlılığı gerektirmez)
+export const ELEMENT_KINDS = [
+  { kind: 'Label',         label: 'Etiket',          icon: '𝐓' },
+  { kind: 'BoundField',    label: 'Veri Alanı',      icon: '⟨⟩' },
+  { kind: 'Image',         label: 'Resim',           icon: '🖼' },
+  { kind: 'Shape',         label: 'Şekil',           icon: '▬' },
+  { kind: 'Barcode',       label: 'Barkod',          icon: '▥' },
+  { kind: 'QrCode',        label: 'QR Kod',          icon: '▦' },
+  { kind: 'AmountInWords', label: 'Yazı ile Tutar',  icon: '₺' },
+  { kind: 'PageNumber',    label: 'Sayfa No',        icon: '#' },
+  { kind: 'DateTimeNow',   label: 'Tarih/Saat',      icon: '📅' },
+]
+
+export const BARCODE_TYPES = [
+  { value: 'Code128', label: 'Code 128' },
+  { value: 'Code39',  label: 'Code 39'  },
+  { value: 'EAN13',   label: 'EAN-13'   },
+  { value: 'EAN8',    label: 'EAN-8'    },
+  { value: 'UPCA',    label: 'UPC-A'    },
+  { value: 'ITF',     label: 'ITF (Interleaved 2/5)' },
+  { value: 'Codabar', label: 'Codabar'  },
+]
+
 export function makeId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
-export const BAND_TYPES = [
-  { type: 'PageHeader',     label: 'Sayfa Başlığı',       defaultHeight: 25, repeats: true },
-  { type: 'DocumentHeader', label: 'Belge Başlığı',        defaultHeight: 35, repeats: false },
-  { type: 'TableHeader',    label: 'Tablo Başlığı',        defaultHeight: 8,  repeats: true },
-  { type: 'Detail',         label: 'Kalem Satırı',         defaultHeight: 7,  repeats: false },
-  { type: 'TotalsBlock',    label: 'Toplamlar',            defaultHeight: 30, repeats: false },
-  { type: 'SignatureBlock', label: 'İmza Alanı',           defaultHeight: 25, repeats: false },
-  { type: 'PageFooter',     label: 'Sayfa Altbilgisi',     defaultHeight: 12, repeats: true },
-]
-
-export const ELEMENT_KINDS = [
-  { kind: 'Label',         label: 'Metin',         icon: 'T' },
-  { kind: 'BoundField',    label: 'Veri Alanı',    icon: '{}' },
-  { kind: 'Image',         label: 'Görsel',        icon: '🖼' },
-  { kind: 'Shape',         label: 'Şekil',         icon: '□' },
-  { kind: 'AmountInWords', label: 'Yazı ile Tutar',icon: '₺' },
-  { kind: 'PageNumber',    label: 'Sayfa No',      icon: '#' },
-  { kind: 'DateTimeNow',   label: 'Tarih/Saat',    icon: '📅' },
-]
-
-export function makeDefaultElement(kind, x = 10, y = 2) {
+export function makeDefaultElement(kind, x = 0, y = 0, binding = null) {
+  const needsBinding = kind === 'BoundField' || kind === 'AmountInWords' || kind === 'Barcode' || kind === 'QrCode'
   return {
     id: makeId(),
     kind,
-    x, y, w: 60, h: 8,
-    text: kind === 'Label' ? 'Metin' : null,
-    style: { fontSize: 10, bold: false, italic: false, underline: false,
-             align: 'left', color: '#000000', bgColor: 'transparent', border: false },
-    binding: null,
+    x, y,
+    w: kind === 'Shape' ? 50
+      : kind === 'Image' ? 40
+      : kind === 'AmountInWords' ? 80
+      : kind === 'Barcode' ? 50
+      : kind === 'QrCode'  ? 25
+      : 50,
+    h: kind === 'Shape' ? 1
+      : kind === 'Image' ? 15
+      : kind === 'Barcode' ? 15
+      : kind === 'QrCode'  ? 25
+      : 8,
+    text: kind === 'Label' ? 'Yeni Etiket' : null,
+    zIndex: 0,
+    style: { fontSize: 10, bold: false, italic: false, underline: false, align: 'left', verticalAlign: 'middle', overflow: 'ellipsis', color: '#000000', bgColor: 'transparent', border: false },
+    binding: binding ?? (needsBinding ? { alias: '', col: '' } : null),
     format: null,
-    expression: null,
-    shapeKind: 'Rectangle',
-    imageSource: null,
-    zIndex: 0
+    barcodeType: kind === 'Barcode' ? 'Code128' : null,
+    showBarcodeText: kind === 'Barcode' ? true : null,
+    qrErrorCorrection: kind === 'QrCode' ? 'M' : null,
+    imageSrc: kind === 'Image' ? null  : null,            // base64 / URL
+    imageFit: kind === 'Image' ? 'contain' : null,        // contain | stretch | original
+
+    // Davranış
+    visible:          true,    // Görünür
+    printable:        true,    // PDF/print çıktısında basılır
+    rotation:         0,       // 0 / 90 / 180 / 270 (derece)
+    suppressRepeated: false,   // Detail satırında aynı değer tekrarlanmasın
+    hideZeros:        false,   // Sayı 0 ise boş gösterilsin
   }
 }
 
 export function makeDefaultBand(type) {
-  const def = BAND_TYPES.find(b => b.type === type) ?? { defaultHeight: 20, repeats: false }
+  const def = BAND_TYPES.find(b => b.type === type)
   return {
     id: makeId(),
     type,
-    height: def.defaultHeight,
-    repeatOnEveryPage: def.repeats,
-    dataAlias: type === 'Detail' ? 'Lines' : null,
-    canGrow: type === 'Detail',
-    elements: []
+    height: def?.defaultHeight ?? 20,
+    repeatOnEveryPage: type === 'PageHeader' || type === 'PageFooter' || type === 'TableHeader',
+    canGrow: type === 'Detail' || type === 'SubDetail',
+    dataAlias: null,
+    elements: [],
+
+    // Sayfa akışı ayarları
+    startNewPage:         false,   // bant öncesi yeni sayfaya geç
+    printIfDetailEmpty:   true,    // detay yoksa bile basılsın (Detail bandı dışında anlamlı)
+    allowSplit:           false,   // bant satır arasında bölünebilir mi (canGrow ile birlikte)
+    keepDetailTogether:   true,    // master + detail aynı sayfada kalsın
   }
 }
 
+const defaultMeta = {
+  id: 0, code: '', name: '', docType: 'sales_quote',
+  pageW: 210, pageH: 297,
+  marginTop: 10, marginBot: 10, marginLeft: 15, marginRight: 10,
+  isDefault: false,
+}
+
 export const initialState = {
-  meta: {
-    id: 0, code: '', name: '', docType: 'sales_quote',
-    description: '', pageW: 210, pageH: 297,
-    marginTop: 10, marginBot: 10, marginLeft: 15, marginRight: 10,
-    isDefault: false
-  },
+  meta: defaultMeta,
   bands: [],
   dataSources: [],
   selectedElementId: null,
+  selectedElementIds: [],   // multi-select
   selectedBandId: null,
+  editingElementId: null,   // çift tıklama → editor modal
+  clipboard: [],            // copy/paste
   dirty: false,
   saving: false,
   previewing: false,
   previewHtml: null,
-  error: null
+  error: null,
+}
+
+// 0.1mm hassasiyetinde yuvarlama — kullanıcı fareyle bıraktığı yer korunur,
+// görsel snap yok. Önceden 2mm'ye yuvarlanıyordu; kullanıcı "fareyle verdiğim
+// hassasiyeti round ediyor" diye raporladı. 0.1mm float kirini temizler ama
+// görsel olarak fark edilmez.
+function snapToGrid(val, grid = 0.1) {
+  return Math.round(val / grid) * grid
+}
+
+/** Tüm bandlardaki elementleri düz liste olarak döner */
+function allElements(state) {
+  return state.bands.flatMap(b => b.elements)
 }
 
 export function reducer(state, action) {
   switch (action.type) {
-    case 'LOAD_LAYOUT':
+
+    case 'LOAD': {
+      const { layout } = action
       return {
         ...state,
         meta: {
-          id: action.payload.id,
-          code: action.payload.code,
-          name: action.payload.name,
-          docType: action.payload.docType,
-          description: action.payload.description ?? '',
-          pageW: action.payload.pageW,
-          pageH: action.payload.pageH,
-          marginTop: action.payload.marginTop,
-          marginBot: action.payload.marginBot,
-          marginLeft: action.payload.marginLeft,
-          marginRight: action.payload.marginRight,
-          isDefault: action.payload.isDefault
+          id: layout.id, code: layout.code, name: layout.name, docType: layout.docType,
+          pageW: layout.pageW, pageH: layout.pageH,
+          marginTop: layout.marginTop, marginBot: layout.marginBot,
+          marginLeft: layout.marginLeft, marginRight: layout.marginRight,
+          isDefault: layout.isDefault ?? false,
         },
-        bands: parseBandsFromJson(action.payload.layoutJson),
-        dataSources: action.payload.dataSources ?? [],
-        dirty: false,
+        bands: parseBands(layout.layoutJson),
+        dataSources: layout.dataSources ?? [],
         selectedElementId: null,
-        selectedBandId: null
+        selectedElementIds: [],
+        clipboard: [],
+        dirty: false,
       }
+    }
 
     case 'SET_META':
       return { ...state, meta: { ...state.meta, ...action.payload }, dirty: true }
 
     case 'ADD_BAND': {
-      const newBand = makeDefaultBand(action.bandType)
-      return { ...state, bands: [...state.bands, newBand], dirty: true }
+      const band = makeDefaultBand(action.bandType)
+      return { ...state, bands: [...state.bands, band], dirty: true }
     }
 
-    case 'REMOVE_BAND':
+    case 'UPDATE_BAND': {
+      const bands = state.bands.map(b => b.id === action.bandId ? { ...b, ...action.patch } : b)
+      return { ...state, bands, dirty: true }
+    }
+
+    case 'RESIZE_BAND': {
+      const bands = state.bands.map(b =>
+        b.id === action.bandId ? { ...b, height: Math.max(4, action.height) } : b)
+      return { ...state, bands, dirty: true }
+    }
+
+    case 'DELETE_BAND': {
       return {
         ...state,
         bands: state.bands.filter(b => b.id !== action.bandId),
         selectedBandId: state.selectedBandId === action.bandId ? null : state.selectedBandId,
-        selectedElementId: null,
-        dirty: true
+        dirty: true,
       }
-
-    case 'RESIZE_BAND':
-      return {
-        ...state,
-        bands: state.bands.map(b => b.id === action.bandId ? { ...b, height: Math.max(5, action.height) } : b),
-        dirty: true
-      }
-
-    case 'UPDATE_BAND':
-      return {
-        ...state,
-        bands: state.bands.map(b => b.id === action.bandId ? { ...b, ...action.patch } : b),
-        dirty: true
-      }
-
-    case 'SELECT_BAND':
-      return { ...state, selectedBandId: action.bandId, selectedElementId: null }
+    }
 
     case 'ADD_ELEMENT': {
-      const el = makeDefaultElement(action.kind, action.x ?? 10, action.y ?? 2)
-      if (action.binding) el.binding = action.binding
-      if (action.text) el.text = action.text
-      // z-index = mevcut maksimum + 1
-      const maxZ = state.bands.find(b => b.id === action.bandId)?.elements
-        .reduce((m, e) => Math.max(m, e.zIndex ?? 0), 0) ?? 0
-      el.zIndex = maxZ + 1
+      const el = action.element ?? makeDefaultElement(action.kind, action.x ?? 0, action.y ?? 0, action.binding ?? null)
+      const bands = state.bands.map(b =>
+        b.id === action.bandId ? { ...b, elements: [...b.elements, el] } : b)
+      return { ...state, bands, selectedElementId: el.id, selectedElementIds: [el.id], selectedBandId: action.bandId, dirty: true }
+    }
+
+    case 'UPDATE_ELEMENT': {
+      const bands = state.bands.map(b => ({
+        ...b,
+        elements: b.elements.map(e =>
+          e.id === action.elementId ? { ...e, ...action.patch } : e),
+      }))
+      return { ...state, bands, dirty: true }
+    }
+
+    case 'UPDATE_ELEMENTS_BULK': {
+      // Çoklu seçimde toplu property güncelleme. patch = element-level patch
+      // (style güncellemesi için patch.style: {...} kullan).
+      const ids = new Set(action.elementIds ?? [])
+      if (ids.size === 0) return state
+      const bands = state.bands.map(b => ({
+        ...b,
+        elements: b.elements.map(e => {
+          if (!ids.has(e.id)) return e
+          const next = { ...e, ...action.patch }
+          // style merge — patch.style varsa mevcut style ile birleştir, override değil
+          if (action.patch.style) {
+            next.style = { ...e.style, ...action.patch.style }
+          }
+          return next
+        }),
+      }))
+      return { ...state, bands, dirty: true }
+    }
+
+    case 'MOVE_ELEMENT': {
+      const bands = state.bands.map(b => ({
+        ...b,
+        elements: b.elements.map(e =>
+          e.id === action.elementId
+            ? { ...e, x: snapToGrid(action.x), y: snapToGrid(action.y) }
+            : e),
+      }))
+      return { ...state, bands, dirty: true }
+    }
+
+    case 'RESIZE_ELEMENT': {
+      const bands = state.bands.map(b => ({
+        ...b,
+        elements: b.elements.map(e =>
+          e.id === action.elementId
+            // Min 0.5mm (Konva boundBoxFunc'ta zaten enforce ediliyor — burada da
+            // güvenlik için aynı). 5×3mm clamp kaldırıldı; ince çizgi elementleri
+            // (imza altı, sayfa altı) tasarımcıda küçültülebilsin.
+            ? { ...e, w: Math.max(0.5, snapToGrid(action.w)), h: Math.max(0.5, snapToGrid(action.h)) }
+            : e),
+      }))
+      return { ...state, bands, dirty: true }
+    }
+
+    case 'DELETE_ELEMENT': {
+      const targetIds = action.elementIds ?? (action.elementId ? [action.elementId] : [])
+      const bands = state.bands.map(b => ({
+        ...b, elements: b.elements.filter(e => !targetIds.includes(e.id)),
+      }))
       return {
-        ...state,
-        bands: state.bands.map(b =>
-          b.id === action.bandId ? { ...b, elements: [...b.elements, el] } : b),
-        selectedElementId: el.id,
-        selectedBandId: action.bandId,
-        dirty: true
+        ...state, bands,
+        selectedElementId: targetIds.includes(state.selectedElementId) ? null : state.selectedElementId,
+        selectedElementIds: state.selectedElementIds.filter(id => !targetIds.includes(id)),
+        dirty: true,
       }
     }
 
@@ -155,101 +258,167 @@ export function reducer(state, action) {
       return {
         ...state,
         selectedElementId: action.elementId,
-        selectedBandId: action.bandId ?? state.selectedBandId
+        selectedElementIds: [action.elementId],
+        selectedBandId: action.bandId ?? state.selectedBandId,
       }
+
+    case 'MULTI_SELECT_ELEMENT': {
+      const { elementId, bandId } = action
+      const already = state.selectedElementIds.includes(elementId)
+      const newIds = already
+        ? state.selectedElementIds.filter(id => id !== elementId)
+        : [...state.selectedElementIds, elementId]
+      return {
+        ...state,
+        selectedElementIds: newIds,
+        selectedElementId: newIds.length === 1 ? newIds[0] : (already ? null : state.selectedElementId),
+        selectedBandId: bandId ?? state.selectedBandId,
+      }
+    }
+
+    case 'SELECT_BAND':
+      return { ...state, selectedBandId: action.bandId, selectedElementId: null, selectedElementIds: [] }
 
     case 'DESELECT':
-      return { ...state, selectedElementId: null, selectedBandId: null }
+      return { ...state, selectedElementId: null, selectedElementIds: [], selectedBandId: null }
 
-    case 'MOVE_ELEMENT':
-      return {
-        ...state,
-        bands: state.bands.map(b =>
-          b.id === action.bandId
-            ? { ...b, elements: b.elements.map(e =>
-                e.id === action.elementId
-                  ? { ...e, x: snapToGrid(action.x), y: snapToGrid(action.y) }
-                  : e) }
-            : b),
-        dirty: true
+    // ── Hizalama araçları ────────────────────────────────────────────────────
+
+    case 'ALIGN_ELEMENTS': {
+      const ids = state.selectedElementIds
+      if (ids.length < 2) return state
+      const els = allElements(state)
+      const selected = ids.map(id => els.find(e => e.id === id)).filter(Boolean)
+      const anchor = selected[0]
+      const patches = {}
+      selected.forEach(el => {
+        switch (action.align) {
+          case 'left':    patches[el.id] = { x: anchor.x }; break
+          case 'right':   patches[el.id] = { x: anchor.x + anchor.w - el.w }; break
+          case 'centerH': patches[el.id] = { x: anchor.x + (anchor.w - el.w) / 2 }; break
+          case 'top':     patches[el.id] = { y: anchor.y }; break
+          case 'bottom':  patches[el.id] = { y: anchor.y + anchor.h - el.h }; break
+          case 'centerV': patches[el.id] = { y: anchor.y + (anchor.h - el.h) / 2 }; break
+          default: break
+        }
+      })
+      const bands = state.bands.map(b => ({
+        ...b, elements: b.elements.map(e => patches[e.id] ? { ...e, ...patches[e.id] } : e),
+      }))
+      return { ...state, bands, dirty: true }
+    }
+
+    case 'DISTRIBUTE_ELEMENTS': {
+      const ids = state.selectedElementIds
+      if (ids.length < 3) return state
+      const els = allElements(state)
+      const selected = ids.map(id => els.find(e => e.id === id)).filter(Boolean)
+      const patches = {}
+
+      if (action.axis === 'h') {
+        const sorted = [...selected].sort((a, b) => a.x - b.x)
+        const first = sorted[0], last = sorted[sorted.length - 1]
+        const totalW = sorted.reduce((s, e) => s + e.w, 0)
+        const gap = (last.x + last.w - first.x - totalW) / (sorted.length - 1)
+        let cur = first.x
+        sorted.forEach(el => { patches[el.id] = { x: snapToGrid(cur) }; cur += el.w + gap })
+      } else {
+        const sorted = [...selected].sort((a, b) => a.y - b.y)
+        const first = sorted[0], last = sorted[sorted.length - 1]
+        const totalH = sorted.reduce((s, e) => s + e.h, 0)
+        const gap = (last.y + last.h - first.y - totalH) / (sorted.length - 1)
+        let cur = first.y
+        sorted.forEach(el => { patches[el.id] = { y: snapToGrid(cur) }; cur += el.h + gap })
       }
 
-    case 'RESIZE_ELEMENT':
+      const bands = state.bands.map(b => ({
+        ...b, elements: b.elements.map(e => patches[e.id] ? { ...e, ...patches[e.id] } : e),
+      }))
+      return { ...state, bands, dirty: true }
+    }
+
+    case 'NUDGE_ELEMENT': {
+      const { dx, dy } = action
+      const ids = state.selectedElementIds.length > 0
+        ? state.selectedElementIds
+        : state.selectedElementId ? [state.selectedElementId] : []
+      if (ids.length === 0) return state
+      const bands = state.bands.map(b => ({
+        ...b,
+        elements: b.elements.map(e =>
+          ids.includes(e.id)
+            ? { ...e, x: snapToGrid(e.x + (dx ?? 0)), y: snapToGrid(e.y + (dy ?? 0)) }
+            : e),
+      }))
+      return { ...state, bands, dirty: true }
+    }
+
+    // ── Kopyala / Yapıştır ────────────────────────────────────────────────────
+
+    case 'COPY_ELEMENTS': {
+      const ids = state.selectedElementIds.length > 0
+        ? state.selectedElementIds
+        : state.selectedElementId ? [state.selectedElementId] : []
+      const clipboard = ids
+        .map(id => allElements(state).find(e => e.id === id))
+        .filter(Boolean)
+      return { ...state, clipboard }
+    }
+
+    case 'PASTE_ELEMENTS': {
+      if (!state.clipboard.length || !state.selectedBandId) return state
+      const newEls = state.clipboard.map(el => ({
+        ...el, id: makeId(), x: el.x + 5, y: el.y + 5,
+      }))
+      const bands = state.bands.map(b =>
+        b.id === state.selectedBandId ? { ...b, elements: [...b.elements, ...newEls] } : b)
+      const newIds = newEls.map(e => e.id)
       return {
-        ...state,
-        bands: state.bands.map(b =>
-          b.id === action.bandId
-            ? { ...b, elements: b.elements.map(e =>
-                e.id === action.elementId
-                  ? { ...e, w: Math.max(5, action.w), h: Math.max(3, action.h) }
-                  : e) }
-            : b),
-        dirty: true
+        ...state, bands,
+        selectedElementIds: newIds,
+        selectedElementId: newIds[0] ?? null,
+        dirty: true,
       }
+    }
 
-    case 'UPDATE_ELEMENT':
-      return {
-        ...state,
-        bands: state.bands.map(b => ({
-          ...b,
-          elements: b.elements.map(e =>
-            e.id === action.elementId ? { ...e, ...action.patch } : e)
-        })),
-        dirty: true
-      }
+    // ── Veri kaynağı ─────────────────────────────────────────────────────────
 
-    case 'DELETE_ELEMENT':
-      return {
-        ...state,
-        bands: state.bands.map(b => ({
-          ...b, elements: b.elements.filter(e => e.id !== action.elementId)
-        })),
-        selectedElementId: state.selectedElementId === action.elementId ? null : state.selectedElementId,
-        dirty: true
-      }
+    case 'ADD_DATASOURCE': {
+      const exists = state.dataSources.find(d => d.alias === action.source.alias)
+      if (exists) return state
+      return { ...state, dataSources: [...state.dataSources, action.source], dirty: true }
+    }
 
-    case 'SET_DATASOURCES':
-      return { ...state, dataSources: action.dataSources, dirty: true }
+    case 'UPDATE_DATASOURCE': {
+      const dataSources = state.dataSources.map(d =>
+        d.alias === action.alias ? { ...d, ...action.patch } : d)
+      return { ...state, dataSources, dirty: true }
+    }
 
-    case 'SET_SAVING':
-      return { ...state, saving: action.saving }
+    case 'REMOVE_DATASOURCE': {
+      return { ...state, dataSources: state.dataSources.filter(d => d.alias !== action.alias), dirty: true }
+    }
 
-    case 'SAVE_SUCCESS':
-      return { ...state, dirty: false, saving: false, meta: { ...state.meta, id: action.id } }
+    case 'OPEN_ELEMENT_EDITOR':  return { ...state, editingElementId: action.elementId }
+    case 'CLOSE_ELEMENT_EDITOR': return { ...state, editingElementId: null }
 
-    case 'SET_PREVIEWING':
-      return { ...state, previewing: action.previewing }
+    case 'SET_SAVING':       return { ...state, saving: action.value }
+    case 'MARK_SAVED':       return { ...state, saving: false, dirty: false, meta: { ...state.meta, id: action.id ?? state.meta.id } }
+    case 'SET_PREVIEWING':   return { ...state, previewing: action.value }
+    case 'SET_PREVIEW_HTML': return { ...state, previewHtml: action.html, previewing: false }
+    case 'SET_ERROR':        return { ...state, error: action.message, saving: false, previewing: false }
+    case 'CLEAR_ERROR':      return { ...state, error: null }
 
-    case 'SET_PREVIEW_HTML':
-      return { ...state, previewHtml: action.html, previewing: false }
-
-    case 'SET_ERROR':
-      return { ...state, error: action.error, saving: false, previewing: false }
-
-    default:
-      return state
+    default: return state
   }
 }
 
-// Helpers
-function snapToGrid(val, grid = 2) {
-  return Math.round(val / grid) * grid
-}
+// ── Serialization ─────────────────────────────────────────────────────────────
 
-function parseBandsFromJson(layoutJson) {
+function parseBands(layoutJson) {
   try {
     const doc = JSON.parse(layoutJson)
-    return (doc.bands ?? []).map(b => ({
-      ...b,
-      id: b.id ?? makeId(),
-      elements: (b.elements ?? []).map(e => ({
-        ...e,
-        id: e.id ?? makeId(),
-        zIndex: e.zIndex ?? 0,
-        style: e.style ?? { fontSize: 10, bold: false, italic: false, underline: false,
-                           align: 'left', color: '#000000', bgColor: 'transparent', border: false }
-      })).sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
-    }))
+    return doc.bands ?? []
   } catch {
     return []
   }
@@ -257,12 +426,12 @@ function parseBandsFromJson(layoutJson) {
 
 export function buildLayoutJson(meta, bands) {
   return JSON.stringify({
-    pageWidth: meta.pageW,
+    pageWidth:  meta.pageW,
     pageHeight: meta.pageH,
     margins: { top: meta.marginTop, bottom: meta.marginBot, left: meta.marginLeft, right: meta.marginRight },
     bands: bands.map(b => ({
       ...b,
-      elements: [...b.elements].sort((a, e) => (a.zIndex ?? 0) - (e.zIndex ?? 0))
-    }))
+      elements: [...b.elements].sort((a, z) => a.zIndex - z.zIndex),
+    })),
   })
 }

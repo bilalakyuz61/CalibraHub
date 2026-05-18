@@ -8,15 +8,14 @@ namespace CalibraHub.Infrastructure.Integrations;
 
 public sealed class MockIntegratorDocumentClient : IIntegratorDocumentClient
 {
-    private static readonly HttpClient ReachabilityClient = new()
-    {
-        Timeout = TimeSpan.FromSeconds(10)
-    };
-
+    // IHttpClientFactory — socket exhaustion + DNS staleness'i onler. Static HttpClient anti-pattern
+    // yerine .NET'in onerdigi yontem. Named client "integrator-reachability" Program.cs'te 10s timeout ile kayitli.
+    private readonly IHttpClientFactory _httpFactory;
     private readonly int _simulatedDocumentsPerPull;
 
-    public MockIntegratorDocumentClient(int simulatedDocumentsPerPull)
+    public MockIntegratorDocumentClient(IHttpClientFactory httpFactory, int simulatedDocumentsPerPull)
     {
+        _httpFactory = httpFactory;
         _simulatedDocumentsPerPull = Math.Max(1, simulatedDocumentsPerPull);
     }
 
@@ -105,7 +104,7 @@ public sealed class MockIntegratorDocumentClient : IIntegratorDocumentClient
         return scopes;
     }
 
-    private static async Task EnsureBaseUrlReachableAsync(string baseUrl, CancellationToken cancellationToken)
+    private async Task EnsureBaseUrlReachableAsync(string baseUrl, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri))
         {
@@ -114,8 +113,9 @@ public sealed class MockIntegratorDocumentClient : IIntegratorDocumentClient
 
         try
         {
+            var http = _httpFactory.CreateClient("integrator-reachability");
             using var headRequest = new HttpRequestMessage(HttpMethod.Head, baseUri);
-            using var headResponse = await ReachabilityClient.SendAsync(
+            using var headResponse = await http.SendAsync(
                 headRequest,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
@@ -126,7 +126,7 @@ public sealed class MockIntegratorDocumentClient : IIntegratorDocumentClient
             }
 
             using var getRequest = new HttpRequestMessage(HttpMethod.Get, baseUri);
-            using var getResponse = await ReachabilityClient.SendAsync(
+            using var getResponse = await http.SendAsync(
                 getRequest,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);

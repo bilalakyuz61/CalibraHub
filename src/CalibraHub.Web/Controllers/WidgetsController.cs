@@ -1,5 +1,7 @@
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Antiforgery;
 
@@ -23,15 +25,110 @@ namespace CalibraHub.Web.Controllers;
 public sealed class WidgetsController : ControllerBase
 {
     private readonly IWidgetService _widgetService;
+    private readonly IIntegrationRepository _integrationRepo;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     // Not: Faz B-D'de kullanilan AdminFormWhitelist HashSet'i kaldirildi.
     // Tek dogruluk kaynagi artik dbo.Forms tablosu. Yeni form eklemek icin sadece
     // SQL seed/INSERT yeterli — C# deploy gereksiz. IsActive=1 filtresi hala
     // repository katmaninda geçerli (pasif form'lar admin panelinde gorunmez).
 
-    public WidgetsController(IWidgetService widgetService)
+    public WidgetsController(
+        IWidgetService widgetService,
+        IIntegrationRepository integrationRepo,
+        IServiceScopeFactory scopeFactory)
     {
         _widgetService = widgetService;
+        _integrationRepo = integrationRepo;
+        _scopeFactory = scopeFactory;
+    }
+
+    /// <summary>
+    /// OnSave trigger dispatcher — verilen formCode + recordId icin aktif OnSave
+    /// trigger'i olan tum entegrasyonlari fire-and-forget calistirir. Save response'u
+    /// bloke etmez (kullanici hizli geri donus alsin); hatalar IntegrationRun audit'e duser.
+    ///
+    /// **Duplicate guard:** Trigger config'inde `{"onlyIfNotSent": true}` (default true) ise
+    /// belge tablosunda IntegrationSentAt dolu kayitlar SKIP edilir. Boylece bir siparis
+    /// guncelendiginde tekrar tekrar ERP'ye gitmez. Yeniden gondermek icin liste/edit
+    /// ekranindaki "Yeniden Gonder" manuel butonu kullanilir.
+    /// </summary>
+    private void FireOnSaveTriggersFireAndForget(string formCode, string recordId, string? userName)
+    {
+        // Background task'a kopya context olustur — request scope kapanmadan disari cikmasin
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var repo    = scope.ServiceProvider.GetRequiredService<IIntegrationRepository>();
+                var runner  = scope.ServiceProvider.GetRequiredService<IIntegrationRunner>();
+                var formMeta = scope.ServiceProvider.GetService<CalibraHub.Application.Abstractions.Services.IFormMetadataService>();
+                var tracker  = scope.ServiceProvider.GetService<CalibraHub.Application.Abstractions.Services.IIntegrationStatusTracker>();
+
+                var integrations = await repo.ListByFormCodeAsync(
+                    formCode, IntegrationTriggerType.OnSave, default);
+
+                if (integrations.Count == 0) return;
+
+                // Form'un BaseTable + BaseRecordKey'i — duplicate guard sorgusu icin
+                CalibraHub.Application.Contracts.IntegrationFormDto? formDto = null;
+                if (formMeta is not null)
+                    formDto = await formMeta.GetFormAsync(formCode, default);
+
+                // Belgenin onceden gonderilip gonderilmedigini bir kere sorgula (cache)
+                DateTime? alreadySentAt = null;
+                if (tracker is not null
+                    && formDto is { BaseTable: not null, BaseRecordKey: not null }
+                    && !string.IsNullOrWhiteSpace(formDto.BaseTable)
+                    && !string.IsNullOrWhiteSpace(formDto.BaseRecordKey))
+                {
+                    alreadySentAt = await tracker.GetSentAtAsync(
+                        formDto.BaseTable!, formDto.BaseRecordKey!, recordId, default);
+                }
+
+                foreach (var integ in integrations)
+                {
+                    // Trigger config'inden onlyIfNotSent oku — default TRUE (guvenli)
+                    var triggers = await repo.GetTriggersAsync(integ.Id, default);
+                    var onSaveTrigger = triggers.FirstOrDefault(t =>
+                        t.IsActive && t.TriggerType == IntegrationTriggerType.OnSave);
+                    var onlyIfNotSent = ParseOnlyIfNotSent(onSaveTrigger?.Config);
+
+                    if (onlyIfNotSent && alreadySentAt.HasValue)
+                        continue;   // zaten gonderildi → skip
+
+                    try
+                    {
+                        await runner.RunAsync(
+                            integrationId: integ.Id,
+                            sourceRecordId: recordId,
+                            triggerType: IntegrationTriggerType.OnSave,
+                            triggeredBy: userName ?? "OnSave",
+                            ct: default);
+                    }
+                    catch { /* Run log'a yazildi; sessizce devam */ }
+                }
+            }
+            catch { /* Background task — exception'i yutuyoruz */ }
+        });
+    }
+
+    private static bool ParseOnlyIfNotSent(string? configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson)) return true; // default TRUE
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(configJson);
+            if (doc.RootElement.TryGetProperty("onlyIfNotSent", out var v))
+                return v.ValueKind switch {
+                    System.Text.Json.JsonValueKind.True  => true,
+                    System.Text.Json.JsonValueKind.False => false,
+                    _ => true,
+                };
+        }
+        catch { /* malformed JSON → default true */ }
+        return true;
     }
 
     // GET /api/widgets/forms
@@ -89,6 +186,16 @@ public sealed class WidgetsController : ControllerBase
                 recordId,
                 request ?? new SaveRecordRequest(null, null),
                 ct);
+
+            // OnSave tetikleyici — formCode'u sema uzerinden cek + fire-and-forget
+            try
+            {
+                var schema = await _widgetService.GetFormSchemaAsync(formId, ct);
+                if (schema is not null && !string.IsNullOrWhiteSpace(schema.FormCode))
+                    FireOnSaveTriggersFireAndForget(schema.FormCode, recordId, User?.Identity?.Name);
+            }
+            catch { /* OnSave dispatch hatasi save'i bozmasin */ }
+
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -142,6 +249,14 @@ public sealed class WidgetsController : ControllerBase
                 recordId,
                 request ?? new SaveRecordRequest(null, null),
                 ct);
+
+            // OnSave tetikleyici — fire-and-forget
+            try
+            {
+                FireOnSaveTriggersFireAndForget(formCode, recordId, User?.Identity?.Name);
+            }
+            catch { /* dispatch hatasi save'i bozmasin */ }
+
             return Ok(result);
         }
         catch (ArgumentException ex)

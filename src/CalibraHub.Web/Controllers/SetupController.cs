@@ -83,7 +83,7 @@ public sealed class SetupController : Controller
                 cancellationToken);
 
             await _adminManagementService.CreateDepartmentAsync(
-                new CreateDepartmentRequest(companyId, "YNT", "Yonetim"),
+                new CreateDepartmentRequest(companyId, "Yonetim"),
                 cancellationToken);
 
             var allDepts = await _departmentRepository.GetAllAsync(cancellationToken);
@@ -235,7 +235,7 @@ public sealed class SetupController : Controller
             if (dept is null)
             {
                 await _adminManagementService.CreateDepartmentAsync(
-                    new CreateDepartmentRequest(input.CompanyId!.Value, "YNT", "Yonetim"),
+                    new CreateDepartmentRequest(input.CompanyId!.Value, "Yonetim"),
                     cancellationToken);
                 allDepts = await _departmentRepository.GetAllAsync(cancellationToken);
                 dept = allDepts.First(x => x.CompanyId == input.CompanyId!.Value);
@@ -423,7 +423,7 @@ public sealed class SetupController : Controller
             if (dept is null)
             {
                 await _adminManagementService.CreateDepartmentAsync(
-                    new CreateDepartmentRequest(input.CompanyId!.Value, "YNT", "Yonetim"),
+                    new CreateDepartmentRequest(input.CompanyId!.Value, "Yonetim"),
                     cancellationToken);
                 allDepts = await _departmentRepository.GetAllAsync(cancellationToken);
                 dept = allDepts.First(x => x.CompanyId == input.CompanyId!.Value);
@@ -559,7 +559,7 @@ public sealed class SetupController : Controller
             if (dept is null)
             {
                 await _adminManagementService.CreateDepartmentAsync(
-                    new CreateDepartmentRequest(input.CompanyId.Value, "YNT", "Yonetim"),
+                    new CreateDepartmentRequest(input.CompanyId.Value, "Yonetim"),
                     cancellationToken);
                 allDepts = await _departmentRepository.GetAllAsync(cancellationToken);
                 dept = allDepts.First(x => x.CompanyId == input.CompanyId.Value);

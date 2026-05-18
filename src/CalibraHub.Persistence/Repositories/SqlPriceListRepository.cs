@@ -184,19 +184,57 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         // Defansif JOIN: orphan FK olan satırlar (Items/currencies eşleşmeyen) düşmesin —
         // LEFT JOIN + null fallback. Server-side filter + OFFSET/FETCH pagination.
         // COUNT(*) OVER() ile total tek query'de.
+        //
+        // ──── ActiveOn (Baz Tarih) DAVRANIŞI ────
+        // Set ise: AYNI (Group+Item+Config+Currency+PriceType) anahtarı için MAX(ValidFrom <= aon)
+        // satırı seçilir; daha eski ValidFrom'lu kayıtlar listede görünmez (sonraki kayıt
+        // tarafından invalide edilmiş kabul edilir). ValidTo dolu ve aon'u geçtiyse de düşer.
+        // Tek satır CTE + ROW_NUMBER() ile partition.
+        var hasActiveOn = filter.ActiveOn.HasValue;
+
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"SELECT p.[id], p.[GroupId], p.[ItemId], i.[Code], i.[Name],");
-        sb.AppendLine($"       p.[ConfigId], cfg.[RecordCode],");
-        sb.AppendLine($"       p.[CurrencyId], cur.[code],");
-        sb.AppendLine($"       p.[PriceType], p.[Price],");
-        sb.AppendLine($"       p.[ValidFrom], p.[ValidTo], p.[IsActive],");
-        sb.AppendLine($"       p.[Created], p.[Updated],");
-        sb.AppendLine($"       COUNT(*) OVER() AS TotalCount");
-        sb.AppendLine($"FROM {_tblEntries} p");
-        sb.AppendLine($"LEFT JOIN {TblItems} i ON i.[Id] = p.[ItemId]");
-        sb.AppendLine($"LEFT JOIN {TblConfigurations} cfg ON cfg.[Id] = p.[ConfigId]");
-        sb.AppendLine($"LEFT JOIN {TblCurrencies} cur ON cur.[id] = p.[CurrencyId]");
-        sb.AppendLine($"WHERE p.[GroupId] = @GroupId");
+        if (hasActiveOn)
+        {
+            sb.AppendLine("WITH AsOf AS (");
+            sb.AppendLine($"  SELECT p.*, ROW_NUMBER() OVER (");
+            sb.AppendLine("    PARTITION BY p.[GroupId], p.[ItemId], p.[ConfigId], p.[CurrencyId], p.[PriceType]");
+            sb.AppendLine("    ORDER BY p.[ValidFrom] DESC, p.[id] DESC");
+            sb.AppendLine("  ) AS rn");
+            sb.AppendLine($"  FROM {_tblEntries} p");
+            sb.AppendLine("  WHERE p.[GroupId] = @GroupId");
+            sb.AppendLine("    AND p.[IsActive] = 1");
+            sb.AppendLine("    AND p.[ValidFrom] <= @ActiveOn");
+            sb.AppendLine("    AND (p.[ValidTo] IS NULL OR p.[ValidTo] >= @ActiveOn)");
+            sb.AppendLine(")");
+            sb.AppendLine("SELECT p.[id], p.[GroupId], p.[ItemId], i.[Code], i.[Name],");
+            sb.AppendLine("       p.[ConfigId], cfg.[RecordCode],");
+            sb.AppendLine("       p.[CurrencyId], cur.[code],");
+            sb.AppendLine("       p.[PriceType], p.[Price],");
+            sb.AppendLine("       p.[ValidFrom], p.[ValidTo], p.[IsActive],");
+            sb.AppendLine("       p.[Created], p.[Updated],");
+            sb.AppendLine("       COUNT(*) OVER() AS TotalCount");
+            sb.AppendLine("FROM AsOf p");
+            sb.AppendLine($"LEFT JOIN {TblItems} i ON i.[Id] = p.[ItemId]");
+            sb.AppendLine($"LEFT JOIN {TblConfigurations} cfg ON cfg.[Id] = p.[ConfigId]");
+            sb.AppendLine($"LEFT JOIN {TblCurrencies} cur ON cur.[id] = p.[CurrencyId]");
+            sb.AppendLine("WHERE p.rn = 1");
+            cmd.Parameters.Add(new SqlParameter("@ActiveOn", filter.ActiveOn!.Value.Date));
+        }
+        else
+        {
+            sb.AppendLine($"SELECT p.[id], p.[GroupId], p.[ItemId], i.[Code], i.[Name],");
+            sb.AppendLine($"       p.[ConfigId], cfg.[RecordCode],");
+            sb.AppendLine($"       p.[CurrencyId], cur.[code],");
+            sb.AppendLine($"       p.[PriceType], p.[Price],");
+            sb.AppendLine($"       p.[ValidFrom], p.[ValidTo], p.[IsActive],");
+            sb.AppendLine($"       p.[Created], p.[Updated],");
+            sb.AppendLine($"       COUNT(*) OVER() AS TotalCount");
+            sb.AppendLine($"FROM {_tblEntries} p");
+            sb.AppendLine($"LEFT JOIN {TblItems} i ON i.[Id] = p.[ItemId]");
+            sb.AppendLine($"LEFT JOIN {TblConfigurations} cfg ON cfg.[Id] = p.[ConfigId]");
+            sb.AppendLine($"LEFT JOIN {TblCurrencies} cur ON cur.[id] = p.[CurrencyId]");
+            sb.AppendLine($"WHERE p.[GroupId] = @GroupId");
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
@@ -222,12 +260,6 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         {
             sb.AppendLine("  AND (p.[ValidTo] IS NULL OR p.[ValidTo] <= @ValidToMax)");
             cmd.Parameters.Add(new SqlParameter("@ValidToMax", vtm.Date));
-        }
-        if (filter.ActiveOn is DateTime aon)
-        {
-            sb.AppendLine("  AND p.[ValidFrom] <= @ActiveOn");
-            sb.AppendLine("  AND (p.[ValidTo] IS NULL OR p.[ValidTo] >= @ActiveOn)");
-            cmd.Parameters.Add(new SqlParameter("@ActiveOn", aon.Date));
         }
 
         sb.AppendLine("ORDER BY i.[Code], cfg.[RecordCode], p.[ValidFrom],");
@@ -334,6 +366,37 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         cmd.CommandText = $"DELETE FROM {_tblEntries} WHERE [id]=@Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<PriceList?> FindActiveDuplicateAsync(
+        int groupId, int itemId, int? configId, int currencyId,
+        string priceType, DateTime validFrom,
+        int excludeId, CancellationToken ct)
+    {
+        await using var conn = await _cf.OpenConnectionAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+        var configClause = configId.HasValue ? "[ConfigId] = @ConfigId" : "[ConfigId] IS NULL";
+        cmd.CommandText = $@"
+            SELECT TOP 1 {EntryCols}
+            FROM {_tblEntries}
+            WHERE [GroupId]    = @GroupId
+              AND [ItemId]     = @ItemId
+              AND {configClause}
+              AND [CurrencyId] = @CurrencyId
+              AND [PriceType]  = @PriceType
+              AND [ValidFrom]  = @ValidFrom
+              AND [IsActive]   = 1
+              AND [id]        <> @ExcludeId;";
+        cmd.Parameters.Add(new SqlParameter("@GroupId",    groupId));
+        cmd.Parameters.Add(new SqlParameter("@ItemId",     itemId));
+        if (configId.HasValue)
+            cmd.Parameters.Add(new SqlParameter("@ConfigId", configId.Value));
+        cmd.Parameters.Add(new SqlParameter("@CurrencyId", currencyId));
+        cmd.Parameters.Add(new SqlParameter("@PriceType",  priceType));
+        cmd.Parameters.Add(new SqlParameter("@ValidFrom",  validFrom));
+        cmd.Parameters.Add(new SqlParameter("@ExcludeId",  excludeId));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct) ? MapEntry(r) : null;
     }
 
     // ── Upsert (bulk) ────────────────────────────────────────────────────────

@@ -8,530 +8,430 @@
 
 @section Styles {
 <style>
-.pe-page {
-    --pe-bg:           #f8fafc;
-    --pe-surface:      #ffffff;
-    --pe-surface2:     #f1f5f9;
-    --pe-border:       #e2e8f0;
-    --pe-border-light: #f1f5f9;
-    --pe-text:         #0f172a;
-    --pe-text-muted:   #64748b;
-    --pe-input-bg:     #ffffff;
-    --pe-input-disabled: #f8fafc;
-    --pe-accent:       var(--theme-accent, #2563eb);
-    --pe-toast-ok-bg:  #d1fae5;
-    --pe-toast-ok-tx:  #065f46;
-    --pe-toast-er-bg:  #fee2e2;
-    --pe-toast-er-tx:  #991b1b;
-}
-body.app-theme-dark .pe-page {
-    --pe-bg:           #080c17;
-    --pe-surface:      #0d1323;
-    --pe-surface2:     #111827;
-    --pe-border:       rgba(255,255,255,.09);
-    --pe-border-light: rgba(255,255,255,.04);
-    --pe-text:         #e2e8f0;
-    --pe-text-muted:   #94a3b8;
-    --pe-input-bg:     rgba(255,255,255,.06);
-    --pe-input-disabled: rgba(255,255,255,.03);
-    --pe-accent:       var(--theme-accent, #6366f1);
-    --pe-toast-ok-bg:  rgba(34,197,94,.18);
-    --pe-toast-ok-tx:  #4ade80;
-    --pe-toast-er-bg:  rgba(239,68,68,.18);
-    --pe-toast-er-tx:  #f87171;
-}
+    .pe-root {
+        --pe-bg:      #f1f5f9;
+        --pe-surface: #ffffff;
+        --pe-border:  #e2e8f0;
+        --pe-text:    #0f172a;
+        --pe-muted:   #64748b;
+        --pe-accent:  #6366f1;
+        display: flex; align-items: flex-start; justify-content: center;
+        min-height: 100%; padding: 32px 16px;
+        background: var(--pe-bg);
+    }
+    body.app-theme-dark .pe-root {
+        --pe-bg:      #080c17;
+        --pe-surface: #0d1323;
+        --pe-border:  rgba(255,255,255,.09);
+        --pe-text:    #e2e8f0;
+        --pe-muted:   #94a3b8;
+    }
+    .pe-card {
+        width: 100%; max-width: 640px;
+        background: var(--pe-surface); border: 1px solid var(--pe-border);
+        border-radius: 14px; padding: 28px 28px 24px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    .pe-header {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 24px; padding-bottom: 16px;
+        border-bottom: 1px solid var(--pe-border);
+    }
+    .pe-header h1 { font-size: 17px; font-weight: 700; margin: 0; color: var(--pe-text); }
+    .pe-back {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 8px;
+        border: 1px solid var(--pe-border); background: none;
+        color: var(--pe-muted); font-size: 13px; cursor: pointer;
+        text-decoration: none; transition: background .12s;
+    }
+    .pe-back:hover { background: var(--pe-bg); color: var(--pe-text); }
+    .pe-spacer { flex: 1; }
 
-.pe-page {
-    padding: 16px 24px; height: 100%;
-    display: flex; flex-direction: column; min-height: 0; gap: 12px;
-    overflow: auto;
-    background: var(--pe-bg); color: var(--pe-text);
-}
-.pe-toolbar {
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--pe-border);
-}
-.pe-toolbar h1 { font-size: 18px; margin: 0; color: var(--pe-text); }
-.pe-toolbar .spacer { flex: 1; }
-.pe-back { color: var(--pe-text-muted); text-decoration: none; font-size: 13px; }
-.pe-back:hover { color: var(--pe-text); }
-.pe-btn {
-    padding: 7px 14px; border-radius: 7px;
-    border: 1px solid var(--pe-border);
-    background: var(--pe-surface); color: var(--pe-text);
-    cursor: pointer; font-size: 13px; font-weight: 500;
-    transition: background .12s, border-color .12s;
-    text-decoration: none; display: inline-block;
-}
-.pe-btn:hover:not(:disabled) { background: var(--pe-surface2); border-color: var(--pe-accent); }
-.pe-btn:disabled { opacity: .4; cursor: not-allowed; }
-.pe-btn--primary { background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; border-color: #4f46e5; }
-.pe-btn--primary:hover:not(:disabled) { filter: brightness(1.07); border-color: #4f46e5; }
-.pe-btn--danger  { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-body.app-theme-dark .pe-btn--danger { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.32); }
+    .pe-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .pe-label { font-size: 12px; font-weight: 600; color: var(--pe-muted); }
+    .pe-input, .pe-select, .pe-textarea {
+        padding: 9px 12px; border-radius: 8px;
+        border: 1px solid var(--pe-border);
+        background: var(--pe-bg); color: var(--pe-text);
+        font-size: 14px; outline: none;
+        font-family: inherit;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    .pe-textarea { resize: vertical; min-height: 70px; }
+    .pe-input:focus, .pe-select:focus, .pe-textarea:focus {
+        border-color: var(--pe-accent);
+        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+    }
+    .pe-input.is-invalid, .pe-select.is-invalid {
+        border-color: #ef4444 !important;
+        box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important;
+    }
+    body.app-theme-dark .pe-select { color-scheme: dark; }
 
-/* Sol-tab + sağ-pane (master-detail) */
-.pe-tabbed {
-    display: flex; min-height: 380px; gap: 0;
-    background: var(--pe-surface);
-    border: 1px solid var(--pe-border); border-radius: 10px;
-    overflow: hidden; flex: 1 1 auto;
-}
-.pe-nav {
-    width: 220px; flex-shrink: 0;
-    background: var(--pe-surface2);
-    border-right: 1px solid var(--pe-border);
-    padding: 10px 0; display: flex; flex-direction: column;
-}
-.pe-nav-grouptitle {
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
-    color: var(--pe-text-muted); padding: 10px 14px 4px; margin: 0;
-}
-.pe-nav-btn {
-    display: flex; align-items: center; gap: 8px;
-    width: 100%; padding: 9px 14px;
-    border: none; background: transparent;
-    text-align: left; cursor: pointer;
-    color: var(--pe-text); font-size: 13px; font-weight: 500;
-    border-left: 3px solid transparent;
-    transition: background .12s, color .12s;
-}
-.pe-nav-btn:hover { background: rgba(99,102,241,.08); }
-.pe-nav-btn.is-active {
-    border-left-color: var(--pe-accent);
-    background: rgba(99,102,241,.14);
-    font-weight: 600;
-}
-.pe-nav-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: .7; }
-.pe-nav-btn.is-active .pe-nav-icon { opacity: 1; }
+    .pe-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-.pe-pane { flex: 1 1 auto; min-width: 0; padding: 18px 22px; overflow-y: auto; }
-.pe-pane-section { display: none; }
-.pe-pane-section.is-active { display: block; }
-.pe-pane h2 { margin: 0 0 4px; font-size: 15px; color: var(--pe-text); font-weight: 700; }
-.pe-pane .pane-hint { font-size: 12px; color: var(--pe-text-muted); margin-bottom: 14px; }
+    .pe-switch-row { display: flex; align-items: center; gap: 10px; }
+    .pe-switch { position: relative; width: 42px; height: 24px; display: inline-block; flex-shrink: 0; }
+    .pe-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .pe-switch-track {
+        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
+        background: #e2e8f0; transition: background .2s;
+    }
+    .pe-switch input:checked + .pe-switch-track { background: #10b981; }
+    body.app-theme-dark .pe-switch-track { background: rgba(255,255,255,.12); }
+    body.app-theme-dark .pe-switch input:checked + .pe-switch-track { background: #059669; }
+    .pe-switch-track::before {
+        content: ''; position: absolute; height: 18px; width: 18px;
+        left: 3px; top: 3px; border-radius: 50%;
+        background: #fff; transition: transform .2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .pe-switch input:checked + .pe-switch-track::before { transform: translateX(18px); }
+    .pe-switch-label { font-size: 13px; font-weight: 600; color: var(--pe-muted); }
 
-/* Form */
-.pe-row { display: grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
-.pe-row label { font-size: 12px; color: var(--pe-text-muted); font-weight: 500; }
-.pe-row input, .pe-row select, .pe-row textarea {
-    padding: 7px 10px; border-radius: 6px;
-    border: 1px solid var(--pe-border);
-    background: var(--pe-input-bg); color: var(--pe-text);
-    font-size: 13px; outline: none;
-}
-.pe-row input:focus, .pe-row select:focus, .pe-row textarea:focus {
-    border-color: var(--pe-accent); box-shadow: 0 0 0 2px rgba(99,102,241,.18);
-}
-body.app-theme-dark .pe-row select,
-html.dark .pe-row select { color-scheme: dark; }
-.pe-row select > * { background: var(--pe-surface); color: var(--pe-text); }
-body.app-theme-dark .pe-row select > *,
-html.dark .pe-row select > * { background-color: #0d1323; color: #e2e8f0; }
-.pe-row textarea { min-height: 60px; resize: vertical; }
-.pe-row.split { grid-template-columns: 160px 1fr 100px 1fr; }
-.pe-row input[type="number"] { text-align: right; -moz-appearance: textfield; }
+    .pe-actions {
+        display: flex; gap: 8px; margin-top: 24px;
+        padding-top: 16px; border-top: 1px solid var(--pe-border);
+    }
+    .pe-btn {
+        padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer; transition: all .12s;
+        text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .pe-btn--primary { background: var(--pe-accent); color: #fff; border-color: #4f46e5; }
+    .pe-btn--primary:hover { filter: brightness(1.1); }
+    .pe-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
+    .pe-btn--ghost { background: none; border-color: var(--pe-border); color: var(--pe-text); }
+    .pe-btn--ghost:hover { background: var(--pe-bg); }
+    .pe-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
+    body.app-theme-dark .pe-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
+    .pe-btn--danger:hover { background: rgba(239,68,68,.08); }
+    .pe-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
 
-.pe-status-pill {
-    padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
-    background: rgba(34,197,94,.18); color: #16a34a;
-}
-.pe-status-pill--off { background: rgba(148,163,184,.18); color: var(--pe-text-muted); }
-body.app-theme-dark .pe-status-pill { color: #86efac; }
+    .pe-err {
+        margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+        background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
+    }
+    body.app-theme-dark .pe-err { color: #f87171; }
 
-.pe-meta {
-    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--pe-border-light);
-    display: flex; gap: 14px; flex-wrap: wrap;
-    font-size: 11px; color: var(--pe-text-muted);
-}
-
-/* Widget sahalari pane — DynamicWidgetRenderer için kapsayıcı */
-#peDynamicWidgets { width: 100%; }
-.pe-placeholder {
-    padding: 18px; border: 1px dashed var(--pe-border); border-radius: 8px;
-    color: var(--pe-text-muted); font-size: 13px;
-    background: var(--pe-surface2);
-}
-
-#pe-flash { position: fixed; top: 16px; right: 16px; z-index: 9999;
-    padding: 10px 16px; border-radius: 8px; font-size: 13px;
-    box-shadow: 0 4px 12px rgba(0,0,0,.25);
-    display: none; max-width: 360px;
-}
-#pe-flash.ok  { background: var(--pe-toast-ok-bg); color: var(--pe-toast-ok-tx); }
-#pe-flash.err { background: var(--pe-toast-er-bg); color: var(--pe-toast-er-tx); }
-
-/* Layout sıfırlamaları (diğer admin sayfalarıyla aynı pattern) */
-.page-personnel-edit .integrator-dashboard {
-    height: 100% !important; min-height: 0 !important;
-    padding: 0 !important; max-width: none !important;
-    background: transparent !important; box-shadow: none !important;
-    border: none !important; border-radius: 0 !important;
-}
-.page-personnel-edit .integrator-dashboard__content {
-    display: flex !important; flex-direction: column !important;
-    width: 100% !important; max-width: none !important;
-    min-height: 0 !important; padding: 0 !important;
-    margin: 0 !important; overflow: hidden !important;
-    height: 100% !important;
-}
+    /* Delete modal */
+    .pe-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.48); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .pe-modal {
+        background: var(--pe-surface); border: 1px solid var(--pe-border);
+        border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw;
+        display: flex; flex-direction: column; gap: 14px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.35);
+    }
+    .pe-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+    .pe-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--pe-text); }
+    .pe-modal-msg { font-size: 13px; color: var(--pe-muted); text-align: center; line-height: 1.55; }
+    .pe-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+    .pe-modal-cancel {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: 1px solid var(--pe-border); background: var(--pe-surface);
+        color: var(--pe-text); cursor: pointer; transition: background .12s;
+    }
+    .pe-modal-cancel:hover { background: var(--pe-bg); }
+    .pe-modal-del {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: none; background: #ef4444; color: #fff; cursor: pointer; transition: filter .12s;
+    }
+    .pe-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
+    .pe-modal-del:disabled { opacity: .5; cursor: not-allowed; }
 </style>
 }
 
-<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
-<div class="pe-page">
-    <div class="pe-toolbar">
-        <a class="pe-back" href="@Url.Action("Personnel")" title="Listeye dön">←</a>
-        <a class="pe-btn" href="@Url.Action("PersonnelEdit")" id="btn-new" title="Yeni personel">+ Yeni</a>
-        <button class="pe-btn pe-btn--primary" id="btn-save">Kaydet</button>
-        @if (!isNew)
-        {
-            <button class="pe-btn pe-btn--danger" id="btn-delete">Sil</button>
-        }
-        <span class="spacer"></span>
-        <h1>@(isNew ? "Yeni Personel" : $"{Model!.Code} — {Model.FullName}")</h1>
-        @if (!isNew)
-        {
-            var pillCls = Model!.IsActive ? "pe-status-pill" : "pe-status-pill pe-status-pill--off";
-            <span class="@pillCls">@(Model.IsActive ? "Aktif" : "Pasif")</span>
-            @if (Model.IsProductionOperator)
-            {
-                <span class="pe-status-pill" style="background:rgba(99,102,241,.18); color:#6366f1;">Üretim Operatörü</span>
-            }
-        }
+@{
+    var _colId = !isNew ? Model!.Id.ToString() : $"new-{Guid.NewGuid():N}";
+    var _colTitle = isNew ? "Yeni Personel" : $"Personel: {Model!.FullName}";
+}
+<form class="integrator-form" style="display:none" aria-hidden="true"
+      data-collaboration-record-type="PERSONNEL_EDIT"
+      data-collaboration-record-id="@_colId"
+      data-collaboration-record-title="@_colTitle"></form>
+
+<div class="pe-root">
+  <div class="pe-card">
+    <div class="pe-header">
+      <a class="pe-back" href="/Production/Personnel">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <span class="pe-spacer"></span>
+      <h1>@(isNew ? "Yeni Personel" : "Personeli Düzenle")</h1>
     </div>
 
-    <div class="pe-tabbed">
-        <nav class="pe-nav">
-            <div class="pe-nav-grouptitle">Personel</div>
-            <button type="button" class="pe-nav-btn is-active" data-tab="genel">
-                <svg class="pe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                <span>Genel Bilgiler</span>
-            </button>
-            <button type="button" class="pe-nav-btn" data-tab="hesap">
-                <svg class="pe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                <span>Sistem Hesabı &amp; PIN/NFC</span>
-            </button>
-            <div class="pe-nav-grouptitle">Ek Sahalar</div>
-            <button type="button" class="pe-nav-btn" data-tab="widgets">
-                <svg class="pe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-                <span>Widget Sahaları</span>
-            </button>
-        </nav>
+    <input type="hidden" id="pe-id" value="@(Model?.Id.ToString() ?? "")" />
 
-        <div class="pe-pane">
-            <!-- Tab: Genel Bilgiler -->
-            <section class="pe-pane-section is-active" data-pane="genel">
-                <h2>Genel Bilgiler</h2>
-                <div class="pane-hint">Personelin kimlik, ünvan ve iletişim bilgileri.</div>
+    <div class="pe-field">
+      <label class="pe-label" for="pe-name">Ad Soyad *</label>
+      <input id="pe-name" class="pe-input" maxlength="150"
+             value="@(Model?.FullName ?? "")" placeholder="Örn: Ahmet Yılmaz" />
+    </div>
 
-                <input type="hidden" id="f-id" value="@(Model?.Id ?? 0)" />
+    <div class="pe-row2">
+      <div class="pe-field">
+        <label class="pe-label" for="pe-title">Ünvan</label>
+        <input id="pe-title" class="pe-input" maxlength="100"
+               value="@(Model?.Title ?? "")" placeholder="Örn: Operatör" />
+      </div>
+      <div class="pe-field">
+        <label class="pe-label" for="pe-dept">Departman</label>
+        <select id="pe-dept" class="pe-input" data-current="@(Model?.Department ?? "")">
+          <option value="">— Departman seçiniz —</option>
+        </select>
+      </div>
+    </div>
 
-                <div class="pe-row">
-                    <label>Sicil No / Kod *</label>
-                    <input type="text" id="f-code" value="@Model?.Code" placeholder="OP-001, EMP-042" maxlength="30" />
-                </div>
-                <div class="pe-row">
-                    <label>Ad Soyad *</label>
-                    <input type="text" id="f-fullName" value="@Model?.FullName" placeholder="Ahmet Yılmaz" maxlength="100" />
-                </div>
-                <div class="pe-row">
-                    <label>Ünvan</label>
-                    <input type="text" id="f-title" value="@Model?.Title" placeholder="Kaynakçı, CNC Operatörü" maxlength="80" />
-                </div>
-                <div class="pe-row">
-                    <label>Departman</label>
-                    <input type="text" id="f-department" value="@Model?.Department" placeholder="Üretim, Boyahane" maxlength="80" />
-                </div>
-                <div class="pe-row split">
-                    <label>Telefon</label>
-                    <input type="text" id="f-phone" value="@Model?.Phone" placeholder="0532 123 45 67" maxlength="40" />
-                    <label style="text-align:right;">E-posta</label>
-                    <input type="email" id="f-email" value="@Model?.Email" placeholder="ad@firma.com" maxlength="120" />
-                </div>
-                <div class="pe-row" style="align-items: start;">
-                    <label>Notlar</label>
-                    <textarea id="f-notes" maxlength="500" placeholder="İsteğe bağlı detay...">@Model?.Notes</textarea>
-                </div>
-                <div class="pe-row">
-                    <label>Aktif</label>
-                    <label style="display:inline-flex; gap:8px; align-items:center;">
-                        <input type="checkbox" id="f-active" @(Model is null || Model.IsActive ? "checked" : "") />
-                        <span style="font-size:12px;color:var(--pe-text-muted);" id="f-active-label">@((Model is null || Model.IsActive) ? "Etkin" : "Pasif")</span>
-                    </label>
-                </div>
+    <div class="pe-row2">
+      <div class="pe-field">
+        <label class="pe-label" for="pe-phone">Telefon</label>
+        <input id="pe-phone" class="pe-input" maxlength="40"
+               value="@(Model?.Phone ?? "")" placeholder="Örn: 0532 ..." />
+      </div>
+      <div class="pe-field">
+        <label class="pe-label" for="pe-email">E-posta</label>
+        <input id="pe-email" class="pe-input" type="email" maxlength="150"
+               value="@(Model?.Email ?? "")" placeholder="ornek@firma.com" />
+      </div>
+    </div>
 
-                @if (!isNew)
-                {
-                    <div class="pe-meta">
-                        <span>Oluşturma: @Model!.Created.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
-                        @if (Model.Updated.HasValue)
-                        {
-                            <span>Güncelleme: @Model.Updated.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
-                        }
-                    </div>
-                }
-            </section>
+    <div class="pe-row2">
+      <div class="pe-field">
+        <label class="pe-label" for="pe-pin">PIN Kodu</label>
+        <input id="pe-pin" class="pe-input" maxlength="20"
+               value="@(Model?.PinCode ?? "")" placeholder="Vardiya/terminal girişi" />
+      </div>
+      <div class="pe-field">
+        <label class="pe-label" for="pe-card">Kart No</label>
+        <input id="pe-card" class="pe-input" maxlength="50"
+               value="@(Model?.CardNo ?? "")" placeholder="RFID / barkod" />
+      </div>
+    </div>
 
-            <!-- Tab: Sistem Hesabı + PIN/NFC -->
-            <section class="pe-pane-section" data-pane="hesap">
-                <h2>Sistem Hesabı &amp; Shop-floor Kimlik</h2>
-                <div class="pane-hint">
-                    Tablet shop-floor girişi için PIN ve/veya NFC kart numarası.
-                    Sistem kullanıcısı (User) varsa link verilir; yoksa personel sadece üretim katından çalışır
-                    (login yapmaz, ekrana PIN/kart ile dahil olur).
-                </div>
+    <div class="pe-field">
+      <label class="pe-label" for="pe-notes">Notlar</label>
+      <textarea id="pe-notes" class="pe-textarea" maxlength="2000"
+                placeholder="Vardiya bilgileri, ekstra notlar...">@(Model?.Notes ?? "")</textarea>
+    </div>
 
-                <div class="pe-row">
-                    <label>Üretim Operatörü</label>
-                    <label style="display:inline-flex; gap:8px; align-items:center;">
-                        <input type="checkbox" id="f-isOperator" @(Model?.IsProductionOperator == true ? "checked" : "") />
-                        <span style="font-size:12px;color:var(--pe-text-muted);">Tablet shop-floor kuyruğunda görünür</span>
-                    </label>
-                </div>
-
-                <div class="pe-row">
-                    <label>PIN Kodu</label>
-                    <input type="text" id="f-pinCode" value="@Model?.PinCode" placeholder="4-10 hane (örn. 1234)" maxlength="10" inputmode="numeric" autocomplete="off" />
-                </div>
-
-                <div class="pe-row">
-                    <label>NFC / Kart No</label>
-                    <input type="text" id="f-cardNo" value="@Model?.CardNo" placeholder="A1B2C3D4..." maxlength="50" autocomplete="off" />
-                </div>
-
-                <div class="pe-row" style="align-items: start;">
-                    <label>Sistem User ID</label>
-                    <div>
-                        <input type="text" id="f-userId" value="@Model?.UserId" placeholder="GUID (User.id) — boş bırakılabilir" maxlength="36" />
-                        @if (!string.IsNullOrEmpty(Model?.UserFullName))
-                        {
-                            <div style="font-size:11px; color:var(--pe-text-muted); margin-top:4px;">
-                                Bağlı kullanıcı: <strong>@Model.UserFullName</strong>
-                            </div>
-                        }
-                        else
-                        {
-                            <div style="font-size:11px; color:var(--pe-text-muted); margin-top:4px;">
-                                Boş = sadece üretim katı personeli, sistem login'i yok.
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <div class="pe-meta" style="border-top: 1px dashed var(--pe-border); margin-top:18px; padding-top:12px;">
-                    <strong style="color:var(--pe-accent);">Güvenlik:</strong>
-                    <span>PIN ve Kart No şirket içinde benzersiz (UNIQUE filtered). Aynı PIN/karta sahip iki personel oluşturulamaz.</span>
-                </div>
-            </section>
-
-            <!-- Tab: Widget Sahaları (DynamicWidgetRenderer) -->
-            <section class="pe-pane-section" data-pane="widgets">
-                <div id="peDynamicWidgets"
-                     data-form-code="PERSONNEL_EDIT"
-                     data-record-id="@(Model?.Id.ToString() ?? "")">
-                    <div class="pe-placeholder">
-                        Bu form için tanımlı widget yok. <a href="@Url.Action("FormManagement", "Admin")">Form Tasarım Ayarları</a>'ndan ekleyebilirsin.
-                    </div>
-                </div>
-            </section>
+    <div class="pe-row2">
+      <div class="pe-field">
+        <label class="pe-label">Üretim Operatörü</label>
+        <div class="pe-switch-row">
+          <label class="pe-switch">
+            <input type="checkbox" id="pe-operator" @(Model?.IsProductionOperator == true ? "checked" : "") />
+            <span class="pe-switch-track"></span>
+          </label>
+          <span class="pe-switch-label" id="pe-operator-label">@(Model?.IsProductionOperator == true ? "Evet" : "Hayır")</span>
         </div>
+      </div>
+      <div class="pe-field">
+        <label class="pe-label">Durum</label>
+        <div class="pe-switch-row">
+          <label class="pe-switch">
+            <input type="checkbox" id="pe-active" @(Model is null || Model.IsActive ? "checked" : "") />
+            <span class="pe-switch-track"></span>
+          </label>
+          <span class="pe-switch-label" id="pe-active-label">@(Model is null || Model.IsActive ? "Aktif" : "Pasif")</span>
+        </div>
+      </div>
     </div>
-</div>
-</section>
 
-<div id="pe-flash"></div>
+    <div id="pe-err" style="display:none;" class="pe-err"></div>
+
+    <!-- Dinamik widget alanları (Admin → Widget Tanımları → PERSONNEL_EDIT) -->
+    <div id="peDynamicWidgetsCard" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--pe-border);">
+      <div id="peDynamicWidgets"
+           data-form-code="PERSONNEL_EDIT"
+           data-record-id="@(Model?.Id.ToString() ?? "")">
+      </div>
+    </div>
+
+    <div class="pe-actions">
+      <button class="pe-btn pe-btn--primary" id="pe-save">Kaydet</button>
+      <a class="pe-btn pe-btn--ghost" href="/Production/Personnel">İptal</a>
+      @if (!isNew)
+      {
+        <button class="pe-btn pe-btn--danger" id="pe-delete">Sil</button>
+      }
+    </div>
+  </div>
+</div>
+
+@if (!isNew)
+{
+  <div id="pe-modal" class="pe-modal-backdrop" style="display:none;" onclick="peCloseModal()">
+    <div class="pe-modal" onclick="event.stopPropagation()">
+      <div class="pe-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="pe-modal-title">Personeli Sil</div>
+      <div class="pe-modal-msg" id="pe-modal-msg"></div>
+      <div class="pe-modal-actions">
+        <button class="pe-modal-cancel" onclick="peCloseModal()">Vazgeç</button>
+        <button class="pe-modal-del" id="pe-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
 @Html.AntiForgeryToken()
 
 @section Scripts {
 <script>
 (function () {
-    const isNew = @(isNew ? "true" : "false");
-    const id    = @(Model?.Id ?? 0);
+    var idVal = document.getElementById('pe-id')?.value || '';
 
-    function token() {
-        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+    function csrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
         return el ? el.value : '';
     }
-    function flash(msg, ok) {
-        const el = document.getElementById('pe-flash');
-        el.textContent = msg;
-        el.className = ok ? 'ok' : 'err';
-        el.style.display = 'block';
-        clearTimeout(window.__peFlashTm);
-        window.__peFlashTm = setTimeout(() => el.style.display = 'none', 3000);
-    }
-
-    /* ── Tab switch ── */
-    const navBtns = document.querySelectorAll('.pe-nav-btn');
-    const panes   = document.querySelectorAll('.pe-pane-section');
-    function activate(tabKey) {
-        navBtns.forEach(b => b.classList.toggle('is-active', b.dataset.tab === tabKey));
-        panes.forEach(p => p.classList.toggle('is-active', p.dataset.pane === tabKey));
-    }
-    navBtns.forEach(btn => btn.addEventListener('click', () => {
-        if (btn.disabled) return;
-        activate(btn.dataset.tab);
-    }));
-
-    /* ── Active switch label ── */
-    const activeChk = document.getElementById('f-active');
-    const activeLbl = document.getElementById('f-active-label');
-    activeChk?.addEventListener('change', () => {
-        if (activeLbl) activeLbl.textContent = activeChk.checked ? 'Etkin' : 'Pasif';
-    });
-
-    /* ── Save ── */
-    document.getElementById('btn-save')?.addEventListener('click', async () => {
-        const code = document.getElementById('f-code').value.trim();
-        const fullName = document.getElementById('f-fullName').value.trim();
-        if (!code) { flash('Sicil no / Kod zorunlu.', false); return; }
-        if (!fullName) { flash('Ad soyad zorunlu.', false); return; }
-
-        const userIdRaw = document.getElementById('f-userId').value.trim();
-        let userId = null;
-        if (userIdRaw) {
-            // GUID format quick check (8-4-4-4-12)
-            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdRaw)) {
-                flash('User ID geçerli bir GUID değil.', false);
-                return;
-            }
-            userId = userIdRaw;
-        }
-
-        const body = {
-            id: Number(document.getElementById('f-id').value || 0),
-            code,
-            fullName,
-            title: document.getElementById('f-title').value.trim() || null,
-            department: document.getElementById('f-department').value.trim() || null,
-            pinCode: document.getElementById('f-pinCode').value.trim() || null,
-            cardNo: document.getElementById('f-cardNo').value.trim() || null,
-            isProductionOperator: document.getElementById('f-isOperator').checked,
-            isActive: activeChk.checked,
-            userId,
-            phone: document.getElementById('f-phone').value.trim() || null,
-            email: document.getElementById('f-email').value.trim() || null,
-            notes: document.getElementById('f-notes').value.trim() || null,
-        };
-        try {
-            const r = await fetch('/Production/SavePersonnel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                credentials: 'same-origin',
-                body: JSON.stringify(body)
-            });
-            const data = await r.json();
-            if (data.ok) {
-                flash('Kaydedildi.', true);
-                if (isNew && data.id) {
-                    setTimeout(() => location.href = '/Production/PersonnelEdit?id=' + data.id, 500);
-                } else {
-                    setTimeout(() => location.reload(), 500);
-                }
-            } else flash(data.error || 'Hata.', false);
-        } catch (e) { flash('İstek hatası: ' + e.message, false); }
-    });
-
-    /* ── Delete (custom modal — tema uyumlu) ── */
-    function showConfirm(opts) {
-        return new Promise(resolve => {
-            const backdrop = document.createElement('div');
-            backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(8,12,24,.55);backdrop-filter:blur(4px);z-index:9999;display:flex;align-items:center;justify-content:center;';
-            const card = document.createElement('div');
-            card.style.cssText = 'background:var(--pe-surface);color:var(--pe-text);border:1px solid var(--pe-border);border-radius:12px;width:min(440px,92vw);box-shadow:0 12px 48px rgba(0,0,0,.4);overflow:hidden;';
-            card.innerHTML = `
-                <div style="padding:20px 22px 14px; display:flex;gap:14px;align-items:flex-start;">
-                    <div style="width:36px;height:36px;border-radius:50%;background:rgba(239,68,68,.18);color:#ef4444;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22m-4 0V4a2 2 0 00-2-2H8a2 2 0 00-2 2v3"/></svg>
-                    </div>
-                    <div style="flex:1;">
-                        <h3 style="margin:0 0 6px;font-size:15px;font-weight:600;">${opts.title || 'Onay'}</h3>
-                        <p style="margin:0;font-size:13px;color:var(--pe-text-muted);line-height:1.5;">${opts.message || ''}</p>
-                    </div>
-                </div>
-                <div style="padding:12px 18px; display:flex;justify-content:flex-end;gap:8px; border-top:1px solid var(--pe-border);background:var(--pe-surface2);">
-                    <button id="cnf-cancel" class="pe-btn">Vazgeç</button>
-                    <button id="cnf-ok" class="pe-btn pe-btn--danger">${opts.okLabel || 'Sil'}</button>
-                </div>`;
-            backdrop.appendChild(card);
-            document.body.appendChild(backdrop);
-            const okBtn = card.querySelector('#cnf-ok');
-            const cnBtn = card.querySelector('#cnf-cancel');
-            const cleanup = (val) => { document.body.removeChild(backdrop); resolve(val); };
-            okBtn.addEventListener('click', () => cleanup(true));
-            cnBtn.addEventListener('click', () => cleanup(false));
-            backdrop.addEventListener('click', e => { if (e.target === backdrop) cleanup(false); });
-            document.addEventListener('keydown', function onKey(e) {
-                if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); cleanup(false); }
-                if (e.key === 'Enter')  { document.removeEventListener('keydown', onKey); cleanup(true); }
-            });
-            okBtn.focus();
-        });
-    }
-
-    document.getElementById('btn-delete')?.addEventListener('click', async () => {
-        const ok = await showConfirm({
-            title: 'Personel Sil',
-            message: 'Bu personel kaydı kalıcı olarak silinecek. Devam edilsin mi?',
-            okLabel: 'Sil'
-        });
-        if (!ok) return;
-        try {
-            const r = await fetch('/Production/DeletePersonnel/' + id, {
-                method: 'POST',
-                headers: { 'RequestVerificationToken': token() },
-                credentials: 'same-origin'
-            });
-            const data = await r.json();
-            if (data.ok) location.href = '/Production/Personnel';
-            else flash(data.error || 'Hata.', false);
-        } catch (e) { flash('İstek hatası: ' + e.message, false); }
-    });
-
-    /* Hash deep-link */
-    function applyHash() {
-        const h = (location.hash || '').replace('#', '').trim();
-        if (!h) return;
-        const ok = Array.from(navBtns).some(b => b.dataset.tab === h && !b.disabled);
-        if (ok) activate(h);
-    }
-    window.addEventListener('hashchange', applyHash);
-    applyHash();
-
-    /* ── DynamicWidgetRenderer mount (Material Card pattern) ── */
-    function mountWidgets() {
-        var el = document.getElementById('peDynamicWidgets');
+    function setErr(msg) {
+        var el = document.getElementById('pe-err');
         if (!el) return;
-        function tryMount() {
-            if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) {
-                console.warn('[PE] mountDynamicWidgetRenderer bulunamadi');
-                return;
-            }
-            try {
-                window._peDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
-                    formCode: 'PERSONNEL_EDIT',
-                    recordId: el.dataset.recordId || ''
+        if (msg) { el.textContent = msg; el.style.display = ''; }
+        else el.style.display = 'none';
+    }
+    function shake(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('is-invalid'); void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
+    }
+
+    // ── Toggle label sync ─────────────────────────────────────
+    function bindLabel(inputId, labelId, onText, offText) {
+        var inp = document.getElementById(inputId);
+        var lab = document.getElementById(labelId);
+        if (!inp || !lab) return;
+        inp.addEventListener('change', function () {
+            lab.textContent = inp.checked ? onText : offText;
+        });
+    }
+    bindLabel('pe-active',   'pe-active-label',   'Aktif', 'Pasif');
+    bindLabel('pe-operator', 'pe-operator-label', 'Evet',  'Hayır');
+
+    // ── Departman dropdown — Admin/GetDepartmentsLookup ──────────
+    // Sadece AKTIF + sirkete tanimli departmanlar listelenir. Mevcut personel
+    // free-text degeri (data-current) listede yoksa secim bos kalir
+    // (kullanici listeden secmek zorunda — pasif/silinmis kayit korunmaz).
+    (function loadDepartments() {
+        var sel = document.getElementById('pe-dept');
+        if (!sel) return;
+        var current = sel.getAttribute('data-current') || '';
+        fetch('/Admin/GetDepartmentsLookup', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                var opts = ['<option value="">— Departman seçiniz —</option>'];
+                (list || []).forEach(function (d) {
+                    var s = (current && d.name === current) ? ' selected' : '';
+                    opts.push('<option value="' + escapeAttr(d.name) + '"' + s + '>' + escapeHtml(d.name) + '</option>');
                 });
-            } catch (e) { console.warn('[PE] mountDynamicWidgetRenderer hatasi:', e); }
+                sel.innerHTML = opts.join('');
+            })
+            .catch(function () { /* sessiz: select bos kalir, save sirasinda sorun yok */ });
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
-        if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
-            tryMount();
-        } else {
-            // Bundle henüz yuklenmediyse retry
-            var retries = 30;
-            var iv = setInterval(function () {
-                if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
-                    clearInterval(iv);
-                    tryMount();
-                } else if (--retries <= 0) {
-                    clearInterval(iv);
+        function escapeAttr(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        }
+    })();
+
+    // ── Save ──────────────────────────────────────────────────
+    var saveBtn = document.getElementById('pe-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            var name = (document.getElementById('pe-name').value || '').trim();
+            if (!name) { shake('pe-name'); return; }
+
+            var payload = {
+                id:                   idVal ? parseInt(idVal) : 0,
+                code:                 '',
+                fullName:             name,
+                title:                document.getElementById('pe-title').value.trim() || null,
+                department:           document.getElementById('pe-dept').value.trim() || null,
+                pinCode:              document.getElementById('pe-pin').value.trim() || null,
+                cardNo:               document.getElementById('pe-card').value.trim() || null,
+                isProductionOperator: document.getElementById('pe-operator').checked,
+                isActive:             document.getElementById('pe-active').checked,
+                userId:               null,
+                phone:                document.getElementById('pe-phone').value.trim() || null,
+                email:                document.getElementById('pe-email').value.trim() || null,
+                notes:                document.getElementById('pe-notes').value.trim() || null
+            };
+            saveBtn.disabled = true;
+            setErr('');
+            fetch('/Production/SavePersonnel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify(payload)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.ok) {
+                    window.location.href = '/Production/Personnel';
+                } else {
+                    setErr((d && d.error) || 'Kayıt başarısız.');
+                    saveBtn.disabled = false;
                 }
-            }, 200);
+            })
+            .catch(function (e) { setErr('Bağlantı hatası: ' + (e.message || e)); saveBtn.disabled = false; });
+        });
+    }
+
+    // ── Delete modal ──────────────────────────────────────────
+    var deleteBtn = document.getElementById('pe-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            var name = document.getElementById('pe-name').value;
+            var msgEl = document.getElementById('pe-modal-msg');
+            if (msgEl) msgEl.innerHTML = '<strong>' + name + '</strong> personelini silmek istediğinize emin misiniz?';
+            document.getElementById('pe-modal').style.display = 'flex';
+            document.getElementById('pe-modal-del').focus();
+        });
+
+        var modalDel = document.getElementById('pe-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled = true;
+                modalDel.textContent = 'Siliniyor…';
+                fetch('/Production/DeletePersonnel/' + idVal, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': csrf() }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.ok) {
+                        window.location.href = '/Production/Personnel';
+                    } else {
+                        peCloseModal();
+                        setErr((d && d.error) || 'Silinemedi.');
+                    }
+                })
+                .catch(function (e) { peCloseModal(); setErr('Bağlantı hatası: ' + (e.message || e)); });
+            });
         }
     }
-    mountWidgets();
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') peCloseModal();
+    });
 })();
+
+function peCloseModal() {
+    var m = document.getElementById('pe-modal');
+    if (m) m.style.display = 'none';
+    var btn = document.getElementById('pe-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
 </script>
 }

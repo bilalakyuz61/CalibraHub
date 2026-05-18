@@ -1,717 +1,362 @@
 @model CalibraHub.Application.Contracts.OperationDto
-@using CalibraHub.Domain.Enums
 @{
     var isNew = Model is null;
-    ViewData["Title"] = isNew ? "Yeni Operasyon" : $"Operasyon: {Model!.Code}";
-    ViewData["FormCode"] = "OPERATION";
+    ViewData["Title"] = isNew ? "Yeni Operasyon" : $"Operasyon: {Model!.Name ?? Model.Code}";
+    ViewData["FormCode"] = "OPERATION_EDIT";
     ViewData["BodyClass"] = "page-operation-edit";
 }
 
 @section Styles {
 <style>
-.oe-page {
-    --oe-bg:           #f8fafc;
-    --oe-surface:      #ffffff;
-    --oe-surface2:     #f1f5f9;
-    --oe-border:       #e2e8f0;
-    --oe-border-light: #f1f5f9;
-    --oe-text:         #0f172a;
-    --oe-text-muted:   #64748b;
-    --oe-input-bg:     #ffffff;
-    --oe-input-disabled: #f8fafc;
-    --oe-accent:       var(--theme-accent, #2563eb);
-    --oe-toast-ok-bg:  #d1fae5;
-    --oe-toast-ok-tx:  #065f46;
-    --oe-toast-er-bg:  #fee2e2;
-    --oe-toast-er-tx:  #991b1b;
-}
-body.app-theme-dark .oe-page {
-    --oe-bg:           #080c17;
-    --oe-surface:      #0d1323;
-    --oe-surface2:     #111827;
-    --oe-border:       rgba(255,255,255,.09);
-    --oe-border-light: rgba(255,255,255,.04);
-    --oe-text:         #e2e8f0;
-    --oe-text-muted:   #94a3b8;
-    --oe-input-bg:     rgba(255,255,255,.06);
-    --oe-input-disabled: rgba(255,255,255,.03);
-    --oe-accent:       var(--theme-accent, #6366f1);
-    --oe-toast-ok-bg:  rgba(34,197,94,.18);
-    --oe-toast-ok-tx:  #4ade80;
-    --oe-toast-er-bg:  rgba(239,68,68,.18);
-    --oe-toast-er-tx:  #f87171;
-}
+    .me-root {
+        --me-bg:      #f1f5f9;
+        --me-surface: #ffffff;
+        --me-border:  #e2e8f0;
+        --me-text:    #0f172a;
+        --me-muted:   #64748b;
+        --me-accent:  #6366f1;
+        display: flex; align-items: flex-start; justify-content: center;
+        min-height: 100%; padding: 32px 16px;
+        background: var(--me-bg);
+    }
+    body.app-theme-dark .me-root {
+        --me-bg:      #080c17;
+        --me-surface: #0d1323;
+        --me-border:  rgba(255,255,255,.09);
+        --me-text:    #e2e8f0;
+        --me-muted:   #94a3b8;
+    }
+    .me-card {
+        width: 100%; max-width: 520px;
+        background: var(--me-surface); border: 1px solid var(--me-border);
+        border-radius: 14px; padding: 28px 28px 24px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    }
+    .me-header {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 24px; padding-bottom: 16px;
+        border-bottom: 1px solid var(--me-border);
+    }
+    .me-header h1 { font-size: 17px; font-weight: 700; margin: 0; color: var(--me-text); }
+    .me-back {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 8px;
+        border: 1px solid var(--me-border); background: none;
+        color: var(--me-muted); font-size: 13px; cursor: pointer;
+        text-decoration: none; transition: background .12s;
+    }
+    .me-back:hover { background: var(--me-bg); color: var(--me-text); }
+    .me-spacer { flex: 1; }
 
-.oe-page {
-    padding: 16px 24px; height: 100%;
-    display: flex; flex-direction: column; min-height: 0; gap: 12px;
-    overflow: auto;
-    background: var(--oe-bg); color: var(--oe-text);
-}
-.oe-toolbar {
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--oe-border);
-}
-.oe-toolbar h1 { font-size: 18px; margin: 0; color: var(--oe-text); }
-.oe-toolbar .spacer { flex: 1; }
-.oe-back { color: var(--oe-text-muted); text-decoration: none; font-size: 13px; }
-.oe-back:hover { color: var(--oe-text); }
-.oe-btn {
-    padding: 7px 14px; border-radius: 7px;
-    border: 1px solid var(--oe-border);
-    background: var(--oe-surface); color: var(--oe-text);
-    cursor: pointer; font-size: 13px; font-weight: 500;
-    transition: background .12s, border-color .12s;
-}
-.oe-btn:hover:not(:disabled) { background: var(--oe-surface2); border-color: var(--oe-accent); }
-.oe-btn:disabled { opacity: .4; cursor: not-allowed; }
-.oe-btn--primary { background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; border-color: #4f46e5; }
-.oe-btn--primary:hover:not(:disabled) { filter: brightness(1.07); border-color: #4f46e5; }
-.oe-btn--danger  { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-body.app-theme-dark .oe-btn--danger { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.32); }
+    .me-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .me-label { font-size: 12px; font-weight: 600; color: var(--me-muted); }
+    .me-input, .me-textarea {
+        padding: 9px 12px; border-radius: 8px;
+        border: 1px solid var(--me-border);
+        background: var(--me-bg); color: var(--me-text);
+        font-size: 14px; outline: none;
+        transition: border-color .15s, box-shadow .15s;
+        font-family: inherit;
+    }
+    .me-textarea { min-height: 72px; resize: vertical; }
+    .me-input:focus, .me-textarea:focus {
+        border-color: var(--me-accent);
+        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+    }
+    .me-input.is-invalid {
+        border-color: #ef4444 !important;
+        box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important;
+    }
 
-/* Sol-tab + sağ-pane */
-.oe-tabbed {
-    display: flex; min-height: 380px; gap: 0;
-    background: var(--oe-surface);
-    border: 1px solid var(--oe-border); border-radius: 10px;
-    overflow: hidden; flex: 1 1 auto;
-}
-.oe-nav {
-    width: 220px; flex-shrink: 0;
-    background: var(--oe-surface2);
-    border-right: 1px solid var(--oe-border);
-    padding: 10px 0; display: flex; flex-direction: column;
-}
-.oe-nav-grouptitle {
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
-    color: var(--oe-text-muted); padding: 10px 14px 4px; margin: 0;
-}
-.oe-nav-btn {
-    display: flex; align-items: center; gap: 8px;
-    width: 100%; padding: 9px 14px;
-    border: none; background: transparent;
-    text-align: left; cursor: pointer;
-    color: var(--oe-text); font-size: 13px; font-weight: 500;
-    border-left: 3px solid transparent;
-    transition: background .12s, color .12s;
-}
-.oe-nav-btn:hover { background: rgba(99,102,241,.08); }
-.oe-nav-btn.is-active {
-    border-left-color: var(--oe-accent);
-    background: rgba(99,102,241,.14);
-    font-weight: 600;
-}
-.oe-nav-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: .7; }
-.oe-nav-btn.is-active .oe-nav-icon { opacity: 1; }
-.oe-nav-count {
-    margin-left: auto; padding: 1px 7px; border-radius: 999px;
-    font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace;
-    background: rgba(99,102,241,.14); color: #4f46e5;
-    border: 1px solid rgba(99,102,241,.28);
-}
-body.app-theme-dark .oe-nav-count { color: #a5b4fc; }
+    .me-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-.oe-pane { flex: 1 1 auto; min-width: 0; padding: 18px 22px; overflow-y: auto; }
-.oe-pane-section { display: none; }
-.oe-pane-section.is-active { display: block; }
-.oe-pane h2 { margin: 0 0 4px; font-size: 15px; color: var(--oe-text); font-weight: 700; }
-.oe-pane .pane-hint { font-size: 12px; color: var(--oe-text-muted); margin-bottom: 14px; }
+    .me-switch-row { display: flex; align-items: center; gap: 10px; }
+    .me-switch { position: relative; width: 42px; height: 24px; display: inline-block; flex-shrink: 0; }
+    .me-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .me-switch-track {
+        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
+        background: #e2e8f0; transition: background .2s;
+    }
+    .me-switch input:checked + .me-switch-track { background: #10b981; }
+    body.app-theme-dark .me-switch-track { background: rgba(255,255,255,.12); }
+    body.app-theme-dark .me-switch input:checked + .me-switch-track { background: #059669; }
+    .me-switch-track::before {
+        content: ''; position: absolute; height: 18px; width: 18px;
+        left: 3px; top: 3px; border-radius: 50%;
+        background: #fff; transition: transform .2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    }
+    .me-switch input:checked + .me-switch-track::before { transform: translateX(18px); }
+    .me-switch-label { font-size: 13px; font-weight: 600; color: var(--me-muted); }
 
-/* Form */
-.oe-row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
-.oe-row label { font-size: 12px; color: var(--oe-text-muted); font-weight: 500; }
-.oe-row input, .oe-row select, .oe-row textarea {
-    padding: 7px 10px; border-radius: 6px;
-    border: 1px solid var(--oe-border);
-    background: var(--oe-input-bg); color: var(--oe-text);
-    font-size: 13px; outline: none;
-}
-.oe-row input:focus, .oe-row select:focus, .oe-row textarea:focus {
-    border-color: var(--oe-accent); box-shadow: 0 0 0 2px rgba(99,102,241,.18);
-}
-body.app-theme-dark .oe-row select,
-html.dark .oe-row select { color-scheme: dark; }
-.oe-row select > * { background: var(--oe-surface); color: var(--oe-text); }
-body.app-theme-dark .oe-row select > *,
-html.dark .oe-row select > * { background-color: #0d1323; color: #e2e8f0; }
-.oe-row textarea { min-height: 60px; resize: vertical; }
-.oe-row.split { grid-template-columns: 140px 1fr 80px 120px; }
-.oe-row input[type="number"] { text-align: right; -moz-appearance: textfield; }
-.oe-row input[type="number"]::-webkit-outer-spin-button,
-.oe-row input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .me-actions {
+        display: flex; gap: 8px; margin-top: 24px;
+        padding-top: 16px; border-top: 1px solid var(--me-border);
+    }
+    .me-btn {
+        padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer; transition: all .12s;
+    }
+    .me-btn--primary { background: var(--me-accent); color: #fff; border-color: #4f46e5; }
+    .me-btn--primary:hover { filter: brightness(1.1); }
+    .me-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
+    .me-btn--ghost { background: none; border-color: var(--me-border); color: var(--me-text); }
+    .me-btn--ghost:hover { background: var(--me-bg); }
+    .me-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
+    body.app-theme-dark .me-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
+    .me-btn--danger:hover { background: rgba(239,68,68,.08); }
+    .me-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
 
-/* Tablolar */
-.oe-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
-.oe-table th, .oe-table td {
-    padding: 8px 10px; border-bottom: 1px solid var(--oe-border-light);
-    text-align: left; color: var(--oe-text);
-}
-.oe-table th {
-    background: var(--oe-surface2); font-size: 11px;
-    text-transform: uppercase; letter-spacing: .5px;
-    color: var(--oe-text-muted);
-    border-bottom: 1px solid var(--oe-border);
-}
-.oe-table tbody tr:hover { background: rgba(99,102,241,.06); }
-.oe-table .row-empty { text-align: center; color: var(--oe-text-muted); padding: 24px 12px; }
-.oe-icon-btn {
-    background: transparent; border: 0; cursor: pointer;
-    color: var(--oe-text-muted); padding: 4px 6px; border-radius: 4px;
-}
-.oe-icon-btn:hover { color: var(--oe-text); background: var(--oe-surface2); }
-.oe-icon-btn--del:hover { color: #ef4444; }
+    .me-err {
+        margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+        background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
+    }
+    body.app-theme-dark .me-err { color: #f87171; }
 
-.oe-add-row { padding: 12px; background: var(--oe-surface2); border-radius: 8px; margin-top: 14px; }
-.oe-add-row h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; margin: 0 0 10px; color: var(--oe-text-muted); }
-.oe-add-row .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 110px 90px auto;
-    gap: 8px; align-items: end;
-}
-.oe-add-row .grid .field { display: flex; flex-direction: column; gap: 4px; }
-.oe-add-row .grid label { font-size: 11px; color: var(--oe-text-muted); }
-.oe-add-row .grid input, .oe-add-row .grid select {
-    padding: 6px 8px; border-radius: 5px;
-    border: 1px solid var(--oe-border);
-    background: var(--oe-input-bg); color: var(--oe-text);
-    font-size: 12px;
-    outline: none;
-}
-.oe-add-row .grid input::placeholder { color: var(--oe-text-muted); opacity: .6; }
-.oe-add-row .grid input:focus, .oe-add-row .grid select:focus {
-    border-color: var(--oe-accent);
-    box-shadow: 0 0 0 2px rgba(99,102,241,.18);
-}
-.oe-add-row .grid input[type="number"] { text-align: right; }
-/* Native dropdown popup'ı dark için color-scheme + option içerik renkleri */
-body.app-theme-dark .oe-add-row .grid select,
-html.dark .oe-add-row .grid select { color-scheme: dark; }
-.oe-add-row .grid select > * {
-    background: var(--oe-surface);
-    color: var(--oe-text);
-}
-body.app-theme-dark .oe-add-row .grid select > *,
-html.dark .oe-add-row .grid select > * {
-    background-color: #0d1323;
-    color: #e2e8f0;
-}
-/* HTML5 datalist (autocomplete) için doğrudan tema override mümkün değil
-   (browser native UI), color-scheme: dark popup'ı koyu yapar. */
-body.app-theme-dark .oe-add-row .grid input[list],
-html.dark .oe-add-row .grid input[list] { color-scheme: dark; }
-
-.oe-status-pill {
-    padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
-    background: rgba(34,197,94,.18); color: #16a34a;
-}
-.oe-status-pill--off { background: rgba(148,163,184,.18); color: var(--oe-text-muted); }
-body.app-theme-dark .oe-status-pill { color: #86efac; }
-
-#oe-flash { position: fixed; top: 16px; right: 16px; z-index: 9999; padding: 10px 16px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,.25); display: none; max-width: 360px; }
-#oe-flash.ok  { background: var(--oe-toast-ok-bg); color: var(--oe-toast-ok-tx); }
-#oe-flash.err { background: var(--oe-toast-er-bg); color: var(--oe-toast-er-tx); }
+    /* Delete modal */
+    .me-modal-backdrop {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,.48); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .me-modal {
+        background: var(--me-surface); border: 1px solid var(--me-border);
+        border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw;
+        display: flex; flex-direction: column; gap: 14px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.35);
+    }
+    .me-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+    .me-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--me-text); }
+    .me-modal-msg { font-size: 13px; color: var(--me-muted); text-align: center; line-height: 1.55; }
+    .me-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+    .me-modal-cancel {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: 1px solid var(--me-border); background: var(--me-surface);
+        color: var(--me-text); cursor: pointer; transition: background .12s;
+    }
+    .me-modal-cancel:hover { background: var(--me-bg); }
+    .me-modal-del {
+        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+        border: none; background: #ef4444; color: #fff; cursor: pointer; transition: filter .12s;
+    }
+    .me-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
+    .me-modal-del:disabled { opacity: .5; cursor: not-allowed; }
 </style>
 }
 
-<div class="oe-page">
-    <div class="oe-toolbar">
-        <a class="oe-back" href="@Url.Action("Operations")" title="Listeye dön">←</a>
-        <a class="oe-btn" href="@Url.Action("OperationEdit")" id="btn-new" title="Yeni operasyon">+ Yeni</a>
-        <button class="oe-btn oe-btn--primary" id="btn-save">Kaydet</button>
-        @if (!isNew)
-        {
-            <button class="oe-btn oe-btn--danger" id="btn-delete">Sil</button>
-        }
-        <span class="spacer"></span>
-        <h1>@(isNew ? "Yeni Operasyon" : $"{Model!.Code} — {Model.Name}")</h1>
-        @if (!isNew)
-        {
-            var pillCls = Model!.IsActive ? "oe-status-pill" : "oe-status-pill oe-status-pill--off";
-            <span class="@pillCls">@(Model.IsActive ? "Aktif" : "Pasif")</span>
-        }
+<div class="me-root">
+  <div class="me-card">
+    <div class="me-header">
+      <a class="me-back" href="/Production/Operations">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <span class="me-spacer"></span>
+      <h1>@(isNew ? "Yeni Operasyon" : "Operasyonu Düzenle")</h1>
     </div>
 
-    <div class="oe-tabbed">
-        <nav class="oe-nav">
-            <div class="oe-nav-grouptitle">Operasyon</div>
-            <button type="button" class="oe-nav-btn is-active" data-tab="genel">
-                <svg class="oe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <span>Genel Tanımlamalar</span>
-            </button>
-            <button type="button" class="oe-nav-btn" data-tab="rota" @(isNew ? "disabled style=\"opacity:.4;cursor:not-allowed;\"" : "")>
-                <svg class="oe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-                <span>Rota Oluşturma</span>
-                <span class="oe-nav-count" id="nav-count-rota" style="display:none;">0</span>
-            </button>
-            <button type="button" class="oe-nav-btn" data-tab="makine" @(isNew ? "disabled style=\"opacity:.4;cursor:not-allowed;\"" : "")>
-                <svg class="oe-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                <span>Makine Eşleştirme</span>
-                <span class="oe-nav-count" id="nav-count-machine" style="display:none;">0</span>
-            </button>
-        </nav>
+    <input type="hidden" id="me-id" value="@(Model?.Id.ToString() ?? "")" />
 
-        <div class="oe-pane">
-            <!-- Tab: Genel -->
-            <section class="oe-pane-section is-active" data-pane="genel">
-                <h2>Genel Tanımlamalar</h2>
-                <div class="pane-hint">Operasyonun kimlik, süre ve maliyet bilgileri.</div>
+    <div class="me-field">
+      <label class="me-label" for="me-code">Kod *</label>
+      <input id="me-code" class="me-input" maxlength="50"
+             value="@(Model?.Code ?? "")" placeholder="OP-CUT, OP-WELD" autocomplete="off" />
+    </div>
 
-                <input type="hidden" id="f-id" value="@(Model?.Id ?? 0)" />
+    <div class="me-field">
+      <label class="me-label" for="me-name">Ad *</label>
+      <input id="me-name" class="me-input" maxlength="200"
+             value="@(Model?.Name ?? "")" placeholder="Kesim, Kaynak, Boya" />
+    </div>
 
-                <div class="oe-row">
-                    <label>Kod *</label>
-                    <input type="text" id="f-code" value="@Model?.Code" placeholder="OP-CUT, OP-WELD" maxlength="50" />
-                </div>
-                <div class="oe-row">
-                    <label>Ad *</label>
-                    <input type="text" id="f-name" value="@Model?.Name" placeholder="Kesim, Kaynak, Boya" maxlength="200" />
-                </div>
-                <div class="oe-row" style="align-items: start;">
-                    <label>Açıklama</label>
-                    <textarea id="f-description" maxlength="500" placeholder="İsteğe bağlı detay...">@Model?.Description</textarea>
-                </div>
-                <div class="oe-row split">
-                    <label>Standart Süre</label>
-                    <input type="number" id="f-duration" step="0.0001" min="0" value="@Model?.StandardDuration" />
-                    <label style="text-align:right;">Birim</label>
-                    <select id="f-duration-unit">
-                        @{
-                            var du = Model?.DurationUnit ?? DurationUnit.Minute;
-                        }
-                        @if (du == DurationUnit.Minute) { <option value="1" selected>Dakika</option> } else { <option value="1">Dakika</option> }
-                        @if (du == DurationUnit.Hour)   { <option value="2" selected>Saat</option> }   else { <option value="2">Saat</option> }
-                    </select>
-                </div>
-                <div class="oe-row">
-                    <label>Saatlik Ücret (TL)</label>
-                    <input type="number" id="f-hourly-rate" step="0.0001" min="0" value="@Model?.HourlyRate" />
-                </div>
-                <div class="oe-row">
-                    <label>Sıra</label>
-                    <input type="number" id="f-sort-order" step="1" value="@(Model?.SortOrder ?? 0)" />
-                </div>
-                <div class="oe-row">
-                    <label>Aktif</label>
-                    <label style="display:inline-flex; gap:8px; align-items:center;">
-                        <input type="checkbox" id="f-active" @(Model is null || Model.IsActive ? "checked" : "") />
-                        <span style="font-size:12px;color:var(--oe-text-muted);" id="f-active-label">@((Model is null || Model.IsActive) ? "Etkin" : "Pasif")</span>
-                    </label>
-                </div>
-            </section>
+    <div class="me-field">
+      <label class="me-label" for="me-desc">Açıklama</label>
+      <textarea id="me-desc" class="me-textarea" maxlength="500"
+                placeholder="İsteğe bağlı detay...">@(Model?.Description ?? "")</textarea>
+    </div>
 
-            <!-- Tab: Rota -->
-            <section class="oe-pane-section" data-pane="rota">
-                <h2>Bu Operasyonu Kullanan Rotalar</h2>
-                <div class="pane-hint">Operasyonun kullanıldığı rotalar listelenir. Yeni rota tanımlamak için Rotalar ekranına git veya buradan hızlı bir rota oluştur.</div>
-                <table class="oe-table" id="rota-table">
-                    <thead>
-                        <tr>
-                            <th>Kod</th>
-                            <th>Ad</th>
-                            <th>Mamul</th>
-                            <th>Operasyon Sayısı</th>
-                            <th>Durum</th>
-                        </tr>
-                    </thead>
-                    <tbody id="rota-tbody">
-                        <tr><td colspan="5" class="row-empty">Yükleniyor…</td></tr>
-                    </tbody>
-                </table>
-            </section>
-
-            <!-- Tab: Makine Eşleştirme -->
-            <section class="oe-pane-section" data-pane="makine">
-                <h2>Makine Eşleştirme &amp; Üretim Süresi</h2>
-                <div class="pane-hint">Bu operasyonun farklı makinelerde (ve isteğe bağlı ürün bazında) bir birim üretim süresi.</div>
-
-                <table class="oe-table" id="machine-table">
-                    <thead>
-                        <tr>
-                            <th style="width:22%;">Makine</th>
-                            <th style="width:22%;">Mamul (opsiyonel)</th>
-                            <th style="width:13%; text-align:right;">Miktar</th>
-                            <th style="width:13%; text-align:right;">Süre</th>
-                            <th style="width:10%;">Birim</th>
-                            <th style="width:10%;">Durum</th>
-                            <th style="width:10%;"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="machine-tbody">
-                        <tr><td colspan="7" class="row-empty">Yükleniyor…</td></tr>
-                    </tbody>
-                </table>
-
-                <div class="oe-add-row">
-                    <h3>+ Yeni Makine-Mamul Eşleştirme</h3>
-                    <div class="grid" style="grid-template-columns: 1fr 1fr 90px 90px 90px auto;">
-                        <div class="field">
-                            <label>Makine *</label>
-                            <select id="mt-machine-select">
-                                <option value="">— Yükleniyor —</option>
-                            </select>
-                            <input type="hidden" id="mt-machine-id" value="0" />
-                        </div>
-                        <div class="field">
-                            <label>Mamul (kod, boş = genel)</label>
-                            <input type="text" id="mt-item-code" list="mt-item-options" placeholder="Items.Code" autocomplete="off" />
-                            <datalist id="mt-item-options"></datalist>
-                            <input type="hidden" id="mt-item-id" value="" />
-                        </div>
-                        <div class="field">
-                            <label>Miktar *</label>
-                            <input type="number" id="mt-quantity" step="0.0001" min="0.0001" value="1" placeholder="1" />
-                        </div>
-                        <div class="field">
-                            <label>Süre *</label>
-                            <input type="number" id="mt-duration" step="0.0001" min="0" placeholder="0.0" />
-                        </div>
-                        <div class="field">
-                            <label>Birim</label>
-                            <select id="mt-duration-unit">
-                                <option value="1">Dakika</option>
-                                <option value="2">Saat</option>
-                            </select>
-                        </div>
-                        <div class="field">
-                            <label>&nbsp;</label>
-                            <button type="button" class="oe-btn oe-btn--primary" id="btn-add-mt">Ekle</button>
-                        </div>
-                    </div>
-                    <div class="pane-hint" style="margin-top:10px; margin-bottom:0;">
-                        <strong>Miktar × Süre</strong> ilişkisi: "Şu kadar birim için şu kadar süre". Örnek: 10 adet için 30 dakika → birim/dk = 3.
-                    </div>
-                </div>
-            </section>
+    <div class="me-row2">
+      <div class="me-field">
+        <label class="me-label" for="me-sort">Sıralama</label>
+        <input id="me-sort" class="me-input" type="number" min="0" value="@(Model?.SortOrder ?? 0)" />
+      </div>
+      <div class="me-field">
+        <label class="me-label">Durum</label>
+        <div class="me-switch-row">
+          <label class="me-switch">
+            <input type="checkbox" id="me-active" @(Model is null || Model.IsActive ? "checked" : "") />
+            <span class="me-switch-track"></span>
+          </label>
+          <span class="me-switch-label" id="me-active-label">@((Model is null || Model.IsActive) ? "Aktif" : "Pasif")</span>
         </div>
+      </div>
     </div>
+
+    <div id="me-err" style="display:none;" class="me-err"></div>
+
+    <!-- Dinamik widget alanları -->
+    <div id="meDynamicWidgetsCard" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--me-border);">
+      <div id="meDynamicWidgets"
+           data-form-code="OPERATION_EDIT"
+           data-record-id="@(Model?.Id.ToString() ?? "")">
+      </div>
+    </div>
+
+    <div class="me-actions">
+      <button class="me-btn me-btn--primary" id="me-save">Kaydet</button>
+      <a class="me-btn me-btn--ghost" href="/Production/Operations">İptal</a>
+      @if (!isNew)
+      {
+        <button class="me-btn me-btn--danger" id="me-delete">Sil</button>
+      }
+    </div>
+  </div>
 </div>
 
-<div id="oe-flash"></div>
+@if (!isNew)
+{
+  <div id="me-modal" class="me-modal-backdrop" style="display:none;" onclick="meCloseModal()">
+    <div class="me-modal" onclick="event.stopPropagation()">
+      <div class="me-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="me-modal-title">Operasyonu Sil</div>
+      <div class="me-modal-msg" id="me-modal-msg"></div>
+      <div class="me-modal-actions">
+        <button class="me-modal-cancel" onclick="meCloseModal()">Vazgeç</button>
+        <button class="me-modal-del" id="me-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
 @Html.AntiForgeryToken()
 
 @section Scripts {
 <script>
 (function () {
-    const isNew = @(isNew ? "true" : "false");
-    const id    = @(Model?.Id ?? 0);
+    var idVal = (document.getElementById('me-id')?.value || '').trim();
 
-    function token() {
-        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+    function csrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
         return el ? el.value : '';
     }
-    function flash(msg, ok) {
-        const el = document.getElementById('oe-flash');
-        el.textContent = msg;
-        el.className = ok ? 'ok' : 'err';
-        el.style.display = 'block';
-        clearTimeout(window.__oeFlashTm);
-        window.__oeFlashTm = setTimeout(() => el.style.display = 'none', 3000);
+    function setErr(msg) {
+        var el = document.getElementById('me-err');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; }
+        else el.style.display = 'none';
     }
-    function escapeHtml(s) {
-        return (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    function shake(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('is-invalid'); void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
     }
 
-    /* ── Tab switch ── */
-    const navBtns = document.querySelectorAll('.oe-nav-btn');
-    const panes   = document.querySelectorAll('.oe-pane-section');
-    function activate(tabKey) {
-        navBtns.forEach(b => b.classList.toggle('is-active', b.dataset.tab === tabKey));
-        panes.forEach(p => p.classList.toggle('is-active', p.dataset.pane === tabKey));
-        if (!isNew && tabKey === 'rota') loadRoutings();
-        if (!isNew && tabKey === 'makine') loadMachineTimes();
+    // Active label sync
+    var activeEl = document.getElementById('me-active');
+    var activeLabel = document.getElementById('me-active-label');
+    if (activeEl && activeLabel) {
+        activeEl.addEventListener('change', function () {
+            activeLabel.textContent = activeEl.checked ? 'Aktif' : 'Pasif';
+        });
     }
-    navBtns.forEach(btn => btn.addEventListener('click', () => {
-        if (btn.disabled) return;
-        activate(btn.dataset.tab);
-    }));
 
-    /* ── Active switch label ── */
-    const activeChk = document.getElementById('f-active');
-    const activeLbl = document.getElementById('f-active-label');
-    activeChk?.addEventListener('change', () => {
-        if (activeLbl) activeLbl.textContent = activeChk.checked ? 'Etkin' : 'Pasif';
-    });
+    // Save
+    var saveBtn = document.getElementById('me-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            var code = (document.getElementById('me-code').value || '').trim();
+            var name = (document.getElementById('me-name').value || '').trim();
+            var invalid = false;
+            if (!code) { shake('me-code'); invalid = true; }
+            if (!name) { shake('me-name'); invalid = true; }
+            if (invalid) return;
 
-    /* ── Save genel ── */
-    document.getElementById('btn-save')?.addEventListener('click', async () => {
-        const code = document.getElementById('f-code').value.trim();
-        const name = document.getElementById('f-name').value.trim();
-        if (!code) { flash('Kod zorunlu.', false); return; }
-        if (!name) { flash('Ad zorunlu.', false); return; }
-        const body = {
-            id: Number(document.getElementById('f-id').value || 0),
-            code, name,
-            description: document.getElementById('f-description').value.trim() || null,
-            standardDuration: document.getElementById('f-duration').value === '' ? null : Number(document.getElementById('f-duration').value),
-            durationUnit: Number(document.getElementById('f-duration-unit').value || 1),
-            hourlyRate: document.getElementById('f-hourly-rate').value === '' ? null : Number(document.getElementById('f-hourly-rate').value),
-            sortOrder: Number(document.getElementById('f-sort-order').value || 0),
-            isActive: activeChk.checked,
-        };
-        try {
-            const r = await fetch('/Production/SaveOperation', {
+            var payload = {
+                id:               idVal ? parseInt(idVal) : 0,
+                code:             code,
+                name:             name,
+                description:      (document.getElementById('me-desc').value || '').trim() || null,
+                standardDuration: null,
+                durationUnit:     1,
+                hourlyRate:       null,
+                sortOrder:        parseInt(document.getElementById('me-sort').value) || 0,
+                isActive:         activeEl.checked,
+            };
+            saveBtn.disabled = true;
+            setErr('');
+            fetch('/Production/SaveOperation', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
                 credentials: 'same-origin',
-                body: JSON.stringify(body)
-            });
-            const data = await r.json();
-            if (data.ok) {
-                flash('Kaydedildi.', true);
-                if (isNew && data.id) {
-                    setTimeout(() => location.href = '/Production/OperationEdit?id=' + data.id, 500);
+                body: JSON.stringify(payload)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.ok) {
+                    if (!idVal && d.id) {
+                        location.href = '/Production/OperationEdit?id=' + d.id;
+                    } else {
+                        location.href = '/Production/Operations';
+                    }
                 } else {
-                    setTimeout(() => location.reload(), 500);
+                    setErr((d && d.error) || 'Kayıt başarısız.');
+                    saveBtn.disabled = false;
                 }
-            } else flash(data.error || 'Hata.', false);
-        } catch (e) { flash('İstek hatası: ' + e.message, false); }
-    });
-
-    /* ── Delete ── */
-    document.getElementById('btn-delete')?.addEventListener('click', async () => {
-        if (!confirm('Bu operasyon silinsin mi?')) return;
-        try {
-            const r = await fetch('/Production/DeleteOperation/' + id, {
-                method: 'POST',
-                headers: { 'RequestVerificationToken': token() },
-                credentials: 'same-origin'
-            });
-            const data = await r.json();
-            if (data.ok) location.href = '/Production/Operations';
-            else flash(data.error || 'Hata.', false);
-        } catch (e) { flash('İstek hatası: ' + e.message, false); }
-    });
-
-    /* ── Tab: Rota ── */
-    async function loadRoutings() {
-        if (isNew) return;
-        const tbody = document.getElementById('rota-tbody');
-        tbody.innerHTML = '<tr><td colspan="5" class="row-empty">Yükleniyor…</td></tr>';
-        try {
-            const r = await fetch('/Production/RoutingsByOperation?operationId=' + id, { credentials: 'same-origin' });
-            const list = await r.json();
-            const arr = Array.isArray(list) ? list : [];
-            const navCount = document.getElementById('nav-count-rota');
-            if (navCount) {
-                navCount.textContent = arr.length;
-                navCount.style.display = arr.length > 0 ? '' : 'none';
-            }
-            if (arr.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="row-empty">Bu operasyonu kullanan rota yok.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = arr.map(r => {
-                const item = r.itemCode ? (escapeHtml(r.itemCode) + (r.itemName ? ' — ' + escapeHtml(r.itemName) : '')) : '<span style="opacity:.5;">(şablon)</span>';
-                const status = r.isActive
-                    ? '<span class="oe-status-pill">Aktif</span>'
-                    : '<span class="oe-status-pill oe-status-pill--off">Pasif</span>';
-                return '<tr>'
-                    + '<td><strong>' + escapeHtml(r.code) + '</strong></td>'
-                    + '<td>' + escapeHtml(r.name) + '</td>'
-                    + '<td>' + item + '</td>'
-                    + '<td>' + r.operationCount + '</td>'
-                    + '<td>' + status + '</td>'
-                    + '</tr>';
-            }).join('');
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="5" class="row-empty">Yüklenemedi.</td></tr>';
-        }
+            })
+            .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
+        });
     }
 
-    /* ── Tab: Makine Eşleştirme ── */
-    async function loadMachineTimes() {
-        if (isNew) return;
-        const tbody = document.getElementById('machine-tbody');
-        tbody.innerHTML = '<tr><td colspan="7" class="row-empty">Yükleniyor…</td></tr>';
-        try {
-            const r = await fetch('/Production/OperationMachineTimes?operationId=' + id, { credentials: 'same-origin' });
-            const list = await r.json();
-            const arr = Array.isArray(list) ? list : [];
-            const navCount = document.getElementById('nav-count-machine');
-            if (navCount) {
-                navCount.textContent = arr.length;
-                navCount.style.display = arr.length > 0 ? '' : 'none';
-            }
-            if (arr.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="row-empty">Henüz makine eşleştirmesi yok.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = arr.map(t => {
-                const machine = t.machineCode
-                    ? (escapeHtml(t.machineCode) + (t.machineName ? ' — ' + escapeHtml(t.machineName) : ''))
-                    : '#' + t.machineId;
-                const item = t.itemCode
-                    ? (escapeHtml(t.itemCode) + (t.itemName ? ' — ' + escapeHtml(t.itemName) : ''))
-                    : '<span style="opacity:.5;">Genel</span>';
-                const unit = t.durationUnit === 2 ? 'Saat' : 'Dakika';
-                const status = t.isActive
-                    ? '<span class="oe-status-pill">Aktif</span>'
-                    : '<span class="oe-status-pill oe-status-pill--off">Pasif</span>';
-                return '<tr data-id="' + t.id + '">'
-                    + '<td>' + machine + '</td>'
-                    + '<td>' + item + '</td>'
-                    + '<td style="text-align:right;font-variant-numeric:tabular-nums;">' + Number(t.quantity || 1).toFixed(2) + '</td>'
-                    + '<td style="text-align:right;font-variant-numeric:tabular-nums;">' + Number(t.durationPerUnit).toFixed(4) + '</td>'
-                    + '<td>' + unit + '</td>'
-                    + '<td>' + status + '</td>'
-                    + '<td><button class="oe-icon-btn oe-icon-btn--del" data-action="del-mt" data-id="' + t.id + '" title="Sil">×</button></td>'
-                    + '</tr>';
-            }).join('');
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="7" class="row-empty">Yüklenemedi.</td></tr>';
-        }
-    }
+    // Delete modal
+    var deleteBtn = document.getElementById('me-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            var name = (document.getElementById('me-name').value || '').trim()
+                    || (document.getElementById('me-code').value || '').trim();
+            var msgEl = document.getElementById('me-modal-msg');
+            if (msgEl) msgEl.innerHTML = '<strong>' + name + '</strong> operasyonunu silmek istediğinize emin misiniz?';
+            document.getElementById('me-modal').style.display = 'flex';
+            document.getElementById('me-modal-del').focus();
+        });
 
-    document.getElementById('machine-tbody')?.addEventListener('click', async (e) => {
-        const btn = e.target.closest('[data-action="del-mt"]');
-        if (!btn) return;
-        const tId = Number(btn.dataset.id);
-        if (!confirm('Bu makine eşleştirmesi silinsin mi?')) return;
-        try {
-            const r = await fetch('/Production/DeleteOperationMachineTime/' + tId, {
-                method: 'POST',
-                headers: { 'RequestVerificationToken': token() },
-                credentials: 'same-origin'
-            });
-            const data = await r.json();
-            if (data.ok) { flash('Silindi.', true); loadMachineTimes(); }
-            else flash(data.error || 'Hata.', false);
-        } catch (e) { flash('İstek hatası: ' + e.message, false); }
-    });
-
-    /* ── Makine dropdown — /Logistics/GetAllMachines'ten doldurulur. */
-    async function loadMachineDropdown() {
-        if (isNew) return;
-        const sel = document.getElementById('mt-machine-select');
-        if (!sel) return;
-        try {
-            const r = await fetch('/Logistics/GetAllMachines', { credentials: 'same-origin' });
-            const list = await r.json();
-            const arr = Array.isArray(list) ? list : [];
-            sel.innerHTML = '<option value="">— Makine seç —</option>';
-            arr.forEach(m => {
-                if (m.isActive === false) return;
-                const opt = document.createElement('option');
-                opt.value = String(m.id);
-                opt.textContent = (m.machineCode || ('#' + m.id)) + (m.machineName ? ' — ' + m.machineName : '');
-                opt.dataset.code = m.machineCode || '';
-                sel.appendChild(opt);
-            });
-        } catch (e) {
-            console.error('[OE] Makine listesi yüklenemedi:', e);
-            sel.innerHTML = '<option value="">(Yüklenemedi)</option>';
-        }
-    }
-
-    document.getElementById('mt-machine-select')?.addEventListener('change', function () {
-        const id = this.value;
-        document.getElementById('mt-machine-id').value = id || '0';
-    });
-
-    /* ── Mamul lookup — input + datalist + StockLookup ile resolve.
-       Kullanıcı tipledikçe arama yapılır, datalist'e doldurulur; blur'da
-       koddan id'ye çözülür ve hidden input'a yazılır. */
-    let itemLookupTm = null;
-    document.getElementById('mt-item-code')?.addEventListener('input', function () {
-        const q = (this.value || '').trim();
-        clearTimeout(itemLookupTm);
-        if (q.length < 1) {
-            document.getElementById('mt-item-options').innerHTML = '';
-            document.getElementById('mt-item-id').value = '';
-            return;
-        }
-        itemLookupTm = setTimeout(async () => {
-            try {
-                const r = await fetch('/Logistics/StockLookup?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
-                const list = await r.json();
-                const arr = Array.isArray(list) ? list : [];
-                const dl = document.getElementById('mt-item-options');
-                dl.innerHTML = arr.slice(0, 30).map(s =>
-                    '<option value="' + escapeHtml(s.code) + '">' + escapeHtml(s.code) + (s.name ? ' — ' + escapeHtml(s.name) : '') + '</option>'
-                ).join('');
-                // Tam match varsa hidden id'yi set et
-                const match = arr.find(s => (s.code || '').toLowerCase() === q.toLowerCase());
-                document.getElementById('mt-item-id').value = match ? String(match.id) : '';
-            } catch (e) { /* sessiz */ }
-        }, 200);
-    });
-    // Blur'da daha sıkı resolve
-    document.getElementById('mt-item-code')?.addEventListener('blur', async function () {
-        const q = (this.value || '').trim();
-        if (!q) { document.getElementById('mt-item-id').value = ''; return; }
-        try {
-            const r = await fetch('/Logistics/StockLookup?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
-            const list = await r.json();
-            const match = (list || []).find(s => (s.code || '').toLowerCase() === q.toLowerCase());
-            if (match) {
-                this.value = match.code;
-                document.getElementById('mt-item-id').value = String(match.id);
-            } else {
-                document.getElementById('mt-item-id').value = '';
-            }
-        } catch (e) { /* sessiz */ }
-    });
-
-    document.getElementById('btn-add-mt')?.addEventListener('click', async () => {
-        if (isNew) { flash('Önce operasyonu kaydet.', false); return; }
-        const machineId = Number(document.getElementById('mt-machine-id').value || 0);
-        const itemIdRaw = document.getElementById('mt-item-id').value.trim();
-        const itemCodeRaw = document.getElementById('mt-item-code').value.trim();
-        let itemId = null;
-        if (itemCodeRaw && !itemIdRaw) {
-            flash('Mamul kodu çözümlenemedi — listeden seçin veya boş bırakın.', false);
-            return;
-        }
-        if (itemIdRaw) itemId = Number(itemIdRaw);
-        const qty = Number(document.getElementById('mt-quantity').value || 0);
-        const dur = Number(document.getElementById('mt-duration').value || 0);
-        const unit = Number(document.getElementById('mt-duration-unit').value || 1);
-        if (!machineId) { flash('Makine seçimi zorunlu.', false); return; }
-        if (!qty || qty <= 0) { flash('Miktar 0\'dan büyük olmalı.', false); return; }
-        if (!dur || dur < 0) { flash('Geçerli bir süre girin.', false); return; }
-        try {
-            const r = await fetch('/Production/SaveOperationMachineTime', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-                credentials: 'same-origin',
-                body: JSON.stringify({
-                    id: 0,
-                    operationId: id,
-                    machineId, itemId,
-                    quantity: qty,
-                    durationPerUnit: dur,
-                    durationUnit: unit,
-                    isActive: true,
+        var modalDel = document.getElementById('me-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled = true;
+                modalDel.textContent = 'Siliniyor…';
+                fetch('/Production/DeleteOperation/' + idVal, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': csrf() },
+                    credentials: 'same-origin'
                 })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.ok) {
+                        location.href = '/Production/Operations';
+                    } else {
+                        meCloseModal();
+                        setErr((d && d.error) || 'Silinemedi.');
+                    }
+                })
+                .catch(function () { meCloseModal(); setErr('Bağlantı hatası.'); });
             });
-            const data = await r.json();
-            if (data.ok) {
-                flash('Eklendi.', true);
-                document.getElementById('mt-machine-select').value = '';
-                document.getElementById('mt-machine-id').value = '0';
-                document.getElementById('mt-item-code').value = '';
-                document.getElementById('mt-item-id').value = '';
-                document.getElementById('mt-quantity').value = '1';
-                document.getElementById('mt-duration').value = '';
-                loadMachineTimes();
-            } else flash(data.error || 'Hata.', false);
-        } catch (e) { flash('İstek hatası: ' + e.message, false); }
-    });
-
-    // Sayfa yüklenince makine listesi (yalnızca edit modunda)
-    if (!isNew) loadMachineDropdown();
-
-    /* Hash deep-link */
-    function applyHash() {
-        const h = (location.hash || '').replace('#', '').trim();
-        if (!h) return;
-        const ok = Array.from(navBtns).some(b => b.dataset.tab === h && !b.disabled);
-        if (ok) activate(h);
+        }
     }
-    window.addEventListener('hashchange', applyHash);
-    applyHash();
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') meCloseModal();
+    });
 })();
+
+function meCloseModal() {
+    var m = document.getElementById('me-modal');
+    if (m) m.style.display = 'none';
+    var btn = document.getElementById('me-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
 </script>
 }

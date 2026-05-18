@@ -958,6 +958,16 @@ public sealed class WidgetService : IWidgetService
         AddIfValid("disabledIf", rules.DisabledIf);
         AddIfValid("requiredIf", rules.RequiredIf);
         AddIfValid("formula",    rules.Formula);
+        AddIfValid("defaultValue", rules.DefaultValue);
+        // defaultValueKind: 'static' veya 'formula' — sadece bu iki literal kabul edilir.
+        if (!string.IsNullOrWhiteSpace(rules.DefaultValueKind))
+        {
+            var kind = rules.DefaultValueKind.Trim().ToLowerInvariant();
+            if (kind == "static" || kind == "formula")
+            {
+                dict["defaultValueKind"] = kind;
+            }
+        }
 
         return dict.Count == 0 ? null : dict;
     }
@@ -973,14 +983,17 @@ public sealed class WidgetService : IWidgetService
         {
             var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(rulesJson);
             if (dict == null || dict.Count == 0) return null;
-            dict.TryGetValue("visibleIf",  out var vi);
-            dict.TryGetValue("disabledIf", out var di);
-            dict.TryGetValue("requiredIf", out var ri);
-            dict.TryGetValue("formula",    out var fm);
+            dict.TryGetValue("visibleIf",        out var vi);
+            dict.TryGetValue("disabledIf",       out var di);
+            dict.TryGetValue("requiredIf",       out var ri);
+            dict.TryGetValue("formula",          out var fm);
+            dict.TryGetValue("defaultValue",     out var dv);
+            dict.TryGetValue("defaultValueKind", out var dk);
             if (string.IsNullOrWhiteSpace(vi) && string.IsNullOrWhiteSpace(di) &&
-                string.IsNullOrWhiteSpace(ri) && string.IsNullOrWhiteSpace(fm))
+                string.IsNullOrWhiteSpace(ri) && string.IsNullOrWhiteSpace(fm) &&
+                string.IsNullOrWhiteSpace(dv) && string.IsNullOrWhiteSpace(dk))
                 return null;
-            return new WidgetRulesDto(vi, di, fm, ri);
+            return new WidgetRulesDto(vi, di, fm, ri, dv, dk);
         }
         catch (JsonException)
         {

@@ -34,8 +34,18 @@ public sealed record SavePriceListRequest(
     int CurrencyId, string PriceType, decimal Price,
     DateTime ValidFrom, DateTime? ValidTo, bool IsActive);
 
-// Inline fiyat guncelleme (sadece tek fiyati degistirir, diger alanlar korunur)
-public sealed record UpdatePriceEntryRequest(int Id, decimal Price);
+// Inline fiyat guncelleme — kismi update. Yalniz Id zorunlu; gonderilmeyen
+// (null) alanlar mevcut degerden korunur. Frontend tum 5 alani gonderebilir
+// (Currency / PriceType / Price / ValidFrom / ValidTo) — tek tanimda hem
+// "yalniz fiyat" hem "tum alanlar" akislari karsilanir.
+public sealed record UpdatePriceEntryRequest(
+    int Id,
+    decimal? Price       = null,
+    int? CurrencyId      = null,
+    string? PriceType    = null,
+    DateTime? ValidFrom  = null,
+    DateTime? ValidTo    = null,
+    bool ClearValidTo    = false);
 
 // ── Toplu Fiyat Girisi ──────────────────────────────────────────────────────
 public sealed record BulkPriceEntryLine(
