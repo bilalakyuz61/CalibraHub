@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
@@ -31,13 +32,16 @@ public sealed class MappingEngine : IMappingEngine
 {
     private readonly IGuideService _guideService;
     private readonly IIntegrationLookupFunctionRegistry? _functions;
+    private readonly IFormRepository? _formRepo;
 
     public MappingEngine(
         IGuideService guideService,
-        IIntegrationLookupFunctionRegistry? functions = null)
+        IIntegrationLookupFunctionRegistry? functions = null,
+        IFormRepository? formRepo = null)
     {
         _guideService = guideService;
         _functions = functions;
+        _formRepo = formRepo;
     }
 
     /// <inheritdoc />
@@ -61,9 +65,17 @@ public sealed class MappingEngine : IMappingEngine
     {
         var output = new JsonObject();
 
-        // SQL Function modu icin standart @P1: kaynak form'un kodu (SourceFormCode).
-        // Boylece dbo.fn_X(@formCode, @keyValue, @manualParam) imzasi karsilanir.
-        var formCode = integration.SourceFormCode;
+        // SQL Function modu icin standart @P1: kaynak form'un Forms.Id'si (INT).
+        // SourceFormCode (string) → Forms.Id (int) cevirimi burada yapilir; engine altinda
+        // tum SQL function call'lar `int formId` ile gider. _formRepo null ise (unit test
+        // kombinasyonu / formCode'tan id cozumlemenin mumkun olmadigi durum) formId=0
+        // gecirilir; SqlIntegrationLookupFunctionRegistry bunu @P1=NULL'a cevirir.
+        int formId = 0;
+        if (_formRepo is not null && !string.IsNullOrWhiteSpace(integration.SourceFormCode))
+        {
+            var form = await _formRepo.GetByCodeAsync(integration.SourceFormCode, ct);
+            if (form is not null) formId = form.Id;
+        }
 
         // ── HEADER mapping'leri ─────────────────────────────────────────
         // SourceSection="Header" olanlar (default — eski kayitlar bu sayilir).
@@ -74,7 +86,7 @@ public sealed class MappingEngine : IMappingEngine
 
         foreach (var rule in headerRules)
         {
-            var value = await ResolveValueAsync(rule, headerData, formCode, lineCombinationId: null, combinationCodes, ct);
+            var value = await ResolveValueAsync(rule, headerData, formId, lineCombinationId: null, combinationCodes, ct);
             SetJsonPath(output, rule.TargetPath, value);
         }
 
@@ -95,7 +107,7 @@ public sealed class MappingEngine : IMappingEngine
 
                 foreach (var rule in lineRules)
                 {
-                    var value = await ResolveValueAsync(rule, line, formCode, combinationId, combinationCodes, ct);
+                    var value = await ResolveValueAsync(rule, line, formId, combinationId, combinationCodes, ct);
                     // Hedef path'in array prefix'ini "Kalems[]" → "Kalems[lineIndex]"e cevir
                     SetJsonPathWithLineIndex(output, rule.TargetPath, lineIndex, value);
                 }
@@ -112,7 +124,7 @@ public sealed class MappingEngine : IMappingEngine
     private async Task<object?> ResolveValueAsync(
         IntegrationMapping rule,
         IReadOnlyDictionary<string, object?> data,
-        string? formCode,
+        int formId,
         int? lineCombinationId,
         IReadOnlyDictionary<int, string>? combinationCodes,
         CancellationToken ct)
@@ -136,7 +148,7 @@ public sealed class MappingEngine : IMappingEngine
                 IntegrationSourceType.Constant  => rule.SourceValue,
                 IntegrationSourceType.Formula   => EvaluateFormulaFromDict(rule.SourceValue, data),
                 IntegrationSourceType.Lookup    => await ResolveLookupFromDictAsync(rule, data, ct),
-                IntegrationSourceType.Function  => await ResolveFunctionFromDictAsync(rule, data, formCode, ct),
+                IntegrationSourceType.Function  => await ResolveFunctionFromDictAsync(rule, data, formId, ct),
                 _                                => null,
             };
         }
@@ -184,13 +196,13 @@ public sealed class MappingEngine : IMappingEngine
     /// Fonksiyon source tipi resolver — iki yol:
     ///   A) SourceValue "schema.fn" (nokta iceriyor) → YENI: DB'de tanimli scalar function direkt cagrilir
     ///      (admin "Lookup Fonksiyonu" tablosuna kayit gerekmez — kullanici DB tarafinda function yazar).
-    ///      Imza: SELECT [schema].[fn](@P1=formCode, @P2=keyValue, @P3=manualParam)
+    ///      Imza: SELECT [schema].[fn](@P1=formId(INT), @P2=keyValue(NVARCHAR), @P3=manualParam(NVARCHAR))
     ///   B) SourceValue legacy code (orn. "ITEMS", "CONTACTS", "CARI_BAKIYE") → wrapper tablosundan
     ///      cozumlenir (geriye uyum: IntegrationLookupFunction kayitlari hala calisir).
     /// </summary>
     private async Task<object?> ResolveFunctionFromDictAsync(
         IntegrationMapping rule, IReadOnlyDictionary<string, object?> data,
-        string? formCode, CancellationToken ct)
+        int formId, CancellationToken ct)
     {
         if (_functions is null) return null;
         if (string.IsNullOrWhiteSpace(rule.SourceValue)) return null;
@@ -208,7 +220,7 @@ public sealed class MappingEngine : IMappingEngine
         {
             return await _functions.ExecuteDbFunctionAsync(
                 functionFullName: rule.SourceValue,
-                formCode:         formCode,
+                formId:           formId,
                 keyValue:         keyValue,
                 manualParam:      rule.LookupParam,
                 ct:               ct);
@@ -217,7 +229,7 @@ public sealed class MappingEngine : IMappingEngine
         // Yol B: Legacy wrapper kodu (ITEMS / CONTACTS / vb.) — eski mapping'ler icin
         return await _functions.ResolveWithParamsAsync(
             functionId:   rule.SourceValue,
-            formCode:     formCode,
+            formId:       formId,
             keyValue:     keyValue,
             manualParam:  rule.LookupParam,
             returnColumn: rule.LookupReturnColumn,

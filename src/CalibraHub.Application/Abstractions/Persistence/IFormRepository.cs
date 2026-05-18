@@ -14,6 +14,12 @@ public interface IFormRepository
     /// <summary>Tek form — bulunamazsa null döner.</summary>
     Task<FormDto?> GetByIdAsync(int id, CancellationToken ct);
 
+    /// <summary>
+    /// FormCode ile form arar (case-insensitive). Bulunamazsa null doner.
+    /// MappingEngine'in SqlFunction @P1 (FormId) lookup'u icin kullanir.
+    /// </summary>
+    Task<FormDto?> GetByCodeAsync(string formCode, CancellationToken ct);
+
     /// <summary>Yeni form ekler, yeni kaydın Id'sini döner.</summary>
     Task<int> CreateAsync(CreateFormRequest request, CancellationToken ct);
 

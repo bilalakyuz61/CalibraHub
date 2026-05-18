@@ -98,16 +98,16 @@ public sealed class SqlIntegrationLookupFunctionRegistry : IIntegrationLookupFun
 
     public Task<object?> ResolveWithParamsAsync(
         string functionId,
-        string? formCode,
+        int formId,
         string? keyValue,
         string? manualParam,
         string? returnColumn,
         CancellationToken ct)
-        => ResolveInternalAsync(functionId, formCode, keyValue, manualParam, returnColumn, ct);
+        => ResolveInternalAsync(functionId, formId, keyValue, manualParam, returnColumn, ct);
 
     public async Task<object?> ExecuteDbFunctionAsync(
         string functionFullName,
-        string? formCode,
+        int formId,
         string? keyValue,
         string? manualParam,
         CancellationToken ct)
@@ -123,7 +123,7 @@ public sealed class SqlIntegrationLookupFunctionRegistry : IIntegrationLookupFun
             SqlSnippet: null,
             SqlFunctionName: functionFullName,
             ReturnColumns: Array.Empty<IntegrationLookupFunctionColumn>());
-        return await ResolveSqlFunctionAsync(virtualSpec, formCode, keyValue, manualParam, ct);
+        return await ResolveSqlFunctionAsync(virtualSpec, formId, keyValue, manualParam, ct);
     }
 
     public async Task<IReadOnlyList<AvailableDbFunctionDto>> ListDbFunctionsAsync(CancellationToken ct)
@@ -133,10 +133,10 @@ public sealed class SqlIntegrationLookupFunctionRegistry : IIntegrationLookupFun
 
     public Task<object?> ResolveAsync(
         string functionId, string? keyValue, string? returnColumn, CancellationToken ct)
-        => ResolveInternalAsync(functionId, formCode: null, keyValue, manualParam: null, returnColumn, ct);
+        => ResolveInternalAsync(functionId, formId: 0, keyValue, manualParam: null, returnColumn, ct);
 
     private async Task<object?> ResolveInternalAsync(
-        string functionId, string? formCode, string? keyValue, string? manualParam,
+        string functionId, int formId, string? keyValue, string? manualParam,
         string? returnColumn, CancellationToken ct)
     {
         var cached = await GetCachedAsync(ct);
@@ -146,7 +146,7 @@ public sealed class SqlIntegrationLookupFunctionRegistry : IIntegrationLookupFun
 
         // ── Mode 0: SqlFunctionName (3-param standart imza) — YENI ────────
         if (!string.IsNullOrWhiteSpace(spec.SqlFunctionName))
-            return await ResolveSqlFunctionAsync(spec, formCode, keyValue, manualParam, ct);
+            return await ResolveSqlFunctionAsync(spec, formId, keyValue, manualParam, ct);
 
         // ── Mode 1: SqlSnippet (serbest SQL) — LEGACY ─────────────────────
         if (!string.IsNullOrWhiteSpace(spec.SqlSnippet))
@@ -189,14 +189,14 @@ public sealed class SqlIntegrationLookupFunctionRegistry : IIntegrationLookupFun
     /// <summary>
     /// Mode 0: DB'de tanimli scalar function'i 3 param ile calistirir.
     /// Cagri: SELECT [schema].[fnName](@P1, @P2, @P3)
-    ///   @P1 = formCode (mapping engine'in saglayacagi standart "form bilgisi")
-    ///   @P2 = keyValue (mapping satirinin LookupSourceField alanindan)
-    ///   @P3 = manualParam (mapping satirinin LookupParam alanindan, kullanici serbest yazar)
+    ///   @P1 = formId (INT — Forms.Id; mapping engine SourceFormCode'tan cozumler. 0 ise NULL)
+    ///   @P2 = keyValue (NVARCHAR — LookupSourceField alanindan; gerekirse SQL icinde CAST)
+    ///   @P3 = manualParam (NVARCHAR — LookupParam alanindan, kullanici serbest yazar)
     /// Hatalar (gecersiz fonksiyon adi, runtime exception, vb.) sessizce null doner —
     /// integration runner ErrorBehavior'a gore (Skip/Retry/Manual) tepki verir.
     /// </summary>
     private async Task<object?> ResolveSqlFunctionAsync(
-        CachedFunction spec, string? formCode, string? keyValue, string? manualParam, CancellationToken ct)
+        CachedFunction spec, int formId, string? keyValue, string? manualParam, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(spec.SqlFunctionName)) return null;
         if (!SqlFunctionNameRegex.IsMatch(spec.SqlFunctionName!)) return null;
@@ -219,8 +219,15 @@ public sealed class SqlIntegrationLookupFunctionRegistry : IIntegrationLookupFun
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
         cmd.CommandText = $"SELECT {quoted}(@P1, @P2, @P3);";
-        cmd.Parameters.Add(new SqlParameter("@P1", (object?)formCode    ?? DBNull.Value));
+        // @P1 = INT (Forms.Id). 0 → NULL pas et (resolver bilemediginde).
+        var p1 = new SqlParameter("@P1", System.Data.SqlDbType.Int)
+        {
+            Value = formId > 0 ? (object)formId : DBNull.Value
+        };
+        cmd.Parameters.Add(p1);
+        // @P2 = NVARCHAR (string keyValue) — gerekirse SQL fonksiyonu icinde TRY_CAST(@P2 AS INT) yapilir
         cmd.Parameters.Add(new SqlParameter("@P2", (object?)keyValue    ?? DBNull.Value));
+        // @P3 = NVARCHAR (kullanici metni)
         cmd.Parameters.Add(new SqlParameter("@P3", (object?)manualParam ?? DBNull.Value));
         cmd.CommandTimeout = 10;
 

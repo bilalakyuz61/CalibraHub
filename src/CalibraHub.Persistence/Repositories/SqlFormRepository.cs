@@ -56,6 +56,26 @@ public sealed class SqlFormRepository : IFormRepository
         return null;
     }
 
+    public async Task<FormDto?> GetByCodeAsync(string formCode, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(formCode)) return null;
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT Id, FormCode, FormName, Module, SubModule, SortOrder, IsActive,
+                   BaseTable, BaseRecordKey
+              FROM dbo.Forms
+             WHERE FormCode = @FormCode
+            """;
+        // FormCode UNIQUE — case-insensitive SQL collation varsayilani altinda eslesir.
+        cmd.Parameters.Add(new SqlParameter("@FormCode", formCode.Trim()));
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (await reader.ReadAsync(ct))
+            return MapRow(reader);
+        return null;
+    }
+
     public async Task<int> CreateAsync(CreateFormRequest request, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);

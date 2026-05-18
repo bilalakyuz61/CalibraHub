@@ -33,13 +33,13 @@ public interface IIntegrationLookupFunctionRegistry
     /// kullanilir — bu overload sadece SqlFunctionName secimi olan fonksiyonlar icindir.
     /// </summary>
     /// <param name="functionId">Lookup function code (orn. "CARI_BAKIYE").</param>
-    /// <param name="formCode">Mapping engine'in saglayacagi @P1 — kaynak form'un kodu (orn. "SALES_ORDER_NEW").</param>
-    /// <param name="keyValue">Mapping satirinin LookupSourceField alanindan cekilen @P2.</param>
+    /// <param name="formId">Mapping engine'in saglayacagi @P1 — kaynak form'un Forms.Id'si (INT). 0 ise NULL gecirilir.</param>
+    /// <param name="keyValue">Mapping satirinin LookupSourceField alanindan cekilen @P2 (string — gerekirse SQL icinde CAST edilir).</param>
     /// <param name="manualParam">Mapping satirinin LookupParam alaninda kullanici yazimi @P3.</param>
     /// <param name="returnColumn">SQL Function modunda kullanilmaz (scalar deger doner).</param>
     Task<object?> ResolveWithParamsAsync(
         string functionId,
-        string? formCode,
+        int formId,
         string? keyValue,
         string? manualParam,
         string? returnColumn,
@@ -48,14 +48,15 @@ public interface IIntegrationLookupFunctionRegistry
     /// <summary>
     /// Yeni — wrapper tablosu olmadan, dogrudan DB'de tanimli scalar function'i 3 paramli imza ile cagirir.
     /// Wizard "Fonksiyon" source tipi artik bu yolu kullanir (admin "Lookup Fonksiyonu" tablosu by-pass).
+    /// Standart imza: SELECT [schema].[fn](@P1=formId(INT), @P2=keyValue(NVARCHAR), @P3=manualParam(NVARCHAR))
     /// </summary>
     /// <param name="functionFullName">Schema-qualified DB fonksiyon adi (orn. "dbo.fn_GetContactBalance").</param>
-    /// <param name="formCode">@P1 — kaynak form'un kodu.</param>
-    /// <param name="keyValue">@P2 — mapping satirinin LookupSourceField alanindan cekilen deger.</param>
+    /// <param name="formId">@P1 — kaynak form'un Forms.Id'si (INT). 0 ise NULL gecirilir.</param>
+    /// <param name="keyValue">@P2 — mapping satirinin LookupSourceField alanindan cekilen deger (string).</param>
     /// <param name="manualParam">@P3 — mapping satirinin LookupParam alanindaki kullanici yazimi.</param>
     Task<object?> ExecuteDbFunctionAsync(
         string functionFullName,
-        string? formCode,
+        int formId,
         string? keyValue,
         string? manualParam,
         CancellationToken ct);
