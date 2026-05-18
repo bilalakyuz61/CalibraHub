@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using CalibraHub.Domain.Common;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
@@ -89,4 +90,58 @@ public sealed class Integration
 
     /// <summary>Endpoint ve auth profile bilgileri (display amacli, ayri sorgu).</summary>
     public IntegrationEndpoint? Endpoint { get; set; }
+
+    // ── Davranis (rapor §2.4 — Aktif/Pasif transition + validation) ──────────
+
+    /// <summary>
+    /// Konfigurasyonun tutarliligini kontrol eder. Save oncesi cagrilir.
+    /// Hata: DomainException.
+    /// </summary>
+    public void EnsureValid()
+    {
+        DomainException.ThrowIf(string.IsNullOrWhiteSpace(Name),
+            "Entegrasyon adi zorunludur.");
+        DomainException.ThrowIf(string.IsNullOrWhiteSpace(SourceFormCode),
+            "Kaynak form (SourceFormCode) zorunludur.");
+
+        // TargetEndpointId NULL ise "Sadece Procedure" modu — en az birinin dolu olmasi sart
+        var hasEndpoint  = TargetEndpointId.HasValue && TargetEndpointId.Value > 0;
+        var hasPreProc   = !string.IsNullOrWhiteSpace(PreProcedureName);
+        var hasPostProc  = !string.IsNullOrWhiteSpace(PostProcedureName);
+        DomainException.ThrowIf(!hasEndpoint && !hasPreProc && !hasPostProc,
+            "Hedef endpoint veya en az bir SQL Procedure (Pre/Post) tanimlanmalidir.");
+
+        // Retry davranisi secildiyse RetryCount pozitif olmali
+        DomainException.ThrowIf(ErrorBehavior == IntegrationErrorBehavior.Retry && RetryCount <= 0,
+            "Retry davranisi seciliyse RetryCount > 0 olmalidir.");
+        DomainException.ThrowIf(RetryCount < 0,
+            "RetryCount negatif olamaz.");
+    }
+
+    /// <summary>Entegrasyonu aktif et — yalniz IsValid ise.</summary>
+    public void Activate()
+    {
+        EnsureValid();
+        if (IsActive) return;
+        IsActive = true;
+        Updated = DateTime.UtcNow;
+    }
+
+    /// <summary>Entegrasyonu pasif et — yeni trigger calismaz, mevcut run'lar etkilenmez.</summary>
+    public void Deactivate()
+    {
+        if (!IsActive) return;
+        IsActive = false;
+        Updated = DateTime.UtcNow;
+    }
+
+    /// <summary>Yeni versiyona gec — runtime'da degisiklik geldikten sonra cagrilir (IntegrationHistory ile birlikte).</summary>
+    public void BumpVersion()
+    {
+        VersionNo += 1;
+        Updated = DateTime.UtcNow;
+    }
+
+    /// <summary>"Sadece Prosedur" modu mu? (HTTP cagrisi yok, sadece Pre/Post SQL).</summary>
+    public bool IsProcedureOnlyMode() => !TargetEndpointId.HasValue || TargetEndpointId.Value <= 0;
 }

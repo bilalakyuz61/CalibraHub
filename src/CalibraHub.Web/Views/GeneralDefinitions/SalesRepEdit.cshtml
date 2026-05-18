@@ -186,34 +186,7 @@ body.app-theme-dark .sre-msg.err { color: #f87171; }
         });
     };
 
-    function showConfirm(repName) {
-        return new Promise(function(resolve) {
-            var backdrop = document.createElement('div');
-            backdrop.className = 'sre-modal-backdrop';
-            backdrop.innerHTML =
-                '<div class="sre-modal">' +
-                '<div class="sre-modal-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></div>' +
-                '<h2>Temsilci Silinsin Mi?</h2>' +
-                '<p>&ldquo;' + escHtml(repName) + '&rdquo; temsilcisini silmek istediğinizden emin misiniz?</p>' +
-                '<div class="sre-modal-btns">' +
-                    '<button class="sre-btn sre-btn--danger" id="sreConfirmOk">Evet, Sil</button>' +
-                    '<button class="sre-btn" style="border:1px solid var(--sre-border);background:none;color:var(--sre-muted);" id="sreConfirmCancel">Vazgeç</button>' +
-                '</div>' +
-                '</div>';
-            document.body.appendChild(backdrop);
-            function cleanup(result) { document.body.removeChild(backdrop); resolve(result); }
-            var okBtn = backdrop.querySelector('#sreConfirmOk');
-            okBtn.focus();
-            okBtn.onclick = function() { cleanup(true); };
-            backdrop.querySelector('#sreConfirmCancel').onclick = function() { cleanup(false); };
-            backdrop.onclick = function(e) { if (e.target === backdrop) cleanup(false); };
-            function keyHandler(e) {
-                if (e.key === 'Escape') { document.removeEventListener('keydown', keyHandler); cleanup(false); }
-                if (e.key === 'Enter')  { document.removeEventListener('keydown', keyHandler); cleanup(true); }
-            }
-            document.addEventListener('keydown', keyHandler);
-        });
-    }
+    // Rapor §2.1 — inline showConfirm kaldirildi, global helper kullaniliyor (wwwroot/js/confirm-modal.js)
 
     function escHtml(s) {
         if (!s) return '';

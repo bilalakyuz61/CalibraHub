@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Text.RegularExpressions;
+using CalibraHub.Domain.Common;
 using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
@@ -68,4 +70,59 @@ public sealed class Contact
     public int? ContactGroupId { get; init; }
 
     public DateTime CreatedAt { get; init; }
+
+    // ── Davranis: Validation & Normalization (rapor §2.4) ────────────────────
+
+    private static readonly Regex DigitsOnly = new(@"[^\d]", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Cari entity'sinin tutarlilik (invariant) kontrolleri. Kayit ONCESI cagrilir.
+    /// Hata: DomainException (caller try-catch ile yakalar).
+    /// </summary>
+    public void EnsureValid()
+    {
+        DomainException.ThrowIf(string.IsNullOrWhiteSpace(AccountCode),
+            "Cari kodu zorunludur.");
+        DomainException.ThrowIf(string.IsNullOrWhiteSpace(AccountTitle),
+            "Cari unvani zorunludur.");
+
+        // Vergi numarasi: 10 hane (kurumsal)
+        var taxDigits = NormalizeDigits(TaxNumber);
+        DomainException.ThrowIf(!string.IsNullOrEmpty(taxDigits) && taxDigits.Length != 10,
+            $"Vergi numarasi 10 hane olmalidir (girilen: {taxDigits.Length} hane).");
+
+        // TC kimlik: 11 hane (bireysel)
+        var idDigits = NormalizeDigits(IdentityNumber);
+        DomainException.ThrowIf(!string.IsNullOrEmpty(idDigits) && idDigits.Length != 11,
+            $"TC kimlik numarasi 11 hane olmalidir (girilen: {idDigits.Length} hane).");
+
+        // WhatsApp numarasi: en az 10 hane (ulke kodu dahil)
+        var waDigits = NormalizeDigits(WaPhone);
+        DomainException.ThrowIf(!string.IsNullOrEmpty(waDigits) && waDigits.Length < 10,
+            "WhatsApp numarasi en az 10 hane olmalidir (ulke kodu dahil).");
+
+        // Email format (opsiyonel ama dolduysa @ ve . icermeli — basit kontrol)
+        if (!string.IsNullOrWhiteSpace(Email))
+        {
+            DomainException.ThrowIf(!Email.Contains('@') || !Email.Contains('.'),
+                $"Gecerli bir e-posta adresi giriniz: {Email}");
+        }
+    }
+
+    /// <summary>Telefonu sadece rakamlara cevirir — "+90 (533) 444-5566" → "905334445566"</summary>
+    public static string? NormalizePhone(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var digits = DigitsOnly.Replace(raw, "");
+        return string.IsNullOrEmpty(digits) ? null : digits;
+    }
+
+    private static string NormalizeDigits(string? raw) =>
+        string.IsNullOrWhiteSpace(raw) ? string.Empty : DigitsOnly.Replace(raw, "");
+
+    /// <summary>Kurumsal mi? (VKN var ve 10 hane).</summary>
+    public bool IsCorporate() => !string.IsNullOrEmpty(NormalizeDigits(TaxNumber));
+
+    /// <summary>Bireysel mi? (TCKN var ve 11 hane).</summary>
+    public bool IsIndividual() => !string.IsNullOrEmpty(NormalizeDigits(IdentityNumber));
 }

@@ -506,44 +506,7 @@
         toast._t = setTimeout(function () { el.className = 'plr-toast plr-toast--' + (kind || 'ok'); }, 2400);
     }
 
-    // Ekran ortasi onay modali — CLAUDE.md 'Silme onay standardi' referans uygulamasi.
-    // Kullanim: showConfirm({ title, message, okLabel }).then(function(ok) { ... })
-    function showConfirm(opts) {
-        opts = opts || {};
-        return new Promise(function (resolve) {
-            var bd      = document.getElementById('plrConfirmBackdrop');
-            var titleEl = document.getElementById('plrConfirmTitle');
-            var msgEl   = document.getElementById('plrConfirmMessage');
-            var okBtn   = document.getElementById('plrConfirmOk');
-            var cnclBtn = document.getElementById('plrConfirmCancel');
-            titleEl.textContent = opts.title   || 'Onay';
-            msgEl.textContent   = opts.message || 'Bu işlem geri alınamaz. Devam edilsin mi?';
-            okBtn.textContent   = opts.okLabel || 'Sil';
-            cnclBtn.textContent = opts.cancelLabel || 'Vazgeç';
-            bd.hidden = false;
-
-            function close(result) {
-                bd.hidden = true;
-                okBtn.removeEventListener('click', onOk);
-                cnclBtn.removeEventListener('click', onCancel);
-                bd.removeEventListener('mousedown', onBackdrop);
-                document.removeEventListener('keydown', onKey);
-                resolve(result);
-            }
-            function onOk()      { close(true); }
-            function onCancel()  { close(false); }
-            function onBackdrop(e) { if (e.target === bd) close(false); }
-            function onKey(e) {
-                if (e.key === 'Escape') { e.preventDefault(); close(false); }
-                else if (e.key === 'Enter')  { e.preventDefault(); close(true); }
-            }
-            okBtn.addEventListener('click', onOk);
-            cnclBtn.addEventListener('click', onCancel);
-            bd.addEventListener('mousedown', onBackdrop);
-            document.addEventListener('keydown', onKey);
-            setTimeout(function () { okBtn.focus(); }, 0);
-        });
-    }
+    // Rapor §2.1 — inline showConfirm kaldirildi, global helper kullaniliyor (wwwroot/js/confirm-modal.js)
 
     // ── Grup adı + Döviz dropdown ────────────────────────────────────────────
     fetch('/PriceList/GetPriceGroup?id=' + groupId, { credentials: 'same-origin' })

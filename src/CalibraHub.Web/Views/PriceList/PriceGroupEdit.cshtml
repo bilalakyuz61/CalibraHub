@@ -324,42 +324,7 @@
     var API = function (a) { return '/PriceList/' + a; };
     var groupId = parseInt(document.getElementById('pgeId').value, 10) || 0;
 
-    // ── Onay modali (CLAUDE.md silme onay standardi) ─────────────────────────
-    function showConfirm(opts) {
-        opts = opts || {};
-        return new Promise(function (resolve) {
-            var bd      = document.getElementById('pgeConfirmBackdrop');
-            var titleEl = document.getElementById('pgeConfirmTitle');
-            var msgEl   = document.getElementById('pgeConfirmMessage');
-            var okBtn   = document.getElementById('pgeConfirmOk');
-            var cnclBtn = document.getElementById('pgeConfirmCancel');
-            titleEl.textContent = opts.title   || 'Onay';
-            msgEl.textContent   = opts.message || 'Devam edilsin mi?';
-            okBtn.textContent   = opts.okLabel || 'Onayla';
-            okBtn.className     = 'pge-btn ' + (opts.danger === false ? 'pge-btn--primary' : 'pge-btn--danger');
-            bd.hidden = false;
-            function close(result) {
-                bd.hidden = true;
-                okBtn.removeEventListener('click', onOk);
-                cnclBtn.removeEventListener('click', onCancel);
-                bd.removeEventListener('mousedown', onBackdrop);
-                document.removeEventListener('keydown', onKey);
-                resolve(result);
-            }
-            function onOk()      { close(true); }
-            function onCancel()  { close(false); }
-            function onBackdrop(e) { if (e.target === bd) close(false); }
-            function onKey(e) {
-                if (e.key === 'Escape') { e.preventDefault(); close(false); }
-                else if (e.key === 'Enter')  { e.preventDefault(); close(true); }
-            }
-            okBtn.addEventListener('click', onOk);
-            cnclBtn.addEventListener('click', onCancel);
-            bd.addEventListener('mousedown', onBackdrop);
-            document.addEventListener('keydown', onKey);
-            setTimeout(function () { okBtn.focus(); }, 0);
-        });
-    }
+    // Rapor §2.1 — inline showConfirm kaldirildi, global helper kullaniliyor (wwwroot/js/confirm-modal.js)
 
     function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 

@@ -13,6 +13,8 @@ using CalibraHub.Web.Infrastructure.Collaboration;
 using CalibraHub.Web.Infrastructure.Ui;
 using CalibraHub.Web.Infrastructure.Workspace;
 using CalibraHub.Web.Middleware;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.SqlClient;
@@ -162,6 +164,9 @@ builder.Services.AddHostedService<CollaborationCleanupService>();
 // Named HTTP clients — static HttpClient anti-pattern yerine IHttpClientFactory ile pool yonetilir
 builder.Services.AddHttpClient("tcmb", c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient("integrator-reachability", c => c.Timeout = TimeSpan.FromSeconds(10));
+// SOAP cagri timeout'u 5dk — Reachability postboxservice.svc icin (rapor §2.10 fix).
+builder.Services.AddHttpClient(ReachabilityIntegratorDocumentClient.HttpClientName,
+    c => c.Timeout = TimeSpan.FromSeconds(300));
 
 if (useMockIntegratorClient)
 {
@@ -452,6 +457,13 @@ mvcBuilder.AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
 });
+
+// ── FluentValidation (rapor §2.5) ────────────────────────────────────────
+// Controller'larda manuel `ModelState.IsValid` ve service icinde manuel
+// `if (string.IsNullOrWhiteSpace(...)) throw` pattern'leri yerine merkezi
+// validator class'lari. Otomatik dogrulama [ApiController]'lar icin actif.
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssembly(typeof(CalibraHub.Application.Validation.SaveDocumentRequestValidator).Assembly);
 
 // ── Mobile API CORS ──────────────────────────────────────────────────────
 // Android companion app (mobile/CalibraHubAndroid) icin. AVD emulator

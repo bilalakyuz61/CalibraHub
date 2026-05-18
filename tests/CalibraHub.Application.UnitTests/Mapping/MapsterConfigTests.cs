@@ -208,4 +208,42 @@ public sealed class MapsterConfigTests
         dto.Name.Should().Be("Satis Departmani");
         dto.IsActive.Should().BeTrue();
     }
+
+    [Fact]
+    public void Currency_To_CurrencyDto_AutoMap_TransientRatesNull()
+    {
+        var c = new Currency
+        {
+            Id = 1, Code = "TRY", Name = "Turk Lirasi", Symbol = "₺", IsActive = true,
+        };
+        var config = BuildConfig();
+        var dto = c.Adapt<CurrencyDto>(config);
+
+        dto.Id.Should().Be(1);
+        dto.Code.Should().Be("TRY");
+        dto.Name.Should().Be("Turk Lirasi");
+        dto.Symbol.Should().Be("₺");
+        dto.IsActive.Should().BeTrue();
+        // Transient alanlar — entity'de yok, DTO'da null
+        dto.LatestBuyingRate.Should().BeNull();
+        dto.LatestSellingRate.Should().BeNull();
+        dto.LatestRateDate.Should().BeNull();
+    }
+
+    [Fact]
+    public void CariGroup_To_CariGroupDto_AutoMap()
+    {
+        var g = new CariGroup
+        {
+            Id = 5, Code = "VIP", Name = "VIP Musteri", SortOrder = 1, IsActive = true,
+        };
+        var config = BuildConfig();
+        var dto = g.Adapt<CariGroupDto>(config);
+
+        dto.Id.Should().Be(5);
+        dto.Code.Should().Be("VIP");
+        dto.Name.Should().Be("VIP Musteri");
+        dto.SortOrder.Should().Be(1);
+        dto.IsActive.Should().BeTrue();
+    }
 }

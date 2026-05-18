@@ -91,6 +91,9 @@ var host = Host.CreateDefaultBuilder(args)
         // Named HTTP clients — IHttpClientFactory ile pool yonetilir
         services.AddHttpClient("tcmb", c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient("integrator-reachability", c => c.Timeout = TimeSpan.FromSeconds(10));
+        // SOAP cagri timeout'u 5dk — Reachability postboxservice.svc icin (rapor §2.10 fix).
+        services.AddHttpClient(ReachabilityIntegratorDocumentClient.HttpClientName,
+            c => c.Timeout = TimeSpan.FromSeconds(300));
 
         if (useMockIntegratorClient)
         {

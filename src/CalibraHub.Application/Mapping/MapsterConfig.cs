@@ -75,6 +75,20 @@ public static class MapsterConfig
               .Map(dest => dest.CompanyName, src => string.Empty)
               .IgnoreNullValues(true);
 
+        // ── Currency ─────────────────────────────────────────────────────
+        // Auto-map: Id/Code/Name/Symbol/IsActive ayni isim. Latest*Rate alanlari
+        // entity'de yok — transient (servis tarafinda ExchangeRate join ile dolar).
+        config.NewConfig<Currency, CurrencyDto>()
+              .Map(dest => dest.LatestBuyingRate,     src => (decimal?)null)
+              .Map(dest => dest.LatestSellingRate,    src => (decimal?)null)
+              .Map(dest => dest.EffectiveBuyingRate,  src => (decimal?)null)
+              .Map(dest => dest.EffectiveSellingRate, src => (decimal?)null)
+              .Map(dest => dest.LatestRateDate,       src => (DateTime?)null);
+
+        // ── CariGroup ────────────────────────────────────────────────────
+        // Convention: Id, Code, Name, SortOrder, IsActive — direkt eslesir.
+        config.NewConfig<CariGroup, CariGroupDto>();
+
         // İleride yeni entity eklerken: tek satir NewConfig + ozel donusumler buraya gelir.
     }
 }

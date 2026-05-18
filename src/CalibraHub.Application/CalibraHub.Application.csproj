@@ -17,6 +17,9 @@
     <!-- DTO mapping (rapor §2.4) — Application/Mapping/MapsterConfig.cs ile birleştirilir -->
     <PackageReference Include="Mapster" Version="7.4.0" />
     <PackageReference Include="Mapster.DependencyInjection" Version="1.0.1" />
+    <!-- Request validation (rapor §2.5 / §2.7) — Application/Validation/*Validator.cs -->
+    <PackageReference Include="FluentValidation" Version="11.10.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.SmartBoard;
 using CalibraHub.Web.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -198,6 +199,7 @@ public sealed class DepartmentController : Controller
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+    // Rapor §2.2: SmartBoardBuilder migration referans ornek
     private async Task<object> BuildDepartmentBoardConfigAsync(CancellationToken cancellationToken)
     {
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
@@ -207,74 +209,21 @@ public sealed class DepartmentController : Controller
             .OrderBy(d => d.Name)
             .ToArray();
 
-        var entities = new List<object>();
-        foreach (var d in departments)
-        {
-            var widgets = new List<object>
-            {
-                new
-                {
-                    id       = "w_active",
-                    type     = "data",
-                    dataType = "text",
-                    label    = "Durum",
-                    value    = d.IsActive ? "Aktif" : "Pasif",
-                    detail   = (string?)null,
-                    color    = d.IsActive ? "emerald" : "slate",
-                },
-            };
-
-            entities.Add(new
-            {
-                id            = d.Id,
-                title         = d.Name,
-                subtitle      = (string?)null,
-                description   = (string?)null,
-                imageUrl      = (string?)null,
-                statusBadge   = (object?)null,
-                widgets,
-                primaryAction = new
-                {
-                    label      = "Duzenle",
-                    icon       = "Edit",
-                    color      = "amber",
-                    url        = $"/Admin/DepartmentEdit?id={d.Id}",
-                    hideButton = true,
-                },
-                secondaryAction = new
-                {
-                    label     = "Sil",
-                    icon      = "Trash2",
-                    apiUrl    = $"/Admin/DeleteDepartmentJson?id={d.Id}",
-                    apiMethod = "POST",
-                    confirm   = $"Bu departmani silmek istediginize emin misiniz? ({d.Name})",
-                },
-            });
-        }
-
-        return new
-        {
-            boardKey          = "admin-departments",
-            title             = "Departman Tanimlamalari",
-            subtitle          = $"{entities.Count} departman",
-            icon              = "Building2",
-            iconColor         = "blue",
-            refreshUrl        = "/Admin/DepartmentsBoardConfig",
-            searchPlaceholder = "Hizli ara... (ad, sirket)",
-            emptyText         = "Henuz departman tanimlanmamis",
-            actions           = new object[]
-            {
-                new
-                {
-                    id      = "new",
-                    label   = "Yeni Departman",
-                    icon    = "Plus",
-                    variant = "primary",
-                    url     = "/Admin/DepartmentEdit",
-                },
-            },
-            masterWidgets = Array.Empty<object>(),
-            entities,
-        };
+        return SmartBoard.For(departments)
+            .WithBoardKey("admin-departments")
+            .WithTitle("Departman Tanimlamalari", subtitle: $"{departments.Length} departman")
+            .WithIcon("Building2", "blue")
+            .WithRefreshUrl("/Admin/DepartmentsBoardConfig")
+            .WithSearchPlaceholder("Hizli ara... (ad, sirket)")
+            .WithEmptyText("Henuz departman tanimlanmamis")
+            .AddHeaderAction("new", "Yeni Departman", "Plus", "/Admin/DepartmentEdit")
+            .MapEntities(d =>
+                SmartBoardEntity.For(d.Id, d.Name)
+                    .AddStatusWidget("w_active", "Durum", d.IsActive)
+                    .WithEditAndDelete(
+                        editUrl:       $"/Admin/DepartmentEdit?id={d.Id}",
+                        deleteApiUrl:  $"/Admin/DeleteDepartmentJson?id={d.Id}",
+                        deleteConfirm: $"Bu departmani silmek istediginize emin misiniz? ({d.Name})"))
+            .Build();
     }
 }

@@ -17,10 +17,21 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
     private const int EArchiveDocumentListWindowDays = 1;
     private const string DocumentDataFormat = "UBL";
 
-    private static readonly HttpClient ServiceClient = new()
+    /// <summary>
+    /// Named HttpClient kullanir (rapor §2.10 cozumu). Static field anti-pattern'i kaldirildi —
+    /// IHttpClientFactory pool yonetir, DNS cache + socket exhaustion korunur.
+    /// Program.cs: services.AddHttpClient("reachability-soap", c => c.Timeout = TimeSpan.FromSeconds(300))
+    /// </summary>
+    public const string HttpClientName = "reachability-soap";
+
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public ReachabilityIntegratorDocumentClient(IHttpClientFactory httpClientFactory)
     {
-        Timeout = TimeSpan.FromSeconds(300)
-    };
+        _httpClientFactory = httpClientFactory;
+    }
+
+    private HttpClient CreateClient() => _httpClientFactory.CreateClient(HttpClientName);
 
     private static readonly DocumentKind[] SupportedKinds =
     [
@@ -250,7 +261,7 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
         return builder.Uri;
     }
 
-    private static async Task<string> LoginAsync(
+    private async Task<string> LoginAsync(
         Uri serviceUri,
         IntegratorSettings settings,
         CancellationToken cancellationToken)
@@ -287,7 +298,7 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
         return sessionId;
     }
 
-    private static async Task TryLogoutAsync(
+    private async Task TryLogoutAsync(
         Uri serviceUri,
         string? sessionId,
         CancellationToken cancellationToken)
@@ -313,7 +324,7 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
         }
     }
 
-    private static async Task<IReadOnlyCollection<DocumentListItem>> GetDocumentListAsync(
+    private async Task<IReadOnlyCollection<DocumentListItem>> GetDocumentListAsync(
         Uri serviceUri,
         string sessionId,
         string documentType,
@@ -384,7 +395,7 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
         return documents;
     }
 
-    private static async Task<DocumentDataResult?> GetDocumentDataAsync(
+    private async Task<DocumentDataResult?> GetDocumentDataAsync(
         Uri serviceUri,
         string sessionId,
         string uuid,
@@ -442,7 +453,7 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
         return new DocumentDataResult(binaryBase64!, envelopeId, fileName, currentDate);
     }
 
-    private static async Task GetDocumentDoneAsync(
+    private async Task GetDocumentDoneAsync(
         Uri serviceUri,
         string sessionId,
         string uuid,
@@ -471,7 +482,7 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
         }
     }
 
-    private static async Task<XDocument> SendSoapRequestAsync(
+    private async Task<XDocument> SendSoapRequestAsync(
         Uri serviceUri,
         string operation,
         string bodyXml,
@@ -507,7 +518,7 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
         throw lastException ?? new InvalidOperationException($"{operation} istegi basarisiz oldu.");
     }
 
-    private static async Task<XDocument> SendSoapRequestInternalAsync(
+    private async Task<XDocument> SendSoapRequestInternalAsync(
         Uri serviceUri,
         string soapAction,
         string operation,
@@ -527,7 +538,9 @@ public sealed class ReachabilityIntegratorDocumentClient : IIntegratorDocumentCl
         request.Headers.Add("SOAPAction", $"\"{soapAction}\"");
         request.Content = new StringContent(requestXml, Encoding.UTF8, "text/xml");
 
-        using var response = await ServiceClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken);
+        // IHttpClientFactory pool yonetir — DNS cache + socket exhaustion korumasi (rapor §2.10).
+        var serviceClient = CreateClient();
+        using var response = await serviceClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken);
         var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(responseContent))
         {
