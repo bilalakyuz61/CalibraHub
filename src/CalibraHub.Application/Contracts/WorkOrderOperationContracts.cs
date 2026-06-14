@@ -10,8 +10,8 @@ public sealed record WorkOrderOperationDto(
     string? OperationCode,
     string? OperationName,
     int? MachineId,
-    string? MachineCode,
-    string? MachineName,
+    string? Code,
+    string? Name,
     decimal? PlannedDuration,
     DurationUnit DurationUnit,
     decimal? ActualDuration,
@@ -29,7 +29,12 @@ public sealed record WorkOrderOperationDto(
     string? WorkOrderNumber,
     string? ItemCode,
     string? ItemName,
-    decimal WorkOrderPlannedQuantity);
+    decimal WorkOrderPlannedQuantity,
+    // 2026-05-22: Bir önceki operasyonların NET ürettiği toplam (Produced - Scrap).
+    // İlk operasyonda upstream yok → WorkOrderPlannedQuantity ile aynı (kapsız).
+    // Sonraki operasyonlar için kullanıcı bu değerden fazla üretemez (downstream cap).
+    // Saha tableti: Start butonu disabled ise upstream=0 demek, Partial/Complete miktar capped.
+    decimal UpstreamCap = 0);
 
 public sealed record SaveWorkOrderOperationRequest(
     int Id,

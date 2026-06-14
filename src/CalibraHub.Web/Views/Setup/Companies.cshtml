@@ -1,552 +1,1307 @@
 @model CalibraHub.Web.Models.Setup.SetupCompanyViewModel
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
-    ViewData["Title"] = "Sirket Tanimlari";
+    ViewData["Title"] = "Şirket Tanımları";
     ViewData["BodyClass"] = "page-setup-companies";
     var listState = Model.ListState;
+    var isEditing = Model.Input.Id.HasValue;
+    var _colRecordId = isEditing ? Model.Input.Id!.Value.ToString() : $"new-{Guid.NewGuid():N}";
+    var editingCompanyId = isEditing ? Model.Input.Id!.Value : 0;
 }
 
 @section Styles {
 <style>
-    .page-setup-companies .integrator-dashboard__content {
-        display: flex !important; flex-direction: column;
-        width: 100% !important; max-width: none !important;
-        min-height: 0; padding: 0; margin: 0 !important; overflow: hidden;
-    }
-    .page-setup-companies .integrator-dashboard__header { flex: 0 0 auto; }
+/* ══ Company Setup — csc-* ══════════════════════════════════════════════ */
+.page-setup-companies .integrator-dashboard__content {
+    display:flex !important; flex-direction:column;
+    width:100% !important; max-width:none !important;
+    min-height:0; padding:0; margin:0 !important; overflow:hidden;
+}
+.page-setup-companies .integrator-dashboard { height:100%; min-height:0; }
 
-    /* ── Sol tab iskelet ── */
-    .cmp-layout { display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-    .cmp-tab-nav {
-        width: 168px; flex-shrink: 0;
-        border-right: 1px solid var(--app-border,#dde3ee);
-        background: var(--app-surface,#fff);
-        display: flex; flex-direction: column;
-        padding: 10px 8px; gap: 3px;
-    }
-    .cmp-tab-btn {
-        width: 100%; text-align: left;
-        padding: 7px 12px; border-radius: 7px; border: none;
-        background: transparent; cursor: pointer;
-        font-size: 0.8rem; font-weight: 500;
-        color: var(--app-text-muted, #64748b);
-        transition: background .15s, color .15s;
-        display: flex; align-items: center; gap: 8px;
-    }
-    .cmp-tab-btn:hover { background: var(--app-muted-surface,#f1f5f9); color: var(--app-text,#1e293b); }
-    .cmp-tab-btn.is-active { background: #eff6ff; color: #2563eb; font-weight: 600; }
-    .cmp-tab-btn svg { flex-shrink: 0; }
-    .cmp-tab-content { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
-    .cmp-tab-pane { display: none; flex: 1 1 auto; min-height: 0; flex-direction: column; overflow: hidden; }
-    .cmp-tab-pane.is-active { display: flex; }
+/* ── Tema değişkenleri (açık) ── */
+.csc-root {
+    --csc-bg:            #f1f5f9;
+    --csc-surface:       #ffffff;
+    --csc-border:        #e2e8f0;
+    --csc-border-light:  rgba(226,232,240,.55);
+    --csc-text:          #1e293b;
+    --csc-text-muted:    #64748b;
+    --csc-text-xs:       #94a3b8;
+    --csc-muted:         #f1f5f9;
+    --csc-input-bg:      #ffffff;
+    --csc-accent:        var(--theme-accent, #2563eb);
+    --csc-accent-soft:   var(--theme-accent-soft, rgba(37,99,235,.08));
+    --csc-pill-green-bg: rgba(22,163,74,.1);    --csc-pill-green-tx: #15803d;
+    --csc-pill-red-bg:   rgba(220,38,38,.08);   --csc-pill-red-tx:   #b91c1c;
+    --csc-pill-blue-bg:  rgba(37,99,235,.1);    --csc-pill-blue-tx:  #1d4ed8;
+    --csc-pill-gray-bg:  rgba(100,116,139,.1);  --csc-pill-gray-tx:  #475569;
+    --csc-pill-ambe-bg:  rgba(245,158,11,.1);   --csc-pill-ambe-tx:  #92400e;
+}
+body.app-theme-dark .csc-root {
+    --csc-bg:            #080c17;
+    --csc-surface:       #0d1323;
+    --csc-border:        rgba(255,255,255,.09);
+    --csc-border-light:  rgba(255,255,255,.04);
+    --csc-text:          #e2e8f0;
+    --csc-text-muted:    #94a3b8;
+    --csc-text-xs:       #4b5563;
+    --csc-muted:         rgba(255,255,255,.05);
+    --csc-input-bg:      rgba(255,255,255,.06);
+    --csc-accent:        var(--theme-accent, #6366f1);
+    --csc-accent-soft:   var(--theme-accent-soft, rgba(99,102,241,.15));
+    --csc-pill-green-bg: rgba(34,197,94,.15);   --csc-pill-green-tx: #4ade80;
+    --csc-pill-red-bg:   rgba(239,68,68,.15);   --csc-pill-red-tx:   #f87171;
+    --csc-pill-blue-bg:  rgba(99,102,241,.18);  --csc-pill-blue-tx:  #a5b4fc;
+    --csc-pill-gray-bg:  rgba(148,163,184,.12); --csc-pill-gray-tx:  #cbd5e1;
+    --csc-pill-ambe-bg:  rgba(245,158,11,.15);  --csc-pill-ambe-tx:  #fcd34d;
+}
 
-    /* ── Sirket tab — mevcut grid ── */
-    .cmp-company-grid {
-        display: flex; flex-direction: column; gap: 4px;
-        flex: 1 1 auto; min-height: 0; padding: 12px 16px; overflow: hidden;
-    }
-    .cmp-company-grid > section { flex: 1 1 0; min-height: 0; overflow: hidden; }
+/* ── Root ── */
+.csc-root {
+    display:flex; flex-direction:column; height:100%; min-height:0;
+    overflow:hidden; font-size:.84rem;
+    color:var(--csc-text); background:var(--csc-bg);
+}
 
-    /* ── ERP tab ── */
-    .erp-tab-wrap { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-    .erp-mini-toolbar { flex-shrink: 0; padding: 6px 12px; border-bottom: 1px solid var(--app-border,#dde3ee); display: flex; align-items: center; gap: 6px; }
-    .erp-layout { display: flex; gap: 0; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-    .erp-form-panel { width: 320px; flex-shrink: 0; border-right: 1px solid var(--app-border,#dde3ee); background: var(--app-surface,#fff); display: flex; flex-direction: column; overflow-y: auto; padding: 10px 14px; }
-    .erp-grid-panel { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
-    .erp-grid-panel .erp-table-wrap { flex: 1 1 auto; overflow: auto; }
-    .erp-toolbar { padding: 5px 10px; border-bottom: 1px solid var(--app-border,#dde3ee); flex-shrink: 0; }
-    .cs-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--app-border-light,#f1f5f9); }
-    .cs-line:last-child { border-bottom: none; }
-    .cs-line > label:first-child { width: 80px; flex-shrink: 0; font-size: 0.76rem; font-weight: 600; color: var(--app-text-muted,#64748b); text-align: right; }
-    .erp-grid { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-    .erp-grid thead th { text-align: left; padding: 3px 8px; font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
-    .erp-grid tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; cursor: pointer; }
-    .erp-grid tbody tr:hover { background: #f8fafc; }
-    .erp-grid tbody tr.is-sel { background: #eff6ff; }
-    .erp-grid td { padding: 2px 8px; vertical-align: middle; }
-    .erp-empty { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; }
-    .erp-msg, .erp-test-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
-    .erp-msg.ok, .erp-test-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-    .erp-msg.err, .erp-test-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+/* ── Page header ── */
+.csc-page-header {
+    display:flex; align-items:center; gap:12px;
+    padding:13px 20px 11px; border-bottom:1px solid var(--csc-border);
+    background:var(--csc-surface); flex-shrink:0;
+}
+.csc-page-icon {
+    width:34px; height:34px; border-radius:9px; flex-shrink:0;
+    background:linear-gradient(135deg,rgba(37,99,235,.14),rgba(99,102,241,.22));
+    display:flex; align-items:center; justify-content:center;
+}
+.csc-page-icon svg { width:17px; height:17px; stroke:var(--csc-accent); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.csc-page-title { font-size:.88rem; font-weight:700; color:var(--csc-text); line-height:1.15; }
+.csc-page-sub   { font-size:.73rem; color:var(--csc-text-muted); margin-top:2px; }
+
+/* ── Body split ── */
+.csc-body { display:flex; flex:1 1 0; min-height:0; overflow:hidden; }
+
+/* ── Form panel ── */
+.csc-form-panel {
+    width:300px; flex-shrink:0; border-right:1px solid var(--csc-border);
+    display:flex; flex-direction:column; overflow:hidden; background:var(--csc-surface);
+}
+.csc-form-panel form {
+    flex:1 1 0; display:flex; flex-direction:column; min-height:0; overflow:hidden;
+}
+.csc-form-header {
+    padding:12px 16px 8px; border-bottom:1px solid var(--csc-border-light); flex-shrink:0;
+    display:flex; align-items:center; gap:7px;
+}
+.csc-form-header svg { width:13px; height:13px; stroke:var(--csc-accent); fill:none; stroke-width:2.2; flex-shrink:0; }
+.csc-form-header-label { font-size:.78rem; font-weight:700; color:var(--csc-text); }
+.csc-form-header-sub   { font-size:.71rem; color:var(--csc-text-muted); margin-top:1px; }
+
+.csc-form-body { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:11px; }
+
+/* ── Tab bar ── */
+.csc-tab-bar {
+    display:flex; flex-shrink:0; background:var(--csc-surface);
+    border-bottom:1px solid var(--csc-border); padding:0 4px;
+}
+.csc-tab-btn {
+    padding:9px 12px; font-size:.77rem; font-weight:600;
+    border:none; border-bottom:2px solid transparent; background:transparent;
+    cursor:pointer; color:var(--csc-text-muted); margin-bottom:-1px;
+    display:flex; align-items:center; gap:5px;
+    transition:color .12s, border-color .12s;
+}
+.csc-tab-btn svg { width:12px; height:12px; stroke:currentColor; fill:none; stroke-width:2; }
+.csc-tab-btn:hover { color:var(--csc-text); }
+.csc-tab-btn.is-active { color:var(--csc-accent); border-bottom-color:var(--csc-accent); }
+
+/* ── Users pane ── */
+.csc-users-pane {
+    flex:1 1 0; min-height:0; display:flex; flex-direction:column; overflow:hidden;
+}
+.csc-users-form-body {
+    flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:11px;
+}
+.csc-user-form-hint {
+    font-size:.7rem; color:var(--csc-text-xs); margin-top:1px;
+}
+.csc-user-form-editing-badge {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 8px; border-radius:6px; font-size:.72rem; font-weight:600;
+    background:var(--csc-accent-soft); color:var(--csc-accent);
+    margin-bottom:2px;
+}
+.csc-user-form-editing-badge svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2.5; }
+
+/* ── User link (existing user search) ── */
+.csc-link-section { display:flex; flex-direction:column; gap:5px; }
+.csc-link-label {
+    font-size:.69rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.04em; color:var(--csc-text-muted);
+}
+.csc-link-search-wrap { position:relative; }
+.csc-link-input {
+    width:100%; padding:7px 10px; border-radius:7px; font-size:.82rem;
+    border:1px solid var(--csc-border); background:var(--csc-input-bg);
+    color:var(--csc-text); outline:none; box-sizing:border-box;
+    transition:border-color .12s, box-shadow .12s;
+}
+.csc-link-input:focus { border-color:var(--csc-accent); box-shadow:0 0 0 3px var(--csc-accent-soft); }
+.csc-link-input::placeholder { color:var(--csc-text-xs); }
+.csc-link-dropdown {
+    position:absolute; top:calc(100% + 3px); left:0; right:0; z-index:200;
+    background:var(--csc-surface); border:1px solid var(--csc-border);
+    border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.14);
+    max-height:180px; overflow-y:auto;
+}
+.csc-link-item {
+    display:flex; flex-direction:column; gap:1px;
+    padding:8px 11px; cursor:pointer; border-bottom:1px solid var(--csc-border-light);
+    transition:background .1s;
+}
+.csc-link-item:last-child { border-bottom:none; }
+.csc-link-item:hover { background:var(--csc-accent-soft); }
+.csc-link-item-name { font-size:.82rem; font-weight:600; color:var(--csc-text); }
+.csc-link-item-meta { font-size:.71rem; color:var(--csc-text-muted); }
+.csc-link-empty { padding:10px 11px; font-size:.79rem; color:var(--csc-text-muted); font-style:italic; }
+
+/* ── Divider ── */
+.csc-or-divider {
+    display:flex; align-items:center; gap:7px; margin:2px 0;
+}
+.csc-or-line { flex:1; height:1px; background:var(--csc-border-light); }
+.csc-or-text { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--csc-text-xs); white-space:nowrap; }
+
+/* ── Fields ── */
+.csc-field { display:flex; flex-direction:column; gap:4px; }
+.csc-field-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.csc-label {
+    font-size:.71rem; font-weight:700; color:var(--csc-text-muted);
+    letter-spacing:.04em; text-transform:uppercase;
+}
+.csc-input {
+    width:100%; padding:7px 10px; border-radius:7px; font-size:.82rem;
+    border:1px solid var(--csc-border); background:var(--csc-input-bg);
+    color:var(--csc-text); outline:none; box-sizing:border-box;
+    transition:border-color .12s, box-shadow .12s;
+}
+.csc-input:focus { border-color:var(--csc-accent); box-shadow:0 0 0 3px var(--csc-accent-soft); }
+.csc-input::placeholder { color:var(--csc-text-xs); }
+.csc-val { font-size:.72rem; color:#dc2626; margin-top:1px; }
+
+.csc-select {
+    width:100%; padding:7px 10px; border-radius:7px; font-size:.82rem;
+    border:1px solid var(--csc-border); background:var(--csc-input-bg);
+    color:var(--csc-text); outline:none; box-sizing:border-box; cursor:pointer;
+    transition:border-color .12s, box-shadow .12s;
+}
+.csc-select:focus { border-color:var(--csc-accent); box-shadow:0 0 0 3px var(--csc-accent-soft); }
+body.app-theme-dark .csc-select option { background:#0d1323; }
+
+/* ── SQL section divider ── */
+.csc-sql-divider {
+    display:flex; align-items:center; gap:7px; margin:4px 0 2px;
+    cursor:pointer; user-select:none; padding:6px 0;
+}
+.csc-sql-divider-line  { flex:1; height:1px; background:var(--csc-border-light); }
+.csc-sql-divider-label {
+    font-size:.69rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--csc-text-muted);
+    display:flex; align-items:center; gap:4px; white-space:nowrap;
+}
+.csc-sql-divider-label svg { width:11px; height:11px; stroke:currentColor; fill:none; stroke-width:2.2; transition:transform .15s; }
+.csc-sql-divider.is-open .csc-sql-divider-label svg { transform:rotate(90deg); }
+
+.csc-sql-section { display:flex; flex-direction:column; gap:10px; }
+.csc-sql-section.is-hidden { display:none; }
+.csc-sql-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+/* ── Test row ── */
+.csc-test-row { display:flex; align-items:center; gap:8px; padding-top:2px; }
+.csc-btn-test {
+    padding:5px 11px; border-radius:6px; font-size:.73rem; font-weight:600;
+    cursor:pointer; white-space:nowrap;
+    border:1px solid var(--csc-border); background:var(--csc-muted); color:var(--csc-text-muted);
+    transition:border-color .12s, color .12s, background .12s;
+}
+.csc-btn-test:hover   { border-color:var(--csc-accent); color:var(--csc-accent); background:var(--csc-accent-soft); }
+.csc-btn-test:disabled { opacity:.5; cursor:default; }
+#cscTestResult { font-size:.73rem; }
+
+/* ── IsActive switch ── */
+.csc-switch-row {
+    display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none;
+}
+.csc-switch-row .csc-label { margin-bottom:0; flex-shrink:0; }
+.csc-switch {
+    position:relative; display:inline-flex; width:36px; height:20px; flex-shrink:0;
+}
+.csc-switch input { opacity:0; width:0; height:0; position:absolute; }
+.csc-switch-track {
+    position:absolute; inset:0; border-radius:20px; cursor:pointer;
+    background:var(--csc-border); transition:background .15s;
+}
+.csc-switch-track::after {
+    content:''; position:absolute; width:14px; height:14px; border-radius:50%;
+    top:3px; left:3px; background:#fff; transition:transform .15s;
+    box-shadow:0 1px 3px rgba(0,0,0,.18);
+}
+.csc-switch input:checked + .csc-switch-track { background:var(--csc-accent); }
+.csc-switch input:checked + .csc-switch-track::after { transform:translateX(16px); }
+.csc-switch-val {
+    font-size:.78rem; font-weight:600;
+    color:var(--csc-text-muted); transition:color .12s;
+}
+.csc-switch input:checked ~ .csc-switch-val { color:var(--csc-accent); }
+
+/* ── Form footer ── */
+.csc-form-footer {
+    padding:11px 16px; border-top:1px solid var(--csc-border-light);
+    display:flex; gap:7px; align-items:center; flex-shrink:0;
+    background:var(--csc-surface);
+}
+.csc-users-footer {
+    padding:11px 16px; border-top:1px solid var(--csc-border-light);
+    display:flex; gap:7px; align-items:center; flex-shrink:0;
+    background:var(--csc-surface);
+}
+.csc-btn-save {
+    flex:1; padding:8px 14px; border-radius:8px; font-size:.8rem; font-weight:700;
+    cursor:pointer; border:none; background:var(--csc-accent); color:#fff;
+    transition:opacity .12s, transform .1s;
+}
+.csc-btn-save:hover  { opacity:.9; }
+.csc-btn-save:active { transform:scale(.98); }
+.csc-btn-save:disabled { opacity:.55; cursor:wait; }
+.csc-btn-new {
+    padding:7px 12px; border-radius:8px; font-size:.8rem; font-weight:600;
+    cursor:pointer; border:1px solid var(--csc-border); background:transparent;
+    color:var(--csc-text-muted); text-decoration:none; display:flex; align-items:center; gap:4px;
+    transition:border-color .12s, color .12s, background .12s;
+}
+.csc-btn-new:hover { border-color:var(--csc-accent); color:var(--csc-accent); background:var(--csc-accent-soft); }
+.csc-btn-clear {
+    padding:7px 12px; border-radius:8px; font-size:.8rem; font-weight:600;
+    cursor:pointer; border:1px solid var(--csc-border); background:transparent;
+    color:var(--csc-text-muted);
+    transition:border-color .12s, color .12s;
+}
+.csc-btn-clear:hover { border-color:var(--csc-text-muted); color:var(--csc-text); }
+
+/* ── Inline form error ── */
+.csc-form-err {
+    font-size:.78rem; color:#dc2626; background:rgba(220,38,38,.07);
+    border:1px solid rgba(220,38,38,.22); border-radius:6px;
+    padding:7px 10px; margin-top:2px;
+}
+
+/* ── Table panel ── */
+.csc-table-panel { flex:1 1 0; min-width:0; display:flex; flex-direction:column; overflow:hidden; background:var(--csc-bg); }
+.csc-panel { flex:1 1 0; display:flex; flex-direction:column; overflow:hidden; }
+.csc-table-topbar {
+    padding:10px 16px 8px; border-bottom:1px solid var(--csc-border);
+    display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
+    background:var(--csc-surface);
+}
+.csc-table-topbar-title { font-size:.78rem; font-weight:700; color:var(--csc-text); }
+.csc-count {
+    font-size:.7rem; font-weight:700; padding:2px 9px; border-radius:20px;
+    background:var(--csc-muted); color:var(--csc-text-muted);
+}
+.csc-table-scroll { flex:1; overflow:auto; }
+
+.csc-tbl { width:100%; border-collapse:collapse; font-size:.81rem; }
+.csc-tbl th {
+    padding:7px 14px 6px; font-size:.69rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--csc-text-muted); text-align:left; white-space:nowrap;
+    border-bottom:2px solid var(--csc-border);
+    background:var(--csc-surface); position:sticky; top:0; z-index:1;
+}
+.csc-tbl td {
+    padding:8px 14px; border-bottom:1px solid var(--csc-border-light);
+    vertical-align:middle; color:var(--csc-text);
+}
+.csc-tbl tbody tr { transition:background .1s; }
+.csc-tbl tbody tr:hover { background:var(--csc-muted); }
+.csc-tbl tbody tr.is-editing { background:var(--csc-accent-soft); }
+.csc-tbl tbody tr.is-editing td { border-bottom-color:rgba(37,99,235,.1); }
+.csc-tbl-empty { text-align:center; padding:36px; color:var(--csc-text-muted); font-style:italic; }
+
+/* cells */
+.csc-td-act { width:64px; text-align:center; padding-left:8px !important; padding-right:8px !important; }
+.csc-td-id  { width:48px; text-align:center; font-size:.72rem; font-weight:700; color:var(--csc-text-muted); padding-left:6px !important; padding-right:6px !important; }
+.csc-cname  { font-weight:600; }
+.csc-act-row { display:flex; align-items:center; gap:4px; }
+
+/* icon buttons */
+.csc-btn-edit {
+    width:28px; height:28px; border-radius:7px;
+    border:1px solid var(--csc-border); background:transparent;
+    cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+    color:var(--csc-text-muted); text-decoration:none;
+    transition:border-color .12s, color .12s, background .12s;
+}
+.csc-btn-edit:hover { border-color:var(--csc-accent); color:var(--csc-accent); background:var(--csc-accent-soft); }
+.csc-btn-edit svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; }
+.csc-tbl tbody tr.is-editing .csc-btn-edit { border-color:var(--csc-accent); color:var(--csc-accent); background:var(--csc-accent-soft); }
+
+.csc-btn-del {
+    width:28px; height:28px; border-radius:7px;
+    border:1px solid var(--csc-border); background:transparent;
+    cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+    color:var(--csc-text-muted);
+    transition:border-color .12s, color .12s, background .12s;
+}
+.csc-btn-del:hover { border-color:#ef4444; color:#ef4444; background:rgba(239,68,68,.10); }
+.csc-btn-del svg  { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; }
+
+.csc-btn-deact {
+    width:28px; height:28px; border-radius:7px;
+    border:1px solid var(--csc-border); background:transparent;
+    cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+    color:var(--csc-text-muted);
+    transition:border-color .12s, color .12s, background .12s;
+}
+.csc-btn-deact:hover { border-color:#f59e0b; color:#d97706; background:rgba(245,158,11,.10); }
+.csc-btn-deact svg  { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2; }
+
+/* ── Topbar action button ── */
+.csc-topbar-btn {
+    padding:5px 10px; border-radius:6px; font-size:.73rem; font-weight:600;
+    border:1px solid var(--csc-border); background:transparent; cursor:pointer;
+    color:var(--csc-text-muted); display:flex; align-items:center; gap:4px;
+    transition:border-color .12s, color .12s, background .12s;
+}
+.csc-topbar-btn svg { width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:2.2; }
+.csc-topbar-btn:hover { border-color:var(--csc-accent); color:var(--csc-accent); background:var(--csc-accent-soft); }
+
+/* ── Confirmation modals (CLAUDE.md silme onay standardi) ── */
+.csc-confirm-backdrop {
+    position:fixed; inset:0; background:rgba(15,23,42,.55);
+    backdrop-filter:blur(3px);
+    display:none; align-items:center; justify-content:center; z-index:1100;
+}
+.csc-confirm-backdrop.show { display:flex; }
+.csc-confirm-card {
+    background:#fff; color:#1e293b;
+    border-radius:14px;
+    width:min(440px, 92vw); padding:26px 24px 22px;
+    box-shadow:0 24px 60px rgba(15,23,42,.35);
+    border:1px solid var(--csc-border);
+    text-align:center;
+    animation:cscConfirmIn .18s ease-out;
+}
+@@keyframes cscConfirmIn { from { opacity:0; transform:translateY(18px) scale(.96); } to { opacity:1; transform:translateY(0) scale(1); } }
+.csc-confirm-icon {
+    width:56px; height:56px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    margin-bottom:14px;
+}
+.csc-confirm-icon--danger { background:rgba(239,68,68,.14); color:#ef4444; }
+.csc-confirm-icon--warning { background:rgba(245,158,11,.14); color:#d97706; }
+.csc-confirm-icon svg { width:28px; height:28px; stroke-width:2; }
+.csc-confirm-title { font-size:17px; font-weight:700; margin:0 0 6px; }
+.csc-confirm-msg   { font-size:13px; color:#64748b; margin:0 0 18px; line-height:1.55; }
+.csc-confirm-msg strong { color:#1e293b; }
+.csc-confirm-actions { display:flex; gap:8px; justify-content:center; }
+.csc-confirm-btn {
+    padding:9px 22px; border-radius:8px; font-size:13px; font-weight:600;
+    border:0; cursor:pointer; transition:transform .12s, opacity .12s;
+}
+.csc-confirm-btn:hover:not(:disabled) { transform:translateY(-1px); }
+.csc-confirm-btn:disabled { opacity:.6; cursor:wait; }
+.csc-confirm-cancel { background:rgba(148,163,184,.18); color:#64748b; }
+.csc-confirm-ok--danger  { background:linear-gradient(135deg, #ef4444, #dc2626); color:#fff; }
+.csc-confirm-ok--warning { background:linear-gradient(135deg, #f59e0b, #d97706); color:#fff; }
+
+/* pill */
+.csc-pill {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 8px; border-radius:20px; font-size:.71rem; font-weight:700; white-space:nowrap;
+}
+.csc-pill-dot { width:5px; height:5px; border-radius:50%; background:currentColor; flex-shrink:0; }
+.csc-pill--green { background:var(--csc-pill-green-bg); color:var(--csc-pill-green-tx); }
+.csc-pill--gray  { background:var(--csc-pill-gray-bg);  color:var(--csc-pill-gray-tx);  }
+.csc-pill--blue  { background:var(--csc-pill-blue-bg);  color:var(--csc-pill-blue-tx);  }
+.csc-pill--red   { background:var(--csc-pill-red-bg);   color:var(--csc-pill-red-tx);   }
+.csc-pill--amber { background:var(--csc-pill-ambe-bg);  color:var(--csc-pill-ambe-tx);  }
+
+/* pager */
+.csc-pager { padding:9px 16px; border-top:1px solid var(--csc-border); flex-shrink:0; background:var(--csc-surface); }
+
+/* user row inactive */
+.csc-user-row-inactive td { opacity:.55; }
 </style>
 }
 
 <section class="admin-content integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+<div class="csc-root">
 
-    <header class="integrator-dashboard__header">
+    @* ── Page header ── *@
+    <header class="csc-page-header">
+        <div class="csc-page-icon">
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+        </div>
         <div>
-            <h1>Sirket Tanimlari</h1>
-            <p class="integrator-dashboard__subtitle">
-                Sistemde tanimli sirketleri, SQL veritabani ve ERP baglanti ayarlarini yonetin.
-            </p>
+            <div class="csc-page-title">Şirket Tanımları</div>
+            <div class="csc-page-sub">Şirketleri ve şirket kullanıcılarını yönetin.</div>
         </div>
     </header>
 
-    <div class="cmp-layout">
+    <div class="csc-body">
 
-        <!-- ── Sol tab nav ── -->
-        <nav class="cmp-tab-nav">
-            <button class="cmp-tab-btn is-active" onclick="cmpTab('company', this)">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-                Sirket Tanimlari
-            </button>
-            <button class="cmp-tab-btn" onclick="cmpTab('erp', this)">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="7" height="7"/><rect x="15" y="3" width="7" height="7"/><rect x="2" y="14" width="7" height="7"/><path d="M17.5 17.5v-4h-4v4"/><path d="M9 7h6"/><path d="M5.5 14v-3.5H9"/></svg>
-                ERP Baglanti
-            </button>
-        </nav>
+        @* ── Form panel (left) ── *@
+        <aside class="csc-form-panel">
+            <div class="csc-form-header">
+                <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                <div>
+                    <div class="csc-form-header-label">@(isEditing ? "Şirketi Düzenle" : "Yeni Şirket")</div>
+                    @if (isEditing) { <div class="csc-form-header-sub">@Model.Input.Name</div> }
+                </div>
+            </div>
 
-        <!-- ── Tab içerikleri ── -->
-        <div class="cmp-tab-content">
+            @* ── Tab bar (only when editing) ── *@
+            @if (isEditing)
+            {
+                <div class="csc-tab-bar">
+                    <button type="button" class="csc-tab-btn is-active" data-tab="genel">
+                        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                        Genel
+                    </button>
+                    <button type="button" class="csc-tab-btn" data-tab="users">
+                        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        Kullanıcılar
+                    </button>
+                </div>
+            }
 
-            <!-- TAB 1: Sirket Tanimlari -->
-            <div class="cmp-tab-pane is-active" id="cmp-pane-company">
-                <div class="cmp-company-grid">
+            @* ── Genel tab: company form ── *@
+            <form id="cscCompanyForm"
+                  method="post" asp-action="SaveCompanyClassic" asp-controller="Setup"
+                  autocomplete="off"
+                  data-collaboration-record-type="SETUP_COMPANY"
+                  data-collaboration-record-id="@_colRecordId"
+                  data-collaboration-record-title="@(isEditing ? $"Şirket #{Model.Input.Id}" : "Yeni Şirket")">
+                @Html.AntiForgeryToken()
+                <input asp-for="Input.Id" type="hidden" />
+                <input type="hidden" name="page" value="@listState.Page" />
+                <input type="hidden" name="pageSize" value="@listState.PageSize" />
 
-                    @* Form *@
-                    <section class="integrator-dashboard__group">
-                        <article class="integrator-card integrator-card--form">
-                            <div class="integrator-card__header">
-                                <div class="integrator-card__title-wrap">
-                                    <span class="integrator-card__icon" aria-hidden="true">
-                                        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-                                    </span>
-                                    <div>
-                                        <h2>@(Model.Input.Id.HasValue ? "Sirket Duzenle" : "Yeni Sirket")</h2>
-                                        <p>Sirket adi ve varsa ozel SQL veritabani baglantisinı tanimlayin.</p>
-                                    </div>
-                                </div>
+                <div class="csc-form-body">
+                    <div class="csc-field">
+                        <label asp-for="Input.Name" class="csc-label">Şirket Adı</label>
+                        <input asp-for="Input.Name" class="csc-input" placeholder="örn: Calibra Merkez" />
+                        <span asp-validation-for="Input.Name" class="csc-val"></span>
+                    </div>
+
+                    <div class="csc-field">
+                        <label class="csc-switch-row">
+                            <span class="csc-label">Durum</span>
+                            <label class="csc-switch">
+                                <input asp-for="Input.IsActive" type="checkbox" />
+                                <span class="csc-switch-track"></span>
+                            </label>
+                            <span class="csc-switch-val" id="cscActiveLabel">@(Model.Input.IsActive ? "Aktif" : "Pasif")</span>
+                        </label>
+                    </div>
+
+                    @* SQL section *@
+                    <div class="csc-sql-divider @(!string.IsNullOrWhiteSpace(Model.Input.SqlServer) ? "is-open" : "")"
+                         id="cscSqlToggle">
+                        <div class="csc-sql-divider-line"></div>
+                        <div class="csc-sql-divider-label">
+                            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                            Veritabanı Bağlantısı
+                        </div>
+                        <div class="csc-sql-divider-line"></div>
+                    </div>
+
+                    <div class="csc-sql-section @(string.IsNullOrWhiteSpace(Model.Input.SqlServer) ? "is-hidden" : "")"
+                         id="cscSqlSection">
+                        <div class="csc-sql-grid">
+                            <div class="csc-field">
+                                <label asp-for="Input.SqlServer" class="csc-label">Sunucu</label>
+                                <input asp-for="Input.SqlServer" class="csc-input"
+                                       placeholder="localhost\SQLEXPRESS" autocomplete="off" />
                             </div>
-                            <div class="integrator-collapsible-card__content">
-                                @{
-                                    var _colRecordId = Model.Input.Id.HasValue ? Model.Input.Id.Value.ToString() : $"new-{Guid.NewGuid():N}";
-                                }
-                                <form method="post" asp-action="SaveCompany" asp-controller="Setup"
-                                      class="integrator-form" autocomplete="off"
-                                      data-collaboration-record-type="SETUP_COMPANY"
-                                      data-collaboration-record-id="@_colRecordId"
-                                      data-collaboration-record-title="@(Model.Input.Id.HasValue ? $"Şirket #{Model.Input.Id}" : "Yeni Şirket")">
-                                    @Html.AntiForgeryToken()
-                                    <input asp-for="Input.Id" type="hidden" />
-                                    <input type="hidden" name="page" value="@listState.Page" />
-                                    <input type="hidden" name="pageSize" value="@listState.PageSize" />
-
-                                    <section class="integrator-form-section">
-                                        <div class="integrator-form-grid">
-                                            <div class="integrator-field integrator-field--full">
-                                                <label asp-for="Input.Name" class="form-label">Sirket Adi</label>
-                                                <input asp-for="Input.Name" class="form-control" />
-                                                <span asp-validation-for="Input.Name"></span>
-                                            </div>
-                                        </div>
-                                    </section>
-
-                                    <section class="integrator-form-section">
-                                        <h3>
-                                            SQL Veritabani Baglantisi
-                                            <span style="font-weight:400; font-size:0.82em; color:var(--app-text-muted,#64748b);">
-                                                (bos birakilirsa sistem veritabani kullanilir)
-                                            </span>
-                                        </h3>
-                                        <div class="integrator-form-grid">
-                                            <div class="integrator-field">
-                                                <label asp-for="Input.SqlServer" class="form-label">Sunucu</label>
-                                                <input asp-for="Input.SqlServer" class="form-control"
-                                                       placeholder="örn: localhost\SQLEXPRESS" autocomplete="off" />
-                                            </div>
-                                            <div class="integrator-field">
-                                                <label asp-for="Input.SqlDatabase" class="form-label">Veri Tabani</label>
-                                                <input asp-for="Input.SqlDatabase" class="form-control"
-                                                       placeholder="örn: CalibraDB" autocomplete="off" />
-                                            </div>
-                                            <div class="integrator-field">
-                                                <label asp-for="Input.SqlUsername" class="form-label">Kullanici Adi</label>
-                                                <input asp-for="Input.SqlUsername" class="form-control" autocomplete="off" />
-                                            </div>
-                                            <div class="integrator-field">
-                                                <label asp-for="Input.SqlPassword" class="form-label">Sifre</label>
-                                                <input asp-for="Input.SqlPassword" class="form-control"
-                                                       type="password" autocomplete="new-password" />
-                                            </div>
-                                        </div>
-                                        <div class="mt-2 d-flex align-items-center gap-2">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm"
-                                                    id="btnTestDbConn">Baglanti Test Et</button>
-                                            <span id="dbTestResult" hidden style="font-size:0.82rem"></span>
-                                        </div>
-                                    </section>
-
-                                    <div class="integrator-form-actions">
-                                        <button type="submit" class="btn btn-primary integrator-btn-primary">Kaydet</button>
-                                        @if (Model.Input.Id.HasValue)
-                                        {
-                                            <a asp-controller="Setup" asp-action="Companies"
-                                               class="btn btn-secondary integrator-btn-secondary">Yeni</a>
-                                        }
-                                    </div>
-                                </form>
+                            <div class="csc-field">
+                                <label asp-for="Input.SqlDatabase" class="csc-label">Veritabanı</label>
+                                <input asp-for="Input.SqlDatabase" class="csc-input"
+                                       placeholder="CalibraDB" autocomplete="off" />
                             </div>
-                        </article>
-                    </section>
+                            <div class="csc-field">
+                                <label asp-for="Input.SqlUsername" class="csc-label">Kullanıcı Adı</label>
+                                <input asp-for="Input.SqlUsername" class="csc-input" autocomplete="off" />
+                            </div>
+                            <div class="csc-field">
+                                <label asp-for="Input.SqlPassword" class="csc-label">Şifre</label>
+                                <input asp-for="Input.SqlPassword" class="csc-input"
+                                       type="password" autocomplete="new-password" />
+                            </div>
+                        </div>
+                        <div class="csc-test-row">
+                            <button type="button" class="csc-btn-test" id="cscBtnTest">Bağlantı Test Et</button>
+                            <span id="cscTestResult" hidden></span>
+                        </div>
+                        <p style="font-size:.7rem;color:var(--csc-text-xs);margin:0;">
+                            Boş bırakılırsa sistem veritabanı kullanılır.
+                        </p>
+                    </div>
+                </div>
 
-                    @* Tablo *@
-                    <section class="integrator-dashboard__group">
-                        <article class="integrator-card integrator-card--table">
-                            <div class="integrator-collapsible-card__content">
-                                <div class="integrator-table-wrap">
-                                    <table class="table integrator-table integrator-table--compact">
-                                        <thead>
-                                        <tr>
-                                            <th class="calibra-grid-actions-first">Islem</th>
-                                            <th>Sirket Adi</th>
-                                            <th>SQL Baglantisi</th>
-                                            <th>Durum</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody>
-                                        @if (Model.Companies.Count == 0)
+                <div class="csc-form-footer">
+                    <button type="submit" class="csc-btn-save">Kaydet</button>
+                    @if (isEditing)
+                    {
+                        <a asp-controller="Setup" asp-action="Companies" class="csc-btn-new">Yeni</a>
+                    }
+                </div>
+            </form>
+
+            @* ── Kullanıcılar tab pane ── *@
+            @if (isEditing)
+            {
+                <div id="cscTabUsers" class="csc-users-pane" hidden>
+                    <div class="csc-users-form-body">
+                        @* Editing badge (shown when editing a user) *@
+                        @* ── Mevcut kullanıcıdan seç ── *@
+                        <div class="csc-link-section">
+                            <div class="csc-link-label">Mevcut kullanıcıdan seç</div>
+                            <div class="csc-link-search-wrap">
+                                <input type="text" id="cscUserLinkSearch" class="csc-link-input"
+                                       placeholder="Ad veya e-posta ile ara…" autocomplete="off" />
+                                <div id="cscUserLinkDropdown" class="csc-link-dropdown" style="display:none;"></div>
+                            </div>
+                        </div>
+
+                        <div class="csc-or-divider">
+                            <div class="csc-or-line"></div>
+                            <span class="csc-or-text">ya da yeni kullanıcı</span>
+                            <div class="csc-or-line"></div>
+                        </div>
+
+                        <div id="cscUserEditingBadge" hidden class="csc-user-form-editing-badge">
+                            <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Kullanıcı düzenleniyor
+                        </div>
+
+                        <input type="hidden" id="cscUserId" value="" />
+                        <input type="hidden" id="cscUserLinked" value="" />@* dolu ise mevcut kullanıcıdan seçildi *@
+
+                        <div class="csc-field-row">
+                            <div class="csc-field">
+                                <label class="csc-label" for="cscUserFirstName">Ad</label>
+                                <input type="text" id="cscUserFirstName" class="csc-input" placeholder="Ad" autocomplete="off" />
+                            </div>
+                            <div class="csc-field">
+                                <label class="csc-label" for="cscUserLastName">Soyad</label>
+                                <input type="text" id="cscUserLastName" class="csc-input" placeholder="Soyad" autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div class="csc-field">
+                            <label class="csc-label" for="cscUserEmail">E-posta</label>
+                            <input type="email" id="cscUserEmail" class="csc-input" placeholder="ornek@sirket.com" autocomplete="off" />
+                        </div>
+
+                        <div class="csc-field">
+                            <label class="csc-label" for="cscUserPassword">Şifre</label>
+                            <input type="password" id="cscUserPassword" class="csc-input"
+                                   placeholder="Yeni kullanıcı için zorunlu" autocomplete="new-password" />
+                            <span class="csc-user-form-hint" id="cscUserPasswordHint" hidden>
+                                Boş bırakılırsa mevcut şifre korunur.
+                            </span>
+                        </div>
+
+                        <div class="csc-field">
+                            <label class="csc-label" for="cscUserRole">Yetki Seviyesi</label>
+                            <select id="cscUserRole" class="csc-select">
+                                <option value="SistemAdmin">Sistem Yöneticisi</option>
+                                <option value="Admin">Admin</option>
+                                <option value="User" selected>Kullanıcı</option>
+                            </select>
+                        </div>
+
+                        <div id="cscUserFormErr" class="csc-form-err" hidden></div>
+                    </div>
+
+                    <div class="csc-users-footer">
+                        <button type="button" class="csc-btn-save" id="cscBtnSaveUser">Kaydet</button>
+                        <button type="button" class="csc-btn-clear" id="cscBtnClearUser">Temizle</button>
+                    </div>
+                </div>
+            }
+        </aside>
+
+        @* ── Table panel (right) ── *@
+        <main class="csc-table-panel">
+
+            @* Company list panel *@
+            <div id="cscPanelCompanies" class="csc-panel">
+                <div class="csc-table-topbar">
+                    <span class="csc-table-topbar-title">Şirket Listesi</span>
+                    <span class="csc-count">@Model.Companies.Count</span>
+                </div>
+
+                <div class="csc-table-scroll">
+                    <table class="csc-tbl">
+                        <thead>
+                            <tr>
+                                <th class="csc-td-act"></th>
+                                <th class="csc-td-id">ID</th>
+                                <th>Şirket Adı</th>
+                                <th>SQL Bağlantısı</th>
+                                <th>Durum</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @if (Model.Companies.Count == 0)
+                        {
+                            <tr><td colspan="5" class="csc-tbl-empty">Henüz şirket tanımlanmamış.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var company in Model.Companies)
+                            {
+                                <tr class="@(isEditing && Model.Input.Id == company.Id ? "is-editing" : "")">
+                                    <td class="csc-td-act">
+                                        <div class="csc-act-row">
+                                            <a class="csc-btn-edit"
+                                               title="Düzenle"
+                                               asp-controller="Setup" asp-action="Companies"
+                                               asp-route-id="@company.Id"
+                                               asp-route-page="@listState.Page"
+                                               asp-route-pageSize="@listState.PageSize">
+                                                <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                            </a>
+                                            <button type="button" class="csc-btn-del"
+                                                    title="Sil"
+                                                    data-company-id="@company.Id"
+                                                    data-company-name="@company.Name">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                                                    <path d="M10 11v6"></path><path d="M14 11v6"></path>
+                                                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td class="csc-td-id">@company.Id</td>
+                                    <td><div class="csc-cname">@company.Name</div></td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(company.DatabaseConnectionString))
                                         {
-                                            <tr>
-                                                <td colspan="4" class="integrator-table__empty">
-                                                    Kayitli sirket bulunmuyor.
-                                                </td>
-                                            </tr>
+                                            <span class="csc-pill csc-pill--blue"><span class="csc-pill-dot"></span>Özel DB</span>
                                         }
                                         else
                                         {
-                                            @foreach (var company in Model.Companies)
-                                            {
-                                                <tr>
-                                                    <td class="calibra-grid-actions-first">
-                                                        <div class="material-row-actions">
-                                                            <a class="btn btn-secondary integrator-btn-secondary"
-                                                               asp-controller="Setup" asp-action="Companies"
-                                                               asp-route-id="@company.Id"
-                                                               asp-route-page="@listState.Page"
-                                                               asp-route-pageSize="@listState.PageSize">Duzenle</a>
-                                                        </div>
-                                                    </td>
-                                                    <td>@company.Name</td>
-                                                    <td>
-                                                        @if (!string.IsNullOrWhiteSpace(company.DatabaseConnectionString))
-                                                        {
-                                                            <span class="integrator-status-pill is-active">
-                                                                <span class="integrator-status-pill__dot" aria-hidden="true"></span>
-                                                                <span>Ozel DB</span>
-                                                            </span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <span class="integrator-status-pill is-inactive">
-                                                                <span class="integrator-status-pill__dot" aria-hidden="true"></span>
-                                                                <span>Sistem DB</span>
-                                                            </span>
-                                                        }
-                                                    </td>
-                                                    <td>
-                                                        <span class="integrator-status-pill @(company.IsActive ? "is-active" : "is-inactive")">
-                                                            <span class="integrator-status-pill__dot" aria-hidden="true"></span>
-                                                            <span>@(company.IsActive ? "Aktif" : "Pasif")</span>
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            }
+                                            <span class="csc-pill csc-pill--gray"><span class="csc-pill-dot"></span>Sistem DB</span>
                                         }
-                                        </tbody>
-                                    </table>
-                                </div>
-                                @await Html.PartialAsync("_GridPager", new CalibraHub.Web.Models.Shared.GridPagerViewModel
-                                {
-                                    State = listState,
-                                    ActionName = "Companies",
-                                    ControllerName = "Setup"
-                                })
-                            </div>
-                        </article>
-                    </section>
+                                    </td>
+                                    <td>
+                                        @if (company.IsActive)
+                                        {
+                                            <span class="csc-pill csc-pill--green"><span class="csc-pill-dot"></span>Aktif</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="csc-pill csc-pill--red"><span class="csc-pill-dot"></span>Pasif</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        </tbody>
+                    </table>
+                </div>
 
+                <div class="csc-pager">
+                    @await Html.PartialAsync("_GridPager", new CalibraHub.Web.Models.Shared.GridPagerViewModel
+                    {
+                        State = listState,
+                        ActionName = "Companies",
+                        ControllerName = "Setup"
+                    })
                 </div>
             </div>
 
-            <!-- TAB 2: ERP Baglanti Ayarlari -->
-            <div class="cmp-tab-pane" id="cmp-pane-erp">
-                <div class="erp-tab-wrap">
-
-                    <!-- Mini toolbar -->
-                    <div class="erp-mini-toolbar">
-                        <button type="button" class="btn btn-primary btn-sm" onclick="erpSave()">Kaydet</button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" id="erpBtnDelete" disabled onclick="erpDelete()">Sil</button>
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="erpNew()">Yeni</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="erpTest()">SQL Baglanti Testi</button>
-                        <span id="erpInlineTestMsg" style="margin-left:4px;"></span>
+            @* User list panel (only rendered when editing a company) *@
+            @if (isEditing)
+            {
+                <div id="cscPanelUsers" class="csc-panel" hidden>
+                    <div class="csc-table-topbar">
+                        <span class="csc-table-topbar-title">
+                            Kullanıcılar — <span style="color:var(--csc-accent);font-weight:700;">@Model.Input.Name</span>
+                        </span>
+                        <button type="button" class="csc-topbar-btn" id="cscBtnNewUser" title="Formu temizle">
+                            <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                            Yeni Kullanıcı
+                        </button>
                     </div>
 
-                    <!-- Form + Grid -->
-                    <div class="erp-layout">
-                        <div class="erp-form-panel">
-                            <input type="hidden" id="erpId" value="" />
-                            <div class="cs-line">
-                                <label>Sirket *</label>
-                                <select id="erpCompanyId" class="form-select form-select-sm"></select>
-                            </div>
-                            <div class="cs-line"><label>Saglayici</label><input id="erpProvider" class="form-control form-control-sm" value="Netsis" readonly /></div>
-                            <div class="cs-line"><label>Sirket *</label><input id="erpCompany" class="form-control form-control-sm" maxlength="50" /></div>
-                            <div class="cs-line"><label>Isletme *</label><input id="erpBusiness" class="form-control form-control-sm" maxlength="100" /></div>
-                            <div class="cs-line"><label>Sube *</label><input id="erpBranch" class="form-control form-control-sm" maxlength="100" /></div>
-                            <div class="cs-line"><label>Kullanici *</label><input id="erpUsername" class="form-control form-control-sm" maxlength="160" /></div>
-                            <div class="cs-line"><label>Sifre *</label><input id="erpPassword" type="password" class="form-control form-control-sm" maxlength="300" /></div>
-                            <div class="cs-line"><label>Durum</label><div class="form-check form-switch" style="margin:0;"><input id="erpIsActive" class="form-check-input" type="checkbox" role="switch" checked /></div></div>
-                            <div id="erpMsg"></div>
-                        </div>
-                        <div class="erp-grid-panel">
-                            <div class="erp-toolbar">
-                                <input type="text" id="erpSearch" class="form-control form-control-sm"
-                                       placeholder="Sirket veya isletmeye gore ara..."
-                                       oninput="erpLoad()" style="max-width:260px;" />
-                            </div>
-                            <div class="erp-table-wrap">
-                                <table class="erp-grid">
-                                    <thead><tr>
-                                        <th style="width:60px;"></th>
-                                        <th>Tanimli Sirket</th><th>Saglayici</th><th>Sirket</th>
-                                        <th>Isletme</th><th>Sube</th><th>Kullanici</th><th>Sifre</th><th>Durum</th>
-                                    </tr></thead>
-                                    <tbody id="erpBody"></tbody>
-                                </table>
-                            </div>
-                        </div>
+                    <div class="csc-table-scroll">
+                        <table class="csc-tbl">
+                            <thead>
+                                <tr>
+                                    <th class="csc-td-act"></th>
+                                    <th>Ad Soyad</th>
+                                    <th>E-posta</th>
+                                    <th>Yetki</th>
+                                    <th>Durum</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cscUserTableBody">
+                                <tr><td colspan="5" class="csc-tbl-empty">Yükleniyor…</td></tr>
+                            </tbody>
+                        </table>
                     </div>
-
                 </div>
+            }
+
+        </main>
+    </div>
+</div>
+
+@* ── Şirket silme onay modal ── *@
+<div class="csc-confirm-backdrop" id="cscConfirmBackdrop" role="dialog" aria-modal="true">
+    <div class="csc-confirm-card">
+        <div class="csc-confirm-icon csc-confirm-icon--danger" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                <path d="M10 11v6"></path><path d="M14 11v6"></path>
+                <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+            </svg>
+        </div>
+        <h3 class="csc-confirm-title">Şirketi Sil</h3>
+        <p class="csc-confirm-msg" id="cscConfirmMsg"><strong>—</strong> şirketini silmek istediğinize emin misiniz?<br/>Bu işlem geri alınamaz.</p>
+        <p id="cscConfirmErr" hidden style="margin:8px 0 0;font-size:.8rem;color:#dc2626;background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.25);border-radius:6px;padding:7px 10px;"></p>
+        <div class="csc-confirm-actions">
+            <button type="button" class="csc-confirm-btn csc-confirm-cancel" id="cscConfirmCancel">Vazgeç</button>
+            <button type="button" class="csc-confirm-btn csc-confirm-ok--danger" id="cscConfirmOk">Sil</button>
+        </div>
+    </div>
+</div>
+
+@* ── Kullanıcı pasife alma onay modal ── *@
+@if (isEditing)
+{
+    <div class="csc-confirm-backdrop" id="cscUserConfirmBackdrop" role="dialog" aria-modal="true">
+        <div class="csc-confirm-card">
+            <div class="csc-confirm-icon csc-confirm-icon--warning" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
+                </svg>
             </div>
-
-        </div><!-- /.cmp-tab-content -->
-    </div><!-- /.cmp-layout -->
-
+            <h3 class="csc-confirm-title">Kullanıcıyı Pasife Al</h3>
+            <p class="csc-confirm-msg" id="cscUserConfirmMsg"><strong>—</strong> kullanıcısını pasife almak istediğinize emin misiniz?</p>
+            <p id="cscUserConfirmErr" hidden style="margin:8px 0 0;font-size:.8rem;color:#dc2626;background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.25);border-radius:6px;padding:7px 10px;"></p>
+            <div class="csc-confirm-actions">
+                <button type="button" class="csc-confirm-btn csc-confirm-cancel" id="cscUserConfirmCancel">Vazgeç</button>
+                <button type="button" class="csc-confirm-btn csc-confirm-ok--warning" id="cscUserConfirmOk">Pasife Al</button>
+            </div>
+        </div>
+    </div>
+}
 </section>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script>
-    // ── Tab geçişi ──
-    function cmpTab(name, btn) {
-        document.querySelectorAll('.cmp-tab-btn').forEach(function(b) { b.classList.remove('is-active'); });
-        document.querySelectorAll('.cmp-tab-pane').forEach(function(p) { p.classList.remove('is-active'); });
-        btn.classList.add('is-active');
-        document.getElementById('cmp-pane-' + name).classList.add('is-active');
-        if (name === 'erp' && !window._erpLoaded) { window._erpLoaded = true; erpInit(); }
-    }
-
-    // ── SQL bağlantı test (Sirket tab) ──
     (function () {
-        var btn = document.getElementById('btnTestDbConn');
-        var result = document.getElementById('dbTestResult');
-        if (!btn) return;
-        btn.addEventListener('click', async function () {
-            var server   = document.getElementById('@Html.IdFor(m => m.Input.SqlServer)').value.trim();
-            var database = document.getElementById('@Html.IdFor(m => m.Input.SqlDatabase)').value.trim();
-            var username = document.getElementById('@Html.IdFor(m => m.Input.SqlUsername)').value.trim();
-            var password = document.getElementById('@Html.IdFor(m => m.Input.SqlPassword)').value;
-            if (!server) {
-                result.hidden = false; result.style.color = '#dc2626';
-                result.textContent = 'Sunucu adi zorunludur.'; return;
-            }
-            var connStr = 'Server=' + server + ';Database=' + database
-                + ';User Id=' + username + ';Password=' + password
-                + ';TrustServerCertificate=True;';
-            btn.disabled = true;
-            result.hidden = false; result.style.color = '#64748b';
-            result.textContent = 'Test ediliyor...';
-            try {
-                var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
-                var resp = await fetch('@Url.Action("TestCompanyConnection", "Setup")', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
-                    body: JSON.stringify({ connectionString: connStr })
-                });
-                var data = await resp.json();
-                result.style.color = data.success ? '#166534' : '#dc2626';
-                result.textContent = data.message;
-            } catch {
-                result.style.color = '#dc2626';
-                result.textContent = 'Test sirasinda bir hata olustu.';
-            } finally { btn.disabled = false; }
-        });
-    })();
+        var COMPANY_ID = @editingCompanyId;
 
-    // ── ERP bağlantı ayarları ──
-    (function() {
-        var API = function(a) { return '/Admin/' + a; };
-        var selId = null;
-
-        window.erpInit = function() {
-            loadCompanies(erpLoad);
-        };
-
-        function loadCompanies(cb) {
-            fetch(API('GetCompaniesJson'))
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    var sel = document.getElementById('erpCompanyId');
-                    sel.innerHTML = '<option value="">Sirket seciniz</option>' +
-                        data.map(function(c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
-                    if (cb) cb();
-                });
+        /* ── helpers ── */
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+                return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+            });
+        }
+        function getToken() {
+            var el = document.querySelector('input[name="__RequestVerificationToken"]');
+            return el ? el.value : '';
         }
 
-        window.erpLoad = function() {
-            var s = (document.getElementById('erpSearch') || {value:''}).value;
-            fetch(API('GetErpSettingsJson') + '?search=' + encodeURIComponent(s))
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    var body = document.getElementById('erpBody');
-                    if (data.length === 0) {
-                        body.innerHTML = '<tr><td colspan="9" class="erp-empty">Kayit bulunamadi.</td></tr>';
-                        return;
+        /* ── IsActive switch label ── */
+        var activeCheck = document.getElementById('@Html.IdFor(m => m.Input.IsActive)');
+        var activeLabel = document.getElementById('cscActiveLabel');
+        if (activeCheck && activeLabel) {
+            activeCheck.addEventListener('change', function () {
+                activeLabel.textContent = this.checked ? 'Aktif' : 'Pasif';
+            });
+        }
+
+        /* ── SQL section toggle ── */
+        var sqlToggle  = document.getElementById('cscSqlToggle');
+        var sqlSection = document.getElementById('cscSqlSection');
+        if (sqlToggle && sqlSection) {
+            sqlToggle.addEventListener('click', function () {
+                var open = sqlToggle.classList.toggle('is-open');
+                sqlSection.classList.toggle('is-hidden', !open);
+            });
+        }
+
+        /* ── Bağlantı testi ── */
+        var testBtn    = document.getElementById('cscBtnTest');
+        var testResult = document.getElementById('cscTestResult');
+        if (testBtn) {
+            testBtn.addEventListener('click', async function () {
+                var server   = document.getElementById('@Html.IdFor(m => m.Input.SqlServer)').value.trim();
+                var database = document.getElementById('@Html.IdFor(m => m.Input.SqlDatabase)').value.trim();
+                var username = document.getElementById('@Html.IdFor(m => m.Input.SqlUsername)').value.trim();
+                var password = document.getElementById('@Html.IdFor(m => m.Input.SqlPassword)').value;
+                if (!server) {
+                    testResult.hidden = false; testResult.style.color = '#dc2626';
+                    testResult.textContent = 'Sunucu adı zorunludur.'; return;
+                }
+                testBtn.disabled = true; testResult.hidden = false;
+                testResult.style.color = 'var(--csc-text-muted,#64748b)';
+                testResult.textContent = 'Test ediliyor…';
+                try {
+                    var resp = await fetch('@Url.Action("TestCompanyConnection", "Setup")', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getToken() },
+                        body: JSON.stringify({ sqlServer: server, sqlDatabase: database, sqlUsername: username, sqlPassword: password })
+                    });
+                    var data = await resp.json();
+                    testResult.style.color = data.success ? '#16a34a' : '#dc2626';
+                    testResult.textContent  = data.message;
+                } catch {
+                    testResult.style.color = '#dc2626'; testResult.textContent = 'Test sırasında bir hata oluştu.';
+                } finally { testBtn.disabled = false; }
+            });
+        }
+
+        /* ════════════════════════════════════════════════════════
+           TAB SWITCHING
+        ════════════════════════════════════════════════════════ */
+        var tabBtns         = document.querySelectorAll('.csc-tab-btn');
+        var companyForm     = document.getElementById('cscCompanyForm');
+        var tabUsers        = document.getElementById('cscTabUsers');
+        var panelCompanies  = document.getElementById('cscPanelCompanies');
+        var panelUsers      = document.getElementById('cscPanelUsers');
+        var usersLoaded     = false;
+
+        if (tabBtns.length) {
+            tabBtns.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var tab = this.dataset.tab;
+                    tabBtns.forEach(function(b) { b.classList.remove('is-active'); });
+                    this.classList.add('is-active');
+
+                    if (tab === 'genel') {
+                        if (companyForm)    companyForm.hidden = false;
+                        if (tabUsers)       tabUsers.hidden    = true;
+                        if (panelCompanies) panelCompanies.hidden = false;
+                        if (panelUsers)     panelUsers.hidden  = true;
+                    } else {
+                        if (companyForm)    companyForm.hidden = true;
+                        if (tabUsers)       tabUsers.hidden    = false;
+                        if (panelCompanies) panelCompanies.hidden = true;
+                        if (panelUsers)     panelUsers.hidden  = false;
+                        if (!usersLoaded) { loadCompanyUsers(); loadAllSystemUsers(); usersLoaded = true; }
                     }
-                    body.innerHTML = data.map(function(d) {
-                        return '<tr class="' + (d.id === selId ? 'is-sel' : '') + '" onclick="erpSelect(\'' + d.id + '\')">' +
-                            '<td onclick="event.stopPropagation()">' +
-                                '<button type="button" class="act-btn primary" title="Duzelt" onclick="erpSelect(\'' + d.id + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>' +
-                                ' <button type="button" class="act-btn danger" title="Sil" onclick="event.stopPropagation();erpDeleteById(\'' + d.id + '\')"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>' +
-                            '</td>' +
-                            '<td>' + esc(d.companyName) + '</td>' +
-                            '<td>' + esc(d.provider) + '</td>' +
-                            '<td style="font-weight:600;">' + esc(d.company) + '</td>' +
-                            '<td>' + esc(d.business) + '</td>' +
-                            '<td>' + esc(d.branch) + '</td>' +
-                            '<td>' + esc(d.username) + '</td>' +
-                            '<td style="color:#94a3b8;">' + esc(d.passwordMasked) + '</td>' +
-                            '<td style="font-size:0.72rem;color:' + (d.isActive ? '#15803d' : '#dc2626') + ';">' + (d.isActive ? 'Aktif' : 'Pasif') + '</td>' +
-                            '</tr>';
-                    }).join('');
                 });
-        };
-
-        window.erpSelect = function(id) {
-            selId = id;
-            fetch(API('GetErpSettingJson') + '?id=' + id)
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    if (!d.id) return;
-                    document.getElementById('erpId').value = d.id;
-                    setSelectValue('erpCompanyId', d.companyId);
-                    document.getElementById('erpCompany').value = d.company || '';
-                    document.getElementById('erpBusiness').value = d.business || '';
-                    document.getElementById('erpBranch').value = d.branch || '';
-                    document.getElementById('erpUsername').value = d.username || '';
-                    document.getElementById('erpPassword').value = d.password || '';
-                    document.getElementById('erpIsActive').checked = d.isActive;
-                    document.getElementById('erpBtnDelete').disabled = false;
-                    erpLoad();
-                });
-        };
-
-        window.erpNew = function() {
-            selId = null;
-            document.getElementById('erpId').value = '';
-            document.getElementById('erpCompany').value = '';
-            document.getElementById('erpBusiness').value = '';
-            document.getElementById('erpBranch').value = '';
-            document.getElementById('erpUsername').value = '';
-            document.getElementById('erpPassword').value = '';
-            document.getElementById('erpIsActive').checked = true;
-            document.getElementById('erpBtnDelete').disabled = true;
-            erpMsg(''); erpTestMsg('');
-            erpLoad();
-        };
-
-        window.erpSave = function() {
-            fetch(API('SaveErpSettingsJson'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(buildPayload())
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success) { erpMsg(d.message || 'Kaydedildi.', true); erpNew(); }
-                else erpMsg(d.message || 'Hata', false);
             });
-        };
-
-        // Rapor §6.6 — native confirm → CalibraAlert.confirm
-        async function _erpConfirmDelete() {
-            return window.CalibraAlert && CalibraAlert.confirm
-                ? await CalibraAlert.confirm('Bu ERP baglantisini silmek istediginize emin misiniz?',
-                    { title: 'ERP Baglanti Sil', okText: 'Evet, Sil', cancelText: 'Vazgec', danger: true })
-                : confirm('Bu ERP baglantisini silmek istediginize emin misiniz?');
         }
 
-        window.erpDelete = async function() {
-            var id = document.getElementById('erpId').value;
-            if (!id) return;
-            if (!await _erpConfirmDelete()) return;
-            erpDeleteById(id);
-        };
-
-        window.erpDeleteById = async function(id) {
-            if (!await _erpConfirmDelete()) return;
-            fetch(API('DeleteErpSettingsJson') + '?id=' + id, { method: 'POST' })
-                .then(function(r) { return r.json(); })
-                .then(function(d) {
-                    if (d.success) { erpMsg('Silindi.', true); erpNew(); }
-                    else erpMsg(d.message || 'Silinemedi', false);
-                });
-        };
-
-        window.erpTest = function() {
-            erpTestMsg('Test ediliyor...', null);
-            fetch(API('TestErpConnectionJson'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(buildPayload())
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                erpTestMsg(d.message || (d.success ? 'Baglanti basarili.' : 'Baglanti basarisiz.'), d.success);
-            });
-        };
-
-        function buildPayload() {
-            return {
-                id: document.getElementById('erpId').value || null,
-                companyId: document.getElementById('erpCompanyId').value || null,
-                provider: 'Netsis',
-                company: document.getElementById('erpCompany').value,
-                business: document.getElementById('erpBusiness').value,
-                branch: document.getElementById('erpBranch').value,
-                username: document.getElementById('erpUsername').value,
-                password: document.getElementById('erpPassword').value,
-                isActive: document.getElementById('erpIsActive').checked
-            };
-        }
-
-        function setSelectValue(id, val) {
-            var sel = document.getElementById(id);
-            if (!sel) return;
-            for (var i = 0; i < sel.options.length; i++) {
-                if (sel.options[i].value === String(val)) { sel.selectedIndex = i; return; }
+        /* ════════════════════════════════════════════════════════
+           USER LIST — AJAX LOAD
+        ════════════════════════════════════════════════════════ */
+        async function loadCompanyUsers() {
+            var tbody = document.getElementById('cscUserTableBody');
+            if (!tbody || !COMPANY_ID) return;
+            tbody.innerHTML = '<tr><td colspan="5" class="csc-tbl-empty">Yükleniyor…</td></tr>';
+            try {
+                var resp  = await fetch('/Setup/GetCompanyUsersJson?companyId=' + COMPANY_ID, { credentials: 'same-origin' });
+                var users = await resp.json();
+                renderUserRows(users);
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="5" class="csc-tbl-empty" style="color:#dc2626">Kullanıcılar yüklenemedi.</td></tr>';
             }
         }
 
-        function erpMsg(msg, ok) {
-            var el = document.getElementById('erpMsg');
-            if (!msg) { el.innerHTML = ''; return; }
-            el.innerHTML = '<div class="erp-msg ' + (ok ? 'ok' : 'err') + '">' + msg + '</div>';
-            if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+        function renderUserRows(users) {
+            var tbody = document.getElementById('cscUserTableBody');
+            if (!tbody) return;
+            if (!users || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="csc-tbl-empty">Bu şirkette henüz kullanıcı yok.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = users.map(function(u) {
+                var roleLabel = u.role === 'SistemAdmin' ? 'Sistem Yön.' : u.role === 'Admin' ? 'Admin' : 'Kullanıcı';
+                var rolePill  = u.role === 'User' ? 'csc-pill--gray' : u.role === 'Admin' ? 'csc-pill--amber' : 'csc-pill--blue';
+                var stPill    = u.isActive ? 'csc-pill--green' : 'csc-pill--red';
+                var stLabel   = u.isActive ? 'Aktif' : 'Pasif';
+
+                var spIdx  = u.fullName.indexOf(' ');
+                var fn     = spIdx > 0 ? u.fullName.substring(0, spIdx) : u.fullName;
+                var ln     = spIdx > 0 ? u.fullName.substring(spIdx + 1) : '';
+
+                var editBtn = '<button type="button" class="csc-btn-edit csc-user-edit-btn" title="Düzenle"' +
+                    ' data-uid="' + u.id + '" data-fn="' + esc(fn) + '" data-ln="' + esc(ln) + '"' +
+                    ' data-email="' + esc(u.email) + '" data-role="' + esc(u.role) + '">' +
+                    '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>' +
+                    '<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
+
+                var deactBtn = u.isActive ?
+                    '<button type="button" class="csc-btn-deact csc-user-deact-btn" title="Pasife Al"' +
+                    ' data-uid="' + u.id + '" data-uname="' + esc(u.fullName) + '">' +
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>' +
+                    '</svg></button>' : '';
+
+                return '<tr class="' + (u.isActive ? '' : 'csc-user-row-inactive') + '">' +
+                    '<td class="csc-td-act"><div class="csc-act-row">' + editBtn + deactBtn + '</div></td>' +
+                    '<td><div style="font-weight:600">' + esc(u.fullName) + '</div></td>' +
+                    '<td style="font-size:.78rem;color:var(--csc-text-muted);">' + esc(u.email) + '</td>' +
+                    '<td><span class="csc-pill ' + rolePill + '"><span class="csc-pill-dot"></span>' + roleLabel + '</span></td>' +
+                    '<td><span class="csc-pill ' + stPill + '"><span class="csc-pill-dot"></span>' + stLabel + '</span></td>' +
+                    '</tr>';
+            }).join('');
+
+            // bind edit buttons
+            document.querySelectorAll('.csc-user-edit-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    fillUserForm(this.dataset.uid, this.dataset.fn, this.dataset.ln,
+                                 this.dataset.email, this.dataset.role);
+                });
+            });
+            // bind deactivate buttons
+            document.querySelectorAll('.csc-user-deact-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    openUserDeactConfirm(this.dataset.uid, this.dataset.uname);
+                });
+            });
         }
 
-        function erpTestMsg(msg, ok) {
-            var el = document.getElementById('erpInlineTestMsg');
-            if (!msg) { el.innerHTML = ''; return; }
-            var cls = ok === null
-                ? 'background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;'
-                : ok ? 'background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;'
-                     : 'background:#fef2f2;color:#dc2626;border:1px solid #fecaca;';
-            el.innerHTML = '<span style="display:inline-block;padding:3px 10px;border-radius:5px;font-size:0.72rem;' + cls + '">' + esc(msg) + '</span>';
+        /* ════════════════════════════════════════════════════════
+           USER LINK — EXISTING USER SEARCH
+        ════════════════════════════════════════════════════════ */
+        var allSystemUsers  = [];
+        var linkSearch      = document.getElementById('cscUserLinkSearch');
+        var linkDropdown    = document.getElementById('cscUserLinkDropdown');
+        var linkedInput     = document.getElementById('cscUserLinked');
+
+        async function loadAllSystemUsers() {
+            try {
+                var resp = await fetch('/Setup/GetUsersJson', { credentials: 'same-origin' });
+                allSystemUsers = await resp.json() || [];
+            } catch { allSystemUsers = []; }
         }
 
-        function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        function renderLinkDropdown(q) {
+            if (!linkDropdown) return;
+            var lq = (q || '').toLowerCase().trim();
+            if (!lq) { linkDropdown.style.display = 'none'; return; }
+
+            // Bu şirkette zaten kayıtlı e-postalar
+            var existingEmails = new Set();
+            document.querySelectorAll('.csc-user-edit-btn').forEach(function(b) {
+                if (b.dataset.email) existingEmails.add(b.dataset.email.toLowerCase());
+            });
+
+            var filtered = allSystemUsers.filter(function(u) {
+                var name  = (u.fullName  || '').toLowerCase();
+                var email = (u.email     || '').toLowerCase();
+                if (!name.includes(lq) && !email.includes(lq)) return false;
+                // Zaten bu şirkette varsa gösterme
+                if (existingEmails.has(email)) return false;
+                return true;
+            }).slice(0, 10);
+
+            if (filtered.length === 0) {
+                linkDropdown.innerHTML = '<div class="csc-link-empty">Eşleşen kullanıcı bulunamadı.</div>';
+            } else {
+                linkDropdown.innerHTML = filtered.map(function(u) {
+                    var companies = (u.companies || []).map(function(c) { return c.name; }).join(', ');
+                    return '<div class="csc-link-item"' +
+                        ' data-fn="'    + esc((u.fullName  || '').split(' ')[0]) + '"' +
+                        ' data-ln="'    + esc((u.fullName  || '').split(' ').slice(1).join(' ')) + '"' +
+                        ' data-email="' + esc(u.email  || '') + '"' +
+                        ' data-role="'  + esc(u.uiRole || 'User') + '">' +
+                        '<span class="csc-link-item-name">' + esc(u.fullName || '') + '</span>' +
+                        '<span class="csc-link-item-meta">' + esc(u.email || '') +
+                        (companies ? ' · ' + esc(companies) : '') + '</span>' +
+                        '</div>';
+                }).join('');
+            }
+            linkDropdown.style.display = 'block';
+
+            linkDropdown.querySelectorAll('.csc-link-item').forEach(function(item) {
+                item.addEventListener('mousedown', function(e) {
+                    e.preventDefault(); // blur önle
+                    var fn    = item.dataset.fn;
+                    var ln    = item.dataset.ln;
+                    var email = item.dataset.email;
+                    var role  = item.dataset.role;
+                    fillUserForm('', fn, ln, email, role, /*linked=*/true);
+                    linkSearch.value = '';
+                    linkDropdown.style.display = 'none';
+                });
+            });
+        }
+
+        if (linkSearch) {
+            linkSearch.addEventListener('input', function() { renderLinkDropdown(this.value); });
+            linkSearch.addEventListener('blur',  function() { setTimeout(function() { if (linkDropdown) linkDropdown.style.display = 'none'; }, 120); });
+            linkSearch.addEventListener('focus', function() { if (this.value.trim()) renderLinkDropdown(this.value); });
+        }
+
+        /* ════════════════════════════════════════════════════════
+           USER FORM — FILL / CLEAR / SAVE
+        ════════════════════════════════════════════════════════ */
+        var uidInput   = document.getElementById('cscUserId');
+        var fnInput    = document.getElementById('cscUserFirstName');
+        var lnInput    = document.getElementById('cscUserLastName');
+        var emailInput = document.getElementById('cscUserEmail');
+        var pwInput    = document.getElementById('cscUserPassword');
+        var roleSelect = document.getElementById('cscUserRole');
+        var formErr    = document.getElementById('cscUserFormErr');
+        var editBadge  = document.getElementById('cscUserEditingBadge');
+        var pwHint     = document.getElementById('cscUserPasswordHint');
+        var saveBtn    = document.getElementById('cscBtnSaveUser');
+        var clearBtn   = document.getElementById('cscBtnClearUser');
+        var newUserBtn = document.getElementById('cscBtnNewUser');
+
+        function fillUserForm(uid, fn, ln, email, role, linked) {
+            if (!uidInput) return;
+            uidInput.value   = uid || '';
+            fnInput.value    = fn || '';
+            lnInput.value    = ln || '';
+            emailInput.value = email || '';
+            pwInput.value    = '';
+            if (linkedInput) linkedInput.value = linked ? '1' : '';
+            if (roleSelect) roleSelect.value = role || 'User';
+            if (formErr)    { formErr.hidden = true; formErr.textContent = ''; }
+            if (editBadge)  editBadge.hidden = !uid;
+            // Şifre hint: düzenleme veya mevcut kullanıcıdan seçildiyse göster
+            if (pwHint) pwHint.hidden = !(uid || linked);
+            if (pwInput) pwInput.placeholder = (uid || linked) ? 'Boş bırakılırsa mevcut şifre korunur' : 'Yeni kullanıcı için zorunlu';
+            if (fnInput) fnInput.focus();
+        }
+
+        function clearUserForm() {
+            fillUserForm('', '', '', '', 'User', false);
+        }
+
+        if (clearBtn)   clearBtn.addEventListener('click', clearUserForm);
+        if (newUserBtn) newUserBtn.addEventListener('click', clearUserForm);
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async function () {
+                if (!fnInput || !emailInput) return;
+                var fn      = fnInput.value.trim();
+                var ln      = lnInput ? lnInput.value.trim() : '';
+                var email   = emailInput.value.trim();
+                var pw      = pwInput ? pwInput.value : '';
+                var role    = roleSelect ? roleSelect.value : 'User';
+                var uid     = uidInput ? uidInput.value.trim() : '';
+                var linked  = linkedInput && linkedInput.value === '1';
+
+                if (!fn)    { showUserFormErr('Ad zorunludur.'); return; }
+                if (!email) { showUserFormErr('E-posta zorunludur.'); return; }
+                // Şifre zorunluluğu: yeni kullanıcı VE mevcut kullanıcıdan seçilmedi ise
+                if (!uid && !linked && !pw) { showUserFormErr('Yeni kullanıcı için şifre zorunludur.'); return; }
+
+                saveBtn.disabled = true;
+                if (formErr) { formErr.hidden = true; }
+                try {
+                    var body = {
+                        companyId: COMPANY_ID,
+                        firstName: fn,
+                        lastName:  ln,
+                        email:     email,
+                        password:  pw || null,
+                        role:      role
+                    };
+                    if (uid) body.id = parseInt(uid, 10);
+
+                    var resp = await fetch('@Url.Action("SaveUserJson", "Setup")', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getToken() },
+                        body: JSON.stringify(body)
+                    });
+                    var data = await resp.json();
+                    if (data && data.success) {
+                        clearUserForm();
+                        usersLoaded = false;
+                        loadCompanyUsers();
+                    } else {
+                        showUserFormErr(data && data.message ? data.message : 'Kayıt başarısız.');
+                    }
+                } catch (err) {
+                    showUserFormErr('Bir hata oluştu: ' + esc(err && err.message ? err.message : String(err)));
+                } finally {
+                    saveBtn.disabled = false;
+                }
+            });
+        }
+
+        function showUserFormErr(msg) {
+            if (formErr) { formErr.textContent = msg; formErr.hidden = false; }
+        }
+
+        /* ════════════════════════════════════════════════════════
+           USER DEACTIVATE CONFIRM MODAL
+        ════════════════════════════════════════════════════════ */
+        var userConfirmBackdrop = document.getElementById('cscUserConfirmBackdrop');
+        var userConfirmMsg      = document.getElementById('cscUserConfirmMsg');
+        var userConfirmOk       = document.getElementById('cscUserConfirmOk');
+        var userConfirmCancel   = document.getElementById('cscUserConfirmCancel');
+        var userConfirmErr      = document.getElementById('cscUserConfirmErr');
+        var pendingUserId       = null;
+
+        function openUserDeactConfirm(id, name) {
+            pendingUserId = id;
+            if (userConfirmMsg) {
+                userConfirmMsg.innerHTML = '<strong>' + esc(name || '#' + id) + '</strong> ' +
+                    'kullanıcısını pasife almak istediğinize emin misiniz?';
+            }
+            if (userConfirmErr) { userConfirmErr.hidden = true; userConfirmErr.textContent = ''; }
+            if (userConfirmBackdrop) {
+                userConfirmBackdrop.classList.add('show');
+                setTimeout(function() { if (userConfirmOk) userConfirmOk.focus(); }, 60);
+            }
+        }
+        function closeUserDeactConfirm() {
+            pendingUserId = null;
+            if (userConfirmBackdrop) userConfirmBackdrop.classList.remove('show');
+        }
+
+        if (userConfirmCancel) userConfirmCancel.addEventListener('click', closeUserDeactConfirm);
+        if (userConfirmBackdrop) {
+            userConfirmBackdrop.addEventListener('click', function(e) {
+                if (e.target === userConfirmBackdrop) closeUserDeactConfirm();
+            });
+        }
+
+        if (userConfirmOk) {
+            userConfirmOk.addEventListener('click', async function () {
+                if (!pendingUserId) return;
+                userConfirmOk.disabled = true;
+                if (userConfirmCancel) userConfirmCancel.disabled = true;
+                if (userConfirmErr) { userConfirmErr.hidden = true; userConfirmErr.textContent = ''; }
+                try {
+                    var resp = await fetch('@Url.Action("DeactivateUserJson", "Setup")', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getToken() },
+                        body: JSON.stringify({ id: parseInt(pendingUserId, 10) })
+                    });
+                    var data = await resp.json();
+                    if (data && data.success) {
+                        closeUserDeactConfirm();
+                        clearUserForm();
+                        usersLoaded = false;
+                        loadCompanyUsers();
+                    } else {
+                        if (userConfirmErr) {
+                            userConfirmErr.textContent = data && data.message ? data.message : 'İşlem başarısız.';
+                            userConfirmErr.hidden = false;
+                        }
+                    }
+                } catch (err) {
+                    if (userConfirmErr) {
+                        userConfirmErr.textContent = 'Bir hata oluştu: ' + esc(err && err.message ? err.message : String(err));
+                        userConfirmErr.hidden = false;
+                    }
+                } finally {
+                    userConfirmOk.disabled = false;
+                    if (userConfirmCancel) userConfirmCancel.disabled = false;
+                }
+            });
+        }
+
+        /* ════════════════════════════════════════════════════════
+           COMPANY DELETE CONFIRM MODAL
+        ════════════════════════════════════════════════════════ */
+        var confirmBackdrop = document.getElementById('cscConfirmBackdrop');
+        var confirmMsg      = document.getElementById('cscConfirmMsg');
+        var confirmOk       = document.getElementById('cscConfirmOk');
+        var confirmCancel   = document.getElementById('cscConfirmCancel');
+        var confirmErr      = document.getElementById('cscConfirmErr');
+        var pendingId       = null;
+
+        function openConfirm(id, name) {
+            pendingId = id;
+            if (confirmMsg) {
+                confirmMsg.innerHTML = '<strong>' + esc(name || '#' + id) + '</strong> ' +
+                    'şirketini silmek istediğinize emin misiniz?<br/>Bu işlem geri alınamaz.';
+            }
+            if (confirmErr) { confirmErr.hidden = true; confirmErr.textContent = ''; }
+            if (confirmBackdrop) {
+                confirmBackdrop.classList.add('show');
+                setTimeout(function() { if (confirmOk) confirmOk.focus(); }, 60);
+            }
+        }
+        function closeConfirm() {
+            pendingId = null;
+            if (confirmBackdrop) confirmBackdrop.classList.remove('show');
+        }
+        function showConfirmErr(msg) {
+            if (confirmErr) { confirmErr.textContent = msg; confirmErr.hidden = false; }
+        }
+
+        document.querySelectorAll('.csc-btn-del').forEach(function(b) {
+            b.addEventListener('click', function () {
+                var id   = this.getAttribute('data-company-id');
+                var name = this.getAttribute('data-company-name');
+                if (id) openConfirm(id, name);
+            });
+        });
+
+        if (confirmCancel) confirmCancel.addEventListener('click', closeConfirm);
+        if (confirmBackdrop) {
+            confirmBackdrop.addEventListener('click', function (e) {
+                if (e.target === confirmBackdrop) closeConfirm();
+            });
+        }
+
+        document.addEventListener('keydown', function (e) {
+            if (confirmBackdrop && confirmBackdrop.classList.contains('show')) {
+                if (e.key === 'Escape') { e.preventDefault(); closeConfirm(); }
+                else if (e.key === 'Enter') { e.preventDefault(); if (confirmOk) confirmOk.click(); }
+                return;
+            }
+            if (userConfirmBackdrop && userConfirmBackdrop.classList.contains('show')) {
+                if (e.key === 'Escape') { e.preventDefault(); closeUserDeactConfirm(); }
+                else if (e.key === 'Enter') { e.preventDefault(); if (userConfirmOk) userConfirmOk.click(); }
+            }
+        });
+
+        if (confirmOk) {
+            confirmOk.addEventListener('click', async function () {
+                if (!pendingId) return;
+                confirmOk.disabled = true;
+                if (confirmCancel) confirmCancel.disabled = true;
+                if (confirmErr) { confirmErr.hidden = true; confirmErr.textContent = ''; }
+                try {
+                    var resp = await fetch('@Url.Action("DeleteCompanyJson", "Setup")', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getToken() },
+                        body: JSON.stringify({ id: Number(pendingId) }),
+                    });
+                    if (!resp.ok) { showConfirmErr('Sunucu hatası: ' + resp.status); return; }
+                    var data = await resp.json();
+                    if (data && data.success) {
+                        closeConfirm();
+                        window.location.reload();
+                    } else {
+                        showConfirmErr('Silme başarısız: ' + (data && data.message ? esc(data.message) : 'Bilinmeyen hata'));
+                    }
+                } catch (err) {
+                    showConfirmErr('Bir hata oluştu: ' + esc(err && err.message ? err.message : String(err)));
+                } finally {
+                    confirmOk.disabled = false;
+                    if (confirmCancel) confirmCancel.disabled = false;
+                }
+            });
+        }
 
     })();
     </script>

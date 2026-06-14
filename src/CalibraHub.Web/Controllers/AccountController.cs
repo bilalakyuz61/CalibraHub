@@ -9,6 +9,7 @@ using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Web.Models.Account;
+using CalibraHub.Web.Models.Navigation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -27,7 +28,9 @@ public sealed class AccountController : Controller
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IUserAuthenticationService _userAuthenticationService;
     private readonly IGrafanaProvisioningService _grafanaProvisioning;
+    private readonly IDepartmentRepository _departmentRepository;
     private readonly IWebHostEnvironment _env;
+    private readonly IPermissionService _permissionService;
 
     public AccountController(
         ICompanyRepository companyDefinitionRepository,
@@ -35,14 +38,18 @@ public sealed class AccountController : Controller
         IUserProfileRepository userProfileRepository,
         IUserAuthenticationService userAuthenticationService,
         IGrafanaProvisioningService grafanaProvisioning,
-        IWebHostEnvironment env)
+        IDepartmentRepository departmentRepository,
+        IWebHostEnvironment env,
+        IPermissionService permissionService)
     {
         _companyDefinitionRepository = companyDefinitionRepository;
         _uiConfigurationService = uiConfigurationService;
         _userProfileRepository = userProfileRepository;
         _userAuthenticationService = userAuthenticationService;
         _grafanaProvisioning = grafanaProvisioning;
+        _departmentRepository = departmentRepository;
         _env = env;
+        _permissionService = permissionService;
     }
 
     [AllowAnonymous]
@@ -131,8 +138,12 @@ public sealed class AccountController : Controller
             new(ClaimTypes.Email, authenticatedUser.Email),
             new(ClaimTypes.Role, authenticatedUser.Role),
             new("company_id", authenticatedUser.CompanyId.ToString()),
-            new("company_name", authenticatedUser.CompanyName)
+            new("company_name", authenticatedUser.CompanyName),
         };
+        // 2026-06-06: department_id claim — RequirePermissionAttribute departmana göre izin
+        // çözümlemesinde kullanır. NULL ise eklenmez.
+        if (authenticatedUser.DepartmentId.HasValue)
+            claims.Add(new Claim("department_id", authenticatedUser.DepartmentId.Value.ToString()));
 
         // Grafana lazy provisioning: ViewDashboards yetkisi olan kullanicilar icin
         // org/membership ensure edilir, orgId claim'e eklenir (middleware kullanir).
@@ -175,6 +186,25 @@ public sealed class AccountController : Controller
             principal,
             authProperties);
 
+        // Login sayfasındaki tema toggle'ı localStorage'a kaydeder.
+        // Form submit sırasında hidden input aracılığıyla sunucuya taşınır ve kullanıcı tercihine işlenir.
+        if (!string.IsNullOrWhiteSpace(input.ThemeCode) &&
+            (string.Equals(input.ThemeCode, "dark",  StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(input.ThemeCode, "light", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                var currentPref = await _uiConfigurationService.GetUserPreferenceAsync(authenticatedUser.Id, cancellationToken);
+                await _uiConfigurationService.SaveUserPreferenceAsync(
+                    new SaveUserInterfacePreferenceRequest(
+                        authenticatedUser.Id,
+                        currentPref?.LanguageCode ?? "tr-TR",
+                        input.ThemeCode.ToLowerInvariant()),
+                    cancellationToken);
+            }
+            catch { /* tema kaydı başarısız olsa da login devam eder */ }
+        }
+
         if (!string.IsNullOrWhiteSpace(input.ReturnUrl) && Url.IsLocalUrl(input.ReturnUrl))
         {
             return Redirect(input.ReturnUrl);
@@ -193,7 +223,7 @@ public sealed class AccountController : Controller
         CancellationToken cancellationToken)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(userIdClaim, out var userId))
+        if (!int.TryParse(userIdClaim, out var userId))
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return RedirectToAction(nameof(Login));
@@ -238,7 +268,7 @@ public sealed class AccountController : Controller
         }
 
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(userIdClaim, out var userId))
+        if (!int.TryParse(userIdClaim, out var userId))
         {
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return RedirectToAction(nameof(Login));
@@ -260,6 +290,167 @@ public sealed class AccountController : Controller
             ModelState.AddModelError(string.Empty, ex.Message);
             return View(input);
         }
+    }
+
+    // ── Profile (kullanici kendi bilgileri) ────────────────────────────────
+    // Email + Role + IsActive DEGISTIRILEMEZ — security (self-elevation,
+    // identity hijack). Bunlar admin tarafindan yonetilir. Diger butun alanlar
+    // (ad, telefon, departman, amir, dil, tema, personel kodu) duzenlenebilir.
+    [Authorize]
+    [HttpGet]
+    public async Task<IActionResult> Profile(CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var userId))
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return RedirectToAction(nameof(Login));
+        }
+
+        var user = await _userProfileRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return RedirectToAction(nameof(Login));
+        }
+
+        var model = await BuildProfileModelAsync(user, cancellationToken);
+        // Mevcut degerleri form'a doldur
+        model.FullName         = user.FullName;
+        model.EmployeeCode     = user.EmployeeCode;
+        model.DepartmentId     = user.DepartmentId;
+        model.SupervisorUserId = user.SupervisorUserId;
+        model.PhoneNumber      = user.PhoneNumber;
+        model.LanguageCode     = user.LanguageCode;
+        model.ThemeCode        = user.ThemeCode;
+
+        return View(model);
+    }
+
+    [Authorize]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Profile(ProfileInputModel input, CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var userId))
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return RedirectToAction(nameof(Login));
+        }
+
+        var existing = await _userProfileRepository.GetByIdAsync(userId, cancellationToken);
+        if (existing is null)
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return RedirectToAction(nameof(Login));
+        }
+
+        if (!ModelState.IsValid)
+        {
+            // Dropdownlari tekrar doldur
+            var redrawn = await BuildProfileModelAsync(existing, cancellationToken);
+            input.Email       = redrawn.Email;
+            input.RoleLabel   = redrawn.RoleLabel;
+            input.CompanyName = redrawn.CompanyName;
+            input.Departments = redrawn.Departments;
+            input.Supervisors = redrawn.Supervisors;
+            return View(input);
+        }
+
+        // Cycle koruma: kullanici kendisini amir secemez
+        var supervisorId = input.SupervisorUserId == existing.Id ? null : input.SupervisorUserId;
+
+        // Telefon normalize — bosluk/tire/parantez temizle, sadece rakam + "+"
+        var cleanPhone = NormalizePhone(input.PhoneNumber);
+
+        var rebuilt = new CalibraHub.Domain.Entities.UserProfile
+        {
+            Id               = existing.Id,
+            CompanyId        = existing.CompanyId,
+            FullName         = (input.FullName ?? string.Empty).Trim(),
+            Email            = existing.Email,                       // KORUNUR
+            EmployeeCode     = string.IsNullOrWhiteSpace(input.EmployeeCode) ? existing.EmployeeCode : input.EmployeeCode.Trim(),
+            DepartmentId     = input.DepartmentId,
+            SupervisorUserId = supervisorId,
+            PhoneNumber      = cleanPhone,
+            Role             = existing.Role,                        // KORUNUR
+            Permissions      = existing.Permissions,
+            GrafanaRole      = existing.GrafanaRole,
+        };
+        rebuilt.SetPasswordHash(existing.PasswordHash);
+        rebuilt.SetInterfacePreferences(input.LanguageCode ?? "tr-TR", input.ThemeCode ?? "light");
+        rebuilt.SetGridPreferencesJson(existing.GridPreferencesJson);
+        if (!existing.IsActive) rebuilt.Deactivate();
+
+        await _userProfileRepository.UpdateAsync(rebuilt, cancellationToken);
+
+        TempData["ProfileSuccess"] = "Profil bilgileriniz güncellendi.";
+        return RedirectToAction(nameof(Profile));
+    }
+
+    private async Task<ProfileInputModel> BuildProfileModelAsync(
+        CalibraHub.Domain.Entities.UserProfile user,
+        CancellationToken ct)
+    {
+        // Sirket adi
+        var companies = await _companyDefinitionRepository.GetAllAsync(ct);
+        var company = companies.FirstOrDefault(c => c.Id == user.CompanyId);
+
+        // Departmanlar — sirkete ait + aktif
+        var depts = (await _departmentRepository.GetAllAsync(ct))
+            .Where(d => d.CompanyId == user.CompanyId && d.IsActive)
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(d => new SelectListItem
+            {
+                Value = d.Id.ToString(),
+                Text  = d.Name,
+                Selected = d.Id == user.DepartmentId,
+            }).ToList();
+        depts.Insert(0, new SelectListItem { Value = "", Text = "(Departman yok)" });
+
+        // Amir adaylari — sirkete ait, aktif, SystemAdmin haric, kendisi haric
+        var sups = (await _userProfileRepository.GetAllAsync(ct))
+            .Where(u => u.CompanyId == user.CompanyId
+                        && u.IsActive
+                        && u.Role != UserRole.SystemAdmin
+                        && u.Id != user.Id)
+            .OrderBy(u => u.FullName, StringComparer.OrdinalIgnoreCase)
+            .Select(u => new SelectListItem
+            {
+                Value = u.Id.ToString(),
+                Text  = u.FullName,
+                Selected = u.Id == user.SupervisorUserId,
+            }).ToList();
+        sups.Insert(0, new SelectListItem { Value = "", Text = "(Amir seçilmedi)" });
+
+        return new ProfileInputModel
+        {
+            Email       = user.Email,
+            CompanyName = company?.Name ?? string.Empty,
+            RoleLabel   = GetRoleLabel(user.Role),
+            Departments = depts,
+            Supervisors = sups,
+        };
+    }
+
+    private static string GetRoleLabel(UserRole role) => role switch
+    {
+        UserRole.SystemAdmin       => "Sistem Yöneticisi",
+        UserRole.DepartmentManager => "Departman Yöneticisi",
+        UserRole.Approver          => "Onaylayıcı",
+        UserRole.Operator          => "Operatör",
+        UserRole.Auditor           => "Denetçi",
+        _ => role.ToString(),
+    };
+
+    private static string? NormalizePhone(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var cleaned = new string(raw.Where(c => char.IsDigit(c) || c == '+').ToArray());
+        if (cleaned.Length == 0) return null;
+        if (cleaned.Length > 30) cleaned = cleaned[..30];
+        return cleaned;
     }
 
     [Authorize]
@@ -539,5 +730,40 @@ public sealed class AccountController : Controller
                 x.Id.ToString(),
                 selectedCompanyId == x.Id))
             .ToArray();
+    }
+
+    /// <summary>
+    /// Shell menüsünü anlık yetkilerle döndürür.
+    /// Shell.jsx focus/visibility değişiminde bu endpoint'i poll ederek
+    /// yetki değişikliklerini sayfa yenilemesi olmadan yansıtır.
+    /// </summary>
+    [Authorize]
+    [HttpGet]
+    public async Task<IActionResult> GetMenuItems(CancellationToken cancellationToken)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdStr, out var userId) || userId <= 0)
+            return Json(new { menu = Array.Empty<object>() });
+
+        var isSystemAdmin = string.Equals(
+            User.FindFirstValue(ClaimTypes.Email), "admin@calibra.local",
+            StringComparison.OrdinalIgnoreCase);
+
+        var languageCode = User.FindFirstValue("language_code") ?? "tr-TR";
+        var full = MenuDefinition.GetMainMenu(isSystemAdmin, languageCode);
+
+        var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        var role = UserAuthorizationCatalog.TryParseRole(roleStr, out var r)
+            ? r : UserRole.Operator;
+        var deptStr = User.FindFirstValue("department_id");
+        int? deptId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;
+
+        var filtered = await MenuDefinition.FilterByPermissionAsync(
+            full, _permissionService, userId, role, deptId, cancellationToken);
+
+        return Json(new { menu = filtered }, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+        });
     }
 }

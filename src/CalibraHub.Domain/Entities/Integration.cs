@@ -78,9 +78,31 @@ public sealed class Integration
     /// </summary>
     public string? PostProcedureParamsJson { get; set; }
 
-    public string? CreatedBy { get; set; }
+    /// <summary>
+    /// 2026-05-22 Pre-flight Filter: kaynak kayıt entegrasyona uygun mu kuralları.
+    /// JSON array: [{ field, op, value, logic }].
+    /// Özel prefix: 'widget:fieldKey' = WidgetTra'dan değer çek.
+    /// Operators: eq/neq/gt/gte/lt/lte/isnull/notnull/contains/startsWith/in/between.
+    /// NULL veya boş array = filtre yok (tüm kayıtlar uygun).
+    /// Tüm tetikleyici yollarda (Manual/Cron/OnSave/Queue/Sayaç) tek noktadan uygulanır.
+    /// </summary>
+    public string? SourceFilterJson { get; set; }
+
+    /// <summary>
+    /// 2026-05-22 Cascade: Bu entegrasyon başka entegrasyonlar tarafından cascade hedefi
+    /// olarak seçilebilir mi? Default TRUE — her integration cascade'lenebilir.
+    /// FALSE'a çevirilirse Wizard Step 2 "Bağımlılık" dropdown'ında gözükmez.
+    /// Manuel/Cron/OnSave tetikleyiciler bu flag'ten ETKİLENMEZ — sadece cascade için.
+    ///
+    /// Kullanım: Aynı "Netsis Stok Ekle" integration'ı hem manuel butondan hem cron'dan
+    /// hem de Sipariş cascade'inden çağrılabilir; tek tanım, çok yol. Kapatmak istersen
+    /// (özel cascade-only versiyon yarattıysan vs.) bu flag'i FALSE yap.
+    /// </summary>
+    public bool AllowAsCascadeTarget { get; set; } = true;
+
+    public int? CreatedById { get; set; }
     public DateTime Created { get; init; } = DateTime.UtcNow;
-    public string? UpdatedBy { get; set; }
+    public int? UpdatedById { get; set; }
     public DateTime? Updated { get; set; }
 
     // ── Aggregate children (transient — repository tarafindan join ile doldurulur) ──

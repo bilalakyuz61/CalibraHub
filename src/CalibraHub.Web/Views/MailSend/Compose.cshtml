@@ -1,0 +1,1325 @@
+@{
+    ViewData["Title"] = "Yeni Toplu Mail Gönderimi";
+    ViewData["FormCode"] = "MAIL_SEND";
+    ViewData["BodyClass"] = "page-mailsend-compose";
+}
+
+@section Styles {
+@await Html.PartialAsync("_MailComposeShared")
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+<div class="mc-app">
+
+    <div class="mc-topbar">
+        <button type="button" class="mce-btn mce-btn--secondary" id="mcBackBtn" title="Listeye dön">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Geri
+        </button>
+        <div class="mc-topbar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+            </svg>
+        </div>
+        <div>
+            <h2 class="mc-topbar__title">Yeni Toplu Gönderim</h2>
+            <div class="mc-topbar__sub">Şablon → Mail gövdesi → Alıcı listesi → Topluca gönder</div>
+        </div>
+        <div class="mc-topbar__spacer"></div>
+        <button type="button" class="mce-btn mce-btn--primary" id="mcSendBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+            Topluca Gönder
+        </button>
+    </div>
+
+    <div class="mc-body">
+
+        <!-- Sidenav (3 sekme) -->
+        <nav class="mc-sidenav" role="tablist" aria-label="Toplu gönderim sekmeleri">
+            <button type="button" class="cs-tab-btn is-active" data-tab="tpl">
+                <span class="cs-tab-btn__step">1</span>
+                <span class="cs-tab-btn__icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </span>
+                <div class="cs-tab-btn__label">
+                    <div>Şablon &amp; Hedef</div>
+                    <div class="cs-tab-btn__hint">Şablon + alıcı ünvanları</div>
+                </div>
+            </button>
+            <button type="button" class="cs-tab-btn" data-tab="body">
+                <span class="cs-tab-btn__step">2</span>
+                <span class="cs-tab-btn__icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                </span>
+                <div class="cs-tab-btn__label">
+                    <div>Mail Gövdesi</div>
+                    <div class="cs-tab-btn__hint">Konu + içerik + token</div>
+                </div>
+            </button>
+            <button type="button" class="cs-tab-btn" data-tab="recip">
+                <span class="cs-tab-btn__step">3</span>
+                <span class="cs-tab-btn__icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </span>
+                <div class="cs-tab-btn__label">
+                    <div>Alıcı Listesi</div>
+                    <div class="cs-tab-btn__hint">Hariç tutma / dahil et</div>
+                </div>
+            </button>
+        </nav>
+
+        <!-- Content -->
+        <div class="mc-content">
+
+            <!-- TAB 1: Şablon & Hedef -->
+            <div class="cs-tab-pane is-active" data-pane="tpl">
+                <div class="cs-tab-pane__head">
+                    <h2>Şablon &amp; Hedef</h2>
+                    <div class="sub">Mail için hangi DocLayout şablonunu ve hangi ünvanlardaki kişileri hedefleyeceğinizi seçin.</div>
+                </div>
+                <div class="cs-tab-pane__body">
+                    <div class="mc-field">
+                        <label class="mc-field__label" for="cmpLayoutId">Şablon <span class="req">*</span></label>
+                        <select id="cmpLayoutId" class="mc-select"></select>
+                    </div>
+
+                    <div class="mc-field">
+                        <label class="mc-field__label">Alıcı Ünvan(ları) <span class="req">*</span></label>
+                        <div class="ms-combo" id="cmpTitleCombo">
+                            <button type="button" class="ms-combo__btn" id="cmpTitleBtn" aria-haspopup="listbox" aria-expanded="false">
+                                <span class="ms-combo__placeholder">Ünvan seçin…</span>
+                                <svg class="ms-combo__caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,9 12,15 18,9"/></svg>
+                            </button>
+                            <div class="ms-combo__panel" role="listbox" id="cmpTitlePanel">
+                                <div class="ms-combo__search">
+                                    <input type="text" id="cmpTitleSearch" placeholder="Ünvan ara…" autocomplete="off"/>
+                                    <div class="ms-combo__bulk">
+                                        <button type="button" id="cmpTitleAll">Hepsi</button>
+                                        <button type="button" id="cmpTitleNone">Temizle</button>
+                                    </div>
+                                </div>
+                                <div class="ms-combo__list" id="cmpTitleList"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2026-05-20: Cari Grup Kodu filtreleri — Kurumsal İletişim gibi
+                         binlerce cariye sahip ünvanlarda alıcı havuzunu daraltır. 5
+                         seviyeli cascade (ContactEdit pattern). Tümü opsiyonel; hepsi
+                         boş ise filtre uygulanmaz. -->
+                    <div class="mc-field">
+                        <label class="mc-field__label">
+                            Cari Grup Kodları
+                            <span style="font-weight:500;font-size:11px;color:var(--mc-muted);margin-left:6px;">
+                                (opsiyonel — alıcı havuzunu daraltır)
+                            </span>
+                        </label>
+                        <div class="mc-group-grid" id="cmpGroupGrid">
+                            <div class="mc-group-row">
+                                <span class="mc-group-row__label">Grup 1</span>
+                                <select class="mc-select cmp-group-sel" data-level="1"><option value="">Seçiniz</option></select>
+                            </div>
+                            <div class="mc-group-row">
+                                <span class="mc-group-row__label">Grup 2</span>
+                                <select class="mc-select cmp-group-sel" data-level="2"><option value="">Seçiniz</option></select>
+                            </div>
+                            <div class="mc-group-row">
+                                <span class="mc-group-row__label">Grup 3</span>
+                                <select class="mc-select cmp-group-sel" data-level="3"><option value="">Seçiniz</option></select>
+                            </div>
+                            <div class="mc-group-row">
+                                <span class="mc-group-row__label">Grup 4</span>
+                                <select class="mc-select cmp-group-sel" data-level="4"><option value="">Seçiniz</option></select>
+                            </div>
+                            <div class="mc-group-row">
+                                <span class="mc-group-row__label">Grup 5</span>
+                                <select class="mc-select cmp-group-sel" data-level="5"><option value="">Seçiniz</option></select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="cs-tab-pane__footer">
+                    <button type="button" class="mce-btn mce-btn--primary" data-next="body">
+                        Devam → Mail Gövdesi
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 2: Mail Gövdesi -->
+            <div class="cs-tab-pane" data-pane="body">
+                <div class="cs-tab-pane__head">
+                    <h2>Mail Gövdesi</h2>
+                    <div class="sub">Konu ve içerik bilgisi. Token rehberinden değişken ekleyebilirsiniz.</div>
+                </div>
+                <div class="cs-tab-pane__body">
+                    <div class="tab2-grid">
+                        <div>
+                            <div class="mc-field">
+                                <label class="mc-field__label" for="cmpSubject">Konu</label>
+                                <input id="cmpSubject" class="mc-input" type="text" placeholder="Mail konusu (boş = şablon adı)"/>
+                            </div>
+                            <div class="mc-field">
+                                <label class="mc-field__label" for="cmpBody">İçerik (gövde)</label>
+                                <textarea id="cmpBody" class="mc-textarea" rows="14" placeholder="Sayın {{personName}},&#10;&#10;..."></textarea>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <button type="button" class="mce-btn mce-btn--secondary" id="cmpPreviewBtn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    Önizle
+                                </button>
+                                <button type="button" class="mce-btn mce-btn--secondary" id="cmpAttachBtn">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 1 1-8.49-8.49l9.19-9.19a4 4 0 1 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/>
+                                    </svg>
+                                    Ek Dosya Seç
+                                </button>
+                                <input type="file" id="cmpAttachInput" multiple style="display:none;" />
+                                <span id="cmpAttachHint" style="font-size:.72rem;color:rgba(255,255,255,0.5);">Toplam 25 MB, en fazla 10 dosya</span>
+                            </div>
+                            <div id="cmpAttachList" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+
+                            <!-- 2026-05-31: Belge bagindan acıldığında (URL params: documentId, docType)
+                                 belge PDF'ini ek olarak yollama secenegi gozukur. Default: kapali. -->
+                            <div id="cmpDocPdfSection" style="display:none;margin-top:16px;padding:12px 14px;border:1px solid rgba(99,102,241,.32);border-radius:8px;background:rgba(99,102,241,.06);">
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;">
+                                    <input type="checkbox" id="cmpDocPdfEnable" checked style="width:16px;height:16px;cursor:pointer;" />
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#dc2626;">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                                    </svg>
+                                    Belge PDF'ini ek olarak gönder
+                                </label>
+                                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;margin-left:24px;">
+                                    <label style="font-size:.72rem;color:rgba(255,255,255,0.65);">PDF şablonu:</label>
+                                    <select id="cmpDocPdfLayout" class="mc-select" style="flex:1;min-width:220px;max-width:380px;"></select>
+                                </div>
+                                <div style="font-size:.7rem;color:rgba(255,255,255,0.5);margin-left:24px;margin-top:6px;">
+                                    Belge: <span id="cmpDocLabel" style="font-weight:600;color:#c7d2fe;">—</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="token-card">
+                            <h4>Token Rehberi</h4>
+                            <div class="token-list">
+                                <button type="button" class="token-chip" data-token="{{personName}}">{{personName}}<span class="desc">Kişi adı</span></button>
+                                <button type="button" class="token-chip" data-token="{{personTitle}}">{{personTitle}}<span class="desc">Ünvan</span></button>
+                                <button type="button" class="token-chip" data-token="{{personEmail}}">{{personEmail}}<span class="desc">Kişi maili</span></button>
+                                <button type="button" class="token-chip" data-token="{{contactName}}">{{contactName}}<span class="desc">Cari adı</span></button>
+                                <button type="button" class="token-chip" data-token="{{contactCode}}">{{contactCode}}<span class="desc">Cari kodu</span></button>
+                                <button type="button" class="token-chip" data-token="{{currentDate}}">{{currentDate}}<span class="desc">Bugün</span></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="cs-tab-pane__footer">
+                    <button type="button" class="mce-btn mce-btn--secondary" data-prev="tpl">← Şablon &amp; Hedef</button>
+                    <button type="button" class="mce-btn mce-btn--primary" data-next="recip">Devam → Alıcı Listesi</button>
+                </div>
+            </div>
+
+            <!-- TAB 3: Alıcı Listesi
+                 Not (2026-05-20): Pane bashligi (cs-tab-pane__head) kaldirildi.
+                 Sol sidebar'da "Alici Listesi" adimi zaten gozukuyor — saga ikinci kez
+                 baslik yazmak gorsel gurultu yaratiyordu. Icerik direkt body'den basliyor. -->
+            <div class="cs-tab-pane" data-pane="recip">
+                <div class="cs-tab-pane__body">
+                    <div class="recip-bar">
+                        <div class="recip-bar__summary">
+                            <span class="num-inc" id="recipIncCount">0</span> dahil ·
+                            <span class="num-exc" id="recipExcCount">0</span> hariç ·
+                            toplam <span id="recipTotalCount">0</span>
+                        </div>
+                        <div class="recip-bar__spacer"></div>
+                        <input type="text" class="recip-bar__search" id="recipSearch" placeholder="Ad / cari / email ara…"/>
+                        <button type="button" class="recip-bar__btn" id="recipShowSelected" title="Sadece dahil olanları göster">Seçilenleri Göster</button>
+                        <button type="button" class="recip-bar__btn" id="recipIncAll">Tümünü Dahil Et</button>
+                        <button type="button" class="recip-bar__btn" id="recipExcAll">Tümünü Hariç Tut</button>
+                    </div>
+                    <div id="recipGrid" class="recip-grid">
+                        <div class="recip-grid__head">
+                            <div>Ad Soyad</div>
+                            <div>Cari</div>
+                            <div>Ünvan</div>
+                            <div>E-posta</div>
+                            <div style="text-align:right;">Dahil</div>
+                        </div>
+                        <div id="recipRows"></div>
+                    </div>
+                    <div id="recipEmpty" class="recip-empty" style="display:none;">Sekme 1'de ünvan seçtiğinizde alıcılar yüklenecek.</div>
+                </div>
+                <div class="cs-tab-pane__footer">
+                    <button type="button" class="mce-btn mce-btn--secondary" data-prev="body">← Mail Gövdesi</button>
+                    <button type="button" class="mce-btn mce-btn--primary" id="cmpFinalSend">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        Topluca Gönder
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+</section>
+
+<!-- Confirm modal -->
+<div class="mc-modal" id="cmpConfirmModal" role="dialog" aria-modal="true">
+    <div class="mc-modal__card">
+        <div class="mc-modal__icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+            </svg>
+        </div>
+        <h4 id="cmpConfirmTitle">Toplu mail gönderilsin mi?</h4>
+        <p id="cmpConfirmMsg">Seçili alıcılara toplu mail gönderilecek.</p>
+        <div class="mc-modal__actions">
+            <button type="button" class="mce-btn mce-btn--secondary" id="cmpConfirmCancel">Vazgeç</button>
+            <button type="button" class="mce-btn mce-btn--primary" id="cmpConfirmOk">Gönder</button>
+        </div>
+    </div>
+</div>
+
+<!-- Preview modal -->
+<div class="mc-modal mc-preview-modal" id="cmpPreviewModal" role="dialog" aria-modal="true">
+    <div class="mc-preview-modal__card">
+        <div class="mc-preview-modal__head">
+            <h3>Önizleme</h3>
+            <div class="spacer"></div>
+            <button type="button" class="mc-preview-modal__close" id="cmpPreviewClose">Kapat</button>
+        </div>
+        <div class="mc-preview-modal__body">
+            <iframe id="cmpPreviewFrame" title="Önizleme"></iframe>
+        </div>
+    </div>
+</div>
+
+<div id="cmpToast" class="mc-toast"></div>
+
+@section Scripts {
+<script>
+(function () {
+    // ── DOM refs ─────────────────────────────────────────────────────────────
+    var $tabs       = document.querySelectorAll('.cs-tab-btn');
+    var $panes      = document.querySelectorAll('.cs-tab-pane');
+    var $backBtn    = document.getElementById('mcBackBtn');
+    var $topSendBtn = document.getElementById('mcSendBtn');
+
+    var $tpl        = document.getElementById('cmpLayoutId');
+    var $combo      = document.getElementById('cmpTitleCombo');
+    var $comboBtn   = document.getElementById('cmpTitleBtn');
+    var $comboPanel = document.getElementById('cmpTitlePanel');
+    var $comboSearch= document.getElementById('cmpTitleSearch');
+    var $comboList  = document.getElementById('cmpTitleList');
+    var $btnAll     = document.getElementById('cmpTitleAll');
+    var $btnNone    = document.getElementById('cmpTitleNone');
+
+    var $subject    = document.getElementById('cmpSubject');
+    var $body       = document.getElementById('cmpBody');
+    var $previewBtn = document.getElementById('cmpPreviewBtn');
+
+    var $recipGrid  = document.getElementById('recipGrid');
+    var $recipRows  = document.getElementById('recipRows');
+    var $recipEmpty = document.getElementById('recipEmpty');
+    var $recipSearch= document.getElementById('recipSearch');
+    var $recipIncCount = document.getElementById('recipIncCount');
+    var $recipExcCount = document.getElementById('recipExcCount');
+    var $recipTotalCount = document.getElementById('recipTotalCount');
+    var $recipIncAll = document.getElementById('recipIncAll');
+    var $recipExcAll = document.getElementById('recipExcAll');
+    var $recipShowSelected = document.getElementById('recipShowSelected');
+
+    var $finalSend  = document.getElementById('cmpFinalSend');
+    var $toast      = document.getElementById('cmpToast');
+
+    // ── Ek dosya state ───────────────────────────────────────────────────────
+    var $attachBtn   = document.getElementById('cmpAttachBtn');
+    var $attachInput = document.getElementById('cmpAttachInput');
+    var $attachList  = document.getElementById('cmpAttachList');
+    var $attachHint  = document.getElementById('cmpAttachHint');
+    var _attachments = []; // File objesi listesi
+    var ATTACH_MAX_FILES = 10;
+    var ATTACH_MAX_TOTAL = 25 * 1024 * 1024; // 25 MB
+
+    function fmtSize(b) {
+        if (b < 1024) return b + ' B';
+        if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+        return (b/(1024*1024)).toFixed(1) + ' MB';
+    }
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function renderAttachList() {
+        if (_attachments.length === 0) { $attachList.innerHTML = ''; return; }
+        var html = '';
+        _attachments.forEach(function (f, idx) {
+            html += '<span class="cmp-attach-chip" title="' + escapeHtml(f.name) + '">' +
+                    '<span class="cmp-attach-chip__name">' + escapeHtml(f.name) + '</span>' +
+                    '<span class="cmp-attach-chip__size">(' + fmtSize(f.size) + ')</span>' +
+                    '<button type="button" class="cmp-attach-chip__del" data-idx="' + idx + '" title="Kaldır">×</button>' +
+                    '</span>';
+        });
+        $attachList.innerHTML = html;
+        $attachList.querySelectorAll('.cmp-attach-chip__del').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var i = parseInt(this.getAttribute('data-idx') || '0', 10);
+                _attachments.splice(i, 1);
+                renderAttachList();
+            });
+        });
+    }
+    if ($attachBtn && $attachInput) {
+        $attachBtn.addEventListener('click', function () { $attachInput.click(); });
+        $attachInput.addEventListener('change', function () {
+            var picked = Array.from($attachInput.files || []);
+            if (picked.length === 0) return;
+            // Limit kontrolü
+            if (_attachments.length + picked.length > ATTACH_MAX_FILES) {
+                toast('En fazla ' + ATTACH_MAX_FILES + ' dosya eklenebilir.', 'err');
+                $attachInput.value = '';
+                return;
+            }
+            var total = _attachments.reduce(function (s, f) { return s + f.size; }, 0);
+            for (var i = 0; i < picked.length; i++) total += picked[i].size;
+            if (total > ATTACH_MAX_TOTAL) {
+                toast('Toplam ek boyutu 25 MB\'i aşamaz.', 'err');
+                $attachInput.value = '';
+                return;
+            }
+            _attachments = _attachments.concat(picked);
+            renderAttachList();
+            $attachInput.value = ''; // tekrar ayni dosyayi secebilmek icin
+        });
+    }
+
+    // ── Belge baginda mail (URL params ile geldi mi?) ────────────────────────
+    // Beklenen URL params:
+    //   documentId   — sayisal belge ID (Document.id)
+    //   docType      — DocLayout.DocType (orn. 'sales_quote')
+    //   docLabel     — kullaniciya gosterilecek etiket (orn. 'STK2026-0123 — GHASSAN HANBAZAZAH')
+    //   docFileName  — PDF eki icin onerilen dosya adi (uzantisiz)
+    var _docContext = {};
+    var $docPdfSection = document.getElementById('cmpDocPdfSection');
+    var $docPdfEnable  = document.getElementById('cmpDocPdfEnable');
+    var $docPdfLayout  = document.getElementById('cmpDocPdfLayout');
+    var $docLabel      = document.getElementById('cmpDocLabel');
+    (function initDocContext() {
+        var qs = new URLSearchParams(window.location.search || '');
+        var documentId = parseInt(qs.get('documentId') || '0', 10);
+        if (!documentId) return;
+        _docContext = {
+            documentId: documentId,
+            docType:    qs.get('docType') || null,
+            label:      qs.get('docLabel') || ('#' + documentId),
+            fileName:   qs.get('docFileName') || ('belge_' + documentId),
+        };
+        if ($docPdfSection) $docPdfSection.style.display = 'block';
+        if ($docLabel) $docLabel.textContent = _docContext.label;
+        // PDF sablonlarini doctype filtresine gore yukle
+        var url = '/MailSend/PdfTemplates' + (_docContext.docType ? ('?docType=' + encodeURIComponent(_docContext.docType)) : '');
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                $docPdfLayout.innerHTML = '';
+                if (!Array.isArray(list) || list.length === 0) {
+                    var empty = document.createElement('option');
+                    empty.value = ''; empty.textContent = '(PDF şablonu bulunamadı)';
+                    $docPdfLayout.appendChild(empty);
+                    if ($docPdfEnable) $docPdfEnable.checked = false;
+                    return;
+                }
+                list.forEach(function (t) {
+                    var o = document.createElement('option');
+                    o.value = t.id;
+                    o.textContent = t.name + (t.isDefault ? ' (varsayılan)' : '');
+                    if (t.isDefault) o.selected = true;
+                    $docPdfLayout.appendChild(o);
+                });
+            })
+            .catch(function () { /* sessizce gecil */ });
+    })();
+
+    var $confirmModal  = document.getElementById('cmpConfirmModal');
+    var $confirmTitle  = document.getElementById('cmpConfirmTitle');
+    var $confirmMsg    = document.getElementById('cmpConfirmMsg');
+    var $confirmOk     = document.getElementById('cmpConfirmOk');
+    var $confirmCancel = document.getElementById('cmpConfirmCancel');
+
+    var $previewModal = document.getElementById('cmpPreviewModal');
+    var $previewClose = document.getElementById('cmpPreviewClose');
+    var $previewFrame = document.getElementById('cmpPreviewFrame');
+
+    // ── State ────────────────────────────────────────────────────────────────
+    var _titles = [];
+    var _selectedTitleIds = new Set();
+    var _recipients = [];      // [{contactPersonId, fullName, title, email, accountTitle, accountCode, phone, contactId}]
+    var _excluded = new Set(); // contactPersonId set
+    var _recipReq = 0;
+    var _recipientsLoadedFor = '';
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];
+        });
+    }
+    function toast(msg, kind) {
+        $toast.textContent = msg;
+        $toast.className = 'mc-toast show mc-toast--' + (kind === 'err' ? 'err' : 'ok');
+        setTimeout(function () { $toast.className = 'mc-toast'; }, 3200);
+    }
+    function confirmModal(opts) {
+        return new Promise(function (resolve) {
+            $confirmTitle.textContent = opts.title || 'Onaylıyor musunuz?';
+            $confirmMsg.textContent = opts.message || '';
+            $confirmOk.textContent = opts.okLabel || 'Onayla';
+            $confirmModal.classList.add('is-open');
+            $confirmOk.focus();
+            function clean(ok) {
+                $confirmModal.classList.remove('is-open');
+                $confirmOk.removeEventListener('click', onOk);
+                $confirmCancel.removeEventListener('click', onCancel);
+                document.removeEventListener('keydown', onKey);
+                resolve(ok);
+            }
+            function onOk()     { clean(true); }
+            function onCancel() { clean(false); }
+            function onKey(e) {
+                if (e.key === 'Escape') { e.preventDefault(); clean(false); }
+                else if (e.key === 'Enter') { e.preventDefault(); clean(true); }
+            }
+            $confirmOk.addEventListener('click', onOk);
+            $confirmCancel.addEventListener('click', onCancel);
+            document.addEventListener('keydown', onKey);
+        });
+    }
+
+    // ── Back button ──────────────────────────────────────────────────────────
+    $backBtn.addEventListener('click', function () {
+        // Workspace tab içindeyse parent shell close-tab event'i dispatch et
+        try {
+            if (window.parent && window.parent !== window && window.parent.postMessage) {
+                window.parent.postMessage({ type: 'calibra:close-current-tab' }, '*');
+            }
+        } catch (_) { /* ignore */ }
+        window.location.href = '/MailSend';
+    });
+
+    // ── Tab nav ──────────────────────────────────────────────────────────────
+    function gotoTab(key) {
+        Array.prototype.forEach.call($tabs, function (b) {
+            b.classList.toggle('is-active', b.getAttribute('data-tab') === key);
+        });
+        Array.prototype.forEach.call($panes, function (p) {
+            p.classList.toggle('is-active', p.getAttribute('data-pane') === key);
+        });
+        // Tab 3'e geçince recipients'i yeniden yükle
+        if (key === 'recip') ensureRecipientsLoaded();
+    }
+    Array.prototype.forEach.call($tabs, function (b) {
+        b.addEventListener('click', function () { gotoTab(b.getAttribute('data-tab')); });
+    });
+    document.querySelectorAll('[data-next]').forEach(function (b) {
+        b.addEventListener('click', function () { gotoTab(b.getAttribute('data-next')); });
+    });
+    document.querySelectorAll('[data-prev]').forEach(function (b) {
+        b.addEventListener('click', function () { gotoTab(b.getAttribute('data-prev')); });
+    });
+
+    // ── Templates ────────────────────────────────────────────────────────────
+    var _templatesCache = [];
+    // 2026-05-31 v2: View tabanli varsayilanlar — backend /MailSend/ResolveDefaults
+    // sorgulanir; donen Subject/Body bos alanlara yazilir. Eski sablonlar (DefaultSubject)
+    // de ayni endpoint'ten legacy moduyla gelir.
+    function applyTemplateDefaults(layoutId) {
+        if (!layoutId) return;
+        fetch('/MailSend/ResolveDefaults?layoutId=' + encodeURIComponent(layoutId), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.ok) return;
+                // Sadece bos alanlari doldur — kullanicinin yazdiklarini ezme.
+                if (!$subject.value && d.subject) $subject.value = d.subject;
+                if (!$body.value    && d.body)    $body.value    = d.body;
+            })
+            .catch(function () { /* sessizce gec */ });
+    }
+    function loadTemplates() {
+        return fetch('/MailSend/Templates', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                _templatesCache = Array.isArray(list) ? list : [];
+                $tpl.innerHTML = '';
+                if (_templatesCache.length === 0) {
+                    var opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = '(Mail şablonu yok — DocDesigner > Çıktı = Email)';
+                    $tpl.appendChild(opt);
+                    return;
+                }
+                // Varsayilan sablon varsa onu otomatik secili goster — "Şablon seçiniz" zorunlu degil.
+                var def = _templatesCache.find(function (t) { return t.isDefault; });
+                if (!def) {
+                    var empty = document.createElement('option');
+                    empty.value = ''; empty.textContent = '— Şablon seçiniz —';
+                    $tpl.appendChild(empty);
+                }
+                _templatesCache.forEach(function (t) {
+                    var o = document.createElement('option');
+                    o.value = t.id;
+                    o.textContent = t.name + (t.isDefault ? ' (varsayılan)' : '');
+                    if (def && t.id === def.id) o.selected = true;
+                    $tpl.appendChild(o);
+                });
+                // Varsayilan sablon icin Konu + Govde otomatik dolar
+                if (def) {
+                    applyTemplateDefaults(def.id);
+                    try { $tpl.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* ignore */ }
+                }
+            })
+            .catch(function () { toast('Şablonlar yüklenemedi.', 'err'); });
+    }
+    // Sablon degisince yeni sablonun defaults'larini uygula (mevcut alanlar bossa)
+    if ($tpl) {
+        $tpl.addEventListener('change', function () { applyTemplateDefaults($tpl.value); });
+    }
+
+    // ── Title combobox ───────────────────────────────────────────────────────
+    function loadTitles() {
+        return fetch('/MailSend/Titles', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                _titles = Array.isArray(list) ? list : [];
+                renderTitleList('');
+            })
+            .catch(function () {
+                _titles = [];
+                $comboList.innerHTML = '<div class="ms-combo__empty">Ünvanlar yüklenemedi.</div>';
+            });
+    }
+
+    function renderTitleList(filter) {
+        var q = (filter || '').toLowerCase().trim();
+        var items = _titles.filter(function (t) {
+            return !q || (t.name || '').toLowerCase().indexOf(q) >= 0;
+        });
+        if (items.length === 0) {
+            $comboList.innerHTML = '<div class="ms-combo__empty">Sonuç yok.</div>';
+            return;
+        }
+        var html = '';
+        items.forEach(function (t) {
+            var checked = _selectedTitleIds.has(t.id);
+            var hasUsage = (t.usageCount || 0) > 0;
+            html += '<label class="ms-combo__row' + (hasUsage ? ' has-usage' : '') + (!hasUsage ? ' is-disabled' : '') + '" data-tid="' + t.id + '">'
+                 +  '<input type="checkbox" data-tid="' + t.id + '"' + (checked ? ' checked' : '') + '/>'
+                 +  '<span class="name">' + esc(t.name) + '</span>'
+                 +  '<span class="count">' + (t.usageCount || 0) + '</span>'
+                 +  '</label>';
+        });
+        $comboList.innerHTML = html;
+        Array.prototype.forEach.call($comboList.querySelectorAll('input[type=checkbox]'), function (cb) {
+            cb.addEventListener('change', function () {
+                var tid = parseInt(cb.getAttribute('data-tid'), 10);
+                if (cb.checked) _selectedTitleIds.add(tid);
+                else _selectedTitleIds.delete(tid);
+                renderComboBtn();
+                _recipientsLoadedFor = ''; // Yeniden yükletmek için key'i sıfırla
+            });
+        });
+    }
+
+    function renderComboBtn() {
+        var caret = $comboBtn.querySelector('.ms-combo__caret');
+        Array.prototype.slice.call($comboBtn.childNodes).forEach(function (n) {
+            if (n !== caret) $comboBtn.removeChild(n);
+        });
+        if (_selectedTitleIds.size === 0) {
+            var ph = document.createElement('span');
+            ph.className = 'ms-combo__placeholder';
+            ph.textContent = 'Ünvan seçin…';
+            $comboBtn.insertBefore(ph, caret);
+        } else {
+            _titles.forEach(function (t) {
+                if (!_selectedTitleIds.has(t.id)) return;
+                var chip = document.createElement('span');
+                chip.className = 'ms-chip';
+                chip.innerHTML = esc(t.name) + '<button type="button" class="ms-chip__x" aria-label="Kaldır" data-tid="' + t.id + '">&times;</button>';
+                $comboBtn.insertBefore(chip, caret);
+            });
+        }
+    }
+
+    $comboBtn.addEventListener('click', function (e) {
+        var target = e.target;
+        if (target && target.classList && target.classList.contains('ms-chip__x')) {
+            e.stopPropagation();
+            var tid = parseInt(target.getAttribute('data-tid'), 10);
+            _selectedTitleIds.delete(tid);
+            renderComboBtn();
+            renderTitleList($comboSearch.value);
+            _recipientsLoadedFor = '';
+            return;
+        }
+        var open = $combo.classList.toggle('is-open');
+        $comboBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) setTimeout(function () { $comboSearch.focus(); }, 30);
+    });
+    document.addEventListener('click', function (e) {
+        if (!$combo.contains(e.target)) {
+            $combo.classList.remove('is-open');
+            $comboBtn.setAttribute('aria-expanded', 'false');
+        }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && $combo.classList.contains('is-open')) {
+            $combo.classList.remove('is-open');
+            $comboBtn.setAttribute('aria-expanded', 'false');
+        }
+    });
+    $comboSearch.addEventListener('input', function () { renderTitleList($comboSearch.value); });
+    $btnAll.addEventListener('click', function () {
+        _titles.forEach(function (t) { if ((t.usageCount || 0) > 0) _selectedTitleIds.add(t.id); });
+        renderComboBtn(); renderTitleList($comboSearch.value); _recipientsLoadedFor = '';
+    });
+    $btnNone.addEventListener('click', function () {
+        _selectedTitleIds.clear();
+        renderComboBtn(); renderTitleList($comboSearch.value); _recipientsLoadedFor = '';
+    });
+
+    // ── Token insertion ──────────────────────────────────────────────────────
+    // Son focus olan input/textarea'yi takip et — token chip'e tiklayinca o alana
+    // imlec konumundan insert edilir. Default: body (gövde).
+    var _lastTokenTarget = $body;
+    [$subject, $body].forEach(function (el) {
+        if (!el) return;
+        el.addEventListener('focus', function () { _lastTokenTarget = el; });
+    });
+    document.querySelectorAll('.token-chip').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var token  = b.getAttribute('data-token');
+            var target = _lastTokenTarget || $body;
+            var start  = target.selectionStart || 0;
+            var end    = target.selectionEnd   || 0;
+            var v      = target.value;
+            target.value = v.substring(0, start) + token + v.substring(end);
+            target.focus();
+            target.selectionStart = target.selectionEnd = start + token.length;
+        });
+    });
+
+    // ── Preview ──────────────────────────────────────────────────────────────
+    function openPreviewModal() { $previewModal.classList.add('is-open'); }
+    function closePreviewModal() { $previewModal.classList.remove('is-open'); }
+    $previewClose.addEventListener('click', closePreviewModal);
+    $previewModal.addEventListener('click', function (e) { if (e.target === $previewModal) closePreviewModal(); });
+
+    $previewBtn.addEventListener('click', function () {
+        if (!$tpl.value) { toast('Önce Sekme 1\'de şablon seçin.', 'err'); return; }
+        if (_selectedTitleIds.size === 0) { toast('Önce Sekme 1\'de ünvan seçin.', 'err'); return; }
+        $previewBtn.disabled = true;
+        var ids = Array.from(_selectedTitleIds).join(',');
+        // Onizleme icin de ayni grup filtrelerini uygula — kullanici "ilk alici" olarak
+        // gercek hedef profilini gormeli (yoksa farkli bir cariyi temsil eden render olur).
+        fetch('/MailSend/RecipientsByTitle?titleIds=' + encodeURIComponent(ids) + cmpGroupQuery(), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.ok || res.count === 0) throw new Error('Önizlenecek alıcı yok.');
+                return fetch('/MailSend/Preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        layoutId: parseInt($tpl.value, 10),
+                        contactId: res.data[0].contactId,
+                        subject: $subject.value,
+                        body: $body.value
+                    })
+                });
+            })
+            .then(function (r) {
+                if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+                return r.text();
+            })
+            .then(function (html) {
+                openPreviewModal();
+                var doc = $previewFrame.contentDocument || $previewFrame.contentWindow.document;
+                doc.open(); doc.write(html); doc.close();
+            })
+            .catch(function (err) { toast('Önizleme hatası: ' + (err.message || err), 'err'); })
+            .finally(function () { $previewBtn.disabled = false; });
+    });
+
+    // ── Recipients ───────────────────────────────────────────────────────────
+    // 2026-05-20: Kullanici raporu — "Kurumsal Iletisim" secince binlerce cari
+    // yuklenmeye calisiliyordu, sayfa dakikalarca takiliyordu. Cozum 3 katmanli:
+    //   1) Backend: TOP 1000 + sargable WHERE + filtered index (kaynak hizli doner)
+    //   2) Buradaki q parametresi → arama metni server'a iletilir (debounced)
+    //   3) Truncated uyari — limit asiildiysa kullanici filtre ile daraltir
+    var TOP_LIMIT = 1000;
+    var _recipSearchDebounce = null;
+    // Son yuklenen title set'inin key'i. _excluded'un ne zaman clear edilecegini
+    // belirler — sadece title degistiyse "temiz baslangic" yaparir; arama veya
+    // grup degisiminde exclude state KORUNUR (kullanici "Tumunu Haric Tut" diyip
+    // sonra arama yaptiginda exclude'lar kaybolmasin).
+    var _lastTitleKey = null;
+    // Infinite scroll state — filter degisirse reset (offset=0). loadMoreRecipients
+    // sayfa altina scroll edildiginde yeni page'i append eder.
+    var _pageOffset  = 0;
+    var _pageHasMore = false;
+    var _pageLoading = false;
+    // 2026-05-20: "Secilenleri Goster" toggle. Aktifken renderRecipients sadece
+    // dahil olanlari listeler — filtre disinda kalmis ama hala dahil olan
+    // pid'leri de cache'ten cikarip gosterir. _selectedCache pid -> minimal
+    // recipient metadata (manuel etkilesim oldukca dolar; bulk action'da temizlenir).
+    var _showSelectedOnly = false;
+    var _selectedCache = new Map();
+
+    // 2026-05-20: Son toplu aksiyon bayragi. Arama/grup degisiminde yeni gelen
+    // recipient'lar bu bayraga gore otomatik duzenlenir:
+    //   'exclude-all' → yeni gelenler de exclude'a eklenir
+    //   'include-all' → yeni gelenler exclude'dan cikarilir
+    //   null          → varsayilan (dokunulmaz, _excluded set'i belirleyicidir)
+    // Network gecikmesi veya server filter uyumsuzlugu varsa "Tumunu Haric Tut"
+    // sonrasi arama yapilinca kayit eklemesi kacirilmaz — yeni gelenler hep
+    // o bayraga gore set edilir.
+    var _lastBulkAction = null;
+    // Kullanicinin manuel toggle ettigi pid'ler. _lastBulkAction kuralinin
+    // bu pid'lere uygulanmamasini saglar — manuel secimleri korur.
+    var _manualToggled = new Set();
+    // Cari grup kodu filtrelerini query string'e ekler (g1..g5 — sadece pozitif olanlar).
+    function cmpGroupQuery() {
+        if (typeof _cmpGroupSelected === 'undefined') return '';
+        var parts = [];
+        for (var i = 0; i < _cmpGroupSelected.length; i++) {
+            var v = _cmpGroupSelected[i];
+            if (v > 0) parts.push('g' + (i + 1) + '=' + v);
+        }
+        return parts.length ? '&' + parts.join('&') : '';
+    }
+    function cmpGroupFingerprint() {
+        return (typeof _cmpGroupSelected === 'undefined') ? '' : ('|' + _cmpGroupSelected.join('-'));
+    }
+    // Yeni gelen recipient set'ine son toplu aksiyonu uygular. Manuel toggle
+    // edilen pid'ler atlanir. _excluded set'i in-place mutate edilir.
+    function applyBulkActionTo(items) {
+        if (_lastBulkAction === 'exclude-all') {
+            items.forEach(function (r) {
+                if (!_manualToggled.has(r.contactPersonId))
+                    _excluded.add(r.contactPersonId);
+            });
+        } else if (_lastBulkAction === 'include-all') {
+            items.forEach(function (r) {
+                if (!_manualToggled.has(r.contactPersonId))
+                    _excluded.delete(r.contactPersonId);
+            });
+        }
+    }
+
+    function ensureRecipientsLoaded() {
+        var key = Array.from(_selectedTitleIds).sort(function (a, b) { return a - b; }).join(',');
+        var q = ($recipSearch.value || '').trim();
+        var fingerprint = key + '|' + q + cmpGroupFingerprint();
+        if (fingerprint === _recipientsLoadedFor && _recipients.length > 0) return;
+        _recipientsLoadedFor = fingerprint;
+        // Sadece TITLE seti degistiginde exclude state'i sifirla. Arama ve grup
+        // degisikliginde exclude korunur — "Tumunu Haric Tut" tiklayan kullanici
+        // sonradan arama yapinca dahil/haric durumunu yeniden secmek zorunda kalmaz.
+        var titleChanged = (key !== _lastTitleKey);
+        _lastTitleKey = key;
+        // Yeni filter seti — pagination state reset
+        _pageOffset = 0;
+        _pageHasMore = false;
+        _pageLoading = false;
+        if (key === '') {
+            _recipients = [];
+            _excluded.clear();
+            renderRecipients();
+            $recipEmpty.style.display = '';
+            $recipEmpty.textContent = 'Sekme 1\'de ünvan seçtiğinizde alıcılar yüklenecek.';
+            return;
+        }
+        $recipEmpty.style.display = '';
+        $recipEmpty.textContent = 'Yükleniyor…';
+        if ($recipRows) $recipRows.innerHTML = '';
+        var req = ++_recipReq;
+        var url = '/MailSend/RecipientsByTitle?titleIds=' + encodeURIComponent(key)
+                + '&top=' + TOP_LIMIT
+                + '&offset=0'
+                + (q ? '&q=' + encodeURIComponent(q) : '')
+                + cmpGroupQuery();
+        _pageLoading = true;
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (req !== _recipReq) return;
+                _recipients = (res && res.ok && Array.isArray(res.data)) ? res.data : [];
+                _pageOffset  = _recipients.length;
+                _pageHasMore = !!(res && res.hasMore);
+                // _excluded SADECE title seti degistiginde sifirlanir. Arama/grup
+                // degisikliginde mevcut hariç tutma durumu korunur.
+                if (titleChanged) {
+                    _excluded.clear();
+                    _manualToggled.clear();
+                    _selectedCache.clear();
+                    _lastBulkAction = null;
+                    // "Secilenleri Goster" modunu kapat — yeni title seti, sifirdan basla
+                    if (_showSelectedOnly && $recipShowSelected) {
+                        _showSelectedOnly = false;
+                        $recipShowSelected.classList.remove('is-active');
+                        $recipShowSelected.textContent = 'Seçilenleri Göster';
+                    }
+                }
+                applyBulkActionTo(_recipients);
+                renderRecipients();
+                if (_recipients.length === 0) {
+                    $recipEmpty.style.display = '';
+                    $recipEmpty.textContent = q
+                        ? '"' + q + '" aramasıyla eşleşen alıcı yok.'
+                        : 'Seçili ünvan(lar) için email adresi olan kişi yok.';
+                } else if (_pageHasMore) {
+                    // Hala devam edecek sayfa var — kullaniciyi bilgilendir.
+                    $recipEmpty.style.display = '';
+                    $recipEmpty.textContent = 'İlk ' + _recipients.length + ' alıcı gösteriliyor — listeyi aşağı kaydırın veya arama yapın.';
+                } else {
+                    $recipEmpty.style.display = 'none';
+                }
+            })
+            .catch(function () {
+                if (req !== _recipReq) return;
+                _recipients = [];
+                $recipEmpty.style.display = '';
+                $recipEmpty.textContent = 'Alıcılar yüklenemedi.';
+            })
+            .finally(function () {
+                _pageLoading = false;
+            });
+    }
+
+    // Infinite scroll — listede asagi inildiginde bir sonraki page'i append eder.
+    // Mevcut filter ile (titleIds + q + grup) tutarli devam eder. _excluded ve
+    // _lastBulkAction state'i KORUNUR — yeni page'e de bulk action uygulanir.
+    function loadMoreRecipients() {
+        if (_pageLoading || !_pageHasMore) return;
+        var key = Array.from(_selectedTitleIds).sort(function (a, b) { return a - b; }).join(',');
+        if (key === '') return;
+        var q = ($recipSearch.value || '').trim();
+        _pageLoading = true;
+        var req = _recipReq; // mevcut filter req'i — degismediyse append yap
+        var url = '/MailSend/RecipientsByTitle?titleIds=' + encodeURIComponent(key)
+                + '&top=' + TOP_LIMIT
+                + '&offset=' + _pageOffset
+                + (q ? '&q=' + encodeURIComponent(q) : '')
+                + cmpGroupQuery();
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (req !== _recipReq) return; // filter degisti, bu page'i atla
+                var newRows = (res && res.ok && Array.isArray(res.data)) ? res.data : [];
+                if (newRows.length === 0) { _pageHasMore = false; return; }
+                applyBulkActionTo(newRows);
+                _recipients = _recipients.concat(newRows);
+                _pageOffset += newRows.length;
+                _pageHasMore = !!(res && res.hasMore);
+                renderRecipients();
+                if (!_pageHasMore) {
+                    $recipEmpty.style.display = 'none';
+                }
+            })
+            .catch(function () { /* silent */ })
+            .finally(function () { _pageLoading = false; });
+    }
+
+    // Arama kutusunda yazi yazilirken debounced server-side reload — sadece
+    // gercekten cok kayit varsa (TOP limit'e takilmis) anlamli. Az kayitlilarda
+    // client-side filter zaten anlik renderRecipients() icinde calisiyor.
+    function recipSearchChanged() {
+        if (_recipSearchDebounce) clearTimeout(_recipSearchDebounce);
+        _recipSearchDebounce = setTimeout(function () {
+            // key fingerprint degisecek (q ek parca), yeni server cagrisi tetiklenecek
+            _recipientsLoadedFor = '__force_reload__';
+            ensureRecipientsLoaded();
+        }, 350);
+    }
+
+    function renderRecipients() {
+        var q = ($recipSearch.value || '').toLowerCase().trim();
+        // Liste kaynagi: normal modda _recipients, "Secilenleri Goster" modunda
+        // _recipients + _selectedCache (filtre disinda kalmis dahil pid'ler de gelsin).
+        var source = _recipients;
+        if (_showSelectedOnly) {
+            var visiblePids = new Set();
+            _recipients.forEach(function (r) { visiblePids.add(r.contactPersonId); });
+            // Cache'ten ek: gorunmuyor ama dahil olanlar
+            var extras = [];
+            _selectedCache.forEach(function (rcp, pid) {
+                if (!visiblePids.has(pid) && !_excluded.has(pid)) extras.push(rcp);
+            });
+            source = _recipients.concat(extras);
+        }
+        var filtered = source.filter(function (rcp) {
+            // "Secilenleri Goster" aktif: sadece dahil olanlari goster
+            if (_showSelectedOnly && _excluded.has(rcp.contactPersonId)) return false;
+            if (!q) return true;
+            return (rcp.fullName || '').toLowerCase().indexOf(q) >= 0
+                || (rcp.accountTitle || '').toLowerCase().indexOf(q) >= 0
+                || (rcp.email || '').toLowerCase().indexOf(q) >= 0;
+        });
+        var html = '';
+        filtered.forEach(function (rcp) {
+            var pid = rcp.contactPersonId;
+            var excluded = _excluded.has(pid);
+            var included = !excluded;
+            html += '<div class="recip-row ' + (excluded ? 'is-excluded' : 'is-included') + '" data-pid="' + pid + '">'
+                 +   '<div class="recip-row__cell recip-row__name"    title="' + esc(rcp.fullName || '') + '">' + esc(rcp.fullName || '(isimsiz)') + '</div>'
+                 +   '<div class="recip-row__cell recip-row__contact" title="' + esc(rcp.accountTitle || '') + '">' + esc(rcp.accountTitle || '—') + '</div>'
+                 +   '<div class="recip-row__cell recip-row__title"   title="' + esc(rcp.title || '') + '">' + esc(rcp.title || '—') + '</div>'
+                 +   '<div class="recip-row__cell recip-row__email"   title="' + esc(rcp.email || '') + '">' + esc(rcp.email || '') + '</div>'
+                 +   '<div class="recip-row__toggle">'
+                 +     '<label class="cp-switch" title="Dahil et / Hariç tut">'
+                 +       '<input type="checkbox" data-pid="' + pid + '"' + (included ? ' checked' : '') + '/>'
+                 +       '<span class="cp-switch__track"></span>'
+                 +       '<span class="cp-switch__thumb"></span>'
+                 +     '</label>'
+                 +   '</div>'
+                 + '</div>';
+        });
+        $recipRows.innerHTML = html;
+        // toggle binding
+        Array.prototype.forEach.call($recipRows.querySelectorAll('input[type=checkbox]'), function (cb) {
+            cb.addEventListener('change', function () {
+                var pid = parseInt(cb.getAttribute('data-pid'), 10);
+                if (cb.checked) _excluded.delete(pid);
+                else _excluded.add(pid);
+                // Manuel toggle: bulk action kuralinin bu pid'e uygulanmamasi icin
+                // _manualToggled set'ine ekle. Sonraki arama/grup degisiminde korunur.
+                _manualToggled.add(pid);
+                // _selectedCache: dahil olanlar minimal metadata ile cache'lenir.
+                // Filtre disina ciksa bile "Secilenleri Goster" modunda gosterilebilir.
+                var rcp = _recipients.find(function (r) { return r.contactPersonId === pid; })
+                       || _selectedCache.get(pid);
+                if (cb.checked && rcp) {
+                    _selectedCache.set(pid, {
+                        contactPersonId: pid,
+                        fullName:        rcp.fullName,
+                        title:           rcp.title,
+                        email:           rcp.email,
+                        phone:           rcp.phone,
+                        contactId:       rcp.contactId,
+                        accountCode:     rcp.accountCode,
+                        accountTitle:    rcp.accountTitle
+                    });
+                } else {
+                    _selectedCache.delete(pid);
+                }
+                updateSummary();
+                // sadece ilgili satırın class'ını güncelle
+                var row = cb.closest('.recip-row');
+                if (row) {
+                    row.classList.toggle('is-excluded', !cb.checked);
+                    row.classList.toggle('is-included', cb.checked);
+                }
+            });
+        });
+        updateSummary();
+    }
+    // Dahil olan pid'lerin unique listesi: _selectedCache (manuel/bulk ile dahil)
+    // + _recipients icinden _excluded olmayanlar. Filtre disinda kalmis manuel
+    // secimler ve gorunur dahil olanlarin birlesimi.
+    function getIncludedPids() {
+        var set = new Set();
+        _selectedCache.forEach(function (_, pid) {
+            if (!_excluded.has(pid)) set.add(pid);
+        });
+        _recipients.forEach(function (r) {
+            if (!_excluded.has(r.contactPersonId)) set.add(r.contactPersonId);
+        });
+        return set;
+    }
+    function updateSummary() {
+        var includedSet = getIncludedPids();
+        var inc = includedSet.size;
+        // total: yuklenen visible + cache'teki extra'lar (gorunmuyor olsa bile dahil sayilanlar)
+        var visiblePids = new Set();
+        _recipients.forEach(function (r) { visiblePids.add(r.contactPersonId); });
+        var extraIncluded = 0;
+        _selectedCache.forEach(function (_, pid) {
+            if (!visiblePids.has(pid) && !_excluded.has(pid)) extraIncluded++;
+        });
+        var total = _recipients.length + extraIncluded;
+        var exc = total - inc;
+        $recipIncCount.textContent = inc;
+        $recipExcCount.textContent = exc;
+        $recipTotalCount.textContent = total;
+    }
+    // Arama kutusu — iki katmanli:
+    //  1) Anlik client-side filter (mevcut yuklenmis _recipients uzerinde)
+    //  2) Debounced server-side reload (TOP limitine takilmissa)
+    $recipSearch.addEventListener('input', function () {
+        renderRecipients();
+        recipSearchChanged();
+    });
+    // "Seçilenleri Göster" toggle — sadece dahil olanları listeler.
+    // Aktif olunca arama kutusu + Tümünü Dahil/Hariç butonları görsel olarak
+    // çalışmaya devam eder (filtre uygulanır ama sadece dahil olanlar gösterilir).
+    // Tekrar tıklayınca normal moda döner.
+    $recipShowSelected.addEventListener('click', function () {
+        _showSelectedOnly = !_showSelectedOnly;
+        $recipShowSelected.classList.toggle('is-active', _showSelectedOnly);
+        $recipShowSelected.textContent = _showSelectedOnly ? 'Tümünü Göster' : 'Seçilenleri Göster';
+        renderRecipients();
+        // Toplam sayım da güncellensin
+        updateSummary();
+    });
+    // "Tümünü Dahil Et" — şu anki filtreye (titleIds + grup + arama) uyan TÜM id'leri
+    // _excluded'dan çıkarır. Filtre scope'u DIŞINDA kalan exclude'lar korunur.
+    // Örnek senaryo: kullanıcı "Tümünü Hariç Tut" → arama yap → arama sonuçlarındaki
+    // 5 kişiyi "Tümünü Dahil Et" ile aç. Arka planda hariç tutulan binlerce kişi
+    // OLDUĞU GİBİ kalır, sadece bu 5 kişi dahil olur.
+    $recipIncAll.addEventListener('click', function () {
+        var key = Array.from(_selectedTitleIds).sort(function (a, b) { return a - b; }).join(',');
+        if (key === '') { return; }
+        var q = ($recipSearch.value || '').trim();
+        var originalLabel = $recipIncAll.textContent;
+        $recipIncAll.disabled = true;
+        $recipIncAll.textContent = 'Yükleniyor…';
+        // Bulk action mode: bu noktadan sonra arama/grup degisiminde yeni gelen
+        // recipient'lar otomatik DAHIL olur (manuel toggle edilmediyse).
+        _lastBulkAction = 'include-all';
+        _manualToggled.clear();
+        // "Tumunu Dahil Et" → goruunur olanlari cache'e ekle (dahil sayar).
+        // Cache buyumesin diye sadece visible'i koyuyoruz; "Secilenleri Goster"
+        // include-all modunda zaten tum filtreyi gosterir.
+        _recipients.forEach(function (r) {
+            _selectedCache.set(r.contactPersonId, {
+                contactPersonId: r.contactPersonId,
+                fullName: r.fullName, title: r.title, email: r.email, phone: r.phone,
+                contactId: r.contactId, accountCode: r.accountCode, accountTitle: r.accountTitle
+            });
+        });
+        var url = '/MailSend/RecipientIdsByTitle?titleIds=' + encodeURIComponent(key)
+                + (q ? '&q=' + encodeURIComponent(q) : '')
+                + cmpGroupQuery();
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (res && res.ok && Array.isArray(res.ids)) {
+                    res.ids.forEach(function (id) { _excluded.delete(id); });
+                }
+                // Fallback: görünür olanları da exclude'dan çıkar
+                _recipients.forEach(function (r) { _excluded.delete(r.contactPersonId); });
+                renderRecipients();
+                if (typeof toast === 'function') {
+                    toast((res && res.count ? res.count : _recipients.length) + ' alıcı dahil edildi.', 'ok');
+                }
+            })
+            .catch(function () {
+                // Network hatası → en azından görünür olanları dahil et
+                _recipients.forEach(function (r) { _excluded.delete(r.contactPersonId); });
+                renderRecipients();
+            })
+            .finally(function () {
+                $recipIncAll.disabled = false;
+                $recipIncAll.textContent = originalLabel;
+            });
+    });
+
+    // "Tümünü Hariç Tut" — sadece görünür 1000 değil, filtreye uyan TÜM kayıtları
+    // hariç tutar. Server'dan id listesi çekilir (RecipientIdsByTitle endpoint —
+    // sadece id, TOP yok). Yüklü recipient'lardaki id'ler de garanti için
+    // eklenir (set zaten unique). Buton loading state'e girer.
+    $recipExcAll.addEventListener('click', function () {
+        var key = Array.from(_selectedTitleIds).sort(function (a, b) { return a - b; }).join(',');
+        if (key === '') { return; }
+        var q = ($recipSearch.value || '').trim();
+        var originalLabel = $recipExcAll.textContent;
+        $recipExcAll.disabled = true;
+        $recipExcAll.textContent = 'Yükleniyor…';
+        // Bulk action mode: bu noktadan sonra arama/grup degisiminde yeni gelen
+        // recipient'lar otomatik HARIC olur (manuel toggle edilmediyse).
+        _lastBulkAction = 'exclude-all';
+        _manualToggled.clear();
+        // "Tumunu Haric Tut" → hicbiri secili degil → cache'i temizle
+        _selectedCache.clear();
+        var url = '/MailSend/RecipientIdsByTitle?titleIds=' + encodeURIComponent(key)
+                + (q ? '&q=' + encodeURIComponent(q) : '')
+                + cmpGroupQuery();
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (res && res.ok && Array.isArray(res.ids)) {
+                    res.ids.forEach(function (id) { _excluded.add(id); });
+                }
+                // Fallback: server eski sürüm ise (endpoint yoksa) görünür olanları yine ekle
+                _recipients.forEach(function (r) { _excluded.add(r.contactPersonId); });
+                renderRecipients();
+                if (typeof toast === 'function') {
+                    toast((res && res.count ? res.count : _recipients.length) + ' alıcı hariç tutuldu.', 'ok');
+                }
+            })
+            .catch(function () {
+                // Network/endpoint hatası → en azından görünür olanları hariç tut
+                _recipients.forEach(function (r) { _excluded.add(r.contactPersonId); });
+                renderRecipients();
+            })
+            .finally(function () {
+                $recipExcAll.disabled = false;
+                $recipExcAll.textContent = originalLabel;
+            });
+    });
+
+    // ── Send (top bar + tab 3 footer) ────────────────────────────────────────
+    function doSend() {
+        if (!$tpl.value) { toast('Sekme 1: Şablon seçin.', 'err'); gotoTab('tpl'); return; }
+        if (_selectedTitleIds.size === 0) { toast('Sekme 1: En az bir ünvan seçin.', 'err'); gotoTab('tpl'); return; }
+        ensureRecipientsLoaded();
+        // Eğer ensureRecipientsLoaded async ise küçük bekleme yapalım
+        setTimeout(function () {
+            // getIncludedPids: gorunur + cache (filtre disinda kalmis manuel dahiller)
+            // birlesimi. Sadece _recipients.filter ile sinirli kalirsa, kullanici
+            // arama yapip baska kayda gectiginde onceki dahillerini kaybeder.
+            var included = Array.from(getIncludedPids());
+            if (included.length === 0) { toast('Dahil edilen alıcı yok.', 'err'); gotoTab('recip'); return; }
+
+            confirmModal({
+                title: 'Toplu mail gönderilsin mi?',
+                message: included.length + ' kişiye mail gönderilecek.',
+                okLabel: 'Gönder'
+            }).then(function (ok) {
+                if (!ok) return;
+                $finalSend.disabled = true; $topSendBtn.disabled = true;
+                var prevTxt = $finalSend.innerHTML;
+                $finalSend.textContent = 'Gönderiliyor…';
+                // Multipart/form-data — dosya eklerini de iceriyor.
+                // Token'sus zaten cookie auth; CSRF lazimsa form'a hidden input ekleyebilirsin.
+                var fd = new FormData();
+                fd.set('layoutId', String(parseInt($tpl.value || '0', 10)));
+                Array.from(_selectedTitleIds).forEach(function (id) { fd.append('titleIds', String(id)); });
+                included.forEach(function (id) { fd.append('contactPersonIds', String(id)); });
+                fd.set('subject', $subject.value || '');
+                fd.set('body', $body.value || '');
+                _attachments.forEach(function (file) { fd.append('attachments', file, file.name); });
+
+                // Belge PDF'ini ek olarak yolla — sadece bagimsiz dokuman context'i varsa
+                // ve kullanici checkbox'i acik tuttuysa.
+                if (_docContext.documentId && $docPdfEnable && $docPdfEnable.checked && $docPdfLayout && $docPdfLayout.value) {
+                    fd.set('documentId', String(_docContext.documentId));
+                    fd.set('documentPdfLayoutId', String($docPdfLayout.value));
+                    if (_docContext.fileName) fd.set('documentPdfFileName', _docContext.fileName);
+                }
+
+                fetch('/MailSend/SendBulk', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: fd
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.ok) {
+                        toast(d.message || (d.sentCount + ' kişiye mail gönderildi.'), 'ok');
+                        setTimeout(function () { window.location.href = '/MailSend'; }, 900);
+                    } else {
+                        var msg = (d && d.message) || 'Gönderilemedi.';
+                        if (d && d.errors && d.errors.length) {
+                            msg += '\n\nHatalar:\n' + d.errors.slice(0, 5).join('\n');
+                        }
+                        toast(msg, 'err');
+                        $finalSend.disabled = false; $topSendBtn.disabled = false;
+                        $finalSend.innerHTML = prevTxt;
+                    }
+                })
+                .catch(function (err) {
+                    toast('Hata: ' + (err.message || err), 'err');
+                    $finalSend.disabled = false; $topSendBtn.disabled = false;
+                    $finalSend.innerHTML = prevTxt;
+                });
+            });
+        }, 60);
+    }
+    $finalSend.addEventListener('click', doSend);
+    $topSendBtn.addEventListener('click', doSend);
+
+    // ── Cari Grup Kodu cascade ─────────────────────────────────────────────
+    // 5 seviyeli grup kodu filtresi. ContactEdit'tekiyle ayni endpoint:
+    // GET /Definitions/GetCardGroups?cardType=2&level=N&parentId=P
+    // Bir seviye degisince alttaki seviyeler temizlenir + bir sonraki seviye fetch'lenir.
+    // Secimler degistikce alici listesi yeniden fetch'lenir (debounced).
+    var _cmpGroupSelected = [0, 0, 0, 0, 0]; // index = level-1
+    function cmpGroupSel(level) {
+        return document.querySelector('.cmp-group-sel[data-level="' + level + '"]');
+    }
+    function cmpBuildOptions(level, items) {
+        var sel = cmpGroupSel(level); if (!sel) return;
+        var html = '<option value="">Seçiniz</option>';
+        (items || []).forEach(function (g) {
+            html += '<option value="' + g.id + '">' + (g.code || '')
+                  + (g.description ? ' — ' + g.description : '') + '</option>';
+        });
+        sel.innerHTML = html;
+    }
+    function cmpClearLevels(fromLevel) {
+        for (var lv = fromLevel; lv <= 5; lv++) {
+            var sel = cmpGroupSel(lv);
+            if (!sel) continue;
+            sel.innerHTML = '<option value="">Seçiniz</option>';
+            sel.value = '';
+            _cmpGroupSelected[lv - 1] = 0;
+        }
+    }
+    function cmpFetchLevel(level, parentId) {
+        var url = '/Definitions/GetCardGroups?cardType=2&level=' + level;
+        if (parentId) url += '&parentId=' + parentId;
+        return fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (data) {
+                var items = Array.isArray(data) ? data : (data.items || []);
+                cmpBuildOptions(level, items);
+                return items;
+            })
+            .catch(function () { return []; });
+    }
+    for (var lv = 1; lv <= 5; lv++) {
+        (function (level) {
+            var sel = cmpGroupSel(level); if (!sel) return;
+            sel.addEventListener('change', function () {
+                var val = parseInt(sel.value, 10) || 0;
+                _cmpGroupSelected[level - 1] = val;
+                cmpClearLevels(level + 1);
+                if (val > 0 && level < 5) cmpFetchLevel(level + 1, val);
+                // Alici listesini yeniden cek — fingerprint degisecek
+                _recipientsLoadedFor = '__force_reload__';
+                if (_selectedTitleIds.size > 0) ensureRecipientsLoaded();
+            });
+        })(lv);
+    }
+    // Init: Level 1'i yukle
+    cmpFetchLevel(1, null);
+
+    // ── Infinite scroll listener ─────────────────────────────────────────────
+    // TAB 3'un scroll konteyneri cs-tab-pane__body. Bottom'a 200px kala bir
+    // sonraki page'i tetikle. Throttle: rAF ile basit.
+    var _scrollTick = false;
+    var $recipPane  = document.querySelector('[data-pane="recip"] .cs-tab-pane__body');
+    if ($recipPane) {
+        $recipPane.addEventListener('scroll', function () {
+            if (_scrollTick) return;
+            _scrollTick = true;
+            requestAnimationFrame(function () {
+                _scrollTick = false;
+                var nearBottom = ($recipPane.scrollHeight - $recipPane.scrollTop - $recipPane.clientHeight) < 240;
+                if (nearBottom && _pageHasMore && !_pageLoading) {
+                    loadMoreRecipients();
+                }
+            });
+        }, { passive: true });
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    loadTemplates();
+    loadTitles().then(function () { renderComboBtn(); });
+})();
+</script>
+}

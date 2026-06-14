@@ -31,6 +31,13 @@ public sealed class FinanceService : IFinanceService
         return entity is null ? null : ToDto(entity);
     }
 
+    public async Task<ContactDto?> GetContactByCodeAsync(string code, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var entity = await _repo.GetContactByCodeAsync(code.Trim(), cancellationToken);
+        return entity is null ? null : ToDto(entity);
+    }
+
     public async Task<(bool Success, string? Error, ContactDto? Account)> UpsertContactAsync(
         SaveContactRequest request, CancellationToken cancellationToken)
     {

@@ -3,7 +3,7 @@ using CalibraHub.Domain.Enums;
 
 namespace CalibraHub.Domain.Entities;
 
-public sealed class UserProfile : Entity
+public sealed class UserProfile : EntityInt
 {
     public const string DefaultLanguageCode = "tr-TR";
     public const string DefaultThemeCode = "light";
@@ -13,7 +13,9 @@ public sealed class UserProfile : Entity
     public required string Email { get; init; }
     public required string EmployeeCode { get; init; }
     public int? DepartmentId { get; init; }
-    public Guid? SupervisorUserId { get; init; }
+    public int? SupervisorUserId { get; init; }
+    /// <summary>Cep telefonu — WhatsApp bildirim alıcısı + iletişim. Opsiyonel.</summary>
+    public string? PhoneNumber { get; init; }
     public UserRole Role { get; init; } = UserRole.Operator;
     public IReadOnlyCollection<UserPermission> Permissions { get; init; } = Array.Empty<UserPermission>();
     public string PasswordHash { get; private set; } = string.Empty;

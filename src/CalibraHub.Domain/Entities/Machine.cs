@@ -14,10 +14,10 @@ public sealed class Machine
     public int LocationId { get; init; }
 
     /// <summary>Kisa benzersiz makine kodu (UNIQUE per company).</summary>
-    public required string MachineCode { get; init; }
+    public required string Code { get; init; }
 
     /// <summary>Makinenin gorunur adi (ornek: "CNC-1 Torna").</summary>
-    public string? MachineName { get; init; }
+    public string? Name { get; init; }
 
     /// <summary>Saatlik max uretim kapasitesi (mamul birimi cinsinden).</summary>
     public decimal? HourlyCapacity { get; init; }
@@ -27,4 +27,8 @@ public sealed class Machine
 
     /// <summary>Pasife alinan makine planlama listelerinde gozukmez.</summary>
     public bool IsActive { get; init; } = true;
+    public int? CreatedById { get; init; }
+    public DateTime Created { get; init; }
+    public int? UpdatedById { get; init; }
+    public DateTime? Updated { get; init; }
 }

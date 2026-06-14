@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CalibraHub.Web.Controllers;
@@ -19,6 +20,7 @@ namespace CalibraHub.Web.Controllers;
 /// v_Flat_{FormCode} dinamik view'ı yeniden oluşturulur (try/catch ile sarılı —
 /// view hatası form kayıt akışını engellemez).
 /// </summary>
+[Authorize]
 [ApiController]
 [Route("api/forms")]
 [IgnoreAntiforgeryToken]

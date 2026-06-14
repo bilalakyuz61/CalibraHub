@@ -14,8 +14,8 @@
  *  - date/datetime: equals, before, after, between
  *  - boolean: isTrue, isFalse
  */
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { Filter, X, Plus, Trash2, RotateCcw, Check, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Filter, X, RotateCcw, Check } from 'lucide-react'
 
 var STORAGE_KEY_PREFIX = 'cb-sb-filters:'
 
@@ -28,10 +28,31 @@ function loadFilters(boardKey) {
     return Array.isArray(arr) ? arr : []
   } catch (e) { return [] }
 }
+// 2026-05-24: Filtre satiri "aktif" mi? Bool icin op='isTrue/isFalse' aktif sayilir,
+// options icin secili eleman varsa aktif, diger tipler icin value (veya value2) dolu olmali.
+function isActiveFilter(f) {
+  if (!f) return false
+  var dt = (f.dataType || '').toLowerCase()
+  if (dt === 'boolean' || dt === 'bool') return f.op === 'isTrue' || f.op === 'isFalse'
+  if (dt === 'options') {
+    var sel = parseOptionsValue(f.value)
+    return sel.length > 0
+  }
+  return (f.value !== '' && f.value != null) || (f.value2 !== '' && f.value2 != null)
+}
+
+// Options dataType value'su comma-separated string olarak saklanir (localStorage uyumlu).
+// Parse → array of string codes.
+function parseOptionsValue(v) {
+  if (!v) return []
+  if (Array.isArray(v)) return v.filter(Boolean)
+  return String(v).split(',').map(function(s){ return s.trim() }).filter(Boolean)
+}
+
 function saveFilters(boardKey, filters) {
   if (!boardKey || typeof window === 'undefined') return
   try {
-    if (!filters || filters.length === 0) {
+    if (!filters || !filters.some(isActiveFilter)) {
       window.localStorage.removeItem(STORAGE_KEY_PREFIX + boardKey)
     } else {
       window.localStorage.setItem(STORAGE_KEY_PREFIX + boardKey, JSON.stringify(filters))
@@ -52,17 +73,24 @@ function operatorsFor(dataType) {
   }
   if (dt === 'date' || dt === 'datetime') {
     return [
-      { id: 'eq',     label: 'Tarih' },
+      { id: 'eq',     label: 'Eşit' },
       { id: 'before', label: 'Once' },
       { id: 'after',  label: 'Sonra' },
       { id: 'between', label: 'Arasinda' },
     ]
   }
   if (dt === 'boolean' || dt === 'bool') {
+    // 2026-05-24: 'any' = filtre uygulanmiyor (default). Radio buttonlar ile gosterilir.
     return [
-      { id: 'isTrue',  label: 'Aktif/Evet' },
-      { id: 'isFalse', label: 'Pasif/Hayir' },
+      { id: 'any',     label: 'Tümü' },
+      { id: 'isTrue',  label: 'Evet' },
+      { id: 'isFalse', label: 'Hayır' },
     ]
+  }
+  if (dt === 'options') {
+    // 2026-05-24: 'in' = secili listeden biri (multi-select). Operator dropdown gosterilmez,
+    // chip-toggle UI direkt secimi yapar.
+    return [ { id: 'in', label: 'Seçili' } ]
   }
   // text/string default
   return [
@@ -76,19 +104,8 @@ function defaultOperator(dataType) {
   return operatorsFor(dataType)[0].id
 }
 
-// Bos filter satiri — yeni eklendiginde
-function newFilterRow(masterWidgets) {
-  var first = (masterWidgets && masterWidgets[0]) || null
-  return {
-    id: 'f_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-    fieldId:  first ? first.id : '',
-    dataType: first ? (first.dataType || 'text') : 'text',
-    label:    first ? (first.label || first.id) : '',
-    op:       first ? defaultOperator(first.dataType) : 'contains',
-    value:    '',
-    value2:   '', // between icin ikinci deger
-  }
-}
+// 2026-05-24: newFilterRow KALDIRILDI — artik kullanici manuel satir eklemiyor,
+// tum alanlar acik. (buildDefaultFilterRows alanlardan otomatik uretir.)
 
 // Widget DataType (DB) → Filter Panel datatype normalizasyonu.
 // dbo.WidgetMas.DataType serbest string oldugundan filter operatorlerine map'liyoruz.
@@ -100,17 +117,23 @@ function normalizeDataType(dt) {
   if (t === 'date') return 'date'
   if (t === 'datetime' || t === 'datetime-local' || t === 'timestamp') return 'datetime'
   if (t === 'boolean' || t === 'bool' || t === 'switch' || t === 'checkbox') return 'boolean'
-  // dropdown/multi-select/lookup/link → text gibi davran (contains/equals)
+  // 2026-05-24: 'options' — backend tanimli enum/picker, multi-select filtre.
+  // dropdown / multi-select / coklu-secim / secim-listesi → hepsi options gibi davranir.
+  if (t === 'options' || t === 'enum') return 'options'
+  if (t === 'dropdown' || t === 'multi-select' || t === 'multi_select' || t === 'multiselect') return 'options'
+  // lookup/link → text gibi davran (contains/equals)
   return 'text'
 }
 
-// Filtrelenebilir mi? group, grid, multi-select tipleri filtrelenmez.
+// Filtrelenebilir mi? group, grid, rehber/lookup, link tipleri filtrelenmez.
+// 2026-05-24: dropdown / multi-select ARTIK filterable — options multi-select olarak gosterilir.
+// Rehber/Lookup widget'lari (guide-list, lookup) yine filtre panelinde gozukmez.
 function isFilterableWidget(w) {
   if (!w) return false
   var t = (w.dataType || w.DataType || '').toLowerCase()
   if (t === 'group' || t === 'grid') return false
-  if (t === 'multi-select' || t === 'multi_select' || t === 'multiselect') return false
   if (t === 'link') return false
+  if (t === 'guide-list' || t === 'guide_list' || t === 'guidelist' || t === 'lookup') return false
   // IsActive=false olanlari da atla (admin pasif yapmis)
   if (w.isActive === false || w.IsActive === false) return false
   return true
@@ -196,16 +219,24 @@ export default function SmartBoardFilterPanel(props) {
     var byId = {}
     var ordered = []
 
-    // 1) Standart alanlar (BoardConfig.masterWidgets)
+    // 1) BoardConfig.masterWidgets — backend'in source bilgisini taşıyabilir.
+    //    Ornek: LogisticsController BuildItemsMasterWidgetsFromSchema admin form
+    //    widget'larini source='widget' olarak işaretliyor → filtre panelinde
+    //    "Widget Alanlari" grubunda gösterilir. Source yoksa varsayilan 'standard'.
+    //    Rehber/Lookup widget'lari (guide-list, lookup) filtrelenmez — isFilterableWidget.
     masterWidgets.forEach(function (w) {
       if (!w || !w.id) return
       var t = (w.type || 'data').toLowerCase()
       if (t !== 'data' && t !== '') return // sadece data tipleri (badge/group atlanir)
+      if (!isFilterableWidget(w)) return    // guide-list / lookup / multi-select vs.
       if (byId[w.id]) return
       var entry = {
         id: w.id, label: w.label || w.id,
         dataType: normalizeDataType(w.dataType),
-        source: 'standard',
+        source: w.source === 'widget' ? 'widget' : 'standard',
+        options: Array.isArray(w.options) ? w.options : null,  // ← options dataType icin
+        group: w.group || null,             // ← collapsible alt-grup (Ornek: 'features')
+        groupLabel: w.groupLabel || null,
       }
       byId[w.id] = entry
       ordered.push(entry)
@@ -222,6 +253,7 @@ export default function SmartBoardFilterPanel(props) {
         if (!w || !w.id) return
         var t = (w.type || 'data').toLowerCase()
         if (t !== 'data' && t !== '') return
+        if (!isFilterableWidget(w)) return   // rehber/lookup/multi-select skip
         if (byId[w.id]) return
         var entry = {
           id: w.id, label: w.label || w.id,
@@ -240,10 +272,19 @@ export default function SmartBoardFilterPanel(props) {
         if (!isFilterableWidget(w)) return
         var key = w.widgetCode
         if (byId[key]) return // master kazanir
+        // 2026-05-24: dropdown / multi-select widget'lari icin Options array'ini
+        // {value,label} formuna donustur — combobox icin gerekli.
+        var dtRaw = (w.dataType || '').toLowerCase()
+        var optsForFilter = null
+        if ((dtRaw === 'dropdown' || dtRaw === 'multi-select' || dtRaw === 'multi_select' || dtRaw === 'multiselect')
+            && Array.isArray(w.options)) {
+          optsForFilter = w.options.map(function (s) { return { value: s, label: s } })
+        }
         var entry = {
           id: key, label: w.label || w.widgetCode,
           dataType: normalizeDataType(w.dataType),
           source: 'widget',
+          options: optsForFilter,
         }
         byId[key] = entry
         ordered.push(entry)
@@ -253,19 +294,37 @@ export default function SmartBoardFilterPanel(props) {
     return ordered
   }, [masterWidgets, widgetSchema, entities])
 
+  // 2026-05-23: Tum filtrelenebilir alanlar default olarak satir halinde gelir.
+  // Kullanici "+ Filtre Ekle" demek zorunda kalmaz — sadece deger girer ve uygular.
+  // Halen mevcut filtreyi koruma onceligi: saved/initial varsa onu kullan, yoksa
+  // her field icin bos bir satir uret.
+  function buildDefaultFilterRows(fields) {
+    if (!Array.isArray(fields) || fields.length === 0) return []
+    return fields.map(function (f, idx) {
+      return {
+        id: 'f_default_' + f.id + '_' + idx,
+        fieldId:  f.id,
+        dataType: f.dataType || 'text',
+        label:    f.label || f.id,
+        op:       defaultOperator(f.dataType),
+        value:    '',
+        value2:   '',
+      }
+    })
+  }
+
   // Local filters state — panel acikken duzenlenir, Apply'da onApply'a gider
   var [filters, setFilters] = useState(function () {
-    if (initialFilters !== null) return initialFilters.map(function (f) { return Object.assign({}, f) })
-    return loadFilters(boardKey)
+    if (initialFilters !== null && initialFilters.length > 0) {
+      return initialFilters.map(function (f) { return Object.assign({}, f) })
+    }
+    var saved = loadFilters(boardKey)
+    if (saved && saved.length > 0) return saved
+    return [] // filterableFields henuz hazir degil; useEffect'te dolduracagiz
   })
 
-  // Open olduğunda initial filters'i sync et (parent disaridan ekleme/silme yaparsa)
-  useEffect(function () {
-    if (isOpen && initialFilters !== null) {
-      setFilters(initialFilters.map(function (f) { return Object.assign({}, f) }))
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen])
+  // 2026-05-24: Tek noktada sync — asagidaki diger useEffect (filterableFields ile
+  // birebir hizalama) artik tum durumlari ele aliyor (initial / saved / bos).
 
   // ESC
   useEffect(function () {
@@ -275,34 +334,28 @@ export default function SmartBoardFilterPanel(props) {
     return function () { document.removeEventListener('keydown', onKey) }
   }, [isOpen, onClose])
 
+  // 2026-05-24: Combobox <details> elementlerini dis tikla ile kapat.
+  // (collapsible alt-gruplar `.cb-combobox` class'ina sahip degil, etkilenmez.)
+  useEffect(function () {
+    if (!isOpen) return undefined
+    function onDocDown(e) {
+      var openCbs = document.querySelectorAll('details.cb-combobox[open]')
+      openCbs.forEach(function (d) {
+        if (!d.contains(e.target)) d.removeAttribute('open')
+      })
+    }
+    document.addEventListener('mousedown', onDocDown)
+    return function () { document.removeEventListener('mousedown', onDocDown) }
+  }, [isOpen])
+
   // ── Filter row CRUD ──
-  function addRow() {
-    if (filterableFields.length === 0) return
-    setFilters(function (prev) { return prev.concat([newFilterRow(filterableFields)]) })
-  }
-  function removeRow(rowId) {
-    setFilters(function (prev) { return prev.filter(function (f) { return f.id !== rowId }) })
-  }
+  // 2026-05-24: addRow/removeRow KALDIRILDI. Her alan icin sabit bir satir var
+  // (filterableFields ile birebir). Kullanici sadece op + value duzenler.
   function updateRow(rowId, patch) {
     setFilters(function (prev) {
       return prev.map(function (f) {
         if (f.id !== rowId) return f
         var next = Object.assign({}, f, patch)
-        // fieldId degistiyse dataType + op + value reset
-        if (patch.fieldId) {
-          var w = filterableFields.find(function (x) { return x.id === patch.fieldId })
-          if (w) {
-            next.dataType = w.dataType || 'text'
-            next.label    = w.label || w.id
-            // Eski op yeni dataType'da gecerli mi?
-            var ops = operatorsFor(next.dataType)
-            if (!ops.find(function (o) { return o.id === next.op })) {
-              next.op = ops[0].id
-            }
-            next.value = ''
-            next.value2 = ''
-          }
-        }
         // op degistiginde between'den cikiyorsa value2 temizle
         if (patch.op && patch.op !== 'between') next.value2 = ''
         return next
@@ -310,21 +363,70 @@ export default function SmartBoardFilterPanel(props) {
     })
   }
 
-  function handleApply() {
-    // Gecersiz satirlari (deger bos) at — ama between'in yarisinin dolu olmasi gecerli
-    var valid = filters.filter(function (f) {
-      var dt = (f.dataType || '').toLowerCase()
-      if (dt === 'boolean' || dt === 'bool') return true // bool icin deger gerekmez
-      if (f.op === 'between') return (f.value !== '' && f.value !== null) || (f.value2 !== '' && f.value2 !== null)
-      return f.value !== '' && f.value !== null
+  // Panel acildiginda + filterableFields hazir oldugunda → satirlari senkronla.
+  // 1) initialFilters varsa onu seed kabul et (parent disardan basliyor)
+  // 2) Yoksa localStorage'den (boardKey scope) yukle
+  // 3) Her durumda filterableFields ile birebir hizala: her alan icin TEK satir,
+  //    mevcut degerleri koru, eksik alanlar icin bos satir ekle, fazla alanlari at.
+  useEffect(function () {
+    if (!isOpen || filterableFields.length === 0) return undefined
+    var seed = []
+    if (initialFilters !== null && initialFilters.length > 0) {
+      seed = initialFilters
+    } else {
+      var saved = loadFilters(boardKey)
+      if (saved && saved.length > 0) seed = saved
+    }
+    var byFieldId = {}
+    seed.forEach(function (f) {
+      if (f && f.fieldId && !byFieldId[f.fieldId]) byFieldId[f.fieldId] = f
     })
+    var aligned = filterableFields.map(function (field, idx) {
+      var existing = byFieldId[field.id]
+      var ops = operatorsFor(field.dataType)
+      var common = {
+        id: 'f_' + field.id + '_' + idx,
+        fieldId:  field.id,
+        dataType: field.dataType || 'text',
+        label:    field.label || field.id,
+        options:  field.options || null,
+        group:    field.group || null,
+        groupLabel: field.groupLabel || null,
+      }
+      if (existing) {
+        var op = ops.find(function (o) { return o.id === existing.op }) ? existing.op : ops[0].id
+        return Object.assign({}, common, {
+          op: op,
+          value:  existing.value  || '',
+          value2: existing.value2 || '',
+          matchMode: existing.matchMode || 'any',
+        })
+      }
+      return Object.assign({}, common, {
+        op:     defaultOperator(field.dataType),
+        value:  '',
+        value2: '',
+        matchMode: 'any',
+      })
+    })
+    setFilters(aligned)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, filterableFields])
+
+  function handleApply() {
+    // Gecersiz satirlari (deger bos) at — ama between'in yarisinin dolu olmasi gecerli.
+    // 2026-05-24: bool icin op='any' → filtre yok; options icin secim bos → filtre yok.
+    var valid = filters.filter(isActiveFilter)
     saveFilters(boardKey, valid)
     onApply(valid)
     onClose()
   }
 
   function handleClearAll() {
-    setFilters([])
+    // 2026-05-23: "Sifirla" — default satirlari geri uretir (degerler bos),
+    // savedFilters'i ve aktif filtreleri temizler.
+    var freshRows = buildDefaultFilterRows(filterableFields)
+    setFilters(freshRows)
     saveFilters(boardKey, [])
     onApply([])
   }
@@ -367,7 +469,7 @@ export default function SmartBoardFilterPanel(props) {
       <aside
         style={{
           position: 'absolute', top: 0, right: 0, bottom: 0,
-          width: 'min(420px, 100vw)',
+          width: 'min(520px, 100vw)',
           background: bgPanel,
           backdropFilter: 'blur(24px) saturate(140%)',
           WebkitBackdropFilter: 'blur(24px) saturate(140%)',
@@ -409,7 +511,19 @@ export default function SmartBoardFilterPanel(props) {
                 } else {
                   fieldsTxt = stdCount + ' alan'
                 }
-                var filtersTxt = filters.length === 0 ? 'aktif filtre yok' : (filters.length + ' aktif filtre')
+                // 2026-05-23: Default'ta tum satirlar acik gelir; "aktif" sayisi sadece
+                // gercekten deger giren satirlari (veya boolean) sayar.
+                var activeCount = filters.filter(function (f) {
+                  var dt2 = (f.dataType || '').toLowerCase()
+                  if (dt2 === 'boolean' || dt2 === 'bool') {
+                    // 2026-05-24: bool icin op='isTrue' veya 'isFalse' secildiyse aktif,
+                    // 'any' (Tümü) default → filtre yok.
+                    return f.op === 'isTrue' || f.op === 'isFalse'
+                  }
+                  if (f.op === 'between') return (f.value !== '' && f.value != null) || (f.value2 !== '' && f.value2 != null)
+                  return f.value !== '' && f.value != null
+                }).length
+                var filtersTxt = activeCount === 0 ? 'aktif filtre yok' : (activeCount + ' aktif filtre')
                 return fieldsTxt + ' · ' + filtersTxt
               })()}
             </div>
@@ -428,7 +542,9 @@ export default function SmartBoardFilterPanel(props) {
           </button>
         </div>
 
-        {/* Body — filter rows */}
+        {/* Body — tum alanlar her zaman acik liste halinde.
+            2026-05-24: Field dropdown + X (sil) + "+ Filtre Ekle" KALDIRILDI.
+            Her alan icin sabit bir satir, kullanici sadece op + value duzenler. */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
           {filterableFields.length === 0 ? (
             <div style={{
@@ -437,16 +553,17 @@ export default function SmartBoardFilterPanel(props) {
             }}>
               Bu listede filtrelenebilecek alan yok.
             </div>
-          ) : filters.length === 0 ? (
-            <div style={{
-              padding: 24, textAlign: 'center', fontSize: 12.5, color: textSubtle, fontStyle: 'italic',
-              background: rowBg, border: '1px dashed ' + rowBorder, borderRadius: 12,
-            }}>
-              Filtre eklemek icin "+ Filtre" butonuna basin
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {filters.map(function (f, idx) {
+          ) : (() => {
+              // Gruplandirma: Standart Alanlar + Widget Alanlar (varsa).
+              // Aktif satir (deger girilmis) indigo highlight ile gosterilir.
+              var groupOf = function (f) {
+                var field = filterableFields.find(function (x) { return x.id === f.fieldId })
+                return (field && field.source) || 'standard'
+              }
+              var standardRows = filters.filter(function (f) { return groupOf(f) !== 'widget' })
+              var widgetRows   = filters.filter(function (f) { return groupOf(f) === 'widget' })
+
+              var renderRow = function (f) {
                 var ops = operatorsFor(f.dataType)
                 var dt = (f.dataType || 'text').toLowerCase()
                 var inputType = 'text'
@@ -454,147 +571,501 @@ export default function SmartBoardFilterPanel(props) {
                 else if (dt === 'date') inputType = 'date'
                 else if (dt === 'datetime') inputType = 'datetime-local'
                 var isBool = (dt === 'boolean' || dt === 'bool')
+                var isOptions = (dt === 'options')
                 var isBetween = f.op === 'between'
+                var isActive = isActiveFilter(f)
 
-                return (
-                  <div
-                    key={f.id}
-                    style={{
-                      padding: 12, borderRadius: 12,
-                      background: rowBg, border: '1px solid ' + rowBorder,
-                      display: 'flex', flexDirection: 'column', gap: 8,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, color: textSubtle, letterSpacing: '0.04em',
-                        textTransform: 'uppercase', flexShrink: 0,
-                      }}>
-                        {idx + 1}
-                      </span>
-                      <select
-                        value={f.fieldId}
-                        onChange={function (e) { updateRow(f.id, { fieldId: e.target.value }) }}
+                // 2026-05-24: Options dataType — chip-toggle (<=6 seçenek) veya combobox (>6).
+                // Field options array'inden seceneklerden cogunu secebilir.
+                // Hicbiri secili degilse → filtre uygulanmaz (Tumu mantigi).
+                if (isOptions) {
+                  var opts = Array.isArray(f.options) ? f.options : []
+                  var sel  = parseOptionsValue(f.value)
+                  var selSet = {}; sel.forEach(function(v){ selSet[v] = true })
+                  // 2026-05-24: Tum options widget'larinda combobox (Olcu Birimi, Gruplar,
+                  // Ozellikler hepsi ayni gorunum). Chip-toggle artik kullanilmaz.
+                  var useCombobox = true
+
+                  if (useCombobox) {
+                    // Combobox: <details><summary> tetikleyici + checkbox listesi
+                    var selectedLabels = opts.filter(function(o){
+                      return o && selSet[String(o.value)]
+                    }).map(function(o){ return o.label || o.value })
+                    var summaryText = sel.length === 0
+                      ? 'Tümü'
+                      : (sel.length === 1
+                          ? (selectedLabels[0] || sel[0])
+                          : (sel.length + ' seçili'))
+                    return (
+                      <div
+                        key={f.id}
                         style={{
-                          flex: 1, padding: '6px 8px', borderRadius: 8,
-                          background: inputBg, border: '1px solid ' + inputBorder,
-                          color: textPrimary, fontSize: 12, outline: 'none',
+                          padding: '7px 10px', borderRadius: 9,
+                          background: isActive
+                            ? (isDark ? 'rgba(99,102,241,0.14)' : '#eef2ff')
+                            : rowBg,
+                          border: '1px solid ' + (isActive
+                            ? (isDark ? 'rgba(99,102,241,0.35)' : '#c7d2fe')
+                            : rowBorder),
+                          transition: 'background 0.15s, border-color 0.15s',
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.6fr)',
+                          gap: 8, alignItems: 'center',
                         }}
                       >
-                        {(function () {
-                          // optgroup: Standart Alanlar (entity kolonlari) + Widget Alanlar (admin)
-                          var standardItems = filterableFields.filter(function (x) { return x.source !== 'widget' })
-                          var widgetItems   = filterableFields.filter(function (x) { return x.source === 'widget' })
-                          var groups = []
-                          if (standardItems.length > 0) {
-                            groups.push(
-                              <optgroup key="g-std" label="Standart Alanlar">
-                                {standardItems.map(function (w) {
-                                  return <option key={w.id} value={w.id}>{w.label || w.id}</option>
-                                })}
-                              </optgroup>
+                        <div
+                          title={f.label}
+                          style={{
+                            fontSize: 11.5, color: textPrimary,
+                            fontWeight: isActive ? 600 : 500,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                          {f.label}
+                        </div>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '70px 1fr',  // toggle alani sabit, combobox kalan
+                          gap: 4, alignItems: 'stretch',
+                        }}>
+                          {/* matchMode toggle — her zaman ayni yer kaplar, 2+ secim olmadiginda gizli */}
+                          <button
+                            type="button"
+                            onClick={function () {
+                              var next = f.matchMode === 'all' ? 'any' : 'all'
+                              updateRow(f.id, { matchMode: next })
+                            }}
+                            title={f.matchMode === 'all'
+                              ? 'Tum secili degerler eslesmeli (AND). Tikla → Herhangi (OR).'
+                              : 'En az biri eslesmeli (OR). Tikla → Tumu (AND).'}
+                            style={{
+                              padding: '0 8px', borderRadius: 6,
+                              background: f.matchMode === 'all'
+                                ? (isDark ? 'rgba(99,102,241,0.35)' : '#6366f1')
+                                : inputBg,
+                              border: '1px solid ' + (f.matchMode === 'all'
+                                ? (isDark ? 'rgba(165,180,252,0.6)' : '#4f46e5')
+                                : inputBorder),
+                              color: f.matchMode === 'all' ? '#fff' : textPrimary,
+                              fontSize: 10, fontWeight: 600,
+                              cursor: sel.length >= 2 ? 'pointer' : 'default',
+                              visibility: sel.length >= 2 ? 'visible' : 'hidden',
+                              pointerEvents: sel.length >= 2 ? 'auto' : 'none',
+                            }}>
+                            {f.matchMode === 'all' ? 'Tümü' : 'Herhangi'}
+                          </button>
+                        <details className="cb-combobox" style={{ position: 'relative', minWidth: 0 }}>
+                          <summary style={{
+                            cursor: 'pointer', listStyle: 'none',
+                            padding: '5px 10px', borderRadius: 7,
+                            background: inputBg, border: '1px solid ' + inputBorder,
+                            color: textPrimary, fontSize: 11,
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            outline: 'none',
+                          }}>
+                            <span style={{
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              flex: 1, fontWeight: isActive ? 600 : 400,
+                            }}>{summaryText}</span>
+                            <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.6 }}>▾</span>
+                          </summary>
+                          <div style={{
+                            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+                            marginTop: 4, maxHeight: 240, overflowY: 'auto',
+                            background: isDark ? '#0f172a' : '#fff',
+                            border: '1px solid ' + inputBorder, borderRadius: 7,
+                            boxShadow: '0 8px 20px rgba(0,0,0,0.25)',
+                            padding: 4,
+                          }}>
+                            {opts.map(function (o) {
+                              var v = (o && o.value != null) ? String(o.value) : ''
+                              var lab = (o && o.label) ? o.label : v
+                              var selected = !!selSet[v]
+                              return (
+                                <label
+                                  key={v || lab}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: 6,
+                                    padding: '5px 8px', borderRadius: 5,
+                                    cursor: 'pointer',
+                                    fontSize: 11, color: textPrimary,
+                                    background: selected
+                                      ? (isDark ? 'rgba(99,102,241,0.18)' : '#eef2ff')
+                                      : 'transparent',
+                                  }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    onChange={function () {
+                                      var next = selected ? sel.filter(function(x){ return x !== v }) : sel.concat([v])
+                                      updateRow(f.id, { value: next.join(',') })
+                                    }}
+                                    style={{ accentColor: '#6366f1', cursor: 'pointer' }}
+                                  />
+                                  <span style={{
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    flex: 1,
+                                  }}>{lab}</span>
+                                </label>
+                              )
+                            })}
+                            {opts.length === 0 && (
+                              <div style={{ padding: 8, color: textSubtle, fontSize: 11, fontStyle: 'italic' }}>
+                                (tanımlı seçenek yok)
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  // Chip-toggle: az seçenek olduğunda (≤6)
+                  return (
+                    <div
+                      key={f.id}
+                      style={{
+                        padding: '7px 10px', borderRadius: 9,
+                        background: isActive
+                          ? (isDark ? 'rgba(99,102,241,0.14)' : '#eef2ff')
+                          : rowBg,
+                        border: '1px solid ' + (isActive
+                          ? (isDark ? 'rgba(99,102,241,0.35)' : '#c7d2fe')
+                          : rowBorder),
+                        transition: 'background 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: opts.length > 0 ? 6 : 0 }}>
+                        <div
+                          title={f.label}
+                          style={{
+                            flex: 1, minWidth: 0,
+                            fontSize: 11.5, color: textPrimary,
+                            fontWeight: isActive ? 600 : 500,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                          {f.label}
+                        </div>
+                        <span style={{ fontSize: 10, color: textSubtle, fontStyle: 'italic' }}>
+                          {sel.length === 0 ? 'Tümü' : (sel.length + ' seçili')}
+                        </span>
+                      </div>
+                      {opts.length === 0 ? (
+                        <div style={{ fontSize: 10.5, color: textSubtle, fontStyle: 'italic' }}>
+                          (tanımlı seçenek yok)
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {opts.map(function (o) {
+                            var v = (o && (o.value != null)) ? String(o.value) : ''
+                            var lab = (o && o.label) ? o.label : v
+                            var selected = !!selSet[v]
+                            return (
+                              <button
+                                key={v || lab}
+                                type="button"
+                                onClick={function () {
+                                  var next = selected ? sel.filter(function(x){ return x !== v }) : sel.concat([v])
+                                  updateRow(f.id, { value: next.join(',') })
+                                }}
+                                title={lab}
+                                style={{
+                                  padding: '3px 8px', borderRadius: 5,
+                                  background: selected
+                                    ? (isDark ? 'rgba(99,102,241,0.35)' : '#6366f1')
+                                    : inputBg,
+                                  border: '1px solid ' + (selected
+                                    ? (isDark ? 'rgba(165,180,252,0.6)' : '#4f46e5')
+                                    : inputBorder),
+                                  color: selected ? '#fff' : textPrimary,
+                                  fontSize: 10.5, fontWeight: selected ? 600 : 500,
+                                  cursor: 'pointer',
+                                  maxWidth: 220,
+                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                  transition: 'all 0.12s',
+                                }}>
+                                {lab}
+                              </button>
                             )
-                          }
-                          if (widgetItems.length > 0) {
-                            groups.push(
-                              <optgroup key="g-w" label="Widget Alanlar (form)">
-                                {widgetItems.map(function (w) {
-                                  return <option key={w.id} value={w.id}>{w.label || w.id}</option>
-                                })}
-                              </optgroup>
-                            )
-                          }
-                          if (groups.length === 0) {
-                            return filterableFields.map(function (w) {
-                              return <option key={w.id} value={w.id}>{w.label || w.id}</option>
-                            })
-                          }
-                          return groups
-                        })()}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={function () { removeRow(f.id) }}
-                        style={{
-                          padding: 6, borderRadius: 8,
-                          background: isDark ? 'rgba(239,68,68,0.1)' : '#fef2f2',
-                          border: '1px solid ' + (isDark ? 'rgba(239,68,68,0.25)' : '#fecaca'),
-                          color: isDark ? '#fca5a5' : '#dc2626',
-                          cursor: 'pointer', flexShrink: 0,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                        title="Filtreyi kaldir"
-                      >
-                        <X size={12} />
-                      </button>
+                          })}
+                        </div>
+                      )}
                     </div>
+                  )
+                }
 
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <select
-                        value={f.op}
-                        onChange={function (e) { updateRow(f.id, { op: e.target.value }) }}
+                // 2026-05-24: Bool icin tek-satir radio group (Tümü / Evet / Hayır) —
+                // operator dropdown ve value alani yerine. Default = 'any' (filtre yok).
+                if (isBool) {
+                  return (
+                    <div
+                      key={f.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.6fr)',
+                        gap: 8, alignItems: 'center',
+                        padding: '7px 10px', borderRadius: 9,
+                        background: isActive
+                          ? (isDark ? 'rgba(99,102,241,0.14)' : '#eef2ff')
+                          : rowBg,
+                        border: '1px solid ' + (isActive
+                          ? (isDark ? 'rgba(99,102,241,0.35)' : '#c7d2fe')
+                          : rowBorder),
+                        transition: 'background 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      <div
+                        title={f.label}
                         style={{
-                          flex: '0 0 130px', padding: '6px 8px', borderRadius: 8,
-                          background: inputBg, border: '1px solid ' + inputBorder,
-                          color: textPrimary, fontSize: 12, outline: 'none',
-                        }}
-                      >
+                          fontSize: 11.5, color: textPrimary,
+                          fontWeight: isActive ? 600 : 500,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                        {f.label}
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                         {ops.map(function (o) {
-                          return <option key={o.id} value={o.id}>{o.label}</option>
+                          var selected = f.op === o.id
+                          return (
+                            <button
+                              key={o.id}
+                              type="button"
+                              onClick={function () { updateRow(f.id, { op: o.id }) }}
+                              style={{
+                                padding: '5px 10px', borderRadius: 6,
+                                background: selected
+                                  ? (isDark ? 'rgba(99,102,241,0.35)' : '#6366f1')
+                                  : inputBg,
+                                border: '1px solid ' + (selected
+                                  ? (isDark ? 'rgba(165,180,252,0.6)' : '#4f46e5')
+                                  : inputBorder),
+                                color: selected ? '#fff' : textPrimary,
+                                fontSize: 11, fontWeight: selected ? 600 : 500,
+                                cursor: 'pointer', minWidth: 50,
+                                transition: 'all 0.12s',
+                              }}>
+                              {o.label}
+                            </button>
+                          )
                         })}
-                      </select>
+                      </div>
+                    </div>
+                  )
+                }
 
-                      {!isBool && (
+                // 2026-05-24: 'Arasında' icin alt satira tam genislik iki input — date'ler sıgmıyordu.
+                if (isBetween) {
+                  return (
+                    <div
+                      key={f.id}
+                      style={{
+                        padding: '7px 10px', borderRadius: 9,
+                        background: isActive
+                          ? (isDark ? 'rgba(99,102,241,0.14)' : '#eef2ff')
+                          : rowBg,
+                        border: '1px solid ' + (isActive
+                          ? (isDark ? 'rgba(99,102,241,0.35)' : '#c7d2fe')
+                          : rowBorder),
+                        transition: 'background 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(0, 1fr) 110px',
+                        gap: 6, alignItems: 'center', marginBottom: 6,
+                      }}>
+                        <div title={f.label} style={{
+                          fontSize: 11.5, color: textPrimary,
+                          fontWeight: isActive ? 600 : 500,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>{f.label}</div>
+                        <select
+                          value={f.op}
+                          onChange={function (e) { updateRow(f.id, { op: e.target.value }) }}
+                          style={{
+                            width: '100%', padding: '5px 6px', borderRadius: 7,
+                            background: inputBg, border: '1px solid ' + inputBorder,
+                            color: textPrimary, fontSize: 11, outline: 'none',
+                          }}>
+                          {ops.map(function (o) {
+                            return <option key={o.id} value={o.id}>{o.label}</option>
+                          })}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
                         <input
                           type={inputType}
                           value={f.value || ''}
                           onChange={function (e) { updateRow(f.id, { value: e.target.value }) }}
-                          placeholder={isBetween ? 'Min' : 'Deger'}
+                          placeholder="Min"
                           style={{
-                            flex: 1, padding: '6px 10px', borderRadius: 8,
+                            flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 7,
                             background: inputBg, border: '1px solid ' + inputBorder,
-                            color: textPrimary, fontSize: 12, outline: 'none',
+                            color: textPrimary, fontSize: 11, outline: 'none',
                           }}
                         />
-                      )}
-                      {isBetween && !isBool && (
                         <input
                           type={inputType}
                           value={f.value2 || ''}
                           onChange={function (e) { updateRow(f.id, { value2: e.target.value }) }}
                           placeholder="Max"
                           style={{
-                            flex: 1, padding: '6px 10px', borderRadius: 8,
+                            flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 7,
                             background: inputBg, border: '1px solid ' + inputBorder,
-                            color: textPrimary, fontSize: 12, outline: 'none',
+                            color: textPrimary, fontSize: 11, outline: 'none',
                           }}
                         />
-                      )}
+                      </div>
                     </div>
+                  )
+                }
+
+                return (
+                  <div
+                    key={f.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1.2fr) 110px minmax(0, 1.4fr)',
+                      gap: 6, alignItems: 'center',
+                      padding: '7px 10px', borderRadius: 9,
+                      background: isActive
+                        ? (isDark ? 'rgba(99,102,241,0.14)' : '#eef2ff')
+                        : rowBg,
+                      border: '1px solid ' + (isActive
+                        ? (isDark ? 'rgba(99,102,241,0.35)' : '#c7d2fe')
+                        : rowBorder),
+                      transition: 'background 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    {/* Field label (read-only) */}
+                    <div
+                      title={f.label}
+                      style={{
+                        fontSize: 11.5, color: textPrimary,
+                        fontWeight: isActive ? 600 : 500,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                      {f.label}
+                    </div>
+
+                    {/* Op dropdown */}
+                    <select
+                      value={f.op}
+                      onChange={function (e) { updateRow(f.id, { op: e.target.value }) }}
+                      style={{
+                        width: '100%', padding: '5px 6px', borderRadius: 7,
+                        background: inputBg, border: '1px solid ' + inputBorder,
+                        color: textPrimary, fontSize: 11, outline: 'none',
+                      }}>
+                      {ops.map(function (o) {
+                        return <option key={o.id} value={o.id}>{o.label}</option>
+                      })}
+                    </select>
+
+                    {/* Value input — tek input (between asagidaki branch'te) */}
+                    <input
+                      type={inputType}
+                      value={f.value || ''}
+                      onChange={function (e) { updateRow(f.id, { value: e.target.value }) }}
+                      placeholder="Deger"
+                      style={{
+                        width: '100%', padding: '5px 8px', borderRadius: 7,
+                        background: inputBg, border: '1px solid ' + inputBorder,
+                        color: textPrimary, fontSize: 11, outline: 'none',
+                      }}
+                    />
                   </div>
                 )
-              })}
-            </div>
-          )}
+              }
 
-          {filterableFields.length > 0 && (
-            <button
-              type="button"
-              onClick={addRow}
-              style={{
-                marginTop: 12, width: '100%', padding: '9px 12px', borderRadius: 10,
-                background: isDark ? 'rgba(99,102,241,0.12)' : '#eef2ff',
-                border: '1px dashed ' + (isDark ? 'rgba(99,102,241,0.3)' : '#c7d2fe'),
-                color: isDark ? '#a5b4fc' : '#4338ca',
-                fontSize: 12, fontWeight: 600,
-                cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}
-            >
-              <Plus size={13} />
-              Filtre Ekle
-            </button>
-          )}
+              // 2026-05-24: Alt-grup desteği — `f.group` dolu satirlar tek bir
+              // collapsible (<details>) altinda toplanir. group olmayanlar normal satir olarak gosterilir.
+              var renderGroup = function (title, rows) {
+                if (rows.length === 0) return null
+                var ungrouped = []
+                var subgroups = {}  // groupKey → { label, rows[] }
+                var subgroupOrder = []
+                rows.forEach(function (r) {
+                  if (r.group) {
+                    if (!subgroups[r.group]) {
+                      subgroups[r.group] = { label: r.groupLabel || r.group, rows: [] }
+                      subgroupOrder.push(r.group)
+                    }
+                    subgroups[r.group].rows.push(r)
+                  } else {
+                    ungrouped.push(r)
+                  }
+                })
+                // 2026-05-24: Tum satirlar collapsible icindeyse dis basligi gizle
+                // (çift "Standart Alanlar" görünmesin).
+                var showTitle = ungrouped.length > 0 || subgroupOrder.length === 0
+                return (
+                  <div key={title} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {showTitle && (
+                      <div style={{
+                        fontSize: 10, fontWeight: 700, color: textSubtle,
+                        letterSpacing: '0.06em', textTransform: 'uppercase',
+                        padding: '2px 4px',
+                      }}>
+                        {title}
+                      </div>
+                    )}
+                    {ungrouped.map(renderRow)}
+                    {subgroupOrder.map(function (key) {
+                      var grp = subgroups[key]
+                      var activeInGrp = grp.rows.filter(isActiveFilter).length
+                      return (
+                        <details key={key} style={{
+                          marginTop: 4, borderRadius: 9,
+                          border: '1px solid ' + (activeInGrp > 0
+                            ? (isDark ? 'rgba(99,102,241,0.35)' : '#c7d2fe')
+                            : rowBorder),
+                          background: activeInGrp > 0
+                            ? (isDark ? 'rgba(99,102,241,0.07)' : 'rgba(238,242,255,0.5)')
+                            : rowBg,
+                          transition: 'background 0.15s, border-color 0.15s',
+                        }}>
+                          <summary style={{
+                            cursor: 'pointer',
+                            padding: '8px 12px',
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            fontSize: 12, fontWeight: 600, color: textPrimary,
+                            outline: 'none',
+                            listStyle: 'revert',
+                          }}>
+                            <span style={{ flex: 1 }}>{grp.label}</span>
+                            <span style={{
+                              fontSize: 10, fontWeight: 600,
+                              padding: '2px 8px', borderRadius: 10,
+                              background: activeInGrp > 0
+                                ? (isDark ? 'rgba(99,102,241,0.3)' : '#6366f1')
+                                : (isDark ? 'rgba(255,255,255,0.06)' : '#e2e8f0'),
+                              color: activeInGrp > 0 ? '#fff' : textSubtle,
+                            }}>
+                              {activeInGrp > 0 ? (activeInGrp + ' aktif · ') : ''}{grp.rows.length}
+                            </span>
+                          </summary>
+                          <div style={{
+                            padding: '4px 8px 10px',
+                            display: 'flex', flexDirection: 'column', gap: 6,
+                          }}>
+                            {grp.rows.map(renderRow)}
+                          </div>
+                        </details>
+                      )
+                    })}
+                  </div>
+                )
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {renderGroup('Standart Alanlar', standardRows)}
+                  {renderGroup('Widget Alanlar (form)', widgetRows)}
+                </div>
+              )
+            })()
+          }
         </div>
 
         {/* Footer */}
@@ -606,14 +1077,14 @@ export default function SmartBoardFilterPanel(props) {
           <button
             type="button"
             onClick={handleClearAll}
-            disabled={filters.length === 0}
+            disabled={!filters.some(isActiveFilter)}
             style={{
               padding: '8px 14px', borderRadius: 9, fontSize: 12, fontWeight: 600,
               background: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
               border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.08)' : '#cbd5e1'),
-              color: filters.length === 0 ? textSubtle : textPrimary,
-              cursor: filters.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: filters.length === 0 ? 0.6 : 1,
+              color: !filters.some(isActiveFilter) ? textSubtle : textPrimary,
+              cursor: !filters.some(isActiveFilter) ? 'not-allowed' : 'pointer',
+              opacity: !filters.some(isActiveFilter) ? 0.6 : 1,
               display: 'inline-flex', alignItems: 'center', gap: 5,
             }}
             title="Tumunu sifirla"
@@ -679,7 +1150,7 @@ export function describeFilter(f) {
 // Verilen entity'nin widget value'larini filter[]'e gore degerlendirir.
 // True donerse entity gorunur kalir.
 export function entityMatchesFilters(entity, filters) {
-  if (!Array.isArray(filters) || filters.length === 0) return true
+  if (!Array.isArray(filters) || !filters.some(isActiveFilter)) return true
   if (!entity || !Array.isArray(entity.widgets)) {
     // Widget yoksa sadece title/subtitle/description'da text-contains'a izin ver
     return filters.every(function (f) {
@@ -699,10 +1170,31 @@ export function entityMatchesFilters(entity, filters) {
     var dt = (f.dataType || 'text').toLowerCase()
 
     if (dt === 'boolean' || dt === 'bool') {
+      // 2026-05-24: op='any' (veya bilinmeyen) → filtre yok, tüm kayıtlar geçer.
+      if (f.op !== 'isTrue' && f.op !== 'isFalse') return true
       var b = raw === true || raw === 'true' || raw === 1 || raw === '1'
       if (f.op === 'isTrue') return b
-      if (f.op === 'isFalse') return !b
-      return true
+      return !b
+    }
+
+    if (dt === 'options') {
+      // 2026-05-24: Multi-select. matchMode='all' → tum secili degerler entity'de
+      // olmali (AND), default 'any' → en az biri eslesmeli (OR).
+      var selList = parseOptionsValue(f.value)
+      if (selList.length === 0) return true
+      var entityVals = parseOptionsValue(raw)
+      if (entityVals.length === 0) return false
+      var mode = (f.matchMode === 'all') ? 'all' : 'any'
+      if (mode === 'all') {
+        for (var k = 0; k < selList.length; k++) {
+          if (entityVals.indexOf(selList[k]) === -1) return false
+        }
+        return true
+      }
+      for (var i = 0; i < entityVals.length; i++) {
+        if (selList.indexOf(entityVals[i]) !== -1) return true
+      }
+      return false
     }
 
     if (dt === 'numeric' || dt === 'currency' || dt === 'percent' || dt === 'integer' || dt === 'decimal') {

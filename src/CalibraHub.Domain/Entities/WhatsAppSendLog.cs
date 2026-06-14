@@ -17,7 +17,7 @@ public sealed class WhatsAppSendLog
 }
 
 /// <summary>
-/// WhatsApp güvenlik kuralları (rate limit, sessiz saat, vb).
+/// WhatsApp güvenlik kuralları (rate limit, vb).
 /// Tek-row config tablosu. UI'dan değiştirilebilir; default'lar agresif/güvenli tarafta.
 /// </summary>
 public sealed class WhatsAppSafetyRules
@@ -33,11 +33,6 @@ public sealed class WhatsAppSafetyRules
     // İnsan-benzeri gecikme
     public int      MinDelaySeconds          { get; set; } = 3;
     public int      MaxDelaySeconds          { get; set; } = 15;
-
-    // Sessiz saatler (gece bu aralıkta gönderme)
-    public bool     RespectQuietHours        { get; set; } = true;
-    public int      QuietHoursStartHour      { get; set; } = 20;  // 20:00
-    public int      QuietHoursEndHour        { get; set; } = 8;   // 08:00
 
     // Burst koruma — N ardışık başarısızlıkta cooldown
     public int      MaxConsecutiveFailures   { get; set; } = 5;

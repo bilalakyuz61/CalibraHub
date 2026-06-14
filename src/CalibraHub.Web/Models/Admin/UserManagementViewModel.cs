@@ -44,7 +44,7 @@ public sealed class UserCreateInput
 
     public int? DepartmentId { get; set; }
 
-    public Guid? SupervisorUserId { get; set; }
+    public int? SupervisorUserId { get; set; }
 
     [Required(ErrorMessage = "Rol secimi zorunludur.")]
     public string Role { get; set; } = string.Empty;
@@ -67,7 +67,7 @@ public sealed class UserCreateInput
 public sealed class UserUpdateInput
 {
     [Required]
-    public Guid Id { get; set; }
+    public int Id { get; set; }
 
     [Required(ErrorMessage = "Sirket secimi zorunludur.")]
     public int? CompanyId { get; set; }

@@ -45,7 +45,7 @@ public sealed class WorkOrder
     public WorkOrderPriority Priority { get; init; } = WorkOrderPriority.Medium;
 
     /// <summary>Eski User-bazli atama — backward compat icin tutuluyor, runtime'da kullanilmiyor.</summary>
-    public Guid? AssignedUserId { get; init; }
+    public int? AssignedUserId { get; init; }
 
     /// <summary>Yeni atama — dogrudan Personnel.Id (User hesabi gerekmez).</summary>
     public int? AssignedPersonnelId { get; init; }
@@ -63,10 +63,16 @@ public sealed class WorkOrder
     public int? ParentWorkOrderId { get; init; }
     public int? RevisedFromId { get; init; }
 
+    /// <summary>
+    /// Opsiyonel AR-GE/ÜR-GE proje baglantisi (Document.id). AR-GE seri/prototip mamulu icin
+    /// WO acildiginda WorkOrderService otomatik turetir; manuel de secilebilir. Maliyet rollup'ta kullanilir.
+    /// </summary>
+    public int? ArgeProjectId { get; init; }
+
     public string? Notes { get; init; }
-    public Guid? CreatedBy { get; init; }
+    public int? CreatedById { get; init; }
     public DateTime Created { get; init; }
-    public Guid? UpdatedBy { get; init; }
+    public int? UpdatedById { get; init; }
     public DateTime? Updated { get; init; }
     public bool IsActive { get; init; } = true;
 
@@ -74,7 +80,7 @@ public sealed class WorkOrder
     // Status state machine: Planned → Released → InProgress → Completed → Closed
     // Cancelled her durumdan alinabilir (Closed haric — kapali emir iptal edilemez)
 
-    /// <summary>Salinim: Planned → Released. Uretime hazirdir.</summary>
+    /// <summary>Yayimlama: Planned → Released. Uretime hazirdir.</summary>
     public void Release()
     {
         DomainException.ThrowIf(_status != WorkOrderStatus.Planned,

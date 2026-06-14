@@ -1,0 +1,662 @@
+@{
+    ViewData["Title"] = "Şirket ve Kullanıcı Tanımları";
+    ViewData["BodyClass"] = "page-setup-users";
+    var boardConfigJson = (ViewData["BoardConfigJson"] as string) ?? "null";
+}
+
+@section Styles {
+<style>
+    /* Tam ekran C-Grid layout — CompanyUser ile birebir, sadece prefix su-* */
+    .page-setup-users .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-setup-users .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-setup-users .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-setup-users .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+
+    /* ── Center modal (cu-* den kopyalanmis, su-* prefix) ────────── */
+    .su-modal-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(15, 23, 42, 0.62);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 9000; padding: 20px;
+        animation: su-fade-in 0.18s ease-out;
+    }
+    @@keyframes su-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .su-modal {
+        background: var(--surface-1, #ffffff);
+        color: var(--text-1, #0f172a);
+        border-radius: 14px;
+        box-shadow: 0 24px 48px rgba(15, 23, 42, 0.32), 0 0 0 1px rgba(99, 102, 241, 0.18);
+        width: 100%; max-width: 460px;
+        max-height: calc(100vh - 40px);
+        display: flex; flex-direction: column;
+        overflow: hidden;
+        animation: su-slide-up 0.22s ease-out;
+    }
+    @@keyframes su-slide-up { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    body.app-theme-dark .su-modal {
+        background: #111827; color: #e5e7eb;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(99, 102, 241, 0.25);
+    }
+    .su-modal__header {
+        display: flex; align-items: center; gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+        background: linear-gradient(180deg, rgba(99,102,241,0.10) 0%, rgba(99,102,241,0.02) 100%);
+    }
+    .su-modal__icon {
+        width: 36px; height: 36px; border-radius: 10px;
+        background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+        color: white; display: flex; align-items: center; justify-content: center;
+        font-size: 18px; flex-shrink: 0;
+    }
+    .su-modal__title { font-size: 16px; font-weight: 600; margin: 0; flex: 1; }
+    .su-modal__close {
+        border: none; background: transparent; cursor: pointer;
+        padding: 6px; border-radius: 6px; color: #64748b;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .su-modal__close:hover { background: rgba(148, 163, 184, 0.18); color: #0f172a; }
+    body.app-theme-dark .su-modal__close { color: #94a3b8; }
+    body.app-theme-dark .su-modal__close:hover { color: #e5e7eb; }
+
+    .su-modal__body { padding: 14px 16px; overflow-y: auto; flex: 1; }
+    .su-modal__footer {
+        padding: 10px 16px;
+        border-top: 1px solid rgba(148, 163, 184, 0.18);
+        display: flex; justify-content: flex-end; gap: 8px;
+        background: rgba(248, 250, 252, 0.6);
+    }
+    body.app-theme-dark .su-modal__footer { background: rgba(15, 23, 42, 0.6); }
+
+    /* ── Form fields: CSS grid (label | ctrl) ─── */
+    :root {
+        --uf-label-w: 90px;
+        --uf-accent:  #6366f1;
+        --uf-border:  rgba(148,163,184,.4);
+        --uf-bg:      #ffffff;
+        --uf-text:    #1e293b;
+        --uf-muted:   #64748b;
+        --uf-soft:    rgba(99,102,241,.13);
+    }
+    body.app-theme-dark {
+        --uf-bg:   rgba(255,255,255,.06);
+        --uf-text: #e2e8f0;
+        --uf-border: rgba(148,163,184,.25);
+        --uf-muted: #94a3b8;
+    }
+
+    .su-form-row {
+        display: grid !important;
+        grid-template-columns: var(--uf-label-w) 1fr !important;
+        align-items: start !important;
+        gap: 0 8px !important;
+        margin-bottom: 6px !important;
+    }
+    .su-form-row > label {
+        font-size: .69rem !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: .04em !important;
+        color: var(--uf-muted) !important;
+        text-align: right !important;
+        padding-top: 7px !important;
+        line-height: 1.2 !important;
+    }
+    .su-form-row > input,
+    .su-form-row > select {
+        width: 100% !important;
+        padding: 6px 9px !important;
+        border: 1px solid var(--uf-border) !important;
+        border-radius: 7px !important;
+        font-size: .82rem !important;
+        font-family: inherit !important;
+        background: var(--uf-bg) !important;
+        color: var(--uf-text) !important;
+        outline: none !important;
+        box-sizing: border-box !important;
+        transition: border-color .13s, box-shadow .13s !important;
+    }
+    .su-form-row > input:focus,
+    .su-form-row > select:focus {
+        border-color: var(--uf-accent) !important;
+        box-shadow: 0 0 0 3px var(--uf-soft) !important;
+    }
+    /* wrapper div (password / grafana hint içerir) */
+    .su-form-row__field {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 2px !important;
+    }
+    .su-form-row__field > input,
+    .su-form-row__field > select {
+        width: 100% !important;
+        padding: 6px 9px !important;
+        border: 1px solid var(--uf-border) !important;
+        border-radius: 7px !important;
+        font-size: .82rem !important;
+        font-family: inherit !important;
+        background: var(--uf-bg) !important;
+        color: var(--uf-text) !important;
+        outline: none !important;
+        box-sizing: border-box !important;
+        transition: border-color .13s, box-shadow .13s !important;
+    }
+    .su-form-row__field > input:focus,
+    .su-form-row__field > select:focus {
+        border-color: var(--uf-accent) !important;
+        box-shadow: 0 0 0 3px var(--uf-soft) !important;
+    }
+    .su-form-row__hint { font-size: .69rem; color: var(--uf-muted); }
+
+    /* company display span */
+    #suCompanyName {
+        font-size: .82rem !important;
+        font-weight: 600 !important;
+        color: var(--uf-text) !important;
+        padding-top: 6px !important;
+        display: block !important;
+    }
+
+    /* switch row — same grid col widths */
+    .su-switch-row {
+        display: grid !important;
+        grid-template-columns: var(--uf-label-w) auto 1fr !important;
+        align-items: center !important;
+        gap: 0 8px !important;
+        margin-bottom: 6px !important;
+    }
+    .su-switch-row > label:first-child {
+        font-size: .69rem !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: .04em !important;
+        color: var(--uf-muted) !important;
+        text-align: right !important;
+    }
+    .su-switch {
+        position: relative; display: inline-block; width: 44px; height: 24px;
+    }
+    .su-switch input { opacity: 0; width: 0; height: 0; }
+    .su-switch__track {
+        position: absolute; cursor: pointer; inset: 0;
+        background: #cbd5e1; border-radius: 24px; transition: background 0.2s;
+    }
+    .su-switch__track::before {
+        content: ""; position: absolute;
+        height: 18px; width: 18px; left: 3px; top: 3px;
+        background: #ffffff; border-radius: 50%;
+        transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    }
+    .su-switch input:checked + .su-switch__track { background: #6366f1; }
+    .su-switch input:checked + .su-switch__track::before { transform: translateX(20px); }
+
+    .su-btn {
+        padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .su-btn--ghost {
+        background: transparent; color: #475569;
+        border-color: rgba(148, 163, 184, 0.4);
+    }
+    .su-btn--ghost:hover { background: rgba(148, 163, 184, 0.1); }
+    body.app-theme-dark .su-btn--ghost { color: #cbd5e1; border-color: rgba(148, 163, 184, 0.3); }
+    .su-btn--primary {
+        background: #6366f1; color: white;
+        border-color: #6366f1;
+    }
+    .su-btn--primary:hover { background: #4f46e5; border-color: #4f46e5; }
+    .su-btn--primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .su-error {
+        margin-top: 8px; padding: 8px 12px;
+        background: rgba(239, 68, 68, 0.1); color: #dc2626;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 6px; font-size: 12px;
+    }
+    body.app-theme-dark .su-error { color: #fca5a5; }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@* Modal markup — CompanyUser ile birebir + en uste "Sirket" dropdown'u *@
+<div id="suModalRoot" style="display:none;">
+    <div class="su-modal-backdrop" id="suModalBackdrop">
+        <div class="su-modal" role="dialog" aria-modal="true" aria-labelledby="suModalTitle">
+            <div class="su-modal__header">
+                <div class="su-modal__icon">U</div>
+                <h3 class="su-modal__title" id="suModalTitle">Yeni Kullanıcı</h3>
+                <button type="button" class="su-modal__close" id="suModalClose" aria-label="Kapat">✕</button>
+            </div>
+            <div class="su-modal__body" style="padding:14px 16px;">
+                <form id="suForm" style="display:flex;flex-direction:column;gap:0;">
+                    <input type="hidden" id="suUserId" />
+                    <input type="hidden" id="suCompany" />
+
+                    @* Şirket — sadece düzenlemede gösterilir *@
+                    <div id="suCompanyDisplay" style="display:none;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Şirket</span>
+                        <span id="suCompanyName" style="font-size:.82rem;font-weight:600;color:inherit;"></span>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <label for="suFullName" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Ad Soyad <span style="color:#dc2626">*</span></label>
+                        <input type="text" id="suFullName" required autocomplete="off" maxlength="200"
+                               style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
+                    </div>
+                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <label for="suEmail" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">E-posta <span style="color:#dc2626">*</span></label>
+                        <input type="email" id="suEmail" required autocomplete="off" maxlength="200"
+                               style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
+                    </div>
+                    <div id="suPasswordRow" style="display:grid;grid-template-columns:90px 1fr;align-items:start;gap:0 8px;margin-bottom:6px;">
+                        <label for="suPassword" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;padding-top:7px;">Şifre</label>
+                        <div style="display:flex;flex-direction:column;gap:2px;">
+                            <input type="password" id="suPassword" autocomplete="new-password" maxlength="100" minlength="6" placeholder="Boş → 12345678 atanır"
+                                   style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
+                            <span style="font-size:.69rem;color:#64748b;">İlk girişten sonra kullanıcı kendi şifresini değiştirebilir.</span>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <label for="suEmployeeCode" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Personel K.</label>
+                        <input type="text" id="suEmployeeCode" autocomplete="off" maxlength="50" placeholder="Boş → e-postadan türetilir"
+                               style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
+                    </div>
+                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <label for="suPhoneNumber" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Telefon</label>
+                        <input type="tel" id="suPhoneNumber" autocomplete="off" maxlength="30"
+                               style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;" />
+                    </div>
+                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <label for="suDepartment" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Departman</label>
+                        <select id="suDepartment" style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;">
+                            <option value="">(Departman yok)</option>
+                        </select>
+                    </div>
+                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <label for="suSupervisor" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Amir</label>
+                        <select id="suSupervisor" style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;">
+                            <option value="">(Amir seçilmedi)</option>
+                        </select>
+                    </div>
+                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <label for="suRole" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Yetki <span style="color:#dc2626">*</span></label>
+                        <select id="suRole" required style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;">
+                            <option value="4">User</option>
+                            <option value="2">Admin</option>
+                            <option value="1">Sistem Admin</option>
+                        </select>
+                    </div>
+                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:start;gap:0 8px;margin-bottom:6px;">
+                        <label for="suGrafanaRole" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;padding-top:7px;">Grafana</label>
+                        <div style="display:flex;flex-direction:column;gap:2px;">
+                            <select id="suGrafanaRole" style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;">
+                                <option value="">(Atanmadı)</option>
+                                <option value="Viewer">Viewer</option>
+                                <option value="Designer">Editor</option>
+                                <option value="Admin">Admin</option>
+                            </select>
+                            <span style="font-size:.69rem;color:#64748b;">Boş = Grafana'ya eklenmez. Seçilirse şirket org.'una eklenir.</span>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:90px auto 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
+                        <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Aktif</span>
+                        <label class="su-switch">
+                            <input type="checkbox" id="suIsActive" checked />
+                            <span class="su-switch__track"></span>
+                        </label>
+                    </div>
+                    <div id="suFormError" class="su-error" style="display:none;"></div>
+                </form>
+            </div>
+            <div class="su-modal__footer">
+                <button type="button" class="su-btn su-btn--ghost" id="suCancelBtn">Vazgeç</button>
+                <button type="button" class="su-btn su-btn--primary" id="suSaveBtn">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Antiforgery token *@
+<form id="suAfTokenForm" style="display:none;">@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+<script>
+(function () {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[SetupUsers] Mount element yok'); return; }
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;padding:20px;">'
+            + msg + '</div>';
+    }
+
+    function loadCss() {
+        var prev = document.querySelector('link[data-setupusers-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-setupusers-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-setupusers-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL;
+        s.setAttribute('data-setupusers-sb', '1');
+        s.onload = function () { setTimeout(cb, 0); };
+        s.onerror = function () { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(s);
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadı');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            console.log('[SetupUsers] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'kullanıcı');
+        } catch (ex) {
+            console.error('[SetupUsers] Mount exception:', ex);
+            showError('Mount hatası: ' + (ex.message || ex));
+        }
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount();
+    else loadScript(doMount);
+
+    function getAfToken() {
+        var input = document.querySelector('#suAfTokenForm input[name="__RequestVerificationToken"]');
+        return input ? input.value : '';
+    }
+
+    // ── Modal kontrolu ─────────────────────────────────────────────
+    var modalRoot      = document.getElementById('suModalRoot');
+    var modalBackdrop  = document.getElementById('suModalBackdrop');
+    var modalTitle     = document.getElementById('suModalTitle');
+    var modalClose     = document.getElementById('suModalClose');
+    var cancelBtn      = document.getElementById('suCancelBtn');
+    var saveBtn        = document.getElementById('suSaveBtn');
+    var form           = document.getElementById('suForm');
+    var inpId          = document.getElementById('suUserId');
+    var inpCompany        = document.getElementById('suCompany');
+    var companyDisplay    = document.getElementById('suCompanyDisplay');
+    var companyNameSpan   = document.getElementById('suCompanyName');
+    var inpFullName    = document.getElementById('suFullName');
+    var inpEmail       = document.getElementById('suEmail');
+    var inpEmpCode     = document.getElementById('suEmployeeCode');
+    var inpPhone       = document.getElementById('suPhoneNumber');
+    var inpDepartment  = document.getElementById('suDepartment');
+    var inpSupervisor  = document.getElementById('suSupervisor');
+    var inpRole        = document.getElementById('suRole');
+    var inpGrafanaRole = document.getElementById('suGrafanaRole');
+    var inpPassword    = document.getElementById('suPassword');
+    var passwordRow    = document.getElementById('suPasswordRow');
+    var inpIsActive    = document.getElementById('suIsActive');
+    var errBox         = document.getElementById('suFormError');
+
+    // FormData cache — companies + roles + grafanaRoles tum kayitlar icin ortak.
+    // departments + supervisors ise sirket bazinda filtreli, sirket degisince yenilenir.
+    var allDepartments = [];
+    var allSupervisors = [];
+    var allCompanies   = [];
+    var initialDataLoaded = false;
+
+    function showFormError(box, msg) {
+        box.textContent = msg;
+        box.style.display = 'block';
+    }
+    function clearError() { errBox.style.display = 'none'; errBox.textContent = ''; }
+
+    function fillDepartmentsAndSupervisors(companyId, excludeUserId) {
+        var depts = (allDepartments || []).filter(function (d) {
+            return !companyId || d.companyId === companyId;
+        });
+        var sups = (allSupervisors || []).filter(function (u) {
+            return (!companyId || u.companyId === companyId) && (!excludeUserId || u.id !== excludeUserId);
+        });
+
+        var prevDept = inpDepartment.value;
+        var prevSup  = inpSupervisor.value;
+        inpDepartment.innerHTML = '<option value="">(Departman yok)</option>';
+        depts.forEach(function (d) {
+            var o = document.createElement('option');
+            o.value = d.id; o.textContent = d.name;
+            inpDepartment.appendChild(o);
+        });
+        // Eski deger hala secenekler arasinda ise koru.
+        if (Array.from(inpDepartment.options).some(function (o) { return o.value === prevDept; })) {
+            inpDepartment.value = prevDept;
+        }
+
+        inpSupervisor.innerHTML = '<option value="">(Amir seçilmedi)</option>';
+        sups.forEach(function (u) {
+            var o = document.createElement('option');
+            o.value = u.id; o.textContent = u.name;
+            inpSupervisor.appendChild(o);
+        });
+        if (Array.from(inpSupervisor.options).some(function (o) { return o.value === prevSup; })) {
+            inpSupervisor.value = prevSup;
+        }
+    }
+
+    function loadFormData() {
+        if (initialDataLoaded) return Promise.resolve();
+        return fetch('/SetupUser/GetFormData', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                allCompanies   = data.companies   || [];
+                allDepartments = data.departments || [];
+                allSupervisors = data.supervisors || [];
+
+                inpRole.innerHTML = '';
+                (data.roles || []).forEach(function (r) {
+                    var o = document.createElement('option');
+                    o.value = r.value; o.textContent = r.label;
+                    inpRole.appendChild(o);
+                });
+                inpGrafanaRole.innerHTML = '';
+                (data.grafanaRoles || []).forEach(function (g) {
+                    var o = document.createElement('option');
+                    o.value = g.value; o.textContent = g.label;
+                    inpGrafanaRole.appendChild(o);
+                });
+                initialDataLoaded = true;
+            });
+    }
+
+    // Şirket artık hidden input — change eventi yok.
+
+    function openModal(userId) {
+        clearError();
+        modalRoot.style.display = 'block';
+        loadFormData().then(function () {
+            if (inpPassword) inpPassword.value = '';
+            if (passwordRow) passwordRow.style.display = userId ? 'none' : 'grid';
+
+            if (userId) {
+                modalTitle.textContent = 'Kullanıcı Düzenle';
+                fetch('/SetupUser/Get?id=' + encodeURIComponent(userId), { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.ok) { showFormError(errBox, data.error || 'Kullanıcı yüklenemedi.'); return; }
+                        var u = data.user;
+                        inpId.value          = u.id;
+                        inpCompany.value     = u.companyId != null ? u.companyId : '';
+                        // Şirket adını oku ve göster
+                        var comp = allCompanies.find(function(c) { return c.id === u.companyId; });
+                        if (companyDisplay) companyDisplay.style.display = comp ? 'grid' : 'none';
+                        if (companyNameSpan) companyNameSpan.textContent = comp ? comp.name : '';
+                        inpFullName.value    = u.fullName || '';
+                        inpEmail.value       = u.email || '';
+                        inpEmpCode.value     = u.employeeCode || '';
+                        inpPhone.value       = u.phoneNumber || '';
+                        // Şirket bazında departman/amir filtrele.
+                        fillDepartmentsAndSupervisors(u.companyId, u.id);
+                        inpDepartment.value  = u.departmentId != null ? u.departmentId : '';
+                        inpSupervisor.value  = u.supervisorUserId || '';
+                        inpRole.value        = u.role;
+                        inpGrafanaRole.value = u.grafanaRole || '';
+                        inpIsActive.checked  = !!u.isActive;
+                        setTimeout(function () { inpFullName.focus(); }, 30);
+                    })
+                    .catch(function (ex) { showFormError(errBox, 'Veri alınamadı: ' + (ex.message || ex)); });
+            } else {
+                modalTitle.textContent = 'Yeni Kullanıcı';
+                inpId.value         = '';
+                // Şirket: otomatik — ilk şirket (GetFormData zaten sadece aktif şirketleri döner)
+                var firstCompany = allCompanies[0] || null;
+                inpCompany.value = firstCompany ? firstCompany.id : '';
+                if (companyDisplay) companyDisplay.style.display = 'none';
+                inpFullName.value   = '';
+                inpEmail.value      = '';
+                inpEmpCode.value    = '';
+                inpPhone.value      = '';
+                fillDepartmentsAndSupervisors(firstCompany ? firstCompany.id : null, null);
+                inpRole.value       = inpRole.options.length > 0 ? inpRole.options[0].value : '';
+                inpGrafanaRole.value = '';
+                inpIsActive.checked = true;
+                setTimeout(function () { inpFullName.focus(); }, 30);
+            }
+        });
+    }
+
+    function closeModal() {
+        modalRoot.style.display = 'none';
+        clearError();
+        if (location.hash) {
+            history.replaceState(null, '', location.pathname + location.search);
+        }
+    }
+
+    modalClose.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    modalBackdrop.addEventListener('click', function (e) {
+        if (e.target === modalBackdrop) closeModal();
+    });
+    document.addEventListener('keydown', function (e) {
+        if (modalRoot.style.display !== 'none') {
+            if (e.key === 'Escape') closeModal();
+            else if (e.key === 'Enter' && e.target.tagName !== 'SELECT') {
+                e.preventDefault();
+                saveBtn.click();
+            }
+        }
+    });
+
+    saveBtn.addEventListener('click', function () {
+        clearError();
+        var companyId = parseInt(inpCompany.value, 10);
+        var fullName = (inpFullName.value || '').trim();
+        var email    = (inpEmail.value || '').trim();
+        if (!fullName) { showFormError(errBox, 'Ad soyad zorunludur.'); inpFullName.focus(); return; }
+        if (!email)    { showFormError(errBox, 'E-posta zorunludur.');   inpEmail.focus();    return; }
+
+        var idVal = inpId.value || null;
+        var deptVal = inpDepartment.value ? parseInt(inpDepartment.value, 10) : null;
+        var roleVal = parseInt(inpRole.value, 10);
+        var pwdVal = (inpPassword && inpPassword.value) ? inpPassword.value : null;
+        if (!idVal && pwdVal && pwdVal.length > 0 && pwdVal.length < 6) {
+            showFormError(errBox, 'Şifre en az 6 karakter olmalı.');
+            inpPassword.focus();
+            return;
+        }
+
+        var payload = {
+            id:               idVal,
+            companyId:        companyId,
+            fullName:         fullName,
+            email:            email,
+            employeeCode:     (inpEmpCode.value || '').trim() || null,
+            departmentId:     deptVal,
+            supervisorUserId: inpSupervisor.value ? parseInt(inpSupervisor.value, 10) : null,
+            phoneNumber:      (inpPhone.value || '').trim() || null,
+            role:             roleVal,
+            grafanaRole:      (inpGrafanaRole && inpGrafanaRole.value) ? inpGrafanaRole.value : null,
+            isActive:         !!inpIsActive.checked,
+            password:         !idVal ? pwdVal : null,
+        };
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Kaydediliyor...';
+
+        fetch('/SetupUser/Save', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': getAfToken(),
+            },
+            body: JSON.stringify(payload),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Kaydet';
+            if (data.ok) {
+                closeModal();
+                if (typeof window._smartBoardRefreshAll === 'function') {
+                    window._smartBoardRefreshAll();
+                } else {
+                    location.reload();
+                }
+            } else {
+                showFormError(errBox, data.error || data.message || 'Kayıt başarısız.');
+            }
+        })
+        .catch(function (ex) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Kaydet';
+            showFormError(errBox, 'Sunucu hatası: ' + (ex.message || ex));
+        });
+    });
+
+    // ── Hashchange ────────
+    function handleHash() {
+        var h = location.hash || '';
+        var raw = h.replace(/^#/, '').split('?')[0];
+        if (raw === 'open-new-user-modal') {
+            openModal(null);
+        } else if (raw.indexOf('edit-user-') === 0) {
+            var userId = raw.substring('edit-user-'.length);
+            if (userId) openModal(userId);
+        }
+    }
+    window.addEventListener('hashchange', handleHash);
+    if (location.hash) setTimeout(handleHash, 200);
+
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+
+    window.openSetupUserModal = openModal;
+})();
+</script>
+}

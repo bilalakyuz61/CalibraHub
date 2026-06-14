@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -138,7 +139,12 @@ public sealed class FormManagementController : Controller
             {
                 new { id = "new", label = "Yeni Form", icon = "Plus", variant = "primary", url = "/Admin/FormEdit" },
             },
-            masterWidgets = Array.Empty<object>(),
+            masterWidgets = new List<object>
+            {
+                SmartBoardFilterHelpers.MakeStdWidget("w_table", "Tablo",   "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_key",   "Anahtar", "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_sort",  "Sıra",    "numeric"),
+            },
             entities,
         };
     }

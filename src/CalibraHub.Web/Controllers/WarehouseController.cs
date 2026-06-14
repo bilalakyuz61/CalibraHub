@@ -1,8 +1,10 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Warehouse;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +19,7 @@ public sealed class WarehouseController : Controller
 {
     private readonly IStockDocRepository _stockDocRepo;
     private readonly ILogisticsConfigurationService _logisticsService;
+    private readonly IArgeProjectService _argeService;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
 
@@ -30,22 +33,26 @@ public sealed class WarehouseController : Controller
     public WarehouseController(
         IStockDocRepository stockDocRepo,
         ILogisticsConfigurationService logisticsService,
+        IArgeProjectService argeService,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
     {
         _stockDocRepo = stockDocRepo;
         _logisticsService = logisticsService;
+        _argeService = argeService;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
     private string CurrentUser() => User.FindFirstValue(ClaimTypes.Name) ?? "system";
+    private int? CurrentUserId() => int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 
     // ═══════════════════════════════════════════════════════════════════════
     // TRANSFER
     // ═══════════════════════════════════════════════════════════════════════
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.Transfer)]
     public async Task<IActionResult> Transfer(CancellationToken ct)
     {
         var config = await BuildTransferBoardConfigAsync(ct);
@@ -57,6 +64,7 @@ public sealed class WarehouseController : Controller
         => Json(await BuildTransferBoardConfigAsync(ct));
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.Transfer)]
     public async Task<IActionResult> TransferEdit(int? id, CancellationToken ct)
     {
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
@@ -72,10 +80,23 @@ public sealed class WarehouseController : Controller
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    // SAYIM — 2026-05-22 iskeleti
+    // ═══════════════════════════════════════════════════════════════════════
+
+    [HttpGet("/Warehouse/Inventory")]
+    public IActionResult Inventory()
+        => View("_ComingSoon", new CalibraHub.Web.Models.ComingSoonViewModel
+        {
+            Title = "Sayım",
+            Description = "Depolarda fiziksel stok sayim planlama, terminal ile sayim girisi ve fark raporu yakinda.",
+        });
+
+    // ═══════════════════════════════════════════════════════════════════════
     // AMBAR GİRİŞ / ÇIKIŞ
     // ═══════════════════════════════════════════════════════════════════════
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
     public async Task<IActionResult> StockEntry(CancellationToken ct)
     {
         var config = await BuildStockEntryBoardConfigAsync(ct);
@@ -87,6 +108,7 @@ public sealed class WarehouseController : Controller
         => Json(await BuildStockEntryBoardConfigAsync(ct));
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
     public async Task<IActionResult> StockEntryEdit(int? id, string? type, CancellationToken ct)
     {
         Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
@@ -125,13 +147,14 @@ public sealed class WarehouseController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
     public async Task<IActionResult> SaveDocJson([FromBody] SaveStockDocRequest? request, CancellationToken ct)
     {
         if (request is null)
             return Json(new { success = false, message = "Geçersiz istek." });
         try
         {
-            var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUser(), ct);
+            var (id, docNo) = await _stockDocRepo.SaveAsync(request, CurrentUserId(), ct);
             return Json(new { success = true, id, docNo });
         }
         catch (Exception ex)
@@ -142,6 +165,7 @@ public sealed class WarehouseController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.StockIn)]
     public async Task<IActionResult> DeleteDocJson(int id, CancellationToken ct)
     {
         try
@@ -163,6 +187,20 @@ public sealed class WarehouseController : Controller
             .Where(l => l.IsActive)
             .OrderBy(l => l.SortOrder).ThenBy(l => l.LocationName)
             .Select(l => new { l.Id, l.LocationCode, l.LocationName }));
+    }
+
+    // AR-GE/ÜR-GE proje listesi — ambar çıkış fişinde "Proje" seçici için (sarf malzeme takibi).
+    [HttpGet]
+    public async Task<IActionResult> GetArgeProjectsJson(CancellationToken ct)
+    {
+        var projects = await _argeService.ListAsync(null, null, ct);
+        return Json(projects.Select(p => new
+        {
+            id = p.DocumentId,
+            name = p.Name,
+            projectType = p.ProjectType,
+            label = (p.ProjectType == 1 ? "ÜR-GE" : "AR-GE") + " · " + p.DocumentNumber + " · " + p.Name,
+        }));
     }
 
     [HttpGet]
@@ -203,7 +241,7 @@ public sealed class WarehouseController : Controller
         {
             if (!id.HasValue || !seen.Add(id.Value)) return;
             if (!unitById.TryGetValue(id.Value, out var u)) return;
-            result.Add(new { id = u.Id, code = u.UnitCode, name = u.UnitName });
+            result.Add(new { id = u.Id, code = u.Code, name = u.Name });
         }
 
         AddUnit(item.UnitId);
@@ -221,6 +259,11 @@ public sealed class WarehouseController : Controller
     {
         var docs = await _stockDocRepo.GetByTypeAsync("TRANSFER", ct);
         var tr = CultureInfo.GetCultureInfo("tr-TR");
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeStdWidget("w_depo",  "Depo",  "text"),
+            SmartBoardFilterHelpers.MakeStdWidget("w_kalem", "Kalem", "numeric"),
+        };
 
         var entities = docs.Select(d => new
         {
@@ -266,7 +309,7 @@ public sealed class WarehouseController : Controller
                 new { id = "new", label = "Yeni Transfer", icon = "Plus", variant = "primary",
                       url = "/Warehouse/TransferEdit" },
             },
-            masterWidgets = Array.Empty<object>(),
+            masterWidgets,
             entities,
         };
     }
@@ -275,6 +318,13 @@ public sealed class WarehouseController : Controller
     {
         var docs = await _stockDocRepo.GetByTypesAsync(["STOCK_IN", "STOCK_OUT"], ct);
         var tr = CultureInfo.GetCultureInfo("tr-TR");
+        var typeOptions = SmartBoardFilterHelpers.ToOptionsList(new[] { "Giriş", "Çıkış" });
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeOptionsWidget("w_type",  "Hareket", typeOptions),
+            SmartBoardFilterHelpers.MakeStdWidget   ("w_loc",   "Depo",    "text"),
+            SmartBoardFilterHelpers.MakeStdWidget   ("w_kalem", "Kalem",   "numeric"),
+        };
 
         var entities = docs.Select(d => new
         {
@@ -286,7 +336,7 @@ public sealed class WarehouseController : Controller
             statusBadge = (object?)null,
             widgets = new object[]
             {
-                new { id = "w_type", type = "data", dataType = "text", label = "Hareket",
+                new { id = "w_type", type = "data", dataType = "options", label = "Hareket",
                       value = d.DocType == "STOCK_IN" ? "Giriş" : "Çıkış",
                       detail = (string?)null,
                       color = d.DocType == "STOCK_IN" ? "emerald" : "rose" },
@@ -327,7 +377,7 @@ public sealed class WarehouseController : Controller
                 new { id = "new-out", label = "Çıkış Belgesi",  icon = "Plus", variant = "secondary",
                       url = "/Warehouse/StockEntryEdit?type=out" },
             },
-            masterWidgets = Array.Empty<object>(),
+            masterWidgets,
             entities,
         };
     }

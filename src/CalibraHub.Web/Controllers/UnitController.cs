@@ -1,3 +1,4 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Models.Logistics;
@@ -24,6 +25,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("Logistics/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(FormCodes.MeasureUnits)]
 public sealed class UnitController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
@@ -37,7 +39,8 @@ public sealed class UnitController : Controller
     public async Task<IActionResult> Units(CancellationToken ct)
     {
         var config = await BuildBoardConfigAsync(ct);
-        return View("MeasureUnitDefinitions", new MeasureUnitsSmartBoardViewModel { BoardConfig = config });
+        // Explicit view path — split sonrasi view'lar /Views/Logistics/ altinda kaldi.
+        return View("~/Views/Logistics/MeasureUnitDefinitions.cshtml", new MeasureUnitsSmartBoardViewModel { BoardConfig = config });
     }
 
     [HttpGet("/Logistics/Units/BoardEntities")]
@@ -56,7 +59,7 @@ public sealed class UnitController : Controller
         try
         {
             await _logisticsConfigurationService.UpdateUnitAsync(
-                new UpdateUnitRequest(id, item.UnitCode, item.UnitName, item.IntlCode, item.SortOrder, enabled), ct);
+                new UpdateUnitRequest(id, item.Code, item.Name, item.IntlCode, item.SortOrder, enabled), ct);
             return Json(new { success = true });
         }
         catch (ArgumentException ex)
@@ -68,7 +71,7 @@ public sealed class UnitController : Controller
     private async Task<object> BuildBoardConfigAsync(CancellationToken ct)
     {
         var all = (await _logisticsConfigurationService.GetUnitsAsync(ct))
-            .OrderBy(x => x.SortOrder).ThenBy(x => x.UnitCode, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         // SmartBoardBuilder (rapor §2.5)
@@ -83,7 +86,7 @@ public sealed class UnitController : Controller
             .MapEntities(u =>
             {
                 var eb = CalibraHub.Application.SmartBoard.SmartBoardEntity
-                    .For(u.Id, u.UnitName, subtitle: u.UnitCode)
+                    .For(u.Id, u.Name, subtitle: u.Code)
                     .WithDescription(u.IntlCode ?? string.Empty)
                     .WithStatusBadge(u.IsActive ? "Aktif" : "Pasif", u.IsActive ? "emerald" : "slate")
                     .AddNumericWidget("w_sort", "Sıra", u.SortOrder.ToString(), color: "slate");
@@ -103,7 +106,7 @@ public sealed class UnitController : Controller
                     apiUrl: $"/Logistics/UnitToggle?id={u.Id}&enabled={(!u.IsActive).ToString().ToLowerInvariant()}");
                 eb.AddExtraAction("Trash2", "red", "Sil", "api-post",
                     apiUrl: $"/Logistics/DeleteMeasureUnitJson?id={u.Id}",
-                    confirm: $"\"{u.UnitName}\" birimini silmek istediğinizden emin misiniz?");
+                    confirm: $"\"{u.Name}\" birimini silmek istediğinizden emin misiniz?");
                 return eb;
             })
             .Build();
@@ -117,17 +120,17 @@ public sealed class UnitController : Controller
             var all  = await _logisticsConfigurationService.GetUnitsAsync(ct);
             var item = all.FirstOrDefault(x => x.Id == id.Value);
             if (item is null) return NotFound();
-            return View(new UnitEditViewModel
+            return View("~/Views/Logistics/UnitEdit.cshtml", new UnitEditViewModel
             {
                 Id       = item.Id,
-                UnitCode = item.UnitCode,
-                UnitName = item.UnitName,
+                UnitCode = item.Code,
+                UnitName = item.Name,
                 IntlCode = item.IntlCode,
                 SortOrder = item.SortOrder,
                 IsActive = item.IsActive,
             });
         }
-        return View(new UnitEditViewModel { IsActive = true });
+        return View("~/Views/Logistics/UnitEdit.cshtml", new UnitEditViewModel { IsActive = true });
     }
 
     // ── JSON API ──────────────────────────────────────────────────────────
@@ -137,12 +140,12 @@ public sealed class UnitController : Controller
     {
         var all = await _logisticsConfigurationService.GetUnitsAsync(ct);
         var filtered = all
-            .OrderBy(x => x.SortOrder).ThenBy(x => x.UnitCode, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
             .Where(x =>
                 string.IsNullOrWhiteSpace(search) ||
-                ContainsInsensitive(x.UnitCode, search) ||
-                ContainsInsensitive(x.UnitName, search))
-            .Select(x => new { x.Id, x.UnitCode, x.UnitName, x.IntlCode, x.SortOrder, x.IsActive });
+                ContainsInsensitive(x.Code, search) ||
+                ContainsInsensitive(x.Name, search))
+            .Select(x => new { x.Id, Code = x.Code, Name = x.Name, x.IntlCode, x.SortOrder, x.IsActive });
         return Json(filtered);
     }
 
@@ -152,7 +155,7 @@ public sealed class UnitController : Controller
         var all = await _logisticsConfigurationService.GetUnitsAsync(ct);
         var item = all.FirstOrDefault(x => x.Id == id);
         if (item is null) return NotFound();
-        return Json(new { item.Id, item.UnitCode, item.UnitName, item.IntlCode, item.SortOrder, item.IsActive });
+        return Json(new { item.Id, Code = item.Code, Name = item.Name, item.IntlCode, item.SortOrder, item.IsActive });
     }
 
     [HttpPost]

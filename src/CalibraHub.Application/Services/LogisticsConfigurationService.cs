@@ -120,7 +120,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             GroupKey = groupKey,
             GroupLabel = groupLabel,
             DisplayOrder = displayOrder,
-            CreatedAt = existing?.CreatedAt ?? DateTime.Now
+            Created = existing?.Created ?? DateTime.Now
         };
 
         group.SetActive(request.IsActive);
@@ -239,7 +239,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             DisplayOrder = displayOrder,
             ColumnSpan = columnSpan,
             IsSystem = existing?.IsSystem ?? false,
-            CreatedAt = existing?.CreatedAt ?? DateTime.Now
+            Created = existing?.Created ?? DateTime.Now
         };
 
         field.SetActive(request.IsActive);
@@ -252,7 +252,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var persistedSettings = await _repository.GetFieldsAsync(cancellationToken);
         var persistedByKey = persistedSettings
             .GroupBy(x => x.FieldKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.UpdatedAt).First(), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.Updated).First(), StringComparer.OrdinalIgnoreCase);
 
         return MaterialCardFieldCatalog.Definitions
             .Select(definition =>
@@ -304,7 +304,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var existingSettings = await _repository.GetFieldsAsync(cancellationToken);
         var existingByKey = existingSettings
             .GroupBy(x => x.FieldKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.UpdatedAt).First(), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.Updated).First(), StringComparer.OrdinalIgnoreCase);
 
         var now = DateTime.Now;
         var settingsToPersist = MaterialCardFieldCatalog.Definitions
@@ -323,8 +323,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     IsVisible = visibleValue,
                     IsRequired = requiredValue,
                     DisplayOrder = definition.DisplayOrder,
-                    CreatedAt = hasExisting ? existing!.CreatedAt : now,
-                    UpdatedAt = now
+                    Created = hasExisting ? existing!.Created : now,
+                    Updated = now
                 };
             })
             .ToArray();
@@ -361,11 +361,11 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var definitions = await _repository.GetUnitsAsync(cancellationToken);
         return definitions
             .OrderBy(x => x.SortOrder)
-            .ThenBy(x => x.UnitCode, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
             .Select(x => new UnitDto(
                 x.Id,
-                x.UnitCode,
-                x.UnitName,
+                x.Code,
+                x.Name,
                 x.IntlCode,
                 x.SortOrder,
                 x.IsActive))
@@ -391,8 +391,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                     x.Name,
                     x.TypeId,
                     x.IsActive,
-                    x.CreateDate,
-                    x.ModifyDate,
+                    x.Created,
+                    x.Updated,
                     x.UnitId,
                     x.Combinations,
                     x.TaxRate))
@@ -1108,7 +1108,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             UnitId = request.UnitId,
             Combinations = request.Combinations,
             TaxRate = request.TaxRate,
-            CreateDate = DateTime.Now
+            Created = DateTime.Now
         };
 
         await _repository.AddItemAsync(stockCard, cancellationToken);
@@ -1157,8 +1157,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             UnitId = request.UnitId,
             Combinations = request.Combinations,
             TaxRate = request.TaxRate,
-            CreateDate = existing.CreateDate,
-            ModifyDate = DateTime.Now
+            Created = existing.Created,
+            Updated = DateTime.Now
         };
 
         await _repository.UpdateItemAsync(updatedItem, cancellationToken);
@@ -1460,7 +1460,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var blockingMachines = machines
             .Where(m => m.LocationId == locationId)
             .Take(5)
-            .Select(m => m.MachineName)
+            .Select(m => m.Name)
             .ToList();
         if (blockingMachines.Count > 0)
         {
@@ -1493,8 +1493,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 m.LocationId,
                 loc?.LocationCode,
                 loc?.LocationName,
-                m.MachineCode,
-                m.MachineName,
+                m.Code,
+                m.Name,
                 m.HourlyCapacity,
                 m.SortOrder,
                 m.IsActive);
@@ -1505,7 +1505,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
     {
         if (request.LocationId <= 0)
             throw new ArgumentException("Lokasyon secimi zorunludur.");
-        if (string.IsNullOrWhiteSpace(request.MachineName))
+        if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Makine adi zorunludur.");
 
         var locations = await _repository.GetLocationsAsync(cancellationToken);
@@ -1513,17 +1513,17 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Secilen lokasyon bulunamadi.");
 
         var existing = await _repository.GetMachinesAsync(cancellationToken);
-        var name = request.MachineName.Trim();
+        var name = request.Name.Trim();
 
         // Ayni isimli makine kontrolu
-        if (existing.Any(m => string.Equals(m.MachineName?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+        if (existing.Any(m => string.Equals(m.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException($"Aynı isimde başka bir makine zaten tanımlı: '{name}'");
         }
 
         // Code DB'de var ama UI'dan kaldirildi — auto-uretilir (MAC-{6-hex})
         var code = "MAC-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
-        for (var attempt = 0; attempt < 5 && existing.Any(m => string.Equals(m.MachineCode, code, StringComparison.OrdinalIgnoreCase)); attempt++)
+        for (var attempt = 0; attempt < 5 && existing.Any(m => string.Equals(m.Code, code, StringComparison.OrdinalIgnoreCase)); attempt++)
         {
             code = "MAC-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         }
@@ -1531,8 +1531,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var machine = new Domain.Entities.Machine
         {
             LocationId = request.LocationId,
-            MachineCode = code,
-            MachineName = name,
+            Code = code,
+            Name = name,
             HourlyCapacity = request.HourlyCapacity,
             SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
             IsActive = request.IsActive
@@ -1546,7 +1546,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Makine secimi zorunludur.");
         if (request.LocationId <= 0)
             throw new ArgumentException("Lokasyon secimi zorunludur.");
-        if (string.IsNullOrWhiteSpace(request.MachineName))
+        if (string.IsNullOrWhiteSpace(request.Name))
             throw new ArgumentException("Makine adi zorunludur.");
 
         var locations = await _repository.GetLocationsAsync(cancellationToken);
@@ -1558,24 +1558,24 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         if (existingMachine is null)
             throw new ArgumentException("Guncellenecek makine bulunamadi.");
 
-        var name = request.MachineName.Trim();
+        var name = request.Name.Trim();
 
         // Ayni isimli baska makine var mi (kendisi haric)
         if (all.Any(m => m.Id != request.Id &&
-                         string.Equals(m.MachineName?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+                         string.Equals(m.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException($"Aynı isimde başka bir makine zaten tanımlı: '{name}'");
         }
 
         // Mevcut kodu koru (UI'dan gelmiyor)
-        var code = existingMachine.MachineCode;
+        var code = existingMachine.Code;
 
         var machine = new Domain.Entities.Machine
         {
             Id = request.Id,
             LocationId = request.LocationId,
-            MachineCode = code,
-            MachineName = name,
+            Code = code,
+            Name = name,
             HourlyCapacity = request.HourlyCapacity,
             SortOrder = request.SortOrder < 0 ? 0 : request.SortOrder,
             IsActive = request.IsActive
@@ -1594,20 +1594,20 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         CreateUnitRequest request,
         CancellationToken cancellationToken)
     {
-        var unitCode = NormalizeMeasureUnitCode(request.UnitCode);
-        var unitName = NormalizeRequiredField(request.UnitName, 100, "Olcu birimi adi");
+        var unitCode = NormalizeMeasureUnitCode(request.Code);
+        var unitName = NormalizeRequiredField(request.Name, 100, "Olcu birimi adi");
         var sortOrder = NormalizeSortOrder(request.SortOrder);
 
         var definitions = await _repository.GetUnitsAsync(cancellationToken);
-        if (definitions.Any(x => string.Equals(x.UnitCode, unitCode, StringComparison.OrdinalIgnoreCase)))
+        if (definitions.Any(x => string.Equals(x.Code, unitCode, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Ayni olcu birimi kodu ile kayit zaten mevcut.");
         }
 
         var definition = new Unit
         {
-            UnitCode = unitCode,
-            UnitName = unitName,
+            Code = unitCode,
+            Name = unitName,
             IntlCode = string.IsNullOrWhiteSpace(request.IntlCode) ? null : request.IntlCode.Trim(),
             SortOrder = sortOrder,
             IsActive = request.IsActive
@@ -1625,8 +1625,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             throw new ArgumentException("Olcu birimi secimi zorunludur.");
         }
 
-        var unitCode = NormalizeMeasureUnitCode(request.UnitCode);
-        var unitName = NormalizeRequiredField(request.UnitName, 100, "Olcu birimi adi");
+        var unitCode = NormalizeMeasureUnitCode(request.Code);
+        var unitName = NormalizeRequiredField(request.Name, 100, "Olcu birimi adi");
         var sortOrder = NormalizeSortOrder(request.SortOrder);
 
         var definitions = await _repository.GetUnitsAsync(cancellationToken);
@@ -1638,7 +1638,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
         if (definitions.Any(x =>
                 x.Id != request.Id &&
-                string.Equals(x.UnitCode, unitCode, StringComparison.OrdinalIgnoreCase)))
+                string.Equals(x.Code, unitCode, StringComparison.OrdinalIgnoreCase)))
         {
             throw new ArgumentException("Ayni olcu birimi kodu ile baska bir kayit mevcut.");
         }
@@ -1646,8 +1646,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var definition = new Unit
         {
             Id = request.Id,
-            UnitCode = unitCode,
-            UnitName = unitName,
+            Code = unitCode,
+            Name = unitName,
             IntlCode = string.IsNullOrWhiteSpace(request.IntlCode) ? null : request.IntlCode.Trim(),
             SortOrder = sortOrder,
             IsActive = request.IsActive
@@ -2687,7 +2687,7 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         var (cards, totalCount) = await _repository.GetItemsPagedAsync(search, offset, pageSize, cancellationToken, groupCode);
         var dtos = cards.Select(x => new ItemDto(
             x.Id, x.Code, x.Name,
-            x.TypeId, x.IsActive, x.CreateDate, x.ModifyDate,
+            x.TypeId, x.IsActive, x.Created, x.Updated,
             x.UnitId, x.Combinations, x.TaxRate)).ToList();
         return (dtos, totalCount);
     }
@@ -2704,8 +2704,8 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 c.Name,
                 null,
                 c.IsActive,
-                c.CreateDate,
-                c.ModifyDate,
+                c.Created,
+                c.Updated,
                 c.UnitId,
                 c.Combinations))
             .ToList();
@@ -2857,26 +2857,62 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         return await _repository.GetBOMByItemAsync(match.ItemId, match.ConfigId, cancellationToken);
     }
 
-    public async Task<int> SaveBOMAsync(SaveBOMRequest request, CancellationToken cancellationToken)
+    public async Task<int> SaveBOMAsync(SaveBOMRequest request, int? userId, CancellationToken cancellationToken)
     {
-        // Items snapshot — hem aktif kontrol hem legacy code → ItemId lookup icin
-        var stockCards = await _repository.GetItemsAsync(cancellationToken);
-        var activeById      = stockCards.Where(x => x.IsActive).ToDictionary(x => x.Id);
-        var activeIdByCode  = stockCards.Where(x => x.IsActive)
-                                        .GroupBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-                                        .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+        // 1) Items lookup — sadece bu kayda dahil olabilecek ID/Code'lari oku.
+        //    Eski "tum tabloyu cek" (50K satir) yaklasimi atildi (rapor madde 3.10).
+        //    a) ID yolu: request'te gelen tum ItemId'leri topla
+        //    b) Code yolu: request'te gelen kod stringlerini cek → ayri sorgu
+        //       (degisken sayida IN(...) parametre + sirket-tabanli filtre)
+        var requestedIds = new List<int>();
+        if (request.ItemId > 0) requestedIds.Add(request.ItemId);
+        foreach (var line in request.Lines ?? Array.Empty<SaveBOMLineRequest>())
+            if (line.ItemId > 0) requestedIds.Add(line.ItemId);
 
-        // Mamul ItemId resolve — yeni UI ItemId gonderir, eski UI ParentMaterialCode gonderir
+        var byIdSnapshot = await _repository.GetItemsByIdsAsync(requestedIds, cancellationToken);
+        var activeById = byIdSnapshot.Where(x => x.IsActive).ToDictionary(x => x.Id);
+
+        // Code yolu (legacy UI) — sadece koda dayanan istekler icin tum tabloyu degil,
+        // sadece request'teki kodlari filtreleyen ek bir lookup yapariz. Mevcut
+        // GetItemsAsync interface'i tek SQL ile tum tablo cektigi icin geri uyumda
+        // simdilik onu kullaniyoruz; lookup esnek kalsin diye sadece kod yolu
+        // gerekliyse cagrilir (yaygin yeni UI yolunda hic tetiklenmez).
+        Dictionary<string, int>? activeIdByCode = null;
+        async Task<Dictionary<string, int>> EnsureCodeLookupAsync()
+        {
+            if (activeIdByCode != null) return activeIdByCode;
+            var all = await _repository.GetItemsAsync(cancellationToken);
+            activeIdByCode = all.Where(x => x.IsActive)
+                                .GroupBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+            // Code lookup yolu degilse activeById'ye yeni ID'ler ekle (sonraki erisimler icin)
+            foreach (var item in all.Where(x => x.IsActive))
+                activeById.TryAdd(item.Id, item);
+            return activeIdByCode;
+        }
+
+        // Mamul ItemId resolve — yeni UI ItemId gonderir, eski UI ParentMaterialCode gonderir.
+        // Kullanici dostu hata mesajlari (rapor 2026-05-17 madde 3.11): teknik ID
+        // ifsa etmeden anlasilir cumleler.
         int parentItemId = request.ItemId;
         if (parentItemId <= 0 && !string.IsNullOrWhiteSpace(request.ParentMaterialCode))
         {
-            if (!activeIdByCode.TryGetValue(request.ParentMaterialCode.Trim(), out parentItemId))
-                throw new ArgumentException($"Mamul kodu bulunamadi veya aktif degil: {request.ParentMaterialCode}");
+            var codes = await EnsureCodeLookupAsync();
+            if (!codes.TryGetValue(request.ParentMaterialCode.Trim(), out parentItemId))
+                throw new ArgumentException(
+                    $"'{request.ParentMaterialCode.Trim()}' kodlu mamul sistemde bulunamadi veya pasif durumda. Listeden gecerli bir mamul seciniz.");
         }
         if (parentItemId <= 0)
-            throw new ArgumentException("Mamul (ItemId veya ParentMaterialCode) belirtilmedi.");
+            throw new ArgumentException("Mamul secmek zorunludur. Listeden bir mamul kodu seciniz.");
         if (!activeById.ContainsKey(parentItemId))
-            throw new ArgumentException($"Mamul (ItemId={parentItemId}) bulunamadi veya aktif degil.");
+        {
+            // ID gonderildi ama lookup'ta yok (silinmis/pasif) — final dogrulama
+            var all = await _repository.GetItemsByIdsAsync(new[] { parentItemId }, cancellationToken);
+            if (!all.Any(x => x.IsActive && x.Id == parentItemId))
+                throw new ArgumentException(
+                    "Sectiginiz mamul aktif degil veya sistemden silinmis. Lutfen listeden gecerli bir kayit seciniz.");
+            foreach (var item in all) activeById.TryAdd(item.Id, item);
+        }
 
         // Config — config kodu verilmis ama ConfigId yoksa best-effort lookup (legacy)
         int? parentConfigId = request.ConfigId;
@@ -2888,28 +2924,41 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             if (match is not null) parentConfigId = match.ConfigId;
         }
 
+        // Lines koleksiyonu — SaveBOMRequestValidator zaten validate ediyor
+        // (NotNull + Count > 0), ama service standalone cagrilabildiginde
+        // (orn. import) defansif: ayni kontrolu burada da koruyoruz.
         var lines = (request.Lines ?? Array.Empty<SaveBOMLineRequest>()).ToList();
         if (lines.Count == 0)
             throw new ArgumentException("Recetede en az bir bilesen olmalidir.");
 
-        // Her bilesen icin ItemId resolve + validation
+        // Her bilesen icin ItemId resolve — cross-aggregate (Items) dogrulamasi
+        // burada kalir (bilesenin aktif olup olmadigi servis sorumlulugu).
+        // Numerik invariant'lar (Quantity>0, ScrapRatio>=0) Domain'de
+        // BOMLine.EnsureValid icinde + validator katmaninda — ayni kontrol burada
+        // tekrar edilmez.
         var resolvedLines = new List<(int ItemId, int? ConfigId, decimal Qty, decimal Scrap)>(lines.Count);
         foreach (var line in lines)
         {
             int lineItemId = line.ItemId;
             if (lineItemId <= 0 && !string.IsNullOrWhiteSpace(line.ComponentMaterialCode))
             {
-                if (!activeIdByCode.TryGetValue(line.ComponentMaterialCode.Trim(), out lineItemId))
-                    throw new ArgumentException($"Bilesen kodu bulunamadi veya aktif degil: {line.ComponentMaterialCode}");
+                var codes = await EnsureCodeLookupAsync();
+                if (!codes.TryGetValue(line.ComponentMaterialCode.Trim(), out lineItemId))
+                    throw new ArgumentException(
+                        $"'{line.ComponentMaterialCode.Trim()}' kodlu bilesen sistemde bulunamadi veya pasif durumda. Bilesen alanindan gecerli bir malzeme seciniz.");
             }
             if (lineItemId <= 0)
-                throw new ArgumentException("Bilesen (ItemId veya ComponentMaterialCode) belirtilmedi.");
+                throw new ArgumentException("Her bilesen icin bir malzeme secmek zorunludur.");
             if (!activeById.ContainsKey(lineItemId))
-                throw new ArgumentException($"Bilesen (ItemId={lineItemId}) bulunamadi veya aktif degil.");
-            if (line.Quantity <= 0)
-                throw new ArgumentException($"Bilesen miktari sifirdan buyuk olmalidir: ItemId={lineItemId}");
-            if (line.ScrapRatio < 0)
-                throw new ArgumentException($"Fire miktari negatif olamaz: ItemId={lineItemId}");
+            {
+                // Edge case: line.ItemId initial snapshot'a girmemis olabilir (yeni
+                // bilesen, ID hic gonderilmemis vs.) — explicit dogrulama
+                var probe = await _repository.GetItemsByIdsAsync(new[] { lineItemId }, cancellationToken);
+                if (!probe.Any(x => x.IsActive && x.Id == lineItemId))
+                    throw new ArgumentException(
+                        "Bilesen olarak secilen malzemelerden biri aktif degil veya sistemden silinmis. Lutfen bilesen listesini gozden geciriniz.");
+                foreach (var item in probe) activeById.TryAdd(item.Id, item);
+            }
 
             int? lineConfigId = line.ConfigId;
             if (lineConfigId is null && !string.IsNullOrWhiteSpace(line.ComponentConfigCode))
@@ -2945,6 +2994,39 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
                 resolvedId = existing.Id;
         }
 
+        // ── Cycle (dongusel bagimlilik) korumasi (rapor 2026-05-17 madde 3.1) ──
+        // Save'den ONCE dogrulanir; ihlal varsa DB'ye yazilmaz. BFS depth cap 20.
+        // Self-reference + indirect loop birlikte tek pass'te yakalanir.
+        // BOMComponentItemIdsAsync recursive lookup icin lazy delegate.
+        // visited cache: ayni alt-mamulun cocuklarini tekrar tekrar sorgulamayalim.
+        var componentItemIds = resolvedLines.Select(l => l.ItemId).Distinct().ToList();
+        var childrenCache = new Dictionary<int, IReadOnlyCollection<int>>();
+        try
+        {
+            BOM.EnsureNoCycle(parentItemId, componentItemIds, childId =>
+            {
+                if (childrenCache.TryGetValue(childId, out var cached)) return cached;
+                // Async lookup'i sync delegate icine sokmak — kayit zinciri 5-6
+                // seviye, BFS sirasinda en kotu durumda 50-100 child id sorgulanir.
+                var ids = _repository.GetBOMComponentItemIdsAsync(childId, cancellationToken)
+                                     .GetAwaiter().GetResult();
+                childrenCache[childId] = ids;
+                return ids;
+            });
+        }
+        catch (CalibraHub.Domain.Common.DomainException dex)
+        {
+            // Domain hatasi -> Application katmaninda ArgumentException (controller 400 mapping'i ile uyumlu)
+            throw new ArgumentException(dex.Message, dex);
+        }
+
+        // Domain entity'yi rich-domain pattern'i ile insa et:
+        //   1) Header field'lari ile bos Lines koleksiyonu yarat.
+        //   2) Her resolved satir icin BOMLine.Create -> EnsureValid invariant'tan gec.
+        //   3) BOM.AddLine ile koleksiyona ekle (mukerrer kontrol).
+        //   4) BOM.EnsureValid son kontrol (sifir bilesen, mukerrer, fit/rotation).
+        // DomainException firlatilirsa controller'in beklemedigi exception olmasin
+        // diye ArgumentException olarak yansitilir (Web 400 mapping uyumlu).
         var entity = new BOM
         {
             Id            = resolvedId,
@@ -2955,15 +3037,26 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
             ImageMimeType = imageMimeType,
             ImageFitMode  = fitMode,
             ImageRotation = rotation,
-            Lines = resolvedLines.Select(l => new BOMLine
-            {
-                ItemId     = l.ItemId,
-                ConfigId   = l.ConfigId,
-                Quantity   = l.Qty,
-                ScrapRatio = l.Scrap,
-                LineGuid   = Guid.NewGuid()
-            }).ToList()
+            // 2026-05-20: header-level Routing FK. NULL ise is emri acilirken kullanici secer.
+            // Cozumleme onceligi:
+            //   1) request.RoutingId > 0  → dogrudan kullan
+            //   2) request.RoutingCode dolu → Routing.Code -> Id lookup (standart rehber fallback)
+            //   3) Aksi halde NULL.
+            // Bulunamayan kod (kullanici sectigi rota silinmis/pasif) → kullanici dostu hata.
+            RoutingId     = await ResolveRoutingIdAsync(request, cancellationToken),
+            CreatedById   = userId,
+            UpdatedById   = userId,
         };
+        try
+        {
+            foreach (var l in resolvedLines)
+                entity.AddLine(BOMLine.Create(l.ItemId, l.ConfigId, l.Qty, l.Scrap, userId));
+            entity.EnsureValid();
+        }
+        catch (CalibraHub.Domain.Common.DomainException dex)
+        {
+            throw new ArgumentException(dex.Message, dex);
+        }
 
         if (entity.Id <= 0)
             return await _repository.AddBOMAsync(entity, cancellationToken);
@@ -2972,10 +3065,167 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
         return entity.Id;
     }
 
-    public async Task DeleteBOMAsync(int id, CancellationToken cancellationToken)
+    public async Task DeleteBOMAsync(int id, int? userId, CancellationToken cancellationToken)
     {
         if (id <= 0) throw new ArgumentException("Silinecek recete secilmelidir.");
-        await _repository.DeleteBOMAsync(id, cancellationToken);
+        await _repository.DeleteBOMAsync(id, userId, cancellationToken);
+    }
+
+    /// <summary>
+    /// 2026-05-20: BOM.RoutingId cozumleyici. Standart rehber UI'sinde frontend
+    /// hidden Id'yi her zaman doldurmayabilir (kullanici input'a elle kod yazip blur
+    /// ettiyse cache miss olabilir). Bu durumda RoutingCode'u backend Routing.Code
+    /// uzerinden lookup eder. Kod gonderildi ama eslesme yoksa: kullanici dostu hata.
+    /// </summary>
+    private async Task<int?> ResolveRoutingIdAsync(SaveBOMRequest request, CancellationToken ct)
+    {
+        if (request.RoutingId.HasValue && request.RoutingId.Value > 0)
+            return request.RoutingId;
+        if (string.IsNullOrWhiteSpace(request.RoutingCode))
+            return null;
+        var id = await _repository.GetRoutingIdByCodeAsync(request.RoutingCode.Trim(), ct);
+        if (id is null)
+            throw new ArgumentException(
+                $"'{request.RoutingCode.Trim()}' kodlu rota sistemde bulunamadi veya pasif durumda. Listeden gecerli bir rota seciniz.");
+        return id;
+    }
+
+    public async Task<BOMExplodeResultDto?> ExplodeBOMAsync(
+        int parentItemId, decimal quantity, int? configId, CancellationToken cancellationToken)
+    {
+        if (parentItemId <= 0)
+            throw new ArgumentException("Patlatma icin mamul ItemId zorunlu (>0).");
+        if (quantity <= 0)
+            throw new ArgumentException($"Patlatma miktari sifirdan buyuk olmalidir (su an: {quantity}).");
+
+        const int maxDepth = 20;
+
+        // Parent item dogrulamasi + display field icin tek satir cek.
+        var parentSnapshot = await _repository.GetItemsByIdsAsync(new[] { parentItemId }, cancellationToken);
+        var parent = parentSnapshot.FirstOrDefault(x => x.IsActive && x.Id == parentItemId);
+        if (parent is null) return null;
+
+        // Opsiyonel config kod cozumleme (UI dropdown ile gosterim icin display)
+        string? configCode = null;
+        if (configId.HasValue)
+        {
+            var combos = await _repository.GetCombinationsByMaterialCodeAsync(parent.Code, cancellationToken);
+            configCode = combos.FirstOrDefault(c => c.ConfigId == configId.Value)?.Code;
+        }
+
+        // ── BFS patlatma ──
+        // Bir kuyruk tasiyor: (ItemId, accumulated quantity, depth).
+        // Her dugumde repo.GetBOMComponentLinesAsync ile cocuklar cekilir;
+        // alt sevtide quantity *= parent.Qty * (1 + scrap). Aggregate map
+        // (ItemId -> (totalQty, firstDepth, isLeaf)) sonucu duzlestirir.
+        // Cycle koruma: visited set + maxDepth cap. Cycle olmadigi varsayilir
+        // (SaveBOMAsync EnsureNoCycle ile zaten engelliyor) ama defansif.
+        var aggregate = new Dictionary<int, (decimal Qty, int Depth, bool IsLeaf)>();
+        var componentsCache = new Dictionary<int, IReadOnlyCollection<BOMComponentLineRow>>();
+        async Task<IReadOnlyCollection<BOMComponentLineRow>> ResolveChildrenAsync(int itemId)
+        {
+            if (componentsCache.TryGetValue(itemId, out var cached)) return cached;
+            var fetched = await _repository.GetBOMComponentLinesAsync(itemId, cancellationToken);
+            componentsCache[itemId] = fetched;
+            return fetched;
+        }
+
+        var rootChildren = await ResolveChildrenAsync(parentItemId);
+        var frontier = new List<(int ItemId, decimal Qty, int Depth)>();
+        foreach (var child in rootChildren)
+        {
+            // 1. seviye quantity = istenen mamul adedi * line qty * (1 + scrap)
+            var subQty = quantity * child.Quantity * (1m + child.ScrapRatio);
+            frontier.Add((child.ItemId, subQty, 1));
+        }
+
+        var truncated = false;
+        var maxDepthSeen = 0;
+
+        for (var depth = 1; depth <= maxDepth && frontier.Count > 0; depth++)
+        {
+            maxDepthSeen = Math.Max(maxDepthSeen, depth);
+            var nextFrontier = new List<(int ItemId, decimal Qty, int Depth)>();
+
+            // Her seviyede frontier'i ItemId bazli grupla — ayni item farkli
+            // yollardan geldiyse total quantity'sini topla, child lookup'i tek
+            // kez yap. Bu N+1 azaltir ve aggregate kalitesini koruyor.
+            var grouped = frontier
+                .GroupBy(f => f.ItemId)
+                .Select(g => (ItemId: g.Key, Qty: g.Sum(x => x.Qty), Depth: g.Min(x => x.Depth)))
+                .ToList();
+
+            foreach (var (childItemId, childQty, childDepth) in grouped)
+            {
+                var children = await ResolveChildrenAsync(childItemId);
+                var isLeaf = children.Count == 0;
+
+                // Aggregate ekle (ilk goruldugu depth korunur — daha sig kayit kazanir)
+                if (aggregate.TryGetValue(childItemId, out var existing))
+                {
+                    aggregate[childItemId] = (existing.Qty + childQty,
+                                              Math.Min(existing.Depth, childDepth),
+                                              existing.IsLeaf || isLeaf);  // herhangi bir path'te leaf ise leaf
+                }
+                else
+                {
+                    aggregate[childItemId] = (childQty, childDepth, isLeaf);
+                }
+
+                if (isLeaf) continue;
+
+                foreach (var grand in children)
+                {
+                    var grandQty = childQty * grand.Quantity * (1m + grand.ScrapRatio);
+                    nextFrontier.Add((grand.ItemId, grandQty, childDepth + 1));
+                }
+            }
+            frontier = nextFrontier;
+        }
+        if (frontier.Count > 0) truncated = true;  // cap'e ulasildi, hala expand edilecek var
+
+        // Display field zenginlestirme — tek toplu Items okumasi (N+1 yerine 1 query)
+        var allItemIds = aggregate.Keys.ToList();
+        var itemsForDisplay = await _repository.GetItemsByIdsAsync(allItemIds, cancellationToken);
+        var itemDisplayMap = itemsForDisplay.ToDictionary(x => x.Id);
+
+        var lines = aggregate
+            .Where(kv => itemDisplayMap.ContainsKey(kv.Key))  // pasif/silinmis itemlari atla
+            .Select(kv =>
+            {
+                var item = itemDisplayMap[kv.Key];
+                return new BOMExplodeLineDto(
+                    ItemId:        item.Id,
+                    ItemCode:      item.Code,
+                    ItemName:      item.Name ?? item.Code,
+                    ConfigId:      null,    // shipping note: aggregation seviyesinde config-bazli ayrismiyoruz
+                    ConfigCode:    null,
+                    TotalQuantity: Math.Round(kv.Value.Qty, 6, MidpointRounding.AwayFromZero),
+                    Depth:         kv.Value.Depth,
+                    IsLeaf:        kv.Value.IsLeaf);
+            })
+            .OrderBy(l => l.Depth)
+            .ThenBy(l => l.ItemCode)
+            .ToList();
+
+        return new BOMExplodeResultDto(
+            ParentItemId:   parent.Id,
+            ParentItemCode: parent.Code,
+            ParentItemName: parent.Name ?? parent.Code,
+            ConfigId:       configId,
+            ConfigCode:     configCode,
+            Quantity:       quantity,
+            MaxDepth:       maxDepthSeen,
+            Truncated:      truncated,
+            Lines:          lines);
+    }
+
+    public Task<IReadOnlyCollection<WhereUsedItemDto>> GetWhereUsedAsync(
+        int componentItemId, CancellationToken cancellationToken)
+    {
+        if (componentItemId <= 0)
+            throw new ArgumentException("Where-used sorgusu icin bilesen ItemId zorunlu (>0).");
+        return _repository.GetWhereUsedAsync(componentItemId, cancellationToken);
     }
 
     /* ── Malzeme Grupları ─────────────────────────────────────── */
@@ -3035,6 +3285,18 @@ public sealed class LogisticsConfigurationService : ILogisticsConfigurationServi
 
     public async Task<IReadOnlyCollection<MaterialGroupMappingDto>> GetMaterialGroupMappingsAsync(int stockCardId, CancellationToken cancellationToken)
         => await _repository.GetMaterialGroupMappingsAsync(stockCardId, cancellationToken);
+
+    public Task<IReadOnlyDictionary<int, IReadOnlyList<MaterialGroupMappingDto>>> GetMaterialGroupMappingsBatchAsync(
+        IReadOnlyCollection<int> stockCardIds, CancellationToken cancellationToken)
+        => _repository.GetMaterialGroupMappingsBatchAsync(stockCardIds, cancellationToken);
+
+    public Task<IReadOnlyDictionary<int, IReadOnlyList<CalibraHub.Domain.Entities.ItemUnit>>> GetItemUnitsBatchAsync(
+        IReadOnlyCollection<int> itemIds, CancellationToken cancellationToken)
+        => _repository.GetItemUnitsBatchAsync(itemIds, cancellationToken);
+
+    public Task<IReadOnlyDictionary<int, IReadOnlyList<CalibraHub.Domain.Entities.ItemFeatureMapping>>> GetItemFeatureMappingsBatchAsync(
+        IReadOnlyCollection<int> itemIds, CancellationToken cancellationToken)
+        => _repository.GetItemFeatureMappingsBatchAsync(itemIds, cancellationToken);
 
     public async Task SaveMaterialGroupMappingsAsync(SaveMaterialGroupMappingsRequest request, CancellationToken cancellationToken)
     {

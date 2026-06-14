@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Approval;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,17 +20,23 @@ public sealed class ApprovalController : Controller
     private readonly IUiConfigurationService _uiConfigurationService;
     private readonly IDocumentImportService _documentImportService;
     private readonly IIncomingDocumentRepository _incomingDocumentRepository;
+    private readonly IApprovalFlowService _approvalFlowService;
+    private readonly IDocumentService _documentService;
 
     public ApprovalController(
         IApprovalQueueService approvalQueueService,
         IUiConfigurationService uiConfigurationService,
         IDocumentImportService documentImportService,
-        IIncomingDocumentRepository incomingDocumentRepository)
+        IIncomingDocumentRepository incomingDocumentRepository,
+        IApprovalFlowService approvalFlowService,
+        IDocumentService documentService)
     {
         _approvalQueueService = approvalQueueService;
         _uiConfigurationService = uiConfigurationService;
         _documentImportService = documentImportService;
         _incomingDocumentRepository = incomingDocumentRepository;
+        _approvalFlowService = approvalFlowService;
+        _documentService = documentService;
     }
 
     public Task<IActionResult> Index(
@@ -508,7 +515,7 @@ public sealed class ApprovalController : Controller
             ? requestedPageSize!.Value
             : storedPageSize;
 
-        if (userId.HasValue && userId.Value != Guid.Empty && resolvedPageSize != storedPageSize)
+        if (userId.HasValue && userId.Value > 0 && resolvedPageSize != storedPageSize)
         {
             await _uiConfigurationService.SaveGridPageSizePreferenceAsync(
                 userId.Value,
@@ -545,10 +552,10 @@ public sealed class ApprovalController : Controller
             ]
         };
 
-    private Guid? GetCurrentUserId()
+    private int? GetCurrentUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(rawUserId, out var userId) ? userId : null;
+        return int.TryParse(rawUserId, out var userId) ? userId : null;
     }
 
     private static string GetGridKey(string? kind) =>
@@ -591,6 +598,9 @@ public sealed class ApprovalController : Controller
                       modalTitle=$"Kalemler - {doc.DocumentNumber}" },
                 new { label="Indir",      icon="Download",     color="green",
                       type="download",   url=$"/Approval/DownloadPayload/{doc.Id}" },
+                new { label="Onay Akisi", icon="GitBranch",    color="indigo",
+                      type="fetch-modal", fetchUrl=$"/Approval/ApprovalPanel/{doc.Id}",
+                      modalTitle=$"Onay Akisi - {doc.DocumentNumber}" },
                 new { label=doc.IsProcessed ? "Islenmedi Yap" : "Islendi Isaretl",
                       icon =doc.IsProcessed ? "XCircle"       : "CheckCircle2",
                       color=doc.IsProcessed ? "red"           : "emerald",
@@ -615,11 +625,11 @@ public sealed class ApprovalController : Controller
             searchPlaceholder = "Belge no, gonderici, VKN...",
             emptyText         = "Bekleyen belge bulunmuyor",
             actions           = Array.Empty<object>(),
-            masterWidgets     = new object[] {
-                new { id="w_sender",    label="Gonderici",     type="data", dataType="text"     },
-                new { id="w_scenario",  label="Senaryo",       type="data", dataType="text"     },
-                new { id="w_issuedate", label="Belge Tarihi",  type="data", dataType="date"     },
-                new { id="w_imported",  label="Sisteme Giris", type="data", dataType="datetime" },
+            masterWidgets     = new List<object> {
+                SmartBoardFilterHelpers.MakeStdWidget("w_sender",    "Gonderici",     "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_scenario",  "Senaryo",       "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_issuedate", "Belge Tarihi",  "date"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_imported",  "Sisteme Giris", "datetime"),
             },
             entities,
         };
@@ -637,6 +647,218 @@ public sealed class ApprovalController : Controller
         catch (Exception ex)
         {
             return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    // ── Onay Paneli — modal içeriği (HTML partial) ────────────────────────────
+    [HttpGet]
+    public async Task<IActionResult> ApprovalPanel(Guid id, CancellationToken cancellationToken)
+    {
+        var document = await _incomingDocumentRepository.GetByIdAsync(id, cancellationToken);
+        if (document is null) return Content("<div class='p-3 text-danger'>Belge bulunamadı.</div>", "text/html");
+
+        var instance = await _approvalFlowService.GetInstanceByDocumentIdAsync(id, cancellationToken);
+        var allFlows = await _approvalFlowService.GetAllAsync(cancellationToken);
+        // 'Document' = "Tüm Belgeler" wildcard (yeni standart), 'All' = legacy. Spesifik tip
+        // (EInvoice/EArchive/SalesQuote/...) ile birebir eşleşme + wildcard'lar dahil edilir.
+        var kindFlows = allFlows.Where(f => f.IsActive && (
+            f.DocumentKind == document.Kind.ToString() ||
+            f.DocumentKind == "Document" ||
+            f.DocumentKind == "All")).ToList();
+
+        var currentUserId   = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        var currentUserName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+
+        return PartialView("_ApprovalPanel", new Web.Models.Approval.ApprovalPanelViewModel
+        {
+            DocumentId      = id,
+            DocumentNumber  = document.DocumentNumber,
+            DocumentKind    = document.Kind.ToString(),
+            Instance        = instance,
+            AvailableFlows  = kindFlows,
+            CurrentUserId   = currentUserId,
+            CurrentUserName = currentUserName,
+        });
+    }
+
+    // ── Onay Akışı — belgenin mevcut onay örneğini getir ──────────────────────
+    [HttpGet]
+    public async Task<IActionResult> ApprovalInstance(Guid id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var instance = await _approvalFlowService.GetInstanceByDocumentIdAsync(id, cancellationToken);
+            if (instance is null) return Json(new { found = false });
+            return Json(new
+            {
+                found = true,
+                instanceId = instance.Id,
+                status = instance.Status,
+                flowName = instance.FlowName,
+                currentStep = instance.CurrentStep,
+                totalSteps = instance.TotalSteps,
+                startedBy = instance.StartedBy,
+                startedAt = instance.StartedAt.ToString("dd.MM.yyyy HH:mm"),
+                rejectNote = instance.RejectNote,
+                steps = instance.StepRecords.Select(s => new
+                {
+                    stepOrder = s.StepOrder,
+                    stepName = s.StepName,
+                    status = s.Status,
+                    approverName = s.ApproverName,
+                    note = s.Note,
+                    actionDate = s.ActionDate?.ToString("dd.MM.yyyy HH:mm"),
+                }),
+            });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { found = false, error = ex.Message });
+        }
+    }
+
+    // ── Uygun akışları getir (belge türü + tutar + VKN + departman'a göre) ──
+    [HttpGet]
+    public async Task<IActionResult> MatchFlow(string kind, decimal? amount, string? taxNo, int? departmentId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var flow = await _approvalFlowService.MatchFlowAsync(kind, amount, taxNo, departmentId, cancellationToken);
+            if (flow is null) return Json(new { matched = false });
+            return Json(new
+            {
+                matched = true,
+                flowId = flow.Id,
+                flowName = flow.Name,
+                stepCount = flow.Steps.Count(s => s.IsActive),
+            });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { matched = false, error = ex.Message });
+        }
+    }
+
+    // ── Tüm akış listesi (İşleme Al modalı için) ──────────────────────────────
+    [HttpGet]
+    public async Task<IActionResult> ListFlows(string? kind, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var all = await _approvalFlowService.GetAllAsync(cancellationToken);
+            var filtered = string.IsNullOrWhiteSpace(kind)
+                ? all
+                : all.Where(f => f.IsActive && (
+                    f.DocumentKind == kind ||
+                    f.DocumentKind == "Document" ||
+                    f.DocumentKind == "All")).ToList();
+            return Json(filtered.Select(f => new
+            {
+                id = f.Id, name = f.Name,
+                documentKind = f.DocumentKind,
+                stepCount = f.StepCount,
+            }));
+        }
+        catch (Exception ex)
+        {
+            return Json(new object[] { });
+        }
+    }
+
+    // ── İşleme Al — onay sürecini başlat ──────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> StartApproval(Guid documentId, int flowId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+            var instance = await _approvalFlowService.StartAsync(
+                new StartApprovalRequest(documentId, flowId, userName), cancellationToken);
+            return Json(new { ok = true, instanceId = instance.Id, status = instance.Status,
+                currentStep = instance.CurrentStep, totalSteps = instance.TotalSteps });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ── Mevcut adımı onayla ───────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveStep(int instanceId, string? note, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userId   = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+            var instance = await _approvalFlowService.ApproveStepAsync(
+                new ApproveStepRequest(instanceId, userId, userName, note), cancellationToken);
+
+            // Onay tamamlandıysa Document.Status = Approved yap (alis_talebi için)
+            if (string.Equals(instance.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+            {
+                var docIdLong = TryDecodeDocumentId(instance.DocumentId);
+                if (docIdLong.HasValue)
+                    await _documentService.ChangeStatusAsync(docIdLong.Value, "Approved", cancellationToken);
+            }
+
+            return Json(new { ok = true, status = instance.Status,
+                currentStep = instance.CurrentStep, totalSteps = instance.TotalSteps });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // Guid'i Document.Id INT'e decode et: "00000000-0000-0000-0000-{docId:D12}" → docId
+    private static int? TryDecodeDocumentId(Guid documentId)
+    {
+        var hex = documentId.ToString("N");  // 32 hex karakter, suffix 12
+        if (hex.Length == 32 && hex.StartsWith("00000000000000000000", StringComparison.Ordinal))
+        {
+            var suffix = hex[20..];
+            if (int.TryParse(suffix, out var id) && id > 0)
+                return id;
+        }
+        return null;
+    }
+
+    // ── Reddet ────────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RejectApproval(int instanceId, string note, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userId   = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+            var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+            var instance = await _approvalFlowService.RejectAsync(
+                new RejectStepRequest(instanceId, userId, userName, note), cancellationToken);
+            return Json(new { ok = true, status = instance.Status });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    // ── İptal et ──────────────────────────────────────────────────────────────
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelApproval(int instanceId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+            await _approvalFlowService.CancelAsync(instanceId, userName, cancellationToken);
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
         }
     }
 }

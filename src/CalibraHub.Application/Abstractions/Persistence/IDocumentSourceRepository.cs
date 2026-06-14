@@ -19,4 +19,10 @@ public interface IDocumentSourceRepository
 
     /// <summary>Bir kaynak belgenin (teklif) zaten siparise donusturulmus olup olmadigi.</summary>
     Task<bool> IsSourceConsumedAsync(int sourceDocumentId, CancellationToken ct);
+
+    /// <summary>
+    /// Bir kaynak belgeden (alis_talebi / İhtiyaç Kaydı) türetilmiş tüm belge ID'lerini döner.
+    /// Ters yön: GetSourceIdsAsync(docId) → "bu belgenin kaynakları", bu metot → "bu kaynaktan türetilenler".
+    /// </summary>
+    Task<IReadOnlyCollection<int>> GetDerivedDocumentIdsAsync(int sourceDocumentId, CancellationToken ct);
 }

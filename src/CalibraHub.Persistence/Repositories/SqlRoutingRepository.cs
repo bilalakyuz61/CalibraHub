@@ -1,4 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -11,14 +13,16 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlRoutingRepository : IRoutingRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IDataVisibilityFilter _dvFilter;
     private readonly string _schema;
     private readonly string _routingTable;
     private readonly string _opTable;
     private readonly string _mapTable;
 
-    public SqlRoutingRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
+    public SqlRoutingRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options, IDataVisibilityFilter dvFilter)
     {
         _connectionFactory = factory;
+        _dvFilter = dvFilter;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         var s = _schema.Replace("]", "]]");
         _routingTable = $"[{s}].[Routing]";
@@ -29,6 +33,7 @@ public sealed class SqlRoutingRepository : IRoutingRepository
     public async Task<IReadOnlyCollection<RoutingDto>> ListAsync(int? itemId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        var dv = await _dvFilter.BuildAsync(FormCodes.Routings, "r", "Id", ct);
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         var itemFilter = itemId.HasValue ? "AND r.[ItemId] = @ItemId" : "";
@@ -42,9 +47,11 @@ public sealed class SqlRoutingRepository : IRoutingRepository
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = r.[ItemId]
             WHERE r.[CompanyId] = @CompanyId
             {itemFilter}
+            {dv.Sql}
             ORDER BY r.[Code];";
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         if (itemId.HasValue) cmd.Parameters.AddWithValue("@ItemId", itemId.Value);
+        foreach (var prm in dv.Parameters) cmd.Parameters.AddWithValue(prm.Name, prm.Value);
         return await ReadListAsync(cmd, ct);
     }
 
@@ -94,8 +101,8 @@ public sealed class SqlRoutingRepository : IRoutingRepository
                 OperationCode: r.IsDBNull(4) ? null : r.GetString(4),
                 OperationName: r.IsDBNull(5) ? null : r.GetString(5),
                 MachineId: r.IsDBNull(6) ? null : r.GetInt32(6),
-                MachineCode: r.IsDBNull(7) ? null : r.GetString(7),
-                MachineName: r.IsDBNull(8) ? null : r.GetString(8),
+                Code: r.IsDBNull(7) ? null : r.GetString(7),
+                Name: r.IsDBNull(8) ? null : r.GetString(8),
                 OverrideDuration: r.IsDBNull(9) ? null : r.GetDecimal(9),
                 DurationUnit: (DurationUnit)r.GetByte(10),
                 Notes: r.IsDBNull(11) ? null : r.GetString(11)));
@@ -249,8 +256,8 @@ public sealed class SqlRoutingRepository : IRoutingRepository
                 OperationCode: r.IsDBNull(4) ? null : r.GetString(4),
                 OperationName: r.IsDBNull(5) ? null : r.GetString(5),
                 MachineId: r.IsDBNull(6) ? null : r.GetInt32(6),
-                MachineCode: r.IsDBNull(7) ? null : r.GetString(7),
-                MachineName: r.IsDBNull(8) ? null : r.GetString(8),
+                Code: r.IsDBNull(7) ? null : r.GetString(7),
+                Name: r.IsDBNull(8) ? null : r.GetString(8),
                 OverrideDuration: r.IsDBNull(9) ? null : r.GetDecimal(9),
                 DurationUnit: (DurationUnit)r.GetByte(10),
                 Notes: r.IsDBNull(11) ? null : r.GetString(11)));

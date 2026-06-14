@@ -17,7 +17,7 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{schema}].[erp_connection_settings]";
+        _tableName = $"[{schema}].[ErpConnectionSetting]";
     }
 
     public async Task<IReadOnlyCollection<ErpConnectionSettings>> GetAllAsync(CancellationToken cancellationToken)
@@ -27,9 +27,9 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [Created]
+            SELECT [Id], [CompanyId], [Provider], [Company], [Business], [Branch], [Username], [Password], [IsActive], [Created]
             FROM {_tableName}
-            ORDER BY [company], [business], [branch];
+            ORDER BY [Company], [Business], [Branch];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -46,9 +46,9 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [Created]
+            SELECT [Id], [CompanyId], [Provider], [Company], [Business], [Branch], [Username], [Password], [IsActive], [Created]
             FROM {_tableName}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
 
@@ -67,14 +67,14 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([id], [company_id], [provider], [company], [business], [branch], [username], [password], [is_active], [Created], [Updated])
+                ([Id], [CompanyId], [Provider], [Company], [Business], [Branch], [Username], [Password], [IsActive], [Created], [Updated])
             VALUES
-                (@Id, @EntityCompanyId, @Provider, @Company, @Business, @Branch, @Username, @Password, @IsActive, @CreatedAt, @UpdatedAt);
+                (@Id, @EntityCompanyId, @Provider, @Company, @Business, @Branch, @Username, @Password, @IsActive, @Created, @Updated);
             """;
 
         AddCommonParameters(command, settings);
-        command.Parameters.Add(new SqlParameter("@CreatedAt", settings.CreatedAt));
-        command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@Created", settings.Created));
+        command.Parameters.Add(new SqlParameter("@Updated", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -85,20 +85,20 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_tableName}
-            SET [company_id] = @EntityCompanyId,
-                [provider] = @Provider,
-                [company] = @Company,
-                [business] = @Business,
-                [branch] = @Branch,
-                [username] = @Username,
-                [password] = @Password,
-                [is_active] = @IsActive,
-                [Updated] = @UpdatedAt
-            WHERE [id] = @Id;
+            SET [CompanyId] = @EntityCompanyId,
+                [Provider] = @Provider,
+                [Company] = @Company,
+                [Business] = @Business,
+                [Branch] = @Branch,
+                [Username] = @Username,
+                [Password] = @Password,
+                [IsActive] = @IsActive,
+                [Updated] = @Updated
+            WHERE [Id] = @Id;
             """;
 
         AddCommonParameters(command, settings);
-        command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@Updated", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -109,7 +109,7 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             DELETE FROM {_tableName}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", id));
@@ -141,7 +141,7 @@ public sealed class SqlErpConnectionSettingsRepository : IErpConnectionSettingsR
             Branch = reader.GetString(5),
             Username = reader.GetString(6),
             Password = reader.GetString(7),
-            CreatedAt = reader.GetFieldValue<DateTime>(9)
+            Created = reader.GetFieldValue<DateTime>(9)
         };
 
         if (!reader.GetBoolean(8))

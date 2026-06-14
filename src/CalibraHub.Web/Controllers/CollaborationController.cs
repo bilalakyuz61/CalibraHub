@@ -33,7 +33,7 @@ public sealed class CollaborationController : ControllerBase
     public async Task<IActionResult> Release([FromBody] CollaborationReleaseApiRequest request, CancellationToken ct)
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(rawUserId, out var userId))
+        if (!int.TryParse(rawUserId, out var userId))
         {
             return Unauthorized();
         }

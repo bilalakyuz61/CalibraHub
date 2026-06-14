@@ -85,4 +85,19 @@ public sealed class IntegrationMapping
     /// Ornek: aynı CONTACTS guide'inden bir mapping CARI_AD ceker, baska mapping VERGI_NO.
     /// </summary>
     public string? LookupReturnColumn { get; set; }
+
+    /// <summary>
+    /// 2026-05-22 Cascade: Bu mapping satırı bir FK alanını hedefliyorsa, parent integration
+    /// çalıştırılmadan ÖNCE FK'nin işaret ettiği entity'yi ERP'ye push'lamak için tetiklenecek
+    /// cascade hedef integration'ın ID'si. NULL = cascade yok (default).
+    ///
+    /// Senaryo: Sipariş integration'ı "FatUst.CariKod ← ContactId" mapping satırında
+    /// CascadeToIntegrationId="Netsis Cari Ekle (Id=5)" set edilir. Runner sipariş
+    /// çalıştırırken bu satırı görür; ContactId değerini (örn. 123) okur, IntegrationRecordStatus
+    /// kontrol eder, !Sent ise Integration ID=5'i recordId="123" ile cascade tetikler.
+    ///
+    /// Hedef integration sadece "Standalone" mantığını bilmek zorunda değil — aynı integration
+    /// hem manuel/cron hem cascade ile çağrılabilir (tek tanım, çok yol).
+    /// </summary>
+    public int? CascadeToIntegrationId { get; set; }
 }

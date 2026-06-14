@@ -7,6 +7,12 @@ using CalibraHub.Application.Contracts;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using QRCoder;
+using SkiaSharp;
+using ZXing;
+using ZXing.Common;
+using ZXing.SkiaSharp;
+using ZXing.SkiaSharp.Rendering;
 
 namespace CalibraHub.Infrastructure.Reporting;
 
@@ -947,11 +953,22 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
     /// <summary>
     /// Tek bir band element'ini (Label/BoundField/PageNumber/Image/etc.) verilen container'a basar.
     /// container zaten doğru boyut+pozisyonda — burada sadece içerik ve stil uygulanır.
+    ///
+    /// OVERFLOW POLITIKASI:
+    /// QuestPDF default davranisi: kutuya sigmayan icerik (uzun text/numara) yeni sayfaya
+    /// "tasinir" — band elementleri icin yanlis sonuc verir (tasarimda kutu sabit konumda;
+    /// kullanici kutuyu o boyutta cizdi). Cozum: `.ShowOnce()` chaining + text icin
+    /// `ClampLines(N)`. Sigmayan kisim KIRPILIR, yeni sayfaya tasinmaz.
     /// </summary>
     private static void RenderSingleElement(IContainer container, LayoutElement el,
         IReadOnlyDictionary<string, ReportRawResult> data)
     {
         var s = el.Style;
+
+        // Tum tek-element render'ları icin overflow guard:
+        // - ShowOnce → kutu disina tasmayi engeller, yeni sayfa acmaz
+        // - Image branchi de dahil tum yollar bu container'i kullanacak
+        container = container.ShowOnce();
 
         if (el.Kind == "Image")
         {
@@ -986,18 +1003,78 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
         }
 
         // Şekil tipi elementler: TEXT ÇAĞIRMA.
-        // Üç senaryo bu kategoriye girer:
-        //   1) Kind == "Shape" / "Barcode" / "QrCode" → tipik olarak içeriksiz
-        //   2) Kind == "Label" AMA Text boş/whitespace → kullanıcı dekoratif çizgi/kutu
-        //      olarak kullanmış (örn. imza üstü gri çizgi: "text":" ", h:0.5, bgColor:#9CA3AF)
-        // Her iki durumda da TextBlock çağırırsak QuestPDF boş text'e font line-height
-        // (~4mm) tahsis edip 0.5mm tasarlanan çizgiyi kabul etmez → "available space not
-        // sufficient" fırlatır ve tüm sayfayı iptal eder. bg + border zaten yukarıda
-        // uygulandı; Text bypass edilir.
-        if (el.Kind is "Shape" or "Barcode" or "QrCode")
+        // Shape ve bos Label dekoratif (cizgi/kutu) — bg+border zaten yukarida
+        // uygulandi; Text bypass edilir, aksi halde QuestPDF font line-height
+        // tahsis edip 0.5mm cizgide "available space" hatasi firlatir.
+        if (el.Kind == "Shape")
             return;
         if (el.Kind == "Label" && string.IsNullOrWhiteSpace(el.Text))
             return;
+
+        // Barkod / QR: gercek PNG uretip Image olarak bas.
+        // QR ayri bir Kind degil; el.BarcodeType == "QR" ile ayirt edilir (legacy
+        // "QrCode" kind'i icin de QR uretilir — geriye uyumluluk).
+        if (el.Kind is "Barcode" or "QrCode")
+        {
+            var rawValue = (el.Binding != null ? ResolveFieldRaw(el, data) : null)
+                           ?? el.Text
+                           ?? "";
+            if (string.IsNullOrWhiteSpace(rawValue))
+                return; // veri yoksa kutu bos kalir (tasarimcida placeholder vardi, render'da yok)
+
+            var isQrType = el.Kind == "QrCode"
+                || string.Equals(el.BarcodeType, "QR", StringComparison.OrdinalIgnoreCase);
+
+            byte[]? png;
+            try
+            {
+                png = isQrType
+                    ? GenerateQrPng(rawValue, el.QrErrorCorrection)
+                    // PureBarcode=true: ZXing kendi label'ini cizmesin — bos birak,
+                    // alttaki text'i QuestPDF native olarak basacagiz (kullanici style'iyla).
+                    : GenerateBarcodePng(rawValue, el.BarcodeType ?? "Code128", showLabel: false);
+            }
+            catch
+            {
+                // Gecersiz icerik (orn. EAN13'e 10 haneli sayi) — kutuyu bos birak,
+                // tum sayfayi iptal ettirme.
+                return;
+            }
+
+            if (png == null || png.Length == 0) return;
+
+            // QR icin: sadece resim (yazi yok).
+            // 1D barkod + ShowBarcodeText=true: Column → ust resim (FIXED yukseklik),
+            //   alt text (FIXED yukseklik). Column item'lara sabit boyut vermek,
+            //   QuestPDF'in text'i otomatik sonraki sayfaya tasimasini onler.
+            // 1D barkod + ShowBarcodeText=false: sadece resim.
+            var showLabelBelow = !isQrType && (el.ShowBarcodeText ?? true);
+            if (!showLabelBelow)
+            {
+                cell.Image(png).FitArea();
+            }
+            else
+            {
+                // Text icin sabit alan: fontSize'a gore line-height (~0.423mm/pt) + minik
+                // padding. Resim icin kalan: el.H - textH (en az 1mm). Kutu zaten
+                // dis container .Height ile sabit oldugu icin toplam asilmaz.
+                var fontSizePt = (s?.FontSize ?? 9f);
+                if (fontSizePt < 4) fontSizePt = 4;
+                var textHmm  = Math.Min(el.H - 1, Math.Max(2.5, fontSizePt * 0.45));
+                var imageHmm = Math.Max(1.0, el.H - textHmm);
+                cell.Column(col =>
+                {
+                    col.Item().Height((float)imageHmm, Unit.Millimetre)
+                        .AlignCenter().Image(png).FitArea();
+                    col.Item().Height((float)textHmm, Unit.Millimetre).Text(t =>
+                    {
+                        ApplyTextAlignment(t, s);
+                        BuildTextStyle(t.Span(rawValue), s);
+                    });
+                });
+            }
+            return;
+        }
 
         // ÖNEMLİ: Burada Padding KULLANMA.
         // Designer'da element kutusu kullanıcı tarafından X/Y/W/H ile zaten tanımlanmış;
@@ -1014,12 +1091,21 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
             ? null
             : s with { FontSize = fittedFont };
 
+        // Maks satir sayisi: element yuksekligine / yaklasik satir yuksekligine bol.
+        // QuestPDF text bunu astiginda son satira "…" ellipsis koyar (ClampLines kontrati).
+        // Line-height yaklasik: fontSize * 1.2 punto = (fontSize * 1.2 / 72) inch
+        //                     = (fontSize * 1.2 / 72) * 25.4 mm ≈ fontSize * 0.423 mm
+        // Tek satir tasarlanan kutularda 1; daha yuksek kutularda hesapla. Min 1.
+        var lineHeightMm = Math.Max(0.5, fittedFont * 0.423);
+        var maxLines = Math.Max(1, (int)Math.Floor(el.H / lineHeightMm));
+
         // PageNumber: özel — t.CurrentPageNumber() ile dinamik
         if (el.Kind == "PageNumber")
         {
             cell.Text(t =>
             {
                 ApplyTextAlignment(t, sEffective);
+                t.ClampLines(maxLines);
                 t.Span("Sayfa "); t.CurrentPageNumber(); t.Span(" / "); t.TotalPages();
                 t.DefaultTextStyle(x => x.FontSize(fittedFont));
             });
@@ -1039,6 +1125,7 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
         cell.Text(t =>
         {
             ApplyTextAlignment(t, sEffective);
+            t.ClampLines(maxLines);
             BuildTextStyle(t.Span(text ?? ""), sEffective);
         });
     }
@@ -1485,6 +1572,62 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
         return sb.ToString().Trim();
     }
 
+    // ── Barkod / QR PNG uretici ──────────────────────────────────────────────
+    // QRCoder + BarcodeStandard. Dpi yuksek (200) — render sirasinda FitArea
+    // PNG'yi kutu boyutuna scale eder; baski net kalir. Hata durumunda caller
+    // try/catch ile yakalar ve elementi atlar.
+
+    private static byte[] GenerateQrPng(string value, string? eccLevel)
+    {
+        var ecc = (eccLevel ?? "M").ToUpperInvariant() switch
+        {
+            "L" => QRCodeGenerator.ECCLevel.L,
+            "Q" => QRCodeGenerator.ECCLevel.Q,
+            "H" => QRCodeGenerator.ECCLevel.H,
+            _   => QRCodeGenerator.ECCLevel.M,
+        };
+        using var gen  = new QRCodeGenerator();
+        using var data = gen.CreateQrCode(value, ecc);
+        var png = new PngByteQRCode(data);
+        // pixelsPerModule = 12 → QR'in net buyuklugu; FitArea scale eder.
+        return png.GetGraphic(12);
+    }
+
+    private static byte[] GenerateBarcodePng(string value, string barcodeType, bool showLabel)
+    {
+        var format = MapBarcodeFormat(barcodeType);
+        var writer = new BarcodeWriter
+        {
+            Format   = format,
+            Renderer = new SKBitmapRenderer(),
+            Options  = new EncodingOptions
+            {
+                Width            = 600,
+                Height           = 200,
+                Margin           = 2,
+                PureBarcode      = !showLabel,
+            },
+        };
+        using var bmp = writer.Write(value);
+        if (bmp == null) return Array.Empty<byte>();
+        using var img = SKImage.FromBitmap(bmp);
+        using var skd = img.Encode(SKEncodedImageFormat.Png, 100);
+        return skd?.ToArray() ?? Array.Empty<byte>();
+    }
+
+    private static BarcodeFormat MapBarcodeFormat(string? code) =>
+        (code ?? "Code128").ToUpperInvariant() switch
+        {
+            "CODE128" => BarcodeFormat.CODE_128,
+            "CODE39"  => BarcodeFormat.CODE_39,
+            "EAN13"   => BarcodeFormat.EAN_13,
+            "EAN8"    => BarcodeFormat.EAN_8,
+            "UPCA"    => BarcodeFormat.UPC_A,
+            "ITF"     => BarcodeFormat.ITF,
+            "CODABAR" => BarcodeFormat.CODABAR,
+            _         => BarcodeFormat.CODE_128,
+        };
+
     // ── JSON deserialization ──────────────────────────────────────────────────
 
     private static LayoutDoc ParseLayout(string json) =>
@@ -1528,7 +1671,12 @@ public sealed class DocLayoutRenderer : IDocLayoutRenderer
         [property: System.Text.Json.Serialization.JsonPropertyName("imageSrc")]  string? ImageSrc,
         [property: System.Text.Json.Serialization.JsonPropertyName("imageFit")]  string? ImageFit,
         // Geriye uyumluluk: eski LayoutJson kayıtlarında "imageSource" varsa onu da yakalayalım
-        [property: System.Text.Json.Serialization.JsonPropertyName("imageSource")] string? ImageSource = null);
+        [property: System.Text.Json.Serialization.JsonPropertyName("imageSource")] string? ImageSource = null,
+        // Barkod elementi metadata'si (Kind == "Barcode"). QR ayri bir kind degil —
+        // barcodeType == "QR" ile ayirt edilir (frontend'le tutarli).
+        [property: System.Text.Json.Serialization.JsonPropertyName("barcodeType")]       string? BarcodeType = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("showBarcodeText")]   bool?   ShowBarcodeText = null,
+        [property: System.Text.Json.Serialization.JsonPropertyName("qrErrorCorrection")] string? QrErrorCorrection = null);
 
     private sealed record ElementStyle(
         float FontSize, bool Bold, bool Italic, bool Underline,

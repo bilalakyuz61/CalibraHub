@@ -30,7 +30,7 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
         // ItemId üzerinden Items JOIN — opsiyonel ürün-özel kayıt için.
         cmd.CommandText = $@"
             SELECT t.[Id], t.[OperationId], op.[Code] AS OpCode, op.[Name] AS OpName,
-                   t.[MachineId], m.[MachineCode], m.[MachineName],
+                   t.[MachineId], m.[Code], m.[Name],
                    t.[ItemId], i.[Code] AS ItemCode, i.[Name] AS ItemName,
                    t.[Quantity], t.[DurationPerUnit], t.[DurationUnit],
                    t.[IsActive], t.[Created], t.[Updated]
@@ -39,7 +39,7 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
             LEFT JOIN [{_schema}].[Machine] m ON m.[Id] = t.[MachineId]
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = t.[ItemId]
             WHERE t.[CompanyId] = @CompanyId AND t.[OperationId] = @OperationId
-            ORDER BY i.[Code], m.[MachineCode];";
+            ORDER BY i.[Code], m.[Code];";
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         cmd.Parameters.AddWithValue("@OperationId", operationId);
 
@@ -53,8 +53,8 @@ public sealed class SqlOperationMachineTimeRepository : IOperationMachineTimeRep
                 OperationCode: r.IsDBNull(2) ? null : r.GetString(2),
                 OperationName: r.IsDBNull(3) ? null : r.GetString(3),
                 MachineId: r.GetInt32(4),
-                MachineCode: r.IsDBNull(5) ? null : r.GetString(5),
-                MachineName: r.IsDBNull(6) ? null : r.GetString(6),
+                Code: r.IsDBNull(5) ? null : r.GetString(5),
+                Name: r.IsDBNull(6) ? null : r.GetString(6),
                 ItemId: r.IsDBNull(7) ? null : r.GetInt32(7),
                 ItemCode: r.IsDBNull(8) ? null : r.GetString(8),
                 ItemName: r.IsDBNull(9) ? null : r.GetString(9),

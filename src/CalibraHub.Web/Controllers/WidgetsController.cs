@@ -1,9 +1,12 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Services.Security;   // CanViewFieldAsync extension
 using CalibraHub.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Antiforgery;
+using System.Security.Claims;                      // FindFirstValue extension
 
 namespace CalibraHub.Web.Controllers;
 
@@ -19,6 +22,7 @@ namespace CalibraHub.Web.Controllers;
 /// React "Aptal Bilesen" tarafi GET record endpoint'inden aldigi JSON'u dogrudan
 /// cizer: { widgetId, label, dataType, options, value } dizisi.
 /// </summary>
+[Authorize]
 [ApiController]
 [Route("api/widgets")]
 [IgnoreAntiforgeryToken]
@@ -27,6 +31,7 @@ public sealed class WidgetsController : ControllerBase
     private readonly IWidgetService _widgetService;
     private readonly IIntegrationRepository _integrationRepo;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly CalibraHub.Application.Abstractions.Services.IPermissionService _permService;
 
     // Not: Faz B-D'de kullanilan AdminFormWhitelist HashSet'i kaldirildi.
     // Tek dogruluk kaynagi artik dbo.Forms tablosu. Yeni form eklemek icin sadece
@@ -36,11 +41,53 @@ public sealed class WidgetsController : ControllerBase
     public WidgetsController(
         IWidgetService widgetService,
         IIntegrationRepository integrationRepo,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        CalibraHub.Application.Abstractions.Services.IPermissionService permService)
     {
         _widgetService = widgetService;
         _integrationRepo = integrationRepo;
         _scopeFactory = scopeFactory;
+        _permService = permService;
+    }
+
+    /// <summary>
+    /// 2026-06-08 — Yetkilendirilebilir alanları kullanıcının izinlerine göre filtreler.
+    /// IsPermissionControlled=true olan widget'lar için kullanıcı FIELD:<WidgetCode> iznine
+    /// sahip değilse schema'dan çıkarılır. SystemAdmin'a tüm alanlar görünür.
+    /// </summary>
+    private async Task<CalibraHub.Application.Contracts.WidgetFormSchemaDto> FilterByFieldPermissionsAsync(
+        CalibraHub.Application.Contracts.WidgetFormSchemaDto schema, CancellationToken ct)
+    {
+        if (schema?.Widgets is null || schema.Widgets.Count == 0) return schema!;
+
+        // SystemAdmin shortcut — tüm alanlar görünür
+        var roleStr = User.FindFirstValue(System.Security.Claims.ClaimTypes.Role) ?? string.Empty;
+        if (string.Equals(roleStr, "SystemAdmin", StringComparison.OrdinalIgnoreCase)) return schema;
+
+        // Anonymous için filtre yapma (controller zaten Authorize ile korunmuyorsa public schema dönsün)
+        var uidStr = User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (!int.TryParse(uidStr, out var uid) || uid <= 0) return schema;
+
+        var deptStr = User.FindFirstValue("department_id");
+        int? deptId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;
+        if (!CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(roleStr, out var role))
+            role = CalibraHub.Domain.Enums.UserRole.Operator;
+
+        // IsPermissionControlled=true olan widget'ları test et — diğerleri kalır
+        var visible = new List<CalibraHub.Application.Contracts.WidgetDefinitionDto>(schema.Widgets.Count);
+        foreach (var w in schema.Widgets)
+        {
+            if (!w.IsPermissionControlled)
+            {
+                visible.Add(w);
+                continue;
+            }
+            var canView = await _permService.CanViewFieldAsync(uid, role, deptId, schema.FormCode, w.WidgetCode, ct);
+            if (canView) visible.Add(w);
+        }
+
+        // Aynı schema ile — yalnızca Widgets değişti
+        return schema with { Widgets = visible };
     }
 
     /// <summary>
@@ -132,13 +179,14 @@ public sealed class WidgetsController : ControllerBase
     }
 
     // GET /api/widgets/forms
-    // dbo.Forms'taki tum aktif formlari listeler (IsActive=1 filtresi repository'de).
-    // Admin module selector besler — yeni form eklemek icin sadece DB seed yeterli.
+    // Alan Rehberi dropdown'u için: IsWidgetForm=true olan formları döner.
+    // IsWidgetForm=false: container/liste formları (SALES_QUOTE vb.) + _NEW formları + ayarlar sayfaları.
+    // Tüm formlar için GetFormsAsync (no filter) servis üzerinden kullanılır.
     [HttpGet("forms")]
     public async Task<IActionResult> GetForms(CancellationToken ct)
     {
         var all = await _widgetService.GetFormsAsync(ct);
-        return Ok(all.OrderBy(f => f.SortOrder).ToArray());
+        return Ok(all.Where(f => f.IsWidgetForm).OrderBy(f => f.SortOrder).ToArray());
     }
 
     // GET /api/widgets/forms/{formCode}/schema
@@ -147,7 +195,9 @@ public sealed class WidgetsController : ControllerBase
     {
         var schema = await _widgetService.GetFormSchemaByCodeAsync(formCode, ct);
         if (schema == null) return NotFound(new { success = false, message = "Form bulunamadi." });
-        return Ok(schema);
+        // 2026-06-08 — Yetkilendirilebilir alanları kullanıcı iznine göre filtrele
+        var filtered = await FilterByFieldPermissionsAsync(schema, ct);
+        return Ok(filtered);
     }
 
     // GET /api/widgets/forms/id/{formId}/schema
@@ -156,7 +206,8 @@ public sealed class WidgetsController : ControllerBase
     {
         var schema = await _widgetService.GetFormSchemaAsync(formId, ct);
         if (schema == null) return NotFound(new { success = false, message = "Form bulunamadi." });
-        return Ok(schema);
+        var filtered = await FilterByFieldPermissionsAsync(schema, ct);
+        return Ok(filtered);
     }
 
     // GET /api/widgets/forms/{formId}/records/{recordId}

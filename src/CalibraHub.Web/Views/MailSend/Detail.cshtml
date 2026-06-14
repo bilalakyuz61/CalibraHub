@@ -1,0 +1,336 @@
+@model CalibraHub.Web.Models.MailSend.MailSendDetailViewModel
+@{
+    ViewData["Title"] = $"Gönderim #{Model.BatchId}";
+    ViewData["FormCode"] = "MAIL_SEND";
+    // Compose ile ayni body class — paylasilan stiller (mc-app, mc-topbar, cs-tab-pane) calisir.
+    ViewData["BodyClass"] = "page-mailsend-compose";
+    var sentLocal = Model.SentAt.ToLocalTime();
+}
+
+@section Styles {
+@await Html.PartialAsync("_MailComposeShared")
+<style>
+    /* Detail-specific katmanlar — Compose ile paylasilmayan parcalar */
+    .mc-readonly-input,
+    .mc-readonly-textarea {
+        background: var(--mc-surface-2);
+        color: var(--mc-muted);
+        cursor: default;
+    }
+    .mc-readonly-textarea { min-height: 200px; white-space: pre-wrap; }
+    .mc-readonly-chip-row {
+        display: flex; flex-wrap: wrap; gap: 6px;
+        padding: 8px 10px; border: 1px solid var(--mc-border);
+        background: var(--mc-surface-2); border-radius: 8px;
+        min-height: 40px; align-items: center;
+    }
+    .mc-readonly-chip-row:empty::before {
+        content: 'Ünvan kaydedilmemiş'; color: var(--mc-muted); font-size: 12px; font-style: italic;
+    }
+
+    .ds-summary {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px; margin: 0 0 18px;
+    }
+    .ds-summary__cell {
+        padding: 10px 12px; border: 1px solid var(--mc-border); border-radius: 9px;
+        background: var(--mc-surface);
+    }
+    .ds-summary__cell .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mc-muted); font-weight: 700; }
+    .ds-summary__cell .val { font-size: 14px; font-weight: 700; margin-top: 3px; }
+    .ds-summary__cell--ok  .val { color: #10b981; }
+    .ds-summary__cell--err .val { color: #ef4444; }
+
+    .ds-preview {
+        width: 100%; min-height: 360px;
+        border: 1px solid var(--mc-border); border-radius: 10px;
+        background: #ffffff; overflow: hidden;
+    }
+    .ds-preview iframe { width: 100%; height: 540px; border: 0; display: block; background: #ffffff; }
+
+    /* Tasarım Onizleme sekmesi (Tab 4) — iframe sekme alanini tam kaplar */
+    .ds-preview-fill {
+        flex: 1 1 auto; min-height: 480px;
+        border: 1px solid var(--mc-border); border-radius: 10px;
+        background: #ffffff; overflow: hidden;
+        display: flex; flex-direction: column;
+    }
+    .ds-preview-fill iframe { flex: 1 1 auto; width: 100%; border: 0; display: block; background: #ffffff; }
+    .ds-preview__hint {
+        font-size: 11px; color: var(--mc-muted); margin: 0 0 8px;
+        display: flex; align-items: center; gap: 6px;
+    }
+    .ds-preview__empty { padding: 40px 20px; text-align: center; color: var(--mc-muted); font-size: 12.5px; }
+
+    .ds-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .ds-table th, .ds-table td {
+        padding: 8px 10px; border-bottom: 1px solid var(--mc-border); vertical-align: top; text-align: left;
+    }
+    .ds-table th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mc-muted); font-weight: 700; }
+    .ds-status { padding: 2px 9px; border-radius: 12px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .ds-status--sent   { background: rgba(16,185,129,.18); color: #10b981; }
+    .ds-status--failed { background: rgba(239,68,68,.18);  color: #ef4444; }
+    .ds-status--other  { background: rgba(148,163,184,.20); color: #64748b; }
+    .ds-err { color: #ef4444; font-size: 11px; max-width: 280px; word-break: break-word; }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+<div class="mc-app">
+
+    <div class="mc-topbar">
+        <button type="button" class="mce-btn mce-btn--secondary" onclick="window.location.href='/MailSend'" title="Geçmişe dön">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Geri
+        </button>
+        <div class="mc-topbar__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+            </svg>
+        </div>
+        <div>
+            <h2 class="mc-topbar__title">Gönderim Detayı — #@Model.BatchId</h2>
+            <div class="mc-topbar__sub">@(Model.LayoutName ?? "(şablon)") • @sentLocal.ToString("dd.MM.yyyy HH:mm") • @(Model.SentBy ?? "—")</div>
+        </div>
+    </div>
+
+    <div class="mc-body">
+
+        <!-- Sidenav (3 sekme) — Compose ile birebir ayni -->
+        <nav class="mc-sidenav" role="tablist" aria-label="Detay sekmeleri">
+            <button type="button" class="cs-tab-btn is-active" data-tab="tpl">
+                <span class="cs-tab-btn__step">1</span>
+                <span class="cs-tab-btn__icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </span>
+                <div class="cs-tab-btn__label">
+                    <div>Şablon &amp; Hedef</div>
+                    <div class="cs-tab-btn__hint">Şablon + alıcı ünvanları</div>
+                </div>
+            </button>
+            <button type="button" class="cs-tab-btn" data-tab="body">
+                <span class="cs-tab-btn__step">2</span>
+                <span class="cs-tab-btn__icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><circle cx="11" cy="11" r="2"/></svg>
+                </span>
+                <div class="cs-tab-btn__label">
+                    <div>Mail Gövdesi</div>
+                    <div class="cs-tab-btn__hint">Konu + içerik</div>
+                </div>
+            </button>
+            <button type="button" class="cs-tab-btn" data-tab="recip">
+                <span class="cs-tab-btn__step">3</span>
+                <span class="cs-tab-btn__icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </span>
+                <div class="cs-tab-btn__label">
+                    <div>Alıcı Listesi</div>
+                    <div class="cs-tab-btn__hint">Gönderim durumu</div>
+                </div>
+            </button>
+            <button type="button" class="cs-tab-btn" data-tab="design">
+                <span class="cs-tab-btn__step">4</span>
+                <span class="cs-tab-btn__icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </span>
+                <div class="cs-tab-btn__label">
+                    <div>Tasarım Önizleme</div>
+                    <div class="cs-tab-btn__hint">Şablonu yeni sekmede aç</div>
+                </div>
+            </button>
+        </nav>
+
+        <!-- Content -->
+        <div class="mc-content">
+
+            <!-- TAB 1: Şablon & Hedef -->
+            <div class="cs-tab-pane is-active" data-pane="tpl">
+                <div class="cs-tab-pane__head">
+                    <h2>Şablon &amp; Hedef</h2>
+                    <div class="sub">Bu gönderim için kullanılan şablon ve hedef ünvan listesi.</div>
+                </div>
+                <div class="cs-tab-pane__body">
+                    <!-- Ozet sayilar -->
+                    <div class="ds-summary">
+                        <div class="ds-summary__cell"><div class="lbl">Toplam</div><div class="val">@Model.TotalCount</div></div>
+                        <div class="ds-summary__cell ds-summary__cell--ok"><div class="lbl">Gönderildi</div><div class="val">@Model.SentCount</div></div>
+                        <div class="ds-summary__cell @(Model.FailCount > 0 ? "ds-summary__cell--err" : "")"><div class="lbl">Başarısız</div><div class="val">@Model.FailCount</div></div>
+                        <div class="ds-summary__cell"><div class="lbl">Tarih</div><div class="val" style="font-size:13px;">@sentLocal.ToString("dd.MM.yyyy HH:mm")</div></div>
+                        <div class="ds-summary__cell"><div class="lbl">Gönderen</div><div class="val" style="font-size:13px;">@(Model.SentBy ?? "—")</div></div>
+                    </div>
+
+                    <div class="mc-field">
+                        <label class="mc-field__label">Şablon</label>
+                        <input type="text" class="mc-input mc-readonly-input" readonly value="@(Model.LayoutName ?? "—")" />
+                        @if (!string.IsNullOrWhiteSpace(Model.LayoutDescription))
+                        {
+                            <div style="font-size:11.5px;color:var(--mc-muted);margin-top:6px;">@Model.LayoutDescription</div>
+                        }
+                    </div>
+
+                    <div class="mc-field">
+                        <label class="mc-field__label">Alıcı Ünvan(ları) — @Model.TitleNames.Length</label>
+                        <div class="mc-readonly-chip-row">
+                            @foreach (var t in Model.TitleNames)
+                            {
+                                <span class="ms-chip">@t</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: Mail Gövdesi (Konu + İçerik) -->
+            <div class="cs-tab-pane" data-pane="body">
+                <div class="cs-tab-pane__head">
+                    <h2>Mail Gövdesi</h2>
+                    <div class="sub">Gönderilen mailin konusu ve gövde içeriği.</div>
+                </div>
+                <div class="cs-tab-pane__body">
+                    <div class="mc-field">
+                        <label class="mc-field__label">Konu</label>
+                        <input type="text" class="mc-input mc-readonly-input" readonly value="@(Model.Subject ?? "")" />
+                    </div>
+
+                    <div class="mc-field">
+                        <label class="mc-field__label">İçerik (gövde özeti)</label>
+                        <textarea class="mc-textarea mc-readonly-textarea" readonly rows="10">@(Model.BodyPreview ?? "")</textarea>
+                        <div style="font-size:11px;color:var(--mc-muted);margin-top:6px;">
+                            * Veritabanında ilk 500 karakter saklanır. Tasarım önizlemesini şablon sekmesinden açabilirsiniz.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: Alıcı Listesi -->
+            <div class="cs-tab-pane" data-pane="recip">
+                <div class="cs-tab-pane__head">
+                    <h2>Alıcı Listesi — @Model.Items.Length</h2>
+                    <div class="sub">Bu gönderimdeki her alıcı için durum ve (varsa) hata mesajı.</div>
+                </div>
+                <div class="cs-tab-pane__body">
+                    @if (Model.Items.Length == 0)
+                    {
+                        <div style="text-align:center;padding:30px;color:var(--mc-muted);">Log satırı yok.</div>
+                    }
+                    else
+                    {
+                        <div class="ds-preview__hint" style="margin-bottom:10px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            <span>Alıcı listesi yeni bir workspace sekmesinde tam sayfa açılır — Ctrl+P ile yazdırabilirsiniz.</span>
+                        </div>
+                        <button type="button" class="mce-btn mce-btn--primary" id="dsRecipientsBtn"
+                                data-preview-url="/MailSend/RecipientsPage/@Model.BatchId"
+                                data-preview-title="Gönderim #@Model.BatchId — Alıcı Listesi"
+                                style="margin-bottom:14px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                <polyline points="15 3 21 3 21 9"/>
+                                <line x1="10" y1="14" x2="21" y2="3"/>
+                            </svg>
+                            Listeyi Yeni Sekmede Aç
+                        </button>
+                        <table class="ds-table">
+                            <thead>
+                                <tr>
+                                    <th>Ad Soyad</th><th>Email</th><th>Ünvan</th><th>Cari</th><th>Durum</th><th>Hata</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var it in Model.Items)
+                            {
+                                var statusClass = it.Status == "Sent" ? "ds-status--sent"
+                                                : it.Status == "Failed" ? "ds-status--failed"
+                                                : "ds-status--other";
+                                <tr>
+                                    <td>@(it.RecipientName ?? "")</td>
+                                    <td>@(it.RecipientEmail ?? "")</td>
+                                    <td>@(it.TitleName ?? "")</td>
+                                    <td>@(it.ContactName ?? "")</td>
+                                    <td><span class="ds-status @statusClass">@(it.Status ?? "—")</span></td>
+                                    <td class="ds-err">@(it.ErrorMessage ?? "")</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+
+            <!-- TAB 4: Tasarım Önizleme — direkt iframe icinde render -->
+            <div class="cs-tab-pane" data-pane="design">
+                <div class="cs-tab-pane__head">
+                    <h2>Tasarım Önizleme</h2>
+                    <div class="sub">Şablonun ilk alıcının token değerleriyle render edilmiş tam hali.</div>
+                </div>
+                <div class="cs-tab-pane__body" style="display:flex;flex-direction:column;min-height:0;">
+                    @if (!string.IsNullOrEmpty(Model.PreviewHtml))
+                    {
+                        <div class="ds-preview-fill">
+                            <iframe sandbox="allow-same-origin" srcdoc="@Model.PreviewHtml"></iframe>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="ds-preview"><div class="ds-preview__empty">Tasarım önizlemesi üretilemedi (şablon silinmiş olabilir).</div></div>
+                    }
+                </div>
+            </div>
+
+        </div><!-- /mc-content -->
+    </div><!-- /mc-body -->
+
+</div><!-- /mc-app -->
+</section>
+
+@section Scripts {
+<script>
+(function () {
+    // Tab toggle — Compose'daki gotoTab ile ayni mantik (sade versiyon).
+    var tabBtns = document.querySelectorAll('.cs-tab-btn[data-tab]');
+    var panes   = document.querySelectorAll('.cs-tab-pane[data-pane]');
+    function go(key) {
+        tabBtns.forEach(function (b) { b.classList.toggle('is-active', b.getAttribute('data-tab') === key); });
+        panes.forEach(function (p)  { p.classList.toggle('is-active', p.getAttribute('data-pane') === key); });
+    }
+    tabBtns.forEach(function (b) {
+        b.addEventListener('click', function () { go(b.getAttribute('data-tab')); });
+    });
+
+    // ── Workspace tab acan butonlar (Onizleme + Alici Listesi) ──────────────
+    // window.top.CalibraHub Shell React app'i mount eder. Iframe icindeyiz
+    // (workspace=1 param ile yuklendik), top window'a erisim var.
+    function bindOpenInWorkspaceTab(btn) {
+        if (!btn) return;
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            var url   = btn.getAttribute('data-preview-url');
+            var title = btn.getAttribute('data-preview-title') || 'Önizleme';
+            if (!url) return;
+
+            // Workspace shell var mi?
+            var shell = null;
+            try { shell = (window.top && window.top.CalibraHub) ? window.top.CalibraHub : null; }
+            catch (e) { shell = null; }
+
+            if (shell && typeof shell.openWorkspaceTab === 'function') {
+                // matchPath VERMIYORUZ — her tikla yepyeni tab (eski tablari guncellemesin).
+                // Ayni URL zaten mevcut ise Shell exact-match ile o tab'a focus olur.
+                shell.openWorkspaceTab({ url: url, title: title });
+                return;
+            }
+            // Iframe disinda (workspace yok) → ayni sekmede ac
+            console.warn('[MailSend Detail] Workspace shell bulunamadi, ayni sekmede aciliyor.');
+            window.location.href = url;
+        });
+    }
+    bindOpenInWorkspaceTab(document.getElementById('dsPreviewBtn'));
+    bindOpenInWorkspaceTab(document.getElementById('dsRecipientsBtn'));
+})();
+</script>
+}

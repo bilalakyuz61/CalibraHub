@@ -28,7 +28,7 @@
   from { transform: translateY(12px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
-.dark .gl-modal { background: #1e293b; }
+body.app-theme-dark .gl-modal { background: #1e293b; }
 
 /* Header — arama */
 .gl-modal-header {
@@ -36,12 +36,12 @@
   padding: 12px 16px; border-bottom: 1px solid #e2e8f0;
   color: #64748b;
 }
-.dark .gl-modal-header { border-bottom-color: rgba(255,255,255,.08); color: rgba(255,255,255,.45); }
+body.app-theme-dark .gl-modal-header { border-bottom-color: rgba(255,255,255,.08); color: rgba(255,255,255,.45); }
 .gl-modal-header input {
   flex: 1; border: none; outline: none; background: transparent;
   font-size: .88rem; color: #1e293b;
 }
-.dark .gl-modal-header input { color: #f1f5f9; }
+body.app-theme-dark .gl-modal-header input { color: #f1f5f9; }
 
 /* Header butonlari (kapat + opsiyonel headerActions) */
 .gl-close-btn,
@@ -54,7 +54,7 @@
 }
 .gl-close-btn:hover { background: rgba(239,68,68,.08); color: #ef4444; }
 .gl-settings-btn:hover { background: rgba(99,102,241,.1); color: #6366f1; }
-.dark .gl-settings-btn:hover { color: #a5b4fc; background: rgba(99,102,241,.15); }
+body.app-theme-dark .gl-settings-btn:hover { color: #a5b4fc; background: rgba(99,102,241,.15); }
 
 /* Scroll alani — modal sabit yukseklikte oldugu icin flex: 1 yeterli.
    min-height: 0 flex-shrink bug korumasi (uzun icerik tasiyabilir). */
@@ -71,7 +71,7 @@
   color: #64748b; background: #f8fafc;
   border-bottom: 2px solid #e2e8f0;
 }
-.dark .gl-table th {
+body.app-theme-dark .gl-table th {
   background: #111827; color: rgba(255,255,255,.45);
   border-bottom-color: rgba(255,255,255,.08);
 }
@@ -79,9 +79,9 @@
   padding: 7px 12px; border-bottom: 1px solid #f1f5f9;
   color: #334155; cursor: pointer;
 }
-.dark .gl-table td { color: rgba(255,255,255,.75); border-bottom-color: rgba(255,255,255,.04); }
+body.app-theme-dark .gl-table td { color: rgba(255,255,255,.75); border-bottom-color: rgba(255,255,255,.04); }
 .gl-table tbody tr:hover td { background: rgba(99,102,241,.06); }
-.dark .gl-table tbody tr:hover td { background: rgba(99,102,241,.1); }
+body.app-theme-dark .gl-table tbody tr:hover td { background: rgba(99,102,241,.1); }
 
 /* Kolon basligi i? duzeni — etiket + filtre butonu */
 .gl-th-inner {
@@ -106,9 +106,9 @@
 .gl-col-filter--active {
   background: rgba(99,102,241,.12); color: #4f46e5;
 }
-.dark .gl-col-filter { color: rgba(255,255,255,.45); }
-.dark .gl-col-filter:hover { color: #a5b4fc; background: rgba(99,102,241,.18); }
-.dark .gl-col-filter--active { color: #c7d2fe; background: rgba(99,102,241,.22); }
+body.app-theme-dark .gl-col-filter { color: rgba(255,255,255,.45); }
+body.app-theme-dark .gl-col-filter:hover { color: #a5b4fc; background: rgba(99,102,241,.18); }
+body.app-theme-dark .gl-col-filter--active { color: #c7d2fe; background: rgba(99,102,241,.22); }
 .gl-col-filter-count {
   font-size: .62rem; font-weight: 700; line-height: 1;
   background: #4f46e5; color: #fff;
@@ -133,11 +133,11 @@
   border-top: 1px solid #e2e8f0;
   display: flex; justify-content: space-between; gap: 12px;
 }
-.dark .gl-footer { border-top-color: rgba(255,255,255,.06); }
+body.app-theme-dark .gl-footer { border-top-color: rgba(255,255,255,.06); }
 .gl-footer-filter {
   color: #4f46e5; font-weight: 600;
 }
-.dark .gl-footer-filter { color: #a5b4fc; }
+body.app-theme-dark .gl-footer-filter { color: #a5b4fc; }
 
 /* Spin animasyonu — global @keyframes spin mevcut */
 .gl-modal .spin,
@@ -157,7 +157,7 @@
   font-size: .8rem;
   animation: glFadeIn .12s ease-out;
 }
-.dark .gl-popover {
+body.app-theme-dark .gl-popover {
   background: #1e293b;
   border-color: rgba(255,255,255,.08);
   box-shadow: 0 12px 36px rgba(0,0,0,.5);
@@ -169,7 +169,7 @@
   font-weight: 700; font-size: .76rem;
   color: #475569;
 }
-.dark .gl-popover-title {
+body.app-theme-dark .gl-popover-title {
   border-bottom-color: rgba(255,255,255,.06);
   color: rgba(255,255,255,.65);
 }
@@ -179,7 +179,7 @@
   padding: 8px 10px;
   border-bottom: 1px solid #f1f5f9;
 }
-.dark .gl-popover-search-wrap { border-bottom-color: rgba(255,255,255,.06); }
+body.app-theme-dark .gl-popover-search-wrap { border-bottom-color: rgba(255,255,255,.06); }
 .gl-popover-search-ico {
   position: absolute; top: 50%; left: 18px; transform: translateY(-50%);
   color: #94a3b8;
@@ -195,10 +195,10 @@
 .gl-popover-search:focus {
   border-color: #6366f1; background: #fff;
 }
-.dark .gl-popover-search {
+body.app-theme-dark .gl-popover-search {
   background: #0f172a; border-color: rgba(255,255,255,.08); color: #f1f5f9;
 }
-.dark .gl-popover-search:focus {
+body.app-theme-dark .gl-popover-search:focus {
   border-color: #a5b4fc; background: #1e293b;
 }
 
@@ -208,16 +208,19 @@
   border-bottom: 1px solid #f1f5f9;
   font-size: .72rem; color: #64748b;
 }
-.dark .gl-popover-actions { border-bottom-color: rgba(255,255,255,.06); color: rgba(255,255,255,.55); }
+body.app-theme-dark .gl-popover-actions { border-bottom-color: rgba(255,255,255,.06); color: rgba(255,255,255,.55); }
 .gl-popover-actions button {
   border: none; background: transparent; padding: 0;
   color: #4f46e5; font-weight: 600; cursor: pointer;
   font-size: .72rem;
 }
 .gl-popover-actions button:hover { text-decoration: underline; }
-.dark .gl-popover-actions button { color: #a5b4fc; }
+body.app-theme-dark .gl-popover-actions button { color: #a5b4fc; }
 .gl-popover-divider { color: #cbd5e1; }
 .gl-popover-count { margin-left: auto; color: #94a3b8; }
+/* 2026-06-04: Dark tema override — light defaults okunabilir, dark'ta soluk slate tonlari. */
+body.app-theme-dark .gl-popover-divider { color: rgba(255,255,255,0.18); }
+body.app-theme-dark .gl-popover-count   { color: rgba(255,255,255,0.45); }
 
 .gl-popover-list {
   flex: 1; overflow-y: auto; max-height: 220px;
@@ -238,10 +241,10 @@
 }
 .gl-popover-row:hover,
 .gl-popover-row:focus { background: rgba(99,102,241,.08); }
-.dark .gl-popover-row:hover,
-.dark .gl-popover-row:focus { background: rgba(99,102,241,.16); }
+body.app-theme-dark .gl-popover-row:hover,
+body.app-theme-dark .gl-popover-row:focus { background: rgba(99,102,241,.16); }
 .gl-popover-row--checked { background: rgba(99,102,241,.05); }
-.dark .gl-popover-row--checked { background: rgba(99,102,241,.12); }
+body.app-theme-dark .gl-popover-row--checked { background: rgba(99,102,241,.12); }
 
 .gl-popover-checkbox {
   display: inline-flex; align-items: center; justify-content: center;
@@ -254,10 +257,10 @@
 .gl-popover-row--checked .gl-popover-checkbox {
   background: #4f46e5; border-color: #4f46e5;
 }
-.dark .gl-popover-checkbox {
+body.app-theme-dark .gl-popover-checkbox {
   background: #0f172a; border-color: rgba(255,255,255,.2);
 }
-.dark .gl-popover-row--checked .gl-popover-checkbox {
+body.app-theme-dark .gl-popover-row--checked .gl-popover-checkbox {
   background: #6366f1; border-color: #6366f1;
 }
 
@@ -266,14 +269,14 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   color: #334155; font-size: .76rem;
 }
-.dark .gl-popover-row-label { color: rgba(255,255,255,.85); }
+body.app-theme-dark .gl-popover-row-label { color: rgba(255,255,255,.85); }
 
 .gl-popover-footer {
   display: flex; gap: 6px; justify-content: flex-end;
   padding: 8px 10px;
   border-top: 1px solid #f1f5f9;
 }
-.dark .gl-popover-footer { border-top-color: rgba(255,255,255,.06); }
+body.app-theme-dark .gl-popover-footer { border-top-color: rgba(255,255,255,.06); }
 
 .gl-popover-btn {
   border: none; padding: 5px 12px;
@@ -287,15 +290,15 @@
 .gl-popover-btn--ghost:hover {
   background: rgba(100,116,139,.1); color: #1e293b;
 }
-.dark .gl-popover-btn--ghost { color: rgba(255,255,255,.65); }
-.dark .gl-popover-btn--ghost:hover { background: rgba(255,255,255,.08); color: #f1f5f9; }
+body.app-theme-dark .gl-popover-btn--ghost { color: rgba(255,255,255,.65); }
+body.app-theme-dark .gl-popover-btn--ghost:hover { background: rgba(255,255,255,.08); color: #f1f5f9; }
 
 .gl-popover-btn--primary {
   background: #4f46e5; color: #fff;
 }
 .gl-popover-btn--primary:hover { background: #4338ca; }
-.dark .gl-popover-btn--primary { background: #6366f1; }
-.dark .gl-popover-btn--primary:hover { background: #818cf8; }
+body.app-theme-dark .gl-popover-btn--primary { background: #6366f1; }
+body.app-theme-dark .gl-popover-btn--primary:hover { background: #818cf8; }
 
 /* ══════════════════════════════════════════════════════════
    Tetikleyici buton + temizle butonu (input yaninda durur)
@@ -310,9 +313,9 @@
 }
 .gl-trigger-btn:hover { background: rgba(99,102,241,.1); color: #6366f1; }
 .gl-clear-btn:hover { background: rgba(239,68,68,.08); color: #ef4444; }
-.dark .gl-trigger-btn { color: rgba(255,255,255,.4); }
-.dark .gl-trigger-btn:hover { color: #a5b4fc; background: rgba(99,102,241,.15); }
-.dark .gl-clear-btn:hover { color: #f87171; background: rgba(248,113,113,.1); }
+body.app-theme-dark .gl-trigger-btn { color: rgba(255,255,255,.4); }
+body.app-theme-dark .gl-trigger-btn:hover { color: #a5b4fc; background: rgba(99,102,241,.15); }
+body.app-theme-dark .gl-clear-btn:hover { color: #f87171; background: rgba(248,113,113,.1); }
 
 /* Hata animasyonu — gecersiz kod girildiginde (proje standardi cbInvalidShake) */
 .gl-shake {
@@ -342,21 +345,21 @@
   font-family: inherit;
   box-sizing: border-box;
 }
-.dark .gl-card {
+body.app-theme-dark .gl-card {
   background: rgba(255,255,255,.04);
   border-color: rgba(255,255,255,.08);
   box-shadow: none;
 }
 
 .gl-card:hover:not(.gl-card--disabled) { border-color: #c7d2fe; }
-.dark .gl-card:hover:not(.gl-card--disabled) { border-color: rgba(165,180,252,.35); }
+body.app-theme-dark .gl-card:hover:not(.gl-card--disabled) { border-color: rgba(165,180,252,.35); }
 
 .gl-card:focus-within:not(.gl-card--disabled) {
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99,102,241,.18);
   background: #ffffff;
 }
-.dark .gl-card:focus-within:not(.gl-card--disabled) {
+body.app-theme-dark .gl-card:focus-within:not(.gl-card--disabled) {
   border-color: #a5b4fc;
   box-shadow: 0 0 0 3px rgba(99,102,241,.25);
   background: rgba(255,255,255,.06);
@@ -374,7 +377,7 @@
   opacity: .35;
   background: #cbd5e1;
 }
-.dark .gl-card--empty .gl-card__bar { background: rgba(255,255,255,.18); }
+body.app-theme-dark .gl-card--empty .gl-card__bar { background: rgba(255,255,255,.18); }
 .gl-card:focus-within:not(.gl-card--disabled) .gl-card__bar { opacity: 1; }
 
 /* Input — kartin govdesi */
@@ -390,9 +393,9 @@
   color: #0f172a;
   letter-spacing: .01em;
 }
-.dark .gl-card__input { color: #f1f5f9; }
+body.app-theme-dark .gl-card__input { color: #f1f5f9; }
 .gl-card__input::placeholder { color: #94a3b8; font-weight: 400; }
-.dark .gl-card__input::placeholder { color: rgba(255,255,255,.35); }
+body.app-theme-dark .gl-card__input::placeholder { color: rgba(255,255,255,.35); }
 .gl-card__input[readonly] { cursor: pointer; }
 .gl-card--readonly .gl-card__input { user-select: none; }
 
@@ -440,9 +443,9 @@
 .gl-card__btn:active { transform: scale(.92); }
 .gl-card__btn--search:hover { background: rgba(99,102,241,.10); color: #6366f1; }
 .gl-card__btn--clear:hover  { background: rgba(239,68,68,.08); color: #ef4444; }
-.dark .gl-card__btn { color: rgba(255,255,255,.40); }
-.dark .gl-card__btn--search:hover { background: rgba(99,102,241,.18); color: #a5b4fc; }
-.dark .gl-card__btn--clear:hover  { background: rgba(248,113,113,.14); color: #f87171; }
+body.app-theme-dark .gl-card__btn { color: rgba(255,255,255,.40); }
+body.app-theme-dark .gl-card__btn--search:hover { background: rgba(99,102,241,.18); color: #a5b4fc; }
+body.app-theme-dark .gl-card__btn--clear:hover  { background: rgba(248,113,113,.14); color: #f87171; }
 
 /* Disabled durumu */
 .gl-card--disabled {
@@ -453,23 +456,23 @@
 }
 .gl-card--disabled .gl-card__input { color: #94a3b8; cursor: not-allowed; }
 .gl-card--disabled .gl-card__bar  { background: #cbd5e1; opacity: .25; }
-.dark .gl-card--disabled {
+body.app-theme-dark .gl-card--disabled {
   background: rgba(255,255,255,.02);
   border-color: rgba(255,255,255,.06);
 }
-.dark .gl-card--disabled .gl-card__input { color: rgba(255,255,255,.35); }
+body.app-theme-dark .gl-card--disabled .gl-card__input { color: rgba(255,255,255,.35); }
 
 /* Error / required-empty */
 .gl-card--error {
   border-color: #ef4444;
   box-shadow: 0 0 0 3px rgba(239,68,68,.15);
 }
-.dark .gl-card--error {
+body.app-theme-dark .gl-card--error {
   border-color: #f87171;
   box-shadow: 0 0 0 3px rgba(248,113,113,.18);
 }
 .gl-card--required-empty:not(:focus-within) { background: rgba(239,68,68,.025); }
-.dark .gl-card--required-empty:not(:focus-within) { background: rgba(239,68,68,.06); }
+body.app-theme-dark .gl-card--required-empty:not(:focus-within) { background: rgba(239,68,68,.06); }
 
 /* Boyut variantlari */
 .gl-card--sm { height: 30px; border-radius: 8px; }
@@ -503,7 +506,7 @@
 }
 .gl-card-display:empty,
 .gl-card-display--empty { display: none; }
-.dark .gl-card-display {
+body.app-theme-dark .gl-card-display {
   color: #c7d2fe;
   background: rgba(99,102,241,.12);
   border-color: rgba(165,180,252,.18);

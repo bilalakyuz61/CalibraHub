@@ -45,7 +45,11 @@ public sealed record IntegrationDetailDto(
     string? PreProcedureName = null,
     string? PreProcedureParamsJson = null,
     string? PostProcedureName = null,
-    string? PostProcedureParamsJson = null);
+    string? PostProcedureParamsJson = null,
+    // 2026-05-22 Pre-flight Filter — JSON kural listesi (bkz. Integration.SourceFilterJson)
+    string? SourceFilterJson = null,
+    // 2026-05-22 Cascade target flag — Wizard Step 2 dropdown'ında görünür mü? Default true.
+    bool AllowAsCascadeTarget = true);
 
 public sealed record IntegrationMappingDto(
     int Id,
@@ -62,7 +66,8 @@ public sealed record IntegrationMappingDto(
     string SourceSection = "Header",       // "Header" | "Lines" | "Combination"
     string? LookupFiltersJson = null,      // Lookup için çoklu WHERE filtre (GuideConstraint[] JSON)
     string? LookupReturnColumn = null,     // Lookup için hangi guide kolonu döner (null = DisplayColumn)
-    string? LookupParam = null);           // SourceType=Function + SqlFn modu icin manuel @P3
+    string? LookupParam = null,            // SourceType=Function + SqlFn modu icin manuel @P3
+    int? CascadeToIntegrationId = null);   // 2026-05-22: FK alanı için cascade hedef integration (null = cascade yok)
 
 public sealed record IntegrationTriggerDto(
     int Id,
@@ -99,7 +104,11 @@ public sealed record SaveIntegrationRequest(
     string? PreProcedureName = null,
     string? PreProcedureParamsJson = null,
     string? PostProcedureName = null,
-    string? PostProcedureParamsJson = null);
+    string? PostProcedureParamsJson = null,
+    // 2026-05-22 Pre-flight Filter — JSON kural listesi
+    string? SourceFilterJson = null,
+    // 2026-05-22 Cascade target flag — bu integration başka biri tarafından cascade edilebilir mi
+    bool AllowAsCascadeTarget = true);
 
 public sealed record SaveIntegrationMappingDto(
     string TargetPath,
@@ -115,7 +124,8 @@ public sealed record SaveIntegrationMappingDto(
     string SourceSection = "Header",       // "Header" | "Lines" | "Combination"
     string? LookupFiltersJson = null,      // Lookup çoklu WHERE filtre (GuideConstraint[] JSON)
     string? LookupReturnColumn = null,     // Lookup hangi guide kolonu döner
-    string? LookupParam = null);           // SourceType=Function + SqlFn modu icin manuel @P3
+    string? LookupParam = null,            // SourceType=Function + SqlFn modu icin manuel @P3
+    int? CascadeToIntegrationId = null);   // 2026-05-22: FK alanı için cascade hedef integration ID'si
 
 public sealed record SaveIntegrationTriggerDto(
     IntegrationTriggerType TriggerType,
@@ -125,11 +135,14 @@ public sealed record SaveIntegrationTriggerDto(
 /// <summary>
 /// Wizard Step 4: dry-run test isteği. Mapping uygulanmis JSON output'u doner,
 /// opsiyonel olarak gercekten endpoint'e gonderir (sendForReal=true).
+/// 2026-05-25: OverrideRequestBody — kullanici Step 4'te body'yi duzenleyip
+/// gercek istegi o body ile gonderebilir. Bos ise mapping ciktisi kullanilir.
 /// </summary>
 public sealed record TestIntegrationRequest(
     SaveIntegrationRequest Integration,
     string? SampleRecordId,
-    bool SendForReal);
+    bool SendForReal,
+    string? OverrideRequestBody = null);
 
 public sealed record TestIntegrationResponse(
     bool Success,
@@ -192,4 +205,5 @@ public sealed record IntegrationRunListItemDto(
     IntegrationRunStatus Status,
     int? HttpStatusCode,
     string? ErrorMessage,
-    string? TriggeredBy);
+    string? TriggeredBy,
+    long? ParentRunId = null);   // 2026-05-22: cascade parent — null = top-level

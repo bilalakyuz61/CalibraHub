@@ -42,7 +42,7 @@ public sealed class InMemoryUserProfileRepository : IUserProfileRepository
         return Task.FromResult(user);
     }
 
-    public Task<UserProfile?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public Task<UserProfile?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         _dataStore.Users.TryGetValue(id, out var user);
         return Task.FromResult(user);

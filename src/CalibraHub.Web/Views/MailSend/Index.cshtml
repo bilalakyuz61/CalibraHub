@@ -1,0 +1,125 @@
+@model CalibraHub.Web.Models.MailSend.MailSendIndexViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Toplu Mail Gönderim";
+    ViewData["FormCode"] = "MAIL_SEND";
+    ViewData["BodyClass"] = "page-mailsend";
+    ViewData["DbInfo"] =
+        "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>MailSendBatch</td><td style='padding:6px 8px;'>Her gönderim için 1 başlık satırı (layout, subject, body önizleme, sayilar, kim/ne zaman)</td></tr>"
+        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>MailSendLogItem</td><td style='padding:6px 8px;'>Batch'e bağlı kişi başına gönderim durum/error log satırı</td></tr>"
+        + "</table>";
+
+    var jsonOpts = new JsonSerializerOptions {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+    var boardConfigJson = Model.BoardConfig != null
+        ? JsonSerializer.Serialize(Model.BoardConfig, jsonOpts)
+        : "null";
+}
+
+@section Styles {
+<style>
+    /* MailSend index = MaterialCards C-Grid iskeleti */
+    .page-mailsend .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-mailsend .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-mailsend .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-mailsend .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+    /* Modal kaldirildi — Detail artik /MailSend/Detail?batchId=X olarak ayri sayfada. */
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+<!-- Detail modal kaldirildi — SmartCard tiklayinca /MailSend/Detail?batchId=X sayfasina gidilir. -->
+
+@section Scripts {
+<script>
+(function() {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[MailSend] Mount element yok'); return; }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];
+        });
+    }
+
+    function showError(msg) {
+        el.innerHTML = '<div class="cb-mount-error">'
+            + '<div>' + msg + '</div>'
+            + '<button onclick="location.reload()">Sayfayi Yenile</button>'
+            + '</div>';
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadi'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadi');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            console.log('[MailSend] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'batch');
+        } catch (ex) {
+            console.error('[MailSend] Mount exception:', ex);
+            showError('Mount hatasi: ' + (ex.message || ex));
+        }
+    }
+
+    function loadCss() {
+        var prev = document.querySelector('link[data-ms-smartboard]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = CSS_URL;
+        link.setAttribute('data-ms-smartboard', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-ms-smartboard]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-ms-smartboard', '1');
+        script.onload = function() { setTimeout(cb, 0); };
+        script.onerror = function() { showError('Bundle yuklenemedi (network hatasi)'); };
+        document.head.appendChild(script);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount();
+    else loadScript(doMount);
+
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted) location.reload();
+    });
+
+    // Detay artik ayri sayfa: /MailSend/Detail?batchId=X — modal kodu kaldirildi.
+})();
+</script>
+}

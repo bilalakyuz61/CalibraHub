@@ -1,3 +1,22 @@
+// Bant render sirasi — sema tarafindaki gercek dizilim. PDF'te ve mail HTML'inde
+// hep bu sirayla iterate edilir. mail_body, mail sablonlarinin "Detay" bandi
+// karsiligi oldugu icin Detail bandinin yaninda yer alir.
+export const BAND_ORDER = [
+  'PageHeader', 'DocumentHeader', 'TableHeader',
+  'Detail', 'mail_body',
+  'SubDetailHeader', 'SubDetail', 'SubDetailFooter',
+  'TotalsBlock', 'SignatureBlock',
+  'PageFooter',
+]
+
+export function sortBandsForRender(bands) {
+  const idx = b => {
+    const i = BAND_ORDER.indexOf(b.type)
+    return i === -1 ? 99 : i
+  }
+  return [...bands].sort((a, b) => idx(a) - idx(b))
+}
+
 export const BAND_TYPES = [
   { type: 'PageHeader',       label: 'Sayfa Başlığı',     defaultHeight: 25 },
   { type: 'DocumentHeader',   label: 'Belge Başlığı',     defaultHeight: 40 },
@@ -9,15 +28,21 @@ export const BAND_TYPES = [
   { type: 'TotalsBlock',      label: 'Toplam Bloku',      defaultHeight: 30 },
   { type: 'SignatureBlock',   label: 'İmza Bloku',        defaultHeight: 25 },
   { type: 'PageFooter',       label: 'Sayfa Altı',        defaultHeight: 15 },
+  // Mail sablonu placeholder bandi — DocLayout.OutputFormat='email' iken kullanilir.
+  // Render sirasinda kullanici tarafindan girilen "mail govdesi" buraya yerlesir.
+  // Bu bandda element olmaz; sadece runtime'da islenecek bir isaretci.
+  { type: 'mail_body',        label: 'Mail Gövdesi',      defaultHeight: 40, mailOnly: true },
 ]
 
+// QR ayri bir Kind degil — Barcode'un bir tipi (barcodeType='QR'). Kullanici
+// toolbox'tan Barkod ekler, barkod tipinden QR'a gecebilir. Boylelikle veri
+// secimi (cift-tikla, alias.col) tum barkod tiplerinde tek noktadan calisir.
 export const ELEMENT_KINDS = [
   { kind: 'Label',         label: 'Etiket',          icon: '𝐓' },
   { kind: 'BoundField',    label: 'Veri Alanı',      icon: '⟨⟩' },
   { kind: 'Image',         label: 'Resim',           icon: '🖼' },
   { kind: 'Shape',         label: 'Şekil',           icon: '▬' },
   { kind: 'Barcode',       label: 'Barkod',          icon: '▥' },
-  { kind: 'QrCode',        label: 'QR Kod',          icon: '▦' },
   { kind: 'AmountInWords', label: 'Yazı ile Tutar',  icon: '₺' },
   { kind: 'PageNumber',    label: 'Sayfa No',        icon: '#' },
   { kind: 'DateTimeNow',   label: 'Tarih/Saat',      icon: '📅' },
@@ -31,14 +56,33 @@ export const BARCODE_TYPES = [
   { value: 'UPCA',    label: 'UPC-A'    },
   { value: 'ITF',     label: 'ITF (Interleaved 2/5)' },
   { value: 'Codabar', label: 'Codabar'  },
+  { value: 'QR',      label: 'QR Kod'   },
 ]
+
+/**
+ * Backward-compat: eski tasarimlarda kind='QrCode' olarak kaydedilmis elementleri
+ * yeni semaya tasi: kind='Barcode', barcodeType='QR'. Kayitli verileri silmemek
+ * icin load sirasinda cagrilir; geri yazimda yeni sema kullanilir.
+ */
+export function normalizeLegacyQrCode(el) {
+  if (el && el.kind === 'QrCode') {
+    return {
+      ...el,
+      kind: 'Barcode',
+      barcodeType: 'QR',
+      qrErrorCorrection: el.qrErrorCorrection ?? 'M',
+      showBarcodeText: el.showBarcodeText ?? false,
+    }
+  }
+  return el
+}
 
 export function makeId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
 export function makeDefaultElement(kind, x = 0, y = 0, binding = null) {
-  const needsBinding = kind === 'BoundField' || kind === 'AmountInWords' || kind === 'Barcode' || kind === 'QrCode'
+  const needsBinding = kind === 'BoundField' || kind === 'AmountInWords' || kind === 'Barcode'
   return {
     id: makeId(),
     kind,
@@ -47,21 +91,20 @@ export function makeDefaultElement(kind, x = 0, y = 0, binding = null) {
       : kind === 'Image' ? 40
       : kind === 'AmountInWords' ? 80
       : kind === 'Barcode' ? 50
-      : kind === 'QrCode'  ? 25
       : 50,
     h: kind === 'Shape' ? 1
       : kind === 'Image' ? 15
       : kind === 'Barcode' ? 15
-      : kind === 'QrCode'  ? 25
       : 8,
     text: kind === 'Label' ? 'Yeni Etiket' : null,
     zIndex: 0,
     style: { fontSize: 10, bold: false, italic: false, underline: false, align: 'left', verticalAlign: 'middle', overflow: 'ellipsis', color: '#000000', bgColor: 'transparent', border: false },
     binding: binding ?? (needsBinding ? { alias: '', col: '' } : null),
     format: null,
+    // Barcode: tip Code128 default; kullanici QR secerse qrErrorCorrection devreye girer
     barcodeType: kind === 'Barcode' ? 'Code128' : null,
     showBarcodeText: kind === 'Barcode' ? true : null,
-    qrErrorCorrection: kind === 'QrCode' ? 'M' : null,
+    qrErrorCorrection: kind === 'Barcode' ? 'M' : null,
     imageSrc: kind === 'Image' ? null  : null,            // base64 / URL
     imageFit: kind === 'Image' ? 'contain' : null,        // contain | stretch | original
 
@@ -98,6 +141,19 @@ const defaultMeta = {
   pageW: 210, pageH: 297,
   marginTop: 10, marginBot: 10, marginLeft: 15, marginRight: 10,
   isDefault: false,
+  // 2026-05-20: outputFormat artik 'pdf'e sabit (UI dropdown'i kaldirildi); legacy
+  // defaultSubject/Body ve defaultsView*/Where alanlari backward-compat icin tutulur
+  // ama Save sirasinda null olarak gonderilir. Mail sablonu kullanim niyeti yeni
+  // bayrakla: useAsMailTemplate.
+  outputFormat: 'pdf',
+  defaultSubject: '',
+  defaultBody: '',
+  defaultsViewName: '',
+  defaultsSubjectColumn: '',
+  defaultsBodyColumn: '',
+  defaultsWhere: '',
+  // Yeni: bu dizayn mail compose ekraninda sablon olarak listelensin mi?
+  useAsMailTemplate: false,
 }
 
 export const initialState = {
@@ -138,10 +194,19 @@ export function reducer(state, action) {
         ...state,
         meta: {
           id: layout.id, code: layout.code, name: layout.name, docType: layout.docType,
+          documentTypeId: layout.documentTypeId ?? null,
           pageW: layout.pageW, pageH: layout.pageH,
           marginTop: layout.marginTop, marginBot: layout.marginBot,
           marginLeft: layout.marginLeft, marginRight: layout.marginRight,
           isDefault: layout.isDefault ?? false,
+          outputFormat: layout.outputFormat ?? 'pdf',
+          defaultSubject: layout.defaultSubject ?? '',
+          defaultBody:    layout.defaultBody    ?? '',
+          defaultsViewName:      layout.defaultsViewName      ?? '',
+          defaultsSubjectColumn: layout.defaultsSubjectColumn ?? '',
+          defaultsBodyColumn:    layout.defaultsBodyColumn    ?? '',
+          defaultsWhere:         layout.defaultsWhere         ?? '',
+          useAsMailTemplate:     layout.useAsMailTemplate     ?? false,
         },
         bands: parseBands(layout.layoutJson),
         dataSources: layout.dataSources ?? [],
@@ -418,18 +483,27 @@ export function reducer(state, action) {
 function parseBands(layoutJson) {
   try {
     const doc = JSON.parse(layoutJson)
-    return doc.bands ?? []
+    const bands = doc.bands ?? []
+    // Backward-compat: eski tasarimlarda QrCode ayri kind idi; yeni semaya cevir.
+    return bands.map(b => ({
+      ...b,
+      elements: (b.elements ?? []).map(normalizeLegacyQrCode),
+    }))
   } catch {
     return []
   }
 }
 
 export function buildLayoutJson(meta, bands) {
+  // Bantlari render sirasi BAND_ORDER ile sirala — kullanici "Mail Govdesi" bandini
+  // sonradan eklese bile JSON'da Page Header ile Page Footer arasinda saklanir,
+  // mail render eden backend (MailTemplateRenderer) bu sirayla render eder.
+  const sortedBands = sortBandsForRender(bands)
   return JSON.stringify({
     pageWidth:  meta.pageW,
     pageHeight: meta.pageH,
     margins: { top: meta.marginTop, bottom: meta.marginBot, left: meta.marginLeft, right: meta.marginRight },
-    bands: bands.map(b => ({
+    bands: sortedBands.map(b => ({
       ...b,
       elements: [...b.elements].sort((a, z) => a.zIndex - z.zIndex),
     })),

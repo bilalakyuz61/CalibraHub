@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, ClipboardCheck, Warehouse, ShoppingCart,
   TrendingUp, Factory, Landmark, Settings2, Package,
-  Puzzle, TreePine, Users, Layers,
+  Puzzle, TreePine, Users, Layers, FlaskConical,
 } from 'lucide-react'
 
 const menuData = [
@@ -42,7 +42,7 @@ const menuData = [
     id: 'sales',
     label: 'Satis',
     icon: TrendingUp,
-    href: '/Sales/Documents',
+    href: '/Sales/Quotes',
   },
   {
     id: 'production',
@@ -51,6 +51,12 @@ const menuData = [
     children: [
       { id: 'product-tree', label: 'Urun Agaci', icon: TreePine, href: '/Production/BOM' },
     ],
+  },
+  {
+    id: 'arge',
+    label: 'AR-GE',
+    icon: FlaskConical,
+    href: '/Arge/Projects',
   },
   {
     id: 'finance',

@@ -1,0 +1,513 @@
+@using System.Text.Json
+@model CalibraHub.Application.Contracts.ShiftDto?
+@{
+    ViewData["Title"] = Model is null ? "Yeni Vardiya" : $"Vardiya: {Model.Name}";
+    ViewData["BodyClass"] = "page-shift-edit workspace-frame-body";
+    ViewData["FormCode"] = "SHIFT_EDIT";
+    var isNew = Model is null;
+
+    var breaksJson = Model?.Breaks != null
+        ? JsonSerializer.Serialize(Model.Breaks, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })
+        : "[]";
+}
+
+<partial name="_ProductionDefsTabs" model='"shifts"' />
+
+@* PJAX wrapper — style + shell + scripts hepsi içinde, PJAX swap'ta yeniden uygulanır *@
+<div id="pdt-tab-content" data-pdt-key="shifts" data-pdt-body-class="page-shift-edit">
+
+<style>
+    /* Vardiya'ya özel: süre rozetleri ve ara satırları tablosu */
+    .sh-duration { padding:6px 12px; background:rgba(99,102,241,.12); border:1px solid rgba(99,102,241,.3); border-radius:6px; font-size:13px; color:#4338ca; display:inline-block; }
+    body.app-theme-dark .sh-duration { color:#a5b4fc; }
+    .sh-time-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .sh-time-row input[type=time] { max-width:160px; font-family:monospace; font-size:15px; text-align:center; }
+
+
+    .sh-section { margin-top: 24px; padding-top: 18px; border-top: 1px dashed #e2e8f0; }
+    body.app-theme-dark .sh-section { border-top-color: rgba(148,163,184,.2); }
+    .sh-section-head { display:flex; align-items:center; gap:10px; margin-bottom: 12px; flex-wrap:wrap; }
+    .sh-section-head h3 { margin:0; font-size:14px; font-weight:600; }
+    .sh-section-hint { font-size:11px; color:#94a3b8; }
+    .sh-breaks-table {
+        width:100%; max-width: 900px; border-collapse: collapse; font-size:13px;
+        background: rgba(255,255,255,.02); border-radius: 6px; overflow:hidden;
+    }
+    .sh-breaks-table th, .sh-breaks-table td { padding:8px 10px; text-align:left; border-bottom:1px solid #f1f5f9; }
+    body.app-theme-dark .sh-breaks-table th, body.app-theme-dark .sh-breaks-table td { border-bottom-color: rgba(148,163,184,.1); }
+    .sh-breaks-table th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#94a3b8; background: #f8fafc; }
+    body.app-theme-dark .sh-breaks-table th { background: rgba(255,255,255,.03); }
+    .sh-breaks-table td input[type=text], .sh-breaks-table td input[type=time] {
+        width:100%; padding:6px 8px; font-size:13px; background:#fff;
+        color:inherit; border:1px solid #e2e8f0; border-radius:4px; outline:none;
+    }
+    body.app-theme-dark .sh-breaks-table td input[type=text],
+    body.app-theme-dark .sh-breaks-table td input[type=time] {
+        background:rgba(255,255,255,.04); border-color:rgba(255,255,255,.08); color:#e2e8f0;
+    }
+    .sh-breaks-table td input[type=time] { font-family: monospace; width: 100px; text-align:center; }
+    .sh-breaks-table td.col-actions { width: 50px; text-align:center; }
+    .sh-break-del {
+        background: rgba(239,68,68,.18); border:1px solid rgba(239,68,68,.4);
+        color:#dc2626; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12px;
+    }
+    body.app-theme-dark .sh-break-del { color:#fca5a5; }
+    .sh-break-del:hover { background: rgba(239,68,68,.28); }
+    .sh-break-empty { padding: 20px; text-align:center; color: #94a3b8; font-size:12px; }
+    .sh-net-line { margin-top: 10px; display:flex; gap:14px; font-size:13px; align-items:center; flex-wrap:wrap; }
+    .sh-net-chip { padding:6px 12px; border-radius:6px; font-weight:500; }
+    .sh-net-chip.total  { background: rgba(99,102,241,.12); color:#4338ca; border:1px solid rgba(99,102,241,.3); }
+    .sh-net-chip.breaks { background: rgba(245,158,11,.12); color:#b45309; border:1px solid rgba(245,158,11,.3); }
+    .sh-net-chip.net    { background: rgba(34,197,94,.12);  color:#059669; border:1px solid rgba(34,197,94,.4); font-weight:700; }
+    body.app-theme-dark .sh-net-chip.total  { color:#a5b4fc; }
+    body.app-theme-dark .sh-net-chip.breaks { color:#fbbf24; }
+    body.app-theme-dark .sh-net-chip.net    { color:#4ade80; }
+</style>
+
+<div class="ux-edit-shell">
+  <header class="ux-edit-bar">
+    <div class="ux-edit-bar__left">
+      <a class="ux-edit-bar__back" href="/Production/Shifts">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <h1 class="ux-edit-bar__title">@(isNew ? "Yeni Vardiya" : (Model!.Name ?? "Vardiya Düzenle"))</h1>
+      @if (!isNew)
+      {
+        var pillCls = Model!.IsActive ? "ux-edit-bar__status" : "ux-edit-bar__status ux-edit-bar__status--off";
+        <span class="@pillCls">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+      }
+    </div>
+    <div class="ux-edit-bar__right">
+      <a class="ux-edit-bar__btn" href="/Production/Shifts">İptal</a>
+      <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="sh-save">Kaydet</button>
+      @if (!isNew)
+      {
+        <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--danger" id="sh-delete">Sil</button>
+      }
+    </div>
+  </header>
+
+  <div class="ux-edit-body">
+    <aside class="ux-edit-nav" id="shNav">
+      <button type="button" class="ux-edit-nav__tab is-active" data-tab="general">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline stroke-linecap="round" stroke-linejoin="round" points="12 6 12 12 16 14"/></svg>
+        <span>Genel Bilgiler</span>
+      </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="breaks">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8h1a4 4 0 0 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8zM6 2v3M10 2v3M14 2v3"/></svg>
+        <span>Vardiya İçi Molalar</span>
+      </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="shNavWidgets" style="display:none;">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        <span>Ek Alanlar</span>
+      </button>
+    </aside>
+
+    <section class="ux-edit-content">
+      <div class="ux-edit-pane is-active" data-tab="general">
+        <h2>Genel Bilgiler</h2>
+        <div class="ux-edit-hint">Vardiya ismi, saatleri ve aktiflik durumu.</div>
+
+        <input type="hidden" id="f-id" value="@(Model?.Id ?? 0)" />
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label>Durum</label>
+            <div class="ux-switch-row">
+              <label class="ux-switch">
+                <input type="checkbox" id="f-active" @(Model?.IsActive ?? true ? "checked" : "") />
+                <span class="ux-switch-track"></span>
+              </label>
+              <span class="ux-switch-label" id="f-active-label">@(Model?.IsActive ?? true ? "Aktif" : "Pasif")</span>
+            </div>
+            <span class="ux-hint">Pasif yapılırsa atama yapılamaz ve listede gizlenir.</span>
+          </div>
+          <div class="ux-field">
+            <label for="f-sort">Sıra</label>
+            <input type="number" id="f-sort" min="0" step="1" value="@(Model?.SortOrder ?? 0)" style="max-width:140px;" />
+            <span class="ux-hint">Listede gösterim sırası.</span>
+          </div>
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-name">Ad *</label>
+          <input type="text" id="f-name" maxlength="200" value="@Model?.Name" placeholder="Örn: Gündüz Vardiyası" />
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label>Saat Aralığı *</label>
+          <div class="sh-time-row">
+            <input type="time" id="f-start" value="@(Model?.StartTime ?? "07:00")" required />
+            <span style="color:#94a3b8;">→</span>
+            <input type="time" id="f-end" value="@(Model?.EndTime ?? "15:00")" required />
+            <span id="f-duration" class="sh-duration">— sa</span>
+          </div>
+          <span class="ux-hint">Bitiş saati başlangıçtan önceyse otomatik <strong>Gece vardiyası</strong> (00:00'ı geçer).</span>
+        </div>
+
+        <div class="ux-field">
+          <label for="f-color">Renk</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="color" id="f-color" value="@(Model?.ColorHex ?? "#8b5cf6")" style="width:48px; height:36px; padding:2px; cursor:pointer;" />
+            <input type="text" id="f-color-hex" maxlength="9" value="@Model?.ColorHex" placeholder="#RRGGBB" style="width:120px;" />
+          </div>
+          <span class="ux-hint">Rapor grafikleri ve rozet rengi.</span>
+        </div>
+
+        <div id="sh-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      <div class="ux-edit-pane" data-tab="breaks">
+        <h2>Vardiya İçi Molalar</h2>
+        <div class="ux-edit-hint">Çay / yemek araları. Net çalışma süresi = vardiya süresi − toplam ara.</div>
+
+        <div class="sh-section">
+            <div class="sh-section-head">
+                <span style="flex:1"></span>
+                <button type="button" class="ux-edit-bar__btn" id="btn-add-break" style="padding:6px 12px;">+ Ara Ekle</button>
+            </div>
+
+            <table class="sh-breaks-table">
+                <thead>
+                    <tr>
+                        <th style="width: 28%">Ad</th>
+                        <th style="width: 22%">Başlangıç</th>
+                        <th style="width: 22%">Bitiş</th>
+                        <th style="width: 14%">Süre</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody id="breaks-body"></tbody>
+            </table>
+            <div id="breaks-empty" class="sh-break-empty" style="display:none;">Henüz ara tanımlı değil. "+ Ara Ekle" ile çay ve yemek aralarınızı tanımlayın.</div>
+
+            <div class="sh-net-line">
+                <span class="sh-net-chip total"  id="chip-total">Vardiya: — sa</span>
+                <span style="opacity:.5;">−</span>
+                <span class="sh-net-chip breaks" id="chip-breaks">Aralar: 0 dk</span>
+                <span style="opacity:.5;">=</span>
+                <span class="sh-net-chip net"    id="chip-net">Net çalışma: — sa</span>
+            </div>
+        </div>
+      </div>
+
+      <div class="ux-edit-pane" data-tab="widgets">
+        <h2>Ek Alanlar</h2>
+        <div class="ux-edit-hint">Admin → Widget Tanımları → SHIFT_EDIT'te tanımlanan ek alanlar.</div>
+        <div class="ux-dyn-widgets">
+          <div id="shDynamicWidgets"
+               data-form-code="SHIFT_EDIT"
+               data-record-id="@(Model?.Id.ToString() ?? "")">
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+<script>
+(function () {
+    function notify(text, ok) {
+        var el = document.getElementById('sh-err');
+        if (!el) return;
+        if (!text) { el.style.display = 'none'; return; }
+        el.textContent = text;
+        el.style.display = '';
+        el.style.background = ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.08)';
+        el.style.borderColor = ok ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.22)';
+        el.style.color = ok ? '#059669' : '#dc2626';
+        activateTab('general');
+        if (ok) setTimeout(function () { el.style.display = 'none'; }, 2200);
+    }
+    function token() {
+        return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    }
+
+    // ── Tab switching ──
+    function activateTab(key) {
+        document.querySelectorAll('#shNav .ux-edit-nav__tab').forEach(function (b) {
+            b.classList.toggle('is-active', b.dataset.tab === key);
+        });
+        document.querySelectorAll('.ux-edit-pane').forEach(function (p) {
+            p.classList.toggle('is-active', p.dataset.tab === key);
+        });
+    }
+    document.querySelectorAll('#shNav .ux-edit-nav__tab').forEach(function (b) {
+        b.addEventListener('click', function () {
+            if (b.disabled) return;
+            activateTab(b.dataset.tab);
+        });
+    });
+
+    // ── Active label sync ──
+    var activeEl = document.getElementById('f-active');
+    var activeLabel = document.getElementById('f-active-label');
+    if (activeEl && activeLabel) {
+        activeEl.addEventListener('change', function () {
+            activeLabel.textContent = activeEl.checked ? 'Aktif' : 'Pasif';
+        });
+    }
+
+    var startEl = document.getElementById('f-start');
+    var endEl   = document.getElementById('f-end');
+    var durEl   = document.getElementById('f-duration');
+
+    function parseTimeToMin(s) {
+        if (!s) return null;
+        var p = s.split(':');
+        var h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+        if (isNaN(h) || isNaN(m)) return null;
+        return h * 60 + m;
+    }
+    function fmtDurMin(dur) {
+        var hours = Math.floor(dur / 60), mins = dur % 60;
+        return hours + 'sa' + (mins > 0 ? ' ' + mins + 'd' : '');
+    }
+    function shiftDurationMin() {
+        var sMin = parseTimeToMin(startEl.value);
+        var eMin = parseTimeToMin(endEl.value);
+        if (sMin == null || eMin == null) return null;
+        var dur = eMin - sMin;
+        if (dur <= 0) dur += 24 * 60;
+        return dur;
+    }
+
+    var INITIAL_BREAKS = @Html.Raw(breaksJson);
+    var breaks = (INITIAL_BREAKS || []).map(function (b) {
+        return {
+            name:      b.name      || '',
+            startTime: b.startTime || '',
+            endTime:   b.endTime   || '',
+            sortOrder: b.sortOrder || 0,
+        };
+    });
+
+    function updateDuration() {
+        var dur = shiftDurationMin();
+        durEl.textContent = dur == null ? '— sa' : fmtDurMin(dur);
+        recomputeNet();
+    }
+    startEl.addEventListener('input', updateDuration);
+    endEl.addEventListener('input', updateDuration);
+    updateDuration();
+
+    function renderBreaks() {
+        var tbody = document.getElementById('breaks-body');
+        var emptyEl = document.getElementById('breaks-empty');
+        tbody.innerHTML = '';
+        if (breaks.length === 0) { emptyEl.style.display = 'block'; recomputeNet(); return; }
+        emptyEl.style.display = 'none';
+        breaks.forEach(function (b, idx) {
+            var tr = document.createElement('tr');
+            tr.setAttribute('data-row-idx', idx);
+            tr.innerHTML =
+                '<td><input type="text" data-idx="' + idx + '" data-field="name" value="' + escAttr(b.name) + '" placeholder="Çay / Yemek" maxlength="100" /></td>' +
+                '<td><input type="time" data-idx="' + idx + '" data-field="startTime" value="' + escAttr(b.startTime) + '" /></td>' +
+                '<td><input type="time" data-idx="' + idx + '" data-field="endTime"   value="' + escAttr(b.endTime)   + '" /></td>' +
+                '<td class="col-dur"></td>' +
+                '<td class="col-actions"><button type="button" class="sh-break-del" data-idx="' + idx + '" title="Sil">✕</button></td>';
+            tbody.appendChild(tr);
+            updateRowDuration(idx);
+        });
+        tbody.querySelectorAll('input[data-field]').forEach(function (el) {
+            el.addEventListener('input', onBreakFieldChange);
+            el.addEventListener('change', onBreakFieldChange);
+        });
+        tbody.querySelectorAll('.sh-break-del').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var idx = parseInt(b.getAttribute('data-idx'), 10);
+                breaks.splice(idx, 1);
+                renderBreaks();
+            });
+        });
+        recomputeNet();
+    }
+
+    function updateRowDuration(idx) {
+        var row = document.querySelector('#breaks-body tr[data-row-idx="' + idx + '"]');
+        if (!row) return;
+        var b = breaks[idx];
+        var sMin = parseTimeToMin(b.startTime), eMin = parseTimeToMin(b.endTime);
+        var dur  = (sMin != null && eMin != null && eMin > sMin) ? (eMin - sMin) : null;
+        var durCell = row.querySelector('.col-dur');
+        if (durCell) {
+            durCell.innerHTML = dur != null
+                ? fmtDurMin(dur)
+                : '<span style="color:rgba(148,163,184,.5)">—</span>';
+        }
+    }
+
+    function onBreakFieldChange(e) {
+        var el = e.target;
+        var idx = parseInt(el.getAttribute('data-idx'), 10);
+        var field = el.getAttribute('data-field');
+        breaks[idx][field] = el.value;
+        if (field === 'startTime' || field === 'endTime') updateRowDuration(idx);
+        recomputeNet();
+    }
+
+    function recomputeNet() {
+        var dur = shiftDurationMin();
+        var totalBreak = breaks.reduce(function (acc, b) {
+            var s = parseTimeToMin(b.startTime), e = parseTimeToMin(b.endTime);
+            if (s != null && e != null && e > s) return acc + (e - s);
+            return acc;
+        }, 0);
+        var net = (dur != null) ? Math.max(0, dur - totalBreak) : null;
+        document.getElementById('chip-total').textContent  = 'Vardiya: ' + (dur == null ? '—' : fmtDurMin(dur));
+        document.getElementById('chip-breaks').textContent = 'Aralar: ' + totalBreak + ' dk';
+        document.getElementById('chip-net').textContent    = 'Net çalışma: ' + (net == null ? '—' : fmtDurMin(net));
+    }
+
+    document.getElementById('btn-add-break').addEventListener('click', function () {
+        var sMin = parseTimeToMin(startEl.value);
+        var eMin = parseTimeToMin(endEl.value);
+        var defaultStart = '10:00', defaultEnd = '10:15';
+        if (sMin != null && eMin != null) {
+            var total = eMin - sMin; if (total <= 0) total += 24 * 60;
+            var midMin = sMin + Math.floor(total / 2);
+            var midH = Math.floor(midMin / 60) % 24, midM = midMin % 60;
+            defaultStart = String(midH).padStart(2,'0') + ':' + String(midM).padStart(2,'0');
+            var endH = Math.floor((midMin + 15) / 60) % 24, endM = (midMin + 15) % 60;
+            defaultEnd = String(endH).padStart(2,'0') + ':' + String(endM).padStart(2,'0');
+        }
+        breaks.push({
+            name: breaks.length === 0 ? 'Yemek' : 'Çay',
+            startTime: defaultStart, endTime: defaultEnd,
+            sortOrder: (breaks.length + 1) * 10,
+        });
+        renderBreaks();
+    });
+
+    function escAttr(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    renderBreaks();
+
+    var colorEl    = document.getElementById('f-color');
+    var colorHexEl = document.getElementById('f-color-hex');
+    colorEl.addEventListener('input', function () { colorHexEl.value = colorEl.value; });
+    colorHexEl.addEventListener('input', function () {
+        var v = colorHexEl.value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(v) || /^#[0-9a-fA-F]{8}$/.test(v)) colorEl.value = v.substring(0,7);
+    });
+
+    document.getElementById('sh-save').addEventListener('click', async function () {
+        var name = document.getElementById('f-name').value.trim();
+        var payload = {
+            id:         parseInt(document.getElementById('f-id').value, 10) || null,
+            code:       name,
+            name:       name,
+            startTime:  startEl.value,
+            endTime:    endEl.value,
+            colorHex:   colorHexEl.value.trim() || null,
+            sortOrder:  parseInt(document.getElementById('f-sort').value, 10) || 0,
+            isActive:   document.getElementById('f-active').checked,
+            breaks: breaks.map(function (b, idx) {
+                return {
+                    name:      (b.name || '').trim(),
+                    startTime: b.startTime || '',
+                    endTime:   b.endTime   || '',
+                    sortOrder: b.sortOrder || (idx + 1) * 10,
+                };
+            }),
+        };
+        if (!payload.name) { notify('Ad zorunlu.', false); return; }
+        if (!payload.startTime || !payload.endTime) { notify('Başlangıç ve bitiş saatleri zorunlu.', false); return; }
+
+        try {
+            var r = await fetch('/Production/SaveShift', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify(payload)
+            });
+            var d = await r.json();
+            if (!d.ok) { notify(d.error || 'Kaydedilemedi.', false); return; }
+            notify('Kaydedildi.', true);
+            if (!payload.id || payload.id === 0) {
+                setTimeout(function () { location.href = '/Production/ShiftEdit?id=' + d.id; }, 600);
+            }
+        } catch (e) { notify('Hata: ' + e.message, false); }
+    });
+
+    var btnDel = document.getElementById('sh-delete');
+    if (btnDel) {
+        btnDel.addEventListener('click', async function () {
+            var ok = (typeof showConfirm === 'function')
+                ? await showConfirm({ title: 'Vardiya Sil', message: 'Bu vardiyayı silmek istediğinize emin misiniz?', okLabel: 'Sil' })
+                : confirm('Bu vardiyayı silmek istediğinize emin misiniz?');
+            if (!ok) return;
+            var id = parseInt(document.getElementById('f-id').value, 10);
+            try {
+                var r = await fetch('/Production/DeleteShift/' + id, {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'RequestVerificationToken': token() }
+                });
+                var d = await r.json();
+                if (!d.ok) { notify(d.error || 'Silinemedi.', false); return; }
+                location.href = '/Production/Shifts';
+            } catch (e) { notify('Hata: ' + e.message, false); }
+        });
+    }
+})();
+
+// ── DynamicWidgetRenderer mount (stacked layout) ──
+(function () {
+    var el = document.getElementById('shDynamicWidgets');
+    if (!el) return;
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+        try {
+            window._shDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode:    el.getAttribute('data-form-code') || 'SHIFT_EDIT',
+                recordId:    el.getAttribute('data-record-id') || '',
+                classPrefix: 'sh',
+                layout:      'stacked',
+                onMounted:   function (handle) {
+                    var attempts = 0;
+                    var iv = setInterval(function () {
+                        attempts++;
+                        try {
+                            if (handle && typeof handle.getHasWidgets === 'function' && handle.getHasWidgets()) {
+                                var nav = document.getElementById('shNavWidgets');
+                                if (nav) nav.style.display = '';
+                                clearInterval(iv);
+                                return;
+                            }
+                        } catch (_) {}
+                        if (attempts > 25) clearInterval(iv);
+                    }, 200);
+                }
+            });
+        } catch (e) { console.warn('[SH] mountDynamicWidgetRenderer hatasi:', e); }
+    }
+    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+        doMount();
+    } else {
+        var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+        var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        if (!document.querySelector('link[data-sh-bundle]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = cssUrl;
+            link.setAttribute('data-sh-bundle', '1');
+            document.head.appendChild(link);
+        }
+        if (!document.querySelector('script[data-sh-bundle]')) {
+            var script = document.createElement('script');
+            script.src = jsUrl;
+            script.setAttribute('data-sh-bundle', '1');
+            script.onload  = function () { setTimeout(doMount, 0); };
+            script.onerror = function () { console.error('[SH] Bundle yuklenemedi'); };
+            document.head.appendChild(script);
+        }
+    }
+})();
+</script>
+
+</div>
+@* /pdt-tab-content *@

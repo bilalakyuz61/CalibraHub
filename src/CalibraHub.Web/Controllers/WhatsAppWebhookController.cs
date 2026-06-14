@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.WhatsApp;
 using CalibraHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -236,10 +237,5 @@ public sealed class WhatsAppWebhookController : ControllerBase
     }
 
     private static string NormalizePhone(string input)
-    {
-        var sb = new System.Text.StringBuilder(input.Length);
-        foreach (var c in input.Trim())
-            if (char.IsDigit(c)) sb.Append(c);
-        return sb.ToString();
-    }
+        => WaPhoneNormalizer.Normalize(input) ?? string.Empty;
 }

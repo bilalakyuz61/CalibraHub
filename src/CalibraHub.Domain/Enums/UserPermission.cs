@@ -24,4 +24,7 @@ public enum UserPermission
     // Faz 3a: Üretim sahası operatörü
     ReportProduction = 17,
     OperateMachine = 18,
+
+    // AR-GE modulu
+    ManageArgeProjects = 19,
 }

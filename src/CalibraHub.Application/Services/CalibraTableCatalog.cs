@@ -56,7 +56,7 @@ public static class CalibraTableCatalog
         "org_chart_nodes", "org_charts",
 
         // Entegrasyon
-        "erp_connection_settings", "incoming_documents",
+        "ErpConnectionSetting", "incoming_documents",
         "integration_api_profiles",
         "integrator_settings", "smtp_profiles",
         "CBT_EBELGEMAS", // Legacy ERP e-belge tablosu — IncomingDocumentRepository kullaniyor
@@ -81,6 +81,9 @@ public static class CalibraTableCatalog
 
         // Uretim personneli (Faz 3a revize — User tablosundan ayri)
         "Personnel",
+
+        // Varlik Yonetimi (Asset Management)
+        "Asset", "AssetEvent", "AssetAssignment",
     };
 
     public static bool IsOwned(string tableName)

@@ -48,6 +48,8 @@
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
     <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 </section>
+@* CSRF token — CardGroupTree.jsx getCsrf() tarafından okunur *@
+@Html.AntiForgeryToken()
 
 @section Scripts {
 <script>

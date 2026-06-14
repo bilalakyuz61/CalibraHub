@@ -49,10 +49,23 @@ function useThemeIsLight() {
 // Tip 2 (ozel rehber): DÖNÜŞ + GÖRÜNÜŞ ayri secilir.
 // PR 5 ViewMeta.IsStandard ile API uzerinden donecek; simdilik hardcoded.
 const STANDARD_VIEWS = new Set([
+  // View adlari (eski seed)
   'cbv_Guide_Items',
   'cbv_Guide_Contacts',
+  'cbv_Guide_Suppliers',
   'cbv_Guide_Documents',
   'cbv_Guide_SalesQuotes',
+  // 2026-06-02: GuideCode'lar (Tip 1 standart rehber, GuideMas'ta seed'li).
+  // openGuideLookup'tan gelen `viewCode` aslinda GuideMas.Code ('CUSTOMERS') olur;
+  // view adi olmadigindan bu set'e koduyla da bakarak Tip 1 algilanır.
+  'CUSTOMERS',
+  'SUPPLIERS',
+  'MATERIALS',
+  'CONTACTS',
+  'DOCUMENTS',
+  'SALES_QUOTES',
+  'SALES_ORDERS',
+  'PURCHASE_REQUESTS',
 ])
 
 // FilterJson icindeki raw SQL fragment'ini cikar — yeni format [{rawSql,logic}] veya
@@ -513,7 +526,13 @@ export default function GuideCustomizationModal(props) {
   // (widget tanim formu — admin override).
   // hideValueDisplayColumns=true ise hem DÖNÜŞ hem GÖRÜNÜŞ tamamen gizlenir
   // (guide-list — salt okunur liste, satir secimi yok).
-  const isStandardView    = STANDARD_VIEWS.has(viewCode)
+  // 2026-06-02: Hardcoded view set yerine prefix-based algilama —
+  // CalibraHub konvansiyonu: TUM standart (Tip 1) view'lari `cbv_Guide_*` ile
+  // baslar. Tip 2 (admin-defined ozel rehber) bu prefix'i kullanmaz.
+  // STANDARD_VIEWS set'i artik backward-compat icin GuideCode kısayollarını da
+  // kabul ediyor (örn. openGuideLookup'tan 'CUSTOMERS' geçtiğinde).
+  const isStandardView    = (typeof viewCode === 'string' && /^cbv_Guide_/i.test(viewCode))
+                            || STANDARD_VIEWS.has(viewCode)
   const hideValueColumn   = hideValueDisplayColumns
   const hideDisplayColumn = hideValueDisplayColumns || (isStandardView && !forceShowDisplayColumn)
   // Sutun sirasi icin ek 44px (↑/↓ butonlari)

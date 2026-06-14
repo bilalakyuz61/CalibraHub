@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Contracts;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CalibraHub.Web.Controllers;
@@ -15,6 +16,7 @@ namespace CalibraHub.Web.Controllers;
 ///   GET    /api/field-settings/runtime/{formCode}    → Runtime baglantilari
 ///   GET    /api/field-settings/discover/{formId}     → Alan kesfi
 /// </summary>
+[Authorize]
 [ApiController]
 [Route("api/field-settings")]
 public sealed class FieldSettingsController : ControllerBase

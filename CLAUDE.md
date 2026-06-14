@@ -22,12 +22,147 @@ Tüm geliştirme akışı Claude üzerinden yürür. Kod değişikliği yaptığ
   Worktree kendi `src/` kopyasına sahip olsa da derleme/çalıştırma hep ana proje üzerinden olur.
 - **Neden:** Birden fazla ajan aynı projeyi farklı worktree'lerden build/run yaptığında port çakışması ve dosya uyumsuzluğu oluşur. Ana proje tek kaynak olarak kalır.
 
+## Mimari kararlar — KALIN UYULMASI GEREKEN
+
+### ENGINE Architecture — KARARLAŞTIRILDI: YAPILMAYACAK (2026-06-10)
+
+Metadata-driven engine motoru (`engine.Entity` + `engine.Field` + dynamic DDL) vizyonu **tamamen rafa kaldırıldı**. İlgili tüm kod (interfaces, services, controllers, DB schema) kaldırıldı. Şu kararlar **bilinçli** olarak verildi:
+
+- **Sebep:** 1-3 kişilik uyarlama ekibi + canlı kopya yok + öncelik "hızlı ayağa kaldırma + stabilite". Engine 23-32 günlük inşa + sonsuza dek paralel kod (Strangler Fig) yükü getiriyordu. Mevcut **WidgetMas EAV** sistemi customer-spesifik form/alan ihtiyaçlarını zaten %85+ karşılıyor.
+- **Yeni form/alan ihtiyacında yapılacak:** Önce `WidgetMas` ile çözmeyi dene. Admin alan rehberi (`/Admin/ViewSettings`) ile dinamik alan ekle. Bu yetmiyorsa standart C# kodu yaz (form-spesifik controller + entity + table).
+- **YAPMA:** `engine.Entity` benzeri "dynamic DDL" sistemleri, runtime-defined motor yapıları, `DynamicDdlService` ALTER TABLE servisleri. Eğer ihtiyaç doğarsa, **önce CLAUDE.md güncelleyip ardından mimar tartışması yap** — direkt kodlama yasak.
+- **Yeniden değerlendirme şartı:** 12+ ay canlıda çalıştıktan sonra eğer 5+ farklı müşteri "kendi form/motor tasarlamak" talebinde bulunursa, engine vizyonu yeniden gündeme alınabilir. O zamana kadar konu kapalı.
+
 ## Diğer kurallar
 
 - DB tasarımında kısa tablo/kolon isimleri, INT PK/FK kullan; SQL entegrasyonu önceliklidir.
 - Veri giriş ekranlarında sol tab menüsü + sağ seçili sekme içeriği standardı (`st-modal-body--tabbed`).
 - Sebep net tespit edildiyse plan dökümanı yazma — direkt Edit + kısa açıklama.
 - **Boolean alanlar için checkbox değil switchkey (toggle switch) kullanılır.** Aktif/Pasif, Makine/Depo gibi açma-kapama girişleri her zaman switch kontrolüyle gösterilir. Native `<input type="checkbox">` ham haliyle UI'a düşmez — ya Bootstrap `form-check form-switch` ya da custom switch CSS pattern'i kullanılır (track + sliding thumb). Form içinde "evet/hayır" değeri toplayan tüm yerlerde geçerlidir.
+
+## CSS ve Tema Kuralları
+
+CalibraHub iki temayı destekler: **light** ve **dark**. Tema, `<body>` üzerindeki `app-theme-light` / `app-theme-dark` class'ı ile kontrol edilir. Yeni CSS/JSX yazarken aşağıdaki kurallara uy.
+
+### Tek dark selector: `body.app-theme-dark`
+
+Koyu tema override'ları için **yalnızca** `body.app-theme-dark` kullanılır.
+
+| ❌ YANLIŞ | ✅ DOĞRU |
+|-----------|---------|
+| `.dark .my-el` | `body.app-theme-dark .my-el` |
+| `html.dark .my-el` | `body.app-theme-dark .my-el` |
+| `[data-theme="dark"] .my-el` | `body.app-theme-dark .my-el` |
+
+**Sebep:** Tailwind'in `.dark`, Daisy UI'ın `[data-theme]` vb. ile karışmaz. Tek nokta olur, grep ile bulunur.
+
+### Light = default pattern
+
+CSS'in tüm renk değişkenleri **light değerler** olarak tanımlanır, `body.app-theme-dark` onları ezer.
+
+```css
+/* ✅ Doğru: Light default → Dark override */
+html body {
+  --my-bg: #ffffff;
+  --my-text: #0f172a;
+}
+body.app-theme-dark {
+  --my-bg: #1e293b;
+  --my-text: #e2e8f0;
+}
+
+/* ❌ Yanlış: Dark default → Light override (anti-pattern) */
+html body {
+  --my-bg: #1e293b;   /* dark default = tema sınıfı olmayan sayfalarda koyu çıkar */
+}
+body.app-theme-light {
+  --my-bg: #ffffff;
+}
+```
+
+### React bileşenlerinde tema: `className` + CSS değişkenleri
+
+JSX inline style içinde hardcoded hex/rgba **kullanılmaz**. Bunun iki zararı var:
+1. **Light modda hep koyu görünür** (tema sınıfından etkilenmez).
+2. **Native form kontrollerinde whiteness** — `color-scheme` sinyali eksik olduğunda tarayıcı checkbox/input'u light olarak çizer.
+
+**Doğru pattern:**
+```css
+/* ComponentName.css */
+.cn-root {
+  color-scheme: light;                /* native kontroller light mod */
+  --cn-bg: #f1f5f9;
+  --cn-text: #0f172a;
+  background: var(--cn-bg);
+  color: var(--cn-text);
+}
+body.app-theme-dark .cn-root {
+  color-scheme: dark;                 /* native kontroller dark mod */
+  --cn-bg: #0b1220;
+  --cn-text: #e2e8f0;
+}
+```
+```jsx
+/* ComponentName.jsx */
+<div className="cn-root" style={{ height: '100%' }}>   {/* layout-only inline */}
+```
+
+Referans implementasyon: `IntegrationQueue.jsx` + `IntegrationWizard.css` → `.iq-root` (2026-06-08).
+
+### `color-scheme` zorunluluğu
+
+Native form kontrolleri (`<input>`, `<select>`, `<checkbox>`, scrollbar) `color-scheme: dark` olmadan her zaman beyaz/light render eder — `body.app-theme-dark` class'ı tek başına yetmez.
+
+**Shell.jsx** her tema değişiminde `html.style.colorScheme = isDark ? 'dark' : 'light'` set eder — bu iframe'lere de yansıtılır.  
+Standalone React bileşeni yazarken kendi root elementine `color-scheme` ekle (yukarıdaki pattern).
+
+### font-weight geçerli değerleri
+
+CSS spec yalnızca **100 basamaklı** değerleri tanır: 100, 200, 300, 400, 500, 600, 700, 800, 900.  
+`font-weight: 560`, `620`, `640`, `650` gibi ara değerler **geçersizdir** — tarayıcı yuvarlar ama bu tutarsızlığa yol açar.
+
+| Sık kullanılan | Eşleşme |
+|----------------|---------|
+| Normal metin | 400 |
+| Orta vurgu | 500 |
+| Yarı-kalın | 600 |
+| Kalın başlık | 700 |
+
+### Monospace font stack
+
+Kod, ID, timestamp alanları için:
+```css
+font-family: ui-monospace, Menlo, Consolas, monospace;
+```
+`Courier New` veya tek başına `monospace` kullanılmaz.
+
+### Inline `<style>` ve `.cshtml` içi CSS
+
+`.cshtml` içinde `<style>` bloğu yazarken Razor `@` karakteri atlatma gerekir:
+- `@keyframes` → `@@keyframes` (Razor direktif çakışmasını önler)
+- `@media` → `@@media`
+
+Renk değerleri için CSS değişken fallback kullan:
+```css
+/* ✅ */
+background: var(--app-surface, #fff);
+color: var(--bs-body-color, #0f172a);
+border: 1px solid var(--app-border, #e2e8f0);
+
+/* ❌ */
+background: #fff;
+color: #1e293b;
+```
+
+### Denetim metodolojisi (tema audit)
+
+Yeni ekran geliştirirken veya mevcut ekranı denetlerken kontrol listesi:
+
+1. **Hardcoded hex grep** — `grep -r "#[0-9a-fA-F]\{3,6\}"` JSX/CSS dosyalarında
+2. **rgba near-white grep** — `rgba(255,255,255,0\.[0-9])` ve `rgba(248,249` gibi pattern'lar (grep'e takılmayan near-white arka planlar)
+3. **Selector grep** — `.dark .` ve `html.dark` → hepsi `body.app-theme-dark` olmalı
+4. **`color-scheme` kontrolü** — standalone React bileşeni ise root'ta var mı?
+5. **Bundle rebuild** — CSS değişikliği yaptıktan sonra `npm run build` zorunlu; eski bundle bellekteki eski CSS'i döndürür
 
 ## Silme onay standardı
 
@@ -61,8 +196,8 @@ CalibraHub yıllar içinde snake_case'ten PascalCase'e geçiş yaptı; rename mi
 - **Boolean kolon**: `Is{Quality}` veya `Has{Quality}` — `IsActive`, `IsMachinePark`, `HasChildren`.
 - **Display alanları (klasik üçlü)**: `Code` (kısa, unique), `Name` (kullanıcıya gösterim), `Description` (opsiyonel uzun).
 - **Audit dörtlüsü (her tabloda olmalı)**:
-  - `Created    DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()`
-  - `Updated    DATETIME2 NULL` (UPDATE'te set edilir)
+  - `Created    DATETIME NOT NULL DEFAULT SYSUTCDATETIME()`
+  - `Updated    DATETIME NULL` (UPDATE'te set edilir)
   - `CreatedBy  NVARCHAR(120) NULL`
   - `UpdatedBy  NVARCHAR(120) NULL`
 - **Eski snake_case tablolarda yeni kolon eklerken o tablonun stiline uy** — `User` tablosuna eklenen yeni alan `phone_number`, `PhoneNumber` değil. Sebep: SELECT/INSERT'leri tutarlı tut, audit ve raporlamada karışıklık yaratma.
@@ -82,16 +217,16 @@ CREATE TABLE dbo.<TableName> (
     -- ... domain-specific kolonlar (PascalCase)
     IsActive    BIT          NOT NULL CONSTRAINT DF_<TableName>_IsActive DEFAULT 1,
     CreatedBy   NVARCHAR(120) NULL,
-    Created     DATETIME2     NOT NULL CONSTRAINT DF_<TableName>_Created DEFAULT SYSUTCDATETIME(),
+    Created     DATETIME      NOT NULL CONSTRAINT DF_<TableName>_Created DEFAULT SYSUTCDATETIME(),
     UpdatedBy   NVARCHAR(120) NULL,
-    Updated     DATETIME2     NULL
+    Updated     DATETIME      NULL
 );
 ```
 
 ### Tip standartları
 - **PK / FK**: `INT IDENTITY` (PK), `INT` (FK). `BIGINT` sadece audit/log tabloları için (`IntegrationRun.Id`, `whatsapp_send_log.id`).
 - **String boyutları**: `NVARCHAR(50)` kod alanları, `NVARCHAR(200)` ad alanları, `NVARCHAR(1000)` kısa açıklama, `NVARCHAR(MAX)` serbest metin/JSON.
-- **Tarih**: `DATETIME2` (UTC), `DATETIME2(0)` saniye hassasiyeti yeter ise. `DATETIME` (legacy) kullanma.
+- **Tarih**: `DATETIME` (UTC). Tüm tarih kolonlarında standart. `DATETIME2` kullanılmaz — 2026-06-11'de tüm mevcut DATETIME2 kolonları DATETIME'a migrate edildi.
 - **Decimal**: `DECIMAL(18,4)` para/miktar, `DECIMAL(5,2)` oran/yüzde.
 - **JSON**: `NVARCHAR(MAX)` — SQL Server'da native JSON tipi yok.
 
@@ -119,6 +254,11 @@ Eski string-based match (NormKey, lowercase concatenation, Trim) gördüğünde 
 
 ### İstisna
 Standart kod alanları (`GuideMas.ValueColumn = Code`) kullanıcıya gösterim için kalır. Ama o kod alanının başka tabloya FK olarak gitmesi yanlış — yeni tabloda referans `int FK_Id` olur.
+
+### Bilinen ihlal — `CreatedBy` / `UpdatedBy` (string NVARCHAR(120))
+Audit dörtlüsündeki `CreatedBy` ve `UpdatedBy` alanları şu an **string** (email/username) tutuluyor. **Kural ihlali**: `Users.Id` (INT) referans olması doğrudur. **Erteleme sebebi (2026-05-31 kararı)**: 42 tablo + 35 entity + 30+ repo + 20+ controller'ı kapsayan büyük bir refactor; canlı veri kaybetmeden Big Bang yapmak risk. **Plan**: Faz 1'de yeni tablolar `CreatedById INT NULL FK -> Users(Id)` ile tasarlanır (mevcut tablolar string kalır). Faz 2'de mevcut tablolar parça parça migrate edilir (önce kritik 10 tablo: Document, Item, Contact, Personnel, DocLayout, ApprovalFlow, Note, BOM, WorkOrder, Integration). Mevcut tablolarda yeni kayıt eklerken **hem `CreatedBy` (legacy)** hem ileride eklenecek **`CreatedById`** doldurulmalı.
+
+**FK tasarım kararı (2026-06-11):** `CreatedById` FK'sinde `ON DELETE SET NULL` **kullanılmaz**. Kullanıcılar gerçek anlamda silinmez — sadece `IsActive = 0` yapılır (soft-delete). Dolayısıyla FK constraint ihlali riski yoktur; standart `FOREIGN KEY REFERENCES dbo.[User](Id)` yeterlidir. Kullanıcı silme işlemi yalnızca deaktifleştirme olarak uygulanır, fiziksel DELETE yasaktır.
 
 ## Kullanıcı tarafından girilen kod alanı yok kuralı
 

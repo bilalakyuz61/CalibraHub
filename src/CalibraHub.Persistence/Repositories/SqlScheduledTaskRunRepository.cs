@@ -16,7 +16,7 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[scheduled_task_runs]";
+        _table = $"[{schema}].[ScheduledTaskRun]";
     }
 
     public async Task<int> CreateAsync(ScheduledTaskRun run, CancellationToken cancellationToken)
@@ -24,7 +24,7 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            INSERT INTO {_table} ([task_id],[task_code],[started_at],[completed_at],[status],[message],[duration_ms],[trigger],[executed_command])
+            INSERT INTO {_table} ([TaskId],[TaskCode],[StartedAt],[CompletedAt],[Status],[Message],[DurationMs],[Trigger],[ExecutedCommand])
             VALUES (@TaskId,@TaskCode,@StartedAt,@CompletedAt,@Status,@Message,@DurationMs,@Trigger,@ExecutedCommand);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
@@ -49,12 +49,12 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             UPDATE {_table}
-               SET [completed_at] = GETUTCDATE(),
-                   [status] = @Status,
-                   [message] = @Message,
-                   [duration_ms] = @DurationMs,
-                   [executed_command] = COALESCE(@ExecutedCommand, [executed_command])
-             WHERE [id] = @Id;
+               SET [CompletedAt] = GETUTCDATE(),
+                   [Status] = @Status,
+                   [Message] = @Message,
+                   [DurationMs] = @DurationMs,
+                   [ExecutedCommand] = COALESCE(@ExecutedCommand, [ExecutedCommand])
+             WHERE [Id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id",              runId));
         cmd.Parameters.Add(new SqlParameter("@Status",          status));
@@ -64,7 +64,7 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private const string SelectColumns = "[id],[task_id],[task_code],[started_at],[completed_at],[status],[message],[duration_ms],[trigger],[executed_command]";
+    private const string SelectColumns = "[Id],[TaskId],[TaskCode],[StartedAt],[CompletedAt],[Status],[Message],[DurationMs],[Trigger],[ExecutedCommand]";
 
     public async Task<IReadOnlyList<ScheduledTaskRun>> GetRecentByTaskIdAsync(int taskId, int limit, CancellationToken cancellationToken)
     {
@@ -74,8 +74,8 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
         cmd.CommandText = $"""
             SELECT TOP (@Limit) {SelectColumns}
               FROM {_table}
-             WHERE [task_id] = @TaskId
-             ORDER BY [started_at] DESC;
+             WHERE [TaskId] = @TaskId
+             ORDER BY [StartedAt] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@TaskId", taskId));
         cmd.Parameters.Add(new SqlParameter("@Limit",  limit));
@@ -88,7 +88,7 @@ public sealed class SqlScheduledTaskRunRepository : IScheduledTaskRunRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [started_at] < @Cutoff;";
+        cmd.CommandText = $"DELETE FROM {_table} WHERE [StartedAt] < @Cutoff;";
         cmd.Parameters.Add(new SqlParameter("@Cutoff", cutoffUtc));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }

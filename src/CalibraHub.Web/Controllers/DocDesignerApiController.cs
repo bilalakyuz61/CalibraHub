@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
@@ -14,8 +15,13 @@ namespace CalibraHub.Web.Controllers;
 public sealed class DocDesignerApiController : ControllerBase
 {
     private readonly IDocDesignerService _svc;
+    private readonly IDocumentTypeRepository _docTypeRepo;
 
-    public DocDesignerApiController(IDocDesignerService svc) => _svc = svc;
+    public DocDesignerApiController(IDocDesignerService svc, IDocumentTypeRepository docTypeRepo)
+    {
+        _svc = svc;
+        _docTypeRepo = docTypeRepo;
+    }
 
     // ── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -81,19 +87,29 @@ public sealed class DocDesignerApiController : ControllerBase
 
     // ── Meta ─────────────────────────────────────────────────────────────────
 
+    // 2026-05-26: Sabit liste yerine DocumentType DB tablosundan dinamik cek.
+    // Numara Kurali (DocumentNumberRule) ekrani da ayni kaynagi kullanir — listeler tutarli.
+    // Frontend artik [{id, code, name}] alir — ID-tabanli eslestirme icin (CLAUDE.md kurali).
+    // "custom" sahte tipi icin id=null (DB'de karsiligi yok, ozgur tasarim).
     [HttpGet("doc-types")]
-    public ActionResult<IReadOnlyCollection<string>> DocTypes()
-        => Ok(new[]
-        {
-            "sales_quote", "sales_order", "purchase_order",
-            "delivery_note", "invoice", "expense_note", "custom"
-        });
+    public async Task<ActionResult<IReadOnlyCollection<object>>> DocTypes(CancellationToken ct)
+    {
+        var types = await _docTypeRepo.GetAllAsync(ct);
+        var list = types
+            .Where(t => t.IsActive)
+            .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(t => (object)new { id = (int?)t.Id, code = t.Code, name = t.Name })
+            .ToList();
+        // "custom" (Özel Belge) DB'de yok — manuel ekle, id null.
+        list.Add(new { id = (int?)null, code = "custom", name = "Özel Belge" });
+        return Ok(list);
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ReportCallerContext BuildCaller()
     {
-        var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : Guid.Empty;
+        var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : 0;
         var companyId = int.TryParse(User.FindFirstValue("company_id"), out var cid) ? cid : 0;
 
         var roles = new List<UserRole>();

@@ -13,10 +13,12 @@ public sealed record StockDocDto(
     string? ToLocationName,
     string? RefNo,
     string? Notes,
-    string? CreatedBy,
+    int? CreatedById,
     DateTime Created,
     bool IsActive,
-    int LineCount);
+    int LineCount,
+    int? ArgeProjectId,
+    string? ArgeProjectName);
 
 // ── Kalem DTO ─────────────────────────────────────────────────────────────────
 public sealed record StockDocLineDto(
@@ -35,7 +37,8 @@ public sealed record StockDocLineDto(
     int? FromLocationId,
     string? FromLocationName,
     int? ToLocationId,
-    string? ToLocationName);
+    string? ToLocationName,
+    decimal? UnitCost);
 
 // ── Kayıt istekleri ───────────────────────────────────────────────────────────
 public sealed record SaveStockDocRequest(
@@ -47,7 +50,8 @@ public sealed record SaveStockDocRequest(
     int? ToLocationId,
     string? RefNo,
     string? Notes,
-    IReadOnlyList<SaveStockDocLineRequest> Lines);
+    IReadOnlyList<SaveStockDocLineRequest> Lines,
+    int? ArgeProjectId);
 
 public sealed record SaveStockDocLineRequest(
     int? Id,
@@ -59,4 +63,5 @@ public sealed record SaveStockDocLineRequest(
     int? CombinationId,
     string? Notes,
     int? FromLocationId,
-    int? ToLocationId);
+    int? ToLocationId,
+    decimal? UnitCost);

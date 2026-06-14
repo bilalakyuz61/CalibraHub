@@ -17,7 +17,7 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{schema}].[ui_label_translations]";
+        _tableName = $"[{schema}].[UiLabelTranslation]";
     }
 
     public async Task<IReadOnlyCollection<UiLabelTranslation>> GetByLanguageAsync(
@@ -29,10 +29,10 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [form_key], [label_key], [language_code], [label_text], [Updated]
+            SELECT [Id], [FormKey], [LabelKey], [LanguageCode], [LabelText], [Updated]
             FROM {_tableName}
-            WHERE [language_code] = @LanguageCode
-            ORDER BY [form_key], [label_key];
+            WHERE [LanguageCode] = @LanguageCode
+            ORDER BY [FormKey], [LabelKey];
             """;
         command.Parameters.Add(new SqlParameter("@LanguageCode", languageCode));
 
@@ -55,11 +55,11 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [form_key], [label_key], [language_code], [label_text], [Updated]
+            SELECT [Id], [FormKey], [LabelKey], [LanguageCode], [LabelText], [Updated]
             FROM {_tableName}
-            WHERE [form_key] = @FormKey
-              AND [language_code] = @LanguageCode
-            ORDER BY [label_key];
+            WHERE [FormKey] = @FormKey
+              AND [LanguageCode] = @LanguageCode
+            ORDER BY [LabelKey];
             """;
         command.Parameters.Add(new SqlParameter("@FormKey", formKey));
         command.Parameters.Add(new SqlParameter("@LanguageCode", languageCode));
@@ -87,8 +87,8 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
             deleteCommand.Transaction = transaction;
             deleteCommand.CommandText = $"""
                 DELETE FROM {_tableName}
-                WHERE [form_key] = @FormKey
-                  AND [language_code] = @LanguageCode;
+                WHERE [FormKey] = @FormKey
+                  AND [LanguageCode] = @LanguageCode;
                 """;
             deleteCommand.Parameters.Add(new SqlParameter("@FormKey", formKey));
             deleteCommand.Parameters.Add(new SqlParameter("@LanguageCode", languageCode));
@@ -101,16 +101,16 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
             insertCommand.Transaction = transaction;
             insertCommand.CommandText = $"""
                 INSERT INTO {_tableName}
-                    ([id], [form_key], [label_key], [language_code], [label_text], [Updated])
+                    ([Id], [FormKey], [LabelKey], [LanguageCode], [LabelText], [Updated])
                 VALUES
-                    (@Id, @FormKey, @LabelKey, @LanguageCode, @LabelText, @UpdatedAt);
+                    (@Id, @FormKey, @LabelKey, @LanguageCode, @LabelText, @Updated);
                 """;
             insertCommand.Parameters.Add(new SqlParameter("@Id", translation.Id));
             insertCommand.Parameters.Add(new SqlParameter("@FormKey", translation.FormKey));
             insertCommand.Parameters.Add(new SqlParameter("@LabelKey", translation.LabelKey));
             insertCommand.Parameters.Add(new SqlParameter("@LanguageCode", translation.LanguageCode));
             insertCommand.Parameters.Add(new SqlParameter("@LabelText", translation.LabelText));
-            insertCommand.Parameters.Add(new SqlParameter("@UpdatedAt", translation.UpdatedAt));
+            insertCommand.Parameters.Add(new SqlParameter("@Updated", translation.Updated));
             await insertCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -125,6 +125,6 @@ public sealed class SqlUiLabelTranslationRepository : IUiLabelTranslationReposit
             LabelKey = reader.GetString(2),
             LanguageCode = reader.GetString(3),
             LabelText = reader.GetString(4),
-            UpdatedAt = reader.GetFieldValue<DateTime>(5)
+            Updated = reader.GetFieldValue<DateTime>(5)
         };
 }

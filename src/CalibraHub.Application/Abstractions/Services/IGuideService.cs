@@ -36,7 +36,8 @@ public interface IGuideService
         string guideCode,
         string column,
         string? search,
-        CancellationToken ct);
+        CancellationToken ct,
+        IReadOnlyCollection<GuideConstraintDto>? constraints = null);
 
     /// <summary>
     /// Rehber bazli varsayilan WHERE filter fragment'ini guncelle.

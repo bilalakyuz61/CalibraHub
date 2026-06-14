@@ -12,6 +12,9 @@ public sealed class CariGroup
     [Description("Grubun ait oldugu sirket. FK -> Company.Id (per-tenant izolasyon).")]
     public int CompanyId { get; set; }
 
+    [Description("Grup kategorisi (1-5) — stok MaterialGroups.GroupCategory ile ayni desende 5 slot.")]
+    public int GroupCategory { get; init; } = 1;
+
     [Description("Grup kodu — kullaniciya gosterim icin (otomatik turetilebilir, runtime karsilastirmasi ID uzerinden).")]
     public required string Code { get; init; }
 
@@ -24,5 +27,5 @@ public sealed class CariGroup
     [Description("Soft delete — pasif gruplar listede gosterilmez.")]
     public bool IsActive { get; init; } = true;
 
-    public DateTime CreatedAt { get; init; }
+    public DateTime Created { get; init; }
 }

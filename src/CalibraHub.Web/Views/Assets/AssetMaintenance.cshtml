@@ -1,0 +1,261 @@
+@model CalibraHub.Web.Models.Assets.AssetAssignViewModel
+@{
+    var isCalib = (ViewData["MaintMode"] as string) == "calib";
+    var opLabel = isCalib ? "Kalibrasyon" : "Bakım";
+    ViewData["Title"] = $"{opLabel}: {Model.AssetName}";
+    ViewData["FormCode"] = "ASSETS";
+    ViewData["BodyClass"] = "page-asset-maint";
+}
+
+@section Styles {
+<style>
+    .am-root {
+        --am-bg:#f1f5f9; --am-surface:#ffffff; --am-border:#e2e8f0;
+        --am-text:#0f172a; --am-muted:#64748b; --am-accent:#6366f1;
+        display:flex; flex-direction:column; height:100dvh; overflow:hidden; background:var(--am-surface); color:var(--am-text);
+    }
+    body.page-asset-maint, html { overflow:hidden; height:100%; }
+    body.app-theme-dark .am-root { --am-bg:#080c17; --am-surface:#0d1323; --am-border:rgba(255,255,255,.09); --am-text:#e2e8f0; --am-muted:#94a3b8; --am-accent:#818cf8; }
+
+    .am-header { display:flex; align-items:center; gap:10px; flex-shrink:0; padding:12px 22px; border-bottom:1px solid var(--am-border); background:var(--am-surface); }
+    .am-header h1 { font-size:16px; font-weight:700; margin:0; }
+    .am-spacer { flex:1; }
+    .am-back { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:8px; border:1px solid var(--am-border); background:none; color:var(--am-muted); font-size:12.5px; cursor:pointer; text-decoration:none; }
+    .am-back:hover { background:var(--am-bg); color:var(--am-text); }
+    .am-btn { padding:9px 18px; border-radius:8px; font-size:13px; font-weight:600; border:1px solid transparent; cursor:pointer; transition:all .12s; }
+    .am-btn--primary { background:var(--am-accent); color:#fff; border-color:#4f46e5; }
+    .am-btn--primary:hover { filter:brightness(1.1); }
+    .am-btn--primary:disabled { opacity:.55; cursor:not-allowed; }
+
+    .am-err { flex-shrink:0; margin:10px 22px 0; padding:8px 12px; border-radius:8px; font-size:13px; background:rgba(239,68,68,.08); color:#dc2626; border:1px solid rgba(239,68,68,.2); display:none; }
+    body.app-theme-dark .am-err { color:#f87171; }
+
+    .am-body { flex:1; display:flex; min-height:0; }
+    .am-tabs { width:210px; flex-shrink:0; border-right:1px solid var(--am-border); display:flex; flex-direction:column; padding:14px 0; gap:2px; overflow-y:auto; background:var(--am-surface); }
+    .am-tab { display:flex; align-items:center; gap:10px; padding:11px 18px; font-size:13px; font-weight:500; cursor:pointer; transition:all .12s; color:var(--am-muted); border:none; background:none; text-align:left; border-left:3px solid transparent; white-space:nowrap; }
+    .am-tab:hover { background:var(--am-bg); color:var(--am-text); }
+    .am-tab.active { color:var(--am-accent); border-left-color:var(--am-accent); background:rgba(99,102,241,.07); font-weight:600; }
+    .am-panels { flex:1; overflow-y:auto; padding:26px 30px; background:var(--am-bg); }
+    .am-panel { display:none; max-width:720px; }
+    .am-panel.active { display:block; }
+    .am-panel-title { font-size:15px; font-weight:700; margin:0 0 4px; }
+    .am-panel-sub { font-size:12.5px; color:var(--am-muted); margin:0 0 20px; }
+
+    .am-asset { padding:14px 16px; border:1px solid var(--am-border); border-radius:10px; background:var(--am-surface); margin-bottom:18px; }
+    .am-asset-name { font-size:15px; font-weight:700; }
+    .am-asset-code { font-size:12px; color:var(--am-muted); margin-top:2px; }
+
+    .am-seg { display:inline-flex; border:1px solid var(--am-border); border-radius:9px; overflow:hidden; margin-bottom:16px; }
+    .am-seg button { padding:9px 18px; font-size:13px; font-weight:600; background:none; border:none; cursor:pointer; color:var(--am-muted); }
+    .am-seg button.active { background:var(--am-accent); color:#fff; }
+
+    .am-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @@media (max-width:640px){ .am-grid2 { grid-template-columns:1fr; } .am-tabs { width:150px; } }
+    .am-field { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+    .am-label { font-size:12px; font-weight:600; color:var(--am-muted); }
+    .am-input, .am-select, .am-textarea { padding:10px 12px; border-radius:8px; border:1px solid var(--am-border); background:var(--am-surface); color:var(--am-text); font-size:14px; outline:none; font-family:inherit; }
+    .am-input:focus,.am-select:focus,.am-textarea:focus { border-color:var(--am-accent); box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+    body.app-theme-dark .am-select { color-scheme:dark; }
+    .am-textarea { resize:vertical; min-height:70px; }
+    .am-actions { margin-top:6px; }
+
+    .am-hist { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .am-hist th { text-align:left; padding:8px; color:var(--am-muted); font-weight:600; border-bottom:1px solid var(--am-border); white-space:nowrap; }
+    .am-hist td { padding:8px; border-bottom:1px solid var(--am-border); vertical-align:top; }
+    .am-chip { display:inline-block; padding:1px 8px; border-radius:999px; font-size:10.5px; font-weight:700; }
+    .am-chip--maint { background:rgba(245,158,11,.14); color:#d97706; }
+    .am-chip--calib { background:rgba(139,92,246,.14); color:#7c3aed; }
+    .am-hist-empty { padding:18px; text-align:center; color:var(--am-muted); font-size:12.5px; }
+</style>
+}
+
+<div class="am-root">
+  <div class="am-header">
+    <a class="am-back" href="#" onclick="amGoBack(false);return false;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg> Listeye Dön</a>
+    <h1>@opLabel İşlemi</h1>
+  </div>
+
+  <div id="am-err" class="am-err"></div>
+  <input type="hidden" id="am-id" value="@Model.Id" />
+
+  <div class="am-body">
+    <div class="am-tabs" role="tablist">
+      <button class="am-tab active" data-tab="op" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        İşlem Kaydı
+      </button>
+      <button class="am-tab" data-tab="hist" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><polyline points="12 7 12 12 15 15"/></svg>
+        Geçmiş
+      </button>
+    </div>
+
+    <div class="am-panels">
+      <div class="am-panel active" id="panel-op">
+        <h2 class="am-panel-title">@opLabel Kaydı</h2>
+        <p class="am-panel-sub">İşlem kaydedildiğinde varlığın "son @(opLabel.ToLower())" tarihi güncellenir; periyot tanımlıysa "sonraki" tarih otomatik hesaplanır.</p>
+
+        <div class="am-asset">
+          <div class="am-asset-name">@Model.AssetName</div>
+          <div class="am-asset-code">@Model.AssetCode</div>
+        </div>
+
+        <div class="am-grid2">
+          <div class="am-field">
+            <label class="am-label" for="am-date">İşlem Tarihi *</label>
+            <input id="am-date" class="am-input" type="date" />
+          </div>
+          <div class="am-field">
+            <label class="am-label" for="am-result">Sonuç</label>
+            <select id="am-result" class="am-select">
+              <option value="0">—</option>
+              <option value="1">Başarılı</option>
+              <option value="2">Başarısız</option>
+              <option value="3">Şartlı</option>
+            </select>
+          </div>
+        </div>
+        <div class="am-grid2">
+          <div class="am-field">
+            <label class="am-label" for="am-personnel">Yapan Personel</label>
+            <select id="am-personnel" class="am-select"><option value="">—</option></select>
+          </div>
+          <div class="am-field">
+            <label class="am-label" for="am-byText">Yapan (firma / serbest)</label>
+            <input id="am-byText" class="am-input" maxlength="200" placeholder="Örn. dış servis firması" />
+          </div>
+        </div>
+        <div class="am-grid2">
+          <div class="am-field">
+            <label class="am-label" for="am-cost">Maliyet</label>
+            <input id="am-cost" class="am-input" type="number" step="0.01" min="0" placeholder="Opsiyonel" />
+          </div>
+          <div class="am-field">
+            <label class="am-label" for="am-next">Sonraki Tarih (bilgi)</label>
+            <input id="am-next" class="am-input" type="date" />
+          </div>
+        </div>
+        <div class="am-field">
+          <label class="am-label" for="am-notes">Notlar</label>
+          <textarea id="am-notes" class="am-textarea" maxlength="1000" placeholder="Açıklama"></textarea>
+        </div>
+        <div class="am-actions">
+          <button class="am-btn am-btn--primary" id="am-save">Kaydet</button>
+        </div>
+      </div>
+
+      <div class="am-panel" id="panel-hist">
+        <h2 class="am-panel-title">Bakım / Kalibrasyon Geçmişi</h2>
+        <p class="am-panel-sub">Bu varlığa ait bakım ve kalibrasyon kayıtları.</p>
+        <table class="am-hist" id="am-hist-table" style="display:none;">
+          <thead><tr><th>Tür</th><th>Tarih</th><th>Yapan</th><th>Sonuç</th><th>Maliyet</th><th>Not</th></tr></thead>
+          <tbody id="am-hist-body"></tbody>
+        </table>
+        <div class="am-hist-empty" id="am-hist-empty">Henüz kayıt yok.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var assetId = parseInt(document.getElementById('am-id').value) || 0;
+    var evType = @(isCalib ? 1 : 0); // tip açılış kaynağından sabit: Bakım=0 / Kalibrasyon=1 (formda seçtirilmez)
+    function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+    function setErr(m) { var el = document.getElementById('am-err'); if (m) { el.textContent = m; el.style.display = ''; } else el.style.display = 'none'; }
+    function today() { var d = new Date(); return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2); }
+    function fmt(s) { if (!s) return ''; var d = new Date(s); return isNaN(d) ? '' : ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear(); }
+    document.getElementById('am-date').value = today();
+
+    document.querySelectorAll('.am-tab').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('.am-tab').forEach(function (x) { x.classList.remove('active'); });
+            document.querySelectorAll('.am-panel').forEach(function (p) { p.classList.remove('active'); });
+            b.classList.add('active');
+            var p = document.getElementById('panel-' + b.dataset.tab); if (p) p.classList.add('active');
+        });
+    });
+    fetch('/Assets/AssetLookups', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : { personnel: [] }; })
+        .then(function (d) {
+            document.getElementById('am-personnel').innerHTML = '<option value="">—</option>' +
+                (d.personnel || []).map(function (p) { return '<option value="' + p.id + '">' + esc(p.label) + '</option>'; }).join('');
+        });
+
+    var EV_TYPE = { Maintenance:'Bakım', Calibration:'Kalibrasyon', 0:'Bakım', 1:'Kalibrasyon' };
+    var EV_RESULT = { None:'—', Passed:'Başarılı', Failed:'Başarısız', Conditional:'Şartlı', 0:'—',1:'Başarılı',2:'Başarısız',3:'Şartlı' };
+    function loadHist() {
+        fetch('/Assets/AssetEvents?assetId=' + assetId, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (rows) {
+                rows = (rows || []).filter(function (e) {
+                    var t = (e.eventType === 'Calibration' || e.eventType === 1) ? 1 : ((e.eventType === 'Maintenance' || e.eventType === 0) ? 0 : -1);
+                    return t === evType; // yalnız bu ekranın tipi (bakım VEYA kalibrasyon)
+                });
+                var body = document.getElementById('am-hist-body'), table = document.getElementById('am-hist-table'), empty = document.getElementById('am-hist-empty');
+                if (!rows.length) { table.style.display = 'none'; empty.style.display = ''; return; }
+                table.style.display = ''; empty.style.display = 'none';
+                body.innerHTML = rows.map(function (e) {
+                    var isCal = (e.eventType === 'Calibration' || e.eventType === 1);
+                    var who = e.performedByName || e.performedByText || '';
+                    return '<tr>'
+                        + '<td><span class="am-chip ' + (isCal ? 'am-chip--calib' : 'am-chip--maint') + '">' + (EV_TYPE[e.eventType] || '') + '</span></td>'
+                        + '<td>' + fmt(e.eventDate) + '</td>'
+                        + '<td>' + esc(who) + '</td>'
+                        + '<td>' + esc(EV_RESULT[e.result] || '') + '</td>'
+                        + '<td>' + (e.cost != null ? esc(e.cost) : '') + '</td>'
+                        + '<td>' + esc(e.notes || '') + '</td>'
+                        + '</tr>';
+                }).join('');
+            });
+    }
+
+    document.getElementById('am-save').addEventListener('click', function () {
+        setErr('');
+        var btn = this; btn.disabled = true;
+        var payload = {
+            assetId: assetId,
+            eventType: evType,
+            eventDate: document.getElementById('am-date').value || null,
+            performedByPersonnelId: parseInt(document.getElementById('am-personnel').value) || null,
+            performedByText: document.getElementById('am-byText').value || null,
+            cost: parseFloat(document.getElementById('am-cost').value) || null,
+            result: parseInt(document.getElementById('am-result').value) || 0,
+            notes: document.getElementById('am-notes').value || null,
+            nextDueDate: document.getElementById('am-next').value || null
+        };
+        fetch('/Assets/SaveAssetEventJson', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+            body: JSON.stringify(payload)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            btn.disabled = false;
+            if (d && d.success) {
+                document.getElementById('am-byText').value = ''; document.getElementById('am-cost').value = ''; document.getElementById('am-notes').value = ''; document.getElementById('am-next').value = '';
+                loadHist();
+                document.querySelector('.am-tab[data-tab="hist"]').click();
+            } else { setErr((d && d.message) || 'Kayıt eklenemedi.'); }
+        })
+        .catch(function () { btn.disabled = false; setErr('Bağlantı hatası.'); });
+    });
+
+    if (assetId) loadHist();
+})();
+
+function amGoBack(refresh) {
+    try {
+        if (window.parent && window.parent !== window && window.parent.AssetContainer
+            && typeof window.parent.AssetContainer.closeEditor === 'function') {
+            window.parent.AssetContainer.closeEditor(!!refresh);
+            return;
+        }
+    } catch (e) { /* fallback */ }
+    window.location.href = '/Assets';
+}
+</script>
+}

@@ -1,3 +1,4 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Ui;
@@ -47,9 +48,28 @@ public sealed class LogisticsController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
+    // DEBUG (2026-05-24): masterWidgets JSON'unu raw goster — Dictionary serialization debug.
+    [AllowAnonymous]
+    [HttpGet("/Debug/MaterialCardsBoardJson")]
+    public async Task<IActionResult> DebugMaterialCardsBoardJson(CancellationToken ct)
+    {
+        var cfg = await BuildMaterialCardsBoardConfigAsync(ct);
+        var opts = new System.Text.Json.JsonSerializerOptions {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(cfg, opts);
+        return Content(json, "application/json; charset=utf-8");
+    }
+
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> MaterialCards(CancellationToken cancellationToken)
     {
+        // 2026-05-24: Iframe cache'lenmesi sorununu onle — her zaman fresh HTML.
+        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
         var boardConfig = await BuildMaterialCardsBoardConfigAsync(cancellationToken);
 
         var viewModel = new MaterialCardsViewModel
@@ -84,8 +104,103 @@ public sealed class LogisticsController : Controller
     private async Task<object> BuildMaterialCardsBoardConfigAsync(CancellationToken ct)
     {
         var (cards, totalCount) = await _logisticsConfigurationService.GetItemsPagedAsync(null, 0, MaterialCardPageSize, ct);
-        var masterWidgets = await BuildItemsMasterWidgetsAsync(ct);
-        var entities = await BuildMaterialCardEntitiesAsync(cards, ct);
+        // 2026-05-24: Schema'yi bir kez cek, hem master widget list hem de "admin'in
+        // zaten cover ettigi plain field" set'ini cikar — boylece w_kod/w_ad sistem
+        // widget'lari admin'in mevcut widget'lariyla cakistirmaz (cift gozukmez).
+        var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("ITEMS", ct);
+        // 2026-05-24: Multi-select filter alanlari:
+        //   - 5 ayri Grup slotu (Grup 1..5) — her birinin kendi MaterialGroups kategorisi
+        //   - Olcu Birimi — Units tanim listesi
+        //   - Her aktif Ozellik (ItemFeature) — kendi degerleri (FeatureValue) ile ayri widget
+        var allMatGroups = await _logisticsConfigurationService.GetMaterialGroupsAsync(null, ct);
+        var groupsByCat = allMatGroups.GroupBy(g => g.GroupCategory).ToDictionary(g => g.Key, g => g.ToList());
+        var allUnits = await _logisticsConfigurationService.GetUnitsAsync(ct);
+        var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
+        var activeFeatures = snapshot.Features.Where(f => f.IsActive).OrderBy(f => f.Name).ToList();
+        var valuesByFeature = snapshot.Values
+            .Where(v => v.IsActive)
+            .GroupBy(v => v.FeatureId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(v => v.Description).ToList());
+
+        var handledColumns = ExtractHandledEntityColumns(itemsSchema);
+
+        var masterWidgets = BuildItemsMasterWidgetsFromSchema(itemsSchema);
+        // 2026-05-24: System.Text.Json List<object> + heterojen anonymous type sorunu —
+        // bazi properties dropped olabiliyor. Dictionary kullanarak her zaman tum key'lerin
+        // serialize edildigini garantiliyoruz.
+
+        const string STD_GROUP = "standardalanlar";
+        const string STD_LBL   = "Standart Alanlar";
+        const string GRP_GROUP = "gruplamalar";
+        const string GRP_LBL   = "Gruplamalar";
+        const string FEAT_GROUP = "ozellikler";
+        const string FEAT_LBL   = "Özellikler ve Kombinasyonlar";
+
+        Dictionary<string, object?> MakeWidget(
+            string id, string label, string dataType,
+            string group, string groupLabel,
+            IReadOnlyList<object>? options = null)
+        {
+            var d = new Dictionary<string, object?>
+            {
+                ["id"]           = id,
+                ["dbId"]         = (int?)null,
+                ["isPlainField"] = false,
+                ["type"]         = "data",
+                ["dataType"]     = dataType,
+                ["label"]        = label,
+                ["source"]       = "standard",
+                ["group"]        = group,
+                ["groupLabel"]   = groupLabel,
+            };
+            if (options != null) d["options"] = options;
+            return d;
+        }
+
+        // Sistem alanlari — "Standart Alanlar" grubunda collapsible.
+        // w_kod / w_ad sadece admin ITEMS formuna mapleyen widget tanimlanmamissa eklenir.
+        if (!handledColumns.Contains("Code"))
+            masterWidgets.Add(MakeWidget("w_kod", "Stok Kodu", "text", STD_GROUP, STD_LBL));
+        if (!handledColumns.Contains("Name"))
+            masterWidgets.Add(MakeWidget("w_ad", "Stok Adı", "text", STD_GROUP, STD_LBL));
+        masterWidgets.Add(MakeWidget("w_aktif",       "Durum",              "boolean", STD_GROUP, STD_LBL));
+        masterWidgets.Add(MakeWidget("w_kombinasyon", "Kombinasyon Takibi", "boolean", STD_GROUP, STD_LBL));
+        masterWidgets.Add(MakeWidget("w_vergi",       "KDV Oranı",          "percent", STD_GROUP, STD_LBL));
+        masterWidgets.Add(MakeWidget("w_olusturma",   "Olusturma Tarihi",   "date",    STD_GROUP, STD_LBL));
+
+        // Olcu Birimi — Standart Alanlar grubunda
+        var unitOptions = allUnits.Select(u => (object)new Dictionary<string, object?>
+        {
+            ["value"] = u.Code,
+            ["label"] = string.IsNullOrWhiteSpace(u.Name) ? u.Code : $"{u.Code} — {u.Name}",
+        }).ToList();
+        masterWidgets.Add(MakeWidget("w_unit", "Ölçü Birimi", "options", STD_GROUP, STD_LBL, unitOptions));
+
+        // 5 Grup slot'u — "Gruplamalar" grubunda collapsible
+        for (int cat = 1; cat <= 5; cat++)
+        {
+            var groupsForCat = groupsByCat.TryGetValue(cat, out var l) ? l : new List<CalibraHub.Application.Contracts.MaterialGroupDto>();
+            var options = groupsForCat.Select(g => (object)new Dictionary<string, object?>
+            {
+                ["value"] = g.GroupCode,
+                ["label"] = string.IsNullOrWhiteSpace(g.GroupDescription) ? g.GroupCode : $"{g.GroupCode} — {g.GroupDescription}",
+            }).ToList();
+            masterWidgets.Add(MakeWidget($"w_grup{cat}", $"Grup {cat}", "options", GRP_GROUP, GRP_LBL, options));
+        }
+
+        // Aktif Ozellik widget'lari — "Özellikler ve Kombinasyonlar" grubunda
+        foreach (var feat in activeFeatures)
+        {
+            var values = valuesByFeature.TryGetValue(feat.Id, out var vl) ? vl : new List<CalibraHub.Application.Contracts.ProductConfigurationValueDto>();
+            var featOptions = values.Select(v => (object)new Dictionary<string, object?>
+            {
+                ["value"] = v.Id.ToString(),
+                ["label"] = !string.IsNullOrWhiteSpace(v.Description) ? v.Description : (!string.IsNullOrWhiteSpace(v.Value) ? v.Value : v.Code),
+            }).ToList();
+            masterWidgets.Add(MakeWidget($"w_feat_{feat.Id}", feat.Name, "options", FEAT_GROUP, FEAT_LBL, featOptions));
+        }
+
+        var entities = await BuildMaterialCardEntitiesAsync(cards, handledColumns, activeFeatures, ct);
 
         return new
         {
@@ -117,6 +232,7 @@ public sealed class LogisticsController : Controller
 
     // GET /Logistics/GetMaterialCardsPage?page=2&pageSize=50&search=abc
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> GetMaterialCardsPage(
         int page = 1, int pageSize = 50, string? search = null, CancellationToken ct = default)
     {
@@ -128,7 +244,11 @@ public sealed class LogisticsController : Controller
         try
         {
             var (cards, totalCount) = await _logisticsConfigurationService.GetItemsPagedAsync(search, offset, pageSize, ct);
-            var entities = await BuildMaterialCardEntitiesAsync(cards, ct);
+            var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("ITEMS", ct);
+            var handledColumns = ExtractHandledEntityColumns(itemsSchema);
+            var snapshot = await _logisticsConfigurationService.GetProductConfigurationSnapshotAsync(ct);
+            var activeFeatures = snapshot.Features.Where(f => f.IsActive).OrderBy(f => f.Name).ToList();
+            var entities = await BuildMaterialCardEntitiesAsync(cards, handledColumns, activeFeatures, ct);
             return Json(new { entities, totalCount, page, pageSize });
         }
         catch (Exception ex)
@@ -139,41 +259,233 @@ public sealed class LogisticsController : Controller
 
     private async Task<List<object>> BuildItemsMasterWidgetsAsync(CancellationToken ct)
     {
-        var masterWidgets = new List<object>();
         var itemsSchema = await _widgetService.GetFormSchemaByCodeAsync("ITEMS", ct);
-        if (itemsSchema != null)
+        return BuildItemsMasterWidgetsFromSchema(itemsSchema);
+    }
+
+    private static List<object> BuildItemsMasterWidgetsFromSchema(
+        CalibraHub.Application.Contracts.WidgetFormSchemaDto? itemsSchema)
+    {
+        var masterWidgets = new List<object>();
+        if (itemsSchema == null) return masterWidgets;
+        foreach (var w in itemsSchema.Widgets.Where(w => w.IsActive
+            && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
         {
-            foreach (var w in itemsSchema.Widgets.Where(w => w.IsActive
-                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
+            var dt = w.DataType.ToLowerInvariant();
+            // 2026-05-24: dropdown / multi-select widget'lari icin Options'i {value,label} formuna donustur.
+            object? optionsArray = null;
+            if ((dt == "dropdown" || dt == "multi-select" || dt == "multi_select" || dt == "multiselect")
+                && w.Options != null && w.Options.Count > 0)
             {
-                masterWidgets.Add(new
-                {
-                    id           = w.WidgetCode,
-                    dbId         = w.Id,
-                    isPlainField = w.IsPlainField,
-                    type         = "data",
-                    dataType     = w.DataType.ToLowerInvariant(),
-                    label        = w.Label,
-                });
+                optionsArray = w.Options.Select(s => (object)new Dictionary<string, object?> {
+                    ["value"] = s,
+                    ["label"] = s,
+                }).ToList();
             }
+            var widget = new Dictionary<string, object?>
+            {
+                ["id"]           = w.WidgetCode,
+                ["dbId"]         = w.Id,
+                ["isPlainField"] = w.IsPlainField,
+                ["type"]         = "data",
+                ["dataType"]     = dt,
+                ["label"]        = w.Label,
+                // Admin Form Tasarimi'ndan tanimlanmis widget — filtre panelinde
+                // "Widget Alanlari" grubunda gosterilsin (default 'standard' degil).
+                ["source"]       = "widget",
+            };
+            if (optionsArray != null) widget["options"] = optionsArray;
+            masterWidgets.Add(widget);
         }
         return masterWidgets;
     }
 
+    /// <summary>
+    /// 2026-05-24: Admin'in ITEMS formuna tanimladigi widget'lar arasinda IsSystemField=true
+    /// olanlarin EntityColumn'larini (Pascal-case) tespit eder. Bu kolonlar zaten admin
+    /// widget'iyla cover edildigi icin biz ayrica w_kod/w_ad/w_grup sistem widget'i
+    /// EKLEMEYIZ — yoksa filtre panelinde duplikat alan gozukur ("Stok Adi" + ayni isim).
+    /// </summary>
+    private static HashSet<string> ExtractHandledEntityColumns(
+        CalibraHub.Application.Contracts.WidgetFormSchemaDto? itemsSchema)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (itemsSchema == null) return set;
+        foreach (var w in itemsSchema.Widgets)
+        {
+            if (!w.IsActive) continue;
+            if (w.IsSystemField && !string.IsNullOrWhiteSpace(w.EntityColumn))
+                set.Add(w.EntityColumn);
+        }
+        return set;
+    }
+
     private async Task<List<object>> BuildMaterialCardEntitiesAsync(
-        IReadOnlyCollection<ItemDto> cards, CancellationToken ct)
+        IReadOnlyCollection<ItemDto> cards,
+        HashSet<string> handledPlainColumns,
+        IReadOnlyList<CalibraHub.Application.Contracts.ProductConfigurationFeatureDto> activeFeatures,
+        CancellationToken ct)
     {
         var recordIds = cards.Select(c => c.Id.ToString()).ToArray();
         var batchWidgets = recordIds.Length > 0
             ? await _widgetService.GetBatchRenderModelsAsync("ITEMS", recordIds, ct)
             : new Dictionary<string, IReadOnlyCollection<CalibraHub.Application.Contracts.WidgetRenderDto>>();
 
+        // 2026-05-24: Batch query'ler (N+1 onlemek icin).
+        var itemIds = cards.Select(c => c.Id).ToArray();
+        var groupMappings = itemIds.Length > 0
+            ? await _logisticsConfigurationService.GetMaterialGroupMappingsBatchAsync(itemIds, ct)
+            : new Dictionary<int, IReadOnlyList<CalibraHub.Application.Contracts.MaterialGroupMappingDto>>();
+        var unitMappings = itemIds.Length > 0
+            ? await _logisticsConfigurationService.GetItemUnitsBatchAsync(itemIds, ct)
+            : new Dictionary<int, IReadOnlyList<CalibraHub.Domain.Entities.ItemUnit>>();
+        var featMappings = itemIds.Length > 0
+            ? await _logisticsConfigurationService.GetItemFeatureMappingsBatchAsync(itemIds, ct)
+            : new Dictionary<int, IReadOnlyList<CalibraHub.Domain.Entities.ItemFeatureMapping>>();
+        // UnitId → UnitCode cevirici — ItemUnit.UnitId int, filter UnitCode string match yapar.
+        var allUnitsLookup = (await _logisticsConfigurationService.GetUnitsAsync(ct))
+            .ToDictionary(u => u.Id, u => u.Code, EqualityComparer<int>.Default);
+
+        var trCulture = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+
         var entities = new List<object>();
         foreach (var card in cards)
         {
             var cardWidgets = new List<object>();
             var recordId = card.Id.ToString();
+
+            // 2026-05-24: Plain field sistem widget'lari (Kod / Ad / Grup) — FilterPanel
+            // entities[0].widgets'tan auto-discover edip "Standart Alanlar" grubunda gosterir.
+            // Bu sayede kullanici Stok Adi / Kodu / Grubu uzerinden direkt filtreleyebilir.
+            // ANCAK: admin ITEMS formuna IsSystemField+EntityColumn ile widget tanimlamissa
+            // o kolonu cover ediyor → cift gozukmemesi icin atla. (handledPlainColumns set'i.)
+            if (!handledPlainColumns.Contains("Code"))
+            {
+                cardWidgets.Add(new {
+                    id = "w_kod", type = "data", dataType = "text", label = "Stok Kodu",
+                    value = (string?)card.Code,
+                    detail = (string?)null,
+                    color = "slate",
+                    alwaysVisible = false,
+                });
+            }
+            if (!handledPlainColumns.Contains("Name"))
+            {
+                cardWidgets.Add(new {
+                    id = "w_ad", type = "data", dataType = "text", label = "Stok Adı",
+                    value = (string?)card.Name,
+                    detail = (string?)null,
+                    color = "slate",
+                    alwaysVisible = false,
+                });
+            }
+            // 2026-05-24: 5 ayri Grup slot'u — her biri kendi MaterialGroup kategorisinden
+            // multi-select filtre alani. Filter panel "options" dataType'inda chip-toggle UI uretir.
+            // Card'da gosterim icin de description varsa onu, yoksa kodu yaziyoruz (detail field).
+            IReadOnlyList<CalibraHub.Application.Contracts.MaterialGroupMappingDto>? cardMappings = null;
+            groupMappings.TryGetValue(card.Id, out cardMappings);
+            for (int cat = 1; cat <= 5; cat++)
+            {
+                var slot = cardMappings?.FirstOrDefault(m => m.SlotOrder == cat);
+                cardWidgets.Add(new {
+                    id = $"w_grup{cat}",
+                    type = "data",
+                    dataType = "options",
+                    label = $"Grup {cat}",
+                    value = (string?)slot?.GroupCode,
+                    detail = (string?)(slot is null
+                        ? null
+                        : (string.IsNullOrWhiteSpace(slot.GroupDescription) ? slot.GroupCode : slot.GroupDescription)),
+                    color = "violet",
+                    alwaysVisible = false,
+                });
+            }
+
+            // 2026-05-24: Olcu Birimi (multi-value) — default UnitId + ItemUnits hepsi.
+            // value = "KG,ADT,M" comma-separated, frontend parseOptionsValue ile parser.
+            var unitCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (card.UnitId.HasValue && allUnitsLookup.TryGetValue(card.UnitId.Value, out var defUC) && !string.IsNullOrEmpty(defUC))
+                unitCodes.Add(defUC);
+            if (unitMappings.TryGetValue(card.Id, out var itemUnitList))
+            {
+                foreach (var iu in itemUnitList)
+                {
+                    if (allUnitsLookup.TryGetValue(iu.UnitId, out var uc) && !string.IsNullOrEmpty(uc))
+                        unitCodes.Add(uc);
+                }
+            }
+            cardWidgets.Add(new {
+                id = "w_unit",
+                type = "data",
+                dataType = "options",
+                label = "Ölçü Birimi",
+                value = (string?)(unitCodes.Count == 0 ? null : string.Join(",", unitCodes)),
+                detail = (string?)null,
+                color = "blue",
+                alwaysVisible = false,
+            });
+
+            // 2026-05-24: Her aktif Ozellik icin widget — bu kart icin secili FeatureValueId
+            // listesi. Multi-value (bir item ayni feature'a birden cok degerle bagli olabilir).
+            IReadOnlyList<CalibraHub.Domain.Entities.ItemFeatureMapping>? itemFeatList = null;
+            featMappings.TryGetValue(card.Id, out itemFeatList);
+            foreach (var feat in activeFeatures)
+            {
+                var valueIds = itemFeatList == null
+                    ? new List<string>()
+                    : itemFeatList
+                        .Where(m => m.FeatureId == feat.Id && m.FeatureValueId.HasValue && m.IsActive)
+                        .Select(m => m.FeatureValueId!.Value.ToString())
+                        .Distinct()
+                        .ToList();
+                cardWidgets.Add(new {
+                    id = $"w_feat_{feat.Id}",
+                    type = "data",
+                    dataType = "options",
+                    label = feat.Name,
+                    value = (string?)(valueIds.Count == 0 ? null : string.Join(",", valueIds)),
+                    detail = (string?)null,
+                    color = "violet",
+                    alwaysVisible = false,
+                });
+            }
+
+            // 2026-05-23: Sistem widget'lari — İhtiyaç Kaydı pattern'i ile ozdes.
+            // FilterPanel entity.widgets'tan auto-discover ettigi icin "standart" alanlar
+            // olarak filtrelenebilir hale gelir. Kart ekraninda chip olarak da gorunurler.
+            cardWidgets.Add(new {
+                id = "w_aktif", type = "data", dataType = "boolean", label = "Durum",
+                value = card.IsActive,
+                detail = (string?)(card.IsActive ? "Aktif" : "Pasif"),
+                color = card.IsActive ? "emerald" : "slate",
+                alwaysVisible = true,
+            });
+            cardWidgets.Add(new {
+                id = "w_kombinasyon", type = "data", dataType = "boolean", label = "Kombinasyon Takibi",
+                value = card.Combinations,
+                detail = (string?)(card.Combinations ? "Var" : "Yok"),
+                color = card.Combinations ? "violet" : "slate",
+                alwaysVisible = true,
+            });
+            cardWidgets.Add(new {
+                id = "w_vergi", type = "data", dataType = "percent", label = "KDV Orani",
+                value = card.TaxRate.ToString("0.##", trCulture),
+                detail = "%",
+                color = "indigo",
+                alwaysVisible = true,
+            });
+            if (card.Created.HasValue)
+            {
+                cardWidgets.Add(new {
+                    id = "w_olusturma", type = "data", dataType = "date", label = "Olusturma Tarihi",
+                    value = card.Created.Value.ToString("yyyy-MM-dd"),
+                    detail = (string?)null,
+                    color = "slate",
+                    alwaysVisible = true,
+                });
+            }
+
             if (batchWidgets.TryGetValue(recordId, out var renderDtos))
             {
                 foreach (var w in renderDtos)
@@ -213,8 +525,8 @@ public sealed class LogisticsController : Controller
                 ["tax_rate"]    = card.TaxRate,
                 ["combinations"]= card.Combinations,
                 ["is_active"]   = card.IsActive,
-                ["create_date"] = card.CreateDate,
-                ["modify_date"] = card.ModifyDate,
+                ["create_date"] = card.Created,
+                ["modify_date"] = card.Updated,
             };
 
             entities.Add(new {
@@ -243,6 +555,7 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> MaterialCardEdit(int? id, CancellationToken cancellationToken)
     {
         ViewData["MaterialCardEditId"] = id ?? 0;
@@ -421,7 +734,7 @@ public sealed class LogisticsController : Controller
 
         // Unit lookup — UnitId varsa UnitCode'u resolve et (single fetch + dictionary)
         var units = await _logisticsConfigurationService.GetUnitsAsync(cancellationToken);
-        var unitMap = units.ToDictionary(u => u.Id, u => u.UnitCode);
+        var unitMap = units.ToDictionary(u => u.Id, u => u.Code);
 
         var results = filtered
             .Select(s => new
@@ -482,33 +795,15 @@ public sealed class LogisticsController : Controller
         var typeMap = types.ToDictionary(t => t.Code, t => t.Name, StringComparer.OrdinalIgnoreCase);
 
         // ── Master widget şablonu (admin SmartBoardConfigPanel + filter panel için) ──
-        var masterWidgets = new List<object>();
-        // Sistem widget'ları — her zaman gösterilebilir (admin filtre/gizleme yapabilir)
-        masterWidgets.Add(new { id = "w_type",     dbId = (int?)null, isPlainField = true, type = "data", dataType = "text",    label = "Tip" });
-        masterWidgets.Add(new { id = "w_status",   dbId = (int?)null, isPlainField = true, type = "data", dataType = "text",    label = "Durum" });
-        masterWidgets.Add(new { id = "w_usage",    dbId = (int?)null, isPlainField = true, type = "data", dataType = "text",    label = "Kullanım" });
-        masterWidgets.Add(new { id = "w_children", dbId = (int?)null, isPlainField = true, type = "data", dataType = "numeric", label = "Alt Sayı" });
-        masterWidgets.Add(new { id = "w_depth",    dbId = (int?)null, isPlainField = true, type = "data", dataType = "numeric", label = "Seviye" });
-
-        // Dinamik widget'lar — LOCATIONS formundaki admin tanımları
         var schema = await _widgetService.GetFormSchemaByCodeAsync(formCode, ct);
-        if (schema != null)
-        {
-            foreach (var w in schema.Widgets.Where(w => w.IsActive
-                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
-            {
-                masterWidgets.Add(new
-                {
-                    id           = w.WidgetCode,
-                    dbId         = (int?)w.Id,
-                    isPlainField = w.IsPlainField,
-                    type         = "data",
-                    dataType     = w.DataType.ToLowerInvariant(),
-                    label        = w.Label,
-                });
-            }
-        }
+        var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(schema);
+        var typeOptions  = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(types.Select(t => t.Name));
+        var usageOptions = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(new[] { "Makine", "Depo", "Makine + Depo" });
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_type",     "Tip",       typeOptions));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_status",   "Durum",     "boolean"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeOptionsWidget("w_usage",    "Kullanım",  usageOptions));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_children", "Alt Sayı",  "numeric"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget   ("w_depth",    "Seviye",    "numeric"));
 
         // ── Batch widget değerleri — tüm lokasyonlar için tek seferde ──
         var recordIds = all.Select(l => l.Id.ToString()).ToArray();
@@ -544,7 +839,7 @@ public sealed class LogisticsController : Controller
             // ── Widget değerleri ──
             var widgets = new List<object>();
             // Sistem widget'ları (her zaman dolu)
-            widgets.Add(new { id = "w_type",   type = "data", dataType = "text", label = "Tip", value = typeName, color = "indigo" });
+            widgets.Add(new { id = "w_type",   type = "data", dataType = "options", label = "Tip", value = typeName, color = "indigo" });
             widgets.Add(new { id = "w_status", type = "data", dataType = "text", label = "Durum",
                 value = l.IsActive ? "Aktif" : "Pasif", color = l.IsActive ? "emerald" : "slate" });
 
@@ -642,6 +937,7 @@ public sealed class LogisticsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> SaveMaterialCard(
         [Bind(Prefix = "StockInput")] MaterialCardCreateInput stockInput,
         CancellationToken cancellationToken)
@@ -724,6 +1020,7 @@ public sealed class LogisticsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialCardEdit)]
     public async Task<IActionResult> DeleteMaterialCard(
         int stockCardId,
         CancellationToken cancellationToken)
@@ -797,6 +1094,7 @@ public sealed class LogisticsController : Controller
     }
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ProductConfig)]
     public async Task<IActionResult> ProductConfiguration(CancellationToken cancellationToken)
     {
         // Yeni akis: SmartBoard cart listesi. Eski 7 parametreli tab/pagination
@@ -815,6 +1113,7 @@ public sealed class LogisticsController : Controller
     // navigate eder (matchPath ile MaterialCard tab'ı reuse).
     // ════════════════════════════════════════════════════════════════════
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ProductCombinations)]
     public async Task<IActionResult> Combinations(CancellationToken cancellationToken)
     {
         var board = await BuildCombinationsBoardConfigAsync(cancellationToken);
@@ -833,6 +1132,12 @@ public sealed class LogisticsController : Controller
     private async Task<object> BuildCombinationsBoardConfigAsync(CancellationToken ct)
     {
         var combos = await _logisticsConfigurationService.GetAllCombinationsAsync(ct);
+        var masterWidgets = new List<object>
+        {
+            CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_status",        "Durum",   "boolean"),
+            CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_item",          "Mamul",   "text"),
+            CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_feature_count", "Özellik", "numeric"),
+        };
 
         var entities = new List<object>();
         foreach (var c in combos)
@@ -922,7 +1227,7 @@ public sealed class LogisticsController : Controller
             searchPlaceholder = "Kombinasyon kodu, mamul veya değer ara…",
             emptyText         = "Henüz tanımlı kombinasyon yok",
             actions           = Array.Empty<object>(),
-            masterWidgets     = Array.Empty<object>(),
+            masterWidgets,
             entities,
         };
     }
@@ -1072,28 +1377,13 @@ public sealed class LogisticsController : Controller
 
         // â"€â"€ Master widget sablonu (âš™ SmartBoardConfigPanel icin) â"€â"€
         // Sistem widget'lari sabit; PRODUCT_CONFIG form kodundaki admin widget'lar ekleniyor.
-        var masterWidgets = new List<object>
-        {
-            new { id = "sys_datatype",     type = "data", dataType = "text",    label = "Veri Tipi" },
-            new { id = "sys_unit",         type = "data", dataType = "text",    label = "Olcu Birimi" },
-            new { id = "sys_value_count",  type = "data", dataType = "numeric", label = "Deger Sayisi" },
-            new { id = "sys_value_sample", type = "data", dataType = "text",    label = "Ornek Degerler" },
-            new { id = "sys_stock_count",  type = "data", dataType = "numeric", label = "Bagli Stok" },
-        };
         var pcSchema = await _widgetService.GetFormSchemaByCodeAsync("PRODUCT_CONFIG", ct);
-        if (pcSchema != null)
-        {
-            foreach (var w in pcSchema.Widgets.Where(w => w.IsActive && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)))
-            {
-                masterWidgets.Add(new
-                {
-                    id = w.WidgetCode,
-                    type = "data",
-                    dataType = w.DataType.ToLowerInvariant(),
-                    label = w.Label,
-                });
-            }
-        }
+        var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(pcSchema);
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("sys_datatype",     "Veri Tipi",      "text"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("sys_unit",         "Olcu Birimi",    "text"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("sys_value_count",  "Deger Sayisi",   "numeric"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("sys_value_sample", "Ornek Degerler", "text"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("sys_stock_count",  "Bagli Stok",     "numeric"));
 
         return new
         {
@@ -1519,16 +1809,16 @@ public sealed class LogisticsController : Controller
         var normalizedSearch = search?.Trim() ?? string.Empty;
         var filteredDefinitions = definitions
             .OrderBy(x => x.SortOrder)
-            .ThenBy(x => x.UnitCode, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
             .Where(x =>
                 string.IsNullOrWhiteSpace(normalizedSearch) ||
-                ContainsInsensitive(x.UnitCode, normalizedSearch) ||
-                ContainsInsensitive(x.UnitName, normalizedSearch))
+                ContainsInsensitive(x.Code, normalizedSearch) ||
+                ContainsInsensitive(x.Name, normalizedSearch))
             .Select(x => new UnitRowViewModel
             {
                 Id = x.Id,
-                UnitCode = x.UnitCode,
-                UnitName = x.UnitName,
+                UnitCode = x.Code,
+                UnitName = x.Name,
                 SortOrder = x.SortOrder,
                 IsActive = x.IsActive
             })
@@ -1651,16 +1941,16 @@ public sealed class LogisticsController : Controller
                     .Select(x => new MaterialCardMetaViewModel
                     {
                         CreatedByUserId = null,
-                        CreatedDate = x.CreateDate,
+                        CreatedDate = x.Created,
                         ModifiedByUserId = null,
-                        ModifiedDate = x.ModifyDate
+                        ModifiedDate = x.Updated
                     })
                     .FirstOrDefault()
                 : null,
             Combinations = combinations,
             MeasureUnits = (await _logisticsConfigurationService.GetUnitsAsync(cancellationToken))
                 .Where(u => u.IsActive)
-                .Select(u => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem(u.UnitName, u.UnitCode))
+                .Select(u => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem(u.Name, u.Code))
                 .ToList(),
             SupplierAccounts = (await _financeService.GetContactsAsync(null, null, cancellationToken))
                 .Where(a => a.IsActive)
@@ -1863,13 +2153,13 @@ public sealed class LogisticsController : Controller
         var options = definitions
             .Where(x => x.IsActive)
             .OrderBy(x => x.SortOrder)
-            .ThenBy(x => x.UnitCode, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
             .Select(x =>
             {
-                var text = string.Equals(x.UnitCode, x.UnitName, StringComparison.OrdinalIgnoreCase)
-                    ? x.UnitCode
-                    : $"{x.UnitCode} - {x.UnitName}";
-                return new SelectListItem(text, x.UnitCode);
+                var text = string.Equals(x.Code, x.Name, StringComparison.OrdinalIgnoreCase)
+                    ? x.Code
+                    : $"{x.Code} - {x.Name}";
+                return new SelectListItem(text, x.Code);
             })
             .ToList();
 
@@ -1920,7 +2210,7 @@ public sealed class LogisticsController : Controller
             ? requestedPageSize!.Value
             : storedPageSize;
 
-        if (userId.HasValue && userId.Value != Guid.Empty && resolvedPageSize != storedPageSize)
+        if (userId.HasValue && userId.Value > 0 && resolvedPageSize != storedPageSize)
         {
             await _uiConfigurationService.SaveGridPageSizePreferenceAsync(
                 userId.Value,
@@ -1961,10 +2251,10 @@ public sealed class LogisticsController : Controller
         new SelectListItem("100", "100", pageSize == 100)
     ];
 
-    private Guid? GetCurrentUserId()
+    private int? GetCurrentUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(rawUserId, out var userId) ? userId : null;
+        return int.TryParse(rawUserId, out var userId) ? userId : null;
     }
 
     private static bool ContainsInsensitive(string source, string value) =>
@@ -2079,10 +2369,10 @@ public sealed class LogisticsController : Controller
         return cols.Count > 0 ? cols : DefaultMaterialCardColumns;
     }
 
-    private Guid GetUserId()
+    private int GetUserId()
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(raw, out var id) ? id : Guid.Empty;
+        return int.TryParse(raw, out var id) ? id : 0;
     }
 
     // â"€â"€ AJAX JSON Endpoint'leri (MaterialCards) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -2101,7 +2391,7 @@ public sealed class LogisticsController : Controller
 
         var snapshot = await _logisticsConfigurationService.GetSnapshotAsync(ct);
         var units = await _logisticsConfigurationService.GetUnitsAsync(ct);
-        var unitNameById = units.ToDictionary(u => u.Id, u => u.UnitName);
+        var unitNameById = units.ToDictionary(u => u.Id, u => u.Name);
 
         var allRows = snapshot.Items
             .Select(x => new MaterialCardRowViewModel
@@ -2154,7 +2444,7 @@ public sealed class LogisticsController : Controller
     public async Task<IActionResult> SaveMaterialCardGridColumns([FromBody] string[] columns, CancellationToken ct)
     {
         var userId = GetUserId();
-        if (userId == Guid.Empty) return Unauthorized();
+        if (userId <= 0) return Unauthorized();
         await _uiConfigurationService.SaveGridColumnPreferencesAsync(userId, "logistics-material-cards", columns, ct);
         return Ok(new { success = true });
     }
@@ -2175,8 +2465,8 @@ public sealed class LogisticsController : Controller
             availableUnits = units
                 .OrderBy(u => u.IsActive ? 0 : 1)
                 .ThenBy(u => u.SortOrder)
-                .ThenBy(u => u.UnitCode)
-                .Select(u => new { u.Id, u.UnitCode, u.UnitName, u.IsActive }),
+                .ThenBy(u => u.Code)
+                .Select(u => new { u.Id, Code = u.Code, Name = u.Name, u.IsActive }),
         });
     }
 

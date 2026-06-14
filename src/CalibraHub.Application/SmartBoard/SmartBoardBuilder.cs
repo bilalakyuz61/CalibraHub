@@ -17,7 +17,7 @@ namespace CalibraHub.Application.SmartBoard;
 ///     .WithEmptyText("Henüz makine tanımlanmamış")
 ///     .AddHeaderAction("new", "Yeni Makine", "Plus", "/Logistics/MachineEdit")
 ///     .MapEntities(m =>
-///         SmartBoardEntity.For(m.Id, m.MachineName ?? m.MachineCode)
+///         SmartBoardEntity.For(m.Id, m.Name ?? m.Code)
 ///             .WithDescription(m.LocationCode ?? "")
 ///             .AddTextWidget("w_status", "Durum",
 ///                 m.IsActive ? "Aktif" : "Pasif",
@@ -25,7 +25,7 @@ namespace CalibraHub.Application.SmartBoard;
 ///             .WithEditAndDelete(
 ///                 editUrl:        $"/Logistics/MachineEdit?id={m.Id}",
 ///                 deleteApiUrl:   $"/Logistics/DeleteMachineJson?id={m.Id}",
-///                 deleteConfirm:  $"Silinsin mi? ({m.MachineName})"))
+///                 deleteConfirm:  $"Silinsin mi? ({m.Name})"))
 ///     .Build();
 /// </code>
 /// </summary>

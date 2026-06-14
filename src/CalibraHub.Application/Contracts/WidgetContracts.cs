@@ -37,7 +37,15 @@ public sealed record WidgetDefinitionDto(
     int ColorType = 0,
     string? ColorValue = null,
     int ColSpan = 12,
-    string LabelStyle = "standard");
+    string LabelStyle = "standard",
+    // Sprint 1 — Universal Form Engine. true ise widget Domain entity property'sine baglidir.
+    bool IsSystemField = false,
+    // Hangi entity property'sine (Pascal-case). Sadece IsSystemField=true ise dolu.
+    string? EntityColumn = null,
+    // 2026-06-08 — Yetkilendirilebilir alan flag'i. Admin UI'da "Yetkilendirilebilir" switch'i
+    // bunu set eder; discovery FIELD:<WidgetCode> izni seed eder. Form render zamanında
+    // yetkisiz kullanıcı için alan filtrelenir.
+    bool IsPermissionControlled = false);
 
 /// <summary>
 /// Faz G — Kural ve formul motoru payload'i. Tum alanlar opsiyonel string ifade.
@@ -109,7 +117,11 @@ public sealed record WidgetRenderDto(
     int ColorType = 0,
     string? ColorValue = null,
     int ColSpan = 12,
-    string LabelStyle = "standard");
+    string LabelStyle = "standard",
+    // Sprint 1 — Universal Form Engine. true ise widget Domain entity property'sine baglidir.
+    bool IsSystemField = false,
+    // Hangi entity property'sine (Pascal-case). Sadece IsSystemField=true ise dolu.
+    string? EntityColumn = null);
 
 /// <summary>
 /// Grid widget'inin tek bir child satirinin serialize edilmis hali.
@@ -217,7 +229,15 @@ public sealed record UpsertWidgetRequest(
     int ColorType = 0,
     string? ColorValue = null,
     int? ColSpan = null,
-    string? LabelStyle = null);
+    string? LabelStyle = null,
+    // Sprint 1 — Universal Form Engine. Discovery service tarafindan IsSystemField=true ile
+    // seed edilen kayitlar admin UI'dan da degistirilebilir (label, gorunurluk, zorunluluk vb.)
+    // ama IsSystemField/EntityColumn semasal kalmali — admin UI bunlari read-only gorur.
+    bool IsSystemField = false,
+    string? EntityColumn = null,
+    // 2026-06-08 — Yetkilendirilebilir alan flag'i. true ise discovery FIELD:<WidgetCode>
+    // izni seed eder; izin verilmemiş kullanıcılar form render'da alanı görmez.
+    bool IsPermissionControlled = false);
 
 public sealed record UpsertWidgetResponse(int Id);
 
@@ -227,4 +247,10 @@ public sealed record FormCatalogItemDto(
     string FormName,
     string Module,
     string? SubModule,
-    int SortOrder);
+    int SortOrder,
+    // 2026-06-09 — ModuleSelector DB-driven entity türetme için
+    string? Icon = null,
+    string? IconColor = null,
+    // 2026-06-09 — Alan Rehberi dropdown filtresi
+    // false = container/liste formu, _NEW navigasyon formu veya ayarlar sayfası → gizlenir
+    bool IsWidgetForm = true);

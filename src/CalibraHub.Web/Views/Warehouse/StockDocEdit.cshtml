@@ -328,6 +328,19 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       <span>Yazdır</span>
     </button>
+    @* Entegrasyonlar — bu belge tipi (TRANSFER/STOCK_IN/STOCK_OUT) icin Manual
+       trigger'li aktif entegrasyonlar dropdown'a "ENTEGRASYONLAR" header'i altinda
+       eklenir. Wizard'da bu form code'lariyla entegrasyon kaydedilmediyse hicbir
+       sey gorunmez (placeholder gizli kalir).
+
+       record-id: DocId yoksa "0" gonderilir; runtime'da kullanici "Once kaydi
+       olusturun" toast'u alir. Save sonrasi JS code yeni id'yi
+       wdeIntActionsHost.setAttribute('data-record-id', newId) ile gunceller. *@
+    @await Html.PartialAsync("_IntegrationActionItems",
+        new CalibraHub.Web.Models.IntegrationButtonsModel {
+            FormCode = Model.DocType,
+            RecordId = (Model.DocId ?? 0).ToString()
+        })
   </div>
 
   <!-- Sol tab + sağ içerik -->
@@ -378,6 +391,13 @@
             <label class="sqe-hlabel">Referans No</label>
             <input type="text" id="wdeRefNo" class="form-control form-control-sm sqe-hinput"
                    placeholder="Opsiyonel" />
+          </div>
+
+          <div class="sqe-hrow" id="wdeArgeProjectRow" style="display:none;">
+            <label class="sqe-hlabel">AR-GE / ÜR-GE Projesi</label>
+            <select id="wdeArgeProject" class="form-select form-select-sm sqe-hinput">
+              <option value="">— Proje yok —</option>
+            </select>
           </div>
 
           <div class="sqe-hrow" style="align-items:flex-start;">
@@ -491,8 +511,24 @@
         }
     }
 
+    // AR-GE/ÜR-GE proje dropdown — yalnizca STOCK_OUT (sarf) icin gosterilir + doldurulur.
+    async function populateArgeProjects() {
+        var row = document.getElementById('wdeArgeProjectRow');
+        var sel = document.getElementById('wdeArgeProject');
+        if (!row || !sel) return;
+        if (DOC_TYPE !== 'STOCK_OUT') { row.style.display = 'none'; return; }
+        row.style.display = '';
+        try {
+            var r = await fetch('/Warehouse/GetArgeProjectsJson', { credentials: 'same-origin' });
+            var list = r.ok ? await r.json() : [];
+            sel.innerHTML = '<option value="">— Proje yok —</option>' +
+                list.map(function (p) { return '<option value="' + p.id + '">' + (p.label || p.name) + '</option>'; }).join('');
+        } catch (e) { /* sessiz */ }
+    }
+
     // ── Belgeyi yükle (edit mod) ──────────────────────────────────────
     async function loadDoc() {
+        await populateArgeProjects();
         if (!DOC_ID) {
             hideMask();
             return;
@@ -522,6 +558,8 @@
                 if (refEl) refEl.value = doc.refNo || '';
                 var notesEl = document.getElementById('wdeNotes');
                 if (notesEl) notesEl.value = doc.notes || '';
+                var apEl = document.getElementById('wdeArgeProject');
+                if (apEl && doc.argeProjectId) apEl.value = String(doc.argeProjectId);
             }
 
             var rows = lines.map(function(l) {
@@ -616,6 +654,7 @@
                 toLocationId:   toLocId,
                 refNo:          (document.getElementById('wdeRefNo')?.value || '').trim() || null,
                 notes:          (document.getElementById('wdeNotes')?.value || '').trim() || null,
+                argeProjectId:  parseInt(document.getElementById('wdeArgeProject')?.value) || null,
                 lines:          lines,
             };
 
@@ -636,6 +675,15 @@
                     history.replaceState(null, '', window.location.pathname + '?id=' + DOC_ID);
                     var delBtn = document.getElementById('wdeDeleteBtn');
                     if (delBtn) delBtn.style.display = '';
+                }
+                // Entegrasyon partial host'una yeni recordId yansit + items yeniden tara
+                // (yeni kayit DOC_ID=0 -> gercek id, "Once kaydi olusturun" toast'i atilmaz).
+                var intHost = document.querySelector('[data-integration-action-items]');
+                if (intHost) {
+                    intHost.setAttribute('data-record-id', String(DOC_ID || 0));
+                    if (window.CalibraHub && window.CalibraHub.scanIntegrationActionItems) {
+                        try { window.CalibraHub.scanIntegrationActionItems(); } catch (_) {}
+                    }
                 }
                 // K.I.T.T. flash
                 var bar = document.getElementById('wdeActionBar');

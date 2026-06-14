@@ -76,6 +76,18 @@ function TR_FMT(n, precision) {
 
 export default function CalibraLineItemsGrid(props) {
   var config = props.config || { columns: [], rows: [], labels: {}, footer: {} }
+  // 2026-06-01: documentTypeCode = "alis_talebi" (İhtiyaç Kaydı) ise satir context
+  // menusunden Fiyat Geçmişi + Maliyet Gör + Revize Et gizlenir — talep ic hareket;
+  // fiyatlandirma teklif/siparis asamasinda olusur, revize akisi gerekmez.
+  var __docTypeCode = String(config.documentTypeCode || '').toLowerCase()
+  var __isPurchaseRequest = __docTypeCode === 'alis_talebi'
+  // 2026-06-02: Satir ek alanlari icin form code'u config'ten al — daha once
+  // hardcoded 'SALES_QUOTE_LINES' idi. Ihtiyac Kaydi (alis_talebi) icin dogru
+  // kod 'PURCHASE_REQUEST_LINES' — hardcoded olunca modal YANLIS form'un
+  // widget'larini gosteriyor + Kaydet YANLIS form tablosuna yaziyordu
+  // (gear kirmizi kaliyordu cunku backend dogru formu kontrol edip eksik
+  // goruyordu). Config'ten gelmezse legacy 'SALES_QUOTE_LINES' fallback.
+  var __lineFormCode = String(config.lineFormCode || 'SALES_QUOTE_LINES')
   var allColumns = Array.isArray(config.columns) ? config.columns : []
   // Kolonlari yerlesime gore ayir:
   //   - row-below  : satirin altinda (ornek: Not)
@@ -206,6 +218,17 @@ export default function CalibraLineItemsGrid(props) {
     setExtrasToast(null)
     try {
       var savedLineId = extrasModalRow.id != null && Number(extrasModalRow.id) > 0 ? Number(extrasModalRow.id) : null
+      // 2026-06-01 diagnostic: hangi yola gidildigini + valuesRef icerigini yaz
+      try {
+        var __dbgValues = extrasRendererRef.current.getValues ? extrasRendererRef.current.getValues() : '(no getValues)'
+        console.log('[CL-EXTRAS] handleExtrasSave', {
+          savedLineId: savedLineId,
+          path: savedLineId == null ? 'local-pending' : 'backend',
+          rowUid: extrasModalRow._uid,
+          rowMaterialCode: extrasModalRow.materialCode,
+          getValuesSnapshot: __dbgValues,
+        })
+      } catch (_) {}
       // Kaydedilmemis satirda backend'e gitmiyoruz — validate edip degerleri
       // row.__extras'a local olarak yaziyoruz. Ana sqSave satirlari kaydedip
       // id aldiktan sonra widget API'siyle senkron eder.
@@ -234,6 +257,14 @@ export default function CalibraLineItemsGrid(props) {
         }
         // Gecerli — degerleri row.__extras'a yaz, modali kapat.
         var localValues = extrasRendererRef.current.getValues() || {}
+        console.log('[CL-EXTRAS] local path → row.__extras yaziliyor', {
+          uid: extrasModalRow._uid,
+          values: localValues,
+          keyCount: Object.keys(localValues).length,
+        })
+        if (Object.keys(localValues).length === 0) {
+          console.warn('[CL-EXTRAS] UYARI: getValues bos dondu — varsayilan degerler valuesRef\'e gecmemis olabilir')
+        }
         setRows(function(prev) {
           return prev.map(function(r) {
             if (r._uid !== extrasModalRow._uid) return r
@@ -246,8 +277,15 @@ export default function CalibraLineItemsGrid(props) {
       }
 
       // Kaydedilmis satir — mevcut backend save akisi.
+      console.log('[CL-EXTRAS] backend path — save() cagrisi', { savedLineId: savedLineId })
       var result = await extrasRendererRef.current.save({ recordId: String(savedLineId) })
+      console.log('[CL-EXTRAS] backend path — save() result', result)
       if (result && result.success === false) {
+        console.warn('[CL-EXTRAS] backend save FAIL — gear KIRMIZI kalacak', {
+          savedLineId: savedLineId,
+          message: result.message,
+          requiredErrors: result.requiredErrors,
+        })
         setExtrasToast({ type: 'err', text: result.message || 'Kayit basarisiz.' })
         // Eksik zorunlu alan varsa kirmizi shake — .is-invalid DOM'a islenene kadar
         // minik bir gecikme; React render sonrasi class'lar yerinde olur.
@@ -264,9 +302,14 @@ export default function CalibraLineItemsGrid(props) {
           }, 40)
         }
       } else {
+        console.log('[CL-EXTRAS] backend save OK — invalidLineIds\'den ' + savedLineId + ' cikarilıyor')
         setExtrasToast({ type: 'ok', text: 'Kaydedildi' })
         // Bu satirin widget'lari dolmus olabilir — invalid listesinden cikar (yesile dons).
-        setInvalidLineIds(function(prev) { return prev.filter(function(x) { return x !== savedLineId }) })
+        setInvalidLineIds(function(prev) {
+          var next = prev.filter(function(x) { return x !== savedLineId })
+          console.log('[CL-EXTRAS] invalidLineIds: ' + JSON.stringify(prev) + ' → ' + JSON.stringify(next))
+          return next
+        })
         // __extras varsa temizle — artik backend source of truth
         setRows(function(prev) {
           return prev.map(function(r) {
@@ -535,7 +578,7 @@ export default function CalibraLineItemsGrid(props) {
   var hasRequiredLineWidgetsRef = useRef(false)
   useEffect(function () {
     var alive = true
-    fetch('/api/widgets/forms/SALES_QUOTE_LINES/schema', { credentials: 'same-origin' })
+    fetch('/api/widgets/forms/' + encodeURIComponent(__lineFormCode) + '/schema', { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (schema) {
         if (!alive || !schema || !Array.isArray(schema.widgets)) return
@@ -1214,7 +1257,7 @@ export default function CalibraLineItemsGrid(props) {
             >
               <DynamicWidgetRenderer
                 ref={extrasRendererRef}
-                formCode="SALES_QUOTE_LINES"
+                formCode={__lineFormCode}
                 /* Kaydedilmemis satirda recordId bos; renderer schema'yi yukler ama
                    server'dan value getirmez. initialValues ile daha once bu satira
                    girilmis local degerler pre-fill edilir (row.__extras). */
@@ -1461,6 +1504,13 @@ export default function CalibraLineItemsGrid(props) {
               disabled: false,
             },
           ]
+          // İhtiyaç Kaydi (alis_talebi): sadece Stok Kartina Git + Not Ekle.
+          // Fiyat / Maliyet / Revize talep asamasinda bir karsiligi yok.
+          if (__isPurchaseRequest) {
+            items = items.filter(function (it) {
+              return it.key === 'stock-card' || it.key === 'note'
+            })
+          }
           // Aksent renk haritasi — icon pill bg / text + hover bg.
           // Light/dark farkli paletler. Tema body class'i ile alginirir; iframe icinde
           // mount edilmis ise parent dokumanin body class'ina da bakilir (workspace

@@ -1,0 +1,54 @@
+@{
+    ViewData["Title"]     = "Satın Alma Talebi Oluştur";
+    ViewData["BodyClass"] = "page-prw";
+}
+
+@section Styles {
+<style>
+    .page-prw .integrator-dashboard {
+        padding:0!important; background:transparent!important;
+        box-shadow:none!important; border:none!important; max-width:none!important;
+    }
+    .page-prw .integrator-dashboard__content { width:100%!important; max-width:none!important; padding:0!important; }
+</style>
+}
+
+<div id="prw-root"></div>
+
+@section Scripts {
+<script>
+(function() {
+    var ANTIFORGERY_TOKEN = '@Html.AntiForgeryToken()'.match(/value="([^"]+)"/)?.[1] || '';
+
+    function loadCss(href) {
+        if (document.querySelector('link[href*="calibra-bundle"]')) return;
+        var l = document.createElement('link');
+        l.rel = 'stylesheet'; l.href = href;
+        document.head.appendChild(l);
+    }
+    function loadScript(src, cb) {
+        var s = document.createElement('script');
+        s.src = src; s.onload = cb;
+        document.head.appendChild(s);
+    }
+
+    var bundleBase = '/react/bundle';
+    var cssHref    = bundleBase + '.css';
+    var jsHref     = bundleBase + '.js';
+
+    function doMount() {
+        var el = document.getElementById('prw-root');
+        if (!el || !window.CalibraHub?.mountPurchaseRequestWizard) {
+            setTimeout(doMount, 50); return;
+        }
+        window.CalibraHub.mountPurchaseRequestWizard(el, {
+            antiForgeryToken: ANTIFORGERY_TOKEN,
+        });
+    }
+
+    loadCss(cssHref);
+    if (window.CalibraHub?.mountPurchaseRequestWizard) { doMount(); }
+    else { loadScript(jsHref, doMount); }
+})();
+</script>
+}

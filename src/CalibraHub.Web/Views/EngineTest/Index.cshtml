@@ -1,0 +1,376 @@
+@{
+    ViewData["Title"] = "Engine Pilot Test";
+    Layout = "_Layout";
+}
+
+<style>
+    /* Full-viewport scroll-free layout */
+    .et-page {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column;
+        padding: 12px 16px; gap: 10px;
+        font-family: system-ui, sans-serif; color: #1f2937;
+        background: #f9fafb;
+        overflow: hidden;
+    }
+    .et-header { flex: 0 0 auto; }
+    .et-header h1 { font-size: 17px; margin: 0; display: flex; align-items: center; gap: 8px; }
+    .et-header .et-sub { color: #6b7280; font-size: 12px; margin-top: 2px; }
+    .et-tag { display: inline-block; padding: 1px 8px; font-size: 11px; border-radius: 4px;
+              background: #eef2ff; color: #4338ca; font-family: ui-monospace, monospace; }
+
+    /* 2×2 grid */
+    .et-grid {
+        flex: 1 1 auto; min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 10px;
+    }
+    .et-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+        padding: 12px 14px;
+        display: flex; flex-direction: column; min-height: 0;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .et-card h2 {
+        font-size: 13px; margin: 0 0 8px; color: #111827;
+        display: flex; align-items: center; gap: 6px;
+        flex: 0 0 auto;
+    }
+    .et-card h2::before { content: ""; width: 3px; height: 14px; background: #6366f1; border-radius: 2px; }
+    .et-card .et-body { flex: 1 1 auto; overflow: auto; min-height: 0; }
+    .et-card .et-foot { flex: 0 0 auto; padding-top: 8px; }
+
+    /* Tablo */
+    .et-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .et-table th {
+        background: #f9fafb; padding: 5px 8px; text-align: left;
+        color: #4b5563; font-weight: 600; border-bottom: 1px solid #e5e7eb;
+        position: sticky; top: 0; z-index: 1;
+    }
+    .et-table td { padding: 4px 8px; border-bottom: 1px solid #f3f4f6; color: #1f2937; }
+    .et-table tr:hover td { background: #fafbff; }
+    code { font-size: 11px; color: #4338ca; background: #eef2ff; padding: 1px 4px; border-radius: 3px; }
+
+    .et-badge { display: inline-block; padding: 1px 6px; font-size: 10px; font-weight: 500; border-radius: 999px; }
+    .et-badge-sys { background: #dbeafe; color: #1e40af; }
+    .et-badge-user { background: #d1fae5; color: #065f46; }
+
+    /* Form girişleri */
+    .et-form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 10px; }
+    .et-form label { font-size: 11px; color: #4b5563; margin-bottom: 2px; font-weight: 500; display: block; }
+    .et-form input, .et-form select {
+        width: 100%; padding: 4px 7px; border: 1px solid #d1d5db; border-radius: 5px;
+        font-size: 12px; box-sizing: border-box; background: #fff;
+    }
+    .et-form input[type="checkbox"] { width: auto; transform: scale(1.05); }
+    .et-form .et-checkrow { grid-column: span 2; display: flex; gap: 14px; align-items: center; padding-top: 2px; font-size: 12px; color: #4b5563; }
+
+    /* Dinamik form (kayıt) — kompakt label+input rows */
+    .et-dynform { display: grid; gap: 5px; }
+    .et-dynform .et-row {
+        display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center;
+    }
+    .et-dynform .et-row label { font-size: 11px; color: #4b5563; font-weight: 500; }
+    .et-dynform .et-row input {
+        padding: 4px 7px; border: 1px solid #d1d5db; border-radius: 5px; font-size: 12px;
+    }
+
+    .et-btn {
+        background: #6366f1; color: #fff; border: 0; padding: 5px 12px;
+        border-radius: 5px; font-size: 12px; cursor: pointer; font-weight: 500;
+    }
+    .et-btn:hover { background: #4f46e5; }
+    .et-btn-sm { padding: 3px 8px; font-size: 11px; }
+    .et-btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+    .et-btn-secondary:hover { background: #e5e7eb; }
+    .et-actions { display: flex; gap: 6px; align-items: center; }
+    .et-actions .et-spacer { flex: 1; }
+
+    .et-msg { padding: 5px 9px; border-radius: 5px; font-size: 11px; margin-top: 6px; display: none; }
+    .et-msg.ok { background: #d1fae5; color: #065f46; }
+    .et-msg.err { background: #fee2e2; color: #991b1b; }
+    .et-meta { color: #6b7280; font-size: 11px; margin-bottom: 6px; }
+    /* Dark tema overrides */
+    body.app-theme-dark .et-page { background: var(--app-content-bg, #0a0d17); color: var(--app-text, #e2e8f0); }
+    body.app-theme-dark .et-card { background: var(--app-surface, #0d1323); border-color: var(--app-border, rgba(255,255,255,.08)); }
+    body.app-theme-dark .et-card h2 { color: var(--app-text, #e2e8f0); }
+    body.app-theme-dark .et-table th { background: var(--app-muted-surface, #111827); color: var(--app-text-muted, #94a3b8); border-bottom-color: var(--app-border); }
+    body.app-theme-dark .et-table td { color: var(--app-text, #e2e8f0); border-bottom-color: rgba(255,255,255,.04); }
+    body.app-theme-dark .et-table tr:hover td { background: rgba(255,255,255,.03); }
+    body.app-theme-dark .et-form label { color: #94a3b8; }
+    body.app-theme-dark .et-form input, body.app-theme-dark .et-form select { background: var(--app-surface); color: var(--app-text); border-color: var(--app-border); }
+    body.app-theme-dark .et-btn-secondary { background: rgba(255,255,255,.06); color: #cbd5e1; border-color: rgba(255,255,255,.1); }
+    body.app-theme-dark .et-msg.ok  { background: rgba(16,185,129,.12); color: #34d399; }
+    body.app-theme-dark .et-msg.err { background: rgba(239,68,68,.12); color: #fca5a5; }
+</style>
+
+<div class="et-page">
+    <div class="et-header">
+        <h1>🧪 Engine Pilot Test — <span class="et-tag">stok_motoru</span></h1>
+        <p class="et-sub">
+            Buradan alan eklediğinde DB'de <code>engine.Inv_Master</code>'a fiziksel kolon eklenir;
+            kayıt yazdığında parametreli INSERT çalışır.
+        </p>
+    </div>
+
+    <div class="et-grid">
+        <!-- (1,1) Alan Kataloğu -->
+        <div class="et-card">
+            <h2>1. Alan Kataloğu</h2>
+            <div id="entityMeta" class="et-meta"></div>
+            <div class="et-body">
+                <table class="et-table">
+                    <thead>
+                        <tr><th>#</th><th>FieldName</th><th>Label</th><th>Tip</th><th>Boyut</th><th>?</th><th>IX</th><th>Tür</th></tr>
+                    </thead>
+                    <tbody id="fieldsTbody"></tbody>
+                </table>
+            </div>
+            <div class="et-foot">
+                <button class="et-btn et-btn-secondary et-btn-sm" onclick="loadFields()">↻ Yenile</button>
+            </div>
+        </div>
+
+        <!-- (1,2) Yeni Alan Ekle -->
+        <div class="et-card">
+            <h2>2. Yeni Dinamik Alan Ekle</h2>
+            <div class="et-body">
+                <div class="et-form">
+                    <div>
+                        <label>FieldName</label>
+                        <input id="newFieldName" placeholder="örn. GlutenOrani" />
+                    </div>
+                    <div>
+                        <label>Label</label>
+                        <input id="newLabel" placeholder="örn. Glüten Oranı" />
+                    </div>
+                    <div>
+                        <label>DataType</label>
+                        <select id="newDataType">
+                            <option value="1">1 — String</option>
+                            <option value="2">2 — Integer</option>
+                            <option value="3">3 — Decimal</option>
+                            <option value="4">4 — DateTime</option>
+                            <option value="5">5 — Boolean</option>
+                            <option value="6">6 — Lookup</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>MaxLength (String)</label>
+                        <input id="newMaxLength" type="number" placeholder="50" />
+                    </div>
+                    <div>
+                        <label>LookupEntityCode (tip=6)</label>
+                        <input id="newLookupCode" placeholder="örn. cari_motoru" />
+                    </div>
+                    <div class="et-checkrow">
+                        <label><input type="checkbox" id="newRequired" /> Zorunlu</label>
+                        <label><input type="checkbox" id="newIndexed" /> Index</label>
+                    </div>
+                </div>
+                <div id="addFieldMsg" class="et-msg"></div>
+            </div>
+            <div class="et-foot">
+                <button class="et-btn" onclick="addField()">+ Alan Ekle</button>
+            </div>
+        </div>
+
+        <!-- (2,1) Yeni Kayıt -->
+        <div class="et-card">
+            <h2>3. Yeni Kayıt</h2>
+            <div class="et-meta">Form alanları katalogtan otomatik üretilir.</div>
+            <div class="et-body">
+                <form id="dynamicForm" class="et-dynform"></form>
+                <div id="insertMsg" class="et-msg"></div>
+            </div>
+            <div class="et-foot et-actions">
+                <button class="et-btn" onclick="insertRecord()">💾 Kaydet</button>
+                <button class="et-btn et-btn-secondary et-btn-sm" onclick="clearForm()">Temizle</button>
+            </div>
+        </div>
+
+        <!-- (2,2) Mevcut Kayıtlar -->
+        <div class="et-card">
+            <h2>4. Mevcut Kayıtlar</h2>
+            <div class="et-body">
+                <table class="et-table">
+                    <thead id="recordsThead"></thead>
+                    <tbody id="recordsTbody"></tbody>
+                </table>
+            </div>
+            <div class="et-foot">
+                <button class="et-btn et-btn-secondary et-btn-sm" onclick="loadRecords()">↻ Yenile</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const ENTITY_CODE = "stok_motoru";
+    const API_BASE = "/api/engine/" + ENTITY_CODE;
+    let currentSchema = { fields: [] };
+
+    const DATA_TYPE_NAMES = {
+        1: "String", 2: "Integer", 3: "Decimal", 4: "DateTime", 5: "Boolean", 6: "Lookup"
+    };
+
+    function showMsg(elId, text, ok) {
+        const el = document.getElementById(elId);
+        el.className = "et-msg " + (ok ? "ok" : "err");
+        el.textContent = text;
+        el.style.display = "block";
+        setTimeout(() => { el.style.display = "none"; }, 4500);
+    }
+
+    async function loadFields() {
+        const res = await fetch(API_BASE + "/fields", { credentials: "same-origin" });
+        const data = await res.json();
+        if (!data.ok) { showMsg("addFieldMsg", data.error || "Yüklenemedi", false); return; }
+
+        currentSchema = data;
+        const meta = document.getElementById("entityMeta");
+        meta.innerHTML = `<code>${data.entity.physicalSchema}.${data.entity.physicalTable}</code> ` +
+            `· schemaVersion=${data.entity.schemaVersion} · ${data.fields.length} alan`;
+
+        const tbody = document.getElementById("fieldsTbody");
+        tbody.innerHTML = data.fields.map((f, i) => `
+            <tr>
+                <td>${i + 1}</td>
+                <td><code>${f.fieldName}</code></td>
+                <td>${f.label}</td>
+                <td>${DATA_TYPE_NAMES[f.dataType] || f.dataType}</td>
+                <td>${f.maxLength || (f.numericScale != null ? `s=${f.numericScale}` : "—")}</td>
+                <td>${f.isRequired ? "✓" : ""}</td>
+                <td>${f.isIndexed ? "✓" : ""}</td>
+                <td>${f.isSystem
+                    ? '<span class="et-badge et-badge-sys">sys</span>'
+                    : '<span class="et-badge et-badge-user">user</span>'}</td>
+            </tr>
+        `).join("");
+
+        rebuildDynamicForm();
+    }
+
+    function rebuildDynamicForm() {
+        const form = document.getElementById("dynamicForm");
+        const exclude = new Set(["Id", "IsActive", "Created", "CreatedBy", "Updated", "UpdatedBy"]);
+        const userFields = currentSchema.fields.filter(f => !exclude.has(f.fieldName));
+
+        form.innerHTML = userFields.map(f => {
+            const inputType = f.dataType === 4 ? "datetime-local"
+                : (f.dataType === 2 || f.dataType === 3 || f.dataType === 6) ? "number"
+                : (f.dataType === 5) ? "checkbox" : "text";
+            const stepAttr = f.dataType === 3 ? 'step="0.0001"' : "";
+            return `
+                <div class="et-row">
+                    <label>${f.label}${f.isRequired ? " *" : ""}</label>
+                    <input data-field="${f.fieldName}" data-type="${f.dataType}"
+                           type="${inputType}" ${stepAttr}
+                           placeholder="${f.fieldName}" />
+                </div>
+            `;
+        }).join("");
+    }
+
+    function clearForm() {
+        document.querySelectorAll('#dynamicForm input').forEach(i => {
+            i.value = ""; i.checked = false;
+        });
+    }
+
+    async function addField() {
+        const body = {
+            fieldName:        document.getElementById("newFieldName").value.trim(),
+            label:            document.getElementById("newLabel").value.trim(),
+            dataType:         parseInt(document.getElementById("newDataType").value, 10),
+            maxLength:        parseInt(document.getElementById("newMaxLength").value, 10) || null,
+            isRequired:       document.getElementById("newRequired").checked,
+            isIndexed:        document.getElementById("newIndexed").checked,
+            lookupEntityCode: document.getElementById("newLookupCode").value.trim() || null
+        };
+        if (!body.fieldName) { showMsg("addFieldMsg", "FieldName zorunlu", false); return; }
+        if (!body.label)     { showMsg("addFieldMsg", "Label zorunlu", false); return; }
+
+        const res = await fetch(API_BASE + "/fields", {
+            method: "POST", credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!data.ok) { showMsg("addFieldMsg", data.error, false); return; }
+
+        showMsg("addFieldMsg", `Alan eklendi (Id=${data.fieldId}) — fiziksel kolon açıldı.`, true);
+        document.getElementById("newFieldName").value = "";
+        document.getElementById("newLabel").value = "";
+        document.getElementById("newMaxLength").value = "";
+        document.getElementById("newLookupCode").value = "";
+        await loadFields();
+    }
+
+    async function insertRecord() {
+        const payload = {};
+        document.querySelectorAll('#dynamicForm input').forEach(inp => {
+            const k = inp.dataset.field;
+            const t = parseInt(inp.dataset.type, 10);
+            let v;
+            if (t === 5) v = inp.checked ? "1" : "0";
+            else v = inp.value;
+            if (v !== "" && v !== null && v !== undefined) payload[k] = v;
+        });
+
+        if (Object.keys(payload).length === 0) {
+            showMsg("insertMsg", "En az bir alan dolu olmalı", false);
+            return;
+        }
+
+        const res = await fetch(API_BASE + "/records", {
+            method: "POST", credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.ok) { showMsg("insertMsg", data.error, false); return; }
+
+        showMsg("insertMsg", `Kayıt eklendi (Id=${data.id}).`, true);
+        clearForm();
+        await loadRecords();
+    }
+
+    async function loadRecords() {
+        const res = await fetch(API_BASE + "/records?page=1&pageSize=100", { credentials: "same-origin" });
+        const data = await res.json();
+        if (!data.ok) return;
+
+        const rows = data.rows || [];
+        const thead = document.getElementById("recordsThead");
+        const tbody = document.getElementById("recordsTbody");
+
+        if (rows.length === 0) {
+            thead.innerHTML = "";
+            tbody.innerHTML = '<tr><td style="color:#9ca3af;padding:14px;text-align:center;">Henüz kayıt yok.</td></tr>';
+            return;
+        }
+
+        const cols = Object.keys(rows[0]);
+        thead.innerHTML = "<tr>" + cols.map(c => `<th>${c}</th>`).join("") + "</tr>";
+        tbody.innerHTML = rows.map(r =>
+            "<tr>" + cols.map(c => `<td>${formatCell(r[c])}</td>`).join("") + "</tr>"
+        ).join("");
+    }
+
+    function formatCell(v) {
+        if (v === null || v === undefined) return '<span style="color:#9ca3af;">—</span>';
+        if (typeof v === "boolean") return v ? "✓" : "✗";
+        if (typeof v === "string" && v.length > 40) return v.substring(0, 40) + "…";
+        return String(v);
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+        await loadFields();
+        await loadRecords();
+    });
+</script>
+}

@@ -1,0 +1,30 @@
+# Android Studio / Gradle
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local config (per-developer SDK paths, etc.)
+local.properties
+*.iml
+.idea/
+
+# Keystore (NEVER commit signing keys)
+*.jks
+*.keystore
+keystore.properties
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+release/
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db

@@ -325,6 +325,49 @@ body.app-theme-dark .cum-select { color-scheme: dark; }
 .cum-switch-label { font-size:.8rem; font-weight:600; color: var(--cum-text-muted); }
 .cum-switch-label.is-active { color: var(--cum-pill-green-tx); }
 
+/* ── Multi-company checkbox list ── */
+.cum-company-checks {
+    display:flex; flex-direction:column; gap:5px;
+}
+.cum-check-item {
+    display:flex; align-items:center; gap:9px;
+    padding:7px 10px; border-radius:8px;
+    border:1px solid var(--cum-border);
+    background: var(--cum-input-bg);
+    cursor:pointer; user-select:none;
+    transition:border-color .12s, background .12s;
+}
+.cum-check-item:hover { border-color: var(--cum-accent); }
+.cum-check-item.is-checked {
+    border-color: var(--cum-accent);
+    background: var(--cum-accent-soft);
+}
+.cum-check-item input[type="checkbox"] {
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}
+.cum-check-dot {
+    flex-shrink:0; width:14px; height:14px;
+    border-radius:3px; border:2px solid var(--cum-border);
+    background: var(--cum-surface); position:relative;
+    transition:border-color .12s, background .12s;
+}
+.cum-check-item.is-checked .cum-check-dot {
+    border-color: var(--cum-accent);
+    background: var(--cum-accent);
+}
+.cum-check-item.is-checked .cum-check-dot::after {
+    content:''; position:absolute; left:2px; top:-1px;
+    width:6px; height:10px;
+    border:2px solid #fff; border-top:none; border-left:none;
+    transform:rotate(40deg);
+}
+.cum-check-label { font-size:.83rem; font-weight:600; color: var(--cum-text); }
+.cum-empty-hint { font-size:.78rem; color: var(--cum-text-muted); font-style:italic; }
+
+/* ── Multi-company table cell ── */
+.cum-td-companies { max-width:220px; }
+
 /* ── Section sep ── */
 .cum-section-sep {
     display:flex; align-items:center; gap:6px;

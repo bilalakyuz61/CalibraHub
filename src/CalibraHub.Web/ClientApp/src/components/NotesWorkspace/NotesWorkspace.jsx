@@ -22,6 +22,9 @@ import { Typography } from '@tiptap/extension-typography'
 import { Focus } from '@tiptap/extension-focus'
 import { common, createLowlight } from 'lowlight'
 import { EncryptedMark } from './EncryptedMark'
+import { Extension } from '@tiptap/core'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { EncryptPromptModal, DecryptPromptModal, FullNoteLockScreen } from './EncryptionModals'
 import {
   encryptText, decryptText,
@@ -38,11 +41,54 @@ import {
   ImagePlus, Youtube as YoutubeIcon, RowsIcon, Columns3,
   ArrowUpFromLine, ArrowDownFromLine, ArrowLeftFromLine, ArrowRightFromLine,
   Trash, TableProperties, Pin, ArrowUpDown, Bell, BellRing, X, Upload, Paperclip,
-  RotateCcw, Info, Settings
+  RotateCcw, Info, Settings,
+  Home, Share2, Tag, AlertCircle, BookOpen, Copy,
+  Maximize2, Minimize2, Eye, EyeOff, LayoutTemplate,
+  RefreshCw, Download,
+  Globe, Keyboard
 } from 'lucide-react'
 import * as api from '../../services/notesService'
 
 var lowlight = createLowlight(common)
+
+
+/* ══════════════════════════════════════════════════════════
+   Search Highlight — ProseMirror Decoration Plugin
+   ══════════════════════════════════════════════════════════ */
+var searchPluginKey = new PluginKey('nwSearch')
+
+var SearchHighlightExtension = Extension.create({
+  name: 'nwSearchHighlight',
+  addProseMirrorPlugins: function () {
+    return [new Plugin({
+      key: searchPluginKey,
+      state: {
+        init: function () { return { term: '', decorations: DecorationSet.empty } },
+        apply: function (tr, old) {
+          var meta = tr.getMeta(searchPluginKey)
+          var term = (meta !== undefined) ? meta : old.term
+          if (term === old.term && !tr.docChanged) return old
+          if (!term) return { term: '', decorations: DecorationSet.empty }
+          var deco = []
+          tr.doc.descendants(function (node, pos) {
+            if (!node.isText || !node.text) return
+            var lc = node.text.toLowerCase()
+            var lt = term.toLowerCase()
+            var i = 0
+            while ((i = lc.indexOf(lt, i)) !== -1) {
+              deco.push(Decoration.inline(pos + i, pos + i + lt.length, { class: 'nw-search-result' }))
+              i += 1
+            }
+          })
+          return { term: term, decorations: DecorationSet.create(tr.doc, deco) }
+        },
+      },
+      props: {
+        decorations: function (state) { return this.getState(state).decorations },
+      },
+    })]
+  },
+})
 
 /* ══════════════════════════════════════════════════════════
    Helpers
@@ -218,17 +264,22 @@ function FolderTree(props) {
    InsertMenu — Evernote/Notion "Ekle" dropdown
    ══════════════════════════════════════════════════════════ */
 var INSERT_ITEMS = [
-  { section: 'Bloklar' },
-  { id: 'h3',    label: 'Kucuk baslik',   icon: Heading3,    action: 'heading3' },
-  { id: 'check', label: 'Onay kutusu',    icon: CheckSquare, action: 'taskList' },
-  { id: 'table', label: 'Tablo',          icon: TableIcon,   action: 'table' },
-  { id: 'hr',    label: 'Ayirici',        icon: Minus,       action: 'hr' },
-  { id: 'code',  label: 'Kod blogu',      icon: Code,        action: 'codeBlock' },
+  { section: 'Yeni Özellikler' },
+  { id: 'callout', label: 'Vurgu',       icon: AlertCircle, action: 'callout',    badge: 'Yeni', desc: 'Stilize bir kutuda ipuçları, uyarılar veya önemli notlar' },
+  { section: 'Temel Gereksinimler' },
+  { id: 'check',   label: 'Yeni görev',  icon: CheckSquare, action: 'taskList',   shortcut: 'Alt+T' },
+  { id: 'table',   label: 'Tablo',       icon: TableIcon,   action: 'table' },
+  { id: 'hr',      label: 'Ayrıcı',      icon: Minus,       action: 'hr',         shortcut: '---' },
+  { id: 'quote',   label: 'Alıntı',      icon: Quote,       action: 'blockquote', shortcut: '>' },
+  { id: 'code',    label: 'Kod bloğu',   icon: Code,        action: 'codeBlock' },
+  { id: 'link',    label: 'Bağlantı',    icon: LinkIcon,    action: 'link',       shortcut: 'Ctrl+K' },
+  { section: 'Metin Stilleri' },
+  { id: 'h1',      label: 'Büyük başlık',icon: Heading1,    action: 'heading1' },
+  { id: 'h2',      label: 'Orta başlık', icon: Heading2,    action: 'heading2' },
+  { id: 'h3',      label: 'Küçük başlık',icon: Heading3,    action: 'heading3' },
   { section: 'Medya' },
-  { id: 'image', label: 'Resim',          icon: ImagePlus,   action: 'image' },
-  { id: 'youtube',label:'YouTube video',  icon: YoutubeIcon,  action: 'youtube' },
-  { section: 'Diger' },
-  { id: 'link',  label: 'Baglanti',       icon: LinkIcon,    action: 'link' },
+  { id: 'image',   label: 'Resim',       icon: ImagePlus,   action: 'image' },
+  { id: 'youtube', label: 'YouTube',     icon: YoutubeIcon, action: 'youtube' },
 ]
 
 function InsertMenu(props) {
@@ -309,7 +360,14 @@ function InsertMenu(props) {
               onClick={function () { onInsert(item); onClose() }}
             >
               <span className="nw-insert-item-ico"><Icon size={16} /></span>
-              <span className="nw-insert-item-label">{item.label}</span>
+              <span className="nw-insert-item-body">
+                <span className="nw-insert-item-top">
+                  <span className="nw-insert-item-label">{item.label}</span>
+                  {item.badge && <span className="nw-insert-item-badge">{item.badge}</span>}
+                  {item.shortcut && <span className="nw-insert-item-shortcut">{item.shortcut}</span>}
+                </span>
+                {item.desc && <span className="nw-insert-item-desc">{item.desc}</span>}
+              </span>
             </button>
           )
         })}
@@ -746,6 +804,172 @@ function NoteInfoModal({ note, folderName, currentUserName, onClose }) {
   )
 }
 
+/* ════ ShortcutsModal — Klavye kısayolları ════ */
+var SHORTCUTS = [
+  { group: 'Gezinme',   items: [
+    { keys: ['Ctrl', 'P'],   desc: 'Hızlı not arama / geç' },
+    { keys: ['Ctrl', 'F'],   desc: 'Bul & Değiştir' },
+  ]},
+  { group: 'Editör',    items: [
+    { keys: ['Ctrl', 'B'],   desc: 'Kalın (Bold)' },
+    { keys: ['Ctrl', 'I'],   desc: 'İtalik' },
+    { keys: ['Ctrl', 'U'],   desc: 'Altı çizili' },
+    { keys: ['Ctrl', 'Z'],   desc: 'Geri al' },
+    { keys: ['Ctrl', 'Y'],   desc: 'Yeniden yap' },
+    { keys: ['/'],           desc: 'Komut paleti (satır başında)' },
+  ]},
+  { group: 'Bul & Değiştir', items: [
+    { keys: ['Enter'],       desc: 'Sonraki eşleşme' },
+    { keys: ['Shift', 'Enter'], desc: 'Önceki eşleşme' },
+    { keys: ['Esc'],         desc: 'Kapat' },
+  ]},
+  { group: 'Görünüm',   items: [
+    { keys: ['F11'],         desc: 'Odak modu aç / kapat' },
+    { keys: ['Esc'],         desc: 'Odak modundan çık' },
+  ]},
+]
+function ShortcutsModal(props) {
+  var onClose = props.onClose
+  useEffect(function () {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [onClose])
+  return (
+    <div className="nw-modal-backdrop" onClick={onClose}>
+      <div className="nw-shortcuts-modal" onClick={function (e) { e.stopPropagation() }}>
+        <div className="nw-shortcuts-head">
+          <Keyboard size={15} />
+          <span>Klavye Kısayolları</span>
+          <button className="nw-toc-close" onClick={onClose}><X size={14} /></button>
+        </div>
+        <div className="nw-shortcuts-body">
+          {SHORTCUTS.map(function (group) {
+            return (
+              <div key={group.group} className="nw-shortcuts-group">
+                <div className="nw-shortcuts-group-title">{group.group}</div>
+                {group.items.map(function (item) {
+                  return (
+                    <div key={item.desc} className="nw-shortcuts-row">
+                      <span className="nw-shortcuts-desc">{item.desc}</span>
+                      <span className="nw-shortcuts-keys">
+                        {item.keys.map(function (k, i) {
+                          return (
+                            <span key={k}>
+                              <kbd className="nw-kbd">{k}</kbd>
+                              {i < item.keys.length - 1 && <span className="nw-kbd-plus">+</span>}
+                            </span>
+                          )
+                        })}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   QuickSwitcherModal — Ctrl+P hızlı not arama/geçiş
+   ══════════════════════════════════════════════════════════ */
+function QuickSwitcherModal(props) {
+  var open = props.open
+  var notes = props.notes
+  var folders = props.folders
+  var onSelect = props.onSelect
+  var onClose = props.onClose
+
+  var [query, setQuery] = useState('')
+  var [activeIdx, setActiveIdx] = useState(0)
+  var inputRef = useRef(null)
+
+  useEffect(function () {
+    if (open) {
+      setQuery('')
+      setActiveIdx(0)
+      setTimeout(function () { inputRef.current && inputRef.current.focus() }, 40)
+    }
+  }, [open])
+
+  var filtered = (function () {
+    var q = query.trim().toLowerCase()
+    if (!q) return notes.slice().sort(function (a, b) { return b.updatedAt - a.updatedAt }).slice(0, 12)
+    return notes.filter(function (n) {
+      return (n.title || '').toLowerCase().indexOf(q) !== -1
+    }).slice(0, 12)
+  })()
+
+  useEffect(function () { setActiveIdx(0) }, [query])
+
+  useEffect(function () {
+    if (!open) return
+    function handleKey(e) {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(function (i) { return Math.min(i + 1, filtered.length - 1) }) }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(function (i) { return Math.max(i - 1, 0) }) }
+      if (e.key === 'Enter') { if (filtered[activeIdx]) onSelect(filtered[activeIdx]) }
+    }
+    document.addEventListener('keydown', handleKey)
+    return function () { document.removeEventListener('keydown', handleKey) }
+  }, [open, filtered, activeIdx, onSelect, onClose])
+
+  if (!open) return null
+
+  function getFolderLabel(folderId) {
+    if (!folderId) return 'Tüm Notlar'
+    var f = folders.find(function (x) { return x.id === folderId })
+    return f ? f.name : '—'
+  }
+
+  return (
+    <div className="nw-qs-backdrop" onClick={onClose}>
+      <div className="nw-qs-modal" onClick={function (e) { e.stopPropagation() }}>
+        <div className="nw-qs-input-wrap">
+          <Search size={14} className="nw-qs-ico" />
+          <input
+            ref={inputRef}
+            className="nw-qs-input"
+            placeholder="Not adı ara... (Ctrl+P)"
+            value={query}
+            onChange={function (e) { setQuery(e.target.value) }}
+          />
+          {query && (
+            <button className="nw-qs-clear" onClick={function () { setQuery(''); inputRef.current && inputRef.current.focus() }}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        <div className="nw-qs-list">
+          {filtered.length === 0 && <div className="nw-qs-empty">Not bulunamadı</div>}
+          {filtered.map(function (note, idx) {
+            return (
+              <button
+                key={note.id}
+                className={'nw-qs-item' + (idx === activeIdx ? ' nw-qs-item--active' : '')}
+                onClick={function () { onSelect(note) }}
+                onMouseEnter={function () { setActiveIdx(idx) }}
+              >
+                <FileText size={13} className="nw-qs-item-ico" />
+                <span className="nw-qs-item-title">{note.title || 'Başlıksız Not'}</span>
+                <span className="nw-qs-item-folder">{getFolderLabel(note.folderId)}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="nw-qs-footer">
+          <span>↑↓ seç</span><span>↵ aç</span><span>Esc kapat</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════════════════════
    NoteActionsMenu — "..." dropdown (PDF export, delete etc.)
    ══════════════════════════════════════════════════════════ */
@@ -753,15 +977,18 @@ function NoteActionsMenu(props) {
   var onClose = props.onClose
   var onExportPdf = props.onExportPdf
   var onDelete = props.onDelete
-  var onReminders = props.onReminders              // Hatirlaticilar popover'ini ac
-  var reminderCount = props.reminderCount || 0     // Aktif hatirlatici sayisi (badge icin)
-  var onEncryptWhole = props.onEncryptWhole       // Mod 2: Tum notu sifrele
-  var onLockWhole = props.onLockWhole             // Mod 2: Acikken kilitle
-  var onRemoveEncryption = props.onRemoveEncryption // Mod 2: Sifrelemeyi kaldir
-  var isEncrypted = !!props.isEncrypted            // Not Mod 2 sifreli mi?
-  var isUnlocked = !!props.isUnlocked              // Mod 2 acikken true
+  var onReminders = props.onReminders
+  var reminderCount = props.reminderCount || 0
+  var onEncryptWhole = props.onEncryptWhole
+  var onLockWhole = props.onLockWhole
+  var onRemoveEncryption = props.onRemoveEncryption
+  var isEncrypted = !!props.isEncrypted
+  var isUnlocked = !!props.isUnlocked
   var onNoteInfo = props.onNoteInfo
+  var onTogglePin = props.onTogglePin
+  var isPinned = !!props.isPinned
   var btnRef = props.btnRef
+  var onClone = props.onClone
 
   useEffect(function () {
     function handleClick(e) {
@@ -778,48 +1005,71 @@ function NoteActionsMenu(props) {
         <Info size={15} />
         <span>Not Bilgisi</span>
       </button>
-      <div className="nw-actions-sep" />
       <button className="nw-actions-item" onClick={onReminders}>
         {reminderCount > 0 ? <BellRing size={15} /> : <Bell size={15} />}
-        <span>Hatirlatici{reminderCount > 0 ? ' (' + reminderCount + ')' : ''}</span>
+        <span>Hatırlatıcı{reminderCount > 0 ? ' (' + reminderCount + ')' : ''}</span>
+      </button>
+      <div className="nw-actions-sep" />
+      <button className="nw-actions-item" onClick={onTogglePin}>
+        <Pin size={15} />
+        <span>{isPinned ? 'Sabitlemeyi Kaldır' : 'Deftere Sabitle'}</span>
+      </button>
+      <div className="nw-actions-sep" />
+      <button className="nw-actions-item" onClick={onClone}>
+        <Copy size={15} />
+        <span>Notu Kopyala</span>
       </button>
       <div className="nw-actions-sep" />
       <button className="nw-actions-item" onClick={onExportPdf}>
         <FileDown size={15} />
-        <span>PDF olarak aktar</span>
+        <span>PDF Olarak Dışa Aktar</span>
       </button>
       <div className="nw-actions-sep" />
       {!isEncrypted && (
         <button className="nw-actions-item" onClick={onEncryptWhole}>
           <Lock size={15} />
-          <span>Notu tamamen sifrele</span>
+          <span>Notu Şifrele</span>
         </button>
       )}
       {isEncrypted && isUnlocked && (
         <>
           <button className="nw-actions-item" onClick={onLockWhole}>
             <Lock size={15} />
-            <span>Notu tekrar kilitle</span>
+            <span>Notu Kilitle</span>
           </button>
           <button className="nw-actions-item" onClick={onRemoveEncryption}>
             <Unlock size={15} />
-            <span>Sifrelemeyi kaldir</span>
+            <span>Şifrelemeyi Kaldır</span>
           </button>
         </>
       )}
       {isEncrypted && !isUnlocked && (
         <button className="nw-actions-item" disabled style={{ opacity: 0.55, cursor: 'not-allowed' }}>
           <Lock size={15} />
-          <span>Not sifreli — ac, sonra ayar gorunur</span>
+          <span>Not şifreli — önce açın</span>
         </button>
       )}
       <div className="nw-actions-sep" />
       <button className="nw-actions-item nw-actions-item--danger" onClick={onDelete}>
         <Trash2 size={15} />
-        <span>Notu sil</span>
+        <span>Çöp Kutusuna Taşı</span>
       </button>
     </div>
   )
+}
+
+/* Paste/drop yardımcıları — base64 fallback (not henüz kaydedilmemişse) */
+function insertImageNode(view, src, alt, pos) {
+  var node = view.state.schema.nodes.image.create({ src: src, alt: alt || '' })
+  var tr = pos != null
+    ? view.state.tr.insert(pos, node)
+    : view.state.tr.replaceSelectionWith(node)
+  view.dispatch(tr)
+}
+function insertImageBase64(view, file, pos) {
+  var reader = new FileReader()
+  reader.onload = function (ev) { insertImageNode(view, ev.target.result, file.name, pos) }
+  reader.readAsDataURL(file)
 }
 
 function formatFileSize(bytes) {
@@ -864,24 +1114,109 @@ function AttachmentsPanel({ open, onToggle, attachments, loading, uploadRef, onU
               <div key={a.id} className="nw-attach-item">
                 <FileText size={14} className="nw-attach-file-ico" />
                 <div className="nw-attach-info">
-                  <a
-                    href={'/Notes/DownloadAttachment?id=' + a.id}
-                    className="nw-attach-name"
-                    download={a.fileName}
-                    onClick={function (e) { e.stopPropagation() }}
-                  >
-                    {a.fileName}
-                  </a>
+                  <span className="nw-attach-name" title={a.fileName}>{a.fileName}</span>
                   <span className="nw-attach-meta">{formatFileSize(a.fileSize)} · {a.uploadedAt}</span>
                 </div>
-                <button className="nw-attach-del" title="Eki sil" onClick={function (e) { e.stopPropagation(); onDelete(a.id, a.fileName) }}>
-                  <Trash2 size={13} />
-                </button>
+                <div className="nw-attach-actions">
+                  <a
+                    className="nw-attach-act"
+                    href={'/Notes/DownloadAttachment?id=' + a.id + '&inline=true'}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Görüntüle"
+                    onClick={function (e) { e.stopPropagation() }}
+                  >
+                    <Eye size={13} />
+                  </a>
+                  <a
+                    className="nw-attach-act"
+                    href={'/Notes/DownloadAttachment?id=' + a.id}
+                    download={a.fileName}
+                    title="İndir"
+                    onClick={function (e) { e.stopPropagation() }}
+                  >
+                    <Download size={13} />
+                  </a>
+                  <button
+                    className="nw-attach-act nw-attach-act--del"
+                    title="Sil"
+                    onClick={function (e) { e.stopPropagation(); onDelete(a.id, a.fileName) }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
             )
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════
+   SlashCommandMenu — "/" ile tetiklenen blok-tipi menü
+   ══════════════════════════════════════════════════════════ */
+function SlashCommandMenu(props) {
+  var open = props.open
+  var query = props.query
+  var pos = props.pos       // { x, y } — viewport koordinatları
+  var onSelect = props.onSelect
+  var onClose = props.onClose
+
+  var [activeIdx, setActiveIdx] = useState(0)
+
+  var items = INSERT_ITEMS.filter(function (item) {
+    if (item.section) return false
+    if (!query) return true
+    return item.label.toLowerCase().indexOf(query.toLowerCase()) !== -1
+  })
+
+  useEffect(function () { setActiveIdx(0) }, [query])
+
+  useEffect(function () {
+    if (!open || items.length === 0) return
+    function handleKey(e) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault(); e.stopPropagation()
+        setActiveIdx(function (i) { return (i + 1) % items.length })
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault(); e.stopPropagation()
+        setActiveIdx(function (i) { return (i - 1 + items.length) % items.length })
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); e.stopPropagation()
+        if (items[activeIdx]) onSelect(items[activeIdx])
+      } else if (e.key === 'Escape') {
+        e.stopPropagation(); onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKey, true)
+    return function () { document.removeEventListener('keydown', handleKey, true) }
+  }, [open, items, activeIdx, onSelect, onClose])
+
+  if (!open || items.length === 0) return null
+
+  return (
+    <div
+      className="nw-slash-menu"
+      style={{ left: pos.x, top: pos.y }}
+      onMouseDown={function (e) { e.preventDefault() }}
+    >
+      {items.map(function (item, idx) {
+        var Icon = item.icon
+        return (
+          <button
+            key={item.id}
+            className={'nw-slash-item' + (idx === activeIdx ? ' nw-slash-item--active' : '')}
+            onMouseDown={function (e) { e.preventDefault(); onSelect(item) }}
+            onMouseEnter={function () { setActiveIdx(idx) }}
+          >
+            <span className="nw-slash-item-ico"><Icon size={14} /></span>
+            <span className="nw-slash-item-label">{item.label}</span>
+            {item.shortcut && <span className="nw-slash-item-shortcut">{item.shortcut}</span>}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -925,6 +1260,7 @@ export default function NotesWorkspace() {
   var [sortOrder, setSortOrder] = useState('updatedDesc') // updatedDesc | updatedAsc | titleAsc | titleDesc | createdDesc
   var contentTimerRef = useRef(null)
   var isSwitchingNoteRef = useRef(false)
+  var isSwitchingResetRef = useRef(null)  // isSwitchingNoteRef'i async sıfırlamak için
   var selectedNoteIdRef = useRef(null)
   selectedNoteIdRef.current = selectedNoteId
   var importInputRef = useRef(null)
@@ -932,9 +1268,10 @@ export default function NotesWorkspace() {
   var [importStatus, setImportStatus] = useState(null)   // { ok, msg }
   var gearBtnRef = useRef(null)
   var [gearMenuOpen, setGearMenuOpen] = useState(false)
-  var [importSubOpen, setImportSubOpen] = useState(false)
+  // importSubOpen kaldırıldı — direkt buton kullanılıyor
   var [searchQuery, setSearchQuery] = useState('')
   var attachUploadRef = useRef(null)
+  var imageInputRef   = useRef(null)
   var [attachmentsOpen, setAttachmentsOpen] = useState(false)
   var [attachments, setAttachments] = useState([])
   var [attachmentsLoading, setAttachmentsLoading] = useState(false)
@@ -942,6 +1279,42 @@ export default function NotesWorkspace() {
   var [trashLoaded, setTrashLoaded] = useState(false)
   var [currentUserName, setCurrentUserName] = useState('')
   var [noteInfoOpen, setNoteInfoOpen] = useState(false)
+  var [currentCompanyId, setCurrentCompanyId] = useState(0)
+
+  // ── Quick Switcher / Reading Mode / Tags ──────────────────────────────
+  var [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)
+  var [readingMode, setReadingMode] = useState(false)
+  var [tagInputOpen, setTagInputOpen] = useState(false)
+  var [tagInput, setTagInput] = useState('')
+  var tagInputRef = useRef(null)
+  var [shortcutsOpen, setShortcutsOpen] = useState(false)
+  // ── Share modal ───────────────────────────────────────────────────────
+  var [shareIsPublic, setShareIsPublic] = useState(false)
+  var [shareToken, setShareToken] = useState(null)
+  var [sharePanelOpen, setSharePanelOpen] = useState(false)
+  var [shareCopied, setShareCopied] = useState(false)
+  var [shareIncludeAttachments, setShareIncludeAttachments] = useState(false)
+  // ── User share (kullanıcı bazlı paylaşım) ────────────────────────────
+  var [userShares, setUserShares] = useState([])          // [{ shareId, userId, fullName, email, canEdit }]
+  var [companyUsers, setCompanyUsers] = useState([])       // tüm şirket kullanıcıları
+  var [shareUserSearch, setShareUserSearch] = useState('') // arama filtresi
+  var [shareUserDropOpen, setShareUserDropOpen] = useState(false)
+  // ── Focus Mode / TOC / Find & Replace / Slash Command ─────────────────
+  var [focusMode, setFocusMode] = useState(false)
+  var [tocOpen, setTocOpen] = useState(false)
+  var [tocItems, setTocItems] = useState([])
+  var tocTimerRef = useRef(null)
+  var [findOpen, setFindOpen] = useState(false)
+  var [findTerm, setFindTerm] = useState('')
+  var [replaceTerm, setReplaceTerm] = useState('')
+  var [findMatches, setFindMatches] = useState([])
+  var [findMatchIdx, setFindMatchIdx] = useState(0)
+  var findInputRef = useRef(null)
+  var [slashMenuOpen, setSlashMenuOpen] = useState(false)
+  var [slashQuery, setSlashQuery] = useState('')
+  var [slashPos, setSlashPos] = useState({ x: 0, y: 0 })
+  var slashMenuOpenRef = useRef(false)
+  slashMenuOpenRef.current = slashMenuOpen
 
   var filteredNotes = (function () {
     if (selectedFolderId === '__trash') return trashedNotes
@@ -950,7 +1323,8 @@ export default function NotesWorkspace() {
       return notes.filter(function (n) {
         if ((n.title || '').toLowerCase().indexOf(q) !== -1) return true
         var plainContent = (n.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ')
-        return plainContent.toLowerCase().indexOf(q) !== -1
+        if (plainContent.toLowerCase().indexOf(q) !== -1) return true
+        return (n.ocrText || '').toLowerCase().indexOf(q) !== -1
       })
     }
     return selectedFolderId
@@ -988,10 +1362,41 @@ export default function NotesWorkspace() {
       Typography,
       Focus.configure({ className: 'has-focus', mode: 'deepest' }),
       EncryptedMark,
+      SearchHighlightExtension,
     ],
     editorProps: {
       attributes: {
         class: 'nw-editor-content',
+      },
+      /* Pano'dan resim yapıştırma (Ctrl+V / ekran görüntüsü) — base64 inline */
+      handlePaste: function (view, event) {
+        var items = event.clipboardData && event.clipboardData.items
+        if (!items) return false
+        var imgItem = null
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image/') === 0) { imgItem = items[i]; break }
+        }
+        if (!imgItem) return false
+        event.preventDefault()
+        var file = imgItem.getAsFile()
+        if (!file) return false
+        insertImageBase64(view, file, null)
+        return true
+      },
+      /* Sürükle-bırak resim desteği — base64 inline */
+      handleDrop: function (view, event) {
+        var files = event.dataTransfer && event.dataTransfer.files
+        if (!files || !files.length) return false
+        var imgFile = null
+        for (var i = 0; i < files.length; i++) {
+          if (files[i].type.indexOf('image/') === 0) { imgFile = files[i]; break }
+        }
+        if (!imgFile) return false
+        event.preventDefault()
+        var coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
+        var pos = coords ? coords.pos : null
+        insertImageBase64(view, imgFile, pos)
+        return true
       },
       handleDOMEvents: {
         contextmenu: function (view, event) {
@@ -1020,10 +1425,57 @@ export default function NotesWorkspace() {
     },
     onUpdate: function (ctx) {
       if (isSwitchingNoteRef.current) return
+
+      // noteId'yi ŞIMDI yakala (timer ateşlendiğinde selectedNoteIdRef değişmiş olabilir)
+      var capturedNoteId = selectedNoteIdRef.current
+      if (!capturedNoteId) return
+
+      // ── Slash command detection ─────────────────────────────────────────
+      var $anch = ctx.editor.state.selection.$anchor
+      if ($anch.parent.type.name === 'paragraph') {
+        var pText = $anch.parent.textContent
+        if (pText.startsWith('/')) {
+          var slashCoords = ctx.editor.view.coordsAtPos(ctx.editor.state.selection.anchor)
+          if (!slashMenuOpenRef.current) {
+            setSlashPos({ x: slashCoords.left, y: slashCoords.bottom + 6 })
+            setSlashMenuOpen(true)
+          }
+          setSlashQuery(pText.slice(1))
+        } else if (slashMenuOpenRef.current) {
+          setSlashMenuOpen(false)
+          setSlashQuery('')
+        }
+      } else if (slashMenuOpenRef.current) {
+        setSlashMenuOpen(false)
+        setSlashQuery('')
+      }
+
+      // ── TOC extraction (debounced 400 ms) ──────────────────────────────
+      if (tocTimerRef.current) clearTimeout(tocTimerRef.current)
+      tocTimerRef.current = setTimeout(function () {
+        var json = ctx.editor.getJSON()
+        var toc = []
+        function walkNodes(nodes) {
+          if (!nodes) return
+          nodes.forEach(function (n) {
+            if (n.type === 'heading') {
+              var txt = (n.content || []).map(function (c) { return c.text || '' }).join('')
+              if (txt) toc.push({ level: (n.attrs && n.attrs.level) || 1, text: txt })
+            }
+            if (n.content) walkNodes(n.content)
+          })
+        }
+        walkNodes(json.content)
+        setTocItems(toc)
+      }, 400)
+
       if (contentTimerRef.current) clearTimeout(contentTimerRef.current)
       contentTimerRef.current = setTimeout(async function () {
         var html = ctx.editor.getHTML()
-        var noteId = selectedNoteIdRef.current
+        // capturedNoteId: onUpdate ateşlendiğinde yakalandı.
+        // selectedNoteIdRef.current bu noktada farklı bir nota işaret edebilir;
+        // capturedNoteId kullanarak her zaman DÜZENLENEN notun kaydedilmesi sağlanır.
+        var noteId = capturedNoteId
         // Mod 2: Bu not sifreli ve aciksa, save oncesi tekrar sifrele.
         // Cache'den parolayi al; yoksa save atla (kullanici oturum acmamis).
         var notePrev = null
@@ -1038,16 +1490,10 @@ export default function NotesWorkspace() {
         var isEnc = notePrev && notePrev.isFullyEncrypted
         if (isEnc) {
           // Guvenlik: Sifreli not + editor bos ise autosave ATLA.
-          // Kullanici sifreleme anindan hemen sonra editor temizlendiginde
-          // bu autosave tetiklenebilir ve gercek sifreli icerigi bos bir
-          // sifreli payload ile uzerine yazabilir.
           var plainText = (html || '').replace(/<[^>]*>/g, '').trim()
           if (!plainText) return
           var pw = recallPassword('note-' + noteId)
-          if (!pw) {
-            // Cache expired or not unlocked; skip save (kullanici onceki parolayi girmeli)
-            return
-          }
+          if (!pw) { return }
           try {
             finalContent = await encryptText(html, pw)
           } catch (e) {
@@ -1071,6 +1517,7 @@ export default function NotesWorkspace() {
     api.getAll()
       .then(function (data) {
         if (data.currentUserName) setCurrentUserName(data.currentUserName)
+        if (data.companyId) setCurrentCompanyId(data.companyId)
         var flds = (data.folders || []).map(function (f) {
           return { id: f.id, name: f.name, parentId: f.parentId || null }
         })
@@ -1086,10 +1533,46 @@ export default function NotesWorkspace() {
             isFullyEncrypted: !!n.isFullyEncrypted,
             encryptionHint: n.encryptionHint || null,
             reminderCount: n.reminderCount || 0,
+            tags: (function () { try { return n.tags ? JSON.parse(n.tags) : [] } catch (e) { return [] } })(),
+            linkedEntityType:  n.linkedEntityType  || null,
+            linkedEntityId:    n.linkedEntityId    || null,
+            linkedEntityLabel: n.linkedEntityLabel || null,
+            visibility:        n.visibility        || 0,
+            isOwner:           n.isOwner !== false,
+            shareIsPublic:             !!n.shareIsPublic,
+            shareToken:                n.shareToken || null,
+            shareIncludeAttachments:   !!n.shareIncludeAttachments,
+            ocrText:                   n.ocrText    || null,
           }
         })
         setFolders(flds)
         setNotes(nts)
+
+        // OCR olmayan ama görsel içeren notlar için arka planda re-OCR tetikle (max 5)
+        var ocrMissing = nts.filter(function (n) {
+          return !n.isFullyEncrypted && n.ocrText === null && n.content.indexOf('data:image/') !== -1
+        })
+        if (ocrMissing.length > 0) {
+          var toProcess = ocrMissing.slice(0, 5)
+          var token = (document.cookie.match(/XSRF-TOKEN=([^;]+)/) || [])[1] || ''
+          toProcess.forEach(function (n) {
+            fetch('/Notes/ReOcrNoteJson', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+              body: JSON.stringify({ noteId: n.id }),
+            })
+              .then(function (r) { return r.ok ? r.json() : null })
+              .then(function (res) {
+                if (!res || !res.ok || !res.ocrText) return
+                setNotes(function (prev) {
+                  return prev.map(function (x) {
+                    return x.id === n.id ? Object.assign({}, x, { ocrText: res.ocrText }) : x
+                  })
+                })
+              })
+              .catch(function () {})
+          })
+        }
         var parentIds = new Set()
         flds.forEach(function (f) { if (f.parentId) parentIds.add(f.parentId) })
         setExpandedFolders(parentIds)
@@ -1099,16 +1582,16 @@ export default function NotesWorkspace() {
       .finally(function () { setLoading(false) })
   }, [])
 
-  /* Ek paneli açıkken not değişince ekleri yenile */
+  /* Not değişince ekleri sıfırla ve arka planda yükle (panel kapalı olsa bile sayı görünsün) */
   useEffect(function () {
     setAttachments([])
-    if (!attachmentsOpen || !selectedNoteId) return
+    if (!selectedNoteId) return
     setAttachmentsLoading(true)
     api.getAttachments(selectedNoteId)
       .then(function (data) { setAttachments(data || []) })
       .catch(function () { setAttachments([]) })
       .finally(function () { setAttachmentsLoading(false) })
-  }, [selectedNoteId, attachmentsOpen])
+  }, [selectedNoteId])
 
   /* Çöp kutusu seçilince server'dan yükle */
   useEffect(function () {
@@ -1142,10 +1625,14 @@ export default function NotesWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFolderId])
 
-  /* Çöp kutusu seçilince editor read-only olsun */
+  /* Çöp kutusu veya başkasının notu seçilince editor read-only olsun */
   useEffect(function () {
-    if (editor) editor.setEditable(selectedFolderId !== '__trash')
-  }, [selectedFolderId, editor])
+    if (editor) {
+      var isTrash = selectedFolderId === '__trash'
+      var isNotOwner = selectedNote ? selectedNote.isOwner === false : false
+      editor.setEditable(!isTrash && !isNotOwner)
+    }
+  }, [selectedFolderId, editor, selectedNote])
 
   /* Sync Tiptap editor when switching notes */
   useEffect(function () {
@@ -1176,20 +1663,25 @@ export default function NotesWorkspace() {
           // Editor'e dokunma — lock screen gorunecek
           isSwitchingNoteRef.current = true
           editor.commands.setContent('', false)
-          isSwitchingNoteRef.current = false
+          clearTimeout(isSwitchingResetRef.current)
+          isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 0)
         }
       } else {
         var currentContent = editor.getHTML()
         if (currentContent !== selectedNote.content) {
           isSwitchingNoteRef.current = true
           editor.commands.setContent(selectedNote.content || '', false)
-          isSwitchingNoteRef.current = false
+          // TipTap bazı extension'lar appendTransaction ile async onUpdate tetikleyebilir;
+          // flag'i 0ms sonra sıfırla — bir event loop tick yeterli.
+          clearTimeout(isSwitchingResetRef.current)
+          isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 0)
         }
       }
     } else if (editor && !selectedNote) {
       isSwitchingNoteRef.current = true
       editor.commands.setContent('', false)
-      isSwitchingNoteRef.current = false
+      clearTimeout(isSwitchingResetRef.current)
+      isSwitchingResetRef.current = setTimeout(function() { isSwitchingNoteRef.current = false }, 0)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNoteId, editor, unlockedNoteIds])
@@ -1238,7 +1730,7 @@ export default function NotesWorkspace() {
           setImportStatus({ ok: false, msg: res.error || 'Aktarım başarısız.' })
           return
         }
-        setImportStatus({ ok: true, msg: res.imported + ' not aktarıldı.' + (res.failed > 0 ? ' ' + res.failed + ' başarısız.' : '') })
+        setImportStatus({ ok: true, msg: res.imported + ' not aktarıldı.' + (res.failed > 0 ? ' ' + res.failed + ' başarısız.' : '') + (res.skippedAttachments > 0 ? ' (' + res.skippedAttachments + ' ek 20 MB sınırı nedeniyle atlandı)' : '') })
         setTimeout(function () { setImportStatus(null) }, 5000)
         // Klasörler ve notları yenile
         api.getAll().then(function (data) {
@@ -1253,6 +1745,12 @@ export default function NotesWorkspace() {
               updatedAt: new Date(n.updatedAt),
               isPinned: !!n.isPinned, isFullyEncrypted: !!n.isFullyEncrypted,
               encryptionHint: n.encryptionHint || null, reminderCount: n.reminderCount || 0,
+              tags: (function () { try { return n.tags ? JSON.parse(n.tags) : [] } catch (e) { return [] } })(),
+              linkedEntityType:  n.linkedEntityType  || null,
+              linkedEntityId:    n.linkedEntityId    || null,
+              linkedEntityLabel: n.linkedEntityLabel || null,
+              visibility:        n.visibility        || 0,
+              isOwner:           n.isOwner !== false,
             }
           })
           setFolders(flds)
@@ -1274,16 +1772,21 @@ export default function NotesWorkspace() {
   }, [])
 
   var handleAttachUpload = useCallback(function (e) {
-    var files = e.target.files
-    if (!files || files.length === 0 || !selectedNoteId) return
+    var fileArr = Array.from(e.target.files || [])
     e.target.value = ''
-    Array.from(files).forEach(function (file) {
+    if (fileArr.length === 0) { console.warn('[attach upload] no files selected'); return }
+    if (!selectedNoteId) { console.warn('[attach upload] no selectedNoteId — note not yet saved?'); return }
+    fileArr.forEach(function (file) {
+      console.log('[attach upload] uploading', file.name, 'to note', selectedNoteId)
       api.uploadAttachment(selectedNoteId, file)
         .then(function (res) {
+          console.log('[attach upload] response', res)
           if (res.success && res.attachment)
             setAttachments(function (prev) { return prev.concat([res.attachment]) })
+          else if (!res.success)
+            console.error('[attach upload] server refused:', res.error || res.message || JSON.stringify(res))
         })
-        .catch(function (err) { console.error('[attach upload]', err) })
+        .catch(function (err) { console.error('[attach upload] fetch error:', err) })
     })
   }, [selectedNoteId])
 
@@ -1396,18 +1899,89 @@ export default function NotesWorkspace() {
     function close(e) {
       if (gearBtnRef.current && gearBtnRef.current.contains(e.target)) return
       setGearMenuOpen(false)
-      setImportSubOpen(false)
     }
     document.addEventListener('mousedown', close)
     return function () { document.removeEventListener('mousedown', close) }
   }, [gearMenuOpen])
+
+  // ── Global keyboard shortcuts: Focus Mode / Find / Quick Switcher / Esc ─
+  useEffect(function () {
+    function onKey(e) {
+      if (e.key === 'F11') {
+        e.preventDefault()
+        setFocusMode(function (p) { return !p })
+      } else if (e.key === 'Escape') {
+        if (slashMenuOpenRef.current) { setSlashMenuOpen(false); setSlashQuery(''); return }
+        setQuickSwitcherOpen(false)
+        setFocusMode(false)
+        setFindOpen(false)
+        setTagInputOpen(false)
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault()
+        setFindOpen(function (p) { return !p })
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setQuickSwitcherOpen(function (p) { return !p })
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [])
+
+  // ── Close share modal on Esc ──────────────────────────────────────────
+  useEffect(function () {
+    if (!sharePanelOpen) return
+    function onKey(e) { if (e.key === 'Escape') setSharePanelOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return function () { document.removeEventListener('keydown', onKey) }
+  }, [sharePanelOpen])
+
+  // ── Auto-focus find input when bar opens ───────────────────────────────
+  useEffect(function () {
+    if (findOpen) {
+      setTimeout(function () { findInputRef.current && findInputRef.current.focus() }, 40)
+    }
+  }, [findOpen])
+
+  // ── Sync find term → search highlight + collect match positions ─────────
+  useEffect(function () {
+    if (!editor) return
+    var term = (findOpen && findTerm) ? findTerm : ''
+    // Update decoration highlights
+    try { editor.view.dispatch(editor.state.tr.setMeta(searchPluginKey, term)) } catch (e) {}
+    if (!term) { setFindMatches([]); setFindMatchIdx(0); return }
+    // Collect positions
+    var matches = []
+    var lt = term.toLowerCase()
+    editor.state.doc.descendants(function (node, pos) {
+      if (!node.isText || !node.text) return
+      var lc = node.text.toLowerCase()
+      var i = 0
+      while ((i = lc.indexOf(lt, i)) !== -1) {
+        matches.push({ from: pos + i, to: pos + i + lt.length })
+        i += 1
+      }
+    })
+    setFindMatches(matches)
+    setFindMatchIdx(0)
+    if (matches.length > 0) {
+      try { editor.chain().setTextSelection(matches[0]).scrollIntoView().run() } catch (e) {}
+    }
+  }, [editor, findTerm, findOpen])
+
+  // ── Replace term update (just visual state) ─────────────────────────────
+  // (no-op — replaceTerm is read at action time; kept for clarity)
 
   var handleSelectNote = useCallback(function (nid) {
     // Not degisirken pending autosave'i hemen iptal et —
     // eski notun plaintext/sifreli icerigi yeni notun icerigi ile karismasin
     if (contentTimerRef.current) { clearTimeout(contentTimerRef.current); contentTimerRef.current = null }
     setSelectedNoteId(nid)
-  }, [])
+    var n = notes.find(function (x) { return x.id === nid })
+    setShareIsPublic(n ? !!n.shareIsPublic : false)
+    setShareToken(n ? (n.shareToken || null) : null)
+    setShareIncludeAttachments(n ? !!n.shareIncludeAttachments : false)
+  }, [notes])
 
   var handleTogglePin = useCallback(function (nid, e) {
     if (e) { e.stopPropagation(); e.preventDefault() }
@@ -1457,9 +2031,9 @@ export default function NotesWorkspace() {
       .catch(function (e) { console.error('[NotesWorkspace] saveNote error:', e) })
   }, [selectedFolderId])
 
-  var doDeleteNote = useCallback(function () {
-    if (!selectedNoteId) return
-    var delId = selectedNoteId
+  var doDeleteNote = useCallback(function (targetId) {
+    var delId = targetId || selectedNoteId
+    if (!delId) return
     var note = notes.find(function (n) { return n.id === delId })
     api.deleteNote(delId).catch(function (e) { console.error(e) })
     setNotes(function (prev) { return prev.filter(function (n) { return n.id !== delId }) })
@@ -1468,21 +2042,24 @@ export default function NotesWorkspace() {
         return [note].concat(prev.filter(function (n) { return n.id !== delId }))
       })
     }
-    setSelectedNoteId(function () {
-      var remaining = filteredNotes.filter(function (n) { return n.id !== delId })
-      return remaining.length > 0 ? remaining[0].id : null
-    })
+    if (delId === selectedNoteId) {
+      setSelectedNoteId(function () {
+        var remaining = filteredNotes.filter(function (n) { return n.id !== delId })
+        return remaining.length > 0 ? remaining[0].id : null
+      })
+    }
     setConfirmModal(null)
   }, [selectedNoteId, filteredNotes, notes])
 
-  var handleDeleteNote = useCallback(function () {
-    if (!selectedNoteId) return
-    var note = notes.find(function (n) { return n.id === selectedNoteId })
+  var handleDeleteNote = useCallback(function (noteId) {
+    var targetId = noteId || selectedNoteId
+    if (!targetId) return
+    var note = notes.find(function (n) { return n.id === targetId })
     setConfirmModal({
       title: 'Çöp Kutusuna Taşı',
       text: '"' + (note ? note.title || 'Başlıksız Not' : 'Not') + '" çöp kutusuna taşınacak.',
       okLabel: 'Çöp Kutusuna Taşı',
-      onConfirm: doDeleteNote,
+      onConfirm: function () { doDeleteNote(targetId) },
     })
   }, [selectedNoteId, notes, doDeleteNote])
 
@@ -1644,6 +2221,7 @@ export default function NotesWorkspace() {
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     }).from(container).save()
   }, [selectedNote, editor])
+
 
   /* ══════════════════════════════════════════════════════════
      ŞIFRELEME — Mod 1 (Secili bolum) + Mod 2 (Tum not)
@@ -1875,8 +2453,22 @@ export default function NotesWorkspace() {
     if (!editor) return
     editor.chain().focus()
     switch (item.action) {
+      case 'heading1':
+        editor.chain().focus().toggleHeading({ level: 1 }).run()
+        break
+      case 'heading2':
+        editor.chain().focus().toggleHeading({ level: 2 }).run()
+        break
       case 'heading3':
         editor.chain().focus().toggleHeading({ level: 3 }).run()
+        break
+      case 'blockquote':
+        editor.chain().focus().toggleBlockquote().run()
+        break
+      case 'callout':
+        editor.chain().focus()
+          .insertContent('<blockquote class="nw-callout"><p>💡 Buraya notunuzu yazın…</p></blockquote>')
+          .run()
         break
       case 'taskList':
         editor.chain().focus().toggleTaskList().run()
@@ -1896,8 +2488,7 @@ export default function NotesWorkspace() {
         break
       }
       case 'image': {
-        var imgUrl = prompt('Resim URL:')
-        if (imgUrl) editor.chain().focus().setImage({ src: imgUrl }).run()
+        imageInputRef.current && imageInputRef.current.click()
         break
       }
       case 'youtube': {
@@ -1909,6 +2500,280 @@ export default function NotesWorkspace() {
         break
     }
   }, [editor])
+
+  /* ── TOC: scroll editor to a heading ─────────────── */
+  var scrollToHeading = useCallback(function (text) {
+    if (!editor) return
+    var headings = editor.view.dom.querySelectorAll('h1,h2,h3,h4,h5,h6')
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].textContent.trim() === text) {
+        headings[i].scrollIntoView({ behavior: 'smooth', block: 'start' })
+        break
+      }
+    }
+  }, [editor])
+
+  /* ── Find & Replace handlers ──────────────────────── */
+  var handleFindNext = useCallback(function () {
+    if (!editor || findMatches.length === 0) return
+    var next = (findMatchIdx + 1) % findMatches.length
+    setFindMatchIdx(next)
+    try { editor.chain().setTextSelection(findMatches[next]).scrollIntoView().run() } catch (e) {}
+  }, [editor, findMatches, findMatchIdx])
+
+  var handleFindPrev = useCallback(function () {
+    if (!editor || findMatches.length === 0) return
+    var prev = (findMatchIdx - 1 + findMatches.length) % findMatches.length
+    setFindMatchIdx(prev)
+    try { editor.chain().setTextSelection(findMatches[prev]).scrollIntoView().run() } catch (e) {}
+  }, [editor, findMatches, findMatchIdx])
+
+  var handleReplaceOne = useCallback(function () {
+    if (!editor || findMatches.length === 0 || findMatchIdx >= findMatches.length) return
+    var match = findMatches[findMatchIdx]
+    try {
+      editor.chain().setTextSelection(match).insertContent(replaceTerm).run()
+      // Recalculate after replace
+      var lt = findTerm.toLowerCase()
+      var newMatches = []
+      editor.state.doc.descendants(function (node, pos) {
+        if (!node.isText || !node.text) return
+        var lc = node.text.toLowerCase()
+        var i = 0
+        while ((i = lc.indexOf(lt, i)) !== -1) {
+          newMatches.push({ from: pos + i, to: pos + i + lt.length })
+          i += 1
+        }
+      })
+      setFindMatches(newMatches)
+      var nextIdx = Math.min(findMatchIdx, newMatches.length - 1)
+      setFindMatchIdx(Math.max(0, nextIdx))
+      try { editor.view.dispatch(editor.state.tr.setMeta(searchPluginKey, findTerm)) } catch (e) {}
+    } catch (e) {}
+  }, [editor, findMatches, findMatchIdx, replaceTerm, findTerm])
+
+  var handleReplaceAll = useCallback(function () {
+    if (!editor || !findTerm) return
+    try {
+      var lt = findTerm.toLowerCase()
+      // Collect in reverse so positions stay valid after each replace
+      var all = []
+      editor.state.doc.descendants(function (node, pos) {
+        if (!node.isText || !node.text) return
+        var lc = node.text.toLowerCase()
+        var i = 0
+        while ((i = lc.indexOf(lt, i)) !== -1) {
+          all.push({ from: pos + i, to: pos + i + lt.length })
+          i += 1
+        }
+      })
+      all.reverse().forEach(function (m) {
+        editor.chain().setTextSelection(m).insertContent(replaceTerm).run()
+      })
+      setFindMatches([])
+      setFindMatchIdx(0)
+      try { editor.view.dispatch(editor.state.tr.setMeta(searchPluginKey, '')) } catch (e) {}
+    } catch (e) {}
+  }, [editor, findTerm, replaceTerm])
+
+  /* ── Slash command: select item ───────────────────── */
+  var handleSlashSelect = useCallback(function (item) {
+    setSlashMenuOpen(false)
+    setSlashQuery('')
+    if (!editor) return
+    // Delete the "/" and any query text typed after it
+    var $anchor = editor.state.selection.$anchor
+    var pText = $anchor.parent.textContent
+    if (pText.startsWith('/')) {
+      try {
+        editor.chain().focus()
+          .deleteRange({ from: $anchor.start(), to: editor.state.selection.anchor })
+          .run()
+      } catch (e) {}
+    }
+    setTimeout(function () { handleInsert(item) }, 10)
+  }, [editor, handleInsert])
+
+  /* ── Quick Switcher: navigate to selected note ─────── */
+  var handleQuickSelect = useCallback(function (note) {
+    setQuickSwitcherOpen(false)
+    if (note.folderId) {
+      setSelectedFolderId(note.folderId)
+      setExpandedFolders(function (prev) { var s = new Set(prev); s.add(note.folderId); return s })
+    } else {
+      setSelectedFolderId(null)
+    }
+    setSelectedNoteId(note.id)
+  }, [])
+
+  /* ── Clone Note ─────────────────────────────────────── */
+  var handleCloneNote = useCallback(function () {
+    if (!selectedNoteId) return
+    setActionsMenuOpen(false)
+    api.cloneNote(selectedNoteId)
+      .then(function (res) {
+        if (!res.ok) { console.error('Clone failed:', res.error); return }
+        var n = res.note
+        var newNote = {
+          id: n.id, folderId: n.folderId || null,
+          title: n.title || '', content: n.content || '',
+          tags: (function () { try { return n.tags ? JSON.parse(n.tags) : [] } catch (e) { return [] } })(),
+          updatedAt: n.updatedAt ? new Date(n.updatedAt) : new Date(),
+          createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
+          isPinned: false, isFullyEncrypted: false, encryptionHint: null, reminderCount: 0,
+        }
+        setNotes(function (prev) { return [newNote].concat(prev) })
+        setSelectedNoteId(newNote.id)
+      })
+      .catch(function (e) { console.error('[cloneNote]', e) })
+  }, [selectedNoteId])
+
+
+  /* ── Tags ────────────────────────────────────────────── */
+  var handleTagAdd = useCallback(function (rawTag) {
+    var tag = rawTag.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 40)
+    if (!tag || !selectedNoteId) return
+    setNotes(function (prev) {
+      return prev.map(function (n) {
+        if (n.id !== selectedNoteId) return n
+        var existing = n.tags || []
+        if (existing.indexOf(tag) !== -1) return n
+        var newTags = existing.concat([tag])
+        api.saveNote({ ...n, tags: JSON.stringify(newTags) }).catch(console.error)
+        return { ...n, tags: newTags }
+      })
+    })
+    setTagInput('')
+    setTagInputOpen(false)
+  }, [selectedNoteId])
+
+  var handleTagRemove = useCallback(function (tag) {
+    if (!selectedNoteId) return
+    setNotes(function (prev) {
+      return prev.map(function (n) {
+        if (n.id !== selectedNoteId) return n
+        var newTags = (n.tags || []).filter(function (t) { return t !== tag })
+        api.saveNote({ ...n, tags: JSON.stringify(newTags) }).catch(console.error)
+        return { ...n, tags: newTags }
+      })
+    })
+  }, [selectedNoteId])
+
+  var handleVisibilityToggle = useCallback(function () {
+    if (!selectedNoteId) return
+    setNotes(function (prev) {
+      return prev.map(function (n) {
+        if (n.id !== selectedNoteId) return n
+        var updated = Object.assign({}, n, { visibility: n.visibility === 1 ? 0 : 1 })
+        api.saveNote(updated)
+        return updated
+      })
+    })
+  }, [selectedNoteId])
+
+  /* ── Share: public link toggle ──────────────────────── */
+  var handleSetSharePublic = useCallback(async function (isPublic, includeAttachments) {
+    if (!selectedNoteId) return
+    var incl = includeAttachments !== undefined ? includeAttachments : shareIncludeAttachments
+    var token = await fetch('/Notes/SetSharePublicJson', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? ''
+      },
+      body: JSON.stringify({ noteId: selectedNoteId, isPublic, shareIncludeAttachments: incl }),
+    }).then(function (r) { return r.json() })
+    if (token.ok) {
+      setShareIsPublic(isPublic)
+      setShareToken(token.shareToken)
+      setShareIncludeAttachments(incl)
+      setNotes(function (prev) {
+        return prev.map(function (n) {
+          return n.id === selectedNoteId
+            ? { ...n, shareIsPublic: isPublic, shareToken: token.shareToken, shareIncludeAttachments: incl }
+            : n
+        })
+      })
+    }
+  }, [selectedNoteId, shareIncludeAttachments])
+
+  /* ── User share helpers ───────────────────────────── */
+  var csrfToken = function () {
+    return document.querySelector('meta[name="csrf-token"]')?.content
+        ?? document.querySelector('input[name="__RequestVerificationToken"]')?.value
+        ?? ''
+  }
+
+  var loadNoteShares = useCallback(async function (noteId) {
+    if (!noteId) return
+    try {
+      var r = await fetch('/Notes/GetNoteSharesJson?noteId=' + noteId)
+      var j = await r.json()
+      if (j.ok) setUserShares(j.shares || [])
+    } catch {}
+  }, [])
+
+  var loadCompanyUsers = useCallback(async function () {
+    if (companyUsers.length > 0) return
+    try {
+      var r = await fetch('/Notes/CompanyUsersJson')
+      var list = await r.json()
+      setCompanyUsers(Array.isArray(list) ? list : [])
+    } catch {}
+  }, [companyUsers.length])
+
+  var handleAddUserShare = useCallback(async function (userId, canEdit) {
+    if (!selectedNoteId) return
+    try {
+      var r = await fetch('/Notes/SaveUserShareJson', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken() },
+        body: JSON.stringify({ noteId: selectedNoteId, userId, canEdit }),
+      })
+      var j = await r.json()
+      if (j.ok) {
+        setUserShares(function (prev) {
+          var existing = prev.findIndex(function (s) { return s.userId === userId })
+          if (existing >= 0) {
+            var updated = [...prev]; updated[existing] = j.share; return updated
+          }
+          return [...prev, j.share]
+        })
+        setShareUserSearch('')
+        setShareUserDropOpen(false)
+      }
+    } catch {}
+  }, [selectedNoteId])
+
+  var handleToggleShareEdit = useCallback(async function (shareId, noteId, canEdit) {
+    try {
+      var r = await fetch('/Notes/UpdateSharePermissionJson', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken() },
+        body: JSON.stringify({ noteId, shareId, canEdit }),
+      })
+      var j = await r.json()
+      if (j.ok) {
+        setUserShares(function (prev) {
+          return prev.map(function (s) { return s.shareId === shareId ? { ...s, canEdit } : s })
+        })
+      }
+    } catch {}
+  }, [])
+
+  var handleRemoveUserShare = useCallback(async function (shareId, noteId) {
+    try {
+      var r = await fetch('/Notes/RemoveUserShareJson', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfToken() },
+        body: JSON.stringify({ noteId, shareId }),
+      })
+      var j = await r.json()
+      if (j.ok) {
+        setUserShares(function (prev) { return prev.filter(function (s) { return s.shareId !== shareId }) })
+      }
+    } catch {}
+  }, [])
 
   /* ── Toolbar helper ───────────────────────────────── */
   function tbClass(isActive) {
@@ -1928,76 +2793,59 @@ export default function NotesWorkspace() {
 
       {!loading && <>
 
-      {/* ═══ Action Bar ═══ */}
-      <div className="nw-action-bar">
-        <input type="file" accept=".enex" ref={importInputRef} onChange={handleImport} style={{ display: 'none' }} />
-        <div className="nw-gear-wrap" ref={gearBtnRef}>
-          <button
-            className={'nw-gear-btn' + (gearMenuOpen ? ' nw-gear-btn--open' : '')}
-            onClick={function () { setGearMenuOpen(function (p) { return !p }); setImportSubOpen(false) }}
-            title="İşlemler"
-            disabled={isImporting}
-          >
-            {isImporting ? <Loader2 size={14} className="nw-spin" /> : <Settings size={14} />}
-          </button>
-          {gearMenuOpen && (
-            <div className="nw-gear-dropdown">
-              <div
-                className={'nw-gear-item nw-gear-item--has-sub' + (importSubOpen ? ' nw-gear-item--sub-open' : '')}
-                onMouseEnter={function () { setImportSubOpen(true) }}
-                onMouseLeave={function () { setImportSubOpen(false) }}
-              >
-                <Upload size={13} />
-                <span>Dışarıdan Not Yükle</span>
-                <ChevronRight size={11} className="nw-gear-item-caret" />
-                {importSubOpen && (
-                  <div className="nw-gear-sub">
-                    <button
-                      className="nw-gear-item"
-                      onClick={function () {
-                        setGearMenuOpen(false)
-                        setImportSubOpen(false)
-                        importInputRef.current && importInputRef.current.click()
-                      }}
-                    >
-                      <FileText size={13} />
-                      <span>Evernote (.enex)</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        {importStatus && (
-          <div className={'nw-import-toast nw-import-toast--inline' + ' nw-import-toast--' + (importStatus.ok ? 'ok' : 'err')}>
-            {importStatus.msg}
-          </div>
-        )}
-      </div>
+      <input type="file" accept=".enex" ref={importInputRef} onChange={handleImport} style={{ display: 'none' }} />
+      <input type="file" accept="image/*" ref={imageInputRef} style={{ display: 'none' }}
+        onChange={function (e) {
+          var file = e.target.files && e.target.files[0]
+          e.target.value = ''
+          if (!file || !editor) return
+          var reader = new FileReader()
+          reader.onload = function (ev) {
+            editor.chain().focus().setImage({ src: ev.target.result, alt: file.name }).run()
+          }
+          reader.readAsDataURL(file)
+        }}
+      />
 
       {/* ═══ 3-Column Content ═══ */}
-      <div className="nw-columns-wrap">
+      <div className={'nw-columns-wrap' + (focusMode ? ' nw-focus-mode' : '')}>
 
-      {/* ═══ Column 1: Folders ═══ */}
+      {/* ═══ Column 1: Sidebar ═══ */}
       <div className="nw-col-folders">
-        <div className="nw-folders-header">
-          <h4 className="nw-folders-title">Klasörler</h4>
-          <button className="nw-folder-add-btn" title="Yeni klasör" onClick={handleNewFolder}>
-            <Plus size={13} /> Yeni
+        {/* CTA — Yeni Not */}
+        <div className="nw-sidebar-cta">
+          <button
+            className="nw-sidebar-new-btn"
+            onClick={handleNewNote}
+            disabled={selectedFolderId === '__trash'}
+          >
+            <Plus size={16} />
+            <span>Not</span>
           </button>
         </div>
-        <div className="nw-folders-scroll">
+
+        {/* Üst Navigasyon */}
+        <div className="nw-sidebar-nav">
           <div
-            className={'nw-folder-item nw-folder-item--all' + (selectedFolderId === null ? ' nw-folder-item--active' : '')}
-            onClick={function () { handleSelectFolder(null) }}
+            className={'nw-sidebar-nav-item' + (selectedFolderId === null && !searchQuery ? ' nw-sidebar-nav-item--active' : '')}
+            onClick={function () { handleSelectFolder(null); setSearchQuery('') }}
           >
-            <span style={{ width: 18, flexShrink: 0 }} />
-            <FileText size={15} className="nw-folder-ico" />
-            <span className="nw-folder-label">Tum Notlar</span>
+            <Home size={14} className="nw-folder-ico" />
+            <span className="nw-folder-label">Tüm Notlar</span>
             <span className="nw-folder-count">{notes.length}</span>
           </div>
+        </div>
 
+        {/* Not Defterleri başlık */}
+        <div className="nw-sidebar-section-hdr">
+          <span>Not Defterleri</span>
+          <button className="nw-sidebar-section-add" title="Yeni defter" onClick={handleNewFolder}>
+            <Plus size={12} />
+          </button>
+        </div>
+
+        {/* Klasör ağacı */}
+        <div className="nw-folders-scroll">
           <FolderTree
             folders={folders} notes={notes} parentId={null} depth={0}
             selectedFolderId={selectedFolderId} expandedSet={expandedFolders}
@@ -2009,16 +2857,54 @@ export default function NotesWorkspace() {
             onRenameCancel={handleRenameCancel}
             onFolderContextMenu={handleFolderContextMenu}
           />
+        </div>
 
-          <div className="nw-folder-trash-wrap">
-            <div
-              className={'nw-folder-item nw-folder-item--trash' + (selectedFolderId === '__trash' ? ' nw-folder-item--active-trash' : '')}
-              onClick={function () { handleSelectFolder('__trash') }}
+        {/* Alt: Ayarlar + Çöp Kutusu */}
+        <div className="nw-sidebar-bottom">
+          <div className="nw-gear-wrap" ref={gearBtnRef}>
+            <button
+              className={'nw-sidebar-settings-btn' + (gearMenuOpen ? ' nw-sidebar-settings-btn--open' : '')}
+              onClick={function () { setGearMenuOpen(function (p) { return !p }) }}
+              title="Ayarlar"
+              disabled={isImporting}
             >
-              <span style={{ width: 18, flexShrink: 0 }} />
-              <Trash2 size={15} className="nw-folder-ico" />
-              <span className="nw-folder-label">Cop Kutusu</span>
+              {isImporting ? <Loader2 size={14} className="nw-spin" /> : <Settings size={14} />}
+              <span>Ayarlar</span>
+            </button>
+            {gearMenuOpen && (
+              <div className="nw-gear-dropdown nw-gear-dropdown--up">
+                <button
+                  className="nw-gear-item"
+                  onClick={function () {
+                    setGearMenuOpen(false)
+                    importInputRef.current && importInputRef.current.click()
+                  }}
+                >
+                  <Upload size={13} />
+                  <span>İçe Aktar (Evernote)</span>
+                </button>
+                <button
+                  className="nw-gear-item"
+                  onClick={function () { setGearMenuOpen(false); setShortcutsOpen(true) }}
+                >
+                  <Keyboard size={13} />
+                  <span>Klavye Kısayolları</span>
+                </button>
+              </div>
+            )}
+          </div>
+          {importStatus && (
+            <div className={'nw-import-status nw-import-toast--' + (importStatus.ok ? 'ok' : 'err')}>
+              {importStatus.msg}
             </div>
+          )}
+          <div
+            className={'nw-folder-item nw-folder-item--trash' + (selectedFolderId === '__trash' ? ' nw-folder-item--active-trash' : '')}
+            onClick={function () { handleSelectFolder('__trash') }}
+          >
+            <span style={{ width: 18, flexShrink: 0 }} />
+            <Trash2 size={15} className="nw-folder-ico" />
+            <span className="nw-folder-label">Çöp Kutusu</span>
           </div>
         </div>
       </div>
@@ -2026,23 +2912,25 @@ export default function NotesWorkspace() {
       {/* ═══ Column 2: Note List ═══ */}
       <div className="nw-col-list">
         <div className="nw-list-header">
-          <h4 className="nw-list-title">
-            {selectedFolderId === '__trash'
-              ? 'Cop Kutusu'
-              : selectedFolderId
-                ? (folders.find(function (f) { return f.id === selectedFolderId }) || {}).name || 'Notlar'
-                : 'Tum Notlar'}
+          <div className="nw-list-header-title-wrap">
+            <h4 className="nw-list-title">
+              {selectedFolderId === '__trash'
+                ? 'Çöp Kutusu'
+                : selectedFolderId
+                  ? (folders.find(function (f) { return f.id === selectedFolderId }) || {}).name || 'Notlar'
+                  : 'Tüm Notlar'}
+            </h4>
             {filteredNotes.length > 0 && (
-              <span className="nw-list-count">({filteredNotes.length})</span>
+              <span className="nw-list-count">{filteredNotes.length}</span>
             )}
-          </h4>
+          </div>
           <div className="nw-list-actions">
             <div className="nw-sort-wrap">
               <select
                 className="nw-sort-select"
                 value={sortOrder}
                 onChange={function (e) { setSortOrder(e.target.value) }}
-                title="Siralama"
+                title="Sıralama"
               >
                 <option value="updatedDesc">Son Düzenlenen</option>
                 <option value="updatedAsc">Eski Düzenlenen</option>
@@ -2052,8 +2940,8 @@ export default function NotesWorkspace() {
               </select>
             </div>
             {selectedFolderId !== '__trash' && (
-              <button className="nw-new-note-btn" onClick={handleNewNote}>
-                <Plus size={13} /> Yeni Not
+              <button className="nw-list-new-btn" onClick={handleNewNote} title="Yeni not">
+                <Plus size={14} />
               </button>
             )}
           </div>
@@ -2131,6 +3019,13 @@ export default function NotesWorkspace() {
                             >
                               <Pin size={12} />
                             </button>
+                            <button
+                              className="nw-card-action nw-card-del"
+                              title="Notu sil"
+                              onClick={function (e) { e.stopPropagation(); handleDeleteNote(n.id) }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                            </button>
                           </>
                         )}
                       </div>
@@ -2139,6 +3034,9 @@ export default function NotesWorkspace() {
                       {formatDate(n.updatedAt)}
                       {folderName && <span className="nw-note-card-folder"> · {folderName}</span>}
                     </div>
+                    {n.linkedEntityLabel && (
+                      <span className="nw-list-entity-badge">{n.linkedEntityLabel}</span>
+                    )}
                     <div className="nw-note-card-snippet">{snippet(n.content, 120, n.isFullyEncrypted)}</div>
                   </div>
                 )
@@ -2148,57 +3046,139 @@ export default function NotesWorkspace() {
       </div>
 
       {/* ═══ Column 3: Editor ═══ */}
-      <div className="nw-col-editor">
+      <div className={'nw-col-editor' + (readingMode ? ' nw-reading-mode' : '')}>
         {selectedNote ? (
           <>
-            {/* Meta bar */}
-            <div className="nw-editor-meta">
-              <span>Son duzenleme: {formatTime(selectedNote.updatedAt)}</span>
-              <div className="nw-actions-wrap" ref={actionsBtnRef}>
-                <button
-                  className={'nw-actions-btn' + (actionsMenuOpen ? ' nw-actions-btn--open' : '')}
-                  onClick={function () { setActionsMenuOpen(function (p) { return !p }) }}
+            {/* Editor Top Bar — breadcrumb + actions */}
+            <div className="nw-editor-topbar">
+              <div className="nw-breadcrumb">
+                <span
+                  className="nw-breadcrumb-folder"
+                  onClick={function () {
+                    handleSelectFolder(selectedNote.folderId || null)
+                  }}
                 >
-                  <MoreHorizontal size={16} />
+                  <BookOpen size={12} style={{ flexShrink: 0 }} />
+                  {selectedNote.folderId
+                    ? (folders.find(function (f) { return f.id === selectedNote.folderId }) || {}).name || 'Notlar'
+                    : 'Tüm Notlar'}
+                </span>
+                <ChevronRight size={11} className="nw-breadcrumb-sep" />
+                <span className="nw-breadcrumb-note">{selectedNote.title || 'İsimsiz'}</span>
+              </div>
+              <div className="nw-editor-topbar-right">
+                <span className="nw-topbar-date">
+                  Düzenlendi {formatDate(selectedNote.updatedAt)}
+                </span>
+                <button
+                  className={'nw-topbar-icon-btn' + (findOpen ? ' nw-topbar-icon-btn--active' : '')}
+                  title="Bul / Değiştir (Ctrl+F)"
+                  onClick={function () { setFindOpen(function (p) { return !p }) }}
+                >
+                  <Search size={14} />
                 </button>
-                {actionsMenuOpen && (
-                  <NoteActionsMenu
-                    onClose={function () { setActionsMenuOpen(false) }}
-                    onNoteInfo={function () { setActionsMenuOpen(false); setNoteInfoOpen(true) }}
-                    onExportPdf={handleExportPdf}
-                    onDelete={function () { setActionsMenuOpen(false); handleDeleteNote() }}
-                    onReminders={function () { setActionsMenuOpen(false); setRemindersOpen(true) }}
-                    reminderCount={reminders.length}
-                    onEncryptWhole={handleOpenEncryptWholeNote}
-                    onLockWhole={handleLockFullNote}
-                    onRemoveEncryption={handleRemoveFullEncryption}
-                    isEncrypted={!!selectedNote && !!selectedNote.isFullyEncrypted}
-                    isUnlocked={!!selectedNote && unlockedNoteIds.has(selectedNote.id)}
-                    btnRef={actionsBtnRef}
-                  />
-                )}
-                {remindersOpen && (
-                  <ReminderPopover
-                    reminders={reminders}
-                    loading={remindersLoading}
-                    onClose={function () { setRemindersOpen(false) }}
-                    onAdd={handleAddReminder}
-                    onDelete={handleDeleteReminder}
-                    btnRef={actionsBtnRef}
-                  />
-                )}
+                <button
+                  className={'nw-topbar-icon-btn' + (tocOpen ? ' nw-topbar-icon-btn--active' : '')}
+                  title="İçindekiler"
+                  onClick={function () { setTocOpen(function (p) { return !p }) }}
+                >
+                  <List size={14} />
+                </button>
+                <button
+                  className={'nw-topbar-icon-btn' + (readingMode ? ' nw-topbar-icon-btn--active' : '')}
+                  title={readingMode ? 'Okuma modundan çık' : 'Okuma modu'}
+                  onClick={function () { setReadingMode(function (p) { return !p }) }}
+                >
+                  {readingMode ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+                <button
+                  className={'nw-topbar-icon-btn' + (focusMode ? ' nw-topbar-icon-btn--active' : '')}
+                  title={focusMode ? 'Odak modundan çık (F11 / Esc)' : 'Odak modu (F11)'}
+                  onClick={function () { setFocusMode(function (p) { return !p }) }}
+                >
+                  {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                </button>
+                <button
+                  className={'nw-topbar-share-btn' + (sharePanelOpen ? ' nw-topbar-share-btn--active' : '')}
+                  title="Paylaş"
+                  onClick={function () {
+                    setSharePanelOpen(true)
+                    setShareUserSearch('')
+                    setShareUserDropOpen(false)
+                    if (selectedNoteId) { loadNoteShares(selectedNoteId); loadCompanyUsers() }
+                  }}
+                >
+                  <Share2 size={14} />
+                  <span>Paylaş</span>
+                </button>
+                <div className="nw-actions-wrap" ref={actionsBtnRef}>
+                  <button
+                    className={'nw-actions-btn' + (actionsMenuOpen ? ' nw-actions-btn--open' : '')}
+                    onClick={function () { setActionsMenuOpen(function (p) { return !p }) }}
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                  {actionsMenuOpen && (
+                    <NoteActionsMenu
+                      onClose={function () { setActionsMenuOpen(false) }}
+                      onNoteInfo={function () { setActionsMenuOpen(false); setNoteInfoOpen(true) }}
+                      onExportPdf={handleExportPdf}
+                      onDelete={function () { setActionsMenuOpen(false); handleDeleteNote() }}
+                      onReminders={function () { setActionsMenuOpen(false); setRemindersOpen(true) }}
+                      onTogglePin={function () { setActionsMenuOpen(false); handleTogglePin(selectedNoteId) }}
+                      onClone={handleCloneNote}
+                      reminderCount={reminders.length}
+                      isPinned={selectedNote && selectedNote.isPinned}
+                      onEncryptWhole={handleOpenEncryptWholeNote}
+                      onLockWhole={handleLockFullNote}
+                      onRemoveEncryption={handleRemoveFullEncryption}
+                      isEncrypted={!!selectedNote && !!selectedNote.isFullyEncrypted}
+                      isUnlocked={!!selectedNote && unlockedNoteIds.has(selectedNote.id)}
+                      btnRef={actionsBtnRef}
+                    />
+                  )}
+                  {remindersOpen && (
+                    <ReminderPopover
+                      reminders={reminders}
+                      loading={remindersLoading}
+                      onClose={function () { setRemindersOpen(false) }}
+                      onAdd={handleAddReminder}
+                      onDelete={handleDeleteReminder}
+                      btnRef={actionsBtnRef}
+                    />
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Readonly banner — başkasının notu */}
+            {selectedNote && selectedNote.isOwner === false && (
+              <div className="nw-readonly-banner">
+                <Lock size={12} /> Başka bir kullanıcının notu — salt okunur
+              </div>
+            )}
 
             {/* Title */}
             <input
               key={selectedNoteId + '-title'}
               className="nw-editor-title"
-              placeholder="Basliksiz Not"
+              placeholder="Başlık"
               defaultValue={selectedNote.title}
               onChange={handleTitleChange}
-              readOnly={selectedFolderId === '__trash'}
+              readOnly={selectedFolderId === '__trash' || selectedNote.isOwner === false}
             />
+
+            {/* Çöp kutusu: Geri Yükle / Kalıcı Sil */}
+            {selectedFolderId === '__trash' && (
+              <div className="nw-trash-actions">
+                <button className="nw-trash-restore-btn" onClick={function () { handleRestoreNote(selectedNoteId) }}>
+                  <RefreshCw size={13} /> Geri Yükle
+                </button>
+                <button className="nw-trash-del-btn" onClick={function () { handlePermanentDelete(selectedNoteId) }}>
+                  <Trash2 size={13} /> Kalıcı Sil
+                </button>
+              </div>
+            )}
 
             {/* Toolbar */}
             <div className="nw-toolbar">
@@ -2313,6 +3293,50 @@ export default function NotesWorkspace() {
               </button>
             </div>
 
+            {/* ── Find & Replace Bar ── */}
+            {findOpen && (
+              <div className="nw-find-bar">
+                <Search size={12} className="nw-find-ico" />
+                <input
+                  ref={findInputRef}
+                  className="nw-find-input"
+                  placeholder="Ara..."
+                  value={findTerm}
+                  onChange={function (e) { setFindTerm(e.target.value) }}
+                  onKeyDown={function (e) {
+                    if (e.key === 'Enter') { e.shiftKey ? handleFindPrev() : handleFindNext() }
+                    if (e.key === 'Escape') { setFindOpen(false); setFindTerm('') }
+                  }}
+                />
+                {findMatches.length > 0 && (
+                  <span className="nw-find-count">{findMatchIdx + 1}/{findMatches.length}</span>
+                )}
+                {findTerm && findMatches.length === 0 && (
+                  <span className="nw-find-count nw-find-count--none">0 sonuç</span>
+                )}
+                <button className="nw-find-nav" onClick={handleFindPrev} title="Önceki (Shift+Enter)">
+                  <ChevronDown size={12} style={{ transform: 'rotate(180deg)' }} />
+                </button>
+                <button className="nw-find-nav" onClick={handleFindNext} title="Sonraki (Enter)">
+                  <ChevronDown size={12} />
+                </button>
+                <div className="nw-find-sep" />
+                <RotateCcw size={12} className="nw-find-ico" />
+                <input
+                  className="nw-find-input"
+                  placeholder="Değiştir..."
+                  value={replaceTerm}
+                  onChange={function (e) { setReplaceTerm(e.target.value) }}
+                  onKeyDown={function (e) { if (e.key === 'Enter') handleReplaceOne() }}
+                />
+                <button className="nw-find-action" onClick={handleReplaceOne}>Değiştir</button>
+                <button className="nw-find-action" onClick={handleReplaceAll}>Tümünü</button>
+                <button className="nw-find-close" onClick={function () { setFindOpen(false); setFindTerm('') }}>
+                  <X size={13} />
+                </button>
+              </div>
+            )}
+
             {/* Mod 2 Lock Screen VEYA Tiptap Editor */}
             {selectedNote.isFullyEncrypted && !unlockedNoteIds.has(selectedNote.id) ? (
               <FullNoteLockScreen
@@ -2325,14 +3349,7 @@ export default function NotesWorkspace() {
               </div>
             )}
 
-            {/* Character count */}
-            {editor && (
-              <div className="nw-char-count">
-                {editor.storage.characterCount.characters()} karakter · {editor.storage.characterCount.words()} kelime
-              </div>
-            )}
-
-            {/* Attachments panel */}
+            {/* Ekler paneli (bottombar'ın üzerinde açılır) */}
             <AttachmentsPanel
               open={attachmentsOpen}
               onToggle={handleAttachToggle}
@@ -2342,11 +3359,118 @@ export default function NotesWorkspace() {
               onUpload={handleAttachUpload}
               onDelete={handleAttachDelete}
             />
+
+            {/* ── TOC Panel (absolute overlay, right side) ── */}
+            {tocOpen && tocItems.length > 0 && (
+              <div className="nw-toc-panel">
+                <div className="nw-toc-head">
+                  <span>İçindekiler</span>
+                  <button className="nw-toc-close" onClick={function () { setTocOpen(false) }}>
+                    <X size={13} />
+                  </button>
+                </div>
+                <div className="nw-toc-list">
+                  {tocItems.map(function (item, i) {
+                    return (
+                      <button
+                        key={i}
+                        className="nw-toc-item"
+                        style={{ paddingLeft: 12 + (item.level - 1) * 12 }}
+                        onClick={function () { scrollToHeading(item.text) }}
+                      >
+                        <span className="nw-toc-level">H{item.level}</span>
+                        <span className="nw-toc-text">{item.text}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Bar */}
+            <div className="nw-bottombar">
+              <div className="nw-bottombar-left">
+                <button
+                  className={'nw-bottombar-btn' + (remindersOpen ? ' nw-bottombar-btn--active' : '')}
+                  title="Hatırlatıcılar"
+                  onClick={function () { setRemindersOpen(function (p) { return !p }) }}
+                >
+                  {reminders.length > 0 ? <BellRing size={14} /> : <Bell size={14} />}
+                  {reminders.length > 0 && <span className="nw-bottombar-badge">{reminders.length}</span>}
+                </button>
+                <button
+                  className={'nw-bottombar-btn' + (attachmentsOpen ? ' nw-bottombar-btn--active' : '')}
+                  title="Ekler"
+                  onClick={handleAttachToggle}
+                >
+                  <Paperclip size={14} />
+                  {attachments.length > 0 && <span className="nw-bottombar-badge">{attachments.length}</span>}
+                </button>
+                {/* Görünürlük butonu */}
+                {selectedNote && selectedNote.isOwner !== false && (
+                  <button
+                    className={'nw-bottombar-btn' + (selectedNote.visibility === 1 ? ' nw-bottombar-btn--active' : '')}
+                    title={selectedNote.visibility === 1 ? 'Şirket geneline paylaşıldı — tıkla gizle' : 'Özel not — tıkla paylaş'}
+                    onClick={handleVisibilityToggle}
+                  >
+                    {selectedNote.visibility === 1 ? <Globe size={14} /> : <Lock size={14} />}
+                  </button>
+                )}
+                {/* Etiketler */}
+                {(selectedNote.tags || []).map(function (tag) {
+                  return (
+                    <span key={tag} className="nw-tag-pill">
+                      {tag}
+                      {selectedFolderId !== '__trash' && (
+                        <button className="nw-tag-pill-rm" onClick={function () { handleTagRemove(tag) }}>×</button>
+                      )}
+                    </span>
+                  )
+                })}
+                {selectedFolderId !== '__trash' && (
+                  tagInputOpen ? (
+                    <input
+                      ref={tagInputRef}
+                      className="nw-tag-input"
+                      placeholder="Etiket..."
+                      value={tagInput}
+                      onChange={function (e) { setTagInput(e.target.value) }}
+                      onKeyDown={function (e) {
+                        if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); handleTagAdd(tagInput) }
+                        if (e.key === 'Escape') { setTagInputOpen(false); setTagInput('') }
+                      }}
+                      onBlur={function () { if (tagInput.trim()) handleTagAdd(tagInput); else { setTagInputOpen(false); setTagInput('') } }}
+                      autoFocus
+                    />
+                  ) : (
+                    <button
+                      className="nw-bottombar-tag-btn"
+                      title="Etiket ekle"
+                      onClick={function () { setTagInputOpen(true) }}
+                    >
+                      <Tag size={13} />
+                      <span>Etiket ekle</span>
+                    </button>
+                  )
+                )}
+              </div>
+              <div className="nw-bottombar-right">
+                {editor && (
+                  <span className="nw-bottombar-chars">
+                    {editor.storage.characterCount.words()} kelime
+                  </span>
+                )}
+              </div>
+            </div>
           </>
         ) : (
           <div className="nw-editor-empty">
-            <StickyNote size={52} style={{ opacity: .12 }} />
-            <span>Bir not secin veya yeni bir not olusturun</span>
+            <StickyNote size={48} className="nw-editor-empty-ico" />
+            <span className="nw-editor-empty-title">Not seçilmedi</span>
+            <span className="nw-editor-empty-sub">Soldaki listeden bir not seçin ya da yeni not oluşturun</span>
+            <button className="nw-editor-empty-btn" onClick={handleNewNote}>
+              <Plus size={14} /> Yeni Not
+            </button>
           </div>
         )}
       </div>
@@ -2441,6 +3565,215 @@ export default function NotesWorkspace() {
           currentUserName={currentUserName}
           onClose={function () { setNoteInfoOpen(false) }}
         />
+      )}
+
+      {/* ═══ Quick Switcher (Ctrl+P) ═══ */}
+      {shortcutsOpen && (
+        <ShortcutsModal onClose={function () { setShortcutsOpen(false) }} />
+      )}
+
+      {quickSwitcherOpen && (
+        <QuickSwitcherModal
+          open={quickSwitcherOpen}
+          notes={notes}
+          folders={folders}
+          onSelect={handleQuickSelect}
+          onClose={function () { setQuickSwitcherOpen(false) }}
+        />
+      )}
+
+      {/* ═══ Slash Command Menu (fixed, at cursor) ═══ */}
+      {slashMenuOpen && (
+        <SlashCommandMenu
+          open={slashMenuOpen}
+          query={slashQuery}
+          pos={slashPos}
+          onSelect={handleSlashSelect}
+          onClose={function () { setSlashMenuOpen(false); setSlashQuery('') }}
+        />
+      )}
+
+      {/* ═══ Share Modal ═══ */}
+      {sharePanelOpen && (
+        <div className="nw-modal-backdrop" onClick={function () { setSharePanelOpen(false) }}>
+          <div className="nw-share-modal" onClick={function (e) { e.stopPropagation() }}>
+            <div className="nw-share-modal-head">
+              <div className="nw-share-modal-title">
+                <Share2 size={16} />
+                <span>Not Paylaşımı</span>
+              </div>
+              <button className="nw-share-modal-close-x" onClick={function () { setSharePanelOpen(false) }}>
+                <X size={16} />
+              </button>
+            </div>
+            {selectedNote && (
+              <div className="nw-share-modal-note-name">
+                {selectedNote.title || 'Adsız Not'}
+              </div>
+            )}
+            <div className="nw-share-modal-divider" />
+            <div className="nw-share-modal-row">
+              <div className="nw-share-modal-row-info">
+                <span className="nw-share-modal-row-label">Herkese Açık Bağlantı</span>
+                <span className="nw-share-modal-row-desc">
+                  {shareIsPublic
+                    ? 'Bağlantıya sahip herkes bu notu görüntüleyebilir.'
+                    : 'Aktifleştirince herkese açık bir bağlantı oluşturulur.'}
+                </span>
+              </div>
+              <button
+                className={'nw-share-toggle' + (shareIsPublic ? ' active' : '')}
+                onClick={function () { handleSetSharePublic(!shareIsPublic) }}
+                title={shareIsPublic ? 'Paylaşımı kapat' : 'Herkese aç'}
+              >
+                <span className="nw-share-toggle-track"><span className="nw-share-toggle-thumb" /></span>
+              </button>
+            </div>
+            {shareIsPublic && attachments.length > 0 && (
+              <div className="nw-share-modal-row">
+                <div className="nw-share-modal-row-info">
+                  <span className="nw-share-modal-row-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:'5px',verticalAlign:'middle'}}><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.41A2 2 0 0 1 6.59 14.59l8.49-8.49"/></svg>
+                    Ekleri de Paylaş
+                  </span>
+                  <span className="nw-share-modal-row-desc">
+                    {shareIncludeAttachments
+                      ? attachments.length + ' ek bağlantı üzerinden indirilebilir.'
+                      : 'Ziyaretçiler ' + attachments.length + ' eki indirebilsin.'}
+                  </span>
+                </div>
+                <button
+                  className={'nw-share-toggle' + (shareIncludeAttachments ? ' active' : '')}
+                  onClick={function () { handleSetSharePublic(shareIsPublic, !shareIncludeAttachments) }}
+                  title={shareIncludeAttachments ? 'Ek paylaşımını kapat' : 'Ekleri de paylaş'}
+                >
+                  <span className="nw-share-toggle-track"><span className="nw-share-toggle-thumb" /></span>
+                </button>
+              </div>
+            )}
+            {shareIsPublic && shareToken && (
+              <div className="nw-share-modal-link-section">
+                <div className="nw-share-link-row">
+                  <input
+                    readOnly
+                    className="nw-share-link-input"
+                    value={window.location.origin + '/Notes/Public?cid=' + currentCompanyId + '&t=' + shareToken}
+                    onFocus={function (e) { e.target.select() }}
+                  />
+                  <button
+                    className={'nw-share-copy-btn' + (shareCopied ? ' copied' : '')}
+                    onClick={function () {
+                      navigator.clipboard.writeText(window.location.origin + '/Notes/Public?cid=' + currentCompanyId + '&t=' + shareToken)
+                      setShareCopied(true)
+                      setTimeout(function () { setShareCopied(false) }, 1800)
+                    }}
+                    title={shareCopied ? 'Kopyalandı!' : 'Kopyala'}
+                  >
+                    {shareCopied
+                      ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    }
+                  </button>
+                </div>
+              </div>
+            )}
+            {/* ── Kullanıcı ile Paylaş ──────────────────────────────── */}
+            <div className="nw-share-modal-divider" />
+            <div className="nw-share-section-header">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Kullanıcı ile Paylaş
+            </div>
+
+            {/* Kullanıcı arama */}
+            <div className="nw-share-user-search-wrap">
+              <span className="nw-share-user-search-ico">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <input
+                className="nw-share-user-search"
+                placeholder="Kullanıcı ara…"
+                value={shareUserSearch}
+                onChange={function (e) { setShareUserSearch(e.target.value); setShareUserDropOpen(true) }}
+                onFocus={function () { setShareUserDropOpen(true) }}
+                onBlur={function () { setTimeout(function () { setShareUserDropOpen(false) }, 180) }}
+                autoComplete="off"
+              />
+              {shareUserDropOpen && (function () {
+                var alreadyIds = new Set(userShares.map(function (s) { return s.userId }))
+                var q = shareUserSearch.toLowerCase()
+                var filtered = companyUsers.filter(function (u) {
+                  return !u.isSelf && !alreadyIds.has(u.id)
+                    && (u.fullName.toLowerCase().indexOf(q) >= 0 || u.email.toLowerCase().indexOf(q) >= 0)
+                })
+                if (!filtered.length) return null
+                return (
+                  <div className="nw-share-user-dropdown">
+                    {filtered.map(function (u) {
+                      var initials = (u.fullName || '?').split(' ').slice(0, 2).map(function (w) { return w[0] }).join('').toUpperCase()
+                      return (
+                        <div
+                          key={u.id}
+                          className="nw-share-user-opt"
+                          onMouseDown={function (e) { e.preventDefault(); handleAddUserShare(u.id, false) }}
+                        >
+                          <div className="nw-share-user-opt-avatar">{initials}</div>
+                          <div>
+                            <div className="nw-share-user-opt-name">{u.fullName}</div>
+                            <div className="nw-share-user-opt-email">{u.email}</div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Paylaşılan kullanıcı listesi */}
+            <div className="nw-share-user-list">
+              {userShares.length === 0
+                ? <div className="nw-share-user-item-empty">Henüz kimseyle paylaşılmadı.</div>
+                : userShares.map(function (s) {
+                    var initials = (s.fullName || '?').split(' ').slice(0, 2).map(function (w) { return w[0] }).join('').toUpperCase()
+                    return (
+                      <div key={s.shareId} className="nw-share-user-item">
+                        <div className="nw-share-user-item-avatar">{initials}</div>
+                        <div className="nw-share-user-item-info">
+                          <div className="nw-share-user-item-name">{s.fullName}</div>
+                          <div className="nw-share-user-item-email">{s.email}</div>
+                        </div>
+                        <div className="nw-share-user-item-perm">
+                          <span style={{marginRight:'3px'}}>{s.canEdit ? 'Düzenleyebilir' : 'Görüntüleyebilir'}</span>
+                          <button
+                            className={'nw-share-toggle nw-share-toggle--sm' + (s.canEdit ? ' active' : '')}
+                            title={s.canEdit ? 'Düzenlemeyi kapat' : 'Düzenlemeye izin ver'}
+                            onClick={function () { handleToggleShareEdit(s.shareId, selectedNoteId, !s.canEdit) }}
+                          >
+                            <span className="nw-share-toggle-track" style={{width:'30px',height:'18px',borderRadius:'9px'}}>
+                              <span className="nw-share-toggle-thumb" style={{width:'12px',height:'12px',top:'3px',left:'3px'}} />
+                            </span>
+                          </button>
+                        </div>
+                        <button
+                          className="nw-share-user-item-remove"
+                          title="Paylaşımı kaldır"
+                          onClick={function () { handleRemoveUserShare(s.shareId, selectedNoteId) }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </div>
+                    )
+                  })
+              }
+            </div>
+
+            <div className="nw-share-modal-footer">
+              <button className="nw-share-modal-close-btn" onClick={function () { setSharePanelOpen(false) }}>
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ═══ Confirm Modal ═══ */}

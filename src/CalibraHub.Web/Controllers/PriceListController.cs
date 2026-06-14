@@ -1,5 +1,7 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Helpers;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(FormCodes.PriceList)]
 public sealed class PriceListController : Controller
 {
     private readonly IPriceListService _svc;
@@ -46,6 +49,10 @@ public sealed class PriceListController : Controller
     [HttpGet]
     public IActionResult PriceGroupEdit(int? id)
     {
+        // 2026-06-02: Workspace tab iframe HTML'inin browser cache'ine takılıp
+        // eski inline JS'in (yanlış formCode vb.) tetiklenmemesi için no-store.
+        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
         ViewData["Title"] = id is > 0 ? "Fiyat Grubu Duzenle" : "Yeni Fiyat Grubu";
         ViewData["FormCode"] = "PRICE_LIST";
         ViewBag.PriceGroupId = id ?? 0;
@@ -82,14 +89,12 @@ public sealed class PriceListController : Controller
                     url     = "/PriceList/PriceGroupEdit"
                 }
             },
-            masterWidgets = new object[]
+            masterWidgets = new List<object>
             {
-                new { id = "code",       type = "data", dataType = "text",      label = "Kod" },
-                new { id = "name",       type = "data", dataType = "text",      label = "Ad" },
-                new { id = "isActive",   type = "data", dataType = "boolean",   label = "Durum" },
-                new { id = "allowsBuying",  type = "data", dataType = "boolean", label = "Alis" },
-                new { id = "allowsSelling", type = "data", dataType = "boolean", label = "Satis" },
-                new { id = "allowsCost",    type = "data", dataType = "boolean", label = "Maliyet" }
+                SmartBoardFilterHelpers.MakeStdWidget("code",         "Kod",            "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("name",         "Ad",             "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("isActive",     "Durum",          "boolean"),
+                SmartBoardFilterHelpers.MakeStdWidget("allowsTypes",  "Izinli Tipler",  "text"),
             },
             entities
         };
@@ -391,6 +396,112 @@ public sealed class PriceListController : Controller
             isAssignedElsewhere   = c.PriceGroupId.HasValue
                                     && (!excludeGroupId.HasValue || c.PriceGroupId.Value != excludeGroupId.Value)
         }));
+    }
+
+    // ── Cari kodu manuel yazan kullanıcı için: kodu ID'ye çöz ──
+    // 2026-06-02: Rehbere basmadan cari kodu yazıp Ekle'ye basan kullanıcı için.
+    [HttpGet]
+    public async Task<IActionResult> ResolveContactByCode(string code, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return Json(new { ok = false, message = "Cari kodu boş olamaz." });
+        var contact = await _finance.GetContactByCodeAsync(code, ct);
+        if (contact == null)
+            return Json(new { ok = false, message = $"'{code}' kodlu cari bulunamadı." });
+        return Json(new
+        {
+            ok = true,
+            data = new
+            {
+                id           = contact.Id,
+                accountCode  = contact.AccountCode,
+                accountTitle = contact.AccountTitle,
+                phone        = contact.Phone,
+                email        = contact.Email,
+                city         = contact.City,
+            }
+        });
+    }
+
+    // ── İlk yükleme: SADECE bu gruba atanmış cariler (paginate gerek yok) ──
+    // 2026-06-02: GetAllContactsForGroup tüm carileri (344k+) paginate ediyor.
+    // Atanmışlar nadiren 100'den fazla — bu endpoint tek seferde döner, frontend
+    // varsayılan "Seçilenleri Göster" modunda direkt çağırır. Tümünü Göster
+    // basılınca paginate akışına (GetAllContactsForGroup) geçilir.
+    [HttpGet]
+    public async Task<IActionResult> GetAssignedContactsForGroup(int groupId, CancellationToken ct)
+    {
+        if (groupId <= 0)
+            return Json(new { ok = false, data = Array.Empty<object>(), totalCount = 0, hasMore = false });
+
+        var items = await _finance.GetContactsByPriceGroupAsync(groupId, ct);
+        var data = items
+            .OrderBy(c => c.AccountCode)
+            .Select(c => new
+            {
+                id                    = c.Id,
+                accountCode           = c.AccountCode,
+                accountTitle          = c.AccountTitle,
+                phone                 = c.Phone,
+                email                 = c.Email,
+                city                  = c.City,
+                currentPriceGroupId   = c.PriceGroupId,
+                isAssignedToThisGroup = true,
+                isAssignedElsewhere   = false
+            })
+            .ToList();
+
+        return Json(new
+        {
+            ok         = true,
+            page       = 1,
+            pageSize   = data.Count,
+            totalCount = data.Count,
+            hasMore    = false,
+            data
+        });
+    }
+
+    // ── Toplu Mail Alıcı Listesi pattern: TÜM cariler tek listede, satır başına toggle ───
+    // 2026-06-02: Eski iki-aşamalı arama (GetGroupContacts + SearchContactsForGroup) yerine
+    // tek endpoint — frontend tüm cariyi yükler, client-side filter + bulk eylem yapar.
+    [HttpGet]
+    public async Task<IActionResult> GetAllContactsForGroup(
+        int groupId, string? q = null, int page = 1, int pageSize = 500, CancellationToken ct = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize <= 0 || pageSize > 2000) pageSize = 500;
+        var offset = (page - 1) * pageSize;
+
+        var (items, totalCount) = await _finance.GetContactsPagedAsync(null, q, offset, pageSize, ct);
+
+        // Atanmış olanlar üstte gelsin: önce bu gruba atanmışlar, sonra başka gruba, sonra atanmamış.
+        var ordered = items
+            .Select(c => new
+            {
+                id                    = c.Id,
+                accountCode           = c.AccountCode,
+                accountTitle          = c.AccountTitle,
+                phone                 = c.Phone,
+                email                 = c.Email,
+                city                  = c.City,
+                currentPriceGroupId   = c.PriceGroupId,
+                isAssignedToThisGroup = c.PriceGroupId.HasValue && c.PriceGroupId.Value == groupId,
+                isAssignedElsewhere   = c.PriceGroupId.HasValue && c.PriceGroupId.Value != groupId
+            })
+            .OrderByDescending(c => c.isAssignedToThisGroup)
+            .ThenBy(c => c.accountCode)
+            .ToList();
+
+        return Json(new
+        {
+            ok         = true,
+            page,
+            pageSize,
+            totalCount,
+            hasMore    = offset + ordered.Count < totalCount,
+            data       = ordered
+        });
     }
 
     public sealed record SetContactPriceGroupRequest(int ContactId, int? PriceGroupId);

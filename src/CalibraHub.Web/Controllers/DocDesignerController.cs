@@ -1,4 +1,6 @@
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,26 +14,61 @@ public sealed class DocDesignerController : Controller
 
     public DocDesignerController(IDocDesignerService svc) => _svc = svc;
 
-    private static readonly Dictionary<string, string> DocTypeLabels = new()
+    // 2026-06-03: Eski İngilizce kodlar (sales_quote vb.) backward-compat için tutulur;
+    // canlı DocType.code değerleri Türkçe snake_case (satis_teklifi, alis_*, vb.).
+    // Hepsini map'e ekleriz — eşleşmeyen sadece çok eski custom layout'lar olur.
+    private static readonly Dictionary<string, string> DocTypeLabels = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["sales_quote"]    = "Satış Teklifi",
-        ["sales_order"]    = "Satış Siparişi",
-        ["purchase_order"] = "Satın Alma Siparişi",
-        ["delivery_note"]  = "İrsaliye",
-        ["invoice"]        = "Fatura",
-        ["expense_note"]   = "Gider Pusulası",
-        ["custom"]         = "Özel Belge",
+        // Canlı kodlar
+        ["satis_teklifi"]     = "Satış Teklifi",
+        ["satis_siparisi"]    = "Satış Siparişi",
+        ["alis_talebi"]       = "İhtiyaç Kaydı",
+        ["alis_teklifi"]      = "Satın Alma Teklifi",
+        ["alis_siparisi"]     = "Satın Alma Siparişi",
+        ["satin_alma_talebi"] = "Satın Alma Talebi",
+        ["fatura"]            = "Fatura",
+        ["irsaliye"]          = "İrsaliye",
+        ["urun_barkodu"]      = "Ürün Barkodu",
+        ["raf_etiketi"]       = "Raf Etiketi",
+        ["is_emri"]           = "İş Emri",
+        ["mail_template"]     = "Mail Şablonu",
+        ["zimmet_teslim"]     = "Zimmet Teslim Formu",
+        ["arge_proje"]        = "AR-GE Projesi",
+        // Legacy İngilizce kodlar (backward-compat)
+        ["sales_quote"]       = "Satış Teklifi",
+        ["sales_order"]       = "Satış Siparişi",
+        ["purchase_order"]    = "Satın Alma Siparişi",
+        ["delivery_note"]     = "İrsaliye",
+        ["invoice"]           = "Fatura",
+        ["expense_note"]      = "Gider Pusulası",
+        ["custom"]            = "Özel Belge",
     };
 
-    private static readonly Dictionary<string, string> DocTypeColors = new()
+    private static readonly Dictionary<string, string> DocTypeColors = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["sales_quote"]    = "indigo",
-        ["sales_order"]    = "blue",
-        ["purchase_order"] = "violet",
-        ["delivery_note"]  = "emerald",
-        ["invoice"]        = "amber",
-        ["expense_note"]   = "rose",
-        ["custom"]         = "slate",
+        // Canlı kodlar
+        ["satis_teklifi"]     = "indigo",
+        ["satis_siparisi"]    = "blue",
+        ["alis_talebi"]       = "amber",
+        ["alis_teklifi"]      = "violet",
+        ["alis_siparisi"]     = "violet",
+        ["satin_alma_talebi"] = "rose",
+        ["fatura"]            = "emerald",
+        ["irsaliye"]          = "blue",
+        ["urun_barkodu"]      = "slate",
+        ["raf_etiketi"]       = "slate",
+        ["is_emri"]           = "amber",
+        ["mail_template"]     = "rose",
+        ["zimmet_teslim"]     = "emerald",
+        ["arge_proje"]        = "violet",
+        // Legacy
+        ["sales_quote"]       = "indigo",
+        ["sales_order"]       = "blue",
+        ["purchase_order"]    = "violet",
+        ["delivery_note"]     = "emerald",
+        ["invoice"]           = "amber",
+        ["expense_note"]      = "rose",
+        ["custom"]            = "slate",
     };
 
     [HttpGet("")]
@@ -53,6 +90,31 @@ public sealed class DocDesignerController : Controller
 
     [HttpGet("Edit/{id:int}")]
     public IActionResult Edit(int id) => View(id);
+
+    /// <summary>
+    /// 2026-05-30 — Tam sayfa onizleme. Workspace tab'inda iframe ile yuklenir;
+    /// kullanici Ctrl+P ile direkt yazdirabilir. previewLayout JSON yerine
+    /// HTML content dondurur (text/html), tarayicinin native render'i devreye girer.
+    /// </summary>
+    [HttpGet("Preview/{id:int}")]
+    public async Task<IActionResult> Preview(int id, CancellationToken ct)
+    {
+        try
+        {
+            var html = await _svc.RenderHtmlPreviewAsync(
+                new DocLayoutRunRequest(id, null, null), ct);
+            return Content(html, "text/html; charset=utf-8");
+        }
+        catch (Exception ex)
+        {
+            var msg = System.Net.WebUtility.HtmlEncode(ex.Message);
+            var errorHtml = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Önizleme Hatası</title>"
+                          + "<style>body{font-family:system-ui,sans-serif;padding:40px;color:#dc2626;background:#fef2f2;}"
+                          + "h1{font-size:18px;}pre{white-space:pre-wrap;background:#fff;padding:14px;border-radius:6px;border:1px solid #fca5a5;}</style>"
+                          + "</head><body><h1>Önizleme oluşturulamadı</h1><pre>" + msg + "</pre></body></html>";
+            return Content(errorHtml, "text/html; charset=utf-8");
+        }
+    }
 
     [HttpPost("DeleteJson")]
     [ValidateAntiForgeryToken]
@@ -88,6 +150,12 @@ public sealed class DocDesignerController : Controller
     {
         var layouts = await _svc.ListAsync(null, ct);
         var ordered = layouts.OrderByDescending(l => l.UpdatedAt).ToList();
+        var docTypeOptions = SmartBoardFilterHelpers.ToOptionsList(DocTypeLabels.Values.Distinct());
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeOptionsWidget("w_doctype", "Belge Tipi",     docTypeOptions),
+            SmartBoardFilterHelpers.MakeStdWidget   ("w_updated", "Son Güncelleme", "text"),
+        };
 
         var entities = ordered.Select(l =>
         {
@@ -110,7 +178,7 @@ public sealed class DocDesignerController : Controller
                     {
                         id       = "w_doctype",
                         type     = "data",
-                        dataType = "text",
+                        dataType = "options",
                         label    = "Belge Tipi",
                         value    = docLabel,
                         detail   = (string?)null,
@@ -174,7 +242,7 @@ public sealed class DocDesignerController : Controller
             {
                 new { id = "new", label = "Yeni Şablon", icon = "Plus", variant = "primary", url = "/DocDesigner/New" },
             },
-            masterWidgets = Array.Empty<object>(),
+            masterWidgets,
             entities,
         };
     }

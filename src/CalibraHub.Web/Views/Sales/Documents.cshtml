@@ -1,14 +1,20 @@
 @model CalibraHub.Web.Models.Sales.DocumentsViewModel
 @using System.Text.Json
 @{
-    ViewData["Title"] = "Satis Teklifleri";
-    ViewData["FormCode"] = "SALES_QUOTES";
+    // 2026-05-23: View 5 belge tipinin paylasilan listesi haline geldi (purchase dahil).
+    // Controller daha onceden ViewData["Title"] / ["FormCode"] / ["DbInfo"] doldurmussa
+    // override etmiyoruz — yoksa eski satis_teklifi varsayilanlari.
+    if (string.IsNullOrEmpty(ViewData["Title"] as string)) ViewData["Title"] = "Satis Teklifleri";
+    if (string.IsNullOrEmpty(ViewData["FormCode"] as string)) ViewData["FormCode"] = "SALES_QUOTES";
     ViewData["BodyClass"] = "page-sales-quotes";
-    ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
-        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quotes</td><td style='padding:6px 8px;'>Satis teklifi master bilgileri (belge no, tarih, cari, durum, toplam)</td></tr>"
-        + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quote_lines</td><td style='padding:6px 8px;'>Teklif satirlari (malzeme, miktar, birim, fiyat)</td></tr>"
-        + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quote_line_details</td><td style='padding:6px 8px;'>Satir detaylari (kombinasyon aciklamalari)</td></tr>"
-        + "</table>";
+    if (ViewData["DbInfo"] == null)
+    {
+        ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
+            + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quotes</td><td style='padding:6px 8px;'>Satis teklifi master bilgileri (belge no, tarih, cari, durum, toplam)</td></tr>"
+            + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quote_lines</td><td style='padding:6px 8px;'>Teklif satirlari (malzeme, miktar, birim, fiyat)</td></tr>"
+            + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>sales_quote_line_details</td><td style='padding:6px 8px;'>Satir detaylari (kombinasyon aciklamalari)</td></tr>"
+            + "</table>";
+    }
 
     // Inline JSON: SmartBoard config (server-side hazirlandi — BuildDocumentsBoardConfigAsync)
     var jsonOpts = new JsonSerializerOptions

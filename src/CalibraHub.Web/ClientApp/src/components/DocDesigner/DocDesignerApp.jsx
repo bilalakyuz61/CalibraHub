@@ -5,9 +5,10 @@ import DesignerCanvas from './Canvas/DesignerCanvas'
 import LeftPanel from './Toolbox/LeftPanel'
 import PropertiesPanel from './Properties/PropertiesPanel'
 import DesignerTopBar from './TopBar/DesignerTopBar'
-import PreviewModal from './Preview/PreviewModal'
 import ElementEditorModal from './Editor/ElementEditorModal'
-import { getLayout, saveLayout, previewLayout, renderPdf } from './services/docDesignerService'
+import { getLayout, saveLayout, renderPdf } from './services/docDesignerService'
+// previewLayout artik kullanilmiyor — onizleme workspace tab'inda direkt
+// /DocDesigner/Preview/{id} GET endpoint'i ile yuklenir.
 
 export default function DocDesignerApp({ layoutId }) {
   const [state, dispatch] = useReducer(reducer, initialState)
@@ -45,11 +46,24 @@ export default function DocDesignerApp({ layoutId }) {
     try {
       const req = {
         id: meta.id, code: derivedCode, name: meta.name.trim(), docType: meta.docType,
+        documentTypeId: meta.documentTypeId ?? null,
         description: null, layoutJson: buildLayoutJson(meta, bands),
         pageW: meta.pageW, pageH: meta.pageH,
         marginTop: meta.marginTop, marginBot: meta.marginBot,
         marginLeft: meta.marginLeft, marginRight: meta.marginRight,
         isDefault: meta.isDefault ?? false,
+        // 2026-05-20: UI'da Cikti Turu ve mail-spesifik alanlar (view/konu/govde/where)
+        // kaldirildi. outputFormat her zaman 'pdf' gonderilir; legacy alanlar null
+        // gonderilir — backward-compat icin backend hala bu alanlari kabul ediyor.
+        outputFormat: 'pdf',
+        defaultSubject: null,
+        defaultBody:    null,
+        defaultsViewName:      null,
+        defaultsSubjectColumn: null,
+        defaultsBodyColumn:    null,
+        defaultsWhere:         null,
+        // Yeni: bu dizayn mail compose ekraninda da listelensin mi?
+        useAsMailTemplate: meta.useAsMailTemplate ?? false,
         dataSources: dataSources.map((ds, i) => ({ ...ds, id: ds.id ?? 0, layoutId: meta.id, ordinal: i })),
       }
       const id = await saveLayout(req)
@@ -60,16 +74,26 @@ export default function DocDesignerApp({ layoutId }) {
   }, [])
 
   // ── Önizle ───────────────────────────────────────────────────────────────
-  const handlePreview = useCallback(async () => {
+  // 2026-05-30: Onizleme modal yerine workspace tab'inda acilir — solda yeni
+  // sekme cikar. Backend: GET /DocDesigner/Preview/{id} HTML icerigi dondurur,
+  // tab iframe ile yukler; kullanici Ctrl+P ile native print baslatabilir.
+  const handlePreview = useCallback(() => {
     const { meta } = stateRef.current
     if (!meta.id) { dispatch({ type: 'SET_ERROR', message: 'Önce kaydedin.' }); return }
-    dispatch({ type: 'SET_PREVIEWING', value: true })
+    const url   = `/DocDesigner/Preview/${meta.id}`
+    const title = (meta.name || 'Belge') + ' — Önizleme'
     try {
-      const html = await previewLayout({ layoutId: meta.id, documentId: null, paramOverrides: null })
-      dispatch({ type: 'SET_PREVIEW_HTML', html })
-    } catch (ex) {
-      dispatch({ type: 'SET_ERROR', message: ex.message })
-    }
+      if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
+        window.top.CalibraHub.openWorkspaceTab({
+          url,
+          title,
+          matchPath: `/DocDesigner/Preview/${meta.id}`,
+        })
+        return
+      }
+    } catch (e) { /* cross-origin fallback */ }
+    // Fallback (iframe disinda) — ayni sekmede ac
+    window.location.href = url
   }, [])
 
   // ── PDF ──────────────────────────────────────────────────────────────────
@@ -161,12 +185,7 @@ export default function DocDesignerApp({ layoutId }) {
         <PropertiesPanel state={state} dispatch={dispatch} />
       </div>
 
-      {state.previewHtml && (
-        <PreviewModal
-          html={state.previewHtml}
-          onClose={() => dispatch({ type: 'SET_PREVIEW_HTML', html: null })}
-        />
-      )}
+      {/* PreviewModal kaldirildi — onizleme workspace tab'inda yeni sekme olarak acilir. */}
 
       {state.editingElementId && (() => {
         const el = state.bands.flatMap(b => b.elements).find(e => e.id === state.editingElementId)

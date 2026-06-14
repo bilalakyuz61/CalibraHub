@@ -2,15 +2,19 @@ import React from 'react'
 import { BAND_TYPES } from '../designerReducer'
 
 export default function BandList({ state, dispatch }) {
-  const { bands } = state
+  const { bands, meta } = state
   const existingTypes = new Set(bands.map(b => b.type))
+  const isEmail = (meta?.outputFormat ?? 'pdf') === 'email'
+  // PDF mod'da mail_body gizli; email mod'da sadece mail_body gosterilir.
+  const visibleBandTypes = BAND_TYPES.filter(b =>
+    isEmail ? b.mailOnly === true : b.mailOnly !== true)
 
   return (
     <div>
       <div style={{ fontSize: 11, color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-        Bant Ekle
+        Bant Ekle {isEmail ? '(Email)' : ''}
       </div>
-      {BAND_TYPES.map(({ type, label }) => (
+      {visibleBandTypes.map(({ type, label }) => (
         <button
           key={type}
           onClick={() => dispatch({ type: 'ADD_BAND', bandType: type })}

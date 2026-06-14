@@ -1,0 +1,135 @@
+@{
+    ViewData["Title"] = "Sistem Yönetimi — Lisans";
+    ViewData["BodyClass"] = "page-system-mgmt";
+    var license = ViewBag.License as CalibraHub.Domain.Entities.LicenseRecord;
+    var machineId = (string)(ViewBag.MachineId ?? "");
+}
+
+@section Styles {
+<style>
+    .sm-panel {
+        background: var(--surface-1, #ffffff);
+        border: 1px solid rgba(148,163,184,.2);
+        border-radius: 14px; padding: 24px; max-width: 680px; margin: 24px;
+    }
+    body.app-theme-dark .sm-panel { background: #111827; border-color: rgba(148,163,184,.15); }
+    .sm-field { margin-bottom: 14px; }
+    .sm-field label { display: block; font-size: .76rem; font-weight: 600; color: #475569; margin-bottom: 4px; }
+    body.app-theme-dark .sm-field label { color: #94a3b8; }
+    .sm-input {
+        width: 100%; padding: 9px 12px;
+        border: 1px solid rgba(148,163,184,.4); border-radius: 8px;
+        font-size: .88rem; font-family: ui-monospace, Consolas, monospace;
+        background: var(--surface-1, #fff); color: inherit; outline: none; box-sizing: border-box;
+    }
+    body.app-theme-dark .sm-input { background: #0f172a; border-color: rgba(148,163,184,.3); }
+    .sm-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .sm-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+    .sm-info-box {
+        padding: 12px 14px;
+        background: rgba(99,102,241,.06);
+        border: 1px solid rgba(99,102,241,.15);
+        border-radius: 8px;
+    }
+    .sm-info-label { font-size: .7rem; color: #64748b; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; margin-bottom: 4px; }
+    .sm-info-value { font-size: .88rem; font-weight: 600; font-family: ui-monospace, Consolas, monospace; }
+    .sm-status {
+        padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
+        display: flex; align-items: center; gap: 12px;
+    }
+    .sm-status--ok   { background: rgba(34,197,94,.08);  border: 1px solid rgba(34,197,94,.25); }
+    .sm-status--err  { background: rgba(239,68,68,.08);  border: 1px solid rgba(239,68,68,.25); }
+    .sm-status--none { background: rgba(148,163,184,.08); border: 1px solid rgba(148,163,184,.2); }
+    .sm-status__dot  { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .sm-status--ok   .sm-status__dot { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.5); }
+    .sm-status--err  .sm-status__dot { background: #ef4444; }
+    .sm-status--none .sm-status__dot { background: #94a3b8; }
+    .sm-status__title { font-weight: 700; font-size: .9rem; }
+    .sm-status__msg   { font-size: .76rem; color: #64748b; margin-top: 2px; }
+    body.app-theme-dark .sm-status__msg { color: #94a3b8; }
+    .sm-btn {
+        padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer;
+        background: #6366f1; color: #fff; font-size: .85rem; font-weight: 600;
+        transition: background .15s;
+    }
+    .sm-btn:hover { background: #4f46e5; }
+    .sm-btn:disabled { opacity: .6; cursor: not-allowed; }
+    #licMsg { min-height: 24px; font-size: .76rem; margin-top: 8px; }
+</style>
+}
+
+<partial name="_SistemAyarlariTabs" model='"license"' />
+
+<div class="sm-panel">
+    @{
+        var statusCls   = license is null ? "none" : (license.IsValid ? "ok" : "err");
+        var statusTitle = license is null ? "Lisans Yok" : (license.IsValid ? "Aktif Lisans" : $"Geçersiz");
+        var statusMsg   = license is null
+            ? "Henüz lisans kaydedilmedi."
+            : (license.IsValid
+                ? $"Geçerlilik: {license.ExpiryDate:dd.MM.yyyy} · Eş zamanlı: {(license.ConcurrentLimit == 0 ? "Limitsiz" : license.ConcurrentLimit?.ToString() ?? "-")} · Toplam: {(license.TotalUserLimit == 0 ? "Limitsiz" : license.TotalUserLimit?.ToString() ?? "-")}"
+                : $"Hata: {license.LastError}");
+    }
+    <div class="sm-status sm-status--@statusCls">
+        <div class="sm-status__dot"></div>
+        <div>
+            <div class="sm-status__title">@statusTitle</div>
+            <div class="sm-status__msg">@statusMsg</div>
+        </div>
+    </div>
+
+    <div class="sm-info-grid">
+        <div class="sm-info-box">
+            <div class="sm-info-label">Makine ID</div>
+            <div class="sm-info-value">@machineId</div>
+        </div>
+        <div class="sm-info-box">
+            <div class="sm-info-label">Durum</div>
+            <div class="sm-info-value">@(license?.IsValid == true ? "✓ Geçerli" : license is null ? "— Tanımsız" : "✗ Geçersiz")</div>
+        </div>
+    </div>
+
+    <div class="sm-field">
+        <label>Lisans Anahtarı</label>
+        <input type="text" class="sm-input" id="licKey" placeholder="Lisans anahtarınızı yapıştırın…"
+               value="@license?.LicenseKey" autocomplete="off" spellcheck="false" />
+        <div style="font-size:.72rem;color:#64748b;margin-top:4px;">
+            Lisans anahtarı son kullanma tarihi, eş zamanlı ve toplam kullanıcı limitini içerir.
+        </div>
+    </div>
+    <button type="button" class="sm-btn" id="licSaveBtn">Kaydet ve Doğrula</button>
+    <div id="licMsg"></div>
+</div>
+
+<form id="licAfForm" style="display:none;">@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+<script>
+(function () {
+    function getAf() { return (document.querySelector('#licAfForm input[name="__RequestVerificationToken"]') || {}).value || ''; }
+    function setMsg(text, ok) {
+        var el = document.getElementById('licMsg');
+        var cls = ok === true ? 'color:#16a34a' : ok === false ? 'color:#dc2626' : 'color:#64748b';
+        el.innerHTML = text ? '<span style="' + cls + '">' + text + '</span>' : '';
+    }
+    document.getElementById('licSaveBtn').addEventListener('click', function () {
+        var key = (document.getElementById('licKey').value || '').trim();
+        if (!key) { document.getElementById('licKey').focus(); return; }
+        var btn = document.getElementById('licSaveBtn');
+        btn.disabled = true; btn.textContent = 'Doğrulanıyor…';
+        setMsg('İşleniyor…', null);
+        var fd = new FormData();
+        fd.append('licenseKey', key);
+        fd.append('__RequestVerificationToken', getAf());
+        fetch('/Gate/License/Save', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                btn.disabled = false; btn.textContent = 'Kaydet ve Doğrula';
+                setMsg((d.success ? '✓ ' : '✗ ') + (d.message || ''), d.success);
+                if (d.success) setTimeout(function () { location.reload(); }, 1200);
+            })
+            .catch(function (ex) { btn.disabled = false; btn.textContent = 'Kaydet ve Doğrula'; setMsg('Hata: ' + ex.message, false); });
+    });
+})();
+</script>
+}

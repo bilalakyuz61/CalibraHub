@@ -1,0 +1,100 @@
+D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Properties\launchSettings.json içindeki başlatma ayarları kullanılıyor...
+[EndpointCatalog] Netsis: 320 endpoint yuklendi.
+info: CalibraHub.Web[0]
+      [EndpointCatalog] 320 endpoint katalogtan yuklendi.
+[DB INIT] integration_api_profiles.id current type: uniqueidentifier
+[DB INIT] EnsureIntegrationApiProfilesTableAsync tamamlandi.
+[DB INIT] EnsureIntegrationTablesAsync tamamlandi.
+[DB INIT] EnsureIntegrationRecordStatusTableAsync tamamlandi.
+[DB INIT] EnsureIntegrationLookupFunctionTablesAsync tamamlandi. (8 fonksiyon, 18 kolon)
+[DB INIT] EnsureIntegrationDocCatalogTablesAsync tamamlandi. (3 provider, 73 enum, 351 enum-deger, 24 field-doc)
+[DB INIT] EnsurePermissionTablesAsync completed successfully.
+[DB INIT] MigrateDateTime2ToDateTimeAsync tamamlandi.
+[PERM DISCOVERY] 376 izin tanımı upsert edildi (CRUD: 354, Buton: 20, Alan: 2; 21 master-detail alt form atlandı).
+info: CalibraHub.Web[0]
+      [Perm Discovery] 376 izin tanımı seed edildi
+warn: CalibraHub.Application.Constants.FormCodeValidator[0]
+      [FormCodeValidator] 2 FormCode sabiti DB'de YOK (typo veya silinmiş form): INTEGRATION_EVENTS, VIEW_SETTINGS
+info: CalibraHub.Application.Workflow.WorkflowTimeoutEscalationJob[0]
+      [WorkflowTimeout] Job başlatıldı.
+info: CalibraHub.Application.Services.Messaging.WhatsAppInboxPollingService[0]
+      [WaPolling] Bridge poll servisi basladi (her 3sn).
+[DB INIT] IntegrationDocCatalogSeed tamamlandi. +0 provider, +0 enum (+0 deger), +0 field-doc, +5 enum-usage backfill.
+warn: Microsoft.AspNetCore.Server.Kestrel[0]
+      Overriding address(es) 'http://localhost:61001'. Binding to endpoints defined via IConfiguration and/or UseKestrel() instead.
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://0.0.0.0:61001
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\bin\Debug\net10.0-windows10.0.17763.0
+fail: Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware[1]
+      An unhandled exception has occurred while executing the request.
+      System.InvalidCastException: Unable to cast object of type 'System.Byte' to type 'System.Int32'.
+         at Microsoft.Data.SqlClient.SqlBuffer.get_Int32()
+         at Microsoft.Data.SqlClient.SqlDataReader.GetInt32(Int32 i)
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.MapLine(SqlDataReader r) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 667
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.GetLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 251
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.GetLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 252
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.GetLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 252
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.GetLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 252
+         at CalibraHub.Application.Services.DocumentService.GetQuoteLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Application\Services\DocumentService.cs:line 167
+         at CalibraHub.Web.Controllers.SalesController.GetQuote(Int32 id, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Controllers\SalesController.cs:line 839
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.TaskOfIActionResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeActionMethodAsync>g__Awaited|12_0(ControllerActionInvoker invoker, ValueTask`1 actionResultValueTask)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeNextActionFilterAsync>g__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State& next, Scope& scope, Object& state, Boolean& isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeInnerFilterAsync>g__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeNextResourceFilter>g__Awaited|25_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.Rethrow(ResourceExecutedContextSealed context)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.Next(State& next, Scope& scope, Object& state, Boolean& isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeFilterPipelineAsync>g__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+         at Program.<>c.<<<Main>$>b__0_17>d.MoveNext() in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Program.cs:line 944
+      --- End of stack trace from previous location ---
+         at CalibraHub.Web.Infrastructure.Workspace.WorkspaceRedirectPreservationMiddleware.InvokeAsync(HttpContext context) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Infrastructure\Workspace\WorkspaceRedirectPreservationMiddleware.cs:line 20
+         at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)
+         at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+         at Microsoft.AspNetCore.Session.SessionMiddleware.Invoke(HttpContext context)
+         at Microsoft.AspNetCore.Session.SessionMiddleware.Invoke(HttpContext context)
+         at CalibraHub.Web.Middleware.ApiExceptionMiddleware.InvokeAsync(HttpContext context) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Middleware\ApiExceptionMiddleware.cs:line 51
+         at CalibraHub.Web.Middleware.ApiExceptionMiddleware.InvokeAsync(HttpContext context) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Middleware\ApiExceptionMiddleware.cs:line 59
+         at Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddlewareImpl.<Invoke>g__Awaited|10_0(ExceptionHandlerMiddlewareImpl middleware, HttpContext context, Task task)
+fail: Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware[1]
+      An unhandled exception has occurred while executing the request.
+      System.InvalidCastException: Unable to cast object of type 'System.Byte' to type 'System.Int32'.
+         at Microsoft.Data.SqlClient.SqlBuffer.get_Int32()
+         at Microsoft.Data.SqlClient.SqlDataReader.GetInt32(Int32 i)
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.MapLine(SqlDataReader r) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 667
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.GetLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 251
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.GetLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 252
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.GetLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 252
+         at CalibraHub.Persistence.Repositories.SqlDocumentRepository.GetLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Persistence\Repositories\SqlDocumentRepository.cs:line 252
+         at CalibraHub.Application.Services.DocumentService.GetQuoteLinesAsync(Int32 documentId, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Application\Services\DocumentService.cs:line 167
+         at CalibraHub.Web.Controllers.SalesController.GetQuote(Int32 id, CancellationToken ct) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Controllers\SalesController.cs:line 839
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ActionMethodExecutor.TaskOfIActionResultExecutor.Execute(ActionContext actionContext, IActionResultTypeMapper mapper, ObjectMethodExecutor executor, Object controller, Object[] arguments)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeActionMethodAsync>g__Awaited|12_0(ControllerActionInvoker invoker, ValueTask`1 actionResultValueTask)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeNextActionFilterAsync>g__Awaited|10_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Rethrow(ActionExecutedContextSealed context)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.Next(State& next, Scope& scope, Object& state, Boolean& isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker.<InvokeInnerFilterAsync>g__Awaited|13_0(ControllerActionInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeNextResourceFilter>g__Awaited|25_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.Rethrow(ResourceExecutedContextSealed context)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.Next(State& next, Scope& scope, Object& state, Boolean& isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeFilterPipelineAsync>g__Awaited|20_0(ResourceInvoker invoker, Task lastTask, State next, Scope scope, Object state, Boolean isCompleted)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+         at Microsoft.AspNetCore.Mvc.Infrastructure.ResourceInvoker.<InvokeAsync>g__Awaited|17_0(ResourceInvoker invoker, Task task, IDisposable scope)
+         at Program.<>c.<<<Main>$>b__0_17>d.MoveNext() in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Program.cs:line 944
+      --- End of stack trace from previous location ---
+         at CalibraHub.Web.Infrastructure.Workspace.WorkspaceRedirectPreservationMiddleware.InvokeAsync(HttpContext context) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Infrastructure\Workspace\WorkspaceRedirectPreservationMiddleware.cs:line 20
+         at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)
+         at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+         at Microsoft.AspNetCore.Session.SessionMiddleware.Invoke(HttpContext context)
+         at Microsoft.AspNetCore.Session.SessionMiddleware.Invoke(HttpContext context)
+         at CalibraHub.Web.Middleware.ApiExceptionMiddleware.InvokeAsync(HttpContext context) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Middleware\ApiExceptionMiddleware.cs:line 51
+         at CalibraHub.Web.Middleware.ApiExceptionMiddleware.InvokeAsync(HttpContext context) in D:\JetBrainsRider\Projeler\CalibraHub\src\CalibraHub.Web\Middleware\ApiExceptionMiddleware.cs:line 59
+         at Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddlewareImpl.<Invoke>g__Awaited|10_0(ExceptionHandlerMiddlewareImpl middleware, HttpContext context, Task task)

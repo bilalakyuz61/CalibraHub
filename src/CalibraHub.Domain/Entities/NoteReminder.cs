@@ -14,7 +14,7 @@ public sealed class NoteReminder : Entity
     public ReminderDeliveryChannel DeliveryChannel { get; init; } = ReminderDeliveryChannel.InApp;
 
     /// <summary>Hedef kullanicilar — bos ise notun sahibine gider, aksi halde listedeki her user'a.</summary>
-    public IReadOnlyCollection<Guid> TargetUserIds { get; init; } = Array.Empty<Guid>();
+    public IReadOnlyCollection<int> TargetUserIds { get; init; } = Array.Empty<int>();
 
     public bool IsSent { get; private set; }
     public DateTime? SentAt { get; private set; }

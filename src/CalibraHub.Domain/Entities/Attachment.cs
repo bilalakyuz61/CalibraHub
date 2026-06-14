@@ -1,5 +1,3 @@
-using CalibraHub.Domain.Common;
-
 namespace CalibraHub.Domain.Entities;
 
 /// <summary>
@@ -8,19 +6,19 @@ namespace CalibraHub.Domain.Entities;
 /// tum entity turleri bu tek tabloda ek saklayabilir.
 /// Diger DB'lerden SYNONYM uzerinden erisim saglanir.
 /// </summary>
-public sealed class Attachment : Entity
+public sealed class Attachment
 {
-    public required string EntityType { get; init; }
-    public required string EntityId   { get; init; }
-    public required string FileName   { get; init; }
-    public required string StoredName { get; init; }
+    public int     Id            { get; set; }
+    public required string EntityType  { get; init; }
+    public required string EntityId    { get; init; }
+    public required string FileName    { get; init; }
     public string? ContentType   { get; init; }
     public long    FileSize      { get; init; }
     public string? Description   { get; set; }
     public bool    IsActive      { get; set; } = true;
-    public string? CreatedBy     { get; init; }
+    public int?    CreatedById   { get; init; }
     public DateTime Created      { get; init; } = DateTime.UtcNow;
-    public string? UpdatedBy     { get; set; }
+    public int?    UpdatedById   { get; set; }
     public DateTime? Updated     { get; set; }
 
     /// <summary>

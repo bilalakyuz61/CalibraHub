@@ -1,4 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
@@ -14,11 +16,13 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlOperationRepository : IOperationRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IDataVisibilityFilter _dvFilter;
     private readonly string _table;
 
-    public SqlOperationRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
+    public SqlOperationRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options, IDataVisibilityFilter dvFilter)
     {
         _connectionFactory = factory;
+        _dvFilter = dvFilter;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _table = $"[{schema.Replace("]", "]]")}].[Operation]";
     }
@@ -26,17 +30,20 @@ public sealed class SqlOperationRepository : IOperationRepository
     public async Task<IReadOnlyCollection<Operation>> ListAsync(bool includeInactive, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
+        var dv = await _dvFilter.BuildAsync(FormCodes.Operations, "op", "Id", ct);
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        var activeFilter = includeInactive ? "" : "AND [IsActive] = 1";
+        var activeFilter = includeInactive ? "" : "AND op.[IsActive] = 1";
         cmd.CommandText = $@"
-            SELECT [Id],[CompanyId],[Code],[Name],[Description],[StandardDuration],
-                   [DurationUnit],[HourlyRate],[SortOrder],[IsActive],[Created],[Updated]
-            FROM {_table}
-            WHERE [CompanyId] = @CompanyId
+            SELECT op.[Id],op.[CompanyId],op.[Code],op.[Name],op.[Description],op.[StandardDuration],
+                   op.[DurationUnit],op.[HourlyRate],op.[SortOrder],op.[IsActive],op.[Created],op.[Updated]
+            FROM {_table} op
+            WHERE op.[CompanyId] = @CompanyId
             {activeFilter}
-            ORDER BY [SortOrder], [Code];";
+            {dv.Sql}
+            ORDER BY op.[SortOrder], op.[Code];";
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
+        foreach (var prm in dv.Parameters) cmd.Parameters.AddWithValue(prm.Name, prm.Value);
         return await ReadListAsync(cmd, ct);
     }
 

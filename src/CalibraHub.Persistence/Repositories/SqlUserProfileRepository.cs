@@ -18,19 +18,19 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{schema}].[User]";
+        _tableName = $"[{schema}].[Users]";
     }
+
+    private const string SelectColumns =
+        "[Id], [CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [GrafanaRole], [PhoneNumber]";
 
     public async Task<IReadOnlyCollection<UserProfile>> GetAllAsync(CancellationToken cancellationToken)
     {
         var users = new List<UserProfile>();
 
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role]            FROM {_tableName}
-            ORDER BY [full_name];
-            """;
+        command.CommandText = $"SELECT {SelectColumns} FROM {_tableName} ORDER BY [FullName];";
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -43,12 +43,9 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
 
     public async Task<UserProfile?> GetByEmailAsync(string email, CancellationToken cancellationToken)
     {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role]            FROM {_tableName}
-            WHERE [email] = @Email;
-            """;
+        command.CommandText = $"SELECT {SelectColumns} FROM {_tableName} WHERE [Email] = @Email;";
         command.Parameters.Add(new SqlParameter("@Email", email));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -65,13 +62,9 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         int companyId,
         CancellationToken cancellationToken)
     {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role]            FROM {_tableName}
-            WHERE [email] = @Email
-              AND [company_id] = @CompanyId;
-            """;
+        command.CommandText = $"SELECT {SelectColumns} FROM {_tableName} WHERE [Email] = @Email AND [CompanyId] = @CompanyId;";
         command.Parameters.Add(new SqlParameter("@Email", email));
         command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
@@ -84,14 +77,11 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         return MapUser(reader);
     }
 
-    public async Task<UserProfile?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<UserProfile?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = $"""
-            SELECT [id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role]            FROM {_tableName}
-            WHERE [id] = @Id;
-            """;
+        command.CommandText = $"SELECT {SelectColumns} FROM {_tableName} WHERE [Id] = @Id;";
         command.Parameters.Add(new SqlParameter("@Id", id));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -105,49 +95,59 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
 
     public async Task AddAsync(UserProfile userProfile, CancellationToken cancellationToken)
     {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        // INT IDENTITY — Id girilmez, SCOPE_IDENTITY ile geri çekilir.
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([id], [company_id], [full_name], [email], [employee_code], [department_id], [supervisor_user_id], [role], [permissions], [password_hash], [language_code], [theme_code], [grid_preferences_json], [is_active], [grafana_role])
+                ([CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [GrafanaRole], [PhoneNumber])
             VALUES
-                (@Id, @CompanyId, @FullName, @Email, @EmployeeCode, @DepartmentId, @SupervisorUserId, @Role, @Permissions, @PasswordHash, @LanguageCode, @ThemeCode, @GridPreferencesJson, @IsActive, @GrafanaRole);
+                (@CompanyId, @FullName, @Email, @EmployeeCode, @DepartmentId, @SupervisorUserId, @Role, @Permissions, @PasswordHash, @LanguageCode, @ThemeCode, @GridPreferencesJson, @IsActive, @GrafanaRole, @PhoneNumber);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
-        AddUserParameters(command, userProfile);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        AddUserParameters(command, userProfile, includeId: false);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        var newId = result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
+        // Id init-only — caller'a yansitmak icin reflection gerekir, ama mevcut akis Id'yi geri okumayi
+        // GetByEmail* uzerinden yapar. Yine de eldeki object'in Id'sini set etmek istersek backing field
+        // expose etmedigimiz icin atlanir; eldeki referans Id=0 kalir, repository tutarliligi okumayla
+        // saglanir.
+        _ = newId;
     }
 
     public async Task UpdateAsync(UserProfile userProfile, CancellationToken cancellationToken)
     {
-        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_tableName}
-            SET [company_id] = @CompanyId,
-                [full_name] = @FullName,
-                [email] = @Email,
-                [employee_code] = @EmployeeCode,
-                [department_id] = @DepartmentId,
-                [supervisor_user_id] = @SupervisorUserId,
-                [role] = @Role,
-                [permissions] = @Permissions,
-                [password_hash] = @PasswordHash,
-                [language_code] = @LanguageCode,
-                [theme_code] = @ThemeCode,
-                [grid_preferences_json] = @GridPreferencesJson,
-                [is_active] = @IsActive,
-                [grafana_role] = @GrafanaRole
-            WHERE [id] = @Id;
+            SET [CompanyId] = @CompanyId,
+                [FullName] = @FullName,
+                [Email] = @Email,
+                [EmployeeCode] = @EmployeeCode,
+                [DepartmentId] = @DepartmentId,
+                [SupervisorUserId] = @SupervisorUserId,
+                [Role] = @Role,
+                [Permissions] = @Permissions,
+                [PasswordHash] = @PasswordHash,
+                [LanguageCode] = @LanguageCode,
+                [ThemeCode] = @ThemeCode,
+                [GridPreferencesJson] = @GridPreferencesJson,
+                [IsActive] = @IsActive,
+                [GrafanaRole] = @GrafanaRole,
+                [PhoneNumber] = @PhoneNumber
+            WHERE [Id] = @Id;
             """;
 
-        AddUserParameters(command, userProfile);
+        AddUserParameters(command, userProfile, includeId: true);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static void AddUserParameters(SqlCommand command, UserProfile userProfile)
+    private static void AddUserParameters(SqlCommand command, UserProfile userProfile, bool includeId)
     {
-        command.Parameters.Add(new SqlParameter("@Id", userProfile.Id));
+        if (includeId)
+            command.Parameters.Add(new SqlParameter("@Id", userProfile.Id));
         command.Parameters.Add(new SqlParameter("@CompanyId", userProfile.CompanyId));
         command.Parameters.Add(new SqlParameter("@FullName", userProfile.FullName));
         command.Parameters.Add(new SqlParameter("@Email", userProfile.Email));
@@ -164,6 +164,8 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         command.Parameters.Add(new SqlParameter("@GrafanaRole", userProfile.GrafanaRole.HasValue
             ? (object)userProfile.GrafanaRole.Value.ToString()
             : DBNull.Value));
+        command.Parameters.Add(new SqlParameter("@PhoneNumber",
+            string.IsNullOrWhiteSpace(userProfile.PhoneNumber) ? (object)DBNull.Value : userProfile.PhoneNumber));
     }
 
     private static UserProfile MapUser(SqlDataReader reader)
@@ -175,7 +177,6 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         var themeCode = reader.IsDBNull(11) ? UserProfile.DefaultThemeCode : reader.GetString(11);
         var gridPreferencesJson = reader.IsDBNull(12) ? string.Empty : reader.GetString(12);
         var isActive = reader.GetBoolean(13);
-        // grafana_role kolonu (column 14) — NULL ya da "Viewer"/"Editor"/"Admin"
         GrafanaRole? grafanaRole = null;
         if (!reader.IsDBNull(14))
         {
@@ -183,6 +184,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
             if (Enum.TryParse(gr, true, out GrafanaRole parsedGrafana))
                 grafanaRole = parsedGrafana;
         }
+        string? phoneNumber = reader.IsDBNull(15) ? null : reader.GetString(15);
 
         if (!Enum.TryParse(roleRaw, true, out UserRole role) || !Enum.IsDefined(role))
         {
@@ -191,16 +193,17 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
 
         var user = new UserProfile
         {
-            Id = reader.GetGuid(0),
+            Id = reader.GetInt32(0),
             CompanyId = reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
             FullName = reader.GetString(2),
             Email = reader.GetString(3),
             EmployeeCode = reader.GetString(4),
             DepartmentId = reader.IsDBNull(5) ? (int?)null : reader.GetInt32(5),
-            SupervisorUserId = reader.IsDBNull(6) ? null : reader.GetGuid(6),
+            SupervisorUserId = reader.IsDBNull(6) ? null : reader.GetInt32(6),
             Role = role,
             Permissions = DeserializePermissions(permissionsRaw),
             GrafanaRole = grafanaRole,
+            PhoneNumber = phoneNumber,
         };
 
         user.SetPasswordHash(passwordHash);

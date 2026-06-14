@@ -19,7 +19,7 @@ public sealed record WorkOrderListItemDto(
     WorkOrderPriority Priority,
     DateTime? PlannedStartDate,
     DateTime? PlannedEndDate,
-    Guid? AssignedUserId,
+    int? AssignedUserId,
     string? AssignedUserName,
     int RevisionNo,
     int? AssignedPersonnelId = null,
@@ -54,7 +54,7 @@ public sealed record WorkOrderDto(
     DateTime? ActualEndDate,
     WorkOrderStatus Status,
     WorkOrderPriority Priority,
-    Guid? AssignedUserId,
+    int? AssignedUserId,
     string? AssignedUserName,
     int? WarehouseLocationId,
     string? WarehouseLocationCode,
@@ -72,7 +72,14 @@ public sealed record WorkOrderDto(
     string? Notes,
     DateTime Created,
     DateTime? Updated,
-    IReadOnlyCollection<WorkOrderSourceDto> Sources);
+    IReadOnlyCollection<WorkOrderSourceDto> Sources,
+    // 2026-05-22: Standart rehber pattern A icin Code + Name pair'leri.
+    // Default null — geriye uyumlu, mevcut caller'lar etkilenmez.
+    string? AssignedPersonnelCode = null,
+    string? WarehouseLocationName = null,
+    // AR-GE Faz 3: opsiyonel AR-GE/ÜR-GE proje baglantisi (display icin proje adi da gelir).
+    int? ArgeProjectId = null,
+    string? ArgeProjectName = null);
 
 public sealed record CreateWorkOrderRequest(
     int ItemId,
@@ -82,7 +89,7 @@ public sealed record CreateWorkOrderRequest(
     DateTime? PlannedStartDate,
     DateTime? PlannedEndDate,
     WorkOrderPriority Priority,
-    Guid? AssignedUserId,
+    int? AssignedUserId,
     int? WarehouseLocationId,
     int? RoutingId,
     int? DefaultMachineId,
@@ -93,7 +100,12 @@ public sealed record CreateWorkOrderRequest(
     /// (operasyonlar otomatik patlatılır, üretim sahasına açılır). NULL ise
     /// CompanyParameter "AutoRelease" değeri kullanılır.
     /// </summary>
-    bool? AutoRelease = null);
+    bool? AutoRelease = null,
+    /// <summary>
+    /// Opsiyonel AR-GE/ÜR-GE proje (Document.id). NULL ise ItemId AR-GE seri/prototip mamuluyse
+    /// WorkOrderService otomatik turetir.
+    /// </summary>
+    int? ArgeProjectId = null);
 
 public sealed record UpdateWorkOrderRequest(
     decimal PlannedQuantity,
@@ -101,12 +113,14 @@ public sealed record UpdateWorkOrderRequest(
     DateTime? PlannedStartDate,
     DateTime? PlannedEndDate,
     WorkOrderPriority Priority,
-    Guid? AssignedUserId,
+    int? AssignedUserId,
     int? WarehouseLocationId,
     int? RoutingId,
     int? DefaultMachineId,
     int? AssignedPersonnelId,
-    string? Notes);
+    string? Notes,
+    /// <summary>AR-GE Faz 3: opsiyonel AR-GE/ÜR-GE proje (Document.id). Mevcut caller'lar icin default null.</summary>
+    int? ArgeProjectId = null);
 
 public sealed record ChangeWorkOrderStatusRequest(int WorkOrderId, WorkOrderStatus NewStatus);
 

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.WhatsApp;
 using CalibraHub.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -37,7 +38,6 @@ public sealed class WhatsAppSafetyChecker
     {
         var rules = await _rulesRepo.GetAsync(cancellationToken) ?? new WhatsAppSafetyRules();
         var nowUtc = DateTime.UtcNow;
-        var nowLocal = DateTime.Now;
         var msgHash = ComputeHash(messageText);
 
         // Interactive chat: kullanici elle yaziyor → spam riski yok, tum rate limit'leri atla.
@@ -47,14 +47,7 @@ public sealed class WhatsAppSafetyChecker
             return Allow(rules, msgHash);
         }
 
-        // 1) Sessiz saat kontrolü
-        if (rules.RespectQuietHours && IsQuietHour(nowLocal.Hour, rules.QuietHoursStartHour, rules.QuietHoursEndHour))
-        {
-            return Reject($"Sessiz saatlerde gönderim yasak ({rules.QuietHoursStartHour:00}:00 - {rules.QuietHoursEndHour:00}:00).",
-                          suggestedWaitMinutes: MinutesUntilHour(nowLocal, rules.QuietHoursEndHour));
-        }
-
-        // 2) Burst protection: son N kayıttaki ardışık başarısızlık
+        // 1) Burst protection: son N kayıttaki ardışık başarısızlık
         var recent = await _logRepo.GetRecentLogsAsync(rules.MaxConsecutiveFailures, cancellationToken);
         var consecutiveFails = recent.TakeWhile(l => !l.Success && string.IsNullOrEmpty(l.BlockReason)).Count();
         if (consecutiveFails >= rules.MaxConsecutiveFailures)
@@ -133,22 +126,6 @@ public sealed class WhatsAppSafetyChecker
         return (DateTime.UtcNow - since).TotalDays < rules.WarmupDays;
     }
 
-    private static bool IsQuietHour(int currentHour, int startHour, int endHour)
-    {
-        // start=20, end=8 → 20-23 ve 0-7 sessiz
-        if (startHour > endHour)
-            return currentHour >= startHour || currentHour < endHour;
-        // start=8, end=20 → 8-19 aktif demek (yani sessiz saat 20-7)
-        return currentHour >= startHour && currentHour < endHour;
-    }
-
-    private static int MinutesUntilHour(DateTime now, int targetHour)
-    {
-        var target = new DateTime(now.Year, now.Month, now.Day, targetHour, 0, 0, DateTimeKind.Local);
-        if (target <= now) target = target.AddDays(1);
-        return (int)(target - now).TotalMinutes;
-    }
-
     private static string ComputeHash(string text)
     {
         var bytes = Encoding.UTF8.GetBytes(text ?? string.Empty);
@@ -157,12 +134,7 @@ public sealed class WhatsAppSafetyChecker
     }
 
     private static string NormalizePhone(string input)
-    {
-        var sb = new StringBuilder();
-        foreach (var c in (input ?? string.Empty).Trim())
-            if (char.IsDigit(c)) sb.Append(c);
-        return sb.ToString();
-    }
+        => WaPhoneNormalizer.Normalize(input) ?? string.Empty;
 }
 
 public sealed record SafetyCheckResult(

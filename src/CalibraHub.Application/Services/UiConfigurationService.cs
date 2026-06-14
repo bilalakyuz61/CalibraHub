@@ -45,10 +45,10 @@ public sealed class UiConfigurationService : IUiConfigurationService
             .ToArray();
 
     public async Task<UserInterfacePreferenceDto> GetUserPreferenceAsync(
-        Guid? userId,
+        int? userId,
         CancellationToken cancellationToken)
     {
-        if (!userId.HasValue || userId.Value == Guid.Empty)
+        if (!userId.HasValue || userId.Value <= 0)
         {
             return new UserInterfacePreferenceDto(UiCatalog.DefaultLanguageCode, UiCatalog.DefaultThemeCode);
         }
@@ -65,14 +65,14 @@ public sealed class UiConfigurationService : IUiConfigurationService
     }
 
     public async Task<int> GetGridPageSizePreferenceAsync(
-        Guid? userId,
+        int? userId,
         string gridKey,
         int defaultPageSize,
         CancellationToken cancellationToken)
     {
         var normalizedDefaultPageSize = NormalizeGridPageSize(defaultPageSize);
         var normalizedGridKey = NormalizeGridPreferenceKey(gridKey);
-        if (string.IsNullOrEmpty(normalizedGridKey) || !userId.HasValue || userId.Value == Guid.Empty)
+        if (string.IsNullOrEmpty(normalizedGridKey) || !userId.HasValue || userId.Value <= 0)
         {
             return normalizedDefaultPageSize;
         }
@@ -93,7 +93,7 @@ public sealed class UiConfigurationService : IUiConfigurationService
         SaveUserInterfacePreferenceRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.UserId == Guid.Empty)
+        if (request.UserId <= 0)
         {
             throw new ArgumentException("Kullanici bilgisi bulunamadi.");
         }
@@ -112,12 +112,12 @@ public sealed class UiConfigurationService : IUiConfigurationService
     }
 
     public async Task SaveGridPageSizePreferenceAsync(
-        Guid userId,
+        int userId,
         string gridKey,
         int pageSize,
         CancellationToken cancellationToken)
     {
-        if (userId == Guid.Empty)
+        if (userId <= 0)
         {
             throw new ArgumentException("Kullanici bilgisi bulunamadi.");
         }
@@ -223,7 +223,7 @@ public sealed class UiConfigurationService : IUiConfigurationService
                 LabelKey = x.LabelKey,
                 LanguageCode = normalizedLanguageCode,
                 LabelText = x.LabelText,
-                UpdatedAt = DateTime.Now
+                Updated = DateTime.Now
             })
             .ToArray();
 
@@ -342,7 +342,7 @@ public sealed class UiConfigurationService : IUiConfigurationService
             Id = Guid.NewGuid(),
             ScreenCode = normalizedScreenCode,
             LayoutJson = json,
-            CreatedAt = DateTime.Now
+            Created = DateTime.Now
         };
 
         entity.UpdateLayout(json);
@@ -523,9 +523,9 @@ public sealed class UiConfigurationService : IUiConfigurationService
     // ── Grid kolon tercihleri (user_settings tablosu) ────────────────────
 
     public async Task<IReadOnlyCollection<string>> GetGridColumnPreferencesAsync(
-        Guid? userId, string gridKey, CancellationToken cancellationToken)
+        int? userId, string gridKey, CancellationToken cancellationToken)
     {
-        if (!userId.HasValue || userId.Value == Guid.Empty) return [];
+        if (!userId.HasValue || userId.Value <= 0) return [];
         var key = $"grid.columns.{NormalizeGridPreferenceKey(gridKey)}";
         var value = await _userSettingRepository.GetAsync(userId.Value, key, cancellationToken);
         if (string.IsNullOrWhiteSpace(value)) return [];
@@ -533,9 +533,9 @@ public sealed class UiConfigurationService : IUiConfigurationService
     }
 
     public async Task SaveGridColumnPreferencesAsync(
-        Guid userId, string gridKey, IReadOnlyCollection<string> columns, CancellationToken cancellationToken)
+        int userId, string gridKey, IReadOnlyCollection<string> columns, CancellationToken cancellationToken)
     {
-        if (userId == Guid.Empty) return;
+        if (userId <= 0) return;
         var key = $"grid.columns.{NormalizeGridPreferenceKey(gridKey)}";
         var value = string.Join(",", columns);
         await _userSettingRepository.SetAsync(userId, key, value, cancellationToken);

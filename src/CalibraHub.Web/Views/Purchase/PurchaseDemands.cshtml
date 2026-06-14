@@ -1,0 +1,43 @@
+@using System.Text.Json
+@model CalibraHub.Web.Models.Sales.DocumentsViewModel
+@{
+    ViewData["Title"] = "Satın Alma Talepleri";
+    var boardConfigJson = JsonSerializer.Serialize(Model.BoardConfig,
+        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+}
+
+@section Scripts {
+<script>
+(function() {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+
+    function loadCss(href) {
+        if (document.querySelector('link[href*="calibra-bundle"]')) return;
+        var l = document.createElement('link');
+        l.rel = 'stylesheet'; l.href = href;
+        document.head.appendChild(l);
+    }
+    function loadScript(src, cb) {
+        var s = document.createElement('script');
+        s.src = src; s.onload = cb;
+        document.head.appendChild(s);
+    }
+
+    var bundleBase = '/react/bundle';
+
+    function doMount() {
+        var el = document.getElementById('smart-board-root');
+        if (!el || !window.CalibraHub?.mountSmartBoard) {
+            setTimeout(doMount, 50); return;
+        }
+        window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+    }
+
+    loadCss(bundleBase + '.css');
+    if (window.CalibraHub?.mountSmartBoard) { doMount(); }
+    else { loadScript(bundleBase + '.js', doMount); }
+})();
+</script>
+}
+
+<div id="smart-board-root"></div>

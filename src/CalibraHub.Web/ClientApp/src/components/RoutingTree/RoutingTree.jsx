@@ -668,7 +668,7 @@ export default function RoutingTree({ config }) {
         </button>
         <button className="rt-btn rt-btn--primary"
           onClick={() => { setAddingRouting(true); setEditingId(null) }}>
-          <Plus size={14} /> Yeni Rota
+          <Plus size={15} /> Yeni Rota
         </button>
       </div>
 

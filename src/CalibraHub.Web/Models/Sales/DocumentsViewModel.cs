@@ -39,7 +39,7 @@ public sealed class DocumentEditViewModel
     // değişmesi yeterli — view kodu dokunulmaz.
 
     /// <summary>Liste sayfası URL'i — save/delete sonrası geri dönüş hedefi.</summary>
-    public string ListReturnUrl { get; set; } = "/Sales/Documents";
+    public string ListReturnUrl { get; set; } = "/Sales/Quotes";
 
     /// <summary>Yeni kayıt URL'i (header dropdown / floating "Yeni" butonu için).</summary>
     public string? NewUrl { get; set; }
@@ -55,4 +55,25 @@ public sealed class DocumentEditViewModel
 
     /// <summary>Bu belge tipi entegrasyonla aktarılabilir mi (UI'da "ERP'ye Aktar" butonu için)?</summary>
     public bool IsTransferable { get; set; }
+
+    // ── Form Code haritası (2026-05-23) ──────────────────────────────────────
+    // View artik hardcoded "SALES_QUOTE_EDIT" / "SALES_ORDER_EDIT" yerine bu iki
+    // alandan okur. Boylece Satin Alma (purchase_request/quote/order) ile birlikte
+    // 5 belge tipi ayni view tarafindan render edilebilir.
+
+    /// <summary>Header form kodu — Forms tablosundaki edit formu (orn. "SALES_QUOTE_EDIT", "PURCHASE_REQUEST_EDIT").</summary>
+    public string HeaderFormCode { get; set; } = "SALES_QUOTE_EDIT";
+
+    /// <summary>Yeni-kayit form kodu — header dropdown'unda "Yeni" linki icin (orn. "SALES_QUOTE_NEW").</summary>
+    public string HeaderFormCodeNew { get; set; } = "SALES_QUOTE_NEW";
+
+    /// <summary>Kalem form kodu — DocumentLine widget ek alanlari icin (orn. "SALES_QUOTE_LINES", "PURCHASE_REQUEST_LINES").</summary>
+    public string LineFormCode { get; set; } = "SALES_QUOTE_LINES";
+
+    /// <summary>
+    /// Kaynak ihtiyaç kaydı ID'si — yeni teklif açılırken kalemleri pre-fill etmek için.
+    /// NULL ise normal yeni/düzenleme modu; dolu ise bu ID'li ihtiyaç kaydındaki
+    /// kalemler fiyat=0 ile teklif form'una kopyalanır.
+    /// </summary>
+    public int? FromRequestId { get; set; }
 }

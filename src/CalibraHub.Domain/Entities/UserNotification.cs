@@ -6,11 +6,11 @@ namespace CalibraHub.Domain.Entities;
 /// Uygulama ici bildirim kaydi. Worker veya servisler tarafindan olusturulur,
 /// Shell navbar'daki bell dropdown tarafindan listelenir.
 /// </summary>
-public sealed class UserNotification : Entity
+public sealed class UserNotification : EntityInt
 {
     public int CompanyId { get; init; }
-    public Guid UserId { get; init; }
-    public DateTime CreatedAt { get; init; } = DateTime.Now;
+    public int UserId { get; init; }
+    public DateTime Created { get; init; } = DateTime.UtcNow;
 
     /// <summary>Basliki (bildirimde kalin kisim).</summary>
     public required string Title { get; init; }
@@ -22,7 +22,7 @@ public sealed class UserNotification : Entity
     public string? SourceType { get; init; }
 
     /// <summary>Kaynak kayit id'si — notu actirma gibi deep link icin.</summary>
-    public Guid? SourceId { get; init; }
+    public int? SourceId { get; init; }
 
     /// <summary>Opsiyonel deep link URL — tiklayinca gidecegi sayfa.</summary>
     public string? Link { get; init; }

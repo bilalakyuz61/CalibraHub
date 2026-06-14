@@ -1,6 +1,8 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Finance;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -44,11 +46,58 @@ public sealed class FinanceController : Controller
             documentNumber = q.DocumentNumber,
             documentDate = q.DocumentDate,
             validUntil = q.ValidUntil,
-            currency = q.Currency,
+            currencyId = q.CurrencyId,
+            currency = q.CurrencyCode,    // display-only (geri uyum: 'currency' key korunur)
+            currencySymbol = q.CurrencySymbol,
             grandTotal = q.GrandTotal,
             status = q.Status,
             lineCount = q.LineCount
         }));
+    }
+
+    /// <summary>
+    /// GET /Finance/GetContact?id=X veya /Finance/GetContact?code=ABC
+    /// Stok karti GetMaterialCard pattern'inin cari versiyonu — ContactEdit ve
+    /// DocumentEdit'in cari kod input'lari kullanir. ContactEdit ekranlarinda
+    /// in-place AJAX fill icin TUM form alanlari donulur (sayfa reload yok).
+    /// Bulunamazsa 404 → istemci tarafi /Finance/ContactEdit?new=1&code=X (yeni cari).
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetContact(int id, string? code, CancellationToken ct)
+    {
+        ContactDto? contact = id > 0
+            ? await _financeService.GetContactByIdAsync(id, ct)
+            : await _financeService.GetContactByCodeAsync(code ?? string.Empty, ct);
+        if (contact is null) return NotFound();
+
+        // Tum form alanlari (ContactEdit AJAX fill icin) — Razor view'daki @existing?.X esleri ile birebir.
+        return Json(new
+        {
+            id              = contact.Id,
+            accountCode     = contact.AccountCode,
+            accountTitle    = contact.AccountTitle,
+            accountType     = contact.AccountType,
+            taxNumber       = contact.TaxNumber,
+            identityNumber  = contact.IdentityNumber,
+            taxOffice       = contact.TaxOffice,
+            contactPerson   = contact.ContactPerson,
+            phone           = contact.Phone,
+            mobile          = contact.Mobile,
+            waPhone         = contact.WaPhone,
+            waName          = contact.WaName,
+            email           = contact.Email,
+            website         = contact.Website,
+            address         = contact.Address,
+            city            = contact.City,
+            district        = contact.District,
+            neighborhood    = contact.Neighborhood,
+            postalCode      = contact.PostalCode,
+            countryCode     = contact.CountryCode,
+            isActive        = contact.IsActive,
+            priceGroupId    = contact.PriceGroupId,
+            salesRepId      = contact.SalesRepresentativeId,
+            contactGroupId  = contact.ContactGroupId,
+        });
     }
 
     // GET /Finance/GetContactMovements?contactId=X&documentTypeId=&fromDate=&toDate= — cariye ait hareketler
@@ -65,7 +114,9 @@ public sealed class FinanceController : Controller
             documentNumber = d.DocumentNumber,
             documentDate = d.DocumentDate,
             validUntil = d.ValidUntil,
-            currency = d.Currency,
+            currencyId = d.CurrencyId,
+            currency = d.CurrencyCode,    // display-only
+            currencySymbol = d.CurrencySymbol,
             grandTotal = d.GrandTotal,
             status = d.Status,
             lineCount = d.LineCount,
@@ -94,6 +145,8 @@ public sealed class FinanceController : Controller
     // GET /Finance/Contacts — anlik render (DB cagirisi YOK). HTML tarayiciya
     // <100ms icinde dusuyor, spinner hemen gorunur. Tum config + ilk sayfa
     // verisi tek bir combined AJAX (`GetContactsInitialPayload`) ile yuklenir.
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.Contacts)]
     public IActionResult Contacts()
     {
         return View(new ContactsViewModel { BoardConfig = null });
@@ -104,6 +157,7 @@ public sealed class FinanceController : Controller
     // useEffect[searchQuery]'in mount ek fetch tetiklemesini engellemek icin
     // skipInitialFetch=true bayragi config'e gomulur.
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.Contacts)]
     public async Task<IActionResult> GetContactsInitialPayload(CancellationToken ct)
     {
         var (accounts, totalCount) = await _financeService.GetContactsPagedAsync(
@@ -181,6 +235,7 @@ public sealed class FinanceController : Controller
 
     // GET /Finance/GetContactsPage?page=1&pageSize=50&search=abc
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.Contacts)]
     public async Task<IActionResult> GetContactsPage(
         int page = 1, int pageSize = 50, string? search = null, byte? accountType = null, CancellationToken ct = default)
     {
@@ -250,25 +305,15 @@ public sealed class FinanceController : Controller
 
     private async Task<List<object>> BuildMasterWidgetsAsync(CancellationToken ct)
     {
-        var masterWidgets = new List<object>();
         var contactsSchema = await _widgetService.GetFormSchemaByCodeAsync("CONTACTS", ct);
-        if (contactsSchema != null)
-        {
-            foreach (var w in contactsSchema.Widgets.Where(w => w.IsActive
-                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
-            {
-                masterWidgets.Add(new
-                {
-                    id           = w.WidgetCode,
-                    dbId         = w.Id,
-                    isPlainField = w.IsPlainField,
-                    type         = "data",
-                    dataType     = w.DataType.ToLowerInvariant(),
-                    label        = w.Label,
-                });
-            }
-        }
+        var masterWidgets = SmartBoardFilterHelpers.BuildAdminFormWidgets(contactsSchema);
+        var typeOptions = SmartBoardFilterHelpers.ToOptionsList(new[] { "Musteri", "Tedarikci" });
+        masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_phone",    "Telefon",  "text"));
+        masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_email",    "E-Posta",  "text"));
+        masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_tax_no",   "Vergi No", "text"));
+        masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_city",     "İl",       "text"));
+        masterWidgets.Add(SmartBoardFilterHelpers.MakeStdWidget   ("sys_district", "İlçe",     "text"));
+        masterWidgets.Add(SmartBoardFilterHelpers.MakeOptionsWidget("sys_type",     "Tip",      typeOptions));
         return masterWidgets;
     }
 
@@ -294,7 +339,7 @@ public sealed class FinanceController : Controller
                 widgets.Add(new { id = "sys_city",   type = "data", dataType = "text", label = "İl",       value = account.City,       color = "teal"    });
             if (!string.IsNullOrWhiteSpace(account.District))
                 widgets.Add(new { id = "sys_district", type = "data", dataType = "text", label = "İlçe",   value = account.District,   color = "teal"    });
-            widgets.Add(new { id = "sys_type", type = "data", dataType = "text", label = "Tip",
+            widgets.Add(new { id = "sys_type", type = "data", dataType = "options", label = "Tip",
                 value = account.AccountType == 1 ? "Musteri" : "Tedarikci",
                 color = account.AccountType == 1 ? "emerald" : "violet" });
 
@@ -342,6 +387,8 @@ public sealed class FinanceController : Controller
     }
 
     // GET /Finance/ContactEdit
+    [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ContactEdit)]
     public async Task<IActionResult> ContactEdit(int? id, CancellationToken cancellationToken)
     {
         ContactDto? existing = null;
@@ -374,6 +421,7 @@ public sealed class FinanceController : Controller
 
     // POST /Finance/UpsertContact
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ContactEdit)]
     public async Task<IActionResult> UpsertContact(
         [FromBody] SaveContactRequest? request, CancellationToken cancellationToken)
     {
@@ -394,6 +442,7 @@ public sealed class FinanceController : Controller
 
     // POST /Finance/DeleteContact
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ContactEdit)]
     public async Task<IActionResult> DeleteContact(
         [FromBody] DeleteContactBody? body, CancellationToken cancellationToken)
     {

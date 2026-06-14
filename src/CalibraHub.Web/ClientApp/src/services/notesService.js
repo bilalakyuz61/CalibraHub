@@ -30,7 +30,16 @@ export function saveNote(note) {
     // Mod 2 E2E: sifreli not ise content alani JSON payload tutar
     isFullyEncrypted: !!note.isFullyEncrypted,
     encryptionHint:   note.encryptionHint || null,
+    tags: note.tags && note.tags.length > 0 ? JSON.stringify(note.tags) : null,
+    linkedEntityType:  note.linkedEntityType  || null,
+    linkedEntityId:    note.linkedEntityId    || null,
+    linkedEntityLabel: note.linkedEntityLabel || null,
+    visibility:        note.visibility        || 0,
   })
+}
+
+export function cloneNote(noteId) {
+  return postJson(BASE + '/CloneNoteJson', { noteId: noteId })
 }
 
 export function deleteNote(id) {
@@ -117,6 +126,11 @@ export function restoreNote(id) {
 
 export function permanentDeleteNote(id) {
   return postJson(BASE + '/PermanentDeleteNoteJson', { id: id })
+}
+
+export function entitySearch(type, q) {
+  return fetch('/Notes/EntitySearchJson?type=' + encodeURIComponent(type) + '&q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
 }
 
 export function importEvernote(file, folderId) {

@@ -1,19 +1,33 @@
 @model CalibraHub.Web.Models.Sales.DocumentEditViewModel
 @{
     var isOrder = string.Equals(Model.DocumentTypeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase);
-    var entityLabel = isOrder ? "Siparis" : "Teklif";
-    // Form kodu: belge tipine göre — Satış Teklifi vs Satış Siparişi.
-    // Widget tanımları, alan rehberi binding'leri ve DynamicWidgetRenderer
-    // bu form kodları üzerinden ayrı ayrı yönetilir.
-    var headerFormCode = isOrder ? "SALES_ORDER_EDIT" : "SALES_QUOTE_EDIT";
-    var lineFormCode   = isOrder ? "SALES_ORDER_LINES" : "SALES_QUOTE_LINES";
+    var isPurchase = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.IsPurchase(Model.DocumentTypeCode);
+    // Satin Alma Talebi (alis_talebi) — sirket icinden gelen talep; bu asamada henuz
+    // tedarikci de fiyatlandirma da belli degil. Para Birimi / Cari Kod alanlari gizlenir.
+    var isPurchaseRequest = string.Equals(Model.DocumentTypeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase);
+    // Cari Kod rehberi: purchase belgelerinde Tedarikci, sales/talep'te musteri.
+    var customerGuideCode = isPurchase ? "SUPPLIERS" : "CUSTOMERS";
+    // 2026-05-23: Satis tarafinda "Teklif/Siparis" labellari kullaniliyordu; satin alma
+    // belgeleri icin de label haritasi gerek. Satin alma: talep/teklif/siparis.
+    string entityLabel = Model.DocumentTypeCode switch
+    {
+        "satis_siparisi"  => "Siparis",
+        "alis_talebi"     => "İhtiyaç",   // tam ad: "İhtiyaç Kaydı"; alt etiketlerde kisa kullanim
+        "alis_teklifi"    => "Teklif",
+        "alis_siparisi"   => "Siparis",
+        _                  => "Teklif",
+    };
+    // Form kodlari artik VM'den geliyor (controller DocumentTypeFormMap helper'i ile doldurur).
+    // 5 belge tipi (satis_teklifi/siparisi + alis_talebi/teklifi/siparisi) ayni view ile render edilir.
+    var headerFormCode = Model.HeaderFormCode;
+    var lineFormCode   = Model.LineFormCode;
     // Save / Delete sonrasi geri donulecek liste sayfasi.
     // Faz N — DocumentType.ListUrl tek-noktadan gelir (controller doldurur).
     // Yeni belge tipleri (alış irsaliyesi, satınalma siparişi vb.) eklenince
     // sadece DB seed'i guncellenir; bu view dokunulmaz.
     var listReturnUrl  = !string.IsNullOrWhiteSpace(Model.ListReturnUrl)
         ? Model.ListReturnUrl
-        : (isOrder ? "/Sales/Orders" : "/Sales/Documents");   // legacy fallback
+        : (isOrder ? "/Sales/Orders" : "/Sales/Quotes");   // teklif yeni route + siparis ayri
     ViewData["Title"] = Model.DocumentId.HasValue ? entityLabel + " Duzenle" : "Yeni " + entityLabel;
     ViewData["FormCode"] = headerFormCode;
     ViewData["BodyClass"] = "page-sales-quote-edit";
@@ -850,6 +864,14 @@
     }
     .sqe-hinput.sqe-flash {
         animation: sqeShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
+    }
+    /* 2026-06-01: Bootstrap'in `<select>.is-invalid` icin eklediği ünlem işareti
+       SVG background-image'i bastir — sadece kirmizi border + shake gostermek
+       istiyoruz, alani ünlem deseniyle doldurmasin. */
+    select.sqe-hinput.is-invalid,
+    select.sqe-hinput.is-invalid:focus {
+        background-image: none !important;
+        padding-right: 0.75rem !important;
     }
     /* ── Aranabilir temsilci combobox ── */
     .sqe-rep-cb { position: relative; }
@@ -2122,6 +2144,13 @@
             </svg>
             <span>Yazdir</span>
         </button>
+        <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionSendMail(event)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+            </svg>
+            <span>Mail Gönder</span>
+        </button>
         <button type="button" role="menuitem" class="sqe-actions-item" onclick="sqActionShowAllCosts(event)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="4" y="2" width="16" height="20" rx="2"/>
@@ -2149,10 +2178,20 @@
         </button>
         @* Entegrasyonlar — bu form icin Manual trigger'li aktif entegrasyonlar
            dinamik olarak divider + header + items seklinde dropdown'a eklenir.
-           Hicbiri yoksa goruunmez (placeholder gizli kalir). *@
+           Hicbiri yoksa goruunmez (placeholder gizli kalir).
+
+           ÖNEMLI (bug fix 2026-05-20): Wizard'da kullanici "Satıs Teklifi" altinda
+           ya SALES_QUOTE_NEW ya SALES_QUOTE_EDIT kodunu secebilir (Forms tablosunda
+           ikisi de var). Edit ekraninda her ikisini de gostermek icin partial'a
+           VIRGULLE AYRILMIS form kod listesi gonderiyoruz. _IntegrationActionItems
+           her birini ayri sorgulayip dedup ile birlestirir. *@
+        @{
+            // 2026-05-23: VM'den okuyoruz — 5 belge tipi icin de "EDIT,NEW" cifti.
+            var integrationFormCodes = $"{Model.HeaderFormCode},{Model.HeaderFormCodeNew}";
+        }
         @await Html.PartialAsync("_IntegrationActionItems",
             new CalibraHub.Web.Models.IntegrationButtonsModel {
-                FormCode = headerFormCode,
+                FormCode = integrationFormCodes,
                 RecordId = (editId ?? 0).ToString()
             })
     </div>
@@ -2198,6 +2237,10 @@
             <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="notes" onclick="sqSwitchTab('notes')">Notlar</button>
             <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="widgets" onclick="sqSwitchTab('widgets')">Ek Alanlar</button>
             <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="attachments" onclick="sqSwitchTab('attachments')">Ekli Dosyalar</button>
+            @if (Model.DocumentId.HasValue)
+            {
+                <button type="button" class="sqe-tab-btn" data-sqe-tab-btn="workflow" onclick="sqSwitchTab('workflow')">Onay Akışı</button>
+            }
         </nav>
         <div class="sqe-tab-content">
 
@@ -2205,7 +2248,10 @@
         <div class="sqe-tab-pane is-active" data-sqe-pane="general">
             <div class="sqe-hform">
                 <div class="sqe-hrow">
-                    <label class="sqe-hlabel">@(isOrder ? "Siparis No" : "Teklif No")</label>
+                    @* 2026-05-23: 5 belge tipini destekler — entityLabel switch'ten gelir.
+                       satis_teklifi → "Teklif No", satis_siparisi → "Siparis No",
+                       alis_talebi → "İhtiyaç No", alis_teklifi → "Teklif No", alis_siparisi → "Siparis No" *@
+                    <label class="sqe-hlabel">@(entityLabel) No</label>
                     <div class="sqe-hcombo" style="align-items:center;gap:6px;">
                         <input id="sqQuoteNumber" class="form-control form-control-sm sqe-hinput" readonly placeholder="Kaydedildiginde olusturulur" style="font-size:1rem; font-weight:600;" />
                         @if (isOrder)
@@ -2236,28 +2282,54 @@
                 }
                 else
                 {
-                    @* Teklif: Gecerlilik Gun + Tarih (eski davranis — iki input) *@
+                    @* Teklif / İhtiyaç Kaydı: Gecerlilik Gun + Tarih (iki input)
+                       2026-06-01: alis_talebi (İhtiyaç Kaydı) icin varsayilan Gun=0 —
+                       talep anlik bir is olusumudur, "kac gun gecerli" anlami yok.
+                       Teklif (satis_teklifi / alis_teklifi) icin bos kalir, kullanici girer. *@
                     <div class="sqe-hrow">
                         <label class="sqe-hlabel">Gecerlilik Gun/Tarih</label>
                         <div class="sqe-hcombo">
-                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" oninput="sqRecalcValidFromDays()" />
+                            <input id="sqValidDays" type="number" min="0" class="form-control form-control-sm sqe-hinput sqe-fp-days" placeholder="Gun" value="@(isPurchaseRequest ? "0" : "")" oninput="sqRecalcValidFromDays()" />
                             <input id="sqValidUntil" type="date" class="form-control form-control-sm sqe-hinput" oninput="sqRecalcDaysFromValid()" />
                         </div>
                     </div>
                 }
-                <div class="sqe-hrow">
+                @* 2026-05-23: Satin Alma Talebi belge tipinde Para Birimi ve Cari Kod
+                   gizlenir — talep iç hareket, fiyatlandırma teklifle gelir, tedarikçi
+                   sipariş aşamasında belli olur. Diğer 4 belge tipinde her ikisi de görünür.
+                   Inputlar DOM'da hala mevcut (hidden) — JS save akışı bos string gönderir,
+                   backend default değerleri (CurrencyId=1, ContactId=NULL) uygular. *@
+                <div class="sqe-hrow" style="@(isPurchaseRequest ? "display:none;" : "")">
                     <label class="sqe-hlabel">Para Birimi</label>
-                    <select id="sqCurrency" class="form-select form-select-sm sqe-hinput" style="max-width:72px;"
-                            onchange="(function(el){ try { window.dispatchEvent(new CustomEvent('sq:currency', { detail: { code: el.value || 'TRY' } })); } catch(e) {} })(this)">
-                        <option value="TRY">TRY</option><option value="USD">USD</option><option value="EUR">EUR</option>
+                    <!-- ID-bazli FK (CurrencyId): value=currencies.id, data-code attribute'unda
+                         ISO kodu (TRY/USD/EUR) tasinir — event listener'lar code'u okur.
+                         Options sayfa load'da /Finance/GetCurrenciesLookup'tan dinamik dolar. -->
+                    <select id="sqCurrency" class="form-select form-select-sm sqe-hinput" style="max-width:90px;"
+                            data-current-id="1"
+                            onchange="(function(el){
+                                try {
+                                    var opt = el.options[el.selectedIndex];
+                                    var code = (opt && opt.getAttribute('data-code')) || 'TRY';
+                                    window.dispatchEvent(new CustomEvent('sq:currency', { detail: { id: parseInt(el.value) || 1, code: code } }));
+                                } catch(e) {}
+                            })(this)">
+                        <option value="1" data-code="TRY">TRY</option>
                     </select>
                 </div>
-                <div class="sqe-hrow">
-                    <label class="sqe-hlabel sqe-hlabel--link" title="Cari karta gitmek icin cift tiklayin" ondblclick="sqGoToCustomerCard()">Cari Kod</label>
-                    <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput" readonly placeholder="Rehberden seciniz" />
+                <div class="sqe-hrow" style="@(isPurchaseRequest ? "display:none;" : "")">
+                    @* 2026-05-23: Satin alma belgelerinde label "Tedarikci", satista "Cari Kod".
+                       Element id'leri (sqCustomerDisplay/sqCustomerId) bilincli olarak ayni —
+                       JS handler'lari ve save akisi degismez. *@
+                    <label class="sqe-hlabel sqe-hlabel--link" title="@(isPurchase ? "Tedarikci karta gitmek icin cift tiklayin" : "Cari karta gitmek icin cift tiklayin")" ondblclick="sqGoToCustomerCard()">@(isPurchase ? "Tedarikçi" : "Cari Kod")</label>
+                    <!-- Stok karti pattern: yazinca lookup; varsa otomatik dolar, yoksa yeni cari ekranina yonlendirir.
+                         attachGuide rehber butonu hala calisir, ek olarak elle yazma destegi (readonly KALDIRILDI). -->
+                    <input type="text" id="sqCustomerDisplay" class="form-control form-control-sm sqe-hinput"
+                           placeholder="Kod yazin veya rehberden secin" autocomplete="off" />
                     <input type="hidden" id="sqCustomerId" />
                     <span id="sqCustomerName" class="sqe-hlabel-value sqe-customer-name" data-placeholder="Cari secildiginde otomatik dolar"></span>
                 </div>
+                @if (!isPurchaseRequest)
+                {
                 <div class="sqe-hrow">
                     <label class="sqe-hlabel">Temsilci</label>
                     <div class="sqe-rep-cb sqe-hinput" id="sqSalesRepWrapper">
@@ -2275,12 +2347,48 @@
                         </div>
                     </div>
                 </div>
+                }
+                @if (isPurchaseRequest)
+                {
+                    var personnels         = ViewData["RequesterPersonnels"] as System.Collections.IEnumerable;
+                    var requesterLocked    = (bool)(ViewData["RequesterLocked"] ?? false);
+                    var curPersonnelId     = ViewData["CurrentUserPersonnelId"] as int?;
+                    <div class="sqe-hrow">
+                        <label class="sqe-hlabel">Talep Eden</label>
+                        <select id="sqRequesterId" class="form-select form-select-sm sqe-hinput"
+                            @(requesterLocked ? "disabled" : "")>
+                            <option value="">Seçiniz…</option>
+                            @if (personnels != null)
+                            {
+                                foreach (dynamic p in personnels)
+                                {
+                                    <option value="@p.Id" data-dept="@p.Dept">@p.Name</option>
+                                }
+                            }
+                        </select>
+                        @if (requesterLocked && curPersonnelId == null)
+                        {
+                            <small class="text-warning ms-1" title="Hesabınıza bağlı personel kaydı bulunamadı.">⚠ Personel kaydı yok</small>
+                        }
+                    </div>
+                    @if (requesterLocked && curPersonnelId.HasValue)
+                    {
+                        <script>
+                        (function(){
+                            var sel = document.getElementById('sqRequesterId');
+                            if (sel) { sel.value = '@curPersonnelId'; }
+                        })();
+                        </script>
+                    }
+                }
             </div>
         </div>
 
         <!-- TAB 2: Kalem Bilgileri -->
         <div class="sqe-tab-pane" data-sqe-pane="lines">
             <div id="reactDocumentLineGrid" style="min-height:220px;"></div>
+            @if (!isPurchaseRequest)
+            {
             <div class="sqe-totals">
                 <span class="sqe-total-label">Ara Toplam (Brut):</span>
                 <span class="sqe-total-control"></span>
@@ -2303,6 +2411,7 @@
                 <span class="sqe-total-control"></span>
                 <span class="sqe-total-value sqe-grand-total" id="sqGrandTotal">0,00</span>
             </div>
+            }
         </div>
 
         <!-- TAB 3: Kosullar -->
@@ -2369,6 +2478,13 @@
             </div>
         </div>
 
+        @if (Model.DocumentId.HasValue)
+        {
+            <div class="sqe-tab-pane" data-sqe-pane="workflow">
+                <partial name="~/Views/Approval/_WorkflowPanel.cshtml" model="@Model.DocumentId.Value" />
+            </div>
+        }
+
         </div><!-- /sqe-tab-content -->
     </div><!-- /sqe-body -->
 </section>
@@ -2402,18 +2518,35 @@
                 disableMobile: true,
                 appendTo: document.body
             };
-            var dateEl = document.getElementById('sqQuoteDate');
+
+            /* Yardimci: flatpickr'i olustur ve takvimin sadece tiklamayla
+               acilmasini garantile — focus/tab ile otomatik acilmaz.       */
+            function makePicker(el, extraOpts) {
+                if (!el || el._flatpickr) return;
+                var _clickPending = false;
+                var cfg = Object.assign({}, common, extraOpts || {}, {
+                    onOpen: function (dates, dateStr, instance) {
+                        /* Mousedown onceden isaretlenmediyse focus/tab ile acildi — kapat */
+                        if (!_clickPending) {
+                            instance.close();
+                            return;
+                        }
+                        _clickPending = false;
+                    }
+                });
+                var fp = flatpickr(el, cfg);
+                /* mousedown: kullanici tiklamaya basladi — izni ver */
+                fp.altInput.addEventListener('mousedown', function () {
+                    _clickPending = true;
+                    /* 200 ms icinde open gelmezse flag'i temizle */
+                    setTimeout(function () { _clickPending = false; }, 200);
+                });
+            }
+
+            var dateEl  = document.getElementById('sqQuoteDate');
             var validEl = document.getElementById('sqValidUntil');
-            if (dateEl && !dateEl._flatpickr) {
-                flatpickr(dateEl, Object.assign({}, common, {
-                    onChange: function () { if (typeof window.sqRecalcValidFromDays === 'function') window.sqRecalcValidFromDays(); }
-                }));
-            }
-            if (validEl && !validEl._flatpickr) {
-                flatpickr(validEl, Object.assign({}, common, {
-                    onChange: function () { if (typeof window.sqRecalcDaysFromValid === 'function') window.sqRecalcDaysFromValid(); }
-                }));
-            }
+            makePicker(dateEl,  { onChange: function () { if (typeof window.sqRecalcValidFromDays === 'function') window.sqRecalcValidFromDays(); } });
+            makePicker(validEl, { onChange: function () { if (typeof window.sqRecalcDaysFromValid  === 'function') window.sqRecalcDaysFromValid();  } });
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSqPickers);
         else initSqPickers();
@@ -2426,6 +2559,14 @@
     // meta bilgi tamamen C#'tan gelir — React bileseni hardcode yapmaz.
     // ══════════════════════════════════════════════════════════════
     window.__CALIBRA_SALES_QUOTE_LINE_GRID__ = @Html.Raw(Model.LineGridConfigJson);
+    // 2026-06-01: Grid'in satir context menusunden Fiyat Geçmişi/Maliyet/Revize'yi
+    // alis_talebi (İhtiyaç Kaydı) icin gizlemek uzere documentTypeCode'u config'e enjekte.
+    try { window.__CALIBRA_SALES_QUOTE_LINE_GRID__.documentTypeCode = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.DocumentTypeCode ?? "")); } catch (e) { }
+    // 2026-06-02: Satir ek alanlari modal'i + schema fetch dogru form code'u
+    // kullansin diye config'e enjekte. Onceden grid hardcoded SALES_QUOTE_LINES
+    // kullaniyordu; alis_talebi'nde modal yanlis form widget'larini gosteriyor +
+    // backend dogru formu kontrol edip eksik gorerek gear'i kirmizi tutuyordu.
+    try { window.__CALIBRA_SALES_QUOTE_LINE_GRID__.lineFormCode = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.LineFormCode ?? "SALES_QUOTE_LINES")); } catch (e) { }
     // Belge tipi server-side resolve — SaveDocument body'sine documentTypeId set etmek
     // ve UI label/davranis ayrimlari icin (teklif vs siparis).
     window.__CALIBRA_DOC_TYPE__ = {
@@ -2467,6 +2608,23 @@
         // Genel Bilgiler sekmesine don ve focus ver
         sqActivateTab('general');
         setTimeout(function() { disp.focus(); }, 50);
+    }
+
+    // Talep Eden zorunlu uyarisi — flashCustomerRequired pattern'i ile ayni:
+    // kirmizi cerceve + shake animasyonu, kullanici seciminde temizlenir,
+    // Genel Bilgiler sekmesi acilir, focus verilir.
+    function flashRequesterRequired() {
+        var sel = document.getElementById('sqRequesterId');
+        if (!sel) return;
+        sel.classList.add('is-invalid', 'sqe-flash');
+        setTimeout(function() { sel.classList.remove('sqe-flash'); }, 600);
+        var clearInvalid = function() {
+            sel.classList.remove('is-invalid');
+            sel.removeEventListener('change', clearInvalid);
+        };
+        sel.addEventListener('change', clearInvalid);
+        sqActivateTab('general');
+        setTimeout(function() { sel.focus(); }, 50);
     }
 
     function sqActivateTab(tabKey) {
@@ -2581,7 +2739,8 @@
     sqSwitchTab('general');
 
     var searchTimer = null;
-    var currentQuoteId = @Html.Raw(editId.HasValue ? $"'{editId.Value}'" : "null");
+    var currentQuoteId  = @Html.Raw(editId.HasValue ? $"'{editId.Value}'" : "null");
+    var fromRequestId   = @Html.Raw(Model.FromRequestId.HasValue ? Model.FromRequestId.Value.ToString() : "null");
     var materials = [];
     var customers = [];
 
@@ -2777,6 +2936,10 @@
                     var data = await quotePrefetch;
                     await sqLoadQuote(currentQuoteId, data);
                 } catch (e) { console.error('sqLoadQuote hatasi:', e); }
+            } else if (fromRequestId) {
+                sqInitNew();
+                try { await sqPreFillFromRequest(fromRequestId); }
+                catch (e) { console.error('sqPreFillFromRequest hatasi:', e); }
             } else {
                 sqInitNew();
             }
@@ -2817,11 +2980,18 @@
 
     function attachCustomerGuide() {
         if (window.CalibraHub && window.CalibraHub.attachGuide) {
-            window.CalibraHub.attachGuide('#sqCustomerDisplay', 'CUSTOMERS', {
+            // 2026-05-23: Satin alma belgelerinde (purchase_quote/order) tedarikci
+            // rehberi (SUPPLIERS) acilir — sales tarafinda CUSTOMERS. Talep zaten Cari
+            // Kod alanini gizler (isPurchaseRequest), bu nedenle burada talep ele alinmaz.
+            // customerGuideCode top of view'da resolve edilir; simple C# variable ile JS'e gelir.
+            var guideCode = '@customerGuideCode';
+            window.CalibraHub.attachGuide('#sqCustomerDisplay', guideCode, {
                 formCode: '@headerFormCode',
                 // SalesRepId — cari kart uzerinde tanimliysa otomatik dolar; bos gelen
                 // (cari icin temsilci atanmamis) durumda mevcut deger korunur cunku
                 // attachGuide bos string yazmaz.
+                // NOT: SUPPLIERS view'inde SalesRepId yok — fillMap'te eksik kolonu
+                // attachGuide sessizce atlar (uyari yazmaz), gecmis sales mantigi bozulmaz.
                 fillMap: {
                     '#sqCustomerId': 'Id',
                     '#sqCustomerName': 'AccountTitle',
@@ -2832,6 +3002,80 @@
         }
         return false;
     }
+
+    /**
+     * Stok karti pattern: Cari Kod input'a el ile yazip blur (Tab/Enter/disari tik)
+     * yapilinca DB'de lookup. Varsa otomatik dolar (Id+Name+SalesRepId), yoksa
+     * yeni cari ekranina (ContactEdit) yonlendirir — code parametresi ile.
+     * AttachGuide rehber pick'i hala calisir; bu el-yazimi alternatif.
+     */
+    (function attachCustomerCodeLookup() {
+        var disp = document.getElementById('sqCustomerDisplay');
+        if (!disp) return;
+        var idEl   = document.getElementById('sqCustomerId');
+        var nameEl = document.getElementById('sqCustomerName');
+        var repEl  = document.getElementById('sqSalesRepId');
+
+        // Last-fetched code — ayni kod tekrar lookup yapmasin (tab toggling).
+        var lastChecked = '';
+
+        async function lookupAndFill() {
+            var code = (disp.value || '').trim();
+            if (!code || code === lastChecked) return;
+            // Eger zaten Id dolu ve display ona ait kod ise atla (rehberden secim)
+            if (idEl && idEl.value && idEl.getAttribute('data-display') === code) {
+                lastChecked = code;
+                return;
+            }
+            lastChecked = code;
+
+            try {
+                var r = await fetch('/Finance/GetContact?code=' + encodeURIComponent(code),
+                    { credentials: 'same-origin' });
+                if (r.ok) {
+                    // BULDU — dolduran alanlar (rehberden gelmis gibi)
+                    var c = await r.json();
+                    if (idEl)   { idEl.value = c.id; idEl.setAttribute('data-display', c.accountCode); }
+                    if (nameEl)  nameEl.textContent = c.accountTitle || c.accountCode || '';
+                    if (repEl && c.salesRepId) repEl.value = c.salesRepId;
+                    disp.value = c.accountCode;
+                    disp.classList.remove('is-invalid');
+                    // ffl-sync — diger lookup-bagimli alanlari tetikle
+                    try { disp.dispatchEvent(new CustomEvent('ffl-sync', { bubbles: true })); } catch (_) {}
+                    return;
+                }
+                if (r.status === 404) {
+                    // YOK — kullaniciya sor; istiyorsa yeni cari ekrani ac
+                    var msg = '"' + code + '" kodlu cari bulunamadi.\n\nYeni cari hesap olusturmak ister misiniz?';
+                    var ok = (window.CalibraAlert && CalibraAlert.confirm)
+                        ? await CalibraAlert.confirm(msg, { title: 'Cari Bulunamadi', okText: 'Yeni Cari Ekle', cancelText: 'Vazgec' })
+                        : window.confirm(msg);
+                    if (ok) {
+                        // Yeni sekme: cari karti olustur, code on-fill
+                        var url = '/Finance/ContactEdit?new=1&code=' + encodeURIComponent(code);
+                        window.open(url, '_blank', 'noopener');
+                    }
+                    // Reset: kullanici tekrar denesin
+                    disp.value = '';
+                    if (idEl) { idEl.value = ''; idEl.removeAttribute('data-display'); }
+                    if (nameEl) nameEl.textContent = '';
+                    lastChecked = '';
+                }
+            } catch (e) {
+                if (window.CalibraHub && CalibraHub.toast)
+                    CalibraHub.toast('Cari lookup hatasi: ' + e.message, 'err');
+            }
+        }
+
+        disp.addEventListener('blur', lookupAndFill);
+        disp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                // Enter: lookup et + form'un submit edilmesini engelle
+                if (e.key === 'Enter') e.preventDefault();
+                lookupAndFill();
+            }
+        });
+    })();
 
     /**
      * openOrderLookup — Sipariş modu (window.__CALIBRA_DOC_TYPE__.isOrder) iken,
@@ -3113,22 +3357,73 @@
     window.sqRecalcValidFromDays = sqRecalcValidFromDays;
     window.sqRecalcDaysFromValid = sqRecalcDaysFromValid;
 
+    /* ── Currency dropdown: dinamik yukleme + ID/code map ─────────────────
+       Backend Document.CurrencyId int FK tutar; dropdown value=id, data-code=ISO.
+       Sayfa load'da /PriceList/GetCurrencies'ten option'lar doldurulur.
+       sqSetCurrencyById(id) ID ile select'i ayarlar + 'sq:currency' event firlatir
+       (kalem grid'i + diger dinleyiciler kod stringini bilmek istiyor). */
+    var __sqCurrencyMap = { 1: 'TRY' };  // fallback — endpoint yuklenmeden once
+    function sqSetCurrencyById(id) {
+        var el = document.getElementById('sqCurrency');
+        if (!el) return;
+        var idStr = String(id || 1);
+        el.value = idStr;
+        var opt = el.options[el.selectedIndex];
+        var code = (opt && opt.getAttribute('data-code')) || __sqCurrencyMap[id] || 'TRY';
+        try {
+            window.dispatchEvent(new CustomEvent('sq:currency', {
+                detail: { id: parseInt(idStr) || 1, code: code }
+            }));
+        } catch (_) {}
+    }
+    window.sqSetCurrencyById = sqSetCurrencyById;
+
+    function sqLoadCurrencies() {
+        return fetch('/PriceList/GetCurrencies', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                var sel = document.getElementById('sqCurrency');
+                if (!sel || !Array.isArray(list) || list.length === 0) return;
+                var currentId = sel.value || sel.getAttribute('data-current-id') || '1';
+                __sqCurrencyMap = {};
+                sel.innerHTML = list.map(function (c) {
+                    __sqCurrencyMap[c.id] = c.code;
+                    return '<option value="' + c.id + '" data-code="' + c.code + '">' + c.code + '</option>';
+                }).join('');
+                // Onceden secili id varsa onu koru (option'lar yenilendi)
+                if (Array.from(sel.options).some(function (o) { return o.value === currentId; })) {
+                    sel.value = currentId;
+                }
+            })
+            .catch(function () { /* sessiz: TRY fallback option zaten render edilmis */ });
+    }
+    // Sayfa hazir olunca yukle (DOMContentLoaded yapilmistir buraya gelindiginde)
+    sqLoadCurrencies();
+
     async function sqInitNew() {
         window.applyCustomerLock(false);
         window.sqSetDateValue('sqQuoteDate', new Date().toISOString().split('T')[0]);
-        window.sqSetDateValue('sqValidUntil', '');
-        document.getElementById('sqValidDays').value = '';
+        // 2026-06-01: İhtiyaç Kaydi (alis_talebi) icin varsayilan Gecerlilik Gun = 0;
+        // anlik talep, gecerlilik suresi anlami yok. Diger belge tiplerinde bos baslar.
+        var __isPR_init = @(isPurchaseRequest ? "true" : "false");
+        if (__isPR_init) {
+            document.getElementById('sqValidDays').value = '0';
+            // Gun=0 + Tarih=bugun → ValidUntil=bugun (sqRecalcValidFromDays tetiklendi).
+            window.sqRecalcValidFromDays();
+        } else {
+            window.sqSetDateValue('sqValidUntil', '');
+            document.getElementById('sqValidDays').value = '';
+        }
         document.getElementById('sqCustomerId').value = '';
         document.getElementById('sqCustomerDisplay').value = '';
         document.getElementById('sqCustomerDisplay').removeAttribute('data-value');
         document.getElementById('sqCustomerDisplay').removeAttribute('data-display');
         document.getElementById('sqCustomerName').textContent = '';
         sqSetSalesRep(null);
-        document.getElementById('sqCurrency').value = 'TRY';
-        // Programatik set 'change' event tetiklemez — kalem grid'i ve diger
-        // dinleyiciler icin custom event firlat.
-        try { window.dispatchEvent(new CustomEvent('sq:currency', { detail: { code: 'TRY' } })); } catch (e) {}
-        document.getElementById('sqDiscountRate').value = '0';
+        // Default: TRY (id=1). sqSetCurrencyById helper id->code lookup yapip
+        // hem dropdown'u set hem custom event firlatir.
+        sqSetCurrencyById(1);
+        var _drEl = document.getElementById('sqDiscountRate'); if (_drEl) _drEl.value = '0';
         document.getElementById('sqPaymentTerms').value = '';
         document.getElementById('sqDeliveryTerms').value = '';
         document.getElementById('sqDeliveryAddress').value = '';
@@ -3190,10 +3485,14 @@
             try { custDisp.dispatchEvent(new CustomEvent('ffl-sync', { bubbles: true })); } catch (_) {}
             document.getElementById('sqCustomerName').textContent = q.contactName || '';
             sqSetSalesRep(q.salesRepId);
-            document.getElementById('sqCurrency').value = q.currency || 'TRY';
-            // Programatik set sonrasi kalem grid sembolu yenilesin.
-            try { window.dispatchEvent(new CustomEvent('sq:currency', { detail: { code: q.currency || 'TRY' } })); } catch (e) {}
-            document.getElementById('sqDiscountRate').value = q.discountRate ?? 0;
+            try {
+                var reqEl = document.getElementById('sqRequesterId');
+                if (reqEl && q.requesterPersonnelId) reqEl.value = q.requesterPersonnelId;
+            } catch (_) {}
+            // Backend artik currencyId (FK) gonderir; geri uyum icin string currency
+            // alani da gelir ama biz ID'yi authoritative sayariz.
+            sqSetCurrencyById(q.currencyId || 1);
+            var _drEl2 = document.getElementById('sqDiscountRate'); if (_drEl2) _drEl2.value = q.discountRate ?? 0;
             document.getElementById('sqPaymentTerms').value = q.paymentTerms || '';
             document.getElementById('sqDeliveryTerms').value = q.deliveryTerms || '';
             document.getElementById('sqDeliveryAddress').value = q.deliveryAddress || '';
@@ -3257,6 +3556,44 @@
             console.error('sqLoadQuote hatasi:', e);
             CalibraAlert.error('Teklif yuklenemedi: ' + e.message);
         }
+    }
+
+    // ── İhtiyaç Kaydından Teklif Pre-fill ────────────────────────────────────
+    // fromRequestId varsa ihtiyaç kaydının kalemlerini alır, fiyat=0 olarak
+    // yeni teklif formuna yükler. Belge no, tedarikçi vb. boş kalır.
+    async function sqPreFillFromRequest(requestId) {
+        var resp = await fetch('/Sales/GetQuote?id=' + requestId);
+        if (!resp.ok) throw new Error('GetQuote (prefill) HTTP ' + resp.status);
+        var data = await resp.json();
+        var q    = data && data.quote;
+        if (!q) throw new Error('İhtiyaç kaydı verisi alınamadı.');
+
+        var lines = (data.lines || []).map(function (ln) {
+            var m = (materials || []).find(function (x) { return x.id === ln.itemId; });
+            return {
+                stockCardId:       ln.itemId,
+                materialCode:      ln.materialCode  || '',
+                materialName:      ln.materialName  || '',
+                unitId:            ln.unitId        || null,
+                quantity:          ln.quantity      || 1,
+                unitPrice:         0,
+                discountRate:      0,
+                taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
+                locationId:        ln.locationId    || null,
+                notes:             ln.notes         || null,
+                combinationCode:   null,
+                combinationId:     null,
+                trackCombinations: m ? m.trackCombinations === true : false,
+            };
+        });
+
+        setGridRows(lines.length > 0 ? lines : [{
+            materialCode: '', materialName: '', unitId: null,
+            quantity: 1, unitPrice: 0, discountRate: 0,
+            locationId: null, notes: null,
+        }]);
+        sqRecalc();
+        window.applyCustomerLock(false);
     }
 
     window.sqAddLine = function () { addLineRow(null); };
@@ -3404,10 +3741,9 @@
     };
 
     window.sqRecalc = function () {
+        // Fiyat alanları gizliyse (ör. İhtiyaç Kaydı) hesaplama yapılmaz.
+        if (!document.getElementById('sqDiscountRate')) return;
         // Her satir icin qty*price = brut, iskonto ve kdv oranlari uygulanir.
-        // Genel iskonto tum satirlara orantili yansir. KDV, her satirin kendi
-        // oranina gore hesaplanir ve oranlar bazinda gruplanir — farkli oranlar
-        // varsa alt kisimda ayri satir olarak gosterilir.
         var rawLines = window.__SQ_LINES__ || [];
         // Aktif satirlar: revisedFromId bos. Eski (superseded) satirlarda revisedFromId dolu.
         var lines = rawLines.filter(function (r) {
@@ -3582,9 +3918,23 @@
 
         if (_validate) {
             // ── Cari zorunlu kontrolu ───────────────────────────────────────────
-            if (!custIdVal && !custCodeVal && !custText) {
+            // 2026-05-23: İhtiyaç Kaydı (alis_talebi) bir IC belge — tedarikci/musteri
+            // bu asamada belli degil. Cari Kod UI'da zaten gizli; save akisinda da
+            // zorunluluk uygulanmaz. Diger 4 belge tipinde kontrol aynen calisir.
+            var __isPurchaseRequest = @(isPurchaseRequest ? "true" : "false");
+            if (!__isPurchaseRequest && !custIdVal && !custCodeVal && !custText) {
                 flashCustomerRequired();
                 return;
+            }
+            // ── Talep Eden zorunlu kontrolu (sadece İhtiyaç Kaydı) ─────────────
+            // 2026-06-01: alis_talebi'nde Talep Eden personel secimi zorunlu —
+            // talep kimden geldiyse onay akisi + raporlama o uzerine kurulur.
+            if (__isPurchaseRequest) {
+                var __reqEl = document.getElementById('sqRequesterId');
+                if (!__reqEl || !__reqEl.value || String(__reqEl.value).trim() === '') {
+                    flashRequesterRequired();
+                    return;
+                }
             }
         }
 
@@ -3609,9 +3959,10 @@
             contactCode:     custCodeVal || null,
             contactName:     custText,
             contactAddress:  null,
-            salesRepId:      parseInt(document.getElementById('sqSalesRepId').value) || null,
-            currency:        document.getElementById('sqCurrency').value,
-            discountRate:    parseFloat(document.getElementById('sqDiscountRate').value || 0),
+            salesRepId:      (function(){ var el = document.getElementById('sqSalesRepId'); return el ? parseInt(el.value) || null : null; })(),
+            requesterPersonnelId: (function(){ var el = document.getElementById('sqRequesterId'); return el && el.value ? parseInt(el.value) || null : null; })(),
+            currencyId:      parseInt(document.getElementById('sqCurrency').value) || 1,
+            discountRate:    (function(){ var el = document.getElementById('sqDiscountRate'); return el ? parseFloat(el.value || 0) : 0; })(),
             // Satir bazli KDV hesaplandigi icin belge basligindaki TaxRate legacy —
             // ilk satirin orani, yoksa 20 gonder (sunucu hala bu alani bekliyor).
             taxRate:         (function () {
@@ -3626,6 +3977,9 @@
             deliveryTerms:   document.getElementById('sqDeliveryTerms').value || null,
             deliveryAddress: document.getElementById('sqDeliveryAddress')?.value || null,
             notes:           document.getElementById('sqNotes').value || null,
+            // Kaynak İhtiyaç Kaydı ID'si — yeni belge ise köprü oluşturulur (document_source).
+            // Mevcut belgede null gönderilir (server-side isNew kontrolü zaten var).
+            fromRequestId:   currentQuoteId ? null : (fromRequestId || null),
             lines: lines
         };
         try {
@@ -3645,6 +3999,44 @@
                     if (sqNumEl && data.quote.documentNumber) sqNumEl.value = data.quote.documentNumber;
                     var sqMetaErr = document.getElementById('sqMeta');
                     if (sqMetaErr) sqMetaErr.innerHTML = '<strong>' + (data.quote.documentNumber || '') + '</strong>';
+                    // ── ÖNCE: row.__extras sync (refresh ROW state'i ezeceği için onun ONCESINDE) ──
+                    // 2026-06-01: Satir kaydedilmemis iken kullanici modal'dan __extras girdiyse,
+                    // success=false'da bile bu degerleri kaybetmeyelim — server'dan refLines aldiktan
+                    // sonra siraya gore widget API'sine POST edelim. Boylece sonraki ana Kaydet'te
+                    // satir gecerli sayilir.
+                    try {
+                        var refResp0 = await fetch('/Sales/GetQuote?id=' + currentQuoteId);
+                        if (refResp0.ok) {
+                            var refData0  = await refResp0.json();
+                            var refLines0 = Array.isArray(refData0.lines) ? refData0.lines : [];
+                            console.log('[SQ-EXTRAS-SYNC fail-path] refLines=' + refLines0.length + ', rowsFilled=' + rowsFilled.length);
+                            for (var ii = 0; ii < rowsFilled.length && ii < refLines0.length; ii++) {
+                                var lrr = rowsFilled[ii];
+                                if (!lrr.__extras || Object.keys(lrr.__extras).length === 0) continue;
+                                var tId = refLines0[ii].id;
+                                if (!(tId > 0)) continue;
+                                try {
+                                    console.log('[SQ-EXTRAS-SYNC fail-path] POST', { targetId: tId, code: lrr.materialCode, values: lrr.__extras });
+                                    var xResp = await fetch('/api/widgets/forms/@(lineFormCode)/records/' + encodeURIComponent(String(tId)), {
+                                        method: 'POST',
+                                        credentials: 'same-origin',
+                                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                        body: JSON.stringify({ values: lrr.__extras, grids: null }),
+                                    });
+                                    var xText = '';
+                                    try { xText = await xResp.text(); } catch(_) {}
+                                    console.log('[SQ-EXTRAS-SYNC fail-path] response', { targetId: tId, status: xResp.status, body: xText });
+                                    // Bu satir artik gecerli — invalidLineIds'den çıkar
+                                    var idx = invalidLineIds.indexOf(tId);
+                                    if (idx !== -1) invalidLineIds.splice(idx, 1);
+                                } catch (xErr) {
+                                    console.warn('[SQ] fail-path extras POST hatasi (id=' + tId + '):', xErr);
+                                }
+                            }
+                        }
+                    } catch (syncErrPre) {
+                        console.warn('[SQ] fail-path extras pre-sync hatasi:', syncErrPre);
+                    }
                     // Satirlari yeniden cek ki line.id'ler gunce olsun + widget state yenilensin.
                     try {
                         var refreshResp = await fetch('/Sales/GetQuote?id=' + currentQuoteId);
@@ -3664,6 +4056,21 @@
                         }
                     } catch (refreshErr) { /* ignore */ }
                 }
+                // 2026-06-01: Pre-sync ile tum eksik widget'lar dolduysa, kullaniciya
+                // "basarisiz" gostermek yerine yesil onay ver — gercekten dokumandaki
+                // tum satirlar artik gecerli. setInvalidLines bos array ile temizler,
+                // toast OK gosterilir.
+                if (invalidLineIds.length === 0 && data.quote && data.quote.id) {
+                    console.log('[SQ-EXTRAS-SYNC fail-path] tum extras\'lar fixed, success kabul ediliyor');
+                    if (window.CalibraHub && window.CalibraHub.salesLineGrid
+                        && typeof window.CalibraHub.salesLineGrid.setInvalidLines === 'function') {
+                        window.CalibraHub.salesLineGrid.setInvalidLines([]);
+                    }
+                    if (window.CalibraHub && window.CalibraHub.toast) {
+                        window.CalibraHub.toast('Kaydedildi — ek alanlar başarıyla işlendi.', 'ok');
+                    }
+                    return;
+                }
                 // Ekrani uyari modalı ile kesmeyelim — sadece gorsel feedback (⚙ kirmiziya dons+titre).
                 // Kullanici baska bir sekmedeyse once Kalemler sekmesine yonlendir. Tab gecis +
                 // titre tek rAF icinde — panel "genislemeden" once butonlar kirmizi+titre halinde
@@ -3678,16 +4085,26 @@
                     if (typeof sqActivateTab === 'function') sqActivateTab('lines');
                     // Shake animasyonunu bir rAF sonra tetikle ki DOM gorunur hale geldikten sonra
                     // calışsın. Panel-genisleme hissini azaltmak icin setTimeout(200) kullanmiyoruz.
-                    requestAnimationFrame(function () {
-                        if (window.CalibraHub && window.CalibraHub.salesLineGrid
-                            && typeof window.CalibraHub.salesLineGrid.flashInvalidLines === 'function') {
-                            window.CalibraHub.salesLineGrid.flashInvalidLines(invalidLineIds);
-                        }
-                    });
+                    // 2026-06-02: Silent save'lerde (malzeme rehberinden auto-tetiklenen)
+                    // kullaniciya titreme gostermeyelim — daha alanlari doldurma firsati
+                    // bulamadan "titriyor" hissi veriyor. Sadece kirmizi rengi set et;
+                    // explicit Kaydet basildiginda shake animasyonu calissin.
+                    if (!_silent) {
+                        requestAnimationFrame(function () {
+                            if (window.CalibraHub && window.CalibraHub.salesLineGrid
+                                && typeof window.CalibraHub.salesLineGrid.flashInvalidLines === 'function') {
+                                window.CalibraHub.salesLineGrid.flashInvalidLines(invalidLineIds);
+                            }
+                        });
+                    }
                 }
                 if (data.message && !invalidLineIds.length) {
-                    // Validation disi gercek bir hata — artik sessiz kalmamak icin konsola log yaz.
+                    // 2026-05-23: Eskiden sadece console.warn'a yaziyordu — kullanici hatayi
+                    // F12 acmadan goremiyordu. Artik sag alt kose toast'ina dusurulur.
                     console.warn('[SQ] save failed:', data.message);
+                    if (window.CalibraHub && window.CalibraHub.toast) {
+                        window.CalibraHub.toast(data.message, 'err');
+                    }
                 }
                 return;
             }
@@ -3721,9 +4138,21 @@
             // /Sales/GetQuote ile taze listeyi cek, siraya gore __extras degerlerini
             // widget API'siyle iliskilendir.
             var localRowsForSync = rowsFilled; // SaveDocument'a gonderdigimiz ayni sira
+            console.log('[SQ-EXTRAS-SYNC] start', {
+                rowCount: localRowsForSync.length,
+                rows: localRowsForSync.map(function(r) {
+                    return {
+                        code: r.materialCode,
+                        hasExtras: !!r.__extras,
+                        extrasKeys: r.__extras ? Object.keys(r.__extras) : [],
+                        extras: r.__extras || null,
+                    };
+                }),
+            });
             var hasAnyPending = localRowsForSync.some(function (r) {
                 return r && r.__extras && Object.keys(r.__extras).length > 0;
             });
+            console.log('[SQ-EXTRAS-SYNC] hasAnyPending=' + hasAnyPending);
             if (hasAnyPending) {
                 try {
                     var refResp = await fetch('/Sales/GetQuote?id=' + currentQuoteId);
@@ -3739,12 +4168,20 @@
                             var targetId = refLines[i].id;
                             if (!(targetId > 0)) continue;
                             try {
-                                await fetch('/api/widgets/forms/@(lineFormCode)/records/' + encodeURIComponent(String(targetId)), {
+                                console.log('[SQ-EXTRAS-SYNC] POST', {
+                                    targetId: targetId,
+                                    materialCode: lr.materialCode,
+                                    values: lr.__extras,
+                                });
+                                var extResp = await fetch('/api/widgets/forms/@(lineFormCode)/records/' + encodeURIComponent(String(targetId)), {
                                     method: 'POST',
                                     credentials: 'same-origin',
                                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                                     body: JSON.stringify({ values: lr.__extras, grids: null }),
                                 });
+                                var extText = '';
+                                try { extText = await extResp.text(); } catch(_) {}
+                                console.log('[SQ-EXTRAS-SYNC] response', { targetId: targetId, status: extResp.status, body: extText });
                             } catch (extrasErr) {
                                 console.warn('[SQ] satir ek alan kaydi basarisiz (id=' + targetId + '):', extrasErr);
                             }
@@ -3964,6 +4401,53 @@
         var drop = document.getElementById('sqActionsDropdown');
         if (drop && drop.classList.contains('is-open')) sqPositionActionsDropdown();
     });
+
+    // ── Islemler: Mail Gönder ──
+    // 2026-05-31: Aktif teklifi Compose ekrani uzerinden ek olarak gonder.
+    // URL params: documentId + docType (satis_teklifi) → Compose acilinca
+    // "Belge PDF'ini ek olarak gonder" bolumu otomatik gozukur, default PDF sablonu secili gelir.
+    window.sqActionSendMail = function (ev) {
+        if (ev) ev.stopPropagation();
+        sqCloseActionsMenu();
+
+        if (!currentQuoteId || Number(currentQuoteId) <= 0) {
+            (window.CalibraAlert && CalibraAlert.warn ? CalibraAlert.warn : CalibraAlert.warning)
+                ('Mail göndermek için önce teklifi kaydedin.');
+            return;
+        }
+        // Form'dan gosterim icin belge numarasi + cari adi topla
+        var docNumber = (document.getElementById('documentNumber')?.value || '').trim() || ('#' + currentQuoteId);
+        var contactName = '';
+        try {
+            var cnEl = document.getElementById('contactAccountTitle')
+                    || document.getElementById('contactTitle')
+                    || document.querySelector('[data-sq-contact-name]');
+            if (cnEl) contactName = (cnEl.value || cnEl.textContent || '').trim();
+        } catch (_) {}
+        var label = docNumber + (contactName ? (' — ' + contactName) : '');
+        var fileName = docNumber.replace(/[^\w\-]/g, '_'); // safe file stem
+
+        var qs = new URLSearchParams({
+            documentId: String(currentQuoteId),
+            docType:    'satis_teklifi',
+            docLabel:   label,
+            docFileName: fileName,
+        });
+        var url = '/MailSend/Compose?' + qs.toString();
+
+        // Workspace tab — varsa shell API kullan, yoksa ayni sekme
+        try {
+            if (window.top && window.top.CalibraHub && typeof window.top.CalibraHub.openWorkspaceTab === 'function') {
+                window.top.CalibraHub.openWorkspaceTab({
+                    url: url,
+                    title: 'Mail Gönder — ' + docNumber,
+                    matchPath: '/MailSend/Compose',
+                });
+                return;
+            }
+        } catch (_) {}
+        window.location.href = url;
+    };
 
     // ── Islemler: Yazdir ──
     // Belge turune tanimlanmis varsayilan tasarim (Belge Tasarimcisi / DocDesigner)
@@ -4806,6 +5290,34 @@
         setTimeout(window.sqProbeWidgets, 200);
     };
 
+    // Revize sonrasi grid'i sunucudan yeniden yukle.
+    // CalibraLineItemsGrid.jsx'teki createRevision() bu fonksiyonu arar;
+    // bulursa fallback (setRows direkt) yerine bu guvenilir yolu kullanir.
+    window.sqReloadLinesFromServer = function () {
+        if (!currentQuoteId || !(currentQuoteId > 0)) return;
+        fetch('/Sales/GetQuote?id=' + currentQuoteId, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || !Array.isArray(data.lines)) return;
+                var mats = Array.isArray(window.__SQ_MATERIALS__) ? window.__SQ_MATERIALS__ : [];
+                var initialLines = data.lines.map(function (ln) {
+                    var m = mats.find(function (x) { return x.id === ln.itemId; });
+                    return Object.assign({}, ln, {
+                        stockCardId:       ln.itemId,
+                        trackCombinations: m ? m.trackCombinations === true : false,
+                        taxRate:           ln.taxRate != null ? ln.taxRate : (m && m.taxRate != null ? m.taxRate : 20),
+                    });
+                });
+                setGridRows(initialLines);
+                var invalidArr = Array.isArray(data.invalidLineIds) ? data.invalidLineIds : [];
+                if (window.CalibraHub && window.CalibraHub.salesLineGrid
+                    && typeof window.CalibraHub.salesLineGrid.setInvalidLines === 'function') {
+                    window.CalibraHub.salesLineGrid.setInvalidLines(invalidArr);
+                }
+            })
+            .catch(function () { /* swallow */ });
+    };
+
     /* ──────────────────────────────────────────────────────────────
        Widget gruplarini "Ek Alanlar" panesinin icindeki yatay alt
        sekmelere donustur. Statik "Ek Alanlar" ust sekmesi ayni yerde
@@ -4862,9 +5374,9 @@
 
 <!-- Kombinasyon Secim Modal -->
 <div id="combModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:12px;width:680px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
-        <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #e2e8f0;">
-            <h4 style="margin:0;font-size:0.92rem;font-weight:700;flex:1;">Kombinasyon Secimi</h4>
+    <div style="background:var(--app-surface,#fff);border-radius:12px;width:680px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+        <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--app-border,#e2e8f0);">
+            <h4 style="margin:0;font-size:0.92rem;font-weight:700;flex:1;color:var(--bs-body-color,#0f172a);">Kombinasyon Secimi</h4>
             <button type="button" onclick="closeCombModal()" style="border:none;background:none;font-size:1.2rem;cursor:pointer;color:#94a3b8;">&times;</button>
         </div>
         <div style="display:flex;gap:0;border-bottom:1px solid #e2e8f0;">

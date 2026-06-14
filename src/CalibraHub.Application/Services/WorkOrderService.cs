@@ -14,10 +14,14 @@ namespace CalibraHub.Application.Services;
 public sealed class WorkOrderService : IWorkOrderService
 {
     private const string FormCode = "WORK_ORDER";
-    // Format: WO-26-000000001 (yıl son 2 hane + 9 haneli dolgulu sayaç).
-    // Şirket parametre ekranında {yyyy}, {yy}, {MM}, {dd}, {seq:N} placeholder'ları
-    // ile özelleştirilebilir; bu sabit yalnızca parametre boş olduğunda fallback.
+    // 2026-05-20: Belge numarası türetme önceliği:
+    //   1. DocumentNumberRule (Tasarım Kuralları → Belge Numarası ekranı) — aktif kural
+    //      varsa onun PREFIX + YIL/AY + SAYAÇ formatı uygulanır (DocumentService pattern'i).
+    //   2. NumeratorService (CompanyParameter "NumeratorMask"/"NumeratorResetPolicy")
+    //   3. DefaultNumberMask fallback: WO-{yy}-{seq:9}
+    // Yeni kullanıcılar Belge Tipi="Is Emri" için kural tanımlayınca anında etkin olur.
     private const string DefaultNumberMask = "WO-{yy}-{seq:9}";
+    private const string WorkOrderTypeCode = "is_emri";
 
     private readonly IWorkOrderRepository _workOrders;
     private readonly INumeratorService _numerator;
@@ -26,6 +30,9 @@ public sealed class WorkOrderService : IWorkOrderService
     private readonly IWorkOrderOperationRepository _workOrderOperations;
     private readonly IWorkOrderComponentRepository _workOrderComponents;
     private readonly ILogisticsConfigurationRepository _logisticsConfig;
+    private readonly IDocumentNumberService? _docNumberService;
+    private readonly IDocumentTypeRepository? _documentTypeRepo;
+    private readonly IArgeProjectRepository? _argeProjects;
 
     public WorkOrderService(
         IWorkOrderRepository workOrders,
@@ -34,7 +41,10 @@ public sealed class WorkOrderService : IWorkOrderService
         IDocumentRepository documents,
         IWorkOrderOperationRepository workOrderOperations,
         IWorkOrderComponentRepository workOrderComponents,
-        ILogisticsConfigurationRepository logisticsConfig)
+        ILogisticsConfigurationRepository logisticsConfig,
+        IDocumentNumberService? docNumberService = null,
+        IDocumentTypeRepository? documentTypeRepo = null,
+        IArgeProjectRepository? argeProjects = null)
     {
         _workOrders = workOrders;
         _numerator = numerator;
@@ -43,6 +53,38 @@ public sealed class WorkOrderService : IWorkOrderService
         _workOrderOperations = workOrderOperations;
         _workOrderComponents = workOrderComponents;
         _logisticsConfig = logisticsConfig;
+        _docNumberService = docNumberService;
+        _documentTypeRepo = documentTypeRepo;
+        _argeProjects = argeProjects;
+    }
+
+    /// <summary>
+    /// İş emri numarası türetme — DocumentNumberRule (admin tanımlı kural) önce kontrol
+    /// edilir; bulunmazsa NumeratorService fallback. DocumentService.ResolveNextDocumentNumberAsync
+    /// pattern'inin birebir aynısı (geriye uyum: kural yoksa eski WO-{yy}-{seq:9} çalışır).
+    /// </summary>
+    private async Task<string> ResolveOrderNumberAsync(DateTime orderDate, CancellationToken ct)
+    {
+        // 1) DocumentNumberRule — is_emri belge tipinin aktif kuralı varsa onu uygula
+        if (_docNumberService is not null && _documentTypeRepo is not null)
+        {
+            var type = await _documentTypeRepo.GetByCodeAsync(WorkOrderTypeCode, ct);
+            if (type is not null && type.Id > 0)
+            {
+                var ctx = new DocumentNumberContext(
+                    DocumentTypeId: type.Id,
+                    ContactId:      null,
+                    ContactGroupId: null,
+                    UserId:         null,   // ileride: current user — controller'dan pass
+                    BranchId:       null,
+                    IssueDate:      orderDate);
+                var generated = await _docNumberService.GenerateNextAsync(ctx, ct);
+                if (!string.IsNullOrWhiteSpace(generated)) return generated;
+            }
+        }
+
+        // 2) Fallback: NumeratorService (CompanyParameter mask veya hardcoded default)
+        return await _numerator.GetNextNumberAsync("WORK_ORDER", FormCode, DefaultNumberMask, ct);
     }
 
     public Task<IReadOnlyCollection<WorkOrderListItemDto>> ListAsync(WorkOrderStatus? status, CancellationToken ct)
@@ -58,15 +100,16 @@ public sealed class WorkOrderService : IWorkOrderService
         if (request.ItemId <= 0)
             throw new ArgumentException("Mamul (ItemId) zorunlu.", nameof(request.ItemId));
 
-        var orderNumber = await _numerator.GetNextNumberAsync("WORK_ORDER", FormCode, DefaultNumberMask, ct);
+        var orderDate = DateTime.UtcNow;
+        var orderNumber = await ResolveOrderNumberAsync(orderDate, ct);
 
         var defaultLocationId = request.WarehouseLocationId
             ?? await _parameters.GetIntAsync(FormCode, "DefaultLocationId", ct);
-        Guid? defaultUserId = request.AssignedUserId;
+        int? defaultUserId = request.AssignedUserId;
         if (!defaultUserId.HasValue)
         {
             var rawUserId = await _parameters.GetStringAsync(FormCode, "DefaultAssignedUserId", ct);
-            if (Guid.TryParse(rawUserId, out var parsedUser)) defaultUserId = parsedUser;
+            if (int.TryParse(rawUserId, out var parsedUser)) defaultUserId = parsedUser;
         }
         var defaultPlanDays = await _parameters.GetIntAsync(FormCode, "DefaultPlanDays", ct) ?? 7;
         // Per-WO switch ("Üretime Planla") öncelikli — request.AutoRelease set ise onu kullan,
@@ -74,12 +117,16 @@ public sealed class WorkOrderService : IWorkOrderService
         var autoRelease = request.AutoRelease
             ?? (await _parameters.GetBoolAsync(FormCode, "AutoRelease", ct) ?? false);
 
-        var orderDate = DateTime.UtcNow;
         var plannedEnd = request.PlannedEndDate ?? orderDate.AddDays(defaultPlanDays);
 
         // Routing resolve: request'te verildiyse onu kullan, yoksa Item bazlı arama yap (Faz 3a default rota).
         var resolvedRoutingId = request.RoutingId
             ?? await _workOrders.FindRoutingForItemAsync(request.ItemId, request.ConfigId, ct);
+
+        // AR-GE Faz 3: proje baglantisi. Acikca verildiyse onu kullan; yoksa ItemId AR-GE seri/prototip
+        // mamuluyse otomatik turet (mamul -> ArgeProductionLink/ArgePrototype -> proje).
+        var argeProjectId = request.ArgeProjectId
+            ?? (_argeProjects is null ? null : await _argeProjects.FindProjectIdByItemAsync(request.ItemId, ct));
 
         var entity = new WorkOrder
         {
@@ -99,6 +146,7 @@ public sealed class WorkOrderService : IWorkOrderService
             DefaultMachineId = request.DefaultMachineId,
             AssignedPersonnelId = request.AssignedPersonnelId,
             Notes = request.Notes,
+            ArgeProjectId = argeProjectId,
         };
 
         var newId = await _workOrders.CreateAsync(entity, ct);
@@ -195,7 +243,8 @@ public sealed class WorkOrderService : IWorkOrderService
                 RoutingId: target.RoutingId,
                 DefaultMachineId: target.DefaultMachineId,
                 AssignedPersonnelId: target.AssignedPersonnelId,
-                Notes: target.Notes), null, ct);
+                Notes: target.Notes,
+                ArgeProjectId: target.ArgeProjectId), null, ct);
             return target.Id;
         }
 

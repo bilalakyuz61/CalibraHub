@@ -9,6 +9,9 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
     <PackageReference Include="Dapper" Version="2.1.35" />
+    <!-- 2026-05-25 ApprovalSqlQueryService — Karar (Decision) node SQL koşulları için
+         tek-statement + whitelist + DML/DDL reddi parse'i (ScriptDom). -->
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.10.0" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -134,6 +134,13 @@ export default function SmartCard(props) {
 
     if (!visibleIds && !order) return listableRaw
 
+    // 2026-05-23: Backend "alwaysVisible: true" ile isaretledigi sistem widget'lari
+    // visibleIds filtresinden muaftir — kullanici saved config'inde olmasa bile
+    // her zaman gosterilir (Durum, KDV, Tarih gibi standart alanlar icin).
+    function isAlwaysVisible(w) {
+      return w && (w.alwaysVisible === true)
+    }
+
     // Id → widget map
     var map = {}
     listableRaw.forEach(function(w) { if (w && w.id) map[w.id] = w })
@@ -144,7 +151,7 @@ export default function SmartCard(props) {
     // Once order'a gore gez
     if (order) {
       order.forEach(function(wid) {
-        if (visibleIds && visibleIds.indexOf(wid) === -1) return
+        if (visibleIds && visibleIds.indexOf(wid) === -1 && !isAlwaysVisible(map[wid])) return
         if (map[wid]) {
           result.push(map[wid])
           usedIds[wid] = true
@@ -153,7 +160,7 @@ export default function SmartCard(props) {
     } else if (visibleIds) {
       // Order yoksa listableRaw sirasi kullanilir
       listableRaw.forEach(function(w) {
-        if (w && visibleIds.indexOf(w.id) !== -1) {
+        if (w && (visibleIds.indexOf(w.id) !== -1 || isAlwaysVisible(w))) {
           result.push(w)
           usedIds[w.id] = true
         }
@@ -161,9 +168,10 @@ export default function SmartCard(props) {
     }
 
     // Order'da olmayan ama visibleIds'de olan (veya visibleIds yoksa tum geri kalanlar) sona
+    // alwaysVisible olanlar da burada yakalanir
     listableRaw.forEach(function(w) {
       if (!w || !w.id || usedIds[w.id]) return
-      if (visibleIds && visibleIds.indexOf(w.id) === -1) return
+      if (visibleIds && visibleIds.indexOf(w.id) === -1 && !isAlwaysVisible(w)) return
       result.push(w)
     })
 
@@ -324,6 +332,15 @@ export default function SmartCard(props) {
           return
         }
       } catch (e) { /* cross-origin — fallback */ }
+    }
+    // Hash-only URL'lerde workspace nav'i bypass et: navigateInWorkspace iframe icinde
+    // ?workspace=1 ekledigi icin hash icine query string sokuyor (#detail-1?workspace=1),
+    // bu da host sayfanin hashchange listener regex'ini bozuyor. Pure hash icin direct set.
+    if (typeof action.url === 'string' && action.url.charAt(0) === '#') {
+      try { window.location.hash = action.url } catch (e) { /* fallback */ }
+      // Ayni hash zaten setli ise hashchange fire etmez — manuel tetikle.
+      try { window.dispatchEvent(new HashChangeEvent('hashchange')) } catch (e) { /* ignore */ }
+      return
     }
     navigateInFrame(action.url)
   }
@@ -619,7 +636,21 @@ export default function SmartCard(props) {
           transition: 'border-color 0.4s ease, box-shadow 0.4s ease',
         }}
       >
-        <div className="flex items-center gap-0">
+        <div
+          className="flex items-center gap-0"
+          // hideButton:true demek "buton goster ama tum kart govdesi navigate edilebilir".
+          // Bu durumda widget alanini + bos alani da tiklanabilir hale getiriyoruz.
+          // Action butonlari (handlePrimary/handleSecondary/handleExtraAction) zaten
+          // stopPropagation yapiyor — onlara tiklayinca buradaki click dispatch olmaz.
+          onClick={(primaryAction && primaryAction.hideButton)
+            ? function (e) {
+                // Iclerden gelen butonlar stopPropagation yaptigi icin burada bubble
+                // edilmis click sadece "bos alan / kimlik disi / widget alani" demek.
+                dispatchActionUrl(primaryAction)
+              }
+            : undefined}
+          style={(primaryAction && primaryAction.hideButton) ? { cursor: 'pointer' } : undefined}
+        >
 
           {/* Sol: Aksiyonlar */}
           {(primaryAction || secondaryAction || extraActions.length > 0) && (
@@ -671,9 +702,21 @@ export default function SmartCard(props) {
               {(subtitle || badgeElement || violations.length > 0) && (
                 <div className="flex items-center gap-2 mb-0.5">
                   {subtitle && (
-                    <span className="text-[13px] font-mono font-semibold tracking-wide text-slate-700 dark:text-white/85 uppercase truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
-                      {subtitle}
-                    </span>
+                    // 2026-05-26: Subtitle'da email varsa uppercase YAPMA — okunabilirlik.
+                    // Belge no/kod gibi alanlar uppercase kalir (mevcut davranis).
+                    // `subtitleCase` prop'u 'normal' verilmisse de uppercase iptal edilir.
+                    (function () {
+                      var preserveCase = props.subtitleCase === 'normal'
+                        || (typeof subtitle === 'string' && subtitle.indexOf('@') !== -1)
+                      return (
+                        <span className={
+                          'text-[13px] font-mono font-semibold tracking-wide text-slate-700 dark:text-white/85 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors'
+                          + (preserveCase ? '' : ' uppercase')
+                        }>
+                          {subtitle}
+                        </span>
+                      )
+                    })()
                   )}
                   {badgeElement}
                   {violations.length > 0 && (

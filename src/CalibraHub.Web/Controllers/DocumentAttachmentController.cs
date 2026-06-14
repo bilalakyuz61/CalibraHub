@@ -37,10 +37,10 @@ public sealed class DocumentAttachmentController : Controller
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[file_name],[mime_type],[file_size],[uploaded_at]
-            FROM [{_schema}].[document_attachments]
-            WHERE [document_id] = @DocumentId AND [is_active] = 1
-            ORDER BY [uploaded_at] DESC;
+            SELECT [Id],[FileName],[MimeType],[FileSize],[UploadedAt]
+            FROM [{_schema}].[DocumentAttachment]
+            WHERE [DocumentId] = @DocumentId AND [IsActive] = 1
+            ORDER BY [UploadedAt] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -82,8 +82,8 @@ public sealed class DocumentAttachmentController : Controller
 
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = $"""
-                INSERT INTO [{_schema}].[document_attachments]
-                    ([document_id],[file_name],[mime_type],[file_size],[content],[uploaded_by],[uploaded_at],[is_active])
+                INSERT INTO [{_schema}].[DocumentAttachment]
+                    ([DocumentId],[FileName],[MimeType],[FileSize],[Content],[UploadedBy],[UploadedAt],[IsActive])
                 VALUES (@DocumentId,@FileName,@Mime,@Size,@Content,@User,SYSUTCDATETIME(),1);
                 """;
             cmd.Parameters.Add(new SqlParameter("@DocumentId", documentId));
@@ -103,9 +103,9 @@ public sealed class DocumentAttachmentController : Controller
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [file_name],[mime_type],[content]
-            FROM [{_schema}].[document_attachments]
-            WHERE [id] = @Id AND [is_active] = 1;
+            SELECT [FileName],[MimeType],[Content]
+            FROM [{_schema}].[DocumentAttachment]
+            WHERE [Id] = @Id AND [IsActive] = 1;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -123,7 +123,7 @@ public sealed class DocumentAttachmentController : Controller
             return BadRequest(new { success = false, message = "Id gecersiz." });
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"UPDATE [{_schema}].[document_attachments] SET [is_active] = 0 WHERE [id] = @Id;";
+        cmd.CommandText = $"UPDATE [{_schema}].[DocumentAttachment] SET [IsActive] = 0 WHERE [Id] = @Id;";
         cmd.Parameters.Add(new SqlParameter("@Id", body.Id));
         await cmd.ExecuteNonQueryAsync(ct);
         return Json(new { success = true });

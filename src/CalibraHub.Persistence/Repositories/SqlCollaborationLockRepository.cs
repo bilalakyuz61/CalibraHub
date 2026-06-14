@@ -70,7 +70,7 @@ public sealed class SqlCollaborationLockRepository : ICollaborationLockRepositor
                     INSERT INTO {_table}
                         ([RecordType],[RecordId],[UserId],[UserName],[SessionId],
                          [RecordTitle],[PageUrl],[AcquiredAt],[LastHeartbeat],[IsActive],
-                         [Created],[CreatedBy])
+                         [Created],[CreatedById])
                     VALUES
                         (@RecordType,@RecordId,@UserId,@UserName,@SessionId,
                          @RecordTitle,@PageUrl,@AcquiredAt,@LastHeartbeat,1,

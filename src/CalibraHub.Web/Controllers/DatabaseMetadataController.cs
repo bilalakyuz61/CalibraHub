@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using CalibraHub.Persistence.Database;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 
@@ -14,6 +15,7 @@ namespace CalibraHub.Web.Controllers;
 ///
 /// SQL Injection koruması: tableName parametresi identifier regex'ten geçer.
 /// </summary>
+[Authorize]
 [ApiController]
 [Route("api/database")]
 [IgnoreAntiforgeryToken]

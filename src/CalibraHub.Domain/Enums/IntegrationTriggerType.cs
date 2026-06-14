@@ -20,4 +20,11 @@ public enum IntegrationTriggerType
 
     /// <summary>(V2) IntegrationEvents tablosundan ozel event geldiginde fire eder.</summary>
     Event = 3,
+
+    /// <summary>
+    /// 2026-05-22: Bir parent integration cascade ile tetikledi (ContactId/ItemId vb. FK
+    /// alanlari icin pre-push). Manuel/Cron/OnSave/Event'ten farkli olarak kullanici degil,
+    /// IntegrationRunner kendi kendine tetikler. Run logunda ParentRunId ile parent'a baglanir.
+    /// </summary>
+    Cascade = 4,
 }

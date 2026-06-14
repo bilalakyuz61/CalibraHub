@@ -86,7 +86,7 @@ public sealed record DepartmentDto(
     bool IsActive);
 
 public sealed record UserProfileDto(
-    Guid Id,
+    int Id,
     int CompanyId,
     string CompanyName,
     string FullName,

@@ -77,4 +77,7 @@ public sealed class PersonnelService : IPersonnelService
 
     public Task<PersonnelDto?> GetByPinOrCardAsync(string? pinCode, string? cardNo, CancellationToken ct)
         => _repo.GetByPinOrCardAsync(pinCode, cardNo, ct);
+
+    public Task<PersonnelDto?> GetByPinOrCardAsync(string? personnelCode, string? pinCode, string? cardNo, CancellationToken ct)
+        => _repo.GetByPinOrCardAsync(personnelCode, pinCode, cardNo, ct);
 }

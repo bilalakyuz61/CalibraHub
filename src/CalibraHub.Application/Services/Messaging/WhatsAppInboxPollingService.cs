@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.WhatsApp;
 using CalibraHub.Domain.Entities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,6 +23,7 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WhatsAppInboxPollingService> _logger;
+    private readonly IWhatsAppRealTimeNotifier _notifier;
 
     private DateTime _sinceCursor = DateTime.MinValue; // ilk tickte DB'den restore edilir
     private bool _backfillDone = false;                 // session basina bir kez calissin
@@ -28,11 +31,13 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
     public WhatsAppInboxPollingService(
         IServiceScopeFactory scopeFactory,
         IHttpClientFactory httpClientFactory,
-        ILogger<WhatsAppInboxPollingService> logger)
+        ILogger<WhatsAppInboxPollingService> logger,
+        IWhatsAppRealTimeNotifier notifier)
     {
         _scopeFactory       = scopeFactory;
         _httpClientFactory  = httpClientFactory;
         _logger             = logger;
+        _notifier           = notifier;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -171,19 +176,87 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
         if (payload?.Messages is null || payload.Messages.Count == 0) return;
 
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var inbox = scope.ServiceProvider.GetRequiredService<IWaInboxRepository>();
+        var inbox      = scope.ServiceProvider.GetRequiredService<IWaInboxRepository>();
+        var resolver   = scope.ServiceProvider.GetRequiredService<IWaContactResolver>();
+        var groupRepo  = scope.ServiceProvider.GetRequiredService<IWaGroupRepository>();
 
-        var now = DateTime.UtcNow;
+        var now   = DateTime.UtcNow;
         var maxTs = _sinceCursor;
 
         foreach (var m in payload.Messages)
         {
             if (string.IsNullOrWhiteSpace(m.From)) continue;
-            var phone = NormalizePhone(m.From);
+
+            // Bridge'in gönderdiği tam JID (varsa); yoksa eski fallback
+            var jid   = m.Jid ?? (m.From.Contains('@') ? m.From : m.From + "@s.whatsapp.net");
+            var isLid = m.IsLid || WaPhoneNormalizer.IsLid(jid);
+            var phone = WaPhoneNormalizer.Normalize(m.From) ?? string.Empty;
             if (string.IsNullOrEmpty(phone)) continue;
 
             var ts = DateTimeOffset.FromUnixTimeMilliseconds(m.Timestamp).UtcDateTime;
             if (ts > maxTs) maxTs = ts;
+
+            // WaContact çöz veya oluştur
+            int? waContactId = null;
+            try
+            {
+                // LID ise önce Bridge'ten phone resolve dene
+                if (isLid)
+                {
+                    var resolvedPhoneJid = await resolver.ResolveLidToPhoneJidAsync(jid, bridgeBase, ct);
+                    if (resolvedPhoneJid is not null)
+                    {
+                        var resolvedPhone = WaPhoneNormalizer.Normalize(resolvedPhoneJid);
+                        if (resolvedPhone is not null)
+                        {
+                            phone = resolvedPhone;
+                            jid   = resolvedPhoneJid;
+                            isLid = false;
+                        }
+                    }
+                }
+
+                var waContact = await resolver.GetOrCreateAsync(jid, m.FromName, ct);
+                waContactId = waContact.Id;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug("[WaPolling] WaContact resolve hatası ({jid}): {msg}", jid, ex.Message);
+            }
+
+            // ── Grup mesajı — contact_phone = groupJid, grup kaydı lazım ──────
+            var isGroupMessage = !string.IsNullOrWhiteSpace(m.GroupJid);
+            if (isGroupMessage)
+            {
+                var groupSubject = m.SenderName ?? m.GroupJid!;
+                try
+                {
+                    await groupRepo.GetOrCreateAsync(m.GroupJid!, groupSubject, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug("[WaPolling] Grup kayıt hatası ({jid}): {msg}", m.GroupJid, ex.Message);
+                }
+                // Grup mesajında contact_phone = groupJid; phone değişkeni düzeltme
+                phone = m.GroupJid!;
+            }
+
+            // ── Reaksiyon mesajı — normal insert değil, hedef mesajı güncelle ──
+            if (m.MediaType == "reaction" && !string.IsNullOrWhiteSpace(m.ReactionTargetId))
+            {
+                var emoji = string.IsNullOrEmpty(m.Body) ? null : m.Body;
+                try
+                {
+                    await inbox.UpdateReactionAsync(m.ReactionTargetId, emoji, ct);
+                    await _notifier.ReactionUpdatedAsync(m.ReactionTargetId, phone, emoji, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug("[WaPolling] Reaction update hatası ({id}): {msg}", m.ReactionTargetId, ex.Message);
+                }
+                if (ts > maxTs) maxTs = ts;
+                continue;
+            }
 
             // Medyayi indir + diske kaydet (varsa)
             string? mediaPath = null;
@@ -199,6 +272,7 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
                     BridgeMsgId   = m.Id,
                     Direction     = m.FromMe ? (byte)1 : (byte)0,
                     ContactPhone  = phone,
+                    ContactId     = waContactId,
                     ContactName   = m.FromName,
                     Body          = m.Body,
                     MediaType     = m.MediaType ?? "chat",
@@ -209,7 +283,19 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
                     MediaMime     = m.MediaMime,
                     MediaFileName = m.MediaFileName,
                     MediaSize     = m.MediaSize,
+                    IsLid         = isLid,
+                    GroupJid      = m.GroupJid,
+                    SenderJid     = m.SenderJid,
+                    SenderName    = m.SenderName,
                 }, ct);
+
+                // Hub'a push — React istemcileri anında güncellenir
+                await _notifier.MessageReceivedAsync(
+                    phone, m.Id ?? string.Empty, m.FromMe ? 1 : 0,
+                    m.Body, m.MediaType ?? "chat", m.IsMedia,
+                    mediaPath, m.MediaMime, m.MediaFileName, m.MediaSize,
+                    ts, ct);
+                await _notifier.ConversationUpdatedAsync(phone, ct);
             }
             catch (Exception ex)
             {
@@ -218,14 +304,6 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
         }
 
         if (maxTs > _sinceCursor) _sinceCursor = maxTs;
-    }
-
-    private static string NormalizePhone(string input)
-    {
-        var sb = new System.Text.StringBuilder(input.Length);
-        foreach (var c in input.Trim())
-            if (char.IsDigit(c)) sb.Append(c);
-        return sb.ToString();
     }
 
     /// <summary>
@@ -323,6 +401,14 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
         [System.Text.Json.Serialization.JsonPropertyName("from")]
         public string? From { get; set; }
 
+        /// <summary>Tam JID: 905...@s.whatsapp.net veya 178...@lid. Bridge'in yeni versiyonunda gönderilir.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("jid")]
+        public string? Jid { get; set; }
+
+        /// <summary>LID identifier mı (gerçek telefon numarası değil)?</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("isLid")]
+        public bool IsLid { get; set; }
+
         [System.Text.Json.Serialization.JsonPropertyName("fromName")]
         public string? FromName { get; set; }
 
@@ -352,5 +438,21 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
 
         [System.Text.Json.Serialization.JsonPropertyName("mediaSize")]
         public int? MediaSize { get; set; }
+
+        /// <summary>Reaksiyon mesajı: hedef mesajın bridge ID'si.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("reactionTargetId")]
+        public string? ReactionTargetId { get; set; }
+
+        /// <summary>Grup mesajı: grubun JID'i (@g.us). Null ise 1:1 sohbet.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("groupJid")]
+        public string? GroupJid { get; set; }
+
+        /// <summary>Grup mesajı: mesajı gönderen üyenin JID'i.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("senderJid")]
+        public string? SenderJid { get; set; }
+
+        /// <summary>Grup mesajı: mesajı gönderen üyenin adı (pushName).</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("senderName")]
+        public string? SenderName { get; set; }
     }
 }

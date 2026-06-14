@@ -1,0 +1,515 @@
+@model CalibraHub.Web.Models.Assets.AssetAssignViewModel
+@{
+    ViewData["Title"] = $"Zimmet: {Model.AssetName}";
+    ViewData["FormCode"] = "ASSETS";
+    ViewData["BodyClass"] = "page-asset-assign";
+}
+
+@section Styles {
+<style>
+    .az-root {
+        --az-bg:#f1f5f9; --az-surface:#ffffff; --az-border:#e2e8f0;
+        --az-text:#0f172a; --az-muted:#64748b; --az-accent:#6366f1;
+        display:flex; flex-direction:column; height:100dvh; overflow:hidden; background:var(--az-surface); color:var(--az-text);
+    }
+    body.page-asset-assign, html { overflow:hidden; height:100%; }
+    body.app-theme-dark .az-root { --az-bg:#080c17; --az-surface:#0d1323; --az-border:rgba(255,255,255,.09); --az-text:#e2e8f0; --az-muted:#94a3b8; --az-accent:#818cf8; }
+    body.app-theme-dark .az-badge--on { color:#60a5fa; }
+    body.app-theme-dark .az-chip--on  { color:#60a5fa; }
+    body.app-theme-dark .az-chip--off  { color:#34d399; }
+
+    .az-header { display:flex; align-items:center; gap:10px; flex-shrink:0; padding:12px 22px; border-bottom:1px solid var(--az-border); background:var(--az-surface); }
+    .az-header h1 { font-size:16px; font-weight:700; margin:0; }
+    .az-spacer { flex:1; }
+    .az-back { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:8px; border:1px solid var(--az-border); background:none; color:var(--az-muted); font-size:12.5px; cursor:pointer; text-decoration:none; }
+    .az-back:hover { background:var(--az-bg); color:var(--az-text); }
+    .az-btn { padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; border:1px solid transparent; cursor:pointer; transition:all .12s; }
+    .az-btn--primary { background:var(--az-accent); color:#fff; border-color:#4f46e5; }
+    .az-btn--primary:hover { filter:brightness(1.1); }
+    .az-btn--primary:disabled { opacity:.55; cursor:not-allowed; }
+    .az-btn--ghost { background:none; border-color:var(--az-border); color:var(--az-text); }
+    .az-btn--ghost:hover { background:var(--az-bg); }
+    .az-btn--warn { background:none; border-color:#fcd34d; color:#d97706; }
+    body.app-theme-dark .az-btn--warn { border-color:rgba(251,191,36,.35); color:#fbbf24; }
+    .az-btn--warn:hover { background:rgba(251,191,36,.1); }
+
+    .az-err { flex-shrink:0; margin:10px 22px 0; padding:8px 12px; border-radius:8px; font-size:13px; background:rgba(239,68,68,.08); color:#dc2626; border:1px solid rgba(239,68,68,.2); }
+    body.app-theme-dark .az-err { color:#f87171; }
+
+    .az-body { flex:1; display:flex; min-height:0; }
+    .az-tabs { width:230px; flex-shrink:0; border-right:1px solid var(--az-border); display:flex; flex-direction:column; padding:14px 0; gap:2px; overflow-y:auto; background:var(--az-surface); }
+    .az-tab { display:flex; align-items:center; gap:10px; padding:11px 18px; font-size:13px; font-weight:500; cursor:pointer; transition:all .12s; color:var(--az-muted); border:none; background:none; text-align:left; border-left:3px solid transparent; white-space:nowrap; }
+    .az-tab svg { opacity:.85; }
+    .az-tab:hover { background:var(--az-bg); color:var(--az-text); }
+    .az-tab.active { color:var(--az-accent); border-left-color:var(--az-accent); background:rgba(99,102,241,.07); font-weight:600; }
+    .az-panels { flex:1; overflow-y:auto; padding:26px 30px; background:var(--az-bg); }
+    .az-panel { display:none; max-width:760px; }
+    .az-panel.active { display:block; }
+    .az-panel-title { font-size:15px; font-weight:700; margin:0 0 4px; }
+    .az-panel-sub { font-size:12.5px; color:var(--az-muted); margin:0 0 20px; }
+
+    .az-asset { padding:14px 16px; border:1px solid var(--az-border); border-radius:10px; background:var(--az-surface); margin-bottom:18px; display:flex; align-items:center; gap:14px; }
+    .az-asset-name { font-size:15px; font-weight:700; }
+    .az-asset-code { font-size:12px; color:var(--az-muted); margin-top:2px; }
+    .az-badge { margin-left:auto; padding:4px 12px; border-radius:999px; font-size:12px; font-weight:700; }
+    .az-badge--on { background:rgba(59,130,246,.12); color:#3b82f6; }
+    .az-badge--off { background:rgba(100,116,139,.14); color:#64748b; }
+
+    .az-field { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+    .az-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @@media (max-width:680px){ .az-grid2 { grid-template-columns:1fr; } .az-tabs { width:170px; } }
+    .az-label { font-size:12px; font-weight:600; color:var(--az-muted); }
+    .az-input, .az-select { padding:10px 12px; border-radius:8px; border:1px solid var(--az-border); background:var(--az-surface); color:var(--az-text); font-size:14px; outline:none; font-family:inherit; }
+    .az-input:focus, .az-select:focus { border-color:var(--az-accent); box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+    body.app-theme-dark .az-select { color-scheme:dark; }
+    .az-actions { display:flex; gap:8px; margin-top:6px; }
+    .az-form-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--az-muted); margin:4px 0 12px; }
+
+    .az-hist { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .az-hist th { text-align:left; padding:8px; color:var(--az-muted); font-weight:600; border-bottom:1px solid var(--az-border); white-space:nowrap; }
+    .az-hist td { padding:8px; border-bottom:1px solid var(--az-border); vertical-align:top; }
+    .az-hist tr:hover td { background:rgba(99,102,241,.04); }
+    .az-chip { display:inline-block; padding:1px 8px; border-radius:999px; font-size:10.5px; font-weight:700; }
+    .az-chip--on { background:rgba(59,130,246,.12); color:#3b82f6; }
+    .az-chip--off { background:rgba(16,185,129,.12); color:#10b981; }
+    .az-doc-link { color:var(--az-accent); cursor:pointer; background:none; border:none; font-size:12px; text-decoration:underline; }
+    .az-hist-empty { padding:18px; text-align:center; color:var(--az-muted); font-size:12.5px; }
+
+    /* Ortalanmış onay modali (zimmet belgesi yazdırma vb.) */
+    .az-modal-backdrop { position:fixed; inset:0; z-index:1000; display:none; align-items:center; justify-content:center; background:rgba(2,6,23,.55); backdrop-filter:blur(3px); }
+    .az-modal-backdrop.active { display:flex; }
+    .az-modal { width:390px; max-width:calc(100vw - 40px); background:var(--az-surface); border:1px solid var(--az-border); border-radius:14px; box-shadow:0 24px 60px rgba(0,0,0,.35); padding:24px 22px 20px; text-align:center; animation:azModalIn .18s ease-out both; }
+    @@keyframes azModalIn { from { opacity:0; transform:translateY(8px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+    .az-modal-icon { width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 14px; background:rgba(99,102,241,.12); color:var(--az-accent); }
+    .az-modal-title { font-size:16px; font-weight:700; margin:0 0 7px; color:var(--az-text); }
+    .az-modal-msg { font-size:13px; color:var(--az-muted); margin:0 0 22px; line-height:1.5; }
+    .az-modal-actions { display:flex; gap:10px; justify-content:center; }
+    .az-modal-actions .az-btn { min-width:104px; }
+
+    /* Dokunmatik imza */
+    .az-sig-hint { font-weight:400; color:var(--az-muted); font-size:11px; }
+    .az-sig-canvas { width:100%; max-width:560px; height:150px; border:1px dashed var(--az-border); border-radius:10px; background:#ffffff; touch-action:none; cursor:crosshair; display:block; }
+    body.app-theme-dark .az-sig-canvas { background:#f8fafc; }
+    .az-sig-clear { margin-top:6px; padding:5px 12px; border-radius:7px; border:1px solid var(--az-border); background:none; color:var(--az-muted); font-size:12px; cursor:pointer; }
+    .az-sig-clear:hover { background:var(--az-bg); color:var(--az-text); }
+</style>
+}
+
+<div class="az-root">
+  <div class="az-header">
+    <a class="az-back" href="#" onclick="azGoBack(false);return false;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg> Listeye Dön</a>
+    <h1>Zimmet İşlemi</h1>
+    <span class="az-spacer"></span>
+    <button class="az-btn az-btn--ghost" id="az-print" style="display:none;">🖨 Zimmet Belgesi</button>
+  </div>
+
+  <div id="az-err" style="display:none;" class="az-err"></div>
+
+  <input type="hidden" id="az-id" value="@Model.Id" />
+
+  <div class="az-body">
+    <div class="az-tabs" role="tablist">
+      <button class="az-tab active" data-tab="current" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+        Zimmet
+      </button>
+      <button class="az-tab" data-tab="history" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><polyline points="12 7 12 12 15 15"/></svg>
+        Zimmet Hareketleri
+      </button>
+    </div>
+
+    <div class="az-panels">
+      <!-- ZİMMET -->
+      <div class="az-panel active" id="panel-current">
+        <h2 class="az-panel-title">Zimmet Durumu</h2>
+        <p class="az-panel-sub">Varlığı bir personele zimmetleyin veya iade alın. İşlem tarih bazlı kayıt altına alınır.</p>
+
+        <div class="az-asset">
+          <div>
+            <div class="az-asset-name">@Model.AssetName</div>
+            <div class="az-asset-code">@Model.AssetCode</div>
+          </div>
+          <span class="az-badge az-badge--off" id="az-status">—</span>
+        </div>
+
+        <!-- Zimmetle (boştayken) -->
+        <div id="az-assign-form" style="display:none;">
+          <div class="az-form-title">Yeni Zimmet</div>
+          <p style="font-size:12px;color:var(--az-muted);margin:-6px 0 12px;">Zimmet bir <strong>kişiye</strong> ve/veya <strong>departmana</strong> yapılabilir (en az biri zorunlu). Lokasyon opsiyoneldir.</p>
+          <div class="az-grid2">
+            <div class="az-field">
+              <label class="az-label" for="az-personnel">Zimmetlenen Personel</label>
+              <select id="az-personnel" class="az-select"><option value="">— Personel seçiniz —</option></select>
+            </div>
+            <div class="az-field">
+              <label class="az-label" for="az-department">Departman</label>
+              <select id="az-department" class="az-select"><option value="">— Departman seçiniz —</option></select>
+            </div>
+          </div>
+          <div class="az-grid2">
+            <div class="az-field">
+              <label class="az-label" for="az-location">Lokasyon</label>
+              <select id="az-location" class="az-select"><option value="">— Lokasyon seçiniz —</option></select>
+            </div>
+            <div class="az-field">
+              <label class="az-label" for="az-assign-date">Zimmet Tarihi *</label>
+              <input id="az-assign-date" class="az-input" type="date" />
+            </div>
+          </div>
+          <div class="az-grid2">
+            <div class="az-field">
+              <label class="az-label" for="az-doc-no">Belge No</label>
+              <input id="az-doc-no" class="az-input" maxlength="50" placeholder="Opsiyonel" />
+            </div>
+            <div class="az-field">
+              <label class="az-label" for="az-assign-note">Not</label>
+              <input id="az-assign-note" class="az-input" maxlength="500" placeholder="Açıklama" />
+            </div>
+          </div>
+          <div class="az-field">
+            <label class="az-label">Teslim Alan İmzası <span class="az-sig-hint">dokunmatik ekranda parmağınızla imzalayın (opsiyonel)</span></label>
+            <canvas id="az-sig-assign" class="az-sig-canvas" width="560" height="150"></canvas>
+            <button type="button" class="az-sig-clear" id="az-sig-assign-clear">Temizle</button>
+          </div>
+          <div class="az-actions">
+            <button class="az-btn az-btn--primary" id="az-assign">Zimmetle</button>
+          </div>
+        </div>
+
+        <!-- İade Al (zimmetteyken) -->
+        <div id="az-return-form" style="display:none;">
+          <div class="az-form-title">İade Al</div>
+          <div class="az-grid2">
+            <div class="az-field">
+              <label class="az-label">Güncel Zimmet</label>
+              <input class="az-input" id="az-cur-info" readonly />
+            </div>
+            <div class="az-field">
+              <label class="az-label" for="az-return-date">İade Tarihi *</label>
+              <input id="az-return-date" class="az-input" type="date" />
+            </div>
+          </div>
+          <div class="az-field">
+            <label class="az-label" for="az-return-note">Not</label>
+            <input id="az-return-note" class="az-input" maxlength="500" placeholder="Açıklama" />
+          </div>
+          <div class="az-field">
+            <label class="az-label">Teslim Eden İmzası <span class="az-sig-hint">dokunmatik ekranda parmağınızla imzalayın (opsiyonel)</span></label>
+            <canvas id="az-sig-return" class="az-sig-canvas" width="560" height="150"></canvas>
+            <button type="button" class="az-sig-clear" id="az-sig-return-clear">Temizle</button>
+          </div>
+          <div class="az-actions">
+            <button class="az-btn az-btn--warn" id="az-return">İade Al</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- HAREKETLER -->
+      <div class="az-panel" id="panel-history">
+        <h2 class="az-panel-title">Zimmet Hareketleri</h2>
+        <p class="az-panel-sub">Bu varlığa ait tüm zimmet/iade hareketleri.</p>
+        <table class="az-hist" id="az-hist-table" style="display:none;">
+          <thead><tr><th>Personel</th><th>Departman</th><th>Lokasyon</th><th>Zimmet Tarihi</th><th>İade Tarihi</th><th>Durum</th><th>Belge No</th><th>Not</th><th></th></tr></thead>
+          <tbody id="az-hist-body"></tbody>
+        </table>
+        <div class="az-hist-empty" id="az-hist-empty">Henüz zimmet hareketi yok.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+<div class="az-modal-backdrop" id="az-modal-backdrop">
+  <div class="az-modal" role="dialog" aria-modal="true" aria-labelledby="az-modal-title">
+    <div class="az-modal-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+    </div>
+    <h3 class="az-modal-title" id="az-modal-title">Onay</h3>
+    <p class="az-modal-msg" id="az-modal-msg"></p>
+    <div class="az-modal-actions">
+      <button class="az-btn az-btn--ghost" id="az-modal-cancel" type="button">Vazgeç</button>
+      <button class="az-btn az-btn--primary" id="az-modal-ok" type="button">Tamam</button>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var assetId = parseInt(document.getElementById('az-id').value) || 0;
+    var activeAssignment = null;
+
+    function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function setErr(m) { var el = document.getElementById('az-err'); if (m) { el.textContent = m; el.style.display = ''; } else el.style.display = 'none'; }
+    function today() { var d = new Date(); return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2); }
+    function fmt(s) { if (!s) return ''; var d = new Date(s); return isNaN(d) ? '' : ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear(); }
+    function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+    // ── Ortalanmış onay modali (Promise tabanlı) ──
+    var _azModalCb = null;
+    function azConfirm(opts) {
+        opts = opts || {};
+        document.getElementById('az-modal-title').textContent = opts.title || 'Onay';
+        document.getElementById('az-modal-msg').textContent = opts.message || '';
+        document.getElementById('az-modal-ok').textContent = opts.okLabel || 'Tamam';
+        document.getElementById('az-modal-cancel').textContent = opts.cancelLabel || 'Vazgeç';
+        document.getElementById('az-modal-backdrop').classList.add('active');
+        setTimeout(function () { document.getElementById('az-modal-ok').focus(); }, 30);
+        return new Promise(function (resolve) { _azModalCb = resolve; });
+    }
+    function azCloseModal(result) {
+        document.getElementById('az-modal-backdrop').classList.remove('active');
+        var cb = _azModalCb; _azModalCb = null;
+        if (cb) cb(!!result);
+    }
+    document.getElementById('az-modal-ok').addEventListener('click', function () { azCloseModal(true); });
+    document.getElementById('az-modal-cancel').addEventListener('click', function () { azCloseModal(false); });
+    document.getElementById('az-modal-backdrop').addEventListener('click', function (e) { if (e.target === this) azCloseModal(false); });
+    document.addEventListener('keydown', function (e) {
+        if (!document.getElementById('az-modal-backdrop').classList.contains('active')) return;
+        if (e.key === 'Escape') { e.preventDefault(); azCloseModal(false); }
+        else if (e.key === 'Enter') { e.preventDefault(); azCloseModal(true); }
+    });
+
+    // Tab geçişi
+    document.querySelectorAll('.az-tab').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.az-tab').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('.az-panel').forEach(function (p) { p.classList.remove('active'); });
+            btn.classList.add('active');
+            var panel = document.getElementById('panel-' + btn.dataset.tab);
+            if (panel) panel.classList.add('active');
+        });
+    });
+
+    // Personel + Departman + Lokasyon listeleri
+    fetch('/Assets/AssetLookups', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : { personnel: [], departments: [], locations: [] }; })
+        .then(function (d) {
+            var sel = document.getElementById('az-personnel');
+            sel.innerHTML = '<option value="">— Personel seçiniz —</option>' +
+                (d.personnel || []).map(function (p) { return '<option value="' + p.id + '">' + esc(p.label) + '</option>'; }).join('');
+            var dep = document.getElementById('az-department');
+            dep.innerHTML = '<option value="">— Departman seçiniz —</option>' +
+                (d.departments || []).map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join('');
+            var loc = document.getElementById('az-location');
+            loc.innerHTML = '<option value="">— Lokasyon seçiniz —</option>' +
+                (d.locations || []).filter(function (x) { return x.isActive; }).map(function (x) {
+                    var lbl = (x.code || '') + (x.name ? ' - ' + x.name : '');
+                    return '<option value="' + x.id + '">' + esc(lbl) + '</option>';
+                }).join('');
+        });
+
+    // ── Dokunmatik imza pad'leri ──
+    function initSigPad(canvasId, clearId) {
+        var canvas = document.getElementById(canvasId); if (!canvas) return { isDirty: function () { return false; }, dataUrl: function () { return null; }, clear: function () {} };
+        var ctx = canvas.getContext('2d'); var drawing = false, dirty = false, last = null;
+        ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a';
+        function pos(e) { var r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) }; }
+        canvas.addEventListener('pointerdown', function (e) { drawing = true; dirty = true; last = pos(e); try { canvas.setPointerCapture(e.pointerId); } catch (x) {} e.preventDefault(); });
+        canvas.addEventListener('pointermove', function (e) { if (!drawing) return; var p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; e.preventDefault(); });
+        canvas.addEventListener('pointerup', function () { drawing = false; });
+        canvas.addEventListener('pointercancel', function () { drawing = false; });
+        var clearBtn = document.getElementById(clearId);
+        function clear() { ctx.clearRect(0, 0, canvas.width, canvas.height); dirty = false; }
+        if (clearBtn) clearBtn.addEventListener('click', clear);
+        return { isDirty: function () { return dirty; }, dataUrl: function () { return canvas.toDataURL('image/png'); }, clear: clear };
+    }
+    var sigAssign = initSigPad('az-sig-assign', 'az-sig-assign-clear');
+    var sigReturn = initSigPad('az-sig-return', 'az-sig-return-clear');
+    var ASSET_NAME = (document.querySelector('.az-asset-name') || {}).textContent || '';
+    var ASSET_CODE = (document.querySelector('.az-asset-code') || {}).textContent || '';
+    function selText(id) { var s = document.getElementById(id); if (!s || s.selectedIndex < 0) return ''; var v = s.value; return v ? s.options[s.selectedIndex].text : ''; }
+
+    // İmzayı teslim formunun ÜZERİNE işler: varlık/kişi/tarih/belge + filigran + kayda-bağlı dipnot.
+    // Böylece kaydedilen görüntü o zimmet kaydına özgüdür; başka belgeye kopyalanması geçersiz/görünür olur.
+    function buildSignedForm(info, padCanvas) {
+        var W = 760, Hh = 250, Hs = 200, H = Hh + Hs;
+        var c = document.createElement('canvas'); c.width = W; c.height = H;
+        var x = c.getContext('2d');
+        x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
+        // Filigran (çapraz, tekrarlı) — kayda bağlılık
+        x.save(); x.translate(W / 2, H / 2); x.rotate(-24 * Math.PI / 180);
+        x.fillStyle = 'rgba(99,102,241,0.07)'; x.font = 'bold 24px sans-serif'; x.textAlign = 'center';
+        var wm = 'CalibraHub · Zimmet #' + info.assignmentId;
+        for (var yy = -H; yy < H; yy += 64) for (var xx = -W; xx < W; xx += 360) x.fillText(wm, xx, yy);
+        x.restore();
+        // Başlık
+        x.textAlign = 'left'; x.fillStyle = '#0f172a'; x.font = 'bold 18px sans-serif'; x.fillText(info.title, 28, 38);
+        x.strokeStyle = '#e2e8f0'; x.lineWidth = 1; x.beginPath(); x.moveTo(28, 50); x.lineTo(W - 28, 50); x.stroke();
+        // Alanlar
+        x.font = '13px sans-serif'; var y = 82, lh = 27;
+        function row(k, v) { x.fillStyle = '#64748b'; x.fillText(k, 28, y); x.fillStyle = '#0f172a'; x.font = '600 13px sans-serif'; x.fillText(v || '-', 200, y); x.font = '13px sans-serif'; y += lh; }
+        row('Varlık', ASSET_NAME + (ASSET_CODE ? '  (' + ASSET_CODE + ')' : ''));
+        row(info.kind === 'return' ? 'Teslim Eden' : 'Teslim Alan', info.target);
+        if (info.location) row('Lokasyon', info.location);
+        row(info.kind === 'return' ? 'İade Tarihi' : 'Zimmet Tarihi', info.date);
+        if (info.docNo) row('Belge No', info.docNo);
+        // İmza kutusu
+        var sy = Hh; x.fillStyle = '#64748b'; x.font = '12px sans-serif'; x.fillText('İmza', 28, sy + 6);
+        x.strokeStyle = '#cbd5e1'; x.strokeRect(28, sy + 14, W - 56, 150);
+        if (padCanvas) x.drawImage(padCanvas, 30, sy + 16, W - 60, 146);
+        // Bağlılık dipnotu
+        x.fillStyle = '#94a3b8'; x.font = '11px sans-serif';
+        x.fillText('Bu dijital imza yalnızca #' + info.assignmentId + ' numaralı zimmet kaydına aittir · ' + info.stamp, 28, H - 12);
+        return c.toDataURL('image/png');
+    }
+    function stampNow() { var d = new Date(); function p(n){return ('0'+n).slice(-2);} return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+
+    function saveSignature(assignmentId, kind, pad, info) {
+        if (!assignmentId || !pad || !pad.isDirty()) return Promise.resolve();
+        info = info || {}; info.assignmentId = assignmentId; info.kind = kind; info.stamp = stampNow();
+        info.title = kind === 'return' ? 'ZİMMET İADE FORMU' : 'ZİMMET TESLİM FORMU';
+        var dataUrl = buildSignedForm(info, document.getElementById(kind === 'return' ? 'az-sig-return' : 'az-sig-assign'));
+        return fetch('/Assets/SaveAssignmentSignatureJson', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+            body: JSON.stringify({ assignmentId: assignmentId, kind: kind, dataUrl: dataUrl })
+        }).then(function () { pad.clear(); }).catch(function () {});
+    }
+
+    function renderState(assignments) {
+        activeAssignment = (assignments || []).filter(function (a) { return !a.returnDate; })[0] || null;
+        var statusEl = document.getElementById('az-status');
+        var printBtn = document.getElementById('az-print');
+        if (activeAssignment) {
+            var tgt = activeAssignment.personnelName || (activeAssignment.departmentName ? activeAssignment.departmentName + ' (departman)' : '—');
+            statusEl.textContent = 'Zimmette: ' + tgt;
+            statusEl.className = 'az-badge az-badge--on';
+            document.getElementById('az-assign-form').style.display = 'none';
+            document.getElementById('az-return-form').style.display = '';
+            document.getElementById('az-cur-info').value = tgt + ' · ' + fmt(activeAssignment.assignDate);
+            document.getElementById('az-return-date').value = today();
+            printBtn.style.display = '';
+            printBtn.onclick = function () { window.open('/Assets/PrintAssignment?id=' + activeAssignment.id, '_blank'); };
+        } else {
+            statusEl.textContent = 'Boşta';
+            statusEl.className = 'az-badge az-badge--off';
+            document.getElementById('az-assign-form').style.display = '';
+            document.getElementById('az-return-form').style.display = 'none';
+            document.getElementById('az-assign-date').value = today();
+            printBtn.style.display = 'none';
+        }
+        // Hareketler tablosu
+        var body = document.getElementById('az-hist-body');
+        var table = document.getElementById('az-hist-table');
+        var empty = document.getElementById('az-hist-empty');
+        if (!assignments || !assignments.length) { table.style.display = 'none'; empty.style.display = ''; }
+        else {
+            table.style.display = ''; empty.style.display = 'none';
+            body.innerHTML = assignments.map(function (a) {
+                var on = !a.returnDate;
+                return '<tr>'
+                    + '<td>' + esc(a.personnelName || '—') + '</td>'
+                    + '<td>' + esc(a.departmentName || '—') + '</td>'
+                    + '<td>' + esc(a.locationName || '—') + '</td>'
+                    + '<td>' + fmt(a.assignDate) + '</td>'
+                    + '<td>' + (a.returnDate ? fmt(a.returnDate) : '—') + '</td>'
+                    + '<td><span class="az-chip ' + (on ? 'az-chip--on' : 'az-chip--off') + '">' + (on ? 'Zimmette' : 'İade edildi') + '</span></td>'
+                    + '<td>' + esc(a.documentNo || '') + '</td>'
+                    + '<td>' + esc(a.assignNote || '') + (a.returnNote ? ' · ' + esc(a.returnNote) : '') + '</td>'
+                    + '<td><button class="az-doc-link" data-doc="' + a.id + '">belge</button>'
+                    + (a.hasSignature ? ' <button class="az-doc-link" data-sig="' + a.id + '">imza</button>' : '') + '</td>'
+                    + '</tr>';
+            }).join('');
+            Array.prototype.forEach.call(body.querySelectorAll('.az-doc-link[data-doc]'), function (b) {
+                b.addEventListener('click', function () { window.open('/Assets/PrintAssignment?id=' + b.getAttribute('data-doc'), '_blank'); });
+            });
+            Array.prototype.forEach.call(body.querySelectorAll('.az-doc-link[data-sig]'), function (b) {
+                b.addEventListener('click', function () { window.open('/Assets/AssignmentSignatureImage?assignmentId=' + b.getAttribute('data-sig'), '_blank'); });
+            });
+        }
+    }
+
+    function loadAssignments() {
+        fetch('/Assets/AssignmentsJson?assetId=' + assetId, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(renderState);
+    }
+
+    document.getElementById('az-assign').addEventListener('click', function () {
+        var pid = parseInt(document.getElementById('az-personnel').value) || null;
+        var did = parseInt(document.getElementById('az-department').value) || null;
+        if (!pid && !did) { setErr('Personel veya departman seçiniz.'); return; }
+        setErr('');
+        var btn = this; btn.disabled = true;
+        fetch('/Assets/AssignAssetJson', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+            body: JSON.stringify({
+                assetId: assetId, personnelId: pid,
+                departmentId: did,
+                locationId: parseInt(document.getElementById('az-location').value) || null,
+                assignDate: document.getElementById('az-assign-date').value || null,
+                documentNo: document.getElementById('az-doc-no').value || null,
+                note: document.getElementById('az-assign-note').value || null
+            })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            btn.disabled = false;
+            if (d && d.success) {
+                var info = {
+                    target: selText('az-personnel') || (selText('az-department') ? selText('az-department') + ' (departman)' : ''),
+                    location: selText('az-location'),
+                    date: document.getElementById('az-assign-date').value,
+                    docNo: document.getElementById('az-doc-no').value
+                };
+                document.getElementById('az-assign-note').value = ''; document.getElementById('az-doc-no').value = '';
+                saveSignature(d.assignmentId, 'assign', sigAssign, info).then(loadAssignments);
+                if (d.assignmentId) {
+                    azConfirm({
+                        title: 'Zimmet Kaydedildi',
+                        message: 'Zimmet belgesini şimdi yazdırmak ister misiniz? Tasarlanmış bir Zimmet Teslim Formu varsa o kullanılır; daha sonra Zimmet Hareketleri sekmesinden de yazdırabilirsiniz.',
+                        okLabel: 'Yazdır', cancelLabel: 'Şimdi Değil'
+                    }).then(function (ok) {
+                        if (ok) window.open('/Assets/PrintAssignment?id=' + d.assignmentId, '_blank');
+                    });
+                }
+            } else { setErr((d && d.message) || 'Zimmet başarısız.'); }
+        })
+        .catch(function () { btn.disabled = false; setErr('Bağlantı hatası.'); });
+    });
+
+    document.getElementById('az-return').addEventListener('click', function () {
+        setErr('');
+        var btn = this; btn.disabled = true;
+        var closingId = activeAssignment ? activeAssignment.id : null;
+        var rinfo = activeAssignment ? {
+            target: activeAssignment.personnelName || (activeAssignment.departmentName ? activeAssignment.departmentName + ' (departman)' : ''),
+            location: activeAssignment.locationName,
+            date: document.getElementById('az-return-date').value
+        } : {};
+        fetch('/Assets/ReturnAssetJson', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+            body: JSON.stringify({
+                assetId: assetId,
+                returnDate: document.getElementById('az-return-date').value || null,
+                note: document.getElementById('az-return-note').value || null
+            })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            btn.disabled = false;
+            if (d && d.success) { document.getElementById('az-return-note').value = ''; saveSignature(closingId, 'return', sigReturn, rinfo).then(loadAssignments); }
+            else { setErr((d && d.message) || 'İade başarısız.'); }
+        })
+        .catch(function () { btn.disabled = false; setErr('Bağlantı hatası.'); });
+    });
+
+    loadAssignments();
+})();
+
+// Konteyner içindeysek kapat + Zimmetleme board'unu yenile; değilsek /Assets'e dön
+function azGoBack(refresh) {
+    try {
+        if (window.parent && window.parent !== window && window.parent.AssetContainer
+            && typeof window.parent.AssetContainer.closeEditor === 'function') {
+            window.parent.AssetContainer.closeEditor(!!refresh);
+            return;
+        }
+    } catch (e) { /* fallback */ }
+    window.location.href = '/Assets';
+}
+</script>
+}

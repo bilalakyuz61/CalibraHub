@@ -1,4 +1,7 @@
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
+using CalibraHub.Web.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CalibraHub.Web.Controllers;
@@ -10,6 +13,8 @@ namespace CalibraHub.Web.Controllers;
 /// Endpoint idempotent: tekrar calistirilmasi guvenli (mevcut kayitlar
 /// overwrite edilmez, sadece eksikler eklenir).
 /// </summary>
+[Authorize]
+[PermissionScope(FormCodes.SetupDefinitions)]
 [ApiController]
 [Route("api/legacy-migration")]
 [IgnoreAntiforgeryToken]

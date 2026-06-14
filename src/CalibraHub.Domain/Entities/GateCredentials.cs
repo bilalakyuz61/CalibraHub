@@ -10,5 +10,5 @@ public sealed class GateCredentials
     public string    PasswordHash      { get; set; } = string.Empty;
     public DateTime  LastChangedAt     { get; set; }
     public string?   LastChangedFromIp { get; set; }
-    public DateTime  CreatedAt         { get; set; }
+    public DateTime  Created           { get; set; }
 }

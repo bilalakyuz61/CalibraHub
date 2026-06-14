@@ -7,7 +7,7 @@ namespace CalibraHub.Application.Abstractions.Persistence;
 public interface IRptDefinitionRepository
 {
     Task<IReadOnlyCollection<ReportDefinitionSummaryDto>> GetAccessibleAsync(
-        Guid userId,
+        int userId,
         IReadOnlyCollection<UserRole> roles,
         CancellationToken ct);
 

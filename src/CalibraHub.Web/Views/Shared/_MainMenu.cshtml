@@ -2,6 +2,7 @@
 @using CalibraHub.Application.Security
 @using CalibraHub.Domain.Enums
 @inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@inject CalibraHub.Application.Abstractions.Services.IPermissionService MenuPermService
 @{
     var controller = (ViewContext.RouteData.Values["controller"]?.ToString() ?? string.Empty).ToLowerInvariant();
     var action = (ViewContext.RouteData.Values["action"]?.ToString() ?? string.Empty).ToLowerInvariant();
@@ -17,8 +18,8 @@
                      || (controller == "production" && action is "workorders" or "workorderedit");
     var productionWorkOrdersActive = controller == "production" && action is "workorders" or "workorderedit";
     var adminParametersActive = controller == "admin" && action == "parameters";
-    var settingsOpen = controller == "admin" || controller == "setup";
-    var setupDefinitionsActive = controller == "setup" && action == "definitions";
+    var settingsOpen = controller == "admin" || controller == "setup" || controller == "gate";
+    var setupDefinitionsActive = controller == "setupuser";
     var viewSettingsActive = controller == "admin" && action == "viewsettings";
     var isSystemAdmin = string.Equals(
         User.FindFirstValue(ClaimTypes.Email), "admin@calibra.local",
@@ -107,6 +108,28 @@
         canViewDashboards = UserAuthorizationCatalog.GetAllowedPermissions(dashboardRole)
             .Contains(UserPermission.ViewDashboards);
     }
+
+    // ── Permission-based menu filtering ────────────────────────────────────────
+    var menuUserIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+    var menuRoleStr   = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+    var menuDeptStr   = User.FindFirstValue("department_id");
+    int.TryParse(menuUserIdStr, out var menuUserId);
+    int? menuDeptId = int.TryParse(menuDeptStr, out var menuDeptIdRaw) && menuDeptIdRaw > 0 ? menuDeptIdRaw : null;
+    UserAuthorizationCatalog.TryParseRole(menuRoleStr, out var menuRole);
+    var isMenuAdmin = menuRole == UserRole.SystemAdmin || menuRole == UserRole.DepartmentManager;
+
+    HashSet<string>? menuAllowedForms = null;
+    if (!isMenuAdmin && menuUserId > 0)
+    {
+        var menuPerms = await MenuPermService.GetEffectivePermissionsAsync(menuUserId, menuRole, menuDeptId, CancellationToken.None);
+        menuAllowedForms = menuPerms
+            .Where(p => p.IsAllowed && p.ActionCode == CalibraHub.Domain.Entities.PermissionDef.StandardActions.View)
+            .Select(p => p.FormCode)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    Func<string, bool> canView = code => isMenuAdmin || (menuAllowedForms?.Contains(code) == true);
+    var permissionsActive = controller == "admin" && action == "permissions";
 }
 
 <nav class="side-nav" data-menu-root data-menu-scope="main">
@@ -126,6 +149,8 @@
     </section>
 
 
+    @if (isMenuAdmin || canView("NOTES"))
+    {
     <details class="side-group" @(generalOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -137,6 +162,8 @@
         <div class="menu-group-content">
             <div class="menu-group-content-inner">
 
+                @if (canView("NOTES"))
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-general-notes">
                     <a class="side-subitem @(notesActive ? "active" : string.Empty)"
                        asp-controller="Notes" asp-action="Index"
@@ -150,7 +177,10 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
 
+                @if (isMenuAdmin)
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-general-orgchart">
                     <a class="side-subitem @(orgChartActive ? "active" : string.Empty)"
                        asp-controller="OrgChart" asp-action="Index"
@@ -178,11 +208,15 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
 
             </div>
         </div>
     </details>
+    }
 
+    @if (isMenuAdmin)
+    {
     <details class="side-group" @(onayOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -250,7 +284,10 @@
             </div>
         </div>
     </details>
+    }
 
+    @if (isMenuAdmin || canView("ITEMS") || canView("PRODUCT_CONFIG") || canView("SALES_QUOTE"))
+    {
     <details class="side-group" @(logisticsOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -261,6 +298,8 @@
 
         <div class="menu-group-content">
             <div class="menu-group-content-inner">
+                @if (canView("ITEMS") || canView("PRODUCT_CONFIG"))
+                {
                 <details class="side-group side-group-nested" @(logisticsFixedDefinitionsOpen ? "open" : null)>
                     <summary>
                         <span class="menu-icon" aria-hidden="true">
@@ -271,6 +310,8 @@
 
                     <div class="menu-group-content">
                         <div class="menu-group-content-inner">
+                            @if (canView("ITEMS"))
+                            {
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-logistics-material-cards">
                                 <a class="side-subitem @(logisticsMaterialCardsActive ? "active" : string.Empty)"
                                    asp-controller="Logistics" asp-action="MaterialCards"
@@ -284,7 +325,10 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
+                            }
 
+                            @if (canView("PRODUCT_CONFIG"))
+                            {
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-logistics-configuration-definitions">
                                 <a class="side-subitem @(logisticsConfigurationActive ? "active" : string.Empty)"
                                    asp-controller="Logistics" asp-action="ProductConfiguration"
@@ -298,21 +342,110 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
-
-
+                            }
 
                             @* Malzeme Grupları → Genel > Grup Tanımlamaları *@
                         </div>
                     </div>
                 </details>
+                }
 
-                <div class="menu-group-label">
-                    <span class="menu-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24"><path d="M4 7h16"></path><path d="M7 11h10"></path><path d="M9 15h6"></path></svg>
-                    </span>
-                    <span class="menu-text">@purchaseText</span>
-                </div>
+                @{
+                    var purchaseOpen = ViewContext.RouteData.Values["controller"]?.ToString() == "Purchase";
+                }
+                @if (isMenuAdmin || canView("PURCHASE_REQUEST") || canView("PURCHASE_DEMAND") || canView("PURCHASE_QUOTE") || canView("PURCHASE_ORDER") || canView("PURCHASE_FULFILLMENT"))
+                {
+                <details class="side-group side-group-nested" @(purchaseOpen ? "open" : null)>
+                    <summary>
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        </span>
+                        <span class="menu-text">@purchaseText</span>
+                    </summary>
+                    <div class="menu-group-content">
+                        <div class="menu-group-content-inner">
+                        @if (isMenuAdmin || canView("PURCHASE_REQUEST"))
+                        {
+                        <div class="menu-entry" data-menu-entry data-favorite-key="main-purchase-requests">
+                            <a class="side-subitem @(purchaseOpen && ViewContext.RouteData.Values["action"]?.ToString() == "Requests" ? "active" : "")"
+                               href="/Purchase/Requests" title="İhtiyaç Kaydı">
+                                <span class="menu-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                                </span>
+                                <span class="menu-text">İhtiyaç Kaydı</span>
+                            </a>
+                            <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="İhtiyaç Kaydı favorilere ekle">
+                                <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                            </button>
+                        </div>
+                        }
+                        @if (isMenuAdmin || canView("PURCHASE_DEMAND"))
+                        {
+                        <div class="menu-entry" data-menu-entry data-favorite-key="main-purchase-demands">
+                            <a class="side-subitem @(purchaseOpen && ViewContext.RouteData.Values["action"]?.ToString() == "PurchaseDemands" ? "active" : "")"
+                               href="/Purchase/PurchaseDemands" title="Satın Alma Talebi">
+                                <span class="menu-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                                </span>
+                                <span class="menu-text">Satın Alma Talebi</span>
+                            </a>
+                            <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Satın Alma Talebi favorilere ekle">
+                                <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                            </button>
+                        </div>
+                        }
+                        @if (isMenuAdmin || canView("PURCHASE_QUOTE"))
+                        {
+                        <div class="menu-entry" data-menu-entry data-favorite-key="main-purchase-quotes">
+                            <a class="side-subitem @(purchaseOpen && ViewContext.RouteData.Values["action"]?.ToString() == "Quotes" ? "active" : "")"
+                               href="/Purchase/Quotes" title="Satın Alma Teklifi">
+                                <span class="menu-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                </span>
+                                <span class="menu-text">SA Teklifi</span>
+                            </a>
+                            <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="SA Teklifi favorilere ekle">
+                                <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                            </button>
+                        </div>
+                        }
+                        @if (isMenuAdmin || canView("PURCHASE_ORDER"))
+                        {
+                        <div class="menu-entry" data-menu-entry data-favorite-key="main-purchase-orders">
+                            <a class="side-subitem @(purchaseOpen && ViewContext.RouteData.Values["action"]?.ToString() == "Orders" ? "active" : "")"
+                               href="/Purchase/Orders" title="Satın Alma Siparişi">
+                                <span class="menu-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                                </span>
+                                <span class="menu-text">SA Siparişi</span>
+                            </a>
+                            <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="SA Siparişi favorilere ekle">
+                                <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                            </button>
+                        </div>
+                        }
+                        @if (isMenuAdmin || canView("PURCHASE_FULFILLMENT"))
+                        {
+                        <div class="menu-entry" data-menu-entry data-favorite-key="main-purchase-fulfillment">
+                            <a class="side-subitem @(purchaseOpen && ViewContext.RouteData.Values["action"]?.ToString() == "FulfillmentCenter" ? "active" : "")"
+                               href="/Purchase/FulfillmentCenter" title="Karşılama Merkezi">
+                                <span class="menu-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="6" height="6"/><rect x="16" y="3" width="6" height="6"/><rect x="9" y="10" width="6" height="6"/><path d="M5 9v4"/><path d="M19 9v4"/><path d="M12 16v5"/></svg>
+                                </span>
+                                <span class="menu-text">Karşılama Merkezi</span>
+                            </a>
+                            <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Karşılama Merkezi favorilere ekle">
+                                <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                            </button>
+                        </div>
+                        }
+                        </div>
+                    </div>
+                </details>
+                }
 
+                @if (canView("SALES_QUOTE"))
+                {
                 <details class="side-group side-group-nested" @(ViewContext.RouteData.Values["controller"]?.ToString() == "Sales" ? "open" : null)>
                     <summary>
                         <span class="menu-icon" aria-hidden="true">
@@ -324,7 +457,7 @@
                         <div class="menu-group-content-inner">
                         <div class="menu-entry" data-menu-entry data-favorite-key="main-sales-quotes">
                             <a class="side-subitem @(ViewContext.RouteData.Values["controller"]?.ToString() == "Sales" ? "active" : "")"
-                               asp-controller="Sales" asp-action="Documents" title="Satış Teklifi">
+                               asp-controller="Sales" asp-action="Quotes" title="Satış Teklifi">
                                 <span class="menu-icon" aria-hidden="true">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -342,10 +475,14 @@
                         </div>
                     </div>
                 </details>
+                }
             </div>
         </div>
     </details>
+    }
 
+    @if (isMenuAdmin || canView("BOM_EDIT"))
+    {
     <details class="side-group" @(uretimOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -355,6 +492,8 @@
         </summary>
         <div class="menu-group-content">
             <div class="menu-group-content-inner">
+                @if (canView("BOM_EDIT"))
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-uretim-product-trees">
                     <a class="side-subitem @(logisticsBOMsActive ? "active" : string.Empty)"
                        asp-controller="Logistics" asp-action="BOMs"
@@ -368,6 +507,9 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
+                @if (isMenuAdmin)
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-uretim-work-orders">
                     <a class="side-subitem @(productionWorkOrdersActive ? "active" : string.Empty)"
                        asp-controller="Production" asp-action="WorkOrders"
@@ -381,10 +523,48 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
             </div>
         </div>
     </details>
+    }
 
+    @{
+        var argeProjectsActive = controller == "arge" && action is "projects" or "projectedit";
+        var argeOpen = controller == "arge";
+    }
+    @if (isMenuAdmin || canView("ARGE_PROJECT_EDIT"))
+    {
+    <details class="side-group" @(argeOpen ? "open" : null)>
+        <summary>
+            <span class="menu-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 3v7L4.5 19A1.5 1.5 0 0 0 5.8 21h12.4a1.5 1.5 0 0 0 1.3-2.3L14 10V3"/><path d="M8 14h8"/></svg>
+            </span>
+            <span class="menu-text">AR-GE</span>
+        </summary>
+
+        <div class="menu-group-content">
+            <div class="menu-group-content-inner">
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-arge-projects">
+                    <a class="side-subitem @(argeProjectsActive ? "active" : string.Empty)"
+                       asp-controller="Arge" asp-action="Projects"
+                       title="AR-GE Projeleri">
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 3v7L4.5 19A1.5 1.5 0 0 0 5.8 21h12.4a1.5 1.5 0 0 0 1.3-2.3L14 10V3"/><path d="M8 14h8"/></svg>
+                        </span>
+                        <span class="menu-text">AR-GE Projeleri</span>
+                    </a>
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="AR-GE Projeleri favorilere ekle">
+                        <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </details>
+    }
+
+    @if (canView("CONTACTS"))
+    {
     <details class="side-group" @(financeOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -424,6 +604,7 @@
             </div>
         </div>
     </details>
+    }
 
     @{
         var productionOperationsActive = controller == "production" && action is "operations" or "operationedit";
@@ -439,6 +620,8 @@
         var finansDefOpen   = controller == "generaldefinitions" && action == "currencies";
         var genDefOpen      = uretimDefOpen || lojistikDefOpen || satisDefOpen || finansDefOpen || logisticsMeasureUnitsActive || cardGroupsActive;
     }
+    @if (isMenuAdmin || canView("MACHINES") || canView("OPERATION_EDIT") || canView("ROUTING_EDIT") || canView("PERSONNEL_EDIT") || canView("LOCATIONS") || canView("PRICE_LIST") || canView("MEASURE_UNITS"))
+    {
     <details class="side-group" @(genDefOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -453,6 +636,8 @@
             <div class="menu-group-content-inner">
 
                 <!-- ── Üretim ──────────────────────────────── -->
+                @if (canView("MACHINES") || canView("OPERATION_EDIT") || canView("ROUTING_EDIT") || canView("PERSONNEL_EDIT"))
+                {
                 <details class="side-group side-group-nested" @(uretimDefOpen ? "open" : null)>
                     <summary>
                         <span class="menu-icon" aria-hidden="true">
@@ -462,6 +647,8 @@
                     </summary>
                     <div class="menu-group-content">
                         <div class="menu-group-content-inner">
+                            @if (canView("MACHINES"))
+                            {
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-machines">
                                 <a class="side-subitem @(logisticsMachinesActive ? "active" : string.Empty)"
                                    asp-controller="Logistics" asp-action="Machines" title="Makine Tanımlamaları">
@@ -474,6 +661,9 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
+                            }
+                            @if (canView("OPERATION_EDIT"))
+                            {
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-operations">
                                 <a class="side-subitem @(productionOperationsActive ? "active" : string.Empty)"
                                    asp-controller="Production" asp-action="Operations" title="Operasyon Tanımlamaları">
@@ -486,6 +676,9 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
+                            }
+                            @if (canView("ROUTING_EDIT"))
+                            {
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-routings">
                                 <a class="side-subitem @(productionRoutingsActive ? "active" : string.Empty)"
                                    asp-controller="Production" asp-action="Routings" title="Rota Tanımlamaları">
@@ -498,6 +691,9 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
+                            }
+                            @if (canView("PERSONNEL_EDIT"))
+                            {
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-personnel">
                                 <a class="side-subitem @(productionPersonnelActive ? "active" : string.Empty)"
                                    asp-controller="Production" asp-action="Personnel" title="Personel Tanımlamaları">
@@ -510,11 +706,15 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
+                            }
                         </div>
                     </div>
                 </details>
+                }
 
                 <!-- ── Lojistik ─────────────────────────────── -->
+                @if (canView("LOCATIONS"))
+                {
                 <details class="side-group side-group-nested" @(lojistikDefOpen ? "open" : null)>
                     <summary>
                         <span class="menu-icon" aria-hidden="true">
@@ -539,8 +739,11 @@
                         </div>
                     </div>
                 </details>
+                }
 
                 <!-- ── Satış ──────────────────────────────── -->
+                @if (isMenuAdmin || canView("PRICE_LIST"))
+                {
                 <details class="side-group side-group-nested" @(satisDefOpen ? "open" : null)>
                     <summary>
                         <span class="menu-icon" aria-hidden="true">
@@ -550,6 +753,8 @@
                     </summary>
                     <div class="menu-group-content">
                         <div class="menu-group-content-inner">
+                            @if (isMenuAdmin)
+                            {
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-salesrep">
                                 <a class="side-subitem @(controller == "generaldefinitions" && action == "salesrepresentatives" ? "active" : string.Empty)"
                                    asp-controller="GeneralDefinitions" asp-action="SalesRepresentatives" title="Satış Temsilcileri">
@@ -574,6 +779,9 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
+                            }
+                            @if (canView("PRICE_LIST"))
+                            {
                             <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-price-list">
                                 <a class="side-subitem @(priceListActive || priceGroupsActive ? "active" : string.Empty)"
                                    asp-controller="PriceList" asp-action="PriceGroups" title="Fiyat Listesi">
@@ -586,11 +794,15 @@
                                     <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                                 </button>
                             </div>
+                            }
                         </div>
                     </div>
                 </details>
+                }
 
                 <!-- ── Finans ─────────────────────────────── -->
+                @if (isMenuAdmin)
+                {
                 <details class="side-group side-group-nested" @(finansDefOpen ? "open" : null)>
                     <summary>
                         <span class="menu-icon" aria-hidden="true">
@@ -615,14 +827,20 @@
                         </div>
                     </div>
                 </details>
+                }
 
                 <!-- ── Genel ──────────────────────────────── -->
+                @if (isMenuAdmin || canView("MEASURE_UNITS"))
+                {
                 <div class="menu-group-label">
                     <span class="menu-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
                     </span>
                     <span class="menu-text">Genel</span>
                 </div>
+                }
+                @if (canView("MEASURE_UNITS"))
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-measure-units">
                     <a class="side-subitem @(logisticsMeasureUnitsActive ? "active" : string.Empty)"
                        asp-controller="Logistics" asp-action="Units" title="Ölçü Birimleri">
@@ -635,6 +853,9 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
+                @if (isMenuAdmin)
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-gendef-card-groups">
                     <a class="side-subitem @(cardGroupsActive ? "active" : string.Empty)"
                        asp-controller="Definitions" asp-action="CardGroups" title="Grup Tanımlamaları">
@@ -647,11 +868,15 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
 
             </div>
         </div>
     </details>
+    }
 
+    @if (canViewDashboards || isMenuAdmin)
+    {
     <details class="side-group" @(reportsGroupOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -672,7 +897,7 @@
                     <div class="menu-entry" data-menu-entry data-favorite-key="main-reports-dashboards">
                         <a class="side-subitem @(dashboardsActive ? "active" : string.Empty)"
                            asp-controller="Dashboard" asp-action="Index"
-                           title="Panolar">
+                           title="Rapor Panoları">
                             <span class="menu-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <rect x="3" y="3" width="7" height="9" rx="1"/>
@@ -681,9 +906,9 @@
                                     <rect x="3" y="16" width="7" height="5" rx="1"/>
                                 </svg>
                             </span>
-                            <span class="menu-text">Panolar</span>
+                            <span class="menu-text">Rapor Panoları</span>
                         </a>
-                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Panolar favorilere ekle">
+                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Rapor Panoları favorilere ekle">
                             <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                         </button>
                     </div>
@@ -691,41 +916,62 @@
                     <div class="menu-entry" data-menu-entry data-favorite-key="main-reports-grafana">
                         <a class="side-subitem @(grafanaActive ? "active" : string.Empty)"
                            asp-controller="Dashboard" asp-action="Grafana"
-                           title="Grafana">
+                           title="Rapor Tasarımı">
                             <span class="menu-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="12" cy="12" r="9"/>
                                     <path d="M12 7v5l3 2"/>
                                 </svg>
                             </span>
-                            <span class="menu-text">Grafana</span>
+                            <span class="menu-text">Rapor Tasarımı</span>
                         </a>
-                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Grafana favorilere ekle">
+                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Rapor Tasarımı favorilere ekle">
                             <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                         </button>
                     </div>
                 }
 
-                <div class="menu-entry" data-menu-entry data-favorite-key="main-reporting-designer">
-                    <a class="side-subitem @(reportingDesignerActive ? "active" : string.Empty)"
-                       asp-controller="Reporting" asp-action="Designer"
-                       title="Rapor Tasarımı">
+                @if (isMenuAdmin)
+                {
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-dashboard-access">
+                    <a class="side-subitem @(Context.Request.Path.StartsWithSegments("/Dashboard/AccessConfig") ? "active" : string.Empty)"
+                       asp-controller="Dashboard" asp-action="AccessConfig"
+                       title="Pano Erişim Yönetimi">
                         <span class="menu-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V6"/><path d="M17 16v-4"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
                         </span>
-                        <span class="menu-text">Rapor Tasarımı</span>
+                        <span class="menu-text">Pano Erişim Yönetimi</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Rapor Tasarımı favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Pano Erişim Yönetimi favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-reporting-designer">
+                    <a class="side-subitem @(reportingDesignerActive ? "active" : string.Empty)"
+                       asp-controller="Reporting" asp-action="Designer"
+                       title="Şablon Tasarımı">
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V6"/><path d="M17 16v-4"/></svg>
+                        </span>
+                        <span class="menu-text">Şablon Tasarımı</span>
+                    </a>
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Şablon Tasarımı favorilere ekle">
+                        <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                    </button>
+                </div>
+                }
             </div>
         </div>
     </details>
+    }
 
     @{
         var designGroupOpen = docDesignerActive;
     }
+    @if (isMenuAdmin)
+    {
     <details class="side-group" @(designGroupOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -758,7 +1004,10 @@
             </div>
         </div>
     </details>
+    }
 
+    @if (isMenuAdmin || canView("SETUP_DEFINITIONS") || canView("PERMISSION_MGMT"))
+    {
     <details class="side-group" @(settingsOpen ? "open" : null)>
         <summary>
             <span class="menu-icon" aria-hidden="true">
@@ -772,6 +1021,8 @@
 
         <div class="menu-group-content">
             <div class="menu-group-content-inner">
+                @if (isMenuAdmin)
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-company">
                     <a class="side-subitem @(companySettingsActive ? "active" : string.Empty)"
                        asp-controller="Admin" asp-action="CompanySettings" title="@companyDefinitionText">
@@ -809,7 +1060,10 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
 
+                @if (canView("SETUP_DEFINITIONS"))
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-viewsettings">
                     <a class="side-subitem @(viewSettingsActive ? "active" : string.Empty)"
                        asp-controller="Admin" asp-action="ViewSettings" title="Alan ve Widget Tanımlamaları">
@@ -825,7 +1079,29 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
+                }
 
+                @if (canView("PERMISSION_MGMT"))
+                {
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-permissions">
+                    <a class="side-subitem @(permissionsActive ? "active" : string.Empty)"
+                       asp-controller="Admin" asp-action="Permissions" title="Yetki Yönetimi">
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                <path d="M9 12l2 2 4-4"/>
+                            </svg>
+                        </span>
+                        <span class="menu-text">Yetki Yönetimi</span>
+                    </a>
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Yetki Yönetimi favorilere ekle">
+                        <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                    </button>
+                </div>
+                }
+
+                @if (isMenuAdmin)
+                {
                 <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-db-schema">
                     <a class="side-subitem @(controller == "dbschema" ? "active" : string.Empty)"
                        href="/admin/db-schema" title="Veritabanı Haritası">
@@ -859,23 +1135,37 @@
                     </button>
                 </div>
 
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-sql-query-library">
+                    <a class="side-subitem @(controller == "admin" && action == "sqlquerylibrary" ? "active" : string.Empty)"
+                       asp-controller="Admin" asp-action="SqlQueryLibrary" title="SQL Sorgu Kütüphanesi">
+                        <span class="menu-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <ellipse cx="12" cy="5" rx="8" ry="3"/>
+                                <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/>
+                                <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/>
+                            </svg>
+                        </span>
+                        <span class="menu-text">SQL Sorgu Kütüphanesi</span>
+                    </a>
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="SQL Sorgu Kütüphanesi favorilere ekle">
+                        <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
+                    </button>
+                </div>
+                }
+
                 @if (isSystemAdmin)
                 {
-                    <div class="menu-group-divider" style="margin:4px 12px; border-top:1px solid var(--app-border,#e0e0e0);"></div>
-
-                    <div class="menu-entry" data-menu-entry data-favorite-key="main-setup-definitions">
-                        <a class="side-subitem @(setupDefinitionsActive ? "active" : string.Empty)"
-                           asp-controller="Setup" asp-action="Definitions" title="Şirket ve Kullanıcı Tanımları">
+                    <div class="menu-entry" data-menu-entry data-favorite-key="main-settings-system-admin">
+                        <a class="side-subitem @(controller == "gate" || controller == "setup" ? "active" : string.Empty)"
+                           href="/Gate" title="Sistem Yönetimi">
                             <span class="menu-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                                    <rect x="2" y="7" width="20" height="14" rx="2"/>
-                                    <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                                    <path d="M12 12v4m-2-2h4"/>
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                                 </svg>
                             </span>
-                            <span class="menu-text">Şirket ve Kullanıcı Tanımları</span>
+                            <span class="menu-text">Sistem Yönetimi</span>
                         </a>
-                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Genel Tanımlar favorilere ekle">
+                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Sistem Yönetimi favorilere ekle">
                             <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                         </button>
                     </div>
@@ -883,6 +1173,7 @@
             </div>
         </div>
     </details>
+    }
 
     <!-- Daralt / Genişlet butonu — sidebar alt footer -->
     <div class="side-nav-footer">

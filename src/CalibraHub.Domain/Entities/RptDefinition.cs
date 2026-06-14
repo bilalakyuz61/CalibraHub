@@ -10,7 +10,7 @@ public sealed class RptDefinition
     public int ViewId { get; set; }
     public ReportCategory Category { get; set; }
     public required string ConfigJson { get; set; }
-    public Guid OwnerUserId { get; set; }
+    public int OwnerUserId { get; set; }
     public bool IsShared { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }

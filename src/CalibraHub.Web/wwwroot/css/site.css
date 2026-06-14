@@ -1,5 +1,13 @@
-html {
+﻿html {
   font-size: 13px;
+  /* Sayfa-arasi navigasyon flash'i engelle (rapor §6.8 FOUC fix):
+     Browser default beyaz arka plani yerine projenin koyu temasiyla uyumlu
+     bir base verir. Light tema body class'i geldikten sonra ezilebilir. */
+  background-color: #0c0f1a;
+  color-scheme: dark light;
+}
+html.light, html:has(body.app-theme-light) {
+  background-color: #f8fafc;
 }
 
 /* ── Button design tokens (rapor §6.5) ───────────────────────────────────
@@ -1477,7 +1485,7 @@ body.app-theme-dark .workspace-frame-body {
 .integrator-section-label {
   margin-left: 4px;
   font-size: 0.75rem;
-  font-weight: 640;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--integrator-muted);
@@ -1669,7 +1677,7 @@ body.app-theme-dark .workspace-frame-body {
 .integrator-field .form-label {
   margin-bottom: 7px;
   font-size: 0.83rem;
-  font-weight: 560;
+  font-weight: 600;
   color: var(--integrator-text);
 }
 
@@ -1726,7 +1734,7 @@ body.app-theme-dark .workspace-frame-body {
 .integrator-switch__label {
   font-size: 0.87rem;
   color: var(--integrator-text);
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .integrator-form-actions {
@@ -1774,7 +1782,7 @@ body.app-theme-dark .workspace-frame-body {
   align-items: center;
   justify-content: center;
   font-size: 0.77rem;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .integrator-tab-link__content {
@@ -1784,7 +1792,7 @@ body.app-theme-dark .workspace-frame-body {
 
 .integrator-tab-link__content strong {
   font-size: 0.86rem;
-  font-weight: 620;
+  font-weight: 600;
 }
 
 .integrator-tab-link__content small {
@@ -1870,7 +1878,7 @@ body.app-theme-dark .workspace-frame-body {
   color: #ffffff;
   border-radius: 10px;
   padding: 0 18px;
-  font-weight: 560;
+  font-weight: 600;
 }
 
 .integrator-btn-primary:hover,
@@ -1885,7 +1893,7 @@ body.app-theme-dark .workspace-frame-body {
   min-height: 44px;
   border-radius: 10px;
   padding: 0 18px;
-  font-weight: 550;
+  font-weight: 500;
 }
 
 .integrator-btn-secondary {
@@ -1929,7 +1937,7 @@ body.app-theme-dark .workspace-frame-body {
   font-size: 0.73rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-weight: 640;
+  font-weight: 600;
   white-space: nowrap;
   padding: 12px 14px;
 }
@@ -1960,7 +1968,7 @@ body.app-theme-dark .workspace-frame-body {
   padding: 0.2rem 0.54rem;
   border: 1px solid transparent;
   font-size: 0.73rem;
-  font-weight: 620;
+  font-weight: 600;
 }
 
 .integrator-status-pill__dot {
@@ -2063,7 +2071,7 @@ body.app-theme-dark .workspace-frame-body {
   font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-weight: 620;
+  font-weight: 600;
 }
 
 .integrator-data-block .integrator-table-wrap {
@@ -2109,7 +2117,7 @@ body.app-theme-dark .workspace-frame-body {
 
 .integrator-detail-modal .modal-title {
   font-size: 0.9rem;
-  font-weight: 620;
+  font-weight: 600;
   color: #163659;
 }
 
@@ -2401,7 +2409,7 @@ body.app-theme-dark .workspace-frame-body {
 .material-card-toggle-field .integrator-field__pseudo-label {
   margin-bottom: 0;
   font-size: 0.83rem;
-  font-weight: 560;
+  font-weight: 600;
   color: #1f324d;
 }
 
@@ -2467,7 +2475,7 @@ body.app-theme-dark .workspace-frame-body {
   background: #edf4ff;
   color: #1a4676;
   font-size: 0.74rem;
-  font-weight: 620;
+  font-weight: 600;
   padding: 0.17rem 0.56rem;
   white-space: nowrap;
 }
@@ -2486,7 +2494,7 @@ body.app-theme-dark .workspace-frame-body {
   color: #294d75;
   border-radius: 8px;
   font-size: 0.74rem;
-  font-weight: 560;
+  font-weight: 600;
   padding: 0.2rem 0.44rem;
 }
 
@@ -2547,7 +2555,7 @@ body.app-theme-dark .workspace-frame-body {
   background: transparent;
   color: #0f3f74;
   font-size: 0.82rem;
-  font-weight: 620;
+  font-weight: 600;
   padding: 0;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -2605,7 +2613,7 @@ body.app-theme-dark .workspace-frame-body {
   background: #eef5ff;
   color: #214871;
   font-size: 0.74rem;
-  font-weight: 550;
+  font-weight: 500;
   padding: 0.16rem 0.5rem;
 }
 
@@ -2895,7 +2903,8 @@ html:has(body.setup-page) {
 .login-shell {
   height: 100vh;
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
+  /* 2026-06-06: 5/2 oran — sol panel resme genişlik verir, sağ giriş kartı rahat sığar. */
+  grid-template-columns: 5fr 2fr;
   overflow: hidden;
 }
 
@@ -2903,9 +2912,52 @@ html:has(body.setup-page) {
   position: relative;
   overflow: hidden;
   min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  /* 2026-06-06: Padding sıfır — resim paneli tamamen kaplasın. */
+  padding: 0;
+  background: linear-gradient(145deg, #0a0d17, #14193a);
 }
 
-.login-hero img {
+/* Resim frame'i — paneli tamamen kaplar, max boyut yok. */
+.login-hero-frame {
+  position: relative;
+  width: 100%; height: 100%;
+  border-radius: 0;
+  overflow: hidden;
+  /* Köşe gölgesi yok — frame tüm paneli kapladığı için kenarlık görünmüyor. */
+}
+
+.login-hero-frame img {
+  /* 2026-06-06: object-fit:cover + object-position:left top — resim sol-üst
+     hizalı büyütülür, sağ-alt köşedeki sparkle filigranı doğal olarak kırpılır.
+     "PRECISION. MEASUREMENT. CONTROL." metni resmin alt-orta tarafında olduğu
+     için sol-üst hizalı cover'da görünür kalır. */
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: left top;
+  filter: saturate(1.05);
+}
+
+/* Sağ alt köşedeki sparkle filigranını ek güvence olarak maskele —
+   cover + left-top hizalama zaten kırpıyor; bu daha büyük gradient overlay
+   resim oranı değişse bile filigranın görünmemesini garanti eder. */
+.login-hero-frame::after {
+  content: '';
+  position: absolute;
+  right: 0; bottom: 0;
+  width: 140px; height: 140px;
+  background: radial-gradient(circle at bottom right,
+              #0a0d17 0%,
+              #0a0d17 35%,
+              rgba(10,13,23,0.85) 55%,
+              transparent 80%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Geriye dönük uyum: legacy img doğrudan .login-hero altında olursa */
+.login-hero > img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -3018,6 +3070,19 @@ html:has(body.setup-page) {
   color: transparent !important;
 }
 
+/* Giris Yap butonu — input alanlariyla ayni yukseklik (54px) ve radius (10px).
+   Bootstrap default .btn yuksekligi ~38px idi; floating-label input ile uyumsuzdu. */
+.login-card .btn-primary,
+.login-card button[type="submit"] {
+  height: 46px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 /* ─── Dark tema — login floating-label overrides (yuksek specificity) ─── */
 body.app-theme-dark .login-card .login-field > .form-control,
 body.app-theme-dark .login-card .login-field > .form-select {
@@ -3121,10 +3186,10 @@ body.app-theme-dark .login-card .login-field > .form-select option {
 }
 
 .login-card .btn.btn-primary {
-  height: 54px;
+  height: 46px;
   border-radius: 10px;
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 1.1rem;
+  font-weight: 700;
   letter-spacing: 0.01em;
 }
 
@@ -6179,6 +6244,34 @@ body.app-theme-graphite {
   color-scheme: dark;
 }
 
+/* Dark tema CSS değişkenleri — var(--app-surface, #fff) gibi fallback'li view'ların
+   dark modda doğru renk alması için. :root'un #ffffff default'unu override eder. */
+body.app-theme-dark {
+  --app-topbar-bg: #0d1323;
+  --app-sidebar-bg: #080b14;
+  --app-content-bg: #0a0d17;
+  --app-surface: #0d1323;
+  --app-muted-surface: #111827;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-border-light: rgba(255, 255, 255, 0.05);
+  --app-text: #e2e8f0;
+  --app-text-muted: #94a3b8;
+  --theme-accent: #6366f1;
+  --theme-accent-strong: #4f46e5;
+  --theme-accent-soft: rgba(99, 102, 241, 0.16);
+  --theme-brand: #6366f1;
+  /* Bootstrap 5 dark variables — BS bileşenleri (dropdown, tab, modal vb.) için */
+  --bs-body-bg:         #0a0d17;
+  --bs-body-color:      #e2e8f0;
+  --bs-border-color:    rgba(255, 255, 255, 0.10);
+  --bs-secondary-bg:    #0d1323;
+  --bs-tertiary-bg:     #111827;
+  --bs-secondary-color: #94a3b8;
+  --bs-emphasis-color:  #f1f5f9;
+  --bs-link-color:      #818cf8;
+  --bs-link-hover-color: #a5b4fc;
+}
+
 body.app-theme-graphite {
   --theme-accent: #475569;
   --theme-accent-strong: #334155;
@@ -6922,6 +7015,31 @@ body.workspace-tabs-visible .workspace-tabs {
 .workspace-tab__close:focus {
   background: rgba(59, 130, 246, 0.12);
   color: var(--theme-accent);
+}
+
+/* ── workspace-tabs dark theme overrides ── */
+body.app-theme-dark .workspace-tabs {
+  background: linear-gradient(180deg, rgba(13, 19, 35, 0.98), rgba(8, 12, 23, 0.92));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+body.app-theme-dark .workspace-tab {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+}
+body.app-theme-dark .workspace-tab:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+body.app-theme-dark .workspace-tab.is-active {
+  background: rgba(13, 19, 35, 0.95);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+body.app-theme-dark .workspace-tab__close:hover,
+body.app-theme-dark .workspace-tab__close:focus {
+  background: rgba(99, 102, 241, 0.15);
 }
 
 .entity-form-toolbar {
@@ -9136,7 +9254,7 @@ body.collaboration-panel-open .utility-rail .collaboration-launcher {
   font-size: var(--calibra-grid-header-font-size, 0.67rem);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-weight: 640;
+  font-weight: 600;
 }
 
 .calibra-grid-actions-first .material-row-actions {
@@ -9703,6 +9821,13 @@ body.app-theme-dark .form-select option {
   background: #0d1323;
   color:      #cbd5e1;
 }
+/* 2026-05-22 Global fix — native <select>'lar (Bootstrap form-select disinda elle yazilmis
+   formlar) dark mode'da option text'i okunamiyordu (default beyaz arkaplan + acik renk text).
+   Tum select'ler icin geneli kapsayan kural. Ozel sayfa override edebilir (specificity dusuk). */
+body.app-theme-dark select option {
+  background: #1e293b;
+  color:      #e2e8f0;
+}
 
 /* Date input — takvim popup'ı da koyu */
 body.app-theme-dark input[type="date"].form-control {
@@ -10073,4 +10198,521 @@ body.app-theme-light .admin-nav::-webkit-scrollbar-thumb {
     animation: cbInvalidShake 0.45s cubic-bezier(.36,.07,.19,.97) both;
     border-color: #ef4444 !important;
     box-shadow: 0 0 0 3px rgba(239,68,68,.20) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PROJE STANDARDI — DbInfo tooltip tablosu (.cb-dbinfo-*)
+   Inline style yerine bu sınıfları kullan. Tema-aware (light + dark).
+   Razor: ViewData["DbInfo"] = @Html.Partial("_DbInfoTable", dict).ToString();
+   veya doğrudan <table class="cb-dbinfo-table">… markup üret.
+   ══════════════════════════════════════════════════════════════ */
+.cb-dbinfo-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.cb-dbinfo-table tr { border-bottom: 1px solid #e2e8f0; }
+.cb-dbinfo-table tr:last-child { border-bottom: 0; }
+.cb-dbinfo-name { padding:6px 8px; font-weight:600; color:#2563eb; white-space:nowrap; vertical-align:top; }
+.cb-dbinfo-desc { padding:6px 8px; color:#1e293b; }
+body.app-theme-dark .cb-dbinfo-table tr { border-bottom-color: rgba(255,255,255,0.10); }
+body.app-theme-dark .cb-dbinfo-name { color: #93c5fd; }
+body.app-theme-dark .cb-dbinfo-desc { color: rgba(255,255,255,0.78); }
+
+/* ══════════════════════════════════════════════════════════════
+   PROJE STANDARDI — React mount-error fallback (.cb-mount-error)
+   Mount başarısız olduğunda gösterilecek hata bloğu için.
+   Kullanım:
+     el.innerHTML = '<div class="cb-mount-error"><div>' + msg + '</div>' +
+                    '<button onclick="location.reload()">Sayfayı Yenile</button></div>';
+   ══════════════════════════════════════════════════════════════ */
+.cb-mount-error {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    height:100%; min-height:400px; gap:12px;
+    background:#0c0f1a; color:#f87171; font-size:14px;
+    padding:24px; text-align:center;
+}
+.cb-mount-error button {
+    padding:8px 20px; border-radius:8px; border:1px solid #4f46e5;
+    background:#6366f1; color:#fff; cursor:pointer; font-size:13px;
+}
+.cb-mount-error button:hover { background:#4f46e5; }
+body.app-theme-light .cb-mount-error {
+    background:#f8fafc; color:#dc2626;
+}
+body.app-theme-light .cb-mount-error button {
+    background:#4f46e5; border-color:#4338ca;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   UX Edit Shell — Tam ekran sol tabsheet düzeni
+   (Operation/Personnel/Routing/Machine/Shift/ActivityReason vb. edit
+   ekranları için ortak iskelet — dark + light tema uyumlu)
+   - Üst sticky action bar (geri + başlık + Kaydet/İptal/Sil)
+   - Sol sabit nav (220-260px)
+   - Sağ scroll içerik
+   - DynamicWidgetRenderer "stacked" modda gömülür; outer nav tek
+     seviyedir ("Genel Bilgiler" + "Ek Alanlar")
+   ════════════════════════════════════════════════════════════════════ */
+.ux-edit-shell {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0; overflow: hidden;
+  background: #f1f5f9;
+  color: #0f172a;
+}
+body.app-theme-dark .ux-edit-shell {
+  background: #080c17; color: #e2e8f0;
+}
+
+.ux-edit-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px 18px; flex-shrink: 0;
+  background: rgba(255,255,255,0.96);
+  border-bottom: 1px solid #e2e8f0;
+  backdrop-filter: blur(12px);
+}
+body.app-theme-dark .ux-edit-bar {
+  background: rgba(13,19,35,0.92); border-bottom-color: rgba(255,255,255,0.06);
+}
+.ux-edit-bar__left {
+  display: flex; align-items: center; gap: 14px;
+  min-width: 0; flex: 1 1 auto;
+}
+.ux-edit-bar__back {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid #e2e8f0; background: #fff;
+  color: #64748b; font-size: 12.5px; text-decoration: none;
+  transition: background .12s, color .12s, border-color .12s;
+  flex-shrink: 0;
+}
+.ux-edit-bar__back:hover { background: #f1f5f9; color: #0f172a; }
+body.app-theme-dark .ux-edit-bar__back {
+  background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1);
+  color: #94a3b8;
+}
+body.app-theme-dark .ux-edit-bar__back:hover {
+  background: rgba(255,255,255,0.08); color: #e2e8f0;
+}
+.ux-edit-bar__title {
+  font-size: 15px; font-weight: 700; margin: 0;
+  color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body.app-theme-dark .ux-edit-bar__title { color: #f1f5f9; }
+.ux-edit-bar__status {
+  font-size: 11px; font-weight: 600; padding: 3px 9px;
+  border-radius: 999px; background: rgba(16,185,129,0.14); color: #059669;
+  border: 1px solid rgba(16,185,129,0.3);
+}
+.ux-edit-bar__status--off {
+  background: rgba(148,163,184,0.18); color: #64748b;
+  border-color: rgba(148,163,184,0.3);
+}
+body.app-theme-dark .ux-edit-bar__status { color: #34d399; }
+body.app-theme-dark .ux-edit-bar__status--off { color: #94a3b8; }
+
+.ux-edit-bar__right {
+  display: flex; gap: 8px; align-items: center; flex-shrink: 0;
+}
+.ux-edit-bar__btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 7px 16px; border-radius: 8px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  border: 1px solid #e2e8f0; background: #fff; color: #475569;
+  text-decoration: none;
+  transition: background .12s, color .12s, border-color .12s, filter .12s;
+}
+.ux-edit-bar__btn:hover:not(:disabled) {
+  background: #f1f5f9; color: #0f172a; border-color: #cbd5e1;
+}
+.ux-edit-bar__btn:disabled { opacity: .55; cursor: not-allowed; }
+.ux-edit-bar__btn--primary {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border-color: #4338ca; color: #fff;
+}
+.ux-edit-bar__btn--primary:hover:not(:disabled) {
+  filter: brightness(1.08); background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff; border-color: #4338ca;
+}
+.ux-edit-bar__btn--danger {
+  background: #fff; border-color: #fecaca; color: #dc2626;
+}
+.ux-edit-bar__btn--danger:hover:not(:disabled) {
+  background: rgba(239,68,68,0.08); color: #b91c1c; border-color: #fca5a5;
+}
+body.app-theme-dark .ux-edit-bar__btn {
+  background: rgba(255,255,255,0.04); color: #cbd5e1;
+  border-color: rgba(255,255,255,0.1);
+}
+body.app-theme-dark .ux-edit-bar__btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08); color: #f1f5f9;
+}
+body.app-theme-dark .ux-edit-bar__btn--primary,
+body.app-theme-dark .ux-edit-bar__btn--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff; border-color: #4338ca;
+}
+body.app-theme-dark .ux-edit-bar__btn--danger {
+  background: rgba(239,68,68,0.12); color: #fca5a5;
+  border-color: rgba(239,68,68,0.32);
+}
+body.app-theme-dark .ux-edit-bar__btn--danger:hover:not(:disabled) {
+  background: rgba(239,68,68,0.2); color: #fecaca;
+}
+
+.ux-edit-body {
+  flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden;
+}
+.ux-edit-nav {
+  width: 240px; flex-shrink: 0;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  padding: 14px 8px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px;
+}
+body.app-theme-dark .ux-edit-nav {
+  background: rgba(15,15,26,0.45);
+  border-right-color: rgba(255,255,255,0.06);
+}
+.ux-edit-nav__group {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: #94a3b8;
+  padding: 10px 14px 4px;
+}
+.ux-edit-nav__tab {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  text-align: left; padding: 9px 13px; margin-bottom: 2px;
+  background: transparent; border: none; border-radius: 8px;
+  color: #475569; font-size: 13px; font-weight: 500; cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.ux-edit-nav__tab:hover { background: #eef2ff; color: #1e293b; }
+.ux-edit-nav__tab.is-active {
+  background: #eef2ff; color: #4338ca; font-weight: 600;
+  border-left-color: #6366f1;
+}
+.ux-edit-nav__tab:disabled { opacity: .5; cursor: not-allowed; }
+.ux-edit-nav__tab:disabled:hover { background: transparent; color: #475569; }
+.ux-edit-nav__icon { width: 15px; height: 15px; flex-shrink: 0; opacity: .8; }
+.ux-edit-nav__tab.is-active .ux-edit-nav__icon { opacity: 1; }
+.ux-edit-nav__count {
+  margin-left: auto; padding: 1px 7px; border-radius: 999px;
+  font-size: 10px; font-weight: 700;
+  background: rgba(99,102,241,0.12); color: #4338ca;
+  border: 1px solid rgba(99,102,241,0.25);
+}
+body.app-theme-dark .ux-edit-nav__tab { color: #94a3b8; }
+body.app-theme-dark .ux-edit-nav__tab:hover {
+  background: rgba(255,255,255,0.04); color: #e2e8f0;
+}
+body.app-theme-dark .ux-edit-nav__tab.is-active {
+  background: rgba(99,102,241,0.14); color: #a5b4fc;
+  border-left-color: #6366f1;
+}
+body.app-theme-dark .ux-edit-nav__count {
+  background: rgba(99,102,241,0.18); color: #a5b4fc;
+  border-color: rgba(99,102,241,0.32);
+}
+
+.ux-edit-content {
+  flex: 1 1 auto; min-width: 0; min-height: 0;
+  padding: 22px 28px 28px; overflow-y: auto;
+  background: #ffffff;
+}
+body.app-theme-dark .ux-edit-content {
+  background: #0d1323;
+}
+.ux-edit-pane { display: none; }
+.ux-edit-pane.is-active { display: block; }
+.ux-edit-pane > h2 {
+  margin: 0 0 4px; font-size: 15px; font-weight: 700; color: #0f172a;
+}
+body.app-theme-dark .ux-edit-pane > h2 { color: #f1f5f9; }
+.ux-edit-pane .ux-edit-hint {
+  font-size: 12px; color: #64748b; margin-bottom: 16px;
+}
+body.app-theme-dark .ux-edit-pane .ux-edit-hint { color: #94a3b8; }
+
+/* Form alanları — tam genişlik (max 560px input) */
+.ux-edit-pane .ux-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; max-width: 560px; }
+.ux-edit-pane .ux-field--wide { max-width: 760px; }
+.ux-edit-pane .ux-field--full { max-width: none; }
+.ux-edit-pane .ux-field > label {
+  display: block; font-size: 11px; font-weight: 700;
+  color: #64748b; letter-spacing: 0.03em; text-transform: uppercase;
+}
+body.app-theme-dark .ux-edit-pane .ux-field > label { color: #94a3b8; }
+.ux-edit-pane .ux-row2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 760px;
+}
+.ux-edit-pane .ux-row3 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; max-width: 900px;
+}
+.ux-edit-pane input[type="text"],
+.ux-edit-pane input[type="number"],
+.ux-edit-pane input[type="email"],
+.ux-edit-pane input[type="time"],
+.ux-edit-pane input[type="color"],
+.ux-edit-pane textarea,
+.ux-edit-pane select {
+  padding: 9px 12px; border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff; color: #0f172a;
+  font-size: 13.5px; outline: none; font-family: inherit;
+  transition: border-color .15s, box-shadow .15s;
+  width: 100%;
+}
+.ux-edit-pane textarea { min-height: 72px; resize: vertical; }
+.ux-edit-pane input:focus,
+.ux-edit-pane textarea:focus,
+.ux-edit-pane select:focus {
+  border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+.ux-edit-pane .is-invalid {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important;
+}
+body.app-theme-dark .ux-edit-pane input[type="text"],
+body.app-theme-dark .ux-edit-pane input[type="number"],
+body.app-theme-dark .ux-edit-pane input[type="email"],
+body.app-theme-dark .ux-edit-pane input[type="time"],
+body.app-theme-dark .ux-edit-pane textarea,
+body.app-theme-dark .ux-edit-pane select {
+  background: rgba(255,255,255,0.05); color: #e2e8f0;
+  border-color: rgba(255,255,255,0.12);
+}
+body.app-theme-dark .ux-edit-pane select { color-scheme: dark; }
+body.app-theme-dark .ux-edit-pane select > * { background: #0d1323; color: #e2e8f0; }
+
+.ux-edit-pane .ux-hint {
+  font-size: 11px; color: #94a3b8; margin-top: 4px;
+}
+
+/* Switchkey (CLAUDE.md kuralı: boolean = switch) */
+.ux-edit-pane .ux-switch-row { display: flex; align-items: center; gap: 10px; }
+.ux-edit-pane .ux-switch { position: relative; width: 42px; height: 24px; display: inline-block; flex-shrink: 0; }
+.ux-edit-pane .ux-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.ux-edit-pane .ux-switch-track {
+  position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
+  background: #e2e8f0; transition: background .2s;
+}
+.ux-edit-pane .ux-switch input:checked + .ux-switch-track { background: #10b981; }
+body.app-theme-dark .ux-edit-pane .ux-switch-track { background: rgba(255,255,255,0.12); }
+body.app-theme-dark .ux-edit-pane .ux-switch input:checked + .ux-switch-track { background: #059669; }
+.ux-edit-pane .ux-switch-track::before {
+  content: ''; position: absolute; height: 18px; width: 18px;
+  left: 3px; top: 3px; border-radius: 50%;
+  background: #fff; transition: transform .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.ux-edit-pane .ux-switch input:checked + .ux-switch-track::before { transform: translateX(18px); }
+.ux-edit-pane .ux-switch-label { font-size: 13px; font-weight: 600; color: #64748b; }
+body.app-theme-dark .ux-edit-pane .ux-switch-label { color: #94a3b8; }
+
+.ux-edit-pane .ux-err {
+  margin-top: 10px; padding: 9px 13px; border-radius: 8px; font-size: 13px;
+  background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.22);
+  max-width: 560px;
+}
+body.app-theme-dark .ux-edit-pane .ux-err { color: #f87171; }
+
+/* Dinamik widget'lar pane'de — stacked layout için container reset */
+.ux-edit-pane .ux-dyn-widgets {
+  max-width: 900px;
+}
+.ux-edit-pane .ux-dyn-empty {
+  padding: 28px; text-align: center;
+  border: 1px dashed #e2e8f0; border-radius: 10px;
+  color: #94a3b8; font-size: 13px; max-width: 560px;
+}
+body.app-theme-dark .ux-edit-pane .ux-dyn-empty {
+  border-color: rgba(255,255,255,0.1);
+}
+
+/* Iframe (panel) modunda partial tab bar gizli, ux-edit-shell zaten full kaplar */
+.workspace-frame-body .ux-edit-shell { height: 100dvh; }
+
+/* 2026-06-06: Edit ekranlarında üst sub-tab bar (Personel/Operasyon/Makine...)
+   persistent görünür. .pdt-tabs ile .ux-edit-shell sibling olduğunda
+   shell yüksekliği kalan alan kadar olur, parent flex column. */
+.workspace-frame-body:has(> .pdt-tabs) .app-content-area--workspace-frame,
+.workspace-frame-body:has(.pdt-tabs + .ux-edit-shell) .app-content-area--workspace-frame {
+  display: flex; flex-direction: column;
+  height: 100dvh; min-height: 0; overflow: hidden; padding: 0;
+}
+.pdt-tabs + .ux-edit-shell,
+.workspace-frame-body:has(.pdt-tabs) .ux-edit-shell {
+  flex: 1 1 auto; min-height: 0;
+  height: auto !important;
+}
+.pdt-tabs { flex-shrink: 0; }
+
+/* ── Silme onay modali (ortak) ── */
+.ux-modal-backdrop {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(15,23,42,0.55); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.ux-modal {
+  background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 14px; padding: 24px; width: 380px; max-width: 92vw;
+  display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.35);
+}
+body.app-theme-dark .ux-modal {
+  background: #0d1323; border-color: rgba(255,255,255,0.1);
+}
+.ux-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+.ux-modal-title {
+  font-size: 16px; font-weight: 700; text-align: center; color: #0f172a;
+}
+body.app-theme-dark .ux-modal-title { color: #f1f5f9; }
+.ux-modal-msg {
+  font-size: 13px; color: #64748b; text-align: center; line-height: 1.55;
+}
+body.app-theme-dark .ux-modal-msg { color: #94a3b8; }
+.ux-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+.ux-modal-cancel {
+  padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer;
+}
+.ux-modal-cancel:hover { background: #f1f5f9; }
+body.app-theme-dark .ux-modal-cancel {
+  background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: #cbd5e1;
+}
+.ux-modal-del {
+  padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  border: none; background: #ef4444; color: #fff; cursor: pointer;
+}
+.ux-modal-del:hover:not(:disabled) { filter: brightness(1.08); }
+.ux-modal-del:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Flash bildirim (genel) */
+.ux-flash {
+  position: fixed; top: 16px; right: 16px; z-index: 9999;
+  padding: 10px 16px; border-radius: 8px; font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+  display: none; max-width: 360px;
+}
+.ux-flash.is-show { display: block; }
+.ux-flash.ok  { background: #d1fae5; color: #065f46; }
+.ux-flash.err { background: #fee2e2; color: #991b1b; }
+body.app-theme-dark .ux-flash.ok  { background: rgba(34,197,94,.2); color: #4ade80; }
+body.app-theme-dark .ux-flash.err { background: rgba(239,68,68,.2); color: #f87171; }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GLOBAL DARK TEMA OVERRIDE'LARI
+   Hardcoded light renklere sahip bileşenlerin dark modda düzgün görünmesi için.
+   ─────────────────────────────────────────────────────────────────────────────
+   Kural: view-specific CSS class'ları bu bloğa eklenmez (her view kendi <style>
+   bloğuna body.app-theme-dark override koyar). Bu blok SADECE site.css'in ilk
+   bölümündeki genel component'leri (module-card, hero, profile menu vb.) kapsar.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Home / Dashboard — module kartlar */
+body.app-theme-dark .hero {
+  background: linear-gradient(120deg, rgba(99,102,241,.12), rgba(15,23,42,.6));
+  border-color: rgba(255,255,255,.08);
+  color: var(--app-text, #e2e8f0);
+}
+body.app-theme-dark .module-card {
+  background: var(--app-surface, #0d1323);
+  border-color: var(--app-border, rgba(255,255,255,.08));
+  color: var(--app-text, #e2e8f0);
+}
+body.app-theme-dark .module-card p { color: var(--app-text-muted, #94a3b8); }
+body.app-theme-dark .module-link {
+  background: rgba(99,102,241,.12);
+  border-color: rgba(99,102,241,.2);
+  color: #a5b4fc;
+}
+body.app-theme-dark .module-link:hover { background: rgba(99,102,241,.2); color: #c7d2fe; }
+
+/* Home page favorite link */
+body.app-theme-dark .home-favorite-link {
+  background: var(--app-surface, #0d1323);
+  border-color: var(--app-border, rgba(255,255,255,.08));
+  color: var(--app-text, #e2e8f0);
+}
+body.app-theme-dark .home-favorite-link:hover {
+  border-color: rgba(99,102,241,.4);
+  box-shadow: 0 4px 14px rgba(99,102,241,.15);
+}
+
+/* Profil menüsü action items */
+body.app-theme-dark .profile-menu-action-item { color: var(--app-text-muted, #94a3b8); }
+body.app-theme-dark .profile-menu-action-item:hover {
+  background: var(--app-muted-surface, #111827);
+  color: var(--app-text, #e2e8f0);
+}
+
+/* Generic dark table header — view'larda class-spesifik override yoksa bu devreye girer.
+   View'ların kendi .xxx-thead-th kuralları varsa bu override edilir (lower specificity). */
+body.app-theme-dark table thead th {
+  background: var(--app-muted-surface, #111827) !important;
+  color: var(--app-text-muted, #94a3b8) !important;
+  border-bottom-color: var(--app-border, rgba(255,255,255,.08)) !important;
+}
+body.app-theme-dark table tbody tr { border-bottom-color: var(--app-border, rgba(255,255,255,.05)) !important; }
+body.app-theme-dark table tbody tr:hover { background: rgba(255,255,255,.03) !important; }
+
+/* Durum mesaj kutuları — .ok / .err light renkleri dark'ta da okunabilir olsun */
+body.app-theme-dark [class*="-msg"].ok,
+body.app-theme-dark [class*="-msg"].success {
+  background: rgba(16,185,129,.12) !important;
+  border-color: rgba(16,185,129,.25) !important;
+  color: #34d399 !important;
+}
+body.app-theme-dark [class*="-msg"].err,
+body.app-theme-dark [class*="-msg"].error {
+  background: rgba(239,68,68,.12) !important;
+  border-color: rgba(239,68,68,.25) !important;
+  color: #fca5a5 !important;
+}
+
+/* ── Sidebar collapsed — TAM kapanma + floating expand FAB ────────────
+   Mevcut `app-side-collapsed` rail davranisi kaldirilir; sidebar ekran
+   disina kayar. Aciliminin yegane yolu: sol-ust kose'deki floating FAB.
+   _Layout'taki ".app-shell-expand-fab" elementi sadece collapsed durumda
+   gorunur, data-sidebar-toggle ile ayni handler'i tetikler. */
+body.app-side-collapsed .app-sidebar {
+  transform: translateX(-100%) !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  border-right: 0 !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
+  transition: transform var(--layout-motion-duration) var(--layout-motion-ease),
+              width var(--layout-motion-duration) var(--layout-motion-ease) !important;
+}
+.app-sidebar { transition: transform var(--layout-motion-duration) var(--layout-motion-ease),
+                          width var(--layout-motion-duration) var(--layout-motion-ease); }
+
+.app-shell-expand-fab {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  width: 36px;
+  height: 36px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--app-surface, #ffffff);
+  color: var(--app-text, #0f172a);
+  border: 1px solid var(--app-border, #e2e8f0);
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 1100;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  transition: background .12s, transform .12s, box-shadow .12s;
+}
+.app-shell-expand-fab:hover {
+  background: var(--theme-accent-soft, rgba(99,102,241,.12));
+  transform: scale(1.06);
+}
+.app-shell-expand-fab svg { width: 18px; height: 18px; }
+body.app-side-collapsed .app-shell-expand-fab { display: inline-flex; }
+body.app-theme-dark .app-shell-expand-fab {
+  background: #0d1323;
+  color: #e2e8f0;
+  border-color: rgba(255,255,255,.10);
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
 }

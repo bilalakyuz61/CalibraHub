@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CalibraHub — Design System Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  :root {
+    --bg-base:        #09090b;
+    --bg-elev-1:      #121214;
+    --bg-elev-2:      #18181b;
+    --bg-elev-3:      #1c1c1e;
+    --border-soft:    rgba(255,255,255,0.06);
+    --border-strong:  rgba(255,255,255,0.10);
+    --text-primary:   #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-tertiary:  #71717a;
+    --accent:         #6366f1;     /* indigo-500 */
+    --accent-hover:   #818cf8;
+    --accent-soft:    rgba(99,102,241,0.12);
+    --accent-ring:    rgba(99,102,241,0.25);
+    --success:        #10b981;
+    --warning:        #f59e0b;
+    --danger:         #ef4444;
+    --radius-md:      10px;
+    --radius-lg:      14px;
+    --radius-xl:      20px;
+    --ease:           cubic-bezier(.22,.61,.36,1);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(99,102,241,0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(16,185,129,0.05), transparent 60%),
+      var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    font-feature-settings: "cv11","ss01","ss03";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+  }
+
+  /* ── Sticky glass header ─────────────────────────────────── */
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    background: rgba(9,9,11,0.65);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .app-header-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; letter-spacing: -0.01em;
+    font-size: 15px;
+  }
+  .brand-mark {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    display: grid; place-items: center;
+    box-shadow: 0 4px 16px -4px rgba(99,102,241,0.5);
+  }
+  .brand-mark i { color: white; width: 16px; height: 16px; }
+  .header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+  /* ── Layout shell ────────────────────────────────────────── */
+  .shell { max-width: 1280px; margin: 0 auto; padding: 40px 28px 80px; }
+  .section { margin-bottom: 56px; }
+  .section-title {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin: 0 0 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::after {
+    content: ""; flex: 1; height: 1px;
+    background: linear-gradient(90deg, var(--border-soft), transparent);
+  }
+  .h1 {
+    font-size: 36px; font-weight: 600; letter-spacing: -0.025em;
+    margin: 0 0 8px;
+    background: linear-gradient(180deg, #fafafa, #a1a1aa);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede { color: var(--text-secondary); font-size: 15px; line-height: 1.6; max-width: 640px; margin: 0 0 32px; }
+
+  .grid { display: grid; gap: 16px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 880px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Cards / surfaces ───────────────────────────────────── */
+  .card {
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    transition: all .2s var(--ease);
+  }
+  .card:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
+  .card-title { font-size: 14px; font-weight: 500; margin: 0 0 4px; }
+  .card-sub   { font-size: 13px; color: var(--text-secondary); margin: 0 0 16px; }
+
+  /* ── Floating label inputs ─────────────────────────────── */
+  .field {
+    position: relative;
+    margin-bottom: 14px;
+  }
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 18px 14px 8px;
+    outline: none;
+    transition: border-color .2s var(--ease), box-shadow .2s var(--ease), background .2s var(--ease);
+  }
+  .field textarea { resize: vertical; min-height: 84px; padding-top: 22px; }
+  .field input:hover,
+  .field select:hover,
+  .field textarea:hover { border-color: var(--border-strong); }
+  .field input:focus,
+  .field select:focus,
+  .field textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-ring);
+    background: var(--bg-elev-2);
+  }
+  .field label {
+    position: absolute;
+    left: 14px;
+    top: 14px;
+    font-size: 14px;
+    color: var(--text-tertiary);
+    pointer-events: none;
+    transition: all .18s var(--ease);
+    background: transparent;
+    padding: 0 2px;
+  }
+  .field input:focus + label,
+  .field input:not(:placeholder-shown) + label,
+  .field textarea:focus + label,
+  .field textarea:not(:placeholder-shown) + label,
+  .field.filled label,
+  .field.focused label {
+    top: 4px;
+    font-size: 11px;
+    color: var(--accent-hover);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .field-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    pointer-events: none;
+  }
+
+  /* ── Buttons ────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 36px; padding: 0 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px; font-weight: 500;
+    font-family: inherit;
+    border: 1px solid var(--border-soft);
+    background: var(--bg-elev-2);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all .2s var(--ease);
+  }
+  .btn:hover { border-color: var(--border-strong); background: var(--bg-elev-3); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0) scale(.98); }
+  .btn i { width: 15px; height: 15px; }
+  .btn-primary {
+    background: var(--accent);
+    border-color: rgba(255,255,255,0.08);
+    color: white;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 6px 20px -6px rgba(99,102,241,0.6);
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-ghost { background: transparent; }
+  .btn-icon { width: 36px; padding: 0; justify-content: center; }
+  .btn-danger { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.25); color: #fca5a5; }
+  .btn-danger:hover { background: rgba(239,68,68,0.2); }
+
+  /* ── Switchkey ─────────────────────────────────────────── */
+  .switch-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+  .switch-row + .switch-row { border-top: 1px solid var(--border-soft); }
+  .switch-label { font-size: 14px; }
+  .switch-desc  { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .switch {
+    position: relative;
+    width: 38px; height: 22px;
+    background: var(--bg-elev-3);
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all .25s var(--ease);
+    flex-shrink: 0;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: #d4d4d8;
+    border-radius: 50%;
+    transition: all .25s var(--ease);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .switch.on { background: var(--accent); border-color: var(--accent); }
+  .switch.on::after { left: 18px; background: white; }
+
+  /* ── Badges ────────────────────────────────────────────── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 22px; padding: 0 8px;
+    border-radius: 6px;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .badge-success { background: rgba(16,185,129,0.12); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.2); }
+  .badge-warning { background: rgba(245,158,11,0.12); color: #fcd34d; border: 1px solid rgba(245,158,11,0.2); }
+  .badge-info    { background: rgba(99,102,241,0.12); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); }
+  .badge-slate   { background: rgba(148,163,184,0.10); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.18); }
+
+  /* ── SmartBoard header sample ──────────────────────────── */
+  .sb-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 18px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    margin-bottom: 16px;
+  }
+  .sb-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    box-shadow: 0 4px 14px -4px rgba(99,102,241,0.55);
+  }
+  .sb-icon i { color: white; width: 18px; height: 18px; }
+  .sb-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  .sb-sub   { font-size: 12px; color: var(--text-secondary); margin: 2px 0 0; }
+  .sb-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .sb-search {
+    position: relative;
+    width: 220px;
+  }
+  .sb-search input {
+    width: 100%; height: 36px;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: inherit; font-size: 13px;
+    padding: 0 12px 0 34px;
+    outline: none;
+    transition: all .2s var(--ease);
+  }
+  .sb-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring); }
+  .sb-search i {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; color: var(--text-tertiary);
+  }
+
+  /* ── SmartCard sample ──────────────────────────────────── */
+  .sc {
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    padding: 18px;
+    transition: all .2s var(--ease);
+    cursor: pointer;
+  }
+  .sc:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px -12px rgba(99,102,241,0.25);
+  }
+  .sc-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+  .sc-avatar {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: var(--bg-elev-3);
+    border: 1px solid var(--border-soft);
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .sc-avatar i { width: 18px; height: 18px; color: var(--accent-hover); }
+  .sc-title { font-size: 14px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sc-sub   { font-size: 12px; color: var(--text-secondary); margin: 2px 0 0; }
+  .sc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 24px; padding: 0 8px;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    font-size: 11px; color: var(--text-secondary);
+  }
+  .chip strong { color: var(--text-primary); font-weight: 500; }
+
+  /* ── Metric cards ──────────────────────────────────────── */
+  .metric {
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .metric::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(400px 100px at 100% 0%, var(--accent-soft), transparent 60%);
+    pointer-events: none;
+  }
+  .metric-label { font-size: 12px; color: var(--text-secondary); margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
+  .metric-label i { width: 13px; height: 13px; }
+  .metric-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+  .metric-delta { font-size: 12px; color: #6ee7b7; margin-top: 6px; display: inline-flex; align-items: center; gap: 4px; }
+  .metric-delta i { width: 12px; height: 12px; }
+
+  /* ── Modal preview (silme onayı) ──────────────────────── */
+  .modal-stage {
+    position: relative;
+    height: 320px;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background:
+      radial-gradient(600px 300px at 50% 50%, rgba(99,102,241,0.06), transparent 70%),
+      var(--bg-elev-1);
+    border: 1px solid var(--border-soft);
+  }
+  .modal-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    display: grid; place-items: center;
+  }
+  .modal-card {
+    width: 380px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    text-align: center;
+    box-shadow: 0 24px 64px -16px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  }
+  .modal-icon {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.25);
+    display: grid; place-items: center;
+    margin: 0 auto 14px;
+  }
+  .modal-icon i { width: 22px; height: 22px; color: #fca5a5; }
+  .modal-title { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
+  .modal-desc  { font-size: 13px; color: var(--text-secondary); margin: 0 0 20px; line-height: 1.5; }
+  .modal-actions { display: flex; gap: 8px; justify-content: center; }
+
+  /* ── Toast ─────────────────────────────────────────────── */
+  .toast {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--success);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    box-shadow: 0 8px 24px -8px rgba(0,0,0,0.5);
+  }
+  .toast i { width: 16px; height: 16px; color: var(--success); }
+
+  /* ── Color swatches ────────────────────────────────────── */
+  .swatch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .swatch {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .swatch-color { height: 56px; }
+  .swatch-meta { padding: 10px 12px; }
+  .swatch-name { font-size: 12px; font-weight: 500; margin: 0; }
+  .swatch-hex  { font-size: 11px; color: var(--text-tertiary); margin: 2px 0 0; font-family: 'SF Mono', ui-monospace, monospace; }
+
+  .footer {
+    margin-top: 60px; padding-top: 24px;
+    border-top: 1px solid var(--border-soft);
+    font-size: 12px; color: var(--text-tertiary);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="app-header-inner">
+    <div class="brand">
+      <div class="brand-mark"><i data-lucide="layers"></i></div>
+      CalibraHub · Design System
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-ghost"><i data-lucide="search"></i> Ara</button>
+      <button class="btn btn-ghost btn-icon" aria-label="Bildirimler"><i data-lucide="bell"></i></button>
+      <button class="btn btn-primary"><i data-lucide="plus"></i> Yeni Kayıt</button>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+
+  <div class="section">
+    <h1 class="h1">Tasarım Genetiği</h1>
+    <p class="lede">Apple / Linear / Vercel kalibresinde, koyu temada premium SaaS estetiği.
+       Floating label form'lar, glassmorphism header, mikro-etkileşimler ve Lucide ikon dili.</p>
+  </div>
+
+  <!-- METRICS -->
+  <section class="section">
+    <h2 class="section-title">Metrikler</h2>
+    <div class="grid grid-4">
+      <div class="metric">
+        <p class="metric-label"><i data-lucide="factory"></i> Aktif Makine</p>
+        <p class="metric-value">128</p>
+        <span class="metric-delta"><i data-lucide="trending-up"></i> +12 bu hafta</span>
+      </div>
+      <div class="metric">
+        <p class="metric-label"><i data-lucide="package"></i> İş Emri</p>
+        <p class="metric-value">2,847</p>
+        <span class="metric-delta"><i data-lucide="trending-up"></i> +8.4%</span>
+      </div>
+      <div class="metric">
+        <p class="metric-label"><i data-lucide="users"></i> Personel</p>
+        <p class="metric-value">96</p>
+        <span class="metric-delta"><i data-lucide="trending-up"></i> +3 yeni</span>
+      </div>
+      <div class="metric">
+        <p class="metric-label"><i data-lucide="activity"></i> Verim</p>
+        <p class="metric-value">94.2%</p>
+        <span class="metric-delta"><i data-lucide="trending-up"></i> +2.1%</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORM -->
+  <section class="section">
+    <h2 class="section-title">Form · Floating Labels</h2>
+    <div class="grid grid-2">
+      <div class="card">
+        <h3 class="card-title">Personel Tanımı</h3>
+        <p class="card-sub">Floating label, focus glow, ince border — Apple HIG hissi.</p>
+
+        <div class="field">
+          <input type="text" id="f-name" placeholder=" " />
+          <label for="f-name">Ad Soyad</label>
+        </div>
+        <div class="field">
+          <input type="email" id="f-mail" placeholder=" " value="bilal@calibrahub.com" />
+          <label for="f-mail">E-posta</label>
+        </div>
+        <div class="field">
+          <select id="f-dep">
+            <option value=""></option>
+            <option>Üretim</option>
+            <option selected>Mühendislik</option>
+            <option>Kalite Kontrol</option>
+          </select>
+          <label for="f-dep" class="filled-label">Departman</label>
+        </div>
+        <div class="field">
+          <textarea id="f-note" placeholder=" "></textarea>
+          <label for="f-note">Notlar</label>
+        </div>
+
+        <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
+          <button class="btn">Vazgeç</button>
+          <button class="btn btn-primary"><i data-lucide="check"></i> Kaydet</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="card-title">Tercihler · Switchkey</h3>
+        <p class="card-sub">Native checkbox yerine sliding thumb — track + animasyon.</p>
+
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">Aktif</div>
+            <div class="switch-desc">Kayıt sistem geneline açıktır</div>
+          </div>
+          <div class="switch on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">Makine Parkı</div>
+            <div class="switch-desc">Üretim hattında çalışır</div>
+          </div>
+          <div class="switch on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">Otomatik Senkronizasyon</div>
+            <div class="switch-desc">ERP entegrasyonuna açık</div>
+          </div>
+          <div class="switch" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="switch-row">
+          <div>
+            <div class="switch-label">E-posta Bildirimi</div>
+            <div class="switch-desc">Durum değişikliklerinde mail at</div>
+          </div>
+          <div class="switch on" onclick="this.classList.toggle('on')"></div>
+        </div>
+
+        <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border-soft);">
+          <div class="toast">
+            <i data-lucide="check-circle-2"></i>
+            Ayarlar otomatik kaydediliyor
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUTONLAR -->
+  <section class="section">
+    <h2 class="section-title">Butonlar</h2>
+    <div class="card" style="display:flex; flex-wrap:wrap; gap:12px;">
+      <button class="btn btn-primary"><i data-lucide="zap"></i> Primary Action</button>
+      <button class="btn"><i data-lucide="download"></i> Secondary</button>
+      <button class="btn btn-ghost"><i data-lucide="filter"></i> Ghost</button>
+      <button class="btn btn-danger"><i data-lucide="trash-2"></i> Destructive</button>
+      <button class="btn btn-icon" aria-label="Ayarlar"><i data-lucide="settings"></i></button>
+      <button class="btn btn-icon" aria-label="Yenile"><i data-lucide="refresh-cw"></i></button>
+      <button class="btn"><i data-lucide="arrow-right"></i> Devam Et</button>
+    </div>
+  </section>
+
+  <!-- SMARTBOARD HEADER + CARDS -->
+  <section class="section">
+    <h2 class="section-title">SmartBoard · C-Grid Header + Kartlar</h2>
+
+    <div class="sb-header">
+      <div class="sb-icon"><i data-lucide="cog"></i></div>
+      <div>
+        <h3 class="sb-title">Makine Tanımlamaları</h3>
+        <p class="sb-sub">3 makine</p>
+      </div>
+      <div class="sb-tools">
+        <div class="sb-search">
+          <i data-lucide="search"></i>
+          <input type="text" placeholder="Hızlı ara…" />
+        </div>
+        <button class="btn btn-icon" aria-label="Filtre"><i data-lucide="sliders-horizontal"></i></button>
+        <button class="btn btn-icon" aria-label="Excel"><i data-lucide="download"></i></button>
+        <button class="btn btn-icon" aria-label="Widget"><i data-lucide="settings-2"></i></button>
+        <button class="btn btn-primary"><i data-lucide="plus"></i> Yeni Makine</button>
+      </div>
+    </div>
+
+    <div class="grid grid-3">
+      <div class="sc">
+        <div class="sc-top">
+          <div class="sc-avatar"><i data-lucide="cog"></i></div>
+          <div style="flex:1; min-width:0;">
+            <h4 class="sc-title">CNC Tezgah #1</h4>
+            <p class="sc-sub">MAC-A8F12C · Hat 1</p>
+          </div>
+          <span class="badge badge-success">Aktif</span>
+        </div>
+        <div class="sc-chips">
+          <span class="chip">Verim <strong>96.4%</strong></span>
+          <span class="chip">Vardiya <strong>3</strong></span>
+          <span class="chip">Operatör <strong>2</strong></span>
+        </div>
+      </div>
+
+      <div class="sc">
+        <div class="sc-top">
+          <div class="sc-avatar"><i data-lucide="cpu"></i></div>
+          <div style="flex:1; min-width:0;">
+            <h4 class="sc-title">Lazer Kesim</h4>
+            <p class="sc-sub">MAC-B3D77E · Hat 2</p>
+          </div>
+          <span class="badge badge-warning">Bakım</span>
+        </div>
+        <div class="sc-chips">
+          <span class="chip">Verim <strong>0%</strong></span>
+          <span class="chip">Vardiya <strong>—</strong></span>
+          <span class="chip">Süre <strong>2s 14d</strong></span>
+        </div>
+      </div>
+
+      <div class="sc">
+        <div class="sc-top">
+          <div class="sc-avatar"><i data-lucide="boxes"></i></div>
+          <div style="flex:1; min-width:0;">
+            <h4 class="sc-title">Paketleme Hattı</h4>
+            <p class="sc-sub">MAC-C9E20B · Sevkiyat</p>
+          </div>
+          <span class="badge badge-info">Çalışıyor</span>
+        </div>
+        <div class="sc-chips">
+          <span class="chip">Verim <strong>89.1%</strong></span>
+          <span class="chip">Vardiya <strong>2</strong></span>
+          <span class="chip">Çıktı <strong>1.4k/sa</strong></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODAL -->
+  <section class="section">
+    <h2 class="section-title">Silme Onayı · Custom Modal</h2>
+    <div class="modal-stage">
+      <div class="modal-backdrop">
+        <div class="modal-card">
+          <div class="modal-icon"><i data-lucide="trash-2"></i></div>
+          <h3 class="modal-title">Kaydı silmek istiyor musunuz?</h3>
+          <p class="modal-desc">
+            <strong style="color:#f4f4f5">"Lazer Kesim"</strong> makinesi ve bağlı tüm tanımlamalar
+            silinecek. Bu işlem geri alınamaz.
+          </p>
+          <div class="modal-actions">
+            <button class="btn">Vazgeç</button>
+            <button class="btn btn-danger"><i data-lucide="trash-2"></i> Evet, Sil</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PALETTE -->
+  <section class="section">
+    <h2 class="section-title">Palet</h2>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="swatch-color" style="background:#09090b"></div><div class="swatch-meta"><p class="swatch-name">Base</p><p class="swatch-hex">#09090b</p></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#121214"></div><div class="swatch-meta"><p class="swatch-name">Elev 1</p><p class="swatch-hex">#121214</p></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#18181b"></div><div class="swatch-meta"><p class="swatch-name">Elev 2</p><p class="swatch-hex">#18181b</p></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#1c1c1e"></div><div class="swatch-meta"><p class="swatch-name">Elev 3</p><p class="swatch-hex">#1c1c1e</p></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#6366f1"></div><div class="swatch-meta"><p class="swatch-name">Accent</p><p class="swatch-hex">#6366f1</p></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#10b981"></div><div class="swatch-meta"><p class="swatch-name">Success</p><p class="swatch-hex">#10b981</p></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#f59e0b"></div><div class="swatch-meta"><p class="swatch-name">Warning</p><p class="swatch-hex">#f59e0b</p></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#ef4444"></div><div class="swatch-meta"><p class="swatch-name">Danger</p><p class="swatch-hex">#ef4444</p></div></div>
+    </div>
+  </section>
+
+  <div class="footer">
+    <span>CalibraHub · Apple / Linear / Vercel kalibresi</span>
+    <span>Inter · Lucide · backdrop-blur</span>
+  </div>
+
+</main>
+
+<script>
+  // Lucide ikonlarını render et
+  if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': 1.5 } });
+
+  // Floating label için select gibi placeholder-shown'ı desteklemeyen alanları manuel işaretle
+  document.querySelectorAll('select').forEach(s => {
+    const f = s.closest('.field');
+    const set = () => f.classList.toggle('filled', !!s.value);
+    s.addEventListener('change', set); set();
+  });
+</script>
+
+</body>
+</html>

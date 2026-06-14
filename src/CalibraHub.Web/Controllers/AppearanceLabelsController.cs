@@ -25,10 +25,10 @@ public sealed class AppearanceLabelsController : Controller
         _uiConfigurationService = uiConfigurationService;
     }
 
-    private Guid? GetCurrentUserId()
+    private int? GetCurrentUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(rawUserId, out var userId) ? userId : null;
+        return int.TryParse(rawUserId, out var userId) ? userId : null;
     }
 
     [HttpGet("/Admin/GetAppearanceFormDataJson")]

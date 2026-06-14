@@ -1,3 +1,4 @@
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Infrastructure.Collaboration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -86,7 +87,13 @@ public sealed class LocksController : Controller
             searchPlaceholder = "Kullanıcı veya kayıt ara…",
             emptyText         = "Şu an aktif kilit bulunmuyor",
             actions           = Array.Empty<object>(),
-            masterWidgets     = Array.Empty<object>(),
+            masterWidgets = new List<object>
+            {
+                SmartBoardFilterHelpers.MakeStdWidget("w_type", "Modül",         "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_rec",  "Kayıt ID",      "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_acq",  "Kilit Zamanı",  "text"),
+                SmartBoardFilterHelpers.MakeStdWidget("w_hb",   "Son Heartbeat", "text"),
+            },
             entities,
         };
     }

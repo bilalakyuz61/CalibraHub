@@ -56,12 +56,18 @@ public interface IGuideRepository
     /// search non-empty ise CAST(...) COLLATE Turkish_CI_AI LIKE %search% filtresi
     /// uygulanir — kullanici popover'in arama kutusuna yazinca alfabetik kuyrukta
     /// kalmis degerler de bulunabilir.
+    ///
+    /// constraints — SearchAsync ile ayni WHERE fragment'lari (rawSql, eq, in, ...).
+    /// Distinct popover'i listede gosterilen satirlarla tutarli olsun diye ayni
+    /// WHERE altinda hesaplanir. guide.DefaultFilterJson her zaman AND ile prepend
+    /// edilir (SearchAsync ile birebir davranis).
     /// </summary>
     Task<IReadOnlyCollection<string>> GetDistinctValuesAsync(
         GuideDefinition guide,
         string column,
         string? search,
-        CancellationToken ct);
+        CancellationToken ct,
+        IReadOnlyCollection<GuideConstraintDto>? constraints = null);
 
     /// <summary>
     /// DB'deki cbv_Guide_% pattern'ine uyan tum SQL view'lari listeler.

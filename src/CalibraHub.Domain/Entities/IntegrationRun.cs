@@ -40,4 +40,11 @@ public sealed class IntegrationRun
 
     /// <summary>Manuel icin kullanici adi/email; cron/event icin "system".</summary>
     public string? TriggeredBy { get; set; }
+
+    /// <summary>
+    /// 2026-05-22 Cascade: Bir run baska bir run tarafindan cascade yoluyla tetiklendiyse
+    /// parent'in RunId'si. NULL = top-level run (manuel/cron/onsave/event).
+    /// Run logunda parent expand → child run'lar agac olarak gosterilir.
+    /// </summary>
+    public long? ParentRunId { get; set; }
 }

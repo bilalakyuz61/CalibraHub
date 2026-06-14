@@ -123,7 +123,6 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
         cmd.CommandText = $"""
             SELECT [id],[max_per_minute],[max_per_hour],[max_per_day],[max_per_recipient_per_day],
                    [min_delay_seconds],[max_delay_seconds],
-                   [respect_quiet_hours],[quiet_hours_start_hour],[quiet_hours_end_hour],
                    [max_consecutive_failures],[failure_cooldown_minutes],
                    [warmup_days],[warmup_max_per_day],[max_identical_messages_per_day],
                    [Created],[Updated]
@@ -140,16 +139,13 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
             MaxPerRecipientPerDay       = r.GetInt32(4),
             MinDelaySeconds             = r.GetInt32(5),
             MaxDelaySeconds             = r.GetInt32(6),
-            RespectQuietHours           = r.GetBoolean(7),
-            QuietHoursStartHour         = r.GetInt32(8),
-            QuietHoursEndHour           = r.GetInt32(9),
-            MaxConsecutiveFailures      = r.GetInt32(10),
-            FailureCooldownMinutes      = r.GetInt32(11),
-            WarmupDays                  = r.GetInt32(12),
-            WarmupMaxPerDay             = r.GetInt32(13),
-            MaxIdenticalMessagesPerDay  = r.GetInt32(14),
-            CreatedAt                   = r.GetDateTime(15),
-            UpdatedAt                   = r.GetDateTime(16),
+            MaxConsecutiveFailures      = r.GetInt32(7),
+            FailureCooldownMinutes      = r.GetInt32(8),
+            WarmupDays                  = r.GetInt32(9),
+            WarmupMaxPerDay             = r.GetInt32(10),
+            MaxIdenticalMessagesPerDay  = r.GetInt32(11),
+            CreatedAt                   = r.GetDateTime(12),
+            UpdatedAt                   = r.GetDateTime(13),
         };
     }
 
@@ -163,7 +159,6 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
                     [max_per_minute]=@MaxMin, [max_per_hour]=@MaxHour, [max_per_day]=@MaxDay,
                     [max_per_recipient_per_day]=@MaxRcpDay,
                     [min_delay_seconds]=@MinDelay, [max_delay_seconds]=@MaxDelay,
-                    [respect_quiet_hours]=@RespectQH, [quiet_hours_start_hour]=@QHStart, [quiet_hours_end_hour]=@QHEnd,
                     [max_consecutive_failures]=@MaxFail, [failure_cooldown_minutes]=@CDMin,
                     [warmup_days]=@WarmDays, [warmup_max_per_day]=@WarmMax,
                     [max_identical_messages_per_day]=@MaxIdent,
@@ -173,13 +168,11 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
                 INSERT INTO {_table}
                     ([id],[max_per_minute],[max_per_hour],[max_per_day],[max_per_recipient_per_day],
                      [min_delay_seconds],[max_delay_seconds],
-                     [respect_quiet_hours],[quiet_hours_start_hour],[quiet_hours_end_hour],
                      [max_consecutive_failures],[failure_cooldown_minutes],
                      [warmup_days],[warmup_max_per_day],[max_identical_messages_per_day],
                      [Created],[Updated])
                 VALUES (1,@MaxMin,@MaxHour,@MaxDay,@MaxRcpDay,@MinDelay,@MaxDelay,
-                        @RespectQH,@QHStart,@QHEnd,@MaxFail,@CDMin,
-                        @WarmDays,@WarmMax,@MaxIdent,GETUTCDATE(),GETUTCDATE());
+                        @MaxFail,@CDMin,@WarmDays,@WarmMax,@MaxIdent,GETUTCDATE(),GETUTCDATE());
             """;
         cmd.Parameters.Add(new SqlParameter("@MaxMin",     rules.MaxPerMinute));
         cmd.Parameters.Add(new SqlParameter("@MaxHour",    rules.MaxPerHour));
@@ -187,9 +180,6 @@ public sealed class SqlWhatsAppSafetyRulesRepository : IWhatsAppSafetyRulesRepos
         cmd.Parameters.Add(new SqlParameter("@MaxRcpDay",  rules.MaxPerRecipientPerDay));
         cmd.Parameters.Add(new SqlParameter("@MinDelay",   rules.MinDelaySeconds));
         cmd.Parameters.Add(new SqlParameter("@MaxDelay",   rules.MaxDelaySeconds));
-        cmd.Parameters.Add(new SqlParameter("@RespectQH",  rules.RespectQuietHours));
-        cmd.Parameters.Add(new SqlParameter("@QHStart",    rules.QuietHoursStartHour));
-        cmd.Parameters.Add(new SqlParameter("@QHEnd",      rules.QuietHoursEndHour));
         cmd.Parameters.Add(new SqlParameter("@MaxFail",    rules.MaxConsecutiveFailures));
         cmd.Parameters.Add(new SqlParameter("@CDMin",      rules.FailureCooldownMinutes));
         cmd.Parameters.Add(new SqlParameter("@WarmDays",   rules.WarmupDays));

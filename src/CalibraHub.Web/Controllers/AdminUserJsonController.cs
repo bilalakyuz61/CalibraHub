@@ -150,7 +150,7 @@ public sealed class AdminUserJsonController : Controller
     public async Task<IActionResult> UpdateAdminUserJson(
         [FromBody] UserUpdateInput input, CancellationToken cancellationToken)
     {
-        if (input.Id == Guid.Empty)
+        if (input.Id <= 0)
             return Json(new { success = false, message = "Kullanici Id zorunlu." });
         if (!input.CompanyId.HasValue)
             return Json(new { success = false, message = "Sirket secimi zorunludur." });

@@ -119,7 +119,7 @@ public sealed class GatePasswordService : IGatePasswordService
             PasswordHash      = PasswordHasher.Hash(initial),
             LastChangedAt     = DateTime.UtcNow,
             LastChangedFromIp = null,
-            CreatedAt         = DateTime.UtcNow,
+            Created           = DateTime.UtcNow,
         };
         await _repo.SaveAsync(record, cancellationToken);
     }

@@ -11,6 +11,6 @@ public sealed class Field : Entity
     public bool IsVisible { get; init; } = true;
     public bool IsRequired { get; init; }
     public int DisplayOrder { get; init; }
-    public DateTime CreatedAt { get; init; } = DateTime.Now;
-    public DateTime UpdatedAt { get; init; } = DateTime.Now;
+    public DateTime Created { get; init; } = DateTime.Now;
+    public DateTime Updated { get; init; } = DateTime.Now;
 }

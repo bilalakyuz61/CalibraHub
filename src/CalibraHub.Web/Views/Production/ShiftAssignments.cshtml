@@ -1,0 +1,316 @@
+@using CalibraHub.Application.Contracts
+@{
+    ViewData["Title"] = "Vardiya Atamaları";
+    ViewData["BodyClass"] = "page-shift-assignments";
+
+    var personnel    = ViewBag.Personnel    as IReadOnlyCollection<PersonnelDto> ?? Array.Empty<PersonnelDto>();
+    var shifts       = ViewBag.Shifts       as IReadOnlyCollection<ShiftDto>     ?? Array.Empty<ShiftDto>();
+    var assignments  = ViewBag.Assignments  as IEnumerable<ShiftAssignmentDto>   ?? Array.Empty<ShiftAssignmentDto>();
+
+    // Personnel.Id + DayOfWeek -> Assignment lookup (UI hücrelerinde tek atama)
+    var assignmentMap = assignments
+        .Where(a => a.IsActive)
+        .GroupBy(a => (a.PersonnelId, a.DayOfWeek))
+        .ToDictionary(g => g.Key, g => g.First());
+
+    // Türkçe gün başlıkları — DayOfWeek 0=Pazar..6=Cumartesi (Şirket vardiya akışı Pzt'den başlasın)
+    var weekOrder = new[]
+    {
+        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
+        DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
+    };
+    var dayLabels = new Dictionary<DayOfWeek, string>
+    {
+        [DayOfWeek.Monday]    = "Pzt",
+        [DayOfWeek.Tuesday]   = "Sal",
+        [DayOfWeek.Wednesday] = "Çar",
+        [DayOfWeek.Thursday]  = "Per",
+        [DayOfWeek.Friday]    = "Cum",
+        [DayOfWeek.Saturday]  = "Cmt",
+        [DayOfWeek.Sunday]    = "Paz",
+    };
+}
+
+<partial name="_ProductionDefsTabs" model='"shifts"' />
+
+<style>
+    .sa-page { padding: 16px 24px; color: var(--theme-text, #e2e8f0); }
+    .sa-toolbar { display:flex; gap:8px; align-items:center; padding-bottom:10px; border-bottom:1px solid rgba(148,163,184,.2); margin-bottom:14px; flex-wrap:wrap; }
+    .sa-toolbar h1 { font-size:18px; margin:0; flex:1; }
+    .sa-btn { padding:7px 14px; border-radius:7px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.05); color:inherit; font-size:13px; font-weight:500; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+    .sa-btn:hover { background:rgba(255,255,255,.08); border-color:rgba(99,102,241,.5); }
+    .sa-hint { font-size:12px; color:rgba(148,163,184,.7); margin-bottom:14px; }
+
+    .sa-grid-wrap {
+        border:1px solid rgba(148,163,184,.2); border-radius:8px;
+        overflow:auto; max-height: calc(100vh - 220px);
+        background: rgba(255,255,255,.02);
+    }
+    .sa-table { width:100%; border-collapse: collapse; font-size:13px; }
+    .sa-table thead { position: sticky; top: 0; z-index: 2; background: rgba(15,20,36,0.95); backdrop-filter: blur(4px); }
+    .sa-table th, .sa-table td {
+        padding: 10px 8px; text-align:center; vertical-align: middle;
+        border-bottom: 1px solid rgba(148,163,184,.1);
+        border-right:  1px solid rgba(148,163,184,.08);
+    }
+    .sa-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color:rgba(148,163,184,.85); font-weight: 600; }
+    .sa-table th.col-personnel, .sa-table td.col-personnel {
+        text-align:left; min-width:220px; padding-left:14px;
+        position: sticky; left:0; background: rgba(15,20,36,0.92);
+        border-right: 1px solid rgba(99,102,241,.2);
+    }
+    .sa-personnel-name { font-weight:600; }
+    .sa-personnel-meta { font-size:11px; color:rgba(148,163,184,.7); margin-top:1px; }
+
+    .sa-cell {
+        display:inline-flex; align-items:center; justify-content:center;
+        padding: 6px 10px; border-radius: 999px;
+        font-size:12px; font-weight:500;
+        background: rgba(255,255,255,.03); color:rgba(148,163,184,.6);
+        border: 1px dashed rgba(148,163,184,.15);
+        cursor:pointer; min-width:64px; min-height:30px;
+        transition: background .12s, border-color .12s;
+    }
+    .sa-cell:hover { background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.45); border-style:solid; color:#a5b4fc; }
+    .sa-cell.is-assigned { border-style: solid; background: rgba(99,102,241,.18); color:#a5b4fc; border-color: rgba(99,102,241,.45); }
+    .sa-cell .sa-cell-clear {
+        margin-left: 6px; opacity: 0; transition: opacity .12s;
+        font-size:11px; padding: 0 4px; border-radius: 999px;
+        background: rgba(239,68,68,.25); color:#fca5a5;
+    }
+    .sa-cell.is-assigned:hover .sa-cell-clear { opacity: 1; }
+
+    /* Mini vardiya seçim popover */
+    .sa-pop-backdrop { position:fixed; inset:0; z-index: 999; background: rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding: 20px; }
+    .sa-pop {
+        width: min(420px, 100%); background:#0f1424; border:1px solid rgba(99,102,241,.35);
+        border-radius:12px; box-shadow: 0 12px 40px rgba(0,0,0,.6); color:#e5e7eb;
+        padding: 14px 16px;
+    }
+    .sa-pop h3 { margin: 0 0 4px; font-size: 15px; }
+    .sa-pop .sa-pop-sub { font-size: 12px; color: rgba(148,163,184,.7); margin-bottom: 12px; }
+    .sa-pop-list { display:flex; flex-direction:column; gap:6px; max-height: 50vh; overflow:auto; }
+    .sa-pop-list button {
+        display:flex; align-items:center; gap:10px; padding: 9px 12px;
+        background: rgba(255,255,255,.04); color:inherit;
+        border: 1px solid rgba(255,255,255,.08); border-radius: 6px;
+        cursor:pointer; text-align:left;
+    }
+    .sa-pop-list button:hover { background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.45); }
+    .sa-pop-list .sa-color-dot { width:10px; height:10px; border-radius:50%; flex:0 0 auto; }
+    .sa-pop-list .sa-meta { margin-left:auto; font-size:11px; color:rgba(148,163,184,.7); font-family:monospace; }
+    .sa-pop-actions { display:flex; gap:8px; justify-content:flex-end; margin-top: 12px; }
+
+    .sa-msg { padding:8px 14px; border-radius:8px; font-size:13px; margin:10px 0; display:none; }
+    .sa-msg.ok  { background:rgba(34,197,94,.12); color:#4ade80; border:1px solid rgba(34,197,94,.4); }
+    .sa-msg.err { background:rgba(239,68,68,.12); color:#f87171; border:1px solid rgba(239,68,68,.4); }
+</style>
+
+<div class="sa-page">
+    <div class="sa-toolbar">
+        <a class="sa-btn" href="/Production/Shifts">← Vardiya Tanımları</a>
+        <span style="flex:1"></span>
+        <h1>Vardiya Atamaları</h1>
+    </div>
+
+    <div class="sa-hint">
+        Bir hücreye tıklayın → vardiya seçin. Tekrar tıklayarak vardiyayı değiştirin. Atamayı kaldırmak için
+        atanmış chip üzerine geldiğinde sağdaki <strong style="color:#fca5a5;">×</strong> butonuna tıklayın.
+    </div>
+
+    <div id="msg" class="sa-msg"></div>
+
+    @if (personnel.Count == 0)
+    {
+        <div style="padding:40px; text-align:center; color: rgba(148,163,184,.7); font-size:14px;">
+            Henüz aktif personel yok. <a href="/Production/Personnel" style="color:#a5b4fc;">Personel ekle</a> →
+        </div>
+    }
+    else if (shifts.Count == 0)
+    {
+        <div style="padding:40px; text-align:center; color: rgba(148,163,184,.7); font-size:14px;">
+            Henüz vardiya tanımlı değil. <a href="/Production/ShiftEdit" style="color:#a5b4fc;">Vardiya ekle</a> →
+        </div>
+    }
+    else
+    {
+        <div class="sa-grid-wrap">
+            <table class="sa-table">
+                <thead>
+                    <tr>
+                        <th class="col-personnel">Personel</th>
+                        @foreach (var d in weekOrder)
+                        {
+                            <th>@dayLabels[d]</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in personnel.OrderBy(x => x.FullName))
+                    {
+                        <tr data-personnel-id="@p.Id" data-personnel-name="@p.FullName">
+                            <td class="col-personnel">
+                                <div class="sa-personnel-name">@p.FullName</div>
+                                @if (!string.IsNullOrWhiteSpace(p.Department) || !string.IsNullOrWhiteSpace(p.Title))
+                                {
+                                    <div class="sa-personnel-meta">
+                                        @(string.Join(" · ", new[] { p.Title, p.Department }.Where(x => !string.IsNullOrWhiteSpace(x))))
+                                    </div>
+                                }
+                            </td>
+                            @foreach (var d in weekOrder)
+                            {
+                                ShiftAssignmentDto? cur = null;
+                                assignmentMap.TryGetValue((p.Id, d), out cur);
+                                <td data-day="@((byte)d)">
+                                    @if (cur is null)
+                                    {
+                                        <button type="button" class="sa-cell" data-action="pick"
+                                                data-personnel-id="@p.Id" data-day="@((byte)d)"
+                                                title="Vardiya ata">
+                                            + ata
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="sa-cell is-assigned" data-action="pick"
+                                                data-personnel-id="@p.Id" data-day="@((byte)d)"
+                                                data-assignment-id="@cur.Id"
+                                                data-shift-id="@cur.ShiftId"
+                                                title="@cur.ShiftName">
+                                            @cur.ShiftCode
+                                            <span class="sa-cell-clear" data-action="clear"
+                                                  data-assignment-id="@cur.Id" title="Atamayı kaldır">×</span>
+                                        </button>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var msg = document.getElementById('msg');
+    function notify(text, ok) {
+        msg.textContent = text;
+        msg.className = 'sa-msg ' + (ok ? 'ok' : 'err');
+        msg.style.display = 'block';
+        if (ok) setTimeout(function () { msg.style.display = 'none'; }, 2200);
+    }
+    function token() {
+        return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    }
+
+    // Shift sözlüğü (Razor'dan inline JSON)
+    var SHIFTS = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        shifts.Select(s => new { id = s.Id, code = s.Code, name = s.Name,
+                                  startTime = s.StartTime, endTime = s.EndTime,
+                                  isOvernight = s.IsOvernight, colorHex = s.ColorHex }),
+        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
+
+    function openShiftPicker(personnelId, personnelName, day, currentShiftId) {
+        var bd = document.createElement('div');
+        bd.className = 'sa-pop-backdrop';
+        var listHtml = SHIFTS.map(function (s) {
+            var color = s.colorHex || '#8b5cf6';
+            var current = currentShiftId === s.id ? ' style="border-color: rgba(99,102,241,.7); background:rgba(99,102,241,.18);"' : '';
+            return '<button type="button" data-shift-id="' + s.id + '"' + current + '>'
+                + '<span class="sa-color-dot" style="background:' + color + ';"></span>'
+                + '<span><strong>' + escHtml(s.code) + '</strong> · ' + escHtml(s.name) + '</span>'
+                + '<span class="sa-meta">' + escHtml(s.startTime) + ' - ' + escHtml(s.endTime)
+                + (s.isOvernight ? ' (gece)' : '') + '</span>'
+                + '</button>';
+        }).join('');
+        var dayLabels = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+        bd.innerHTML = '<div class="sa-pop">'
+            + '<h3>Vardiya Ata</h3>'
+            + '<div class="sa-pop-sub">' + escHtml(personnelName) + ' · ' + dayLabels[day] + '</div>'
+            + '<div class="sa-pop-list">' + listHtml + '</div>'
+            + '<div class="sa-pop-actions">'
+            +   '<button type="button" class="sa-btn" id="sa-pop-cancel">Vazgeç</button>'
+            + '</div>'
+            + '</div>';
+        document.body.appendChild(bd);
+
+        function close() { document.body.removeChild(bd); }
+        bd.querySelector('#sa-pop-cancel').addEventListener('click', close);
+        bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+        bd.querySelectorAll('button[data-shift-id]').forEach(function (b) {
+            b.addEventListener('click', async function () {
+                var shiftId = parseInt(b.getAttribute('data-shift-id'), 10);
+                close();
+                await saveAssignment(personnelId, day, shiftId);
+            });
+        });
+    }
+
+    async function saveAssignment(personnelId, day, shiftId) {
+        try {
+            var r = await fetch('/Production/SaveShiftAssignment', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({
+                    id: null,
+                    personnelId: personnelId,
+                    shiftId: shiftId,
+                    dayOfWeek: day,
+                    effectiveFrom: null,
+                    effectiveTo: null,
+                    isActive: true
+                })
+            });
+            var d = await r.json();
+            if (!d.ok) { notify(d.error || 'Atama kaydedilemedi.', false); return; }
+            notify('Atama kaydedildi.', true);
+            location.reload();
+        } catch (e) { notify('Hata: ' + e.message, false); }
+    }
+
+    async function clearAssignment(assignmentId) {
+        if (!confirm('Bu atamayı kaldırmak istediğinize emin misiniz?')) return;
+        try {
+            var r = await fetch('/Production/DeleteShiftAssignment/' + assignmentId, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': token() }
+            });
+            var d = await r.json();
+            if (!d.ok) { notify(d.error || 'Silinemedi.', false); return; }
+            notify('Atama kaldırıldı.', true);
+            location.reload();
+        } catch (e) { notify('Hata: ' + e.message, false); }
+    }
+
+    function escHtml(s) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(s == null ? '' : String(s)));
+        return d.innerHTML;
+    }
+
+    // Hücre tıklama — clear butonuna mı yoksa hücreye mi?
+    document.querySelectorAll('.sa-cell[data-action="pick"]').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            // Sağdaki × tıklandıysa silmedeki event'i ayır
+            var clearTarget = e.target.closest('[data-action="clear"]');
+            if (clearTarget) {
+                e.stopPropagation();
+                clearAssignment(parseInt(clearTarget.getAttribute('data-assignment-id'), 10));
+                return;
+            }
+            var personnelId = parseInt(btn.getAttribute('data-personnel-id'), 10);
+            var day         = parseInt(btn.getAttribute('data-day'), 10);
+            var currentShiftId = btn.getAttribute('data-shift-id');
+            var personnelName  = btn.closest('tr')?.getAttribute('data-personnel-name') || '';
+            openShiftPicker(personnelId, personnelName, day,
+                currentShiftId ? parseInt(currentShiftId, 10) : null);
+        });
+    });
+})();
+</script>
+@Html.AntiForgeryToken()
+}

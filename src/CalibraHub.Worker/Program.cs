@@ -146,6 +146,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IIntegratorImportLogRepository, SqlPltSystemLogRepository>();
         services.AddScoped<INoteRepository, SqlNoteRepository>();
         services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
+        services.AddScoped<IAssetRepository, SqlAssetRepository>();
         services.AddScoped<CalibraHub.Application.Abstractions.Services.IReminderEmailSender,
                            CalibraHub.Infrastructure.Notifications.SmtpReminderEmailSender>();
         services.AddScoped<IScheduledTaskRepository, SqlScheduledTaskRepository>();
@@ -206,6 +207,20 @@ var host = Host.CreateDefaultBuilder(args)
 
         services.AddHostedService<DocumentImportWorker>();
         services.AddHostedService<ReminderNotificationWorker>();
+        services.AddHostedService<AssetMaintenanceReminderWorker>();
+
+        // Approval SLA — Step node SLA tetikleyici worker'i + bagli servisler.
+        services.AddScoped<IApprovalFlowRepository, SqlApprovalFlowRepository>();
+        services.AddScoped<IApprovalInstanceRepository, SqlApprovalInstanceRepository>();
+        services.AddScoped<IApprovalFlowService, ApprovalFlowService>();
+        services.AddScoped<
+            CalibraHub.Application.Services.Approval.IApprovalNotificationDispatcher,
+            CalibraHub.Application.Services.Approval.ApprovalNotificationDispatcher>();
+        // Faz 4 — Runtime executor Worker'da kayitli degil (DocumentContextProvider'in
+        // bagimliliklari Worker tarafinda yok). ApprovalFlowService executor null gorse
+        // bile graceful: SLA otomatik onay/red yine calisir, graph-aware decision/notif
+        // node'lari Worker tarafinda devre disi (Web'de aktif).
+        services.AddHostedService<SlaCheckerWorker>();
         services.AddScoped<ICurrencyRepository, SqlCurrencyRepository>();
         services.AddScoped<IExchangeRateRepository, SqlExchangeRateRepository>();
         services.AddScoped<ICurrencyService, CurrencyService>();

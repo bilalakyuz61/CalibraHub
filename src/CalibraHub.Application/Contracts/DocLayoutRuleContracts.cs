@@ -8,7 +8,7 @@ public sealed record DocLayoutRuleMatchRow(
     int Id,
     int LayoutId,
     int? CustomerId,
-    Guid? UserId,
+    int? UserId,
     int? BranchId,
     int? WarehouseId,
     DateTime UpdatedAt,
@@ -19,29 +19,33 @@ public sealed record DocLayoutRuleMatchRow(
 /// </summary>
 public sealed record DocLayoutRuleDto(
     int Id,
-    string DocType,
+    string? DocType,
     string DocTypeLabel,
     int LayoutId,
     string LayoutName,
     int? CustomerId,
-    Guid? UserId,
+    int? UserId,
     int? BranchId,
     int? WarehouseId,
     bool IsActive,
     int Weight,
     DateTime UpdatedAt,
-    int? ContactGroupId = null);
+    int? ContactGroupId = null,
+    int? DocumentTypeId = null);
 
 /// <summary>
 /// Kural kaydetme isteği. NULLable kriterler = "wildcard" (tüm değerler için).
+/// DocType (legacy) + DocumentTypeId (yeni FK) birlikte yazilir; runtime DocType
+/// kullanmaya devam eder.
 /// </summary>
 public sealed record SaveDocLayoutRuleRequest(
     int Id,
-    string DocType,
+    string? DocType,
     int LayoutId,
     int? CustomerId,
-    Guid? UserId,
+    int? UserId,
     int? BranchId,
     int? WarehouseId,
     bool IsActive = true,
-    int? ContactGroupId = null);
+    int? ContactGroupId = null,
+    int? DocumentTypeId = null);

@@ -59,7 +59,7 @@ public sealed class IntegrationTestSeedController : Controller
                 BodySchema = "{ \"belgeNo\": \"\", \"cariKod\": \"\", \"tutar\": 0 }",
                 Description = "E2E smoke test echo endpoint (httpbin.org echolar request body'sini)",
                 IsActive = true,
-                CreatedBy = User?.Identity?.Name ?? "test",
+                // Test seed — CreatedById = null.
             }, ct);
 
             // 3) Integration
@@ -71,7 +71,7 @@ public sealed class IntegrationTestSeedController : Controller
                 TargetEndpointId = endpointId,
                 ErrorBehavior = IntegrationErrorBehavior.Skip,
                 IsActive = true,
-                CreatedBy = User?.Identity?.Name ?? "test",
+                // Test seed — CreatedById = null.
             }, ct);
 
             // 4) Mapping kurallari — basit ornekler

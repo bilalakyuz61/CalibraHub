@@ -7,10 +7,36 @@
 
     var upsertUrl = Url.Action("UpsertContact", "Finance")!;
     var listUrl   = Url.Action("Contacts",      "Finance")!;
+
+    // DocumentEdit'ten "yeni cari" akisi: ?new=1&code=ABC ile gelirse Cari Kod input'unu prefill et.
+    // Sadece yeni kayit modunda etkin (isEdit=false).
+    var prefillCode = !isEdit ? (Context.Request.Query["code"].ToString() ?? "").Trim() : "";
 }
 
 @section Styles {
 <style>
+/* ── Critical input/select base (rapor §6.8 FOUC fix) ──────────
+   .ca-input ve .ca-select CSS'leri React bundle icinde (widgetField.css)
+   ve bundle async yuklenir. Bundle yuklenmeden once browser default beyaz
+   background gosterir → flash. Asagidaki kritik kurallar inline tanimlanir,
+   HTML render olur olmaz arka plan dogru renkte gorunur. Bundle yuklendigi an
+   widgetField.css daha ozel kurallari (hover, focus, vb.) eklesin diye yalin. */
+.ca-input, .ca-select {
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.92);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    width: 100%;
+    box-sizing: border-box;
+}
+body.app-theme-light .ca-input, body.app-theme-light .ca-select {
+    background: #ffffff;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+
 /* ── Page shell ──────────────────────────────────────────────── */
 .page-contact-account-edit .integrator-dashboard {
     height: 100% !important; min-height: 0 !important;
@@ -713,12 +739,15 @@ body.app-theme-light .ca-grid-row__delete:hover { color: #be123c; }
 .ca-grid-modal {
     width: min(780px,95vw); max-height: 85vh;
     display: flex; flex-direction: column;
-    background: var(--app-surface, #1a1f2e);
+    /* 2026-05-29: Dark mode --app-surface globally #ffffff oluyor (site.css :root).
+       Bu yuzden explicit dark override sart; light theme zaten white. */
+    background: #1a1f2e;
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 16px; box-shadow: 0 24px 72px rgba(0,0,0,0.55);
     overflow: hidden;
     animation: caGridSlide 0.22s cubic-bezier(0.23,1,0.32,1);
 }
+body.app-theme-dark .ca-grid-modal { background: #1a1f2e; }
 @@keyframes caGridSlide {
     from { transform: translateY(16px) scale(0.97); opacity: 0; }
     to { transform: translateY(0) scale(1); opacity: 1; }
@@ -829,6 +858,101 @@ body.app-theme-light .ca-rule-cycle code { background: #fef2f2; border-color: #f
 }
 .ca-message.ok { background: rgba(16,185,129,0.1); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); display: block; }
 .ca-message.err { background: rgba(239,68,68,0.1); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); display: block; }
+
+/* ── İletişim Kişileri (cp-*) ───────────────────────────────── */
+.cp-grid { table-layout: auto; }
+.cp-grid__th {
+    text-align: left; padding: 8px 10px;
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.65);
+    font-weight: 600; font-size: 0.74rem;
+    letter-spacing: 0.02em; text-transform: uppercase;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    position: sticky; top: 0; z-index: 5;
+}
+body.app-theme-light .cp-grid__th {
+    background: #f1f5f9; color: #475569; border-bottom-color: #e2e8f0;
+}
+.cp-grid tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background .12s;
+}
+.cp-grid tbody tr:hover { background: rgba(99,102,241,0.06); }
+body.app-theme-light .cp-grid tbody tr:hover { background: rgba(15,23,42,0.04); }
+.cp-grid td {
+    padding: 8px 10px; color: rgba(255,255,255,0.85); vertical-align: middle;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+body.app-theme-light .cp-grid td { color: #1e293b; }
+.cp-row-actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
+.cp-action-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.6); transition: all .15s;
+    font-size: .82rem; line-height: 1;
+}
+.cp-action-btn--edit:hover {
+    background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.5); color: #93c5fd;
+}
+.cp-action-btn--del:hover {
+    background: rgba(239,68,68,0.18); border-color: rgba(239,68,68,0.5); color: #fca5a5;
+}
+body.app-theme-light .cp-action-btn { background: #fff; border-color: #e2e8f0; color: #64748b; }
+body.app-theme-light .cp-action-btn--edit:hover { color: #1d4ed8; }
+body.app-theme-light .cp-action-btn--del:hover { color: #be123c; }
+
+.cp-primary-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px;
+    background: rgba(16,185,129,.18); color: #34d399;
+    border: 1px solid rgba(16,185,129,.35);
+    font-size: .7rem; font-weight: 600;
+}
+
+/* Ünvanlari Yönet modali — tema-aware cell + muted text */
+.cp-mgr-row { border-bottom: 1px solid rgba(255,255,255,0.06); }
+body.app-theme-light .cp-mgr-row { border-bottom-color: #f1f5f9; }
+.cp-mgr-cell {
+    padding: 8px 10px;
+    color: rgba(255,255,255,0.88);
+    vertical-align: middle;
+}
+body.app-theme-light .cp-mgr-cell { color: #1e293b; }
+.cp-mgr-muted {
+    padding: 14px;
+    text-align: center;
+    color: rgba(255,255,255,0.55);
+}
+body.app-theme-light .cp-mgr-muted { color: #64748b; }
+body.app-theme-light .cp-primary-badge {
+    background: rgba(16,185,129,.12); color: #047857; border-color: rgba(16,185,129,.35);
+}
+
+/* Toggle switch (Boolean alanlar — CLAUDE.md kurali) */
+.cp-switch {
+    display: inline-flex; align-items: center; gap: 8px;
+    cursor: pointer; user-select: none;
+}
+.cp-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.cp-switch__track {
+    position: relative; width: 36px; height: 20px;
+    background: rgba(255,255,255,0.18); border-radius: 999px;
+    transition: background .18s;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+.cp-switch__thumb {
+    position: absolute; top: 1px; left: 1px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; transition: transform .18s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.cp-switch input:checked + .cp-switch__track { background: #6366f1; border-color: #6366f1; }
+.cp-switch input:checked + .cp-switch__track .cp-switch__thumb { transform: translateX(16px); }
+.cp-switch__label { font-size: .82rem; color: rgba(255,255,255,0.82); }
+body.app-theme-light .cp-switch__track { background: #cbd5e1; border-color: #cbd5e1; }
+body.app-theme-light .cp-switch input:checked + .cp-switch__track { background: #4f46e5; border-color: #4f46e5; }
+body.app-theme-light .cp-switch__label { color: #1e293b; }
 
 /* ── Stok Eslestirme grid ───────────────────────────────────── */
 .ca-item-grid { table-layout: fixed; }
@@ -960,9 +1084,14 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 <span class="ca-nav-dot"></span>
                 Temel Bilgiler
             </button>
-            <button type="button" class="ca-nav-btn" data-nav-key="contact">
+            <button type="button" class="ca-nav-btn" data-nav-key="contact" id="caNavContact">
                 <span class="ca-nav-dot"></span>
-                İletişim
+                İletişim Bilgileri
+                <span class="ca-nav-count" id="caPersonCount" style="display:none;">0</span>
+            </button>
+            <button type="button" class="ca-nav-btn" data-nav-key="address" id="caNavAddress">
+                <span class="ca-nav-dot"></span>
+                Adres Bilgileri
             </button>
             <button type="button" class="ca-nav-btn" data-nav-key="addresses" id="caNavAddresses">
                 <span class="ca-nav-dot"></span>
@@ -978,6 +1107,12 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 <span class="ca-nav-dot"></span>
                 Cari Hareket
                 <span class="ca-nav-count" id="caMovementsCount" style="display:none;">0</span>
+            </button>
+            <!-- Hiyerarsik gruplama (entityType=2): malzeme karttaki Gruplar pattern'i.
+                 Eski tek-deger 'Cari Grubu' (ContactGroupId) yerine artik 5 seviyeli cascade. -->
+            <button type="button" class="ca-nav-btn" data-nav-key="groups" id="caNavGroups">
+                <span class="ca-nav-dot"></span>
+                Gruplar
             </button>
             <!-- Widget grup butonlari JS tarafindan dinamik olarak eklenir -->
         </nav>
@@ -999,21 +1134,25 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                         "</select>";
                 }
                 <div class="ca-rows">
-                    <div class="ca-row">
-                        <label class="ca-label" for="accountType">Cari Tipi <span class="required">*</span></label>
-                        @Html.Raw(selectHtml)
-                    </div>
+                    <!-- Saha sirasi (kullanici talebi): Cari Kod → Unvan → Cari Tipi -->
+                    <!-- Cari Kod ekran-seviyesi primary key: yazinca DB'de lookup
+                         (stok karti pattern). data-original ile baslangic degeri tutulur. -->
                     <div class="ca-row">
                         <label class="ca-label" for="accountCode">Cari Kod <span class="required">*</span></label>
                         <input id="accountCode" name="accountCode" type="text" class="ca-input"
-                               placeholder="Örn: CH001" maxlength="50"
-                               value="@(existing?.AccountCode ?? "")" required />
+                               placeholder="Örn: CH001 — yazinca lookup yapilir" maxlength="50"
+                               value="@(existing?.AccountCode ?? prefillCode)"
+                               data-original="@(existing?.AccountCode ?? "")" required />
                     </div>
                     <div class="ca-row">
                         <label class="ca-label" for="accountTitle">Ünvan <span class="required">*</span></label>
                         <input id="accountTitle" name="accountTitle" type="text" class="ca-input"
                                placeholder="Firma veya kişi ünvanı" maxlength="200"
                                value="@(existing?.AccountTitle ?? "")" required />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="accountType">Cari Tipi <span class="required">*</span></label>
+                        @Html.Raw(selectHtml)
                     </div>
                     <div class="ca-row">
                         <label class="ca-label" for="taxOffice">Vergi Dairesi</label>
@@ -1040,13 +1179,8 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                             <option value="">— Seçiniz —</option>
                         </select>
                     </div>
-                    <div class="ca-row">
-                        <label class="ca-label" for="contactGroupId">Cari Grubu</label>
-                        <select id="contactGroupId" name="contactGroupId" class="ca-select"
-                                data-selected="@(existing?.ContactGroupId?.ToString() ?? "")">
-                            <option value="">— Seçiniz —</option>
-                        </select>
-                    </div>
+                    @* Eski tek-deger "Cari Grubu" alani kaldirildi: hiyerarsik gruplama (entityType=2)
+                       sol nav "Gruplar" tab'inda 5 seviye cascade ile sagliyor. *@
                     <div class="ca-row">
                         <label class="ca-label" for="isActive">Durum</label>
                         <label class="ca-toggle" for="isActive" style="margin:0;">
@@ -1059,9 +1193,9 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 </div>
             </div>
 
-            <!-- İletişim -->
+            <!-- Kurumsal İletişim -->
             <div class="ca-card" id="caCardContact" data-section="contact" style="display:none;">
-                <div class="ca-card__title">İletişim</div>
+                <div class="ca-card__title">Kurumsal İletişim</div>
                 <div class="ca-rows">
                     <div class="ca-row">
                         <label class="ca-label" for="contactPerson">İlgili Kişi</label>
@@ -1078,40 +1212,17 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                     <div class="ca-row">
                         <label class="ca-label" for="mobile">Cep Telefonu</label>
                         <input id="mobile" name="mobile" type="tel" class="ca-input"
-                               placeholder="0532 000 00 00" maxlength="30"
+                               placeholder="0532 000 00 00 (WhatsApp olarak da kullanılır)" maxlength="30"
                                value="@(existing?.Mobile ?? "")" />
                     </div>
+                    @* WhatsApp Numarası ve WhatsApp Görünen Adı alanlari kaldirildi —
+                       gerektiginde Cep Telefonu WhatsApp icin de kullanilir. Hidden input ile
+                       form-post sirasinda mevcut backend alanlari bos string olarak gonderilir
+                       (DB kolonlari NULL kabul eder, side-effect yok). *@
+                    <input type="hidden" name="waPhone" value="@(existing?.WaPhone ?? "")" />
+                    <input type="hidden" name="waName" value="@(existing?.WaName ?? "")" />
                     <div class="ca-row">
-                        <label class="ca-label" for="waPhone">
-                            <span style="display:inline-flex; align-items:center; gap:6px;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="#25d366" aria-hidden="true">
-                                    <path d="M20.5 3.5a11.7 11.7 0 0 0-16.6 0 11.6 11.6 0 0 0-2 13.2L1 23l6.5-1.7a11.7 11.7 0 0 0 5.5 1.4h.01a11.7 11.7 0 0 0 8.27-3.42 11.6 11.6 0 0 0-.78-15.78ZM13 20.7a9.7 9.7 0 0 1-4.95-1.36l-.36-.21-3.86 1 1.03-3.76-.23-.38a9.65 9.65 0 0 1 14.62-12.3 9.6 9.6 0 0 1-6.25 16.99Zm5.55-7.21c-.3-.15-1.78-.88-2.06-.98s-.48-.15-.68.15-.78.98-.95 1.18-.36.22-.66.07a8 8 0 0 1-2.36-1.46 8.84 8.84 0 0 1-1.63-2.03c-.17-.3 0-.46.13-.6.13-.13.3-.34.45-.51.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.51-.07-.15-.68-1.64-.93-2.24-.24-.59-.49-.5-.68-.51l-.58-.01a1.12 1.12 0 0 0-.81.38 3.4 3.4 0 0 0-1.07 2.53c0 1.5 1.1 2.94 1.25 3.14.15.2 2.16 3.3 5.24 4.62 1.84.78 2.54.85 3.45.71.55-.08 1.78-.73 2.03-1.43.25-.7.25-1.3.18-1.43-.07-.13-.27-.2-.57-.35Z"/>
-                                </svg>
-                                WhatsApp Numarası
-                            </span>
-                        </label>
-                        <span style="display:flex; gap:8px; align-items:center;">
-                            <input id="waPhone" name="waPhone" type="tel" class="ca-input"
-                                   placeholder="+905321234567 (cep telefonundan farklı olabilir)" maxlength="30"
-                                   value="@(existing?.WaPhone ?? "")" style="flex:1;" />
-                            <button type="button" id="waOpenChat" class="btn btn-sm"
-                                    style="background:linear-gradient(135deg,#25d366,#128c7e); color:#fff; border:none; padding:6px 14px; border-radius:6px; font-weight:600; white-space:nowrap; cursor:pointer; display:inline-flex; align-items:center; gap:6px;"
-                                    title="Bu numarayla WhatsApp sohbetini aç">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                    <path d="M20.5 3.5a11.7 11.7 0 0 0-16.6 0 11.6 11.6 0 0 0-2 13.2L1 23l6.5-1.7a11.7 11.7 0 0 0 5.5 1.4h.01a11.7 11.7 0 0 0 8.27-3.42 11.6 11.6 0 0 0-.78-15.78ZM13 20.7a9.7 9.7 0 0 1-4.95-1.36l-.36-.21-3.86 1 1.03-3.76-.23-.38a9.65 9.65 0 0 1 14.62-12.3 9.6 9.6 0 0 1-6.25 16.99Z"/>
-                                </svg>
-                                Sohbeti Aç
-                            </button>
-                        </span>
-                    </div>
-                    <div class="ca-row">
-                        <label class="ca-label" for="waName">WhatsApp Görünen Adı</label>
-                        <input id="waName" name="waName" type="text" class="ca-input"
-                               placeholder="Sohbet listesinde gösterilecek ad (boş bırakılırsa cari unvanı kullanılır)" maxlength="150"
-                               value="@(existing?.WaName ?? "")" />
-                    </div>
-                    <div class="ca-row">
-                        <label class="ca-label" for="email">E-Posta</label>
+                        <label class="ca-label" for="email">Kurumsal İletişim</label>
                         <input id="email" name="email" type="email" class="ca-input"
                                placeholder="info@@firma.com" maxlength="200"
                                value="@(existing?.Email ?? "")" />
@@ -1122,6 +1233,13 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                                placeholder="https://www.firma.com" maxlength="200"
                                value="@(existing?.Website ?? "")" />
                     </div>
+                </div>
+            </div>
+
+            <!-- Adres Bilgileri -->
+            <div class="ca-card" id="caCardAddress" data-section="address" style="display:none;">
+                <div class="ca-card__title">Adres Bilgileri</div>
+                <div class="ca-rows">
                     <div class="ca-row">
                         <label class="ca-label" for="countryCode">Ülke Kodu</label>
                         <input id="countryCode" name="countryCode" type="text" class="ca-input"
@@ -1289,6 +1407,42 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 </div>
             </div>
 
+            <!-- İletişim Kişileri — Iletisim Bilgileri sekmesinin altinda; ayri nav butonu yok artik -->
+            <div class="ca-card" id="caCardPersons" data-section="contact" style="display:none;">
+                <div class="ca-card__title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <span>İletişim Kişileri</span>
+                    <button type="button" class="ca-btn ca-btn--primary" id="cpAddBtn" style="font-size:.75rem;padding:6px 12px;">+ Kişi Ekle</button>
+                </div>
+                <div style="padding:6px 14px 4px 14px;font-size:.78rem;color:rgba(148,163,184,.85);">
+                    Bu carideki yetkili kişiler (Satış Müdürü, Üretim Sorumlusu, CFO, CTO vb.). Telefon ve e-postaları belge gönderim akışlarında kullanılır.
+                </div>
+
+                <div id="cpNoContact" style="display:none;margin:12px 14px;padding:10px 12px;border-radius:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:#f59e0b;font-size:.78rem;">
+                    Önce cari kart bilgilerini kaydediniz — iletişim kişileri cari kayıt edildikten sonra eklenebilir.
+                </div>
+
+                <div id="cpListWrap" style="padding:8px 14px 0 14px;overflow:auto;">
+                    <table class="cp-grid" style="width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem;">
+                        <thead>
+                            <tr>
+                                <th class="cp-grid__th" style="width:36px;">#</th>
+                                <th class="cp-grid__th" style="width:180px;">Ünvan</th>
+                                <th class="cp-grid__th">Ad Soyad</th>
+                                <th class="cp-grid__th" style="width:160px;">Telefon</th>
+                                <th class="cp-grid__th" style="width:220px;">E-posta</th>
+                                <th class="cp-grid__th" style="width:70px;text-align:center;">Birincil</th>
+                                <th class="cp-grid__th" style="width:110px;text-align:right;">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cpRows"></tbody>
+                    </table>
+                </div>
+
+                <div id="cpEmpty" style="padding:18px;text-align:center;color:rgba(148,163,184,.7);font-size:.84rem;font-style:italic;">
+                    Bu cari için henüz iletişim kişisi tanımlanmamış.
+                </div>
+            </div>
+
             <!-- Cari Hareket -->
             <div class="ca-card" id="caCardMovements" data-section="movements" style="display:none;">
                 <div class="ca-card__title">Cari Hareket</div>
@@ -1312,6 +1466,39 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                 <div id="caMovList" style="display:flex;flex-direction:column;gap:8px;"></div>
             </div>
 
+            <!-- Gruplar (5 seviyeli hiyerarsik gruplama) — entityType=2 (cari) ──
+                 Malzeme karttaki pattern'in cari versiyonu. Eski tek-deger ContactGroupId
+                 yerine cascade dropdown'lar.  -->
+            <div class="ca-card" id="caCardGroups" data-section="groups" style="display:none;">
+                <div class="ca-card__title">Gruplar</div>
+                <div class="ca-rows" id="caGroupRows">
+                    <div class="ca-row" data-group-level="1">
+                        <label class="ca-label">Grup 1</label>
+                        <select class="ca-select ca-group-sel" data-level="1"><option value="">Seciniz</option></select>
+                    </div>
+                    <div class="ca-row" data-group-level="2">
+                        <label class="ca-label">Grup 2</label>
+                        <select class="ca-select ca-group-sel" data-level="2"><option value="">Seciniz</option></select>
+                    </div>
+                    <div class="ca-row" data-group-level="3">
+                        <label class="ca-label">Grup 3</label>
+                        <select class="ca-select ca-group-sel" data-level="3"><option value="">Seciniz</option></select>
+                    </div>
+                    <div class="ca-row" data-group-level="4">
+                        <label class="ca-label">Grup 4</label>
+                        <select class="ca-select ca-group-sel" data-level="4"><option value="">Seciniz</option></select>
+                    </div>
+                    <div class="ca-row" data-group-level="5">
+                        <label class="ca-label">Grup 5</label>
+                        <select class="ca-select ca-group-sel" data-level="5"><option value="">Seciniz</option></select>
+                    </div>
+                </div>
+                <div id="caGroupError" style="display:none;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
+                <div style="margin-top:10px;font-size:.72rem;color:rgba(255,255,255,.45);">
+                    Degisiklikler cari karti kaydedildiginde otomatik uygulanir.
+                </div>
+            </div>
+
             @* Ek Alanlar — DynamicWidgetRenderer gruplari buraya render edilir. *@
             <div id="caDynamicWidgetsCard" style="display:none">
                 <div id="caDynamicWidgets"
@@ -1325,6 +1512,131 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
     </div>
 
     <input type="hidden" id="caId" value="@(existing?.Id.ToString() ?? "")" />
+
+    <!-- İletişim Kişisi modalı (ekle/düzenle) -->
+    <div id="cpModalBackdrop" class="ca-grid-modal-backdrop" style="display:none;">
+        <div class="ca-grid-modal" role="dialog" aria-modal="true" aria-labelledby="cpModalTitle">
+            <header>
+                <span id="cpModalTitle" class="ca-grid-modal__title">İletişim Kişisi</span>
+                <button type="button" id="cpModalClose" class="ca-btn" style="font-size:.74rem;padding:4px 10px;">Kapat</button>
+            </header>
+            <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;overflow:auto;">
+                <input type="hidden" id="cpFldId" value="" />
+                <div class="ca-row">
+                    <label class="ca-label" for="cpFldTitleId">Ünvan <span class="required">*</span></label>
+                    <div style="display:flex;gap:6px;align-items:stretch;">
+                        <select id="cpFldTitleId" class="ca-input" style="flex:1 1 auto;min-width:0;">
+                            <option value="">Seçiniz…</option>
+                        </select>
+                        <button type="button" id="cpFldTitleAddBtn" class="ca-btn"
+                                style="flex:0 0 auto;padding:0 12px;white-space:nowrap;"
+                                title="Listede olmayan yeni bir unvan ekle">+ Yeni</button>
+                        <button type="button" id="cpFldTitleManageBtn" class="ca-btn"
+                                style="flex:0 0 auto;padding:0 12px;white-space:nowrap;"
+                                title="Mevcut ünvanları yönet (sil/pasifleştir)">Yönet</button>
+                    </div>
+                </div>
+                <div class="ca-row">
+                    <label class="ca-label" for="cpFldFullName">Ad Soyad <span class="required">*</span></label>
+                    <input id="cpFldFullName" type="text" class="ca-input" maxlength="150" placeholder="Ad Soyad" />
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="ca-row">
+                        <label class="ca-label" for="cpFldPhone">Telefon</label>
+                        <input id="cpFldPhone" type="text" class="ca-input" maxlength="40" placeholder="+90 5XX XXX XXXX" />
+                    </div>
+                    <div class="ca-row">
+                        <label class="ca-label" for="cpFldEmail">E-posta</label>
+                        <input id="cpFldEmail" type="email" class="ca-input" maxlength="200" placeholder="ornek@firma.com" />
+                    </div>
+                </div>
+                <div class="ca-row">
+                    <label class="ca-label" for="cpFldNotes">Not</label>
+                    <textarea id="cpFldNotes" class="ca-input" rows="2" maxlength="1000" placeholder="(opsiyonel) eklemek istediğiniz not"></textarea>
+                </div>
+                <div style="display:flex;gap:18px;align-items:center;padding:2px 0;">
+                    <label class="cp-switch">
+                        <input type="checkbox" id="cpFldIsPrimary" />
+                        <span class="cp-switch__track"><span class="cp-switch__thumb"></span></span>
+                        <span class="cp-switch__label">Birincil iletişim</span>
+                    </label>
+                    <label class="cp-switch">
+                        <input type="checkbox" id="cpFldIsActive" checked />
+                        <span class="cp-switch__track"><span class="cp-switch__thumb"></span></span>
+                        <span class="cp-switch__label">Aktif</span>
+                    </label>
+                </div>
+                <div id="cpModalErr" style="display:none;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
+            </div>
+            <footer style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:flex-end;gap:8px;">
+                <button type="button" id="cpModalCancel" class="ca-btn">Vazgeç</button>
+                <button type="button" id="cpModalSave" class="ca-btn ca-btn--primary">Kaydet</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Yeni ünvan ekle modalı (ortalı) — prompt() yerine -->
+    <div id="cpTitleAddBackdrop" class="ca-grid-modal-backdrop" style="display:none;">
+        <div class="ca-grid-modal" role="dialog" aria-modal="true" style="width:min(420px,92vw);">
+            <header>
+                <span class="ca-grid-modal__title">Yeni Ünvan Ekle</span>
+            </header>
+            <div style="padding:18px 20px;display:flex;flex-direction:column;gap:10px;">
+                <label class="ca-label" for="cpTitleAddName">Ünvan Adı <span class="required">*</span></label>
+                <input id="cpTitleAddName" type="text" class="ca-input" maxlength="100" placeholder="Örn: Pazarlama Direktörü" autocomplete="off" />
+                <div id="cpTitleAddErr" style="display:none;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#f87171;font-size:.78rem;"></div>
+            </div>
+            <footer style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:flex-end;gap:8px;">
+                <button type="button" id="cpTitleAddCancel" class="ca-btn">Vazgeç</button>
+                <button type="button" id="cpTitleAddOk" class="ca-btn ca-btn--primary">Ekle</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Ünvanları yönet modalı (liste + sil) -->
+    <div id="cpTitleManageBackdrop" class="ca-grid-modal-backdrop" style="display:none;">
+        <div class="ca-grid-modal" role="dialog" aria-modal="true" style="width:min(540px,95vw);max-height:80vh;">
+            <header>
+                <span class="ca-grid-modal__title">Ünvanları Yönet</span>
+                <button type="button" id="cpTitleManageClose" class="ca-btn" style="font-size:.74rem;padding:4px 10px;">Kapat</button>
+            </header>
+            <div style="padding:14px 20px;overflow:auto;flex:1 1 auto;">
+                <div style="font-size:.78rem;color:rgba(255,255,255,0.55);margin-bottom:10px;">
+                    Kullanılmayan ünvanlar silinebilir. Sistem ünvanları (★) silinemez ama pasif yapılabilir.
+                </div>
+                <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:.84rem;">
+                    <thead>
+                        <tr>
+                            <th class="cp-grid__th">Ünvan</th>
+                            <th class="cp-grid__th" style="width:90px;text-align:center;">Sistem</th>
+                            <th class="cp-grid__th" style="width:80px;text-align:right;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cpTitleManageList">
+                        <tr><td colspan="3" style="padding:14px;color:rgba(255,255,255,0.55);text-align:center;">Yükleniyor…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Silme onay modalı (ortalı, danger) -->
+    <div id="cpConfirmBackdrop" class="ca-grid-modal-backdrop" style="display:none;">
+        <div class="ca-grid-modal" role="dialog" aria-modal="true" style="width:min(440px,92vw);">
+            <header style="color:#f87171;">
+                <span class="ca-grid-modal__title">İletişim Kişisini Sil</span>
+            </header>
+            <div style="padding:18px 20px;">
+                <div id="cpConfirmMsg" style="font-size:.86rem;color:rgba(255,255,255,0.88);line-height:1.5;">
+                    Bu iletişim kişisini silmek istediğinize emin misiniz?
+                </div>
+            </div>
+            <footer style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:flex-end;gap:8px;">
+                <button type="button" id="cpConfirmCancel" class="ca-btn">Vazgeç</button>
+                <button type="button" id="cpConfirmOk" class="ca-btn" style="background:#dc2626;color:#fff;border-color:#dc2626;">Sil</button>
+            </footer>
+        </div>
+    </div>
 
 </section>
 
@@ -1397,6 +1709,151 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
         var el = document.getElementById(id);
         return el ? el.value.trim() : '';
     }
+
+    /**
+     * Cari Kod ekran-seviyesi primary key handler — IN-PLACE AJAX FILL (sayfa reload yok).
+     *
+     * Davranis:
+     *   - Kod yazip blur/Enter/Tab ile ayrildiginda DB'de lookup yapilir
+     *   - VAR ise: tum form alanlari AJAX ile yerinde doldurulur (parlama/grid shift yok),
+     *     URL history.pushState ile ?id=X olur, baslik guncellenir, yan paneller refresh edilir
+     *   - YOK ise:
+     *     * Yeni mod ise (existing yok): sessizce kalir
+     *     * Edit mod ise: "Yeni cari?" sor → in-place clear + URL ?new=1&code=X
+     *   - Bos veya degismemis (data-original ile ayni) kod: hicbir sey yapilmaz
+     */
+    (function attachAccountCodePrimaryKeyLookup() {
+        var codeInput = document.getElementById('accountCode');
+        if (!codeInput) return;
+        var lookupInFlight = false;
+        var lastChecked = '';
+
+        // Form'daki tum alanlari id'leri ile data'dan doldur (in-place fill).
+        // Yan paneller (Adresler/Stok/Hareket) icin event dispatch et — kendileri refresh eder.
+        function fillFormFields(c) {
+            function setVal(id, v) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                if (el.tagName === 'SELECT') {
+                    el.value = v == null ? '' : String(v);
+                    try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
+                } else if (el.type === 'checkbox') {
+                    el.checked = !!v;
+                } else {
+                    el.value = v == null ? '' : String(v);
+                }
+            }
+            // Temel
+            setVal('accountCode',    c.accountCode);
+            setVal('accountTitle',   c.accountTitle);
+            setVal('accountType',    c.accountType);
+            setVal('taxOffice',      c.taxOffice);
+            setVal('taxNumber',      c.taxNumber);
+            setVal('identityNumber', c.identityNumber);
+            setVal('contactPerson',  c.contactPerson);
+            // Iletisim
+            setVal('phone',          c.phone);
+            setVal('mobile',         c.mobile);
+            setVal('waPhone',        c.waPhone);
+            setVal('waName',         c.waName);
+            setVal('email',          c.email);
+            setVal('website',        c.website);
+            // Adres
+            setVal('countryCode',    c.countryCode);
+            setVal('city',           c.city);
+            setVal('district',       c.district);
+            setVal('neighborhood',   c.neighborhood);
+            setVal('postalCode',     c.postalCode);
+            setVal('address',        c.address);
+            // Selects (DOM mevcutsa otomatik)
+            if (c.salesRepId != null)     setVal('salesRepId',     c.salesRepId);
+            if (c.contactGroupId != null) setVal('contactGroupId', c.contactGroupId);
+            // Hidden Id + data-original guncelle (sonraki lookup'lar dogru cevirsin)
+            var caId = document.getElementById('caId');
+            if (caId) caId.value = c.id;
+            codeInput.setAttribute('data-original', c.accountCode);
+            lastChecked = c.accountCode;
+            // Sayfa basligi + uygulama tab basligi
+            document.title = 'Cari Düzenle — ' + c.accountCode;
+            var titleHost = document.querySelector('.workspace-title, h1.page-title');
+            if (titleHost) titleHost.textContent = c.accountCode + ' — ' + (c.accountTitle || '');
+            // Yan paneller event ile haberdar olsun (Adresler/Stok/Hareket vb. kendi kendine refresh)
+            try {
+                window.dispatchEvent(new CustomEvent('ca:contactSwitched', {
+                    detail: { id: c.id, code: c.accountCode, title: c.accountTitle }
+                }));
+            } catch (_) {}
+        }
+
+        function clearFormFieldsForNew(code) {
+            // Yeni cari modu — kullanicinin yazdigi kod kalir, gerisi temizlenir
+            var keepCode = code || '';
+            ['accountTitle','taxOffice','taxNumber','identityNumber','contactPerson',
+             'phone','mobile','waPhone','waName','email','website',
+             'city','district','neighborhood','postalCode','address']
+            .forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            var caId = document.getElementById('caId');
+            if (caId) caId.value = '';
+            codeInput.value = keepCode;
+            codeInput.setAttribute('data-original', '');
+            lastChecked = keepCode;
+            document.title = 'Yeni Cari Hesap';
+            try {
+                window.dispatchEvent(new CustomEvent('ca:contactReset', {
+                    detail: { code: keepCode }
+                }));
+            } catch (_) {}
+        }
+
+        async function doLookup() {
+            if (lookupInFlight) return;
+            var code = (codeInput.value || '').trim();
+            var original = codeInput.getAttribute('data-original') || '';
+            if (!code || code === original || code === lastChecked) return;
+            lastChecked = code;
+            lookupInFlight = true;
+
+            try {
+                var r = await fetch('/Finance/GetContact?code=' + encodeURIComponent(code),
+                    { credentials: 'same-origin' });
+
+                if (r.ok) {
+                    // ── BULDU ── In-place fill + URL pushState (NO reload, NO flash)
+                    var c = await r.json();
+                    if (!c || !c.id) return;
+                    fillFormFields(c);
+                    // URL'i guncelle: workspace=1 query'i koru
+                    var newUrl = '/Finance/ContactEdit?id=' + c.id;
+                    if (location.search.indexOf('workspace=1') !== -1) newUrl += '&workspace=1';
+                    try { history.pushState({ contactId: c.id }, '', newUrl); } catch (_) {}
+                    if (window.CalibraHub && CalibraHub.toast)
+                        CalibraHub.toast('Cari yuklendi: ' + c.accountCode, 'ok');
+                    return;
+                }
+
+                if (r.status === 404) {
+                    // Bulunamadi — formu yeni cari icin temizle (kodu koru)
+                    clearFormFieldsForNew(code);
+                }
+            } catch (e) {
+                if (window.CalibraHub && CalibraHub.toast)
+                    CalibraHub.toast('Cari lookup hatasi: ' + e.message, 'err');
+            } finally {
+                lookupInFlight = false;
+            }
+        }
+
+        codeInput.addEventListener('blur', doLookup);
+        codeInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                if (e.key === 'Enter') e.preventDefault();
+                doLookup();
+            }
+        });
+    })();
 
     // WhatsApp "Sohbeti Aç" butonu — waPhone alanını WhatsApp sayfasına query string olarak gönderir
     // Rapor §6.6 — native alert → CalibraAlert.warn (toast fallback)
@@ -1522,11 +1979,24 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
                     })
                 : Promise.resolve({ success: true });
 
-            dynPromise.then(function (dynRes) {
+            // Hiyerarsik grup mapping'lerini de kaydet (Gruplar tab acildiysa)
+            var groupsPromise = (typeof window.caGroupsSave === 'function' && newRecordId)
+                ? window.caGroupsSave(newRecordId)
+                    .catch(function (err) {
+                        console.warn('[CA] groups save hatasi:', err);
+                        return { success: false, message: err.message };
+                    })
+                : Promise.resolve({ success: true });
+
+            Promise.all([dynPromise, groupsPromise]).then(function (results) {
                 saveBtn.classList.remove('loading');
                 saveBtn.disabled = false;
+                var dynRes = results[0], grpRes = results[1];
                 if (dynRes && dynRes.success === false) {
                     console.warn('[CA] widget save basarisiz:', dynRes.message);
+                }
+                if (grpRes && grpRes.success === false) {
+                    console.warn('[CA] groups save basarisiz:', grpRes.message);
                 }
                 // Sadece KITT yesil tarayici — text bildirim yok, otomatik redirect yok.
                 flashSuccess();
@@ -2451,6 +2921,651 @@ body.app-theme-light .ca-item-grid td.ca-item-grid__needs-pick input { color: #b
             qs('caItemNoContact').style.display = '';
             caItemEmptyToggle();
         }
+    });
+})();
+
+// ══════════════════════════════════════════════════════════════════════
+// Gruplar — 5 seviyeli hiyerarsik gruplama (entityType=2 cari)
+// Malzeme karttaki mceGroups* pattern'inin cari versiyonu.
+// Endpoint'ler:
+//   GET  /Definitions/GetCardGroups?cardType=2&level=N&parentId=P
+//   GET  /Definitions/GetCardGroupMappings?entityType=2&entityId={contactId}
+//   POST /Definitions/SaveCardGroupMappings { entityType:2, entityId, levels:[{level,cardGroupId}] }
+// ══════════════════════════════════════════════════════════════════════
+(function () {
+    var caGroupsLoaded = false;
+
+    function selByLevel(level) {
+        return document.querySelector('.ca-group-sel[data-level="' + level + '"]');
+    }
+
+    function buildOptions(level, items) {
+        var sel = selByLevel(level);
+        if (!sel) return;
+        var prevValue = sel.value;
+        var opts = '<option value="">Seciniz</option>';
+        (items || []).forEach(function (g) {
+            opts += '<option value="' + g.id + '">' + (g.code || '') +
+                    (g.description ? ' — ' + g.description : '') + '</option>';
+        });
+        sel.innerHTML = opts;
+        if (prevValue && Array.prototype.some.call(sel.options, function (o) { return o.value === prevValue; })) {
+            sel.value = prevValue;
+        }
+    }
+
+    function clearLevels(fromLevel) {
+        for (var lv = fromLevel; lv <= 5; lv++) {
+            var sel = selByLevel(lv);
+            if (!sel) continue;
+            sel.innerHTML = '<option value="">Seciniz</option>';
+            sel.value = '';
+        }
+    }
+
+    function fetchLevel(level, parentId) {
+        var url = '/Definitions/GetCardGroups?cardType=2&level=' + level;
+        if (parentId) url += '&parentId=' + parentId;
+        return fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (data) {
+                var items = Array.isArray(data) ? data : (data.items || []);
+                buildOptions(level, items);
+                return items;
+            })
+            .catch(function (e) { console.error('[CA] group fetch level=' + level + ':', e); return []; });
+    }
+
+    function loadExistingMappings(contactId) {
+        if (!contactId || contactId <= 0) return;
+        var url = '/Definitions/GetCardGroupMappings?entityType=2&entityId=' + contactId;
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (data) {
+                var mappings = Array.isArray(data) ? data : (data.items || data.mappings || []);
+                var byLevel = {};
+                mappings.forEach(function (m) { byLevel[m.level] = m.cardGroupId; });
+
+                function applyLevel(lv) {
+                    if (lv > 5) return Promise.resolve();
+                    var sel = selByLevel(lv);
+                    if (!sel) return Promise.resolve();
+                    var val = byLevel[lv];
+                    if (val) {
+                        sel.value = String(val);
+                        return fetchLevel(lv + 1, val).then(function () { return applyLevel(lv + 1); });
+                    }
+                    return Promise.resolve();
+                }
+                applyLevel(1);
+            })
+            .catch(function (e) { console.error('[CA] group mappings load:', e); });
+    }
+
+    function bindCascadeOnce() {
+        if (window._caGroupCascadeBound) return;
+        window._caGroupCascadeBound = true;
+        for (var lv = 1; lv <= 5; lv++) {
+            (function (level) {
+                var sel = selByLevel(level);
+                if (!sel) return;
+                sel.addEventListener('change', function () {
+                    var val = sel.value;
+                    clearLevels(level + 1);
+                    if (val && level < 5) {
+                        fetchLevel(level + 1, val);
+                    }
+                });
+            })(lv);
+        }
+    }
+
+    // Tab acilinca yukle (lazy): sidenav data-nav-key="groups" tiklaninca tetiklenir
+    window.caGroupsEnsureLoaded = function () {
+        if (caGroupsLoaded) return;
+        caGroupsLoaded = true;
+        bindCascadeOnce();
+        fetchLevel(1, null).then(function () {
+            var caId = document.getElementById('caId');
+            var contactId = caId ? parseInt(caId.value || '0', 10) : 0;
+            if (contactId > 0) loadExistingMappings(contactId);
+        });
+    };
+
+    // Save flow icindeki cagri noktasi — caGroupsSave(contactId)
+    window.caGroupsSave = function (contactIdOverride) {
+        var caId = document.getElementById('caId');
+        var entityId = contactIdOverride || (caId ? caId.value : '');
+        if (!entityId) return Promise.resolve({ success: true, skipped: true });
+        if (!caGroupsLoaded) return Promise.resolve({ success: true, skipped: true });
+
+        var levels = [];
+        for (var lv = 1; lv <= 5; lv++) {
+            var sel = selByLevel(lv);
+            if (!sel) continue;
+            var v = sel.value;
+            levels.push({ level: lv, cardGroupId: v ? parseInt(v) : null });
+        }
+
+        var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+        var token = tokenEl ? tokenEl.value : '';
+        var payload = { entityType: 2, entityId: String(entityId), levels: levels };
+        return fetch('/Definitions/SaveCardGroupMappings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
+        })
+        .then(function (r) { return r.json().catch(function () { return { success: r.ok }; }); })
+        .catch(function (e) {
+            console.error('[CA] group save error:', e);
+            return { success: false, message: e.message };
+        });
+    };
+
+    // Sidenav "Gruplar" butonuna tiklayinca lazy yukle
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest && e.target.closest('[data-nav-key="groups"]');
+        if (btn) window.caGroupsEnsureLoaded();
+    });
+})();
+
+// ── İletişim Kişileri (ContactPerson) ────────────────────────────
+(function () {
+    var loaded = false;
+    var listEl    = document.getElementById('cpRows');
+    var emptyEl   = document.getElementById('cpEmpty');
+    var noContact = document.getElementById('cpNoContact');
+    var listWrap  = document.getElementById('cpListWrap');
+    var addBtn    = document.getElementById('cpAddBtn');
+    var navCount  = document.getElementById('cpPersonCount');
+
+    var modal     = document.getElementById('cpModalBackdrop');
+    var modalTitle= document.getElementById('cpModalTitle');
+    var fldId     = document.getElementById('cpFldId');
+    var fldTitleSel = document.getElementById('cpFldTitleId');
+    var fldTitleAdd = document.getElementById('cpFldTitleAddBtn');
+    var fldName   = document.getElementById('cpFldFullName');
+
+    // Lookup cache — modal her acildiginda ag istegi yapilmasin diye module-level.
+    var _titlesLoaded = false;
+    var _titlesPromise = null;
+    function ensureTitlesLoaded() {
+        if (_titlesLoaded) return Promise.resolve();
+        if (_titlesPromise) return _titlesPromise;
+        _titlesPromise = fetch('/Finance/ContactPersonTitles', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (res && res.ok && Array.isArray(res.data)) {
+                    populateTitleOptions(res.data);
+                    _titlesLoaded = true;
+                }
+            })
+            .catch(function (e) { console.error('[cp] titles load err', e); })
+            .finally(function () { _titlesPromise = null; });
+        return _titlesPromise;
+    }
+    function populateTitleOptions(titles) {
+        if (!fldTitleSel) return;
+        // Mevcut secimi koru
+        var current = fldTitleSel.value;
+        // Placeholder + secenekleri yeniden cizelim
+        fldTitleSel.innerHTML = '<option value="">Seçiniz…</option>';
+        titles.forEach(function (t) {
+            var opt = document.createElement('option');
+            opt.value = String(t.id);
+            opt.textContent = t.name;
+            fldTitleSel.appendChild(opt);
+        });
+        // Eski deger hala mevcutsa geri koy
+        if (current) fldTitleSel.value = current;
+    }
+    function selectTitleByName(name) {
+        if (!fldTitleSel || !name) return false;
+        var trg = String(name).trim().toLowerCase();
+        for (var i = 0; i < fldTitleSel.options.length; i++) {
+            var o = fldTitleSel.options[i];
+            if ((o.textContent || '').trim().toLowerCase() === trg) {
+                fldTitleSel.value = o.value;
+                return true;
+            }
+        }
+        return false;
+    }
+    // ── Yeni ünvan ekle modali (prompt() yerine center modal) ────────────────
+    var titleAddBackdrop = document.getElementById('cpTitleAddBackdrop');
+    var titleAddNameInp  = document.getElementById('cpTitleAddName');
+    var titleAddErr      = document.getElementById('cpTitleAddErr');
+    var titleAddOk       = document.getElementById('cpTitleAddOk');
+    var titleAddCancel   = document.getElementById('cpTitleAddCancel');
+
+    function openAddTitleModal() {
+        if (!titleAddBackdrop) return;
+        titleAddNameInp.value = '';
+        titleAddErr.style.display = 'none';
+        titleAddBackdrop.style.display = 'flex';
+        setTimeout(function(){ try { titleAddNameInp.focus(); } catch(_){} }, 30);
+    }
+    function closeAddTitleModal() {
+        if (titleAddBackdrop) titleAddBackdrop.style.display = 'none';
+    }
+    function addInlineTitle() { openAddTitleModal(); }
+
+    function submitAddTitle() {
+        var name = (titleAddNameInp.value || '').trim();
+        if (!name) {
+            titleAddErr.textContent = 'Ünvan adı zorunlu.';
+            titleAddErr.style.display = 'block';
+            return;
+        }
+        titleAddOk.disabled = true;
+        fetch('/Finance/AddContactPersonTitle', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getToken() },
+            body: JSON.stringify({ name: name })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            titleAddOk.disabled = false;
+            if (!res || !res.ok) {
+                titleAddErr.textContent = (res && res.message) || 'Ünvan eklenemedi.';
+                titleAddErr.style.display = 'block';
+                return;
+            }
+            // Dropdown'a ekle + secili yap
+            var existingOpt = null;
+            for (var i = 0; i < fldTitleSel.options.length; i++) {
+                if (parseInt(fldTitleSel.options[i].value || '0', 10) === res.id) { existingOpt = fldTitleSel.options[i]; break; }
+            }
+            if (!existingOpt) {
+                var opt = document.createElement('option');
+                opt.value = String(res.id);
+                opt.textContent = res.name;
+                if (fldTitleSel.firstChild && fldTitleSel.firstChild.nextSibling) {
+                    fldTitleSel.insertBefore(opt, fldTitleSel.firstChild.nextSibling);
+                } else {
+                    fldTitleSel.appendChild(opt);
+                }
+                existingOpt = opt;
+            }
+            fldTitleSel.value = existingOpt.value;
+            closeAddTitleModal();
+        })
+        .catch(function (e) {
+            titleAddOk.disabled = false;
+            titleAddErr.textContent = 'Bağlantı hatası: ' + e.message;
+            titleAddErr.style.display = 'block';
+        });
+    }
+    if (titleAddOk)     titleAddOk.addEventListener('click', submitAddTitle);
+    if (titleAddCancel) titleAddCancel.addEventListener('click', closeAddTitleModal);
+    if (titleAddBackdrop) {
+        titleAddBackdrop.addEventListener('click', function (ev) {
+            if (ev.target === titleAddBackdrop) closeAddTitleModal();
+        });
+    }
+    if (titleAddNameInp) {
+        titleAddNameInp.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter')     { ev.preventDefault(); submitAddTitle(); }
+            if (ev.key === 'Escape')    { ev.preventDefault(); closeAddTitleModal(); }
+        });
+    }
+
+    // ── Ünvanları yönet modali (sil/pasif) ─────────────────────────────────
+    var titleMgrBackdrop = document.getElementById('cpTitleManageBackdrop');
+    var titleMgrList     = document.getElementById('cpTitleManageList');
+    var titleMgrClose    = document.getElementById('cpTitleManageClose');
+    var fldTitleManage   = document.getElementById('cpFldTitleManageBtn');
+
+    function openManageTitlesModal() {
+        if (!titleMgrBackdrop) return;
+        titleMgrBackdrop.style.display = 'flex';
+        loadManageList();
+    }
+    function closeManageTitlesModal() {
+        if (titleMgrBackdrop) titleMgrBackdrop.style.display = 'none';
+    }
+    function loadManageList() {
+        if (!titleMgrList) return;
+        // Tema-aware muted color (.cp-grid td zaten dark+light override icerir).
+        titleMgrList.innerHTML = '<tr class="cp-mgr-row"><td colspan="3" class="cp-mgr-muted">Yükleniyor…</td></tr>';
+        fetch('/Finance/ContactPersonTitles', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.ok || !res.data || res.data.length === 0) {
+                    titleMgrList.innerHTML = '<tr class="cp-mgr-row"><td colspan="3" class="cp-mgr-muted">Aktif ünvan yok.</td></tr>';
+                    return;
+                }
+                var html = '';
+                res.data.forEach(function (t) {
+                    var sys = t.isSystem ? '★' : '';
+                    html += '<tr class="cp-mgr-row" data-tid="' + t.id + '">'
+                        +  '<td class="cp-mgr-cell">' + escapeHtml(t.name) + '</td>'
+                        +  '<td class="cp-mgr-cell" style="text-align:center;color:#fbbf24;font-weight:700;">' + sys + '</td>'
+                        +  '<td class="cp-mgr-cell" style="text-align:right;">'
+                        +    '<button type="button" class="ca-btn cp-title-del-btn" data-tid="' + t.id + '" data-tname="' + escapeHtml(t.name) + '" style="padding:4px 10px;font-size:.74rem;background:rgba(220,38,38,0.18);border:1px solid rgba(220,38,38,0.4);color:#dc2626;">Sil</button>'
+                        +  '</td>'
+                        + '</tr>';
+                });
+                titleMgrList.innerHTML = html;
+                // Sil click handler
+                titleMgrList.querySelectorAll('.cp-title-del-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        var tid = parseInt(btn.getAttribute('data-tid') || '0', 10);
+                        var tname = btn.getAttribute('data-tname') || '';
+                        if (!tid) return;
+                        // Sayfa ortasinda ozel modal (CLAUDE.md silme onay standardi).
+                        // CalibraAlert.confirm Promise tabanli, danger:true ile kirmizi buton.
+                        if (window.CalibraAlert && window.CalibraAlert.confirm) {
+                            var ok = await window.CalibraAlert.confirm(
+                                "'" + tname + "' ünvanını silmek istediğinize emin misiniz?",
+                                { title: 'Ünvan Sil', okText: 'Evet, Sil', cancelText: 'Vazgeç', danger: true });
+                            if (!ok) return;
+                        } else if (!window.confirm("'" + tname + "' ünvanını silmek istediğinize emin misiniz?")) {
+                            return; // fallback (CalibraAlert yuklenmemisse)
+                        }
+                        btn.disabled = true;
+                        var fd = new FormData();
+                        fd.append('id', tid);
+                        fetch('/Finance/DeleteContactPersonTitle?id=' + tid, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'RequestVerificationToken': getToken() }
+                        })
+                        .then(function (r) { return r.json(); })
+                        .then(function (dres) {
+                            btn.disabled = false;
+                            if (!dres || !dres.ok) {
+                                if (window.CalibraAlert && window.CalibraAlert.error) {
+                                    window.CalibraAlert.error((dres && dres.message) || 'Silme başarısız.');
+                                } else {
+                                    alert((dres && dres.message) || 'Silme başarısız.');
+                                }
+                                return;
+                            }
+                            // Listeyi yenile + dropdown'dan kaldir
+                            loadManageList();
+                            for (var i = fldTitleSel.options.length - 1; i >= 0; i--) {
+                                if (parseInt(fldTitleSel.options[i].value || '0', 10) === tid) {
+                                    fldTitleSel.removeChild(fldTitleSel.options[i]);
+                                    break;
+                                }
+                            }
+                        })
+                        .catch(function (e) {
+                            btn.disabled = false;
+                            alert('Bağlantı hatası: ' + e.message);
+                        });
+                    });
+                });
+            })
+            .catch(function () {
+                titleMgrList.innerHTML = '<tr><td colspan="3" style="padding:14px;color:#f87171;text-align:center;">Yüklenemedi.</td></tr>';
+            });
+    }
+    function escapeHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, function (c) {
+            return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+        });
+    }
+    if (titleMgrClose) titleMgrClose.addEventListener('click', closeManageTitlesModal);
+    if (titleMgrBackdrop) {
+        titleMgrBackdrop.addEventListener('click', function (ev) {
+            if (ev.target === titleMgrBackdrop) closeManageTitlesModal();
+        });
+    }
+    if (fldTitleManage) fldTitleManage.addEventListener('click', openManageTitlesModal);
+    var fldPhone  = document.getElementById('cpFldPhone');
+    var fldEmail  = document.getElementById('cpFldEmail');
+    var fldNotes  = document.getElementById('cpFldNotes');
+    var fldPrim   = document.getElementById('cpFldIsPrimary');
+    var fldActive = document.getElementById('cpFldIsActive');
+    var errBox    = document.getElementById('cpModalErr');
+
+    var confirmModal = document.getElementById('cpConfirmBackdrop');
+    var confirmMsg   = document.getElementById('cpConfirmMsg');
+    var _pendingDelete = null;
+
+    function getContactId() {
+        var el = document.getElementById('caId');
+        return el ? parseInt(el.value || '0', 10) : 0;
+    }
+    function getToken() {
+        var t = document.querySelector('input[name="__RequestVerificationToken"]');
+        return t ? t.value : '';
+    }
+    function htmlEscape(s) {
+        return (s == null ? '' : String(s))
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function setNavCount(n) {
+        if (!navCount) return;
+        if (n > 0) { navCount.style.display = ''; navCount.textContent = String(n); }
+        else       { navCount.style.display = 'none'; }
+    }
+    function renderRows(items) {
+        listEl.innerHTML = '';
+        if (!items || items.length === 0) {
+            emptyEl.style.display = '';
+            listWrap.style.display = 'none';
+            setNavCount(0);
+            return;
+        }
+        emptyEl.style.display = 'none';
+        listWrap.style.display = '';
+        setNavCount(items.length);
+        items.forEach(function (p, i) {
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td>' + (i + 1) + '</td>' +
+                '<td>' + htmlEscape(p.title) + '</td>' +
+                '<td>' + htmlEscape(p.fullName) + '</td>' +
+                '<td>' + htmlEscape(p.phone || '') + '</td>' +
+                '<td>' + htmlEscape(p.email || '') + '</td>' +
+                '<td style="text-align:center;">' +
+                    (p.isPrimary
+                        ? '<span class="cp-primary-badge">✓</span>'
+                        : '<span style="color:rgba(148,163,184,.4);">—</span>') +
+                '</td>' +
+                '<td>' +
+                    '<div class="cp-row-actions">' +
+                        '<button type="button" class="cp-action-btn cp-action-btn--edit" data-act="edit" data-id="' + p.id + '" title="Düzenle">✎</button>' +
+                        '<button type="button" class="cp-action-btn cp-action-btn--del"  data-act="del"  data-id="' + p.id + '" data-name="' + htmlEscape(p.fullName) + '" title="Sil">🗑</button>' +
+                    '</div>' +
+                '</td>';
+            tr._data = p;
+            listEl.appendChild(tr);
+        });
+    }
+
+    function load() {
+        var cid = getContactId();
+        if (cid <= 0) {
+            noContact.style.display = '';
+            listWrap.style.display = 'none';
+            emptyEl.style.display = 'none';
+            if (addBtn) addBtn.disabled = true;
+            setNavCount(0);
+            return Promise.resolve();
+        }
+        noContact.style.display = 'none';
+        if (addBtn) addBtn.disabled = false;
+        return fetch('/Finance/ContactPersons?contactId=' + cid, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (res && res.ok) renderRows(res.data || []);
+                else renderRows([]);
+            })
+            .catch(function (e) { console.error('[cp] load err', e); renderRows([]); });
+    }
+
+    function openModal(person) {
+        errBox.style.display = 'none'; errBox.textContent = '';
+        // Once dropdown'i doldur (modal hemen acilir, options async gelir; placeholder gosterilir)
+        ensureTitlesLoaded().then(function () {
+            if (person) {
+                // TitleId varsa onu sec; yoksa eski string Title'a gore ad eslesmesi dene.
+                if (person.titleId) {
+                    fldTitleSel.value = String(person.titleId);
+                } else if (person.title) {
+                    if (!selectTitleByName(person.title)) {
+                        // Eski string Title hicbir lookup'a uymadiysa "Seçiniz…" kalir.
+                        fldTitleSel.value = '';
+                    }
+                }
+            }
+        });
+
+        if (person) {
+            modalTitle.textContent = 'İletişim Kişisini Düzenle';
+            fldId.value     = person.id || '';
+            // Dropdown ensureTitlesLoaded() sonrasi set ediliyor — burada onceden "" koy
+            fldTitleSel.value = person.titleId ? String(person.titleId) : '';
+            fldName.value   = person.fullName || '';
+            fldPhone.value  = person.phone || '';
+            fldEmail.value  = person.email || '';
+            fldNotes.value  = person.notes || '';
+            fldPrim.checked   = !!person.isPrimary;
+            fldActive.checked = person.isActive !== false;
+        } else {
+            modalTitle.textContent = 'Yeni İletişim Kişisi';
+            fldId.value = '';
+            fldTitleSel.value = '';
+            fldName.value = '';
+            fldPhone.value = ''; fldEmail.value = ''; fldNotes.value = '';
+            fldPrim.checked = false; fldActive.checked = true;
+        }
+        modal.style.display = 'flex';
+        setTimeout(function () { fldTitleSel.focus(); }, 50);
+    }
+    function closeModal() { modal.style.display = 'none'; }
+
+    function save() {
+        var cid = getContactId();
+        if (cid <= 0) { errBox.textContent = 'Önce cari kart bilgilerini kaydedin.'; errBox.style.display = ''; return; }
+        var titleId = parseInt(fldTitleSel.value || '0', 10);
+        var n = (fldName.value  || '').trim();
+        if (!titleId) { errBox.textContent = 'Ünvan zorunlu.'; errBox.style.display = ''; fldTitleSel.focus(); return; }
+        if (!n) { errBox.textContent = 'Ad Soyad zorunlu.'; errBox.style.display = ''; fldName.focus(); return; }
+
+        // Display amacli secili option metnini de yolla — backend TitleId'yi kullanir,
+        // title alani sadece legacy fallback kolonu icin senkron tutulur.
+        var titleText = '';
+        if (fldTitleSel.selectedIndex >= 0) {
+            titleText = (fldTitleSel.options[fldTitleSel.selectedIndex].textContent || '').trim();
+        }
+
+        var payload = {
+            id: parseInt(fldId.value || '0', 10),
+            contactId: cid,
+            titleId: titleId,
+            title: titleText,
+            fullName: n,
+            phone: (fldPhone.value || '').trim() || null,
+            email: (fldEmail.value || '').trim() || null,
+            notes: (fldNotes.value || '').trim() || null,
+            isPrimary: !!fldPrim.checked,
+            isActive: !!fldActive.checked,
+        };
+
+        fetch('/Finance/SaveContactPerson', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getToken() },
+            body: JSON.stringify(payload)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (!res || !res.ok) {
+                errBox.textContent = (res && res.message) || 'Kayıt başarısız.';
+                errBox.style.display = '';
+                return;
+            }
+            closeModal();
+            load();
+            if (window.CalibraAlert && window.CalibraAlert.toast) {
+                window.CalibraAlert.toast('İletişim kişisi kaydedildi.', 'success');
+            }
+        })
+        .catch(function (e) {
+            errBox.textContent = 'Bağlantı hatası: ' + e.message;
+            errBox.style.display = '';
+        });
+    }
+
+    function openConfirm(id, name) {
+        _pendingDelete = id;
+        confirmMsg.innerHTML = 'Bu iletişim kişisini silmek istediğinize emin misiniz?'
+            + (name ? '<br><b style="color:#a5b4fc;">' + htmlEscape(name) + '</b>' : '');
+        confirmModal.style.display = 'flex';
+    }
+    function closeConfirm() { confirmModal.style.display = 'none'; _pendingDelete = null; }
+    function doDelete() {
+        var id = _pendingDelete; if (!id) return;
+        fetch('/Finance/DeleteContactPerson?id=' + encodeURIComponent(id), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'RequestVerificationToken': getToken() }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            closeConfirm();
+            if (res && res.ok) { load(); }
+            else if (window.CalibraAlert && window.CalibraAlert.error) {
+                window.CalibraAlert.error((res && res.message) || 'Silme başarısız.');
+            }
+        })
+        .catch(function (e) { closeConfirm(); console.error('[cp] delete err', e); });
+    }
+
+    // Event bindings
+    if (addBtn) addBtn.addEventListener('click', function () { openModal(null); });
+    if (fldTitleAdd) fldTitleAdd.addEventListener('click', addInlineTitle);
+    document.getElementById('cpModalClose')?.addEventListener('click', closeModal);
+    document.getElementById('cpModalCancel')?.addEventListener('click', closeModal);
+    document.getElementById('cpModalSave')?.addEventListener('click', save);
+    modal?.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+
+    document.getElementById('cpConfirmCancel')?.addEventListener('click', closeConfirm);
+    document.getElementById('cpConfirmOk')?.addEventListener('click', doDelete);
+    confirmModal?.addEventListener('click', function (e) { if (e.target === confirmModal) closeConfirm(); });
+
+    // Esc / Enter klavye kisayollari
+    document.addEventListener('keydown', function (e) {
+        if (modal && modal.style.display === 'flex') {
+            if (e.key === 'Escape') { e.preventDefault(); closeModal(); }
+            else if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault(); save();
+            }
+        } else if (confirmModal && confirmModal.style.display === 'flex') {
+            if (e.key === 'Escape') { e.preventDefault(); closeConfirm(); }
+            else if (e.key === 'Enter') { e.preventDefault(); doDelete(); }
+        }
+    });
+
+    if (listEl) listEl.addEventListener('click', function (e) {
+        var btn = e.target.closest && e.target.closest('button[data-act]');
+        if (!btn) return;
+        var act = btn.getAttribute('data-act');
+        var id  = parseInt(btn.getAttribute('data-id') || '0', 10);
+        if (act === 'edit') {
+            var tr = btn.closest('tr');
+            openModal(tr && tr._data ? tr._data : { id: id });
+        } else if (act === 'del') {
+            openConfirm(id, btn.getAttribute('data-name') || '');
+        }
+    });
+
+    // Lazy load: sidenav "İletişim Bilgileri" tabina ilk tiklamada yukle.
+    // (Eski "persons" sekmesi "contact" altina birlestirildi)
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest && e.target.closest('[data-nav-key="contact"]');
+        if (!btn) return;
+        if (loaded) return;
+        loaded = true;
+        load();
     });
 })();
 </script>

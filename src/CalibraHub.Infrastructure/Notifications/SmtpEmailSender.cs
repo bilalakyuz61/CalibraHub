@@ -25,7 +25,8 @@ public sealed class SmtpEmailSender : IEmailSender
         string subject,
         string body,
         IReadOnlyCollection<EmailAttachment>? attachments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isHtml = false)
     {
         var validRecipients = toEmails
             .Where(e => !string.IsNullOrWhiteSpace(e))
@@ -52,7 +53,7 @@ public sealed class SmtpEmailSender : IEmailSender
                     string.IsNullOrWhiteSpace(profile.FromDisplayName) ? profile.FromEmail : profile.FromDisplayName),
                 Subject = subject,
                 Body = body,
-                IsBodyHtml = false,
+                IsBodyHtml = isHtml,
             };
             foreach (var to in validRecipients)
             {

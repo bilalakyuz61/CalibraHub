@@ -60,15 +60,17 @@ export default function IntegrationQueue({ config }) {
   }, [apiBase])
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>
-      <Loader2 size={20} className="ch-spin" /> Yükleniyor…
-    </div>
+    return (
+      <div className="iq-root" style={{ padding: 40, textAlign: 'center', color: 'var(--iq-muted2)' }}>
+        <Loader2 size={20} className="ch-spin" /> Yükleniyor…
+      </div>
+    )
   }
 
   return (
-    <div style={{
+    <div className="iq-root" style={{
       display: 'flex', flexDirection: 'row', height: '100%', width: '100%',
-      background: '#0b1220', color: '#e2e8f0', fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
       {/* SOL — Entegrasyon listesi */}
       <SidePanel
@@ -101,17 +103,17 @@ export default function IntegrationQueue({ config }) {
 function SidePanel({ integrations, selectedId, onSelect, onRefresh }) {
   return (
     <div style={{
-      width: 320, minWidth: 260, borderRight: '1px solid #1f2937',
-      display: 'flex', flexDirection: 'column', background: '#0a1018',
+      width: 320, minWidth: 260, borderRight: '1px solid var(--iq-border)',
+      display: 'flex', flexDirection: 'column', background: 'var(--iq-sidebar)',
     }}>
       <div style={{
-        padding: '16px 16px 12px', borderBottom: '1px solid #1f2937',
+        padding: '16px 16px 12px', borderBottom: '1px solid var(--iq-border)',
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
         <Send size={18} color="#6366f1" />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>Aktarım Kuyruğu</div>
-          <div style={{ fontSize: 11, color: '#64748b' }}>Manuel entegrasyonlar</div>
+          <div style={{ fontSize: 11, color: 'var(--iq-muted)' }}>Manuel entegrasyonlar</div>
         </div>
         <button onClick={onRefresh} title="Yenile"
                 style={btnIcon}>
@@ -120,33 +122,32 @@ function SidePanel({ integrations, selectedId, onSelect, onRefresh }) {
       </div>
       <div style={{ flex: 1, overflow: 'auto' }}>
         {integrations.length === 0 ? (
-          <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--iq-muted)', fontSize: 12 }}>
             Manuel tetikleyicili aktif entegrasyon bulunamadı.
           </div>
         ) : integrations.map(it => (
+          /* 2026-05-22: Sidebar sadelestirildi —
+             - Form name (Liste / Üst Bilgi) kaldirildi: integration adindan zaten belli
+             - Pending/Failed/Skipped chip'leri kaldirildi: sag tarafta filter tab'larinda
+               (Aktif/Bekleyen/Hatalı/Gönderilen/Hariç) zaten gözüküyor
+             Sadece plug ikonu + integration adi (+ secili durumda indigo sol border). */
           <button key={it.integrationId}
                   onClick={() => onSelect(it.integrationId)}
                   style={{
-                    display: 'block', width: '100%', textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    width: '100%', textAlign: 'left',
                     padding: '12px 16px', border: 'none', background: 'transparent',
-                    color: '#e2e8f0', cursor: 'pointer',
+                    color: 'var(--iq-text)', cursor: 'pointer',
                     borderLeft: it.integrationId === selectedId
                       ? '3px solid #6366f1' : '3px solid transparent',
-                    backgroundColor: it.integrationId === selectedId ? '#11192a' : 'transparent',
+                    backgroundColor: it.integrationId === selectedId ? 'var(--iq-row-sel)' : 'transparent',
                   }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Plug size={14} color="#6366f1" />
-              <div style={{ flex: 1, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {it.name}
-              </div>
-            </div>
-            <div style={{ marginTop: 4, fontSize: 11, color: '#64748b' }}>
-              {it.formName || it.formCode}
-            </div>
-            <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Badge color="#1e3a8a" fg="#93c5fd" label={`Bekleyen: ${it.pendingCount}`} />
-              {it.failedCount > 0 && <Badge color="#7f1d1d" fg="#fca5a5" label={`Hatalı: ${it.failedCount}`} />}
-              {it.skippedCount > 0 && <Badge color="#3f3f46" fg="#d4d4d8" label={`Hariç: ${it.skippedCount}`} />}
+            <Plug size={14} color="#6366f1" style={{ flexShrink: 0 }} />
+            <div style={{
+              flex: 1, fontSize: 13, fontWeight: 600,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {it.name}
             </div>
           </button>
         ))}
@@ -166,9 +167,9 @@ function Badge({ color, fg, label }) {
 
 function EmptyHint() {
   return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--iq-muted)' }}>
       <div style={{ textAlign: 'center' }}>
-        <Send size={48} color="#334155" />
+        <Send size={48} color="var(--iq-border)" />
         <div style={{ marginTop: 12, fontSize: 14 }}>Sol panelden bir entegrasyon seç</div>
       </div>
     </div>
@@ -183,6 +184,8 @@ function QueueDetail({ apiBase, integration, onMutated }) {
   const [search, setSearch]     = useState('')
   const [data, setData]         = useState({ rows: [], total: 0, summary: { pending: 0, failed: 0, sent: 0, skipped: 0 } })
   const [loading, setLoading]   = useState(false)
+  const [page, setPage]         = useState(1)
+  const PAGE_SIZE = 100
   const [selected, setSelected] = useState(new Set())
   const [running, setRunning]   = useState(false)
   const [progress, setProgress] = useState(null) // { current, total, results }
@@ -194,7 +197,7 @@ function QueueDetail({ apiBase, integration, onMutated }) {
     setLoading(true)
     try {
       const params = new URLSearchParams({
-        filter, page: '1', pageSize: '200',
+        filter, page: String(page), pageSize: String(PAGE_SIZE),
       })
       if (search.trim()) params.set('search', search.trim())
       const r = await fetch(`${apiBase}/queue/${integration.integrationId}?${params}`, { credentials: 'same-origin' })
@@ -208,9 +211,11 @@ function QueueDetail({ apiBase, integration, onMutated }) {
     } catch (e) {
       setToast({ kind: 'error', text: String(e) })
     } finally { setLoading(false) }
-  }, [apiBase, integration?.integrationId, filter, search])
+  }, [apiBase, integration?.integrationId, filter, search, page])
 
   useEffect(() => { load() }, [load])
+  // Filtre/arama degisince ilk sayfaya don
+  useEffect(() => { setPage(1) }, [filter, search])
 
   const toggleAll = () => {
     if (selected.size === data.rows.length) setSelected(new Set())
@@ -306,25 +311,31 @@ function QueueDetail({ apiBase, integration, onMutated }) {
     <>
       {/* Başlık */}
       <div style={{
-        padding: '14px 20px', borderBottom: '1px solid #1f2937',
+        padding: '14px 20px', borderBottom: '1px solid var(--iq-border)',
         display: 'flex', alignItems: 'center', gap: 12,
       }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{integration.name}</div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>
+          <div style={{ fontSize: 12, color: 'var(--iq-muted)' }}>
             {integration.formName || integration.formCode} ·
-            Toplam: <strong style={{ color: '#cbd5e1' }}>{data.total}</strong>
+            Toplam: <strong style={{ color: 'var(--iq-text)' }}>{data.total}</strong>
           </div>
         </div>
       </div>
 
       {/* Filtre + arama */}
       <div style={{
-        padding: '10px 20px', borderBottom: '1px solid #1f2937',
+        padding: '10px 20px', borderBottom: '1px solid var(--iq-border)',
         display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
       }}>
         {FILTER_TABS.map(tab => {
-          const cnt = data.summary?.[tab.key]
+          // Aktif = bekleyen + hatali, Tümü = bekleyen + hatali + gönderilen + hariç.
+          // Diger filtreler dogrudan summary[key]'i okur.
+          const sm = data.summary || {}
+          let cnt
+          if      (tab.key === 'active') cnt = (sm.pending || 0) + (sm.failed || 0)
+          else if (tab.key === 'all')    cnt = (sm.pending || 0) + (sm.failed || 0) + (sm.sent || 0) + (sm.skipped || 0)
+          else                            cnt = sm[tab.key]
           const active = filter === tab.key
           return (
             <button key={tab.key}
@@ -332,8 +343,8 @@ function QueueDetail({ apiBase, integration, onMutated }) {
                     title={tab.desc}
                     style={{
                       padding: '6px 12px', borderRadius: 6,
-                      background: active ? '#6366f1' : '#1e293b',
-                      color: active ? '#fff' : '#94a3b8',
+                      background: active ? '#6366f1' : 'var(--iq-filter-bg)',
+                      color: active ? '#fff' : 'var(--iq-muted2)',
                       border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
                     }}>
               {tab.label}{cnt !== undefined ? ` (${cnt})` : ''}
@@ -342,13 +353,13 @@ function QueueDetail({ apiBase, integration, onMutated }) {
         })}
         <div style={{ flex: 1 }} />
         <div style={{ position: 'relative' }}>
-          <Search size={12} style={{ position: 'absolute', left: 8, top: 8, color: '#64748b' }} />
+          <Search size={12} style={{ position: 'absolute', left: 8, top: 8, color: 'var(--iq-muted)' }} />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
                  placeholder="Kod / ad ara…"
                  style={{
                    padding: '6px 8px 6px 26px', fontSize: 12,
-                   background: '#1e293b', color: '#e2e8f0',
-                   border: '1px solid #334155', borderRadius: 6, width: 220,
+                   background: 'var(--iq-input-bg)', color: 'var(--iq-text)',
+                   border: '1px solid var(--iq-border2)', borderRadius: 6, width: 220,
                  }} />
         </div>
         <button onClick={load} title="Yenile" style={btnIcon}><RefreshCw size={14} /></button>
@@ -357,7 +368,7 @@ function QueueDetail({ apiBase, integration, onMutated }) {
       {/* Toplu aksiyonlar */}
       {selected.size > 0 && (
         <div style={{
-          padding: '8px 20px', background: '#1e3a8a', color: '#e2e8f0',
+          padding: '8px 20px', background: 'var(--iq-bulk-bg)', color: '#e2e8f0',
           display: 'flex', alignItems: 'center', gap: 10, fontSize: 12,
         }}>
           <span style={{ fontWeight: 600 }}>{selected.size} seçili</span>
@@ -384,17 +395,17 @@ function QueueDetail({ apiBase, integration, onMutated }) {
       {/* Tablo */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--iq-muted2)' }}>
             <Loader2 size={20} className="ch-spin" /> Yükleniyor…
           </div>
         ) : data.rows.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--iq-muted)' }}>
             Bu filtrede kayıt yok.
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead style={{ background: '#11192a', position: 'sticky', top: 0, zIndex: 1 }}>
-              <tr style={{ color: '#94a3b8', textAlign: 'left' }}>
+            <thead style={{ background: 'var(--iq-thead)', position: 'sticky', top: 0, zIndex: 1 }}>
+              <tr style={{ color: 'var(--iq-muted2)', textAlign: 'left' }}>
                 <th style={{ padding: '8px 12px', width: 30 }}>
                   <input type="checkbox" checked={allChecked} onChange={toggleAll} />
                 </th>
@@ -411,11 +422,11 @@ function QueueDetail({ apiBase, integration, onMutated }) {
                 const isSel = selected.has(row.recordId)
                 return (
                   <tr key={row.recordId}
-                      style={{ borderBottom: '1px solid #1f2937', background: isSel ? '#111c2e' : 'transparent' }}>
+                      style={{ borderBottom: '1px solid var(--iq-border)', background: isSel ? 'var(--iq-row-sel)' : 'transparent' }}>
                     <td style={{ padding: '8px 12px' }}>
                       <input type="checkbox" checked={isSel} onChange={() => toggle(row.recordId)} />
                     </td>
-                    <td style={{ padding: '8px 12px', fontFamily: 'ui-monospace, Consolas, monospace', color: '#cbd5e1' }}>
+                    <td style={{ padding: '8px 12px', fontFamily: 'ui-monospace, Consolas, monospace', color: 'var(--iq-text)' }}>
                       {row.code || row.recordId}
                     </td>
                     <td style={{ padding: '8px 12px' }}>{row.name || '—'}</td>
@@ -430,12 +441,12 @@ function QueueDetail({ apiBase, integration, onMutated }) {
                         {cfg.label}
                       </span>
                       {row.attemptCount > 0 && (
-                        <span style={{ marginLeft: 6, fontSize: 10, color: '#64748b' }}>
+                        <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--iq-muted)' }}>
                           {row.attemptCount}×
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: '8px 12px', fontSize: 11, color: '#94a3b8' }}>
+                    <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--iq-muted2)' }}>
                       {row.lastSentAt ? new Date(row.lastSentAt).toLocaleString('tr-TR') : '—'}
                     </td>
                     <td style={{ padding: '8px 12px' }}>
@@ -466,7 +477,7 @@ function QueueDetail({ apiBase, integration, onMutated }) {
                               <RotateCcw size={11} /> Geri Al
                             </button>
                             {row.skipReason && (
-                              <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                              <span style={{ fontSize: 11, color: 'var(--iq-muted2)', fontStyle: 'italic' }}>
                                 ({row.skipReason})
                               </span>
                             )}
@@ -482,20 +493,52 @@ function QueueDetail({ apiBase, integration, onMutated }) {
         )}
       </div>
 
+      {/* Pagination — Tümü ve diger filtrelerde 100'er sayfalik gezinme */}
+      {!loading && data.total > PAGE_SIZE && (
+        <div style={{
+          padding: '10px 20px', borderTop: '1px solid var(--iq-border)',
+          display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, color: 'var(--iq-muted2)',
+        }}>
+          <span>
+            {((page - 1) * PAGE_SIZE) + 1}
+            –
+            {Math.min(page * PAGE_SIZE, data.total)} / <strong style={{ color: 'var(--iq-text)' }}>{data.total}</strong>
+          </span>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            style={{ ...btnGhost, opacity: page <= 1 ? 0.4 : 1, cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
+          >
+            ← Önceki
+          </button>
+          <span style={{ padding: '0 6px' }}>
+            Sayfa <strong style={{ color: 'var(--iq-text)' }}>{page}</strong> / {Math.max(1, Math.ceil(data.total / PAGE_SIZE))}
+          </span>
+          <button
+            onClick={() => setPage(p => (p * PAGE_SIZE < data.total ? p + 1 : p))}
+            disabled={page * PAGE_SIZE >= data.total}
+            style={{ ...btnGhost, opacity: page * PAGE_SIZE >= data.total ? 0.4 : 1, cursor: page * PAGE_SIZE >= data.total ? 'not-allowed' : 'pointer' }}
+          >
+            Sonraki →
+          </button>
+        </div>
+      )}
+
       {/* Progress overlay */}
       {progress && running && (
         <div style={overlayStyle}>
           <div style={{
-            background: '#0a1018', border: '1px solid #1f2937', borderRadius: 12,
+            background: 'var(--iq-card-bg)', border: '1px solid var(--iq-card-bdr)', borderRadius: 12,
             padding: 24, minWidth: 320, textAlign: 'center',
           }}>
             <Loader2 size={28} className="ch-spin" color="#6366f1" />
             <div style={{ marginTop: 12, fontWeight: 600 }}>Aktarılıyor…</div>
-            <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--iq-muted2)' }}>
               {progress.current}/{progress.total} kayıt
             </div>
             <div style={{
-              marginTop: 12, height: 6, background: '#1e293b', borderRadius: 3, overflow: 'hidden',
+              marginTop: 12, height: 6, background: 'var(--iq-progress-bg)', borderRadius: 3, overflow: 'hidden',
             }}>
               <div style={{
                 height: '100%', width: `${(progress.current / progress.total) * 100}%`,
@@ -539,36 +582,36 @@ function ErrorDetailModal({ row, onClose }) {
     <div style={overlayStyle} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
            style={{
-             background: '#0a1018', border: '1px solid #7f1d1d', borderRadius: 10,
+             background: 'var(--iq-card-bg)', border: '1px solid var(--iq-err-bdr)', borderRadius: 10,
              padding: 0, minWidth: 480, maxWidth: 720, maxHeight: '80vh',
              display: 'flex', flexDirection: 'column',
            }}>
         <div style={{
-          padding: '14px 18px', borderBottom: '1px solid #1f2937',
+          padding: '14px 18px', borderBottom: '1px solid var(--iq-border)',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
           <AlertCircle size={18} color="#fca5a5" />
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 700, fontSize: 14 }}>Aktarım Hatası</div>
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>
+            <div style={{ fontSize: 11, color: 'var(--iq-muted2)' }}>
               {row.code || row.recordId} · {row.name || ''}
             </div>
           </div>
           <button onClick={onClose} style={btnIcon}><X size={16} /></button>
         </div>
-        <div style={{ padding: 18, overflow: 'auto', fontSize: 12, color: '#e2e8f0' }}>
+        <div style={{ padding: 18, overflow: 'auto', fontSize: 12, color: 'var(--iq-text)' }}>
           <div style={{ marginBottom: 12 }}>
-            <div style={{ color: '#94a3b8', marginBottom: 4 }}>Deneme sayısı: <strong>{row.attemptCount}</strong></div>
-            <div style={{ color: '#94a3b8', marginBottom: 4 }}>
+            <div style={{ color: 'var(--iq-muted2)', marginBottom: 4 }}>Deneme sayısı: <strong>{row.attemptCount}</strong></div>
+            <div style={{ color: 'var(--iq-muted2)', marginBottom: 4 }}>
               Son deneme: {row.lastSentAt ? new Date(row.lastSentAt).toLocaleString('tr-TR') : '—'}
             </div>
             {row.lastRunId && (
-              <div style={{ color: '#94a3b8' }}>Run ID: <code>{row.lastRunId}</code></div>
+              <div style={{ color: 'var(--iq-muted2)' }}>Run ID: <code>{row.lastRunId}</code></div>
             )}
           </div>
           <div style={{ color: '#fca5a5', fontWeight: 600, marginBottom: 6 }}>Hata mesajı:</div>
           <pre style={{
-            background: '#1f0a0a', border: '1px solid #7f1d1d', borderRadius: 6,
+            background: 'var(--iq-err-bg)', border: '1px solid var(--iq-err-bdr)', borderRadius: 6,
             padding: 12, margin: 0, fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 11,
             whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#fecaca',
           }}>{row.lastError}</pre>
@@ -584,27 +627,27 @@ function SkipReasonModal({ count, onCancel, onConfirm }) {
     <div style={overlayStyle} onClick={onCancel}>
       <div onClick={(e) => e.stopPropagation()}
            style={{
-             background: '#0a1018', border: '1px solid #6366f1', borderRadius: 10,
+             background: 'var(--iq-card-bg)', border: '1px solid #6366f1', borderRadius: 10,
              padding: 20, minWidth: 380, maxWidth: 480,
            }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
           <Ban size={20} color="#a5b4fc" />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Hariç Tut</div>
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>{count} kayıt kuyruktan çıkarılacak</div>
+            <div style={{ fontSize: 11, color: 'var(--iq-muted2)' }}>{count} kayıt kuyruktan çıkarılacak</div>
           </div>
         </div>
-        <div style={{ fontSize: 12, color: '#cbd5e1', marginBottom: 10, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 12, color: 'var(--iq-text)', marginBottom: 10, lineHeight: 1.5 }}>
           Bu kayıtlar artık kuyrukta görünmeyecek. "Hariç" filtresinden geri alabilirsin.
         </div>
-        <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+        <label style={{ display: 'block', fontSize: 11, color: 'var(--iq-muted2)', marginBottom: 4 }}>
           Sebep (opsiyonel)
         </label>
         <input value={reason} onChange={(e) => setReason(e.target.value)}
                style={{
                  width: '100%', padding: '8px 10px', fontSize: 12,
-                 background: '#1e293b', color: '#e2e8f0',
-                 border: '1px solid #334155', borderRadius: 6,
+                 background: 'var(--iq-input-bg)', color: 'var(--iq-text)',
+                 border: '1px solid var(--iq-border2)', borderRadius: 6,
                  boxSizing: 'border-box',
                }} />
         <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -630,8 +673,8 @@ function Toast({ kind, text, onClose }) {
   return (
     <div style={{
       position: 'fixed', bottom: 24, right: 24, zIndex: 1100,
-      padding: '12px 16px', background: '#0a1018', border: `1px solid ${color}`,
-      borderRadius: 8, color: '#e2e8f0', fontSize: 13, fontWeight: 500,
+      padding: '12px 16px', background: 'var(--iq-card-bg)', border: `1px solid ${color}`,
+      borderRadius: 8, color: 'var(--iq-text)', fontSize: 13, fontWeight: 500,
       display: 'flex', alignItems: 'center', gap: 10, maxWidth: 460,
       boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
     }}>
@@ -639,7 +682,7 @@ function Toast({ kind, text, onClose }) {
       {kind === 'error'   && <AlertCircle  size={16} color={color} />}
       {kind === 'warn'    && <AlertCircle  size={16} color={color} />}
       <span style={{ flex: 1 }}>{text}</span>
-      <button onClick={onClose} style={{ ...btnIcon, color: '#94a3b8' }}><X size={14} /></button>
+      <button onClick={onClose} style={{ ...btnIcon, color: 'var(--iq-muted2)' }}><X size={14} /></button>
     </div>
   )
 }
@@ -653,8 +696,8 @@ const overlayStyle = {
 }
 const btnIcon = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  padding: 6, background: 'transparent', color: '#94a3b8',
-  border: '1px solid #334155', borderRadius: 6, cursor: 'pointer',
+  padding: 6, background: 'transparent', color: 'var(--iq-muted2)',
+  border: '1px solid var(--iq-border2)', borderRadius: 6, cursor: 'pointer',
 }
 const btnPrimary = {
   display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -663,8 +706,8 @@ const btnPrimary = {
 }
 const btnGhost = {
   display: 'inline-flex', alignItems: 'center', gap: 6,
-  padding: '6px 12px', background: 'transparent', color: '#e2e8f0',
-  border: '1px solid #334155', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+  padding: '6px 12px', background: 'transparent', color: 'var(--iq-text)',
+  border: '1px solid var(--iq-border2)', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
 }
 const btnSmallPrimary = {
   display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -673,8 +716,8 @@ const btnSmallPrimary = {
 }
 const btnSmallGhost = {
   display: 'inline-flex', alignItems: 'center',
-  padding: 4, background: 'transparent', color: '#94a3b8',
-  border: '1px solid #334155', borderRadius: 4, cursor: 'pointer',
+  padding: 4, background: 'transparent', color: 'var(--iq-muted2)',
+  border: '1px solid var(--iq-border2)', borderRadius: 4, cursor: 'pointer',
 }
 const btnSmallDanger = {
   display: 'inline-flex', alignItems: 'center',

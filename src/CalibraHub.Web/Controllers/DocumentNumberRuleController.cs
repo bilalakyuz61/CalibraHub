@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Entities;
+using CalibraHub.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -90,8 +92,9 @@ public sealed class DocumentNumberRuleController : Controller
 
         try
         {
-            input.UpdatedBy = User?.Identity?.Name;
-            if (input.Id == 0) input.CreatedBy = input.UpdatedBy;
+            var uid = int.TryParse(User?.FindFirstValue(ClaimTypes.NameIdentifier), out var _uid) ? _uid : (int?)null;
+            input.UpdatedById = uid;
+            if (input.Id == 0) input.CreatedById = uid;
             var savedId = await _repo.SaveAsync(input, ct);
             return Ok(new { ok = true, id = savedId });
         }
@@ -207,7 +210,7 @@ public sealed class DocumentNumberRuleController : Controller
                           value = string.IsNullOrEmpty(r.Prefix) ? "—" : r.Prefix, color="indigo" },
                     new { id="w_format",  type="data", dataType="text", label="Yıl/Ay/Sayaç",
                           value = $"{r.YearFormat ?? "-"} / {r.MonthFormat ?? "-"} / {r.CounterLength}", color="slate" },
-                    new { id="w_reset",   type="data", dataType="text", label="Reset",
+                    new { id="w_reset",   type="data", dataType="options", label="Reset",
                           value = r.ResetPeriod.ToString(), color="amber" },
                     new { id="w_filters", type="data", dataType="text", label="Filtre",
                           value = BuildFilterChip(r), color="violet" },
@@ -243,7 +246,14 @@ public sealed class DocumentNumberRuleController : Controller
                 new { id = "new", label = "Yeni Numara Kuralı", icon = "Plus", variant = "primary",
                       url = "/DocumentNumberRule/New" },
             },
-            masterWidgets = Array.Empty<object>(),
+            masterWidgets = new List<object>
+            {
+                SmartBoardFilterHelpers.MakeStdWidget   ("w_prefix",  "Prefix",       "text"),
+                SmartBoardFilterHelpers.MakeStdWidget   ("w_format",  "Yıl/Ay/Sayaç", "text"),
+                SmartBoardFilterHelpers.MakeOptionsWidget("w_reset",  "Reset",
+                    SmartBoardFilterHelpers.ToOptionsList(new[] { "Never", "Yearly", "Monthly", "Daily" })),
+                SmartBoardFilterHelpers.MakeStdWidget   ("w_filters", "Filtre",       "text"),
+            },
             entities,
         };
     }

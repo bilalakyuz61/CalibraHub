@@ -24,7 +24,7 @@ public sealed class NotificationsController : Controller
     public async Task<IActionResult> ListJson(int take = 30, CancellationToken ct = default)
     {
         var userId = CurrentUserId();
-        if (userId == Guid.Empty) return Json(new { items = Array.Empty<object>(), unreadCount = 0 });
+        if (userId <= 0) return Json(new { items = Array.Empty<object>(), unreadCount = 0 });
 
         var items = await _repo.GetRecentAsync(userId, take, ct);
         var unread = await _repo.GetUnreadCountAsync(userId, ct);
@@ -40,7 +40,7 @@ public sealed class NotificationsController : Controller
                 sourceId   = n.SourceId,
                 link       = n.Link,
                 isRead     = n.IsRead,
-                createdAt  = n.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss"),
+                createdAt  = n.Created.ToString("yyyy-MM-ddTHH:mm:ss"),
             })
         });
     }
@@ -49,18 +49,18 @@ public sealed class NotificationsController : Controller
     public async Task<IActionResult> UnreadCountJson(CancellationToken ct = default)
     {
         var userId = CurrentUserId();
-        if (userId == Guid.Empty) return Json(new { unreadCount = 0 });
+        if (userId <= 0) return Json(new { unreadCount = 0 });
         var unread = await _repo.GetUnreadCountAsync(userId, ct);
         return Json(new { unreadCount = unread });
     }
 
-    public sealed class IdInput { public Guid Id { get; set; } }
+    public sealed class IdInput { public int Id { get; set; } }
 
     [HttpPost]
     public async Task<IActionResult> MarkReadJson([FromBody] IdInput input, CancellationToken ct = default)
     {
         var userId = CurrentUserId();
-        if (userId == Guid.Empty) return Json(new { success = false });
+        if (userId <= 0) return Json(new { success = false });
         await _repo.MarkReadAsync(input.Id, userId, DateTime.Now, ct);
         return Json(new { success = true });
     }
@@ -69,14 +69,14 @@ public sealed class NotificationsController : Controller
     public async Task<IActionResult> MarkAllReadJson(CancellationToken ct = default)
     {
         var userId = CurrentUserId();
-        if (userId == Guid.Empty) return Json(new { success = false });
+        if (userId <= 0) return Json(new { success = false });
         await _repo.MarkAllReadAsync(userId, DateTime.Now, ct);
         return Json(new { success = true });
     }
 
-    private Guid CurrentUserId()
+    private int CurrentUserId()
     {
         var s = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        return Guid.TryParse(s, out var g) ? g : Guid.Empty;
+        return int.TryParse(s, out var i) ? i : 0;
     }
 }

@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>CalibraHub.Web-30fd9770-bd8b-4a42-a002-8bc7f236fbaf</UserSecretsId>

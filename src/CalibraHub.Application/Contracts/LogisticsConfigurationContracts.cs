@@ -63,11 +63,13 @@ public sealed record ItemDto(
     string Name,
     int? TypeId,
     bool IsActive,
-    DateTime? CreateDate,
-    DateTime? ModifyDate,
+    DateTime? Created,
+    DateTime? Updated,
     int? UnitId = null,
     bool Combinations = false,
-    decimal TaxRate = 20m);
+    decimal TaxRate = 20m,
+    int? CreatedById = null,
+    int? UpdatedById = null);
 
 public sealed record FeatureDto(
     int Id,
@@ -167,8 +169,8 @@ public sealed record LocationDto(
 
 public sealed record UnitDto(
     int Id,
-    string UnitCode,
-    string UnitName,
+    string Code,
+    string Name,
     string? IntlCode,
     int SortOrder,
     bool IsActive);
@@ -183,16 +185,16 @@ public sealed record MachineDto(
     int LocationId,
     string? LocationCode,         // join — UI display icin (Repository lookup'ta doldurur)
     string? LocationName,
-    string MachineCode,
-    string? MachineName,
+    string Code,
+    string? Name,
     decimal? HourlyCapacity,
     int SortOrder,
     bool IsActive);
 
 public sealed record CreateMachineRequest(
     int LocationId,
-    string MachineCode,
-    string? MachineName,
+    string Code,
+    string? Name,
     decimal? HourlyCapacity,
     int SortOrder,
     bool IsActive);
@@ -200,8 +202,8 @@ public sealed record CreateMachineRequest(
 public sealed record UpdateMachineRequest(
     int Id,
     int LocationId,
-    string MachineCode,
-    string? MachineName,
+    string Code,
+    string? Name,
     decimal? HourlyCapacity,
     int SortOrder,
     bool IsActive);
@@ -219,8 +221,8 @@ public sealed record CreateLocationRequest(
     bool IsStorageArea);
 
 public sealed record CreateUnitRequest(
-    string UnitCode,
-    string UnitName,
+    string Code,
+    string Name,
     string? IntlCode,
     int SortOrder,
     bool IsActive);
@@ -240,8 +242,8 @@ public sealed record UpdateLocationRequest(
 
 public sealed record UpdateUnitRequest(
     int Id,
-    string UnitCode,
-    string UnitName,
+    string Code,
+    string Name,
     string? IntlCode,
     int SortOrder,
     bool IsActive);
@@ -300,7 +302,10 @@ public sealed record BOMDto(
     string? ImageMimeType,
     string? ImageFitMode,
     int ImageRotation,
-    IReadOnlyCollection<BOMLineDto> Lines);
+    IReadOnlyCollection<BOMLineDto> Lines,
+    int? RoutingId = null,         // 2026-05-20: header-level Routing FK
+    string? RoutingCode = null,    // display
+    string? RoutingName = null);   // display
 
 public sealed record BOMLineDto(
     int Id,
@@ -349,7 +354,10 @@ public sealed record BOMWithNames(
     string? ImageMimeType,
     string? ImageFitMode,
     int ImageRotation,
-    IReadOnlyCollection<BOMLineWithName> Lines);
+    IReadOnlyCollection<BOMLineWithName> Lines,
+    int? RoutingId = null,         // 2026-05-20: header-level Routing FK
+    string? RoutingCode = null,    // display (JOIN with Routing.Code)
+    string? RoutingName = null);   // display (JOIN with Routing.Name)
 
 public sealed record BOMLineWithName(
     int ItemId,
@@ -375,7 +383,9 @@ public sealed record SaveBOMRequest(
     string? ImageMimeType,
     string? ImageFitMode,
     int ImageRotation,
-    IReadOnlyCollection<SaveBOMLineRequest> Lines);
+    IReadOnlyCollection<SaveBOMLineRequest> Lines,
+    int? RoutingId = null,         // 2026-05-20: opsiyonel rota FK
+    string? RoutingCode = null);   // 2026-05-20: RoutingId yoksa Code uzerinden lookup (standart rehber fallback)
 
 public sealed record SaveBOMLineRequest(
     int ItemId,
@@ -384,6 +394,113 @@ public sealed record SaveBOMLineRequest(
     string? ComponentConfigCode,   // legacy: ConfigId null ise lookup icin
     decimal Quantity,
     decimal ScrapRatio);
+
+/// <summary>
+/// Repository → service ham satir tasiyici (ExplodeBOMAsync icinde kullanilir).
+/// Items JOIN olmadan tek seviye line bilgisi — Item Code/Name ayri lookup'tan
+/// (GetItemsByIdsAsync) zenginlestirilir. Boylece N seviyelik BFS'te N×JOIN
+/// yapmak yerine 1 toplu Items okumasi yeterli olur.
+/// </summary>
+public sealed record BOMComponentLineRow(
+    int ItemId,
+    int? ConfigId,
+    decimal Quantity,
+    decimal ScrapRatio);
+
+// ── BOM Explode (multi-level patlatma) sonuclari (rapor 2026-05-17 madde 3.3) ──
+
+/// <summary>
+/// "X mamulden Y adet uretmek icin tum hammadde/yari mamulun toplam ihtiyaci".
+/// Service recursive BFS ile alt-recete agacini gezerek satirlari aggregate eder.
+/// </summary>
+public sealed record BOMExplodeResultDto(
+    int    ParentItemId,
+    string ParentItemCode,
+    string ParentItemName,
+    int?   ConfigId,
+    string? ConfigCode,
+    decimal Quantity,                              // patlatma icin istenen mamul adedi
+    int    MaxDepth,                               // BFS sirasinda ulasilan en derin seviye
+    bool   Truncated,                              // depth cap 20'ye ulasildi mi
+    IReadOnlyCollection<BOMExplodeLineDto> Lines); // duzlestirilmis satirlar
+
+/// <summary>
+/// Patlatma sonucundaki tek bir bilesen — agacin herhangi bir seviyesinden.
+/// IsLeaf=true → kendi recetesi yok (gercek hammadde). false → ara mamul.
+/// TotalQuantity = parent qty * line qty * (1 + scrapRatio) zinciri sonucu birikim.
+/// </summary>
+public sealed record BOMExplodeLineDto(
+    int    ItemId,
+    string ItemCode,
+    string ItemName,
+    int?   ConfigId,
+    string? ConfigCode,
+    decimal TotalQuantity,  // birikmis toplam (parent zincirinin tum quantity carpimlari + scrap)
+    int    Depth,           // 1 = parent'in dogrudan bileseni; 2 = bilesenin bileseni; ...
+    bool   IsLeaf);         // alt recete yok mu? (true ise gercek hammadde)
+
+// ── Where-Used (ters arama: bu malzeme hangi recetelerde geciyor?) ──
+
+/// <summary>
+/// Bir bileseni dogrudan kullanan parent BOM'larin bir satiri. 1-seviye
+/// (transitive degil) — "Vida Leg'de geciyor; Leg da Masa'da geciyor" sonucu
+/// bu surumun kapsami disinda (V2 icin transitive flag eklenebilir).
+/// </summary>
+public sealed record WhereUsedItemDto(
+    int    BOMId,
+    int    ParentItemId,
+    string ParentItemCode,
+    string ParentItemName,
+    int?   ParentConfigId,
+    string? ParentConfigCode,
+    decimal Quantity,
+    decimal ScrapRatio);
+
+// ── BOM Maliyet Hesabi (rapor 2026-05-17 madde 3.8) ──
+
+/// <summary>
+/// Multi-level BOM maliyet ozeti. Explosion sonucu duzlestirilmis bilesen
+/// listesi + her satira fiyat lookup + leaf satirlarinin toplam maliyeti.
+/// Mantik: yalniz IsLeaf=true (gercek hammadde) satirlari TotalCost'a katkida
+/// bulunur — ara mamuller alt-recetelerinden zaten roll-up edilmis durumda,
+/// onlari da toplamak duplicate sayardi.
+/// </summary>
+public sealed record BOMCostResultDto(
+    int    ParentItemId,
+    string ParentItemCode,
+    string ParentItemName,
+    int?   ConfigId,
+    string? ConfigCode,
+    decimal Quantity,
+    int    PriceGroupId,
+    int    CurrencyId,
+    string? CurrencyCode,
+    string? CurrencySymbol,
+    string  PriceType,
+    DateTime ValidOn,
+    decimal TotalCost,
+    int    MissingPriceCount,  // fiyati bulunamamis leaf sayisi (UI uyarisi icin)
+    int    MaxDepth,
+    bool   Truncated,
+    IReadOnlyCollection<BOMCostLineDto> Lines);
+
+/// <summary>
+/// Maliyet satiri — explode'daki line + fiyat bilgisi. IsLeaf=false ise
+/// LineCost her zaman 0 (intermediate item; alt-recetesindeki leaf'ler
+/// kendi satirinda gorunur ve toplama katkida bulunur).
+/// </summary>
+public sealed record BOMCostLineDto(
+    int     ItemId,
+    string  ItemCode,
+    string  ItemName,
+    int?    ConfigId,
+    string? ConfigCode,
+    decimal TotalQuantity,
+    int     Depth,
+    bool    IsLeaf,
+    decimal UnitPrice,    // leaf icin DB fiyati; intermediate icin 0
+    decimal LineCost,     // sadece leaf icin > 0 (TotalQuantity * UnitPrice)
+    bool    HasPrice);    // leaf + DB'de fiyat bulundu mu
 
 public sealed record MaterialGroupDto(
     int Id,

@@ -1,0 +1,82 @@
+@model CalibraHub.Web.Models.Assets.AssignmentDocumentViewModel
+@{
+    Layout = null;
+    string D(DateTime? d) => d?.ToString("dd.MM.yyyy") ?? "—";
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zimmet Teslim Formu @(Model.DocumentNo)</title>
+    <style>
+        * { box-sizing:border-box; }
+        body { font-family:'Segoe UI',Arial,sans-serif; color:#0f172a; background:#f1f5f9; margin:0; padding:24px; }
+        .doc { max-width:760px; margin:0 auto; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:36px 44px; box-shadow:0 4px 24px rgba(0,0,0,.08); }
+        .doc-head { display:flex; align-items:flex-start; justify-content:space-between; border-bottom:2px solid #6366f1; padding-bottom:14px; margin-bottom:24px; }
+        .doc-title { font-size:22px; font-weight:800; letter-spacing:.02em; }
+        .doc-sub { font-size:12px; color:#64748b; margin-top:4px; }
+        .doc-meta { text-align:right; font-size:12px; color:#64748b; }
+        .doc-meta b { color:#0f172a; }
+        table.kv { width:100%; border-collapse:collapse; margin-bottom:8px; }
+        table.kv td { padding:9px 8px; border-bottom:1px solid #eef2f7; font-size:14px; vertical-align:top; }
+        table.kv td.k { width:200px; color:#64748b; font-weight:600; }
+        .sec { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#6366f1; margin:22px 0 6px; }
+        .note { margin-top:8px; font-size:13px; color:#334155; min-height:38px; padding:10px 12px; border:1px dashed #cbd5e1; border-radius:8px; }
+        .sign { display:flex; gap:40px; margin-top:48px; }
+        .sign-box { flex:1; text-align:center; }
+        .sign-line { border-top:1px solid #475569; margin-top:54px; padding-top:6px; font-size:12px; color:#64748b; }
+        .toolbar { max-width:760px; margin:0 auto 14px; display:flex; gap:8px; justify-content:flex-end; }
+        .btn { padding:9px 18px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid transparent; }
+        .btn-print { background:#6366f1; color:#fff; border-color:#4f46e5; }
+        .btn-close { background:#fff; border-color:#e2e8f0; color:#0f172a; }
+        @@media print {
+            body { background:#fff; padding:0; }
+            .doc { border:none; box-shadow:none; max-width:none; padding:24px; }
+            .toolbar { display:none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button class="btn btn-close" onclick="window.close()">Kapat</button>
+        <button class="btn btn-print" onclick="window.print()">🖨 Yazdır</button>
+    </div>
+
+    <div class="doc">
+        <div class="doc-head">
+            <div>
+                <div class="doc-title">ZİMMET TESLİM FORMU</div>
+                <div class="doc-sub">Varlık Zimmet Kaydı</div>
+            </div>
+            <div class="doc-meta">
+                <div>Belge No: <b>@(string.IsNullOrWhiteSpace(Model.DocumentNo) ? ("ZMT-" + Model.AssignmentId) : Model.DocumentNo)</b></div>
+                <div>Tarih: <b>@D(Model.AssignDate)</b></div>
+            </div>
+        </div>
+
+        <div class="sec">Varlık Bilgileri</div>
+        <table class="kv">
+            <tr><td class="k">Varlık Kodu</td><td>@Model.AssetCode</td></tr>
+            <tr><td class="k">Varlık Adı</td><td>@Model.AssetName</td></tr>
+            <tr><td class="k">Seri No</td><td>@(string.IsNullOrWhiteSpace(Model.SerialNo) ? "—" : Model.SerialNo)</td></tr>
+            <tr><td class="k">Lokasyon</td><td>@(string.IsNullOrWhiteSpace(Model.LocationName) ? "—" : Model.LocationName)</td></tr>
+        </table>
+
+        <div class="sec">Zimmet Bilgileri</div>
+        <table class="kv">
+            <tr><td class="k">Zimmetlenen Personel</td><td>@(Model.PersonnelName ?? "—")</td></tr>
+            <tr><td class="k">Zimmet Tarihi</td><td>@D(Model.AssignDate)</td></tr>
+            <tr><td class="k">İade Tarihi</td><td>@D(Model.ReturnDate)</td></tr>
+        </table>
+
+        <div class="sec">Açıklama</div>
+        <div class="note">@(Model.Note ?? "")</div>
+
+        <div class="sign">
+            <div class="sign-box"><div class="sign-line">Teslim Eden</div></div>
+            <div class="sign-box"><div class="sign-line">Teslim Alan (@(Model.PersonnelName ?? ""))</div></div>
+        </div>
+    </div>
+</body>
+</html>

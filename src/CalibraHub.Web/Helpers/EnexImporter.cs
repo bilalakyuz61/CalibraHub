@@ -13,7 +13,10 @@ public sealed record EnexNote(
     string Title,
     string HtmlContent,
     DateTime? Created,
-    List<EnexResource> Attachments);   // Resim olmayan kaynaklar dosya eki olarak kaydedilir
+    DateTime? Updated,
+    List<string> Tags,
+    List<EnexResource> Attachments,
+    int SkippedAttachmentCount);   // 20 MB sınırını aşan ve atlanan ek sayısı
 
 public sealed record EnexResource(
     string FileName,
@@ -22,6 +25,8 @@ public sealed record EnexResource(
 
 public static class EnexImporter
 {
+    private const long MaxAttachmentBytes = 20L * 1024 * 1024; // 20 MB
+
     private static readonly XmlReaderSettings XmlSettings = new()
     {
         DtdProcessing = DtdProcessing.Ignore,
@@ -37,13 +42,22 @@ public static class EnexImporter
         var notes = new List<EnexNote>();
         foreach (var noteEl in doc.Root?.Elements("note") ?? [])
         {
-            var title      = noteEl.Element("title")?.Value?.Trim() ?? "Adsız Not";
-            var created    = ParseEnexDate(noteEl.Element("created")?.Value);
+            var title   = noteEl.Element("title")?.Value?.Trim() ?? "Adsız Not";
+            var created = ParseEnexDate(noteEl.Element("created")?.Value);
+            var updated = ParseEnexDate(noteEl.Element("updated")?.Value);
+
+            // Etiketleri oku
+            var tags = noteEl.Elements("tag")
+                .Select(t => t.Value.Trim())
+                .Where(t => !string.IsNullOrEmpty(t))
+                .ToList();
+
             var contentRaw = noteEl.Element("content")?.Value ?? string.Empty;
 
             // Kaynakları ayrıştır — hash → kaynak sözlüğü inşa et
-            var byHash      = new Dictionary<string, ResourceEntry>(StringComparer.OrdinalIgnoreCase);
-            var attachments = new List<EnexResource>();
+            var byHash              = new Dictionary<string, ResourceEntry>(StringComparer.OrdinalIgnoreCase);
+            var attachments         = new List<EnexResource>();
+            int skippedAttachments  = 0;
 
             foreach (var resEl in noteEl.Elements("resource"))
             {
@@ -65,11 +79,16 @@ public static class EnexImporter
 
                 // Resim olmayanlar dosya eki listesine alınır; resimler HTML içinde inline gösterilir
                 if (!mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-                    attachments.Add(new EnexResource(fileName, mime, bytes));
+                {
+                    if (bytes.Length > MaxAttachmentBytes)
+                        skippedAttachments++;
+                    else
+                        attachments.Add(new EnexResource(fileName, mime, bytes));
+                }
             }
 
             var html = EnmlToHtml(contentRaw, byHash);
-            notes.Add(new EnexNote(title, html, created, attachments));
+            notes.Add(new EnexNote(title, html, created, updated, tags, attachments, skippedAttachments));
         }
 
         return notes;
@@ -115,24 +134,89 @@ public static class EnexImporter
 
         switch (name)
         {
-            case "en-todo":
-                var isChecked = string.Equals(
-                    el.Attribute("checked")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-                sb.Append(isChecked
-                    ? "<input type=\"checkbox\" checked disabled>"
-                    : "<input type=\"checkbox\" disabled>");
+            // ── Evernote özel gizli metadata divileri — içerik değil, atla ──────────
+            case "div" when IsHiddenEnMetadata(el):
                 return;
 
+            // ── Evernote kod bloğu (--en-codeblock:true) → <pre><code> ─────────────
+            case "div" when IsCodeBlock(el):
+            {
+                sb.Append("<pre><code>");
+                var codeSb = new StringBuilder();
+                ExtractPlainTextLines(el, codeSb);
+                // XDocument zaten &lt; → < şeklinde unescaped; HtmlEncoder geri encode eder → <code> için doğru
+                sb.Append(HtmlEncoder.Default.Encode(codeSb.ToString().Trim('\n')));
+                sb.Append("</code></pre>");
+                return;
+            }
+
+            // ── ul: task list kontrolü ───────────────────────────────────────────────
+            case "ul":
+            {
+                var isTaskList = el.Descendants().Any(d =>
+                    d.Name.LocalName.Equals("en-todo", StringComparison.OrdinalIgnoreCase));
+                sb.Append(isTaskList ? "<ul data-type=\"taskList\">" : "<ul>");
+                foreach (var child in el.Nodes())
+                    RenderNode(sb, child, byHash);
+                sb.Append("</ul>");
+                return;
+            }
+
+            // ── li: task item dönüşümü ───────────────────────────────────────────────
+            case "li":
+            {
+                // en-todo doğrudan veya iç div'lerde olabilir
+                var todoEl = el.Descendants().FirstOrDefault(d =>
+                    d.Name.LocalName.Equals("en-todo", StringComparison.OrdinalIgnoreCase));
+                if (todoEl != null)
+                {
+                    var isChecked = string.Equals(
+                        todoEl.Attribute("checked")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+                    sb.Append($"<li data-type=\"taskItem\" data-checked=\"{(isChecked ? "true" : "false")}\">");
+                    sb.Append("<p>");
+                    foreach (var child in el.Nodes())
+                    {
+                        // en-todo node'unu atla — data-checked ile temsil edildi
+                        if (child is XElement ce &&
+                            ce.Name.LocalName.Equals("en-todo", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        RenderNode(sb, child, byHash);
+                    }
+                    sb.Append("</p></li>");
+                }
+                else
+                {
+                    sb.Append("<li>");
+                    foreach (var child in el.Nodes())
+                        RenderNode(sb, child, byHash);
+                    sb.Append("</li>");
+                }
+                return;
+            }
+
+            // ── Standalone en-todo (ul/li dışında — örn. <div><en-todo/>metin</div>) ─
+            case "en-todo":
+            {
+                var isChecked = string.Equals(
+                    el.Attribute("checked")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+                // TipTap, <li> içindeki checkbox'ı task item olarak tanır
+                sb.Append(isChecked
+                    ? "<input type=\"checkbox\" checked>"
+                    : "<input type=\"checkbox\">");
+                return;
+            }
+
+            // ── Resim / dosya referansı ──────────────────────────────────────────────
             case "en-media":
+            {
                 var hash = el.Attribute("hash")?.Value ?? string.Empty;
                 if (byHash.TryGetValue(hash, out var res))
                 {
                     if (res.Mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
                     {
                         var b64 = Convert.ToBase64String(res.Data);
-                        // MIME type used as-is in data URI — HtmlEncoder would encode '/' → '&#x2F;'
-                        // which breaks the data URI. MIME values from ENEX are well-formed ASCII.
-                        sb.Append($"<img src=\"data:{res.Mime};base64,{b64}\" style=\"max-width:100%\">");
+                        // MIME değeri ENEX'den geliyor — ASCII, güvenli
+                        sb.Append($"<img src=\"data:{res.Mime};base64,{b64}\" style=\"max-width:100%\" alt=\"{HtmlEncoder.Default.Encode(res.FileName)}\">");
                     }
                     else
                     {
@@ -144,6 +228,7 @@ public static class EnexImporter
                     sb.Append("<span>[Ek]</span>");
                 }
                 return;
+            }
 
             case "en-crypt":
                 sb.Append("<span><em>[Şifreli içerik — Evernote'da açınız]</em></span>");
@@ -160,6 +245,61 @@ public static class EnexImporter
                 if (!el.IsEmpty)
                     sb.Append($"</{name}>");
                 return;
+        }
+    }
+
+    // ── Yardımcı metodlar ───────────────────────────────────────────────────────
+
+    /// <summary>Evernote'un gizli stil metadata div'i mi? (display:none + --en-chs içerir)</summary>
+    private static bool IsHiddenEnMetadata(XElement el)
+    {
+        var style = el.Attribute("style")?.Value ?? string.Empty;
+        return style.Contains("display:none", StringComparison.OrdinalIgnoreCase)
+            && style.Contains("--en-chs:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Evernote kod bloğu mu? (--en-codeblock:true CSS değişkeni içerir)</summary>
+    private static bool IsCodeBlock(XElement el)
+    {
+        var style = el.Attribute("style")?.Value ?? string.Empty;
+        return style.Contains("--en-codeblock:true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Bir elementin düz metin içeriğini satır bazında çıkartır.
+    /// Her iç &lt;div&gt; bir satır, &lt;br&gt; satır sonu olarak işlenir.
+    /// HTML entity'leri XDocument tarafından zaten çözümlenmiş olduğundan
+    /// ham (unescaped) metin döner — çağıran HtmlEncoder uygular.
+    /// </summary>
+    private static void ExtractPlainTextLines(XElement el, StringBuilder sb)
+    {
+        bool firstLine = true;
+        foreach (var node in el.Nodes())
+        {
+            if (node is XText t)
+            {
+                sb.Append(t.Value);
+            }
+            else if (node is XElement child)
+            {
+                var cName = child.Name.LocalName.ToLowerInvariant();
+                if (cName == "br")
+                {
+                    sb.Append('\n');
+                }
+                else if (cName == "div")
+                {
+                    // Her iç div yeni bir satır
+                    if (!firstLine) sb.Append('\n');
+                    firstLine = false;
+                    ExtractPlainTextLines(child, sb);
+                }
+                else
+                {
+                    // Span, b, i gibi inline elemanlar — metin içeriğini al
+                    ExtractPlainTextLines(child, sb);
+                }
+            }
         }
     }
 
@@ -191,7 +331,7 @@ public static class EnexImporter
         return $"attachment.{ext}";
     }
 
-    /// <summary>XML parse edilemezse <en-note> içeriğini string olarak çıkartır.</summary>
+    /// <summary>XML parse edilemezse &lt;en-note&gt; içeriğini string olarak çıkartır.</summary>
     private static string ExtractEnNoteContent(string enml)
     {
         var openStart = enml.IndexOf("<en-note", StringComparison.OrdinalIgnoreCase);

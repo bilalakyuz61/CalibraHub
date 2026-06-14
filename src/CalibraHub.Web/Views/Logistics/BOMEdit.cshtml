@@ -5,51 +5,74 @@
 
 @section Styles {
 <style>
+    /* ============================================================
+       BOMEdit Premium Skin — token-based, Apple/Linear/Vercel grade
+       Tokens kaynak: /css/tokens.css (--surface-*, --text-*, --accent-*,
+       --motion-*, --shadow-*, --radius-*, --space-*). Tema otomatik
+       (body.app-theme-light/dark CSS variable override).
+       Class isimleri KORUNUR — JS event delegation kirilmaz.
+       ============================================================ */
+
     /* ── Page-level overrides ── */
     .page-product-trees { --workspace-action-bar-height: 0px; }
-    .page-product-trees .workspace-tabs { position:relative;top:unset;flex:0 0 auto;border-bottom:1px solid var(--app-border,#dde3ee);z-index:2; }
-    .page-product-trees .workspace-tabs[hidden] { display:block !important;min-height:42px;visibility:hidden;pointer-events:none; }
+    .page-product-trees .workspace-tabs {
+        position:relative; top:unset; flex:0 0 auto;
+        border-bottom:1px solid var(--border-subtle);
+        z-index:2;
+    }
+    .page-product-trees .workspace-tabs[hidden] { display:block !important; min-height:42px; visibility:hidden; pointer-events:none; }
     .page-product-trees .workspace-action-bar { display:none !important; }
-    .page-product-trees .app-content-area { display:flex;flex-direction:column;overflow:hidden; }
-    .page-product-trees .integrator-dashboard { flex:1 1 0;min-height:0;display:flex;flex-direction:column; }
+    .page-product-trees .app-content-area { display:flex; flex-direction:column; overflow:hidden; }
+    .page-product-trees .integrator-dashboard { flex:1 1 0; min-height:0; display:flex; flex-direction:column; }
     .page-product-trees .integrator-dashboard__content {
-        flex:1 1 0;min-height:0;width:auto !important;max-width:none !important;
-        padding:0 !important;margin:0 !important;
-        display:flex !important;flex-direction:column !important;overflow:hidden;
+        flex:1 1 0; min-height:0; width:auto !important; max-width:none !important;
+        padding:0 !important; margin:0 !important;
+        display:flex !important; flex-direction:column !important; overflow:hidden;
+        font-family: var(--font-stack);
+        color: var(--text-primary);
     }
 
-    /* ── Action bar ── */
+    /* ── Action bar (glass header) ─────────────────────────────────
+       Sticky-feel: backdrop-filter blur + saturate, scroll'da is-scrolled
+       class'i ile shadow + border eklenir (Scripts'te listener var). */
     .pte-action-bar {
-        display:flex;align-items:center;gap:8px;padding:8px 16px;flex-shrink:0;
-        background:rgba(15,15,26,0.85);border-bottom:1px solid rgba(255,255,255,0.06);
-        backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+        display:flex; align-items:center; gap: var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        flex-shrink:0;
+        background: var(--surface-glass);
+        border-bottom: 1px solid var(--border-subtle);
+        backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+        -webkit-backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
         position:relative;
+        transition: box-shadow var(--motion-base) var(--motion-ease-out),
+                    border-color var(--motion-base) var(--motion-ease-out);
     }
-    body.app-theme-light .pte-action-bar {
-        background:rgba(248,250,252,0.92);border-bottom-color:#e2e8f0;
+    .pte-action-bar.is-scrolled {
+        border-bottom-color: var(--border-strong);
+        box-shadow: var(--shadow-elev-2);
     }
     .pte-action-bar .pte-meta {
-        margin-left:auto;font-size:0.72rem;color:rgba(255,255,255,0.55);font-weight:500;
+        margin-left:auto;
+        font-size: 11.5px;
+        color: var(--text-muted);
+        font-weight: var(--font-weight-medium);
+        letter-spacing: 0.01em;
     }
-    body.app-theme-light .pte-action-bar .pte-meta { color:#94a3b8; }
 
-    /* ── KITT (Knight Rider) save flash — MaterialCardEdit ile ayni desen ──
-       Aksiyon seridinin alt kenarinda yesil sweep bg + glow nokta scanner.
-       NOT: pte-action-bar'da overflow:hidden YOK — dropdown menu (.pte-actions-menu)
-       action bar'in disinda asagi dogru acilir. KITT scanner zaten action bar
-       sinirlari icinde kalacak sekilde konumlandirildi (bottom:0). */
+    /* ── KITT (Knight Rider) save flash — Kullanicinin sevdigi mikro-etkilesim,
+       motion token'larla rafine edildi. Yesil scanner aksiyon seridinin altinda. */
     .pte-action-bar::before {
-        content:'';position:absolute;left:0;right:0;bottom:0;
-        height:2px;pointer-events:none;opacity:0;
-        background:linear-gradient(90deg,
+        content:''; position:absolute; left:0; right:0; bottom:0;
+        height:2px; pointer-events:none; opacity:0;
+        background: linear-gradient(90deg,
             rgba(0,60,20,0) 0%,
             rgba(10,120,40,.55) 50%,
             rgba(0,60,20,0) 100%);
     }
     .pte-action-bar::after {
-        content:'';position:absolute;left:0;bottom:0;
-        width:18%;height:4px;pointer-events:none;opacity:0;
-        background:linear-gradient(90deg,
+        content:''; position:absolute; left:0; bottom:0;
+        width:18%; height:4px; pointer-events:none; opacity:0;
+        background: linear-gradient(90deg,
             transparent 0%,
             rgba(34,197,94,.35) 18%,
             rgba(74,255,140,1) 50%,
@@ -61,8 +84,8 @@
             0 0 40px 12px rgba(34,197,94,.22);
         border-radius:50%;
     }
-    .pte-action-bar.is-save-flash::before { animation:pteKittBg   1800ms ease-out forwards; }
-    .pte-action-bar.is-save-flash::after  { animation:pteKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+    .pte-action-bar.is-save-flash::before { animation: pteKittBg   1800ms var(--motion-ease-out) forwards; }
+    .pte-action-bar.is-save-flash::after  { animation: pteKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
     @@keyframes pteKittBg {
         0%, 100% { opacity:0; }
         10%, 90% { opacity:1; }
@@ -76,580 +99,926 @@
         100% { opacity:0; left:0; }
     }
 
-    /* ── Buttons ── */
+    /* ── Buttons (premium polish) ──
+       Token-based; hover'da lift, active'de mikro-sıkışma. */
     .pte-btn {
-        display:inline-flex;align-items:center;gap:6px;
-        padding:7px 14px;border-radius:8px;border:1px solid;
-        font-size:0.78rem;font-weight:600;cursor:pointer;
-        transition:all 0.12s ease;background:transparent;
+        display:inline-flex; align-items:center; gap: 6px;
+        padding: 7px 14px;
+        border-radius: var(--radius-md);
+        border: 1px solid transparent;
+        font-size: 12.5px;
+        font-weight: var(--font-weight-semibold);
+        line-height: 1.2;
+        letter-spacing: -0.005em;
+        cursor:pointer;
+        transition: background var(--motion-fast) var(--motion-ease-out),
+                    border-color var(--motion-fast) var(--motion-ease-out),
+                    color var(--motion-fast) var(--motion-ease-out),
+                    transform var(--motion-fast) var(--motion-ease-out),
+                    box-shadow var(--motion-fast) var(--motion-ease-out);
+        background: transparent;
+        user-select: none;
     }
-    .pte-btn:disabled { opacity:0.5;cursor:not-allowed; }
-    .pte-btn--primary { background:#6366f1;border-color:#4f46e5;color:#fff; }
-    .pte-btn--primary:hover:not(:disabled) { background:#4f46e5; }
+    .pte-btn:disabled { opacity:0.5; cursor:not-allowed; }
+    .pte-btn:active:not(:disabled) { transform: translateY(0.5px) scale(0.99); }
+
+    .pte-btn--primary {
+        /* WorkOrderEdit DNA: indigo gradient — daha premium hava. */
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border-color: #4f46e5;
+        color: #ffffff;
+        box-shadow: 0 1px 0 rgba(255,255,255,0.14) inset, var(--shadow-elev-1);
+    }
+    .pte-btn--primary:hover:not(:disabled) {
+        background: linear-gradient(135deg, #7c83ff 0%, #5b54ea 100%);
+        border-color: #4f46e5;
+        filter: brightness(1.05);
+        box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, var(--shadow-elev-2);
+    }
+
     .pte-btn--secondary {
-        background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.65);
+        background: var(--surface-elev-1);
+        border-color: var(--border-subtle);
+        color: var(--text-secondary);
     }
-    body.app-theme-light .pte-btn--secondary { background:#fff;border-color:#e2e8f0;color:#475569; }
-    .pte-btn--secondary:hover:not(:disabled) { background:rgba(255,255,255,0.1);color:#fff; }
-    body.app-theme-light .pte-btn--secondary:hover:not(:disabled) { background:#f1f5f9;color:#1e293b; }
+    .pte-btn--secondary:hover:not(:disabled) {
+        background: var(--surface-elev-2);
+        border-color: var(--border-strong);
+        color: var(--text-primary);
+    }
+
     .pte-btn--danger {
-        background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.25);color:#f87171;
+        background: var(--danger-soft-bg);
+        border-color: transparent;
+        color: var(--danger-soft-fg);
     }
-    .pte-btn--danger:hover:not(:disabled) { background:rgba(239,68,68,0.18); }
+    .pte-btn--danger:hover:not(:disabled) {
+        background: var(--danger);
+        color: #ffffff;
+    }
+
     .pte-btn--actions {
-        background:rgba(6,182,212,0.08);border-color:rgba(6,182,212,0.3);color:#67e8f9;
+        background: var(--accent-soft-bg);
+        border-color: transparent;
+        color: var(--accent-soft-fg);
     }
     .pte-btn--actions:hover:not(:disabled),
-    .pte-btn--actions.is-active { background:rgba(6,182,212,0.18);color:#a5f3fc; }
-    .pte-btn--actions svg:first-child { transition:transform .35s ease; }
+    .pte-btn--actions.is-active {
+        background: var(--accent);
+        color: #ffffff;
+    }
+    .pte-btn--actions svg:first-child { transition: transform var(--motion-slow) var(--motion-ease-spring); }
     .pte-btn--actions:hover:not(:disabled) svg:first-child,
-    .pte-btn--actions.is-active svg:first-child { transform:rotate(60deg); }
-    body.app-theme-light .pte-btn--actions {
-        background:rgba(6,182,212,0.06);border-color:rgba(6,182,212,0.4);color:#0891b2;
-    }
-    body.app-theme-light .pte-btn--actions:hover:not(:disabled),
-    body.app-theme-light .pte-btn--actions.is-active {
-        background:rgba(6,182,212,0.14);color:#0e7490;
-    }
+    .pte-btn--actions.is-active svg:first-child { transform: rotate(72deg); }
 
     /* ── Islemler dropdown menu ──
-       NOT: position:fixed — `.app-content-area`'da overflow:hidden var, bu yuzden
-       absolute olunca clipped oluyordu. Konum JS tarafinda buton rect'ine gore
-       set edilir (top + right). z-index 9999 = toast (10000) altinda. */
-    .pte-actions-wrap { position:relative;display:inline-flex; }
+       position:fixed — app-content-area'da overflow:hidden var, absolute clipped olur.
+       Konum JS tarafinda buton rect'ine gore set edilir. */
+    .pte-actions-wrap { position:relative; display:inline-flex; }
     .pte-actions-menu {
-        position:fixed;z-index:9999;
-        min-width:240px;display:none;
-        background:rgba(23,26,43,.96);border:1px solid rgba(255,255,255,.1);
-        border-radius:10px;overflow:hidden;
-        box-shadow:0 12px 32px rgba(0,0,0,.5);
-        backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-        animation:pteActMenuIn .14s ease-out;
+        position:fixed; z-index:9999;
+        min-width:240px; display:none;
+        background: var(--surface-overlay);
+        border:1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        overflow:hidden;
+        box-shadow: var(--shadow-elev-3);
+        backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+        -webkit-backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+        animation: pteActMenuIn var(--motion-fast) var(--motion-ease-out);
+        padding: var(--space-1);
     }
     .pte-actions-menu.is-open { display:block; }
-    body.app-theme-light .pte-actions-menu {
-        background:#fff;border-color:#e2e8f0;box-shadow:0 12px 32px rgba(15,23,42,.16);
-    }
     @@keyframes pteActMenuIn {
-        from { opacity:0;transform:translateY(-4px); }
-        to   { opacity:1;transform:translateY(0); }
+        from { opacity:0; transform: translateY(-6px) scale(0.98); }
+        to   { opacity:1; transform: translateY(0)   scale(1); }
     }
     .pte-actions-menu__item {
-        display:flex;align-items:center;gap:10px;
-        width:100%;padding:10px 14px;border:0;background:transparent;
-        font-size:.8rem;font-weight:500;color:rgba(255,255,255,.85);
-        cursor:pointer;text-align:left;
-        transition:background .12s,color .12s;
+        display:flex; align-items:center; gap: var(--space-3);
+        width:100%; padding: 9px 12px;
+        border:0; background:transparent;
+        font-size: 12.5px; font-weight: var(--font-weight-medium);
+        color: var(--text-secondary);
+        cursor:pointer; text-align:left;
+        border-radius: var(--radius-sm);
+        transition: background var(--motion-fast) var(--motion-ease-out),
+                    color      var(--motion-fast) var(--motion-ease-out);
     }
-    body.app-theme-light .pte-actions-menu__item { color:#1e293b; }
     .pte-actions-menu__item:hover {
-        background:rgba(99,102,241,.14);color:#a5b4fc;
+        background: var(--accent-soft-bg);
+        color: var(--accent-soft-fg);
     }
-    body.app-theme-light .pte-actions-menu__item:hover {
-        background:#eef2ff;color:#4f46e5;
-    }
-    .pte-actions-menu__item:disabled {
-        opacity:.45;cursor:not-allowed;
-    }
-    .pte-actions-menu__item svg { flex-shrink:0;opacity:.7; }
+    .pte-actions-menu__item:disabled { opacity:.45; cursor:not-allowed; }
+    .pte-actions-menu__item svg { flex-shrink:0; opacity:.75; }
     .pte-actions-menu__divider {
-        height:1px;background:rgba(255,255,255,.08);margin:4px 0;
+        height:1px; background: var(--border-subtle); margin: var(--space-1) 0;
     }
-    body.app-theme-light .pte-actions-menu__divider { background:#e2e8f0; }
-    .pte-btn--sm { padding:5px 10px;font-size:0.72rem;border-radius:6px; }
+    .pte-btn--sm {
+        padding: 5px 10px;
+        font-size: 11.5px;
+        border-radius: var(--radius-sm);
+    }
 
-    /* ── Islemler modal ── */
+    /* ── Islemler modal — premium dialog ── */
     .pta-overlay {
-        position:fixed;inset:0;z-index:9999;display:none;
-        background:rgba(8,12,24,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-        align-items:center;justify-content:center;padding:24px;
-        animation:ptaFadeIn .15s ease-out;
+        position:fixed; inset:0; z-index:9999; display:none;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(8px) saturate(160%);
+        -webkit-backdrop-filter: blur(8px) saturate(160%);
+        align-items:center; justify-content:center; padding: var(--space-5);
+        animation: ptaFadeIn var(--motion-base) var(--motion-ease-out);
     }
     .pta-overlay.is-open { display:flex; }
     @@keyframes ptaFadeIn { from { opacity:0; } to { opacity:1; } }
     .pta-panel {
-        width:min(520px, 96vw);max-height:88vh;overflow:auto;
-        background:rgba(23,26,43,.96);border:1px solid rgba(255,255,255,.08);
-        border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.55);
-        color:rgba(255,255,255,.88);
-        animation:ptaSlide .2s cubic-bezier(.2,.9,.3,1);
+        width: min(560px, 96vw); max-height: 88vh; overflow: auto;
+        background: var(--surface-elev-1);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-elev-3);
+        color: var(--text-primary);
+        animation: ptaSlide var(--motion-slow) var(--motion-ease-spring);
     }
-    body.app-theme-light .pta-panel {
-        background:#fff;border-color:#e2e8f0;color:#1e293b;
+    @@keyframes ptaSlide {
+        from { transform: translateY(12px) scale(0.96); opacity:0; }
+        to   { transform: none;                          opacity:1; }
     }
-    @@keyframes ptaSlide { from { transform:translateY(8px) scale(.97); opacity:0; } to { transform:none; opacity:1; } }
     .pta-header {
-        display:flex;align-items:center;gap:10px;
-        padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.08);
+        display:flex; align-items:center; gap: var(--space-3);
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle);
     }
-    body.app-theme-light .pta-header { border-bottom-color:#e2e8f0; }
-    .pta-header h3 { margin:0;font-size:.92rem;font-weight:700;flex:1; }
+    .pta-header h3 {
+        margin:0; font-size: 14px;
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: -0.01em;
+        flex:1;
+        color: var(--text-primary);
+    }
     .pta-close {
-        background:transparent;border:0;color:inherit;opacity:.6;cursor:pointer;
-        padding:4px 8px;border-radius:6px;font-size:1.2rem;line-height:1;
+        background: transparent; border:0;
+        color: var(--text-muted);
+        cursor:pointer;
+        width: 28px; height: 28px;
+        border-radius: var(--radius-sm);
+        font-size: 18px; line-height:1;
+        display:flex; align-items:center; justify-content:center;
+        transition: background var(--motion-fast) var(--motion-ease-out),
+                    color      var(--motion-fast) var(--motion-ease-out);
     }
-    .pta-close:hover { opacity:1;background:rgba(255,255,255,.06); }
-    .pta-section { padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06); }
-    body.app-theme-light .pta-section { border-bottom-color:#e2e8f0; }
-    .pta-section:last-of-type { border-bottom:0; }
+    .pta-close:hover {
+        background: var(--surface-elev-2);
+        color: var(--text-primary);
+    }
+    .pta-section {
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+    .pta-section:last-of-type { border-bottom: 0; }
     .pta-section h4 {
-        margin:0 0 10px;font-size:.78rem;font-weight:700;text-transform:uppercase;
-        letter-spacing:.04em;color:rgba(255,255,255,.55);
+        margin: 0 0 12px;
+        font-size: 10.5px;
+        font-weight: var(--font-weight-semibold);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
     }
-    body.app-theme-light .pta-section h4 { color:#64748b; }
     .pta-source {
-        font-size:.78rem;color:rgba(255,255,255,.7);
-        padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.04);
-        border:1px dashed rgba(255,255,255,.12);margin-bottom:12px;
+        font-size: 12.5px;
+        color: var(--text-secondary);
+        padding: 10px 14px;
+        border-radius: var(--radius-md);
+        background: var(--surface-base);
+        border: 1px dashed var(--border-strong);
+        margin-bottom: var(--space-3);
     }
-    body.app-theme-light .pta-source { background:#f8fafc;border-color:#cbd5e1;color:#475569; }
-    .pta-source strong { color:#a5b4fc;font-weight:700; }
-    body.app-theme-light .pta-source strong { color:#4f46e5; }
-    .pta-field { display:flex;flex-direction:column;gap:6px;margin-bottom:12px; }
+    .pta-source strong {
+        color: var(--accent-soft-fg);
+        font-weight: var(--font-weight-semibold);
+    }
+    .pta-field { display:flex; flex-direction:column; gap: 6px; margin-bottom: var(--space-3); }
     .pta-field-label {
-        font-size:.74rem;font-weight:600;color:rgba(255,255,255,.7);
+        font-size: 11px;
+        font-weight: var(--font-weight-semibold);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
     }
-    body.app-theme-light .pta-field-label { color:#475569; }
-    .pta-field-required::after { content:' *';color:#f87171; }
-    .pta-field-row { display:flex;gap:8px;align-items:stretch; }
+    .pta-field-required::after { content: ' *'; color: var(--danger); }
+    .pta-field-row { display:flex; gap: var(--space-2); align-items:stretch; position:relative; }
     .pta-field-row .pte-input { flex:1; }
+    .pta-field-row .gl-wrapper { flex:1; min-width:0; }
+    .pta-field-row .gl-card    { width:100%; }
     .pta-field-name {
-        flex:1;padding:9px 12px;border-radius:9px;
-        background:rgba(255,255,255,.02);border:1px dashed rgba(255,255,255,.08);
-        color:rgba(255,255,255,.55);font-size:.82rem;
-    }
-    body.app-theme-light .pta-field-name {
-        background:#f8fafc;border-color:#e2e8f0;color:#94a3b8;
+        flex:1; padding: 9px 12px;
+        border-radius: var(--radius-md);
+        background: transparent;
+        border: 1px dashed var(--border-subtle);
+        color: var(--text-muted);
+        font-size: 12.5px;
+        font-style: italic;
     }
     .pta-actions {
-        padding:14px 18px;display:flex;justify-content:flex-end;gap:10px;
-        background:rgba(255,255,255,.02);border-top:1px solid rgba(255,255,255,.06);
+        padding: 14px 20px;
+        display:flex; justify-content:flex-end; gap: var(--space-2);
+        background: var(--surface-base);
+        border-top: 1px solid var(--border-subtle);
     }
-    body.app-theme-light .pta-actions { background:#f8fafc;border-top-color:#e2e8f0; }
-
-    /* Modal'da hedef alanlar — LookupCard mount edildiginde dolan kart-input */
-    .pta-field-row { position:relative; }
-    .pta-field-row .gl-wrapper { flex:1;min-width:0; }
-    .pta-field-row .gl-card { width:100%; }
 
     /* ── Body: sidenav + content ── */
-    .pte-body { flex:1 1 0;min-height:0;display:flex;flex-direction:row;overflow:hidden;position:relative; }
-
-    /* ── Sidebar navigation ── */
-    .pte-sidenav {
-        width:192px;flex-shrink:0;display:flex;flex-direction:column;gap:2px;
-        padding:12px 8px;
-        background:rgba(255,255,255,0.02);border-right:1px solid rgba(255,255,255,0.07);
-        overflow-y:auto;
+    .pte-body {
+        flex:1 1 0; min-height:0;
+        display:flex; flex-direction:row;
+        overflow:hidden; position:relative;
+        background: var(--surface-base);
     }
-    body.app-theme-light .pte-sidenav {
-        background:#f8fafc;border-right-color:#e2e8f0;
+
+    /* ── Sidebar navigation (Apple Settings DNA — vertical pills) ── */
+    .pte-sidenav {
+        width: 208px;
+        flex-shrink: 0;
+        display:flex; flex-direction:column;
+        gap: 2px;
+        padding: var(--space-4) var(--space-2);
+        background: transparent;
+        border-right: 1px solid var(--border-subtle);
+        overflow-y: auto;
     }
     .pte-sidenav-label {
-        font-size:0.7rem;font-weight:700;
-        color:rgba(255,255,255,0.55);padding:8px 10px 4px;
+        font-size: 10.5px;
+        font-weight: var(--font-weight-semibold);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        padding: 10px 12px 6px;
     }
-    body.app-theme-light .pte-sidenav-label { color:#94a3b8; }
     .pte-nav-btn {
-        display:flex;align-items:center;gap:8px;width:100%;
-        padding:9px 12px;border:none;background:transparent;cursor:pointer;
-        font-size:0.78rem;font-weight:500;color:rgba(255,255,255,0.55);
-        border-radius:8px;border-left:3px solid transparent;
-        transition:all 0.12s;text-align:left;
+        position: relative;
+        display:flex; align-items:center; gap: var(--space-2);
+        width:100%;
+        padding: 9px 12px;
+        border:none; background:transparent;
+        cursor:pointer;
+        font-size: 12.5px;
+        font-weight: var(--font-weight-medium);
+        color: var(--text-secondary);
+        border-radius: var(--radius-md);
+        text-align:left;
+        transition: background var(--motion-fast) var(--motion-ease-out),
+                    color      var(--motion-fast) var(--motion-ease-out),
+                    transform  var(--motion-fast) var(--motion-ease-out);
     }
-    body.app-theme-light .pte-nav-btn { color:#64748b; }
-    .pte-nav-btn:hover { background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.8); }
-    body.app-theme-light .pte-nav-btn:hover { background:rgba(99,102,241,0.05);color:#475569; }
+    .pte-nav-btn::before {
+        /* Sol kenarda 2px accent bar — Linear DNA. Hidden when not active. */
+        content:'';
+        position:absolute;
+        left: 4px; top: 50%;
+        width: 2px; height: 0;
+        background: var(--accent);
+        border-radius: 2px;
+        transform: translateY(-50%);
+        transition: height var(--motion-base) var(--motion-ease-spring);
+    }
+    .pte-nav-btn:hover {
+        background: var(--surface-elev-1);
+        color: var(--text-primary);
+        transform: translateX(1px);
+    }
     .pte-nav-btn.is-active {
-        border-left-color:#6366f1;background:rgba(99,102,241,0.09);color:#a5b4fc;font-weight:600;
+        background: var(--accent-soft-bg);
+        color: var(--accent-soft-fg);
+        font-weight: var(--font-weight-semibold);
     }
-    body.app-theme-light .pte-nav-btn.is-active {
-        background:rgba(99,102,241,0.07);color:#4f46e5;
-    }
-    .pte-nav-dot {
-        width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;opacity:0.5;
-    }
-    .pte-nav-btn.is-active .pte-nav-dot { opacity:1; }
+    .pte-nav-btn.is-active::before { height: 60%; }
+
+    /* Eski .pte-nav-dot — accent bar pattern'i ile yer degistirildi.
+       Class korunur (HTML'de var) ama gorunmez yapilir. */
+    .pte-nav-dot { display: none; }
+
     .pte-nav-count {
-        margin-left:auto;padding:1px 6px;border-radius:999px;
-        font-size:0.6rem;font-weight:700;font-family:monospace;
-        background:rgba(99,102,241,0.12);color:#a5b4fc;
-        border:1px solid rgba(99,102,241,0.25);flex-shrink:0;
+        margin-left: auto;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: var(--font-weight-semibold);
+        font-variant-numeric: tabular-nums;
+        background: var(--surface-elev-2);
+        color: var(--text-muted);
+        border: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+        transition: background var(--motion-fast) var(--motion-ease-out),
+                    color      var(--motion-fast) var(--motion-ease-out);
     }
-    body.app-theme-light .pte-nav-count { background:rgba(99,102,241,0.08);color:#4f46e5; }
+    /* Badge >0 (data-count attr ile JS yazarsa) → accent renge geçer.
+       Fallback: count "0" string'i ise muted, aksi halde accent. */
+    .pte-nav-count:not(:empty):not([data-count="0"]) {
+        background: var(--accent);
+        color: #ffffff;
+        border-color: transparent;
+    }
 
-    /* ── Content area ── */
+    /* ── Content area ──
+       Sade navy yuzey — WorkOrderEdit DNA. Onceki radial gradient kaldirildi:
+       "fazla parilti" hissi yerine temiz, gozu yormayan zemin. */
     .pte-content {
-        flex:1 1 auto;min-width:0;overflow-y:auto;padding:20px 24px;background:transparent;
+        flex:1 1 auto; min-width:0;
+        overflow-y:auto;
+        padding: var(--space-5) var(--space-6);
+        background: var(--surface-base);
     }
-    body.app-theme-dark .pte-content,
-    html.dark .pte-content {
-        background:#0c0f1a;
-        background-image:radial-gradient(at 20% 30%,rgba(99,102,241,0.12) 0px,transparent 50%),
-                         radial-gradient(at 80% 20%,rgba(14,165,233,0.08) 0px,transparent 50%),
-                         radial-gradient(at 50% 80%,rgba(168,85,247,0.08) 0px,transparent 50%);
-    }
-    body.app-theme-light .pte-content { background:#f8fafc; }
 
-    /* ── Cards ── */
+    /* ── Cards (premium elevation) ── */
     .pte-card {
-        background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
-        border-radius:14px;padding:22px;
-        backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-        margin-bottom:16px;
-    }
-    body.app-theme-light .pte-card {
-        background:rgba(255,255,255,0.8);border-color:rgba(15,23,42,0.08);
-        box-shadow:0 2px 6px rgba(15,23,42,0.04);
+        background: var(--surface-elev-1);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        margin-bottom: var(--space-4);
+        box-shadow: var(--shadow-elev-1);
+        transition: border-color var(--motion-base) var(--motion-ease-out),
+                    box-shadow   var(--motion-base) var(--motion-ease-out);
     }
     .pte-card-title {
-        font-size:0.85rem;font-weight:700;
-        color:rgba(255,255,255,0.85);
-        margin:0 0 14px 0;display:flex;align-items:center;gap:8px;
+        font-size: 13px;
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: -0.005em;
+        color: var(--text-primary);
+        margin: 0 0 var(--space-4) 0;
+        display:flex; align-items:center; gap: 10px;
     }
-    body.app-theme-light .pte-card-title { color:#64748b; }
     .pte-card-title::before {
-        content:'';width:6px;height:6px;border-radius:50%;background:#6366f1;
+        content:'';
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft-bg);
     }
 
     /* ── Form grid ── */
-    .pte-grid { display:flex;flex-direction:column;gap:12px; }
-    .pte-row { display:flex;align-items:center;gap:10px;flex-wrap:wrap; }
-    .pte-field { display:flex;flex-direction:column;gap:5px; }
+    .pte-grid { display:flex; flex-direction:column; gap: var(--space-3); }
+    .pte-row  { display:flex; align-items:center; gap: var(--space-3); flex-wrap:wrap; }
+    .pte-field { display:flex; flex-direction:column; gap: 5px; }
     .pte-label {
-        font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.65);
-        letter-spacing:0.02em;white-space:nowrap;flex-shrink:0;
+        font-size: 11px;
+        font-weight: var(--font-weight-semibold);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        white-space: nowrap;
+        flex-shrink: 0;
     }
-    body.app-theme-light .pte-label { color:#64748b; }
-    .pte-label--req::after { content:' *';color:#f87171; }
+    .pte-label--req::after { content: ' *'; color: var(--danger); margin-left: 1px; }
 
-    /* ── Inputs ── */
+    /* ── Inputs (premium polish) ──
+       Hover'da hafif elevation, focus'ta accent ring (3px), placeholder muted. */
     .pte-input {
-        padding:9px 12px;border-radius:9px;
-        background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
-        color:rgba(255,255,255,0.85);font-size:0.85rem;
-        transition:border-color 0.15s,background 0.15s;
-        outline:none;
+        padding: 9px 12px;
+        border-radius: var(--radius-md);
+        background: var(--surface-elev-2);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-primary);
+        font-family: var(--font-stack);
+        font-size: 13px;
+        font-weight: var(--font-weight-medium);
+        letter-spacing: -0.005em;
+        transition: border-color var(--motion-fast) var(--motion-ease-out),
+                    background   var(--motion-fast) var(--motion-ease-out),
+                    box-shadow   var(--motion-fast) var(--motion-ease-out);
+        outline: none;
     }
-    body.app-theme-light .pte-input { background:#fff;border-color:#e2e8f0;color:#1e293b; }
+    .pte-input:hover:not(:focus):not([readonly]) {
+        border-color: var(--border-strong);
+    }
     .pte-input:focus {
-        border-color:#6366f1;background:rgba(255,255,255,0.06);
-        box-shadow:0 0 0 3px rgba(99,102,241,0.12);
+        border-color: var(--border-focus);
+        box-shadow: 0 0 0 var(--ring-width) var(--ring-color);
     }
-    body.app-theme-light .pte-input:focus { background:#fff; }
-    .pte-input::placeholder { color:rgba(255,255,255,0.4); }
-    body.app-theme-light .pte-input::placeholder { color:#94a3b8; }
-    .pte-input[readonly] { opacity:0.7;cursor:default; }
+    .pte-input::placeholder {
+        color: var(--text-muted);
+        font-weight: var(--font-weight-regular);
+        font-style: italic;
+        opacity: 0.7;
+    }
+    .pte-input[readonly] {
+        background: transparent;
+        cursor: default;
+    }
     .pte-input.is-invalid {
-        border-color:#ef4444;background:rgba(239,68,68,0.06);
-        animation:pteShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        border-color: var(--danger);
+        background: var(--danger-soft-bg);
+        animation: pteShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
     }
-    .pte-input[type="number"] { text-align:right;-moz-appearance:textfield; }
+    .pte-input[type="number"] {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        -moz-appearance: textfield;
+    }
     .pte-input[type="number"]::-webkit-outer-spin-button,
-    .pte-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none;margin:0; }
+    .pte-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
 
-    /* ── Lookup ── */
+    /* ── Lookup pair pattern (Apple Settings DNA) ──
+       Sol "kod" input — interaktif, normal border + focus ring
+       Sag "ad/aciklama" input — readonly, BORDER YOK, transparan, secondary text
+       Bu kombinasyon "kod = source of truth, ad = derived display" hiyerarsisini
+       gorsel olarak iletir. Bridge lookup popup'i sol input'a mount olur. */
+    .pte-bilesen-vals .pte-input[readonly] {
+        background: transparent;
+        border-color: transparent;
+        color: var(--text-secondary);
+        font-weight: var(--font-weight-regular);
+        padding-left: 0;
+    }
+    .pte-bilesen-vals .pte-input[readonly]:hover { border-color: transparent; }
+    .pte-bilesen-vals .pte-input[readonly]::placeholder { color: var(--text-disabled); }
+
+    /* ── Recete durum pill'i ── */
+    .pte-recipe-status {
+        font-size: 10.5px;
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        line-height: 1.4;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .pte-recipe-status::before {
+        content: '';
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .pte-recipe-status--existing {
+        color: var(--success-soft-fg);
+        background: var(--success-soft-bg);
+        border-color: transparent;
+    }
+    .pte-recipe-status--existing::before { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft-bg); }
+    .pte-recipe-status--new {
+        color: var(--accent-soft-fg);
+        background: var(--accent-soft-bg);
+        border-color: transparent;
+    }
+    .pte-recipe-status--new::before { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft-bg); }
+
+    /* ── Lookup ──
+       pte-lookup: input + (optional) buyutec butonu — tek border'li capsule.
+       Bridge LookupCard'i veya FixedFieldLookupBridge'i icine mount edebilir. */
     .pte-lookup {
-        display:inline-flex;align-items:stretch;border-radius:9px;overflow:hidden;
+        display: inline-flex;
+        align-items: stretch;
+        border-radius: var(--radius-md);
+        overflow: hidden;
     }
-    .pte-lookup .pte-input { border-radius:9px 0 0 9px;border-right:0; }
-    /* LookupCard mount edilince gl-wrapper/gl-card pte-lookup container'ini tam doldursun
-       (Mamul Kodu vs Kombinasyon Kodu satirlarinin gorsel paritesi icin). */
-    .pte-lookup .gl-wrapper { width:100%;flex:1 1 auto; }
-    .pte-lookup .gl-card    { width:100%; }
-    .pte-lookup-btn {
-        display:flex;align-items:center;justify-content:center;width:36px;
-        background:rgba(99,102,241,0.08);border:1px solid rgba(255,255,255,0.1);
-        border-left:0;border-radius:0 9px 9px 0;cursor:pointer;
-        color:#a5b4fc;transition:all 0.12s;
+    .pte-lookup .pte-input {
+        border-radius: var(--radius-md) 0 0 var(--radius-md);
+        border-right: 0;
     }
-    body.app-theme-light .pte-lookup-btn {
-        background:rgba(99,102,241,0.06);border-color:#e2e8f0;color:#6366f1;
-    }
-    .pte-lookup-btn:hover { background:rgba(99,102,241,0.18); }
+    /* LookupCard mount edildiginde gl-wrapper/gl-card pte-lookup container'ini doldursun. */
+    .pte-lookup .gl-wrapper { width: 100%; flex: 1 1 auto; }
+    .pte-lookup .gl-card    { width: 100%; }
 
-    /* ── Bridge wrapper'i flex stretch — ffl-clear-btn input ile ayni yukseklikte ── */
-    .pte-lookup .ffl-wrapper {
-        display:flex;align-items:stretch;
+    .pte-lookup-btn {
+        display: flex; align-items: center; justify-content: center;
+        width: 36px;
+        background: var(--accent-soft-bg);
+        border: 1px solid var(--border-subtle);
+        border-left: 0;
+        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        cursor: pointer;
+        color: var(--accent-soft-fg);
+        transition: background var(--motion-fast) var(--motion-ease-out),
+                    color      var(--motion-fast) var(--motion-ease-out);
     }
-    /* ── Bridge clear (X) butonu — rehber (buyutec) butonu ile oranli ── */
+    .pte-lookup-btn:hover {
+        background: var(--accent);
+        color: #ffffff;
+    }
+
+    /* Bridge wrapper'i flex stretch — ffl-clear-btn input ile ayni yukseklikte */
+    .pte-lookup .ffl-wrapper { display: flex; align-items: stretch; }
     .pte-lookup .ffl-clear-btn {
-        width:30px;height:auto;min-height:100%;
-        background:transparent;
-        border:1px solid rgba(255,255,255,0.1);
-        border-left:0;border-right:0;border-radius:0;
-        color:rgba(255,255,255,0.35);
-        display:flex;align-items:center;justify-content:center;
-        transition:all 0.12s;
+        width: 30px; height: auto; min-height: 100%;
+        background: transparent;
+        border: 1px solid var(--border-subtle);
+        border-left: 0; border-right: 0;
+        border-radius: 0;
+        color: var(--text-muted);
+        display: flex; align-items: center; justify-content: center;
+        transition: background var(--motion-fast) var(--motion-ease-out),
+                    color      var(--motion-fast) var(--motion-ease-out);
     }
     .pte-lookup .ffl-clear-btn:hover {
-        background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);
-    }
-    body.app-theme-light .pte-lookup .ffl-clear-btn {
-        background:transparent;border-color:#e2e8f0;color:#94a3b8;
-    }
-    body.app-theme-light .pte-lookup .ffl-clear-btn:hover {
-        background:rgba(15,23,42,0.04);color:#475569;
+        background: var(--surface-elev-1);
+        color: var(--text-primary);
     }
 
     /* ── Image tab — tam yukseklik ── */
-    #pteTab-gorsel {
-        height:100%;display:flex;flex-direction:column;
-    }
+    #pteTab-gorsel { height: 100%; display: flex; flex-direction: column; }
     #pteTab-gorsel .pte-card {
-        flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0;
+        flex: 1; min-height: 0;
+        display: flex; flex-direction: column;
+        margin-bottom: 0;
     }
-    #pteTab-gorsel .pte-card-title { flex-shrink:0; }
+    #pteTab-gorsel .pte-card-title { flex-shrink: 0; }
 
     /* ── Image area ── */
     .pte-image-area {
-        display:flex;align-items:stretch;gap:10px;
-        margin-top:10px;padding:14px;border-radius:12px;
-        background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
+        display: flex; align-items: stretch; gap: var(--space-3);
+        margin-top: var(--space-3);
+        padding: var(--space-4);
+        border-radius: var(--radius-lg);
+        background: var(--surface-base);
+        border: 1px solid var(--border-subtle);
     }
-    #pteTab-gorsel .pte-image-area { flex:1;min-height:0;margin-top:10px; }
-    body.app-theme-light .pte-image-area {
-        background:#fafbfd;border-color:rgba(15,23,42,0.06);
+    #pteTab-gorsel .pte-image-area {
+        flex: 1; min-height: 0;
+        margin-top: var(--space-3);
     }
     .pte-img-actions {
-        display:flex;flex-direction:column;gap:6px;flex-shrink:0;
+        display: flex; flex-direction: column; gap: 6px; flex-shrink: 0;
     }
     .pte-img-btn {
-        width:32px;height:32px;border-radius:50%;border:1px solid;display:flex;
-        align-items:center;justify-content:center;cursor:pointer;transition:all 0.12s;
+        width: 34px; height: 34px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-subtle);
+        background: var(--surface-elev-2);
+        color: var(--text-secondary);
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--motion-ease-out),
+                    color      var(--motion-fast) var(--motion-ease-out),
+                    border-color var(--motion-fast) var(--motion-ease-out),
+                    transform  var(--motion-fast) var(--motion-ease-out);
     }
-    .pte-img-btn--upload { background:#6366f1;border-color:#4f46e5;color:#fff; }
-    .pte-img-btn--upload:hover { background:#4f46e5; }
-    .pte-img-btn--mode {
-        background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.12);color:rgba(255,255,255,0.5);
+    .pte-img-btn:hover {
+        background: var(--surface-elev-1);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+        transform: translateY(-1px);
     }
-    body.app-theme-light .pte-img-btn--mode { background:#fff;border-color:#e2e8f0;color:#94a3b8; }
-    .pte-img-btn--mode.is-active { background:#6366f1;border-color:#4f46e5;color:#fff; }
-    .pte-img-btn--clear { background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.25);color:#f87171; }
-    .pte-img-btn--clear:hover { background:rgba(239,68,68,0.18); }
+    .pte-img-btn:active { transform: translateY(0); }
+    .pte-img-btn--upload {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #ffffff;
+    }
+    .pte-img-btn--upload:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+        color: #ffffff;
+    }
+    .pte-img-btn--mode.is-active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #ffffff;
+    }
+    .pte-img-btn--clear {
+        background: var(--danger-soft-bg);
+        border-color: transparent;
+        color: var(--danger-soft-fg);
+    }
+    .pte-img-btn--clear:hover {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: #ffffff;
+    }
     .pte-img-preview {
-        flex:1 1 0;min-height:140px;border-radius:10px;
-        border:2px dashed rgba(255,255,255,0.12);overflow:hidden;position:relative;
-        display:flex;align-items:center;justify-content:center;flex-direction:column;
-        background:rgba(255,255,255,0.02);
+        flex: 1 1 0; min-height: 160px;
+        border-radius: var(--radius-md);
+        border: 2px dashed var(--border-strong);
+        overflow: hidden; position: relative;
+        display: flex; align-items: center; justify-content: center; flex-direction: column;
+        background: var(--surface-elev-2);
+        color: var(--text-muted);
+        transition: border-color var(--motion-base) var(--motion-ease-out),
+                    background   var(--motion-base) var(--motion-ease-out);
     }
-    #pteTab-gorsel .pte-img-preview { min-height:0; }
-    body.app-theme-light .pte-img-preview {
-        border-color:#cbd5e1;background:#f1f5f9;
+    .pte-img-preview:hover {
+        border-color: var(--accent);
+        background: var(--accent-soft-bg);
     }
-
+    #pteTab-gorsel .pte-img-preview { min-height: 0; }
 
     /* ── Bilesen Ekle form — hizali grid ── */
-    .pte-card--compact { padding:12px 14px; }
+    .pte-card--compact { padding: var(--space-4); }
     .pte-bilesen-form {
-        display:grid;
-        grid-template-columns:100px 1fr;
-        row-gap:9px;column-gap:10px;
-        align-items:center;
+        display: grid;
+        grid-template-columns: 100px 1fr;
+        row-gap: 12px;
+        column-gap: var(--space-3);
+        align-items: center;
     }
-    .pte-bilesen-form .pte-label { text-align:right;white-space:nowrap; }
-    .pte-bilesen-form .pte-input { padding:5px 8px;min-width:0; }
+    .pte-bilesen-form .pte-label {
+        text-align: right;
+        white-space: nowrap;
+        font-size: 11px;
+    }
+    .pte-bilesen-form .pte-input { padding: 7px 10px; min-width: 0; }
     .pte-bilesen-vals {
-        display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0;
+        display: flex; align-items: center;
+        gap: var(--space-2);
+        flex-wrap: nowrap; min-width: 0;
     }
-    .pte-bilesen-vals .pte-input { min-width:0; }
+    .pte-bilesen-vals .pte-input { min-width: 0; }
     .pte-bilesen-actions {
-        grid-column:2 / -1;display:flex;gap:8px;margin-top:4px;
+        grid-column: 2 / -1;
+        display: flex; gap: var(--space-2);
+        margin-top: 6px;
     }
-    .pte-cfg-disabled { opacity:0.38;pointer-events:none; }
+    .pte-cfg-disabled { opacity: 0.38; pointer-events: none; }
 
-    /* ── Component grid (Bilesen tab) ── */
+    /* ── Component grid (Bilesen tab) — Linear DNA ── */
     .pte-comp-grid {
-        margin-top:16px;border-radius:12px;overflow:hidden;
-        background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
-    }
-    body.app-theme-light .pte-comp-grid {
-        background:#fafbfd;border-color:rgba(15,23,42,0.06);
+        margin-top: var(--space-4);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        background: var(--surface-elev-1);
+        border: 1px solid var(--border-subtle);
+        box-shadow: var(--shadow-elev-1);
     }
     .pte-comp-header {
-        display:flex;align-items:center;gap:8px;padding:10px 14px;
-        border-bottom:1px solid rgba(255,255,255,0.06);
+        display: flex; align-items: center;
+        gap: var(--space-2);
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-subtle);
+        background: var(--surface-elev-2);
     }
-    body.app-theme-light .pte-comp-header { border-bottom-color:#e2e8f0; }
     .pte-comp-title {
-        font-size:0.85rem;font-weight:700;color:rgba(255,255,255,0.85);
+        font-size: 12px;
+        font-weight: var(--font-weight-semibold);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
     }
-    body.app-theme-light .pte-comp-title { color:#94a3b8; }
     .pte-comp-badge {
-        padding:1px 8px;border-radius:999px;font-size:0.62rem;font-weight:700;
-        background:rgba(99,102,241,0.12);color:#a5b4fc;
-        border:1px solid rgba(99,102,241,0.25);
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: var(--font-weight-semibold);
+        font-variant-numeric: tabular-nums;
+        background: var(--accent-soft-bg);
+        color: var(--accent-soft-fg);
+        border: 1px solid transparent;
     }
-    body.app-theme-light .pte-comp-badge { background:rgba(99,102,241,0.08);color:#4f46e5; }
-    .pte-comp-body { max-height:320px;overflow-y:auto;overflow-x:auto; }
-    .pte-comp-table { width:100%;border-collapse:collapse;font-size:0.82rem; }
+    .pte-comp-body {
+        max-height: 360px;
+        overflow-y: auto; overflow-x: auto;
+    }
+    .pte-comp-table {
+        width: 100%; border-collapse: collapse;
+        font-size: 12.5px;
+    }
     .pte-comp-th {
-        padding:8px 10px;text-align:left;font-size:0.78rem;font-weight:600;
-        color:rgba(255,255,255,0.7);border-bottom:1px solid rgba(255,255,255,0.08);
-        position:sticky;top:0;z-index:3;
-        background:rgba(15,15,26,0.6);backdrop-filter:blur(8px);
-    }
-    body.app-theme-light .pte-comp-th {
-        color:#64748b;border-bottom-color:#e2e8f0;background:rgba(248,250,252,0.95);
+        padding: 10px 12px;
+        text-align: left;
+        font-size: 10.5px;
+        font-weight: var(--font-weight-semibold);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        border-bottom: 1px solid var(--border-subtle);
+        position: sticky; top: 0; z-index: 3;
+        background: var(--surface-elev-2);
+        backdrop-filter: blur(8px);
     }
     .pte-comp-td {
-        padding:7px 10px;border-bottom:1px solid rgba(255,255,255,0.04);
-        color:rgba(255,255,255,0.75);
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-subtle);
+        color: var(--text-primary);
+        font-weight: var(--font-weight-medium);
     }
-    body.app-theme-light .pte-comp-td { color:#334155;border-bottom-color:#f0f2f6; }
-    .pte-comp-table tbody tr { cursor:pointer;transition:background 0.1s; }
-    .pte-comp-table tbody tr:hover .pte-comp-td { background:rgba(99,102,241,0.06); }
-    body.app-theme-light .pte-comp-table tbody tr:hover .pte-comp-td { background:rgba(99,102,241,0.04); }
+    .pte-comp-table tbody tr {
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--motion-ease-out);
+    }
+    .pte-comp-table tbody tr:hover .pte-comp-td { background: var(--accent-soft-bg); }
     .pte-comp-table tbody tr.selected .pte-comp-td {
-        background:rgba(99,102,241,0.12);
-    }
-    body.app-theme-light .pte-comp-table tbody tr.selected .pte-comp-td {
-        background:rgba(99,102,241,0.08);
+        background: var(--accent-soft-bg);
+        color: var(--accent-soft-fg);
     }
     .pte-comp-table tbody tr.selected {
-        outline:2px solid rgba(99,102,241,0.4);outline-offset:-1px;border-radius:4px;
+        box-shadow: inset 2px 0 0 var(--accent);
     }
     .pte-row-badge {
-        display:inline-flex;align-items:center;padding:1px 7px;border-radius:4px;
-        font-size:0.7rem;font-weight:600;
-        background:rgba(99,102,241,0.12);color:#a5b4fc;
+        display: inline-flex; align-items: center;
+        padding: 2px 8px;
+        border-radius: var(--radius-sm);
+        font-size: 11px;
+        font-weight: var(--font-weight-semibold);
+        background: var(--accent-soft-bg);
+        color: var(--accent-soft-fg);
     }
-    body.app-theme-light .pte-row-badge { background:rgba(99,102,241,0.08);color:#4f46e5; }
-    .pte-icon-btn {
-        background:transparent;border:none;cursor:pointer;padding:3px;
-        border-radius:4px;transition:all 0.1s;color:rgba(255,255,255,0.45);
-        outline:none;box-shadow:none;
-    }
-    .pte-icon-btn:hover { background:rgba(255,255,255,0.08); }
-    .pte-icon-btn--edit:hover { color:#6366f1; }
-    .pte-icon-btn--del:hover { color:#f87171; background:transparent; }
-    body.app-theme-light .pte-icon-btn { color:#94a3b8; }
-    body.app-theme-light .pte-icon-btn--edit:hover { color:#4f46e5; }
-    body.app-theme-light .pte-icon-btn--del:hover { color:#ef4444; background:transparent; }
 
-    /* ── Empty state ── */
-    .pte-empty {
-        text-align:center;padding:32px 16px;color:rgba(255,255,255,0.35);font-size:0.82rem;
+    /* Action icon butonlari — Linear/Notion DNA: hover'da görünür */
+    .pte-comp-table tbody tr .pte-icon-btn {
+        opacity: 0.45;
+        transition: opacity var(--motion-fast) var(--motion-ease-out),
+                    background var(--motion-fast) var(--motion-ease-out),
+                    color var(--motion-fast) var(--motion-ease-out);
     }
-    body.app-theme-light .pte-empty { color:rgba(71,85,105,0.5); }
+    .pte-comp-table tbody tr:hover .pte-icon-btn { opacity: 1; }
+    .pte-icon-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 5px;
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        outline: none;
+        box-shadow: none;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .pte-icon-btn:hover { background: var(--surface-elev-2); }
+    .pte-icon-btn--edit:hover { color: var(--accent); }
+    .pte-icon-btn--del:hover  { color: var(--danger); background: var(--danger-soft-bg); }
+
+    /* ── Empty state — Linear DNA ── */
+    .pte-empty {
+        text-align: center;
+        padding: var(--space-7) var(--space-4);
+        color: var(--text-muted);
+        font-size: 12.5px;
+        font-weight: var(--font-weight-medium);
+        line-height: 1.5;
+    }
+    .pte-empty svg {
+        width: 40px !important; height: 40px !important;
+        opacity: 0.5;
+        margin-bottom: 10px;
+    }
 
     /* ── Toast — sag alt kose, slide-in ── */
     .pte-message {
-        position:fixed;right:24px;bottom:24px;left:auto;top:auto;z-index:10000;
-        max-width:380px;min-width:240px;
-        padding:0;border-radius:10px;
-        font-size:0.82rem;font-weight:500;white-space:normal;overflow:hidden;
-        max-height:0;opacity:0;transform:translateY(12px);pointer-events:none;
-        transition:max-height 0.22s ease,opacity 0.22s ease,transform 0.22s ease,padding 0.22s ease;
-        backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-        box-shadow:0 10px 28px rgba(0,0,0,.42);
+        position: fixed;
+        right: var(--space-5); bottom: var(--space-5);
+        left: auto; top: auto;
+        z-index: 10000;
+        max-width: 400px; min-width: 260px;
+        padding: 0;
+        border-radius: var(--radius-lg);
+        font-size: 12.5px;
+        font-weight: var(--font-weight-medium);
+        white-space: normal; overflow: hidden;
+        max-height: 0; opacity: 0;
+        transform: translateY(12px);
+        pointer-events: none;
+        transition: max-height var(--motion-slow) var(--motion-ease-out),
+                    opacity    var(--motion-slow) var(--motion-ease-out),
+                    transform  var(--motion-slow) var(--motion-ease-spring),
+                    padding    var(--motion-slow) var(--motion-ease-out);
+        backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+        -webkit-backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+        box-shadow: var(--shadow-elev-3);
     }
     .pte-message.ok, .pte-message.err {
-        max-height:200px;opacity:1;padding:12px 16px;transform:translateY(0);
-        border:1px solid;
+        max-height: 200px;
+        opacity: 1;
+        padding: 14px 18px;
+        transform: translateY(0);
+        border: 1px solid;
     }
     .pte-message.ok {
-        background:rgba(8,26,17,.92);border-color:rgba(16,185,129,.45);color:#6ee7b7;
+        background: var(--success-soft-bg);
+        border-color: var(--success);
+        color: var(--success-soft-fg);
     }
     .pte-message.err {
-        background:rgba(26,8,8,.92);border-color:rgba(239,68,68,.45);color:#fca5a5;
-    }
-    body.app-theme-light .pte-message.ok {
-        background:rgba(235,253,245,.96);border-color:rgba(16,185,129,.4);color:#047857;
-    }
-    body.app-theme-light .pte-message.err {
-        background:rgba(255,241,241,.96);border-color:rgba(239,68,68,.4);color:#b91c1c;
+        background: var(--danger-soft-bg);
+        border-color: var(--danger);
+        color: var(--danger-soft-fg);
     }
 
     /* ── Dropdown (glassmorphic) ── */
     .pte-dd {
-        position:fixed !important;z-index:99999 !important;
-        background:rgba(15,23,42,0.95);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-        border:1px solid rgba(255,255,255,0.12);border-radius:10px;
-        box-shadow:0 8px 32px rgba(0,0,0,0.35);min-width:360px;overflow:hidden;
-    }
-    body.app-theme-light .pte-dd {
-        background:rgba(255,255,255,0.97);border-color:#e2e8f0;
-        box-shadow:0 8px 24px rgba(0,0,0,0.12);
+        position: fixed !important;
+        z-index: 99999 !important;
+        background: var(--surface-overlay);
+        backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+        -webkit-backdrop-filter: blur(var(--blur-strength)) saturate(var(--blur-saturate));
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-elev-3);
+        min-width: 380px;
+        overflow: hidden;
     }
     .pte-dd-search {
-        padding:8px;border-bottom:1px solid rgba(255,255,255,0.08);
+        padding: var(--space-2);
+        border-bottom: 1px solid var(--border-subtle);
     }
-    body.app-theme-light .pte-dd-search { border-bottom-color:#f0f2f6; }
-    .pte-dd-list { max-height:240px;overflow-y:auto; }
+    .pte-dd-list { max-height: 280px; overflow-y: auto; padding: 4px; }
     .pte-dd-item {
-        padding:8px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);
-        font-size:0.82rem;color:rgba(255,255,255,0.8);transition:background 0.1s;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: 12.5px;
+        color: var(--text-primary);
+        border-radius: var(--radius-sm);
+        transition: background var(--motion-fast) var(--motion-ease-out);
     }
-    body.app-theme-light .pte-dd-item { color:#334155;border-bottom-color:#f5f7fb; }
-    .pte-dd-item:hover { background:rgba(99,102,241,0.08); }
-    body.app-theme-light .pte-dd-item:hover { background:#f0f4ff; }
-    .pte-dd-item strong { color:#a5b4fc; }
-    body.app-theme-light .pte-dd-item strong { color:#1e293b; }
-    .pte-dd-muted { color:rgba(255,255,255,0.45);font-size:0.78rem; }
-    body.app-theme-light .pte-dd-muted { color:#64748b; }
-    .pte-dd-empty { padding:12px 14px;color:rgba(255,255,255,0.4);font-size:0.82rem; }
-    body.app-theme-light .pte-dd-empty { color:#94a3b8; }
+    .pte-dd-item:hover { background: var(--accent-soft-bg); }
+    .pte-dd-item strong { color: var(--accent-soft-fg); font-weight: var(--font-weight-semibold); }
+    .pte-dd-muted {
+        color: var(--text-muted);
+        font-size: 11.5px;
+    }
+    .pte-dd-empty {
+        padding: var(--space-3) var(--space-4);
+        color: var(--text-muted);
+        font-size: 12.5px;
+        text-align: center;
+        font-style: italic;
+    }
     .pte-badge-cfg {
-        display:inline-block;padding:1px 6px;border-radius:4px;font-size:0.65rem;font-weight:600;
-        background:rgba(99,102,241,0.15);color:#a5b4fc;margin-left:6px;
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: var(--radius-sm);
+        font-size: 10.5px;
+        font-weight: var(--font-weight-semibold);
+        background: var(--accent-soft-bg);
+        color: var(--accent-soft-fg);
+        margin-left: 8px;
     }
-    body.app-theme-light .pte-badge-cfg { background:rgba(99,102,241,0.1);color:#4f46e5; }
 
     /* ── Mamul Rehberi (satis teklifi kalem rehberi tarzi) ── */
-    .pte-dd--lookup { min-width: 420px; max-width: 520px; border-radius: 8px; }
-    .pte-dd--lookup .pte-dd-search { padding: 10px 12px; }
+    .pte-dd--lookup {
+        min-width: 460px; max-width: 560px;
+        border-radius: var(--radius-lg);
+    }
+    .pte-dd--lookup .pte-dd-search { padding: var(--space-3); }
     .pte-dd--lookup .pte-dd-search .pte-input {
-        font-size: 0.82rem; padding: 8px 12px; border-radius: 6px;
+        font-size: 13px;
+        padding: 9px 12px;
+        border-radius: var(--radius-md);
     }
-    .pte-dd--lookup .pte-dd-list { max-height: 320px; padding: 4px; }
+    .pte-dd--lookup .pte-dd-list { max-height: 360px; padding: 4px; }
     .pte-dd-row {
-        display: flex; align-items: center; gap: 12px;
-        width: 100%; padding: 8px 12px;
-        background: transparent; border: 0; border-radius: 6px;
-        text-align: left; cursor: pointer; transition: background .12s;
+        display: flex; align-items: center; gap: var(--space-3);
+        width: 100%;
+        padding: 10px 12px;
+        background: transparent;
+        border: 0;
+        border-radius: var(--radius-md);
+        text-align: left;
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--motion-ease-out);
     }
-    .pte-dd-row:hover { background: rgba(99,102,241,0.12); }
-    body.app-theme-light .pte-dd-row:hover { background: #eef2ff; }
-    .pte-dd-row.is-active { background: rgba(99,102,241,0.18); }
-    body.app-theme-light .pte-dd-row.is-active { background: #e0e7ff; }
+    .pte-dd-row:hover { background: var(--accent-soft-bg); }
+    .pte-dd-row.is-active { background: var(--accent-soft-bg); box-shadow: inset 2px 0 0 var(--accent); }
     .pte-dd-code {
-        font-family: 'JetBrains Mono','Fira Code',monospace;
-        font-size: 0.76rem; color: #a5b4fc;
+        font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+        font-size: 11.5px;
+        color: var(--accent-soft-fg);
         font-variant-numeric: tabular-nums;
-        min-width: 120px; flex-shrink: 0; font-weight: 600;
+        min-width: 130px;
+        flex-shrink: 0;
+        font-weight: var(--font-weight-semibold);
     }
-    body.app-theme-light .pte-dd-code { color: #4f46e5; }
     .pte-dd-name {
-        font-size: 0.82rem; color: rgba(255,255,255,0.78);
-        flex: 1 1 auto; min-width: 0;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        font-size: 12.5px;
+        color: var(--text-primary);
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
-    body.app-theme-light .pte-dd-name { color: #334155; }
     .pte-dd-tag {
-        flex-shrink: 0; padding: 2px 8px; border-radius: 999px;
-        font-size: 0.65rem; font-weight: 700; letter-spacing: 0.02em;
-        background: rgba(99,102,241,0.18); color: #a5b4fc;
-        border: 1px solid rgba(99,102,241,0.32);
+        flex-shrink: 0;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: var(--font-weight-semibold);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        background: var(--accent-soft-bg);
+        color: var(--accent-soft-fg);
+        border: 1px solid transparent;
     }
-    body.app-theme-light .pte-dd-tag { background: #eef2ff; color: #4f46e5; border-color: #c7d2fe; }
+
+    /* ── Chip (Kombinasyon ozellik-deger) ── */
     .pte-chip {
-        display:inline-flex;align-items:center;gap:3px;
-        background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.25);
-        border-radius:4px;padding:0 6px;font-size:0.7rem;margin:2px 2px 0 0;white-space:nowrap;
+        display: inline-flex; align-items: center; gap: 4px;
+        background: var(--accent-soft-bg);
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        padding: 1px 8px;
+        font-size: 11px;
+        font-weight: var(--font-weight-medium);
+        margin: 2px 2px 0 0;
+        white-space: nowrap;
     }
-    body.app-theme-light .pte-chip { background:#f0f4ff;border-color:#c7d2fe; }
-    .pte-chip-feat { color:#a5b4fc;font-weight:600; }
-    body.app-theme-light .pte-chip-feat { color:#4f46e5; }
-    .pte-chip-val { color:rgba(255,255,255,0.7); }
-    body.app-theme-light .pte-chip-val { color:#1e293b; }
+    .pte-chip-feat { color: var(--accent-soft-fg); font-weight: var(--font-weight-semibold); }
+    .pte-chip-val  { color: var(--text-secondary); }
 
     /* ── Animations ── */
     @@keyframes pteShake {
-        10%,90% { transform:translateX(-1px); }
-        20%,80% { transform:translateX(2px); }
-        30%,50%,70% { transform:translateX(-4px); }
-        40%,60% { transform:translateX(4px); }
+        10%, 90% { transform: translateX(-1px); }
+        20%, 80% { transform: translateX(2px); }
+        30%, 50%, 70% { transform: translateX(-4px); }
+        40%, 60% { transform: translateX(4px); }
     }
 </style>
 }
@@ -708,7 +1077,7 @@
             <button type="button" class="pte-nav-btn" data-tab="bilesen">
                 <span class="pte-nav-dot"></span>
                 Bilesen Bilgileri
-                <span class="pte-nav-count" id="ptCompCount">0</span>
+                <span class="pte-nav-count" id="ptCompCount" data-count="0">0</span>
             </button>
             <button type="button" class="pte-nav-btn" data-tab="gorsel">
                 <span class="pte-nav-dot"></span>
@@ -720,24 +1089,29 @@
         <div class="pte-content" id="pteContent">
 
             <!-- ── Genel Bilgiler ── -->
+            <!-- Layout: Bilesen Bilgileri ile birebir (grid 100px label + flex values),
+                 kod input 300px, kombinasyon her zaman gorunur (konfig yoksa pasif). -->
             <div id="pteTab-genel">
-                <div class="pte-card">
-                    <p class="pte-card-title">Mamul Bilgileri</p>
-                    <div class="pte-grid">
+                <div class="pte-card pte-card--compact">
+                    <p class="pte-card-title" style="display:flex;align-items:center;gap:10px;">
+                        <span>Mamul Bilgileri</span>
+                        <span id="pteRecipeStatus" class="pte-recipe-status" style="display:none;"></span>
+                    </p>
+                    <div class="pte-bilesen-form">
 
                         <!-- Mamul Kodu + Adi -->
-                        <div class="pte-row">
-                            <label class="pte-label pte-label--req" style="width:130px;">Mamul Kodu</label>
-                            <div class="pte-lookup" style="width:180px;flex-shrink:0;">
+                        <label class="pte-label pte-label--req">Mamul Kodu</label>
+                        <div class="pte-bilesen-vals">
+                            <div class="pte-lookup" style="width:300px;flex-shrink:0;">
                                 <input type="text" id="ptParentCode" data-field-key="parentCode" data-cb-allow-typing="true" class="pte-input" style="flex:1 1 0;min-width:0;" placeholder="Kod..." autocomplete="off" />
                             </div>
                             <input type="text" id="ptParentName" class="pte-input" readonly placeholder="Mamul adi..." style="flex:1 1 0;min-width:0;" />
                         </div>
 
-                        <!-- Kombinasyon Kodu -->
-                        <div class="pte-row" style="display:none;" id="ptConfigRow">
-                            <label class="pte-label pte-label--req" style="width:130px;color:#a5b4fc;">Kombinasyon Kodu</label>
-                            <div class="pte-lookup" style="width:180px;flex-shrink:0;">
+                        <!-- Kombinasyon Kodu (her zaman gorunur, konfig yoksa pasif) -->
+                        <label id="ptConfigLabel" class="pte-label pte-label--req pte-cfg-disabled" style="color:#a5b4fc;">Kombinasyon</label>
+                        <div id="ptConfigRow" class="pte-bilesen-vals pte-cfg-disabled">
+                            <div class="pte-lookup" style="width:300px;flex-shrink:0;">
                                 <input type="text" id="ptConfigCode" data-field-key="combinationCode" data-cb-allow-typing="true" class="pte-input" style="flex:1 1 0;min-width:0;border-color:rgba(99,102,241,0.3);" placeholder="Kombinasyon secin veya yazin..." />
                                 <button type="button" class="pte-lookup-btn" id="btnConfigLookup" title="Kombinasyon Rehberi">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -746,10 +1120,29 @@
                             <input type="text" id="ptConfigDesc" class="pte-input" readonly placeholder="Kombinasyon aciklamasi..." style="flex:1 1 0;min-width:0;" />
                         </div>
 
-                        <!-- Recete Aciklamasi — Mamul Kodu satiriyla ayni hizada (label + input) -->
-                        <div class="pte-row">
-                            <label class="pte-label" for="ptRecipeNote" style="width:130px;">Recete Aciklamasi</label>
+                        <!-- Recete Aciklamasi -->
+                        <label class="pte-label" for="ptRecipeNote">Açıklama</label>
+                        <div class="pte-bilesen-vals">
                             <input type="text" id="ptRecipeNote" class="pte-input" placeholder="Istege bagli..." style="flex:1 1 0;min-width:0;" />
+                        </div>
+
+                        <!-- Rota (Routing) - opsiyonel header-level FK (2026-05-20).
+                             Standart rehber (tip 1) pattern'i: GuideCode=ROUTING (FldSet'te
+                             routingCode field key'i ile baglanir). FixedFieldLookupBridge
+                             input'u LookupCard'a sarip Kod/Ad sutunlu searchli popup acar.
+                             Hidden ptRoutingId backend save oncesi Code -> Id resolver ile dolar. -->
+                        <label class="pte-label" for="ptRoutingCode">Rota</label>
+                        <div class="pte-bilesen-vals">
+                            <div class="pte-lookup" style="width:300px;flex-shrink:0;">
+                                <input type="text" id="ptRoutingCode"
+                                       data-field-key="routingCode" data-cb-allow-typing="true"
+                                       class="pte-input"
+                                       style="flex:1 1 0;min-width:0;border-color:rgba(99,102,241,0.3);"
+                                       placeholder="Rota secin veya yazin..." autocomplete="off" />
+                                <input type="hidden" id="ptRoutingId" value="" />
+                            </div>
+                            <input type="text" id="ptRoutingName" class="pte-input" readonly placeholder="Rota adi..." style="flex:1 1 0;min-width:0;" />
+                            <input type="text" id="ptRoutingDesc" class="pte-input" readonly placeholder="Rota aciklamasi..." style="flex:1 1 0;min-width:0;display:none;" />
                         </div>
 
                     </div>
@@ -938,6 +1331,28 @@
 
 @section Scripts {
 <script>
+/* ===== SCROLL-AWARE GLASS HEADER =====
+   pteContent scroll'unda action bar uzerine 'is-scrolled' class'i ekler —
+   gozun ayrim hissetmesi icin border-color + box-shadow degisimi.
+   CSS: .pte-action-bar.is-scrolled (yukarida tanimli). */
+(function() {
+    function attach() {
+        var bar = document.querySelector('.pte-action-bar');
+        var content = document.getElementById('pteContent');
+        if (!bar || !content) return;
+        function onScroll() {
+            bar.classList.toggle('is-scrolled', content.scrollTop > 4);
+        }
+        content.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', attach);
+    } else {
+        attach();
+    }
+})();
+
 /* ===== REACT BUNDLE YUKLEYICI =====
    BOMs sayfasi workspace iframe'inde calistiginda _Layout.cshtml bundle'i
    yuklemez (shouldUseReactShell = false). Bu yuzden rehber ve kombinasyon
@@ -1106,7 +1521,8 @@
         }
         var cfgRow  = document.getElementById('ptConfigRow');
         var cfgCode = document.getElementById('ptConfigCode')?.value.trim();
-        if (cfgRow && cfgRow.style.display !== 'none' && !cfgCode) {
+        // pte-cfg-disabled aktif degilse => kombinasyon zorunlu
+        if (cfgRow && !cfgRow.classList.contains('pte-cfg-disabled') && !cfgCode) {
             ptShakeField('ptConfigCode');
             return false;
         }
@@ -1292,7 +1708,11 @@
         if (!tbody) return;
         var countText = ptComponents.length + ' bilesen';
         if (badge) badge.textContent = countText;
-        if (navCount) navCount.textContent = String(ptComponents.length);
+        if (navCount) {
+            navCount.textContent = String(ptComponents.length);
+            // data-count attribute → CSS'te muted/accent state ayrimi (badge polish)
+            navCount.setAttribute('data-count', String(ptComponents.length));
+        }
         if (!ptComponents.length) {
             empty.style.display = '';
             tbody.innerHTML = '';
@@ -1439,6 +1859,170 @@
     /* ===== LOAD EXISTING TREE ===== */
     let ptCurrentId = null;
 
+    // Kombinasyon row'u her zaman gorunur; konfigurasyon yoksa pasif (gri+disable)
+    // pte-cfg-disabled toggle pattern'i bilesen form'undaki ile birebir.
+    function ptSetConfigRowEnabled(enabled) {
+        var row   = document.getElementById('ptConfigRow');
+        var label = document.getElementById('ptConfigLabel');
+        if (row)   row.classList.toggle('pte-cfg-disabled', !enabled);
+        if (label) label.classList.toggle('pte-cfg-disabled', !enabled);
+    }
+    // Module-disi (parent listener IIFE) erisimi icin window'a expose
+    window.ptSetConfigRowEnabled = ptSetConfigRowEnabled;
+
+    // Recete durum pill'i (Mamul Bilgileri kart basliginda gosterilir)
+    function ptSetRecipeStatus(mode) {
+        var el = document.getElementById('pteRecipeStatus');
+        if (!el) return;
+        if (mode === 'existing') {
+            el.textContent = 'Mevcut reçete yüklendi';
+            el.className = 'pte-recipe-status pte-recipe-status--existing';
+            el.style.display = '';
+        } else if (mode === 'new') {
+            el.textContent = 'Yeni reçete tanımlanıyor';
+            el.className = 'pte-recipe-status pte-recipe-status--new';
+            el.style.display = '';
+        } else {
+            el.className = 'pte-recipe-status';
+            el.style.display = 'none';
+            el.textContent = '';
+        }
+    }
+    window.ptSetRecipeStatus = ptSetRecipeStatus;
+
+    // ── Rota (Routing) — standart rehber (tip 1) baglantisi (2026-05-20) ──
+    // BOMEdit.cshtml input id="ptRoutingCode" data-field-key="routingCode" tasiyor.
+    // FixedFieldLookupBridge (mountFixedFieldLookups('PRODUCT_TREES')) bu input'a
+    // LookupCard'i giydirir; kullanici 🔍 ile cbv_Guide_Routing rehberini acar veya
+    // kod yazip blur'da resolve eder. Bridge input.value = Code stringi (Code rehber
+    // ValueColumn'u), data-display = Name (DisplayColumn).
+    //
+    // Save oncesi Code -> Id resolve etmek icin /Production/RoutingsList cache'i kullaniyoruz.
+    // BOM.RoutingId int FK — backend SaveBOMRequest.RoutingId bekliyor; hidden ptRoutingId
+    // de bu degeri tasiyor. Bridge -> code degisince listener resolve eder.
+    var ptRoutingsCache = null; // [{ id, code, name, description }, ...]
+    async function ptLoadRoutingsOnce() {
+        if (ptRoutingsCache !== null) return ptRoutingsCache;
+        try {
+            var resp = await fetch('/Production/RoutingsList', { credentials: 'include' });
+            if (!resp.ok) { ptRoutingsCache = []; return ptRoutingsCache; }
+            var list = await resp.json();
+            ptRoutingsCache = Array.isArray(list)
+                ? list.filter(function(r) { return r && r.isActive !== false; })
+                : [];
+        } catch {
+            ptRoutingsCache = [];
+        }
+        return ptRoutingsCache;
+    }
+
+    // Display + hidden ID + name/desc satellite input'lari senkronize et.
+    function ptSetRoutingSelection(id, code, name, description) {
+        var hid     = document.getElementById('ptRoutingId');
+        var codeEl  = document.getElementById('ptRoutingCode');
+        var nameEl  = document.getElementById('ptRoutingName');
+        var descEl  = document.getElementById('ptRoutingDesc');
+        if (!hid || !codeEl) return;
+        if (id == null || id === '' || id === 0 || id === '0') {
+            hid.value = '';
+            if (codeEl.value) {
+                try { codeEl.dispatchEvent(new CustomEvent('ffl-clear')); } catch (e) { /* ignore */ }
+            }
+            codeEl.value = '';
+            codeEl.removeAttribute('data-value');
+            codeEl.removeAttribute('data-display');
+            if (nameEl) nameEl.value = '';
+            if (descEl) { descEl.value = ''; descEl.style.display = 'none'; }
+            return;
+        }
+        hid.value = String(id);
+        codeEl.value = code || '';
+        codeEl.setAttribute('data-value', code || '');
+        codeEl.setAttribute('data-display', name || '');
+        try { codeEl.dispatchEvent(new CustomEvent('ffl-sync')); } catch (e) { /* ignore */ }
+        if (nameEl) nameEl.value = name || '';
+        if (descEl) {
+            descEl.value = description || '';
+            descEl.style.display = description ? '' : 'none';
+        }
+    }
+
+    // Bridge kullanici secimi yapinca codeEl.value = Code olur; cache'den
+    // Id/Name/Description'i bulup hidden + satellite input'lara yansit.
+    async function ptResolveRoutingFromCode() {
+        var codeEl = document.getElementById('ptRoutingCode');
+        var hid    = document.getElementById('ptRoutingId');
+        if (!codeEl || !hid) return;
+        var code = (codeEl.value || '').trim();
+        if (!code) {
+            // Kullanici elle sildi → secimi kaldir
+            hid.value = '';
+            var nameEl = document.getElementById('ptRoutingName');
+            var descEl = document.getElementById('ptRoutingDesc');
+            if (nameEl) nameEl.value = '';
+            if (descEl) { descEl.value = ''; descEl.style.display = 'none'; }
+            return;
+        }
+        var list = await ptLoadRoutingsOnce();
+        var match = (list || []).find(function(r) {
+            return (r.code || '').toLowerCase() === code.toLowerCase();
+        });
+        var nameEl = document.getElementById('ptRoutingName');
+        var descEl = document.getElementById('ptRoutingDesc');
+        if (match) {
+            hid.value = String(match.id);
+            if (nameEl) nameEl.value = match.name || '';
+            if (descEl) {
+                descEl.value = match.description || '';
+                descEl.style.display = match.description ? '' : 'none';
+            }
+        } else {
+            // Bridge data-display'i set etmis olabilir; ondan name'i al
+            var disp = codeEl.getAttribute('data-display') || '';
+            if (nameEl) nameEl.value = disp;
+            // ID resolve edemedik — backend Code lookup ile resolve etsin diye hidden bos kalir.
+            // (Service zaten "kod -> Id" fallback'i uygulayabilir; aksi halde "Rota bulunamadi" hatasi.)
+            hid.value = '';
+            if (descEl) { descEl.value = ''; descEl.style.display = 'none'; }
+        }
+    }
+
+    // ID-bazli rehber preload: cache'den eslesen rotayi bulup display + hidden'a yansit.
+    function ptApplyRoutingIdFromCache(routingId) {
+        if (routingId == null || routingId === '' || routingId === 0) {
+            ptSetRoutingSelection(null);
+            return;
+        }
+        ptLoadRoutingsOnce().then(function(list) {
+            var match = (list || []).find(function(r) { return r.id === routingId || r.id === Number(routingId); });
+            if (match) ptSetRoutingSelection(match.id, match.code, match.name, match.description);
+            else ptSetRoutingSelection(null);
+        });
+    }
+
+    window.ptLoadRoutingsOnce      = ptLoadRoutingsOnce;
+    window.ptApplyRoutingIdFromCache = ptApplyRoutingIdFromCache;
+    window.ptSetRoutingSelection   = ptSetRoutingSelection;
+    window.ptResolveRoutingFromCode = ptResolveRoutingFromCode;
+
+    // Bridge code degisikliklerini dinle → satellite input'lar tazelensin.
+    function ptWireRoutingInputListener() {
+        var codeEl = document.getElementById('ptRoutingCode');
+        if (!codeEl || codeEl._routingWired) return;
+        codeEl._routingWired = true;
+        // 'change' bridge syncToDom + native typing sonrasi tetiklenir.
+        codeEl.addEventListener('change', function() { ptResolveRoutingFromCode(); });
+        // Blur'da da tazele — bridge async resolve yapmis olabilir.
+        codeEl.addEventListener('blur', function() { setTimeout(ptResolveRoutingFromCode, 50); });
+        // Listeyi arka planda yukle — modal acildiginda anlik veri olur
+        ptLoadRoutingsOnce();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ptWireRoutingInputListener);
+    } else {
+        ptWireRoutingInputListener();
+    }
+
     function ptApplyTreeData(data, switchTab) {
         ptComponents = []; ptCurrentId = null; ptSelIndex = -1; ptEditIndex = -1;
 
@@ -1467,15 +2051,23 @@
             }
             if (parentNameEl && data.itemName) parentNameEl.value = data.itemName;
 
-            var cfgRow = document.getElementById('ptConfigRow');
             var cfgInput = document.getElementById('ptConfigCode');
             if (data.configCode) {
-                if (cfgRow) cfgRow.style.display = 'flex';
+                ptSetConfigRowEnabled(true);
                 if (cfgInput) cfgInput.value = data.configCode;
             }
 
             var descInput = document.getElementById('ptRecipeNote');
             if (descInput && data.description != null) descInput.value = data.description;
+
+            // Rota (RoutingId) — opsiyonel header-level FK. Rehber listesi async yuklenir;
+            // ptApplyRoutingIdFromCache cache'i bekleyip display'i doldurur.
+            if (data.routingId != null && (data.routingCode || data.routingName)) {
+                // Backend zaten JOIN ile code/name doldurmus — anlik display, cache beklemeye gerek yok.
+                ptSetRoutingSelection(data.routingId, data.routingCode, data.routingName, null);
+            } else if (typeof window.ptApplyRoutingIdFromCache === 'function') {
+                window.ptApplyRoutingIdFromCache(data.routingId);
+            }
 
             var savedFitMode = data.imageFitMode || 'square';
             ptCurrentImageMode = savedFitMode;
@@ -1510,9 +2102,31 @@
 
             if (switchTab)
                 document.querySelector('.pte-nav-btn[data-tab="bilesen"]')?.click();
+            ptSetRecipeStatus('existing');
+        } else {
+            // Yeni recete modu — kullanici girilen mamul kodu icin recete yok.
+            // Form'u temiz duruma getir: aciklama, gorsel, mod/rotation reset.
+            // Mamul kodu ve adi parent input'larda korunur (kullanici onlari yazdi).
+            var descEl = document.getElementById('ptRecipeNote');
+            if (descEl) descEl.value = '';
+
+            // Rota secimini de bos duruma getir (yeni recete varsayilani: secilmedi).
+            if (typeof window.ptSetRoutingSelection === 'function') window.ptSetRoutingSelection(null);
+            if (typeof ptClearImage === 'function') ptClearImage();
+            if (typeof ptSetImageMode === 'function') ptSetImageMode('square');
+            ptCurrentImageRotation = 0;
+            var rotInputClr = document.getElementById('ptImageRotation');
+            if (rotInputClr) rotInputClr.value = '0';
+
+            // Status pill: yalniz kullanici parent kod girmisken "yeni" goster.
+            // Form henuz bos ise pill'i de gizli tut.
+            var parentCodeNowEl = document.getElementById('ptParentCode');
+            var parentCodeNow = parentCodeNowEl ? (parentCodeNowEl.value || '').trim() : '';
+            ptSetRecipeStatus(parentCodeNow ? 'new' : null);
         }
         renderGrid();
     }
+    window.ptApplyTreeData = ptApplyTreeData;
 
     async function ptLoadExistingTree(materialCode, configCode, switchTab) {
         if (switchTab === undefined) switchTab = true;
@@ -1520,11 +2134,16 @@
             var url = '/Logistics/GetBOM?materialCode=' + encodeURIComponent(materialCode)
                 + (configCode ? '&configCode=' + encodeURIComponent(configCode) : '');
             var resp = await fetch(url, { credentials: 'include' });
-            if (!resp.ok) return;
-            var data = await resp.json();
+            // Sunucu hatasi olsa bile form'u "yeni" duruma geciren reset cagirilsin
+            // (ptApplyTreeData {found:false} ile gorsel/aciklama/bilesen temizler).
+            var data = resp.ok ? await resp.json() : { found: false };
             ptApplyTreeData(data, switchTab);
-        } catch { /* connection error */ }
+        } catch {
+            // baglanti hatasi: yine de yeni-recete moduna gec
+            ptApplyTreeData({ found: false }, false);
+        }
     }
+    window.ptLoadExistingTree = ptLoadExistingTree;
 
     async function ptLoadExistingTreeById(id, switchTab) {
         if (switchTab === undefined) switchTab = true;
@@ -1554,8 +2173,7 @@
         });
         var descRow = document.getElementById('ptConfigDescRow');
         if (descRow) descRow.style.display = 'none';
-        var cfgRow = document.getElementById('ptConfigRow');
-        if (cfgRow) cfgRow.style.display = 'none';
+        ptSetConfigRowEnabled(false);
         var configDesc = document.getElementById('ptConfigDesc');
         if (configDesc) configDesc.value = '';
         if (typeof ptClearImage === 'function') ptClearImage();
@@ -1851,16 +2469,15 @@
         }
         var nameInput = document.getElementById('ptParentName');
         if (nameInput) nameInput.value = match.name || '';
-        var cfgRow = document.getElementById('ptConfigRow');
         var cfgInput = document.getElementById('ptConfigCode');
         var cfgDesc = document.getElementById('ptConfigDesc');
         if (hasCfg) {
-            if (cfgRow) cfgRow.style.display = 'flex';
+            ptSetConfigRowEnabled(true);
             if (cfgInput) cfgInput.value = targetCfg;
             if (cfgDesc) cfgDesc.value = document.getElementById('ptaTargetConfigDesc')?.value || '';
             window.ptCurrentMaterialCode = match.code;
         } else {
-            if (cfgRow) cfgRow.style.display = 'none';
+            ptSetConfigRowEnabled(false);
             if (cfgInput) cfgInput.value = '';
             if (cfgDesc) cfgDesc.value = '';
             window.ptCurrentMaterialCode = null;
@@ -1916,6 +2533,15 @@
             imageMimeType: imageMimeType,
             imageFitMode: document.getElementById('ptImageFitMode')?.value || 'square',
             imageRotation: parseInt(document.getElementById('ptImageRotation')?.value || '0', 10) || 0,
+            // Rota (opsiyonel) — header-level Routing FK. Standart rehber pattern:
+            // hidden ptRoutingId cache'den dolar; bos kalirsa backend routingCode'dan
+            // lookup eder. Ikisi de bosa null gonder → BOM rotasiz kayit olur.
+            routingId: (function() {
+                var v = document.getElementById('ptRoutingId')?.value || '';
+                var n = parseInt(v, 10);
+                return (isNaN(n) || n <= 0) ? null : n;
+            })(),
+            routingCode: (document.getElementById('ptRoutingCode')?.value || '').trim() || null,
             lines: ptComponents.map(function(c) { return {
                 itemId: 0,
                 configId: null,
@@ -1991,17 +2617,16 @@
             document.getElementById('ptParentName').value = card.name || '';
             ptCurrentMaterialCode = card.hasConfig ? card.code : null;
 
-            var cfgRow = document.getElementById('ptConfigRow');
             var cfgInput = document.getElementById('ptConfigCode');
             var cfgDescRow = document.getElementById('ptConfigDescRow');
 
             if (card.hasConfig && cfg) {
-                if (cfgRow) cfgRow.style.display = 'flex';
+                ptSetConfigRowEnabled(true);
                 if (cfgInput) cfgInput.value = cfg;
                 if (cfgDescRow) cfgDescRow.style.display = 'none';
                 ptLoadExistingTree(card.code, cfg, false);
             } else {
-                if (cfgRow) cfgRow.style.display = card.hasConfig ? 'flex' : 'none';
+                ptSetConfigRowEnabled(!!card.hasConfig);
                 ptLoadExistingTree(card.code, null, false);
             }
         } catch { /* silent */ }
@@ -2016,113 +2641,163 @@
    icin binding zorunludur; binding yoksa kullanici hicbir buton gormez.
    ────────────────────────────────────────────────────────────── */
 (function () {
-    function wireCustomLookups() {
-        if (!window.CalibraHub || typeof CalibraHub.mountFixedFieldLookups !== 'function') {
-            setTimeout(wireCustomLookups, 150);
+    // ── Mamul kodu resolve — module scope ──
+    // Onceden bridge mount tamamlanmadan listener bagligi yapilmadigi icin
+    // kullanici yazip blur etse bile reçete yuklenmiyordu. Sebep: wireCustomLookups
+    // bridge bundle yuklenmesini bekliyordu (CalibraHub.mountFixedFieldLookups async).
+    // Yeni yaklasim: ptResolveParent + listener'lar bundle'a bagimsiz olarak DOM
+    // hazir olunca baglanir; bridge ek olarak gelmis ise sadece display fill yapar.
+    // window.X formati ile cagri — helper'lar farkli IIFE icinde tanimli; lokal
+    // scope'tan erisilemez. Birinci IIFE bunlari window'a expose ediyor.
+    function ptResolveParent(code, bridgeDisplay) {
+        var nameEl = document.getElementById('ptParentName');
+        if (!code) {
+            if (nameEl) nameEl.value = '';
+            if (typeof window.ptSetConfigRowEnabled === 'function') window.ptSetConfigRowEnabled(false);
+            window.ptCurrentMaterialCode = null;
+            if (typeof window.ptSetRecipeStatus === 'function') window.ptSetRecipeStatus(null);
             return;
         }
-        CalibraHub.mountFixedFieldLookups('PRODUCT_TREES').then(function () {
-            var parentInput = document.getElementById('ptParentCode');
-            if (!parentInput) return;
-
-            // Mamul (parent) kodu resolve — hem LookupCard change hem blur/Enter'dan çağrılır.
-            function ptResolveParent(code, bridgeDisplay) {
-                var nameEl = document.getElementById('ptParentName');
-                if (!code) {
-                    if (nameEl) nameEl.value = '';
-                    var cfgRowClr = document.getElementById('ptConfigRow');
-                    if (cfgRowClr) cfgRowClr.style.display = 'none';
-                    window.ptCurrentMaterialCode = null;
+        if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
+        fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+                var cfgInput  = document.getElementById('ptConfigCode');
+                var cfgDescRow = document.getElementById('ptConfigDescRow');
+                var cfgDesc   = document.getElementById('ptConfigDesc');
+                if (!match) {
+                    // Stok yok — yine de BOM lookup deneyelim (silinmis stok edge case)
+                    // ve sonuc yoksa form'u "yeni recete" durumuna getir.
+                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(code, null, false);
                     return;
                 }
-                if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
-                fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
-                    .then(function (r) { return r.json(); })
-                    .then(function (list) {
-                        var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
-                        var cfgRow    = document.getElementById('ptConfigRow');
-                        var cfgInput  = document.getElementById('ptConfigCode');
-                        var cfgDescRow = document.getElementById('ptConfigDescRow');
-                        var cfgDesc   = document.getElementById('ptConfigDesc');
-                        if (!match) return;
-                        if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
-                        var isCfg = match.hasConfig === true || match.hasConfig === 'true';
-                        if (cfgRow) cfgRow.style.display = isCfg ? 'flex' : 'none';
-                        if (cfgDescRow) cfgDescRow.style.display = 'none';
-                        window.ptCurrentMaterialCode = isCfg ? match.code : null;
-                        if (isCfg) {
-                            // Kombinasyon seçimi bekleniyor — config alanlarını temizle
-                            if (cfgInput) cfgInput.value = '';
-                            if (cfgDesc) cfgDesc.value = '';
-                        } else {
-                            if (typeof ptLoadExistingTree === 'function') ptLoadExistingTree(match.code, null);
-                        }
-                    })
-                    .catch(function () {});
-            }
-
-            // LookupCard bridge → change event
-            parentInput.addEventListener('change', function () {
-                var code = (parentInput.value || '').trim();
-                ptResolveParent(code, parentInput.getAttribute('data-display'));
-            });
-
-            // Manuel yazım → blur ve Enter
-            parentInput.addEventListener('blur', function () {
-                var code = (parentInput.value || '').trim();
-                ptResolveParent(code, null);
-            });
-            parentInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    var code = (parentInput.value || '').trim();
-                    ptResolveParent(code, null);
+                if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
+                var isCfg = match.hasConfig === true || match.hasConfig === 'true';
+                if (typeof window.ptSetConfigRowEnabled === 'function') window.ptSetConfigRowEnabled(isCfg);
+                if (cfgDescRow) cfgDescRow.style.display = 'none';
+                window.ptCurrentMaterialCode = isCfg ? match.code : null;
+                if (isCfg) {
+                    if (cfgInput) cfgInput.value = '';
+                    if (cfgDesc) cfgDesc.value = '';
+                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null, false);
+                } else {
+                    if (typeof window.ptLoadExistingTree === 'function') window.ptLoadExistingTree(match.code, null);
                 }
+            })
+            .catch(function (err) {
+                console.warn('[BOMEdit] ptResolveParent fetch hatasi:', err);
             });
+    }
+    // Disaridan da cagrilabilsin (admin tools, debug) — window'a expose
+    window.ptResolveParent = ptResolveParent;
 
-            // Bilesen (component) — LookupCard secimi sonrasi gizli input change
-            // event dispatch eder; bilesen adi ve kombinasyon row'u burada doldurulur.
-            var compInput = document.getElementById('cfCompCode');
-            if (compInput) {
-                compInput.addEventListener('change', function () {
-                    var code = (compInput.value || '').trim();
-                    var nameEl = document.getElementById('cfCompName');
-                    var cfgWrap  = document.getElementById('cfCompCfgWrap');
-                    var cfgLabel = document.getElementById('cfCompCfgLabel');
-                    var cfgCodeEl = document.getElementById('cfCompCfgCode');
-                    var cfgDescEl = document.getElementById('cfCompCfgDesc');
-                    if (!code) {
-                        if (nameEl) nameEl.value = '';
-                        if (cfgWrap)  cfgWrap.classList.add('pte-cfg-disabled');
-                        if (cfgLabel) cfgLabel.classList.add('pte-cfg-disabled');
-                        return;
-                    }
-                    // Bridge data-display'i hemen yansit
-                    var bridgeDisplay = compInput.getAttribute('data-display');
-                    if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
-                    fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
-                        .then(function (r) { return r.json(); })
-                        .then(function (list) {
-                            var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
-                            if (match) {
-                                if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
-                                var isCfg = match.hasConfig === true || match.hasConfig === 'true';
-                                if (cfgWrap)  cfgWrap.classList.toggle('pte-cfg-disabled', !isCfg);
-                                if (cfgLabel) cfgLabel.classList.toggle('pte-cfg-disabled', !isCfg);
-                                if (cfgCodeEl) { cfgCodeEl.value = ''; }
-                                if (cfgDescEl) cfgDescEl.value = '';
-                                ptCompMaterialCode = isCfg ? match.code : null;
-                            }
-                        })
-                        .catch(function () {});
-                });
-            }
+    // ── Resolve dedup + debounce ──
+    // Bridge mount durumuna bagimli olmadan, kullanici yazarken AJAX in-place
+    // fill calismali (stok/cari kart pattern'i). Bridge varsa her keystroke
+    // change dispatch eder; yoksa change sadece blur'da fire eder. Bu yuzden
+    // ek olarak debounced 'input' handler — her iki senaryoda da calisir.
+    // Dedup: ayni kod tekrar gelirse fetch atma.
+    var lastResolvedCode = null;
+    var debouncedTimer = null;
+    function maybeResolve(code, bridgeDisplay, immediate) {
+        code = (code || '').trim();
+        if (code === lastResolvedCode) return;
+        clearTimeout(debouncedTimer);
+        if (immediate) {
+            lastResolvedCode = code;
+            ptResolveParent(code, bridgeDisplay);
+        } else {
+            debouncedTimer = setTimeout(function () {
+                lastResolvedCode = code;
+                ptResolveParent(code, bridgeDisplay);
+            }, 250);
+        }
+    }
+
+    function attachParentListeners() {
+        var parentInput = document.getElementById('ptParentCode');
+        if (!parentInput) { setTimeout(attachParentListeners, 100); return; }
+        if (parentInput.dataset.ptListenersAttached === '1') return;
+        parentInput.dataset.ptListenersAttached = '1';
+
+        parentInput.addEventListener('change', function () {
+            maybeResolve(parentInput.value, parentInput.getAttribute('data-display'), false);
+        });
+        parentInput.addEventListener('input', function () {
+            maybeResolve(parentInput.value, parentInput.getAttribute('data-display'), false);
+        });
+        parentInput.addEventListener('blur', function () {
+            maybeResolve(parentInput.value, null, true);
+        });
+        parentInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); maybeResolve(parentInput.value, null, true); }
+        });
+        parentInput.addEventListener('ffl-clear', function () { lastResolvedCode = null; });
+        parentInput.addEventListener('ffl-sync',  function () {
+            lastResolvedCode = (parentInput.value || '').trim();
         });
     }
+
+    function attachComponentListeners() {
+        var compInput = document.getElementById('cfCompCode');
+        if (!compInput) { setTimeout(attachComponentListeners, 100); return; }
+        if (compInput.dataset.cfListenersAttached === '1') return;
+        compInput.dataset.cfListenersAttached = '1';
+
+        compInput.addEventListener('change', function () {
+            var code = (compInput.value || '').trim();
+            var nameEl = document.getElementById('cfCompName');
+            var cfgWrap  = document.getElementById('cfCompCfgWrap');
+            var cfgLabel = document.getElementById('cfCompCfgLabel');
+            var cfgCodeEl = document.getElementById('cfCompCfgCode');
+            var cfgDescEl = document.getElementById('cfCompCfgDesc');
+            if (!code) {
+                if (nameEl) nameEl.value = '';
+                if (cfgWrap)  cfgWrap.classList.add('pte-cfg-disabled');
+                if (cfgLabel) cfgLabel.classList.add('pte-cfg-disabled');
+                return;
+            }
+            var bridgeDisplay = compInput.getAttribute('data-display');
+            if (nameEl && bridgeDisplay) nameEl.value = bridgeDisplay;
+            fetch('/Logistics/StockLookup?q=' + encodeURIComponent(code))
+                .then(function (r) { return r.json(); })
+                .then(function (list) {
+                    var match = (list || []).find(function (s) { return (s.code || '').toLowerCase() === code.toLowerCase(); });
+                    if (match) {
+                        if (nameEl && !bridgeDisplay) nameEl.value = match.name || '';
+                        var isCfg = match.hasConfig === true || match.hasConfig === 'true';
+                        if (cfgWrap)  cfgWrap.classList.toggle('pte-cfg-disabled', !isCfg);
+                        if (cfgLabel) cfgLabel.classList.toggle('pte-cfg-disabled', !isCfg);
+                        if (cfgCodeEl) cfgCodeEl.value = '';
+                        if (cfgDescEl) cfgDescEl.value = '';
+                        ptCompMaterialCode = isCfg ? match.code : null;
+                    }
+                })
+                .catch(function () {});
+        });
+    }
+
+    // Bridge bundle (CalibraHub.mountFixedFieldLookups) varsa onu da cagir;
+    // yoksa endise yok — listener'lar zaten bagli, plain input olarak calisir.
+    function tryMountFixedFieldLookups() {
+        if (!window.CalibraHub || typeof CalibraHub.mountFixedFieldLookups !== 'function') {
+            setTimeout(tryMountFixedFieldLookups, 200);
+            return;
+        }
+        CalibraHub.mountFixedFieldLookups('PRODUCT_TREES').catch(function () { /* sessizce */ });
+    }
+
+    function init() {
+        attachParentListeners();
+        attachComponentListeners();
+        tryMountFixedFieldLookups();
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', wireCustomLookups);
+        document.addEventListener('DOMContentLoaded', init);
     } else {
-        wireCustomLookups();
+        init();
     }
 })();
 </script>

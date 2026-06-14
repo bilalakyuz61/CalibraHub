@@ -14,8 +14,11 @@ public sealed class Item
     public bool Combinations { get; init; } = false;
     public decimal TaxRate { get; init; } = 20m;
     public bool IsActive { get; private set; } = true;
-    public DateTime? CreateDate { get; init; }
-    public DateTime? ModifyDate { get; init; }
+    // 2026-05-26: CLAUDE.md audit standardi — Created/Updated + CreatedBy/UpdatedBy NVARCHAR(120)
+    public DateTime? Created { get; init; }
+    public DateTime? Updated { get; init; }
+    public int? CreatedById { get; init; }
+    public int? UpdatedById { get; init; }
 
     public void Deactivate()
     {

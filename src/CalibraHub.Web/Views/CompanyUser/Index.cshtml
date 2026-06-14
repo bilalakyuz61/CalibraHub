@@ -1,0 +1,688 @@
+@{
+    ViewData["Title"] = "Kullanıcı Tanımlamaları";
+    ViewData["BodyClass"] = "page-company-users";
+    var boardConfigJson = (ViewData["BoardConfigJson"] as string) ?? "null";
+}
+
+@section Styles {
+<style>
+    /* Tam ekran C-Grid layout — Logistics/Machines pattern */
+    .page-company-users .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-company-users .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-company-users .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-company-users .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+
+    /* ── Center modal (PriceList/Report pattern, sade tema) ────────── */
+    .cu-modal-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(15, 23, 42, 0.62);
+        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 9000; padding: 20px;
+        animation: cu-fade-in 0.18s ease-out;
+    }
+    @@keyframes cu-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .cu-modal {
+        background: var(--surface-1, #ffffff);
+        color: var(--text-1, #0f172a);
+        border-radius: 14px;
+        box-shadow: 0 24px 48px rgba(15, 23, 42, 0.32), 0 0 0 1px rgba(99, 102, 241, 0.18);
+        width: 100%; max-width: 460px;
+        max-height: calc(100vh - 40px);
+        display: flex; flex-direction: column;
+        overflow: hidden;
+        animation: cu-slide-up 0.22s ease-out;
+    }
+    @@keyframes cu-slide-up { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    body.app-theme-dark .cu-modal {
+        background: #111827; color: #e5e7eb;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(99, 102, 241, 0.25);
+    }
+    .cu-modal__header {
+        display: flex; align-items: center; gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+        background: linear-gradient(180deg, rgba(99,102,241,0.10) 0%, rgba(99,102,241,0.02) 100%);
+    }
+    .cu-modal__icon {
+        width: 36px; height: 36px; border-radius: 10px;
+        background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+        color: white; display: flex; align-items: center; justify-content: center;
+        font-size: 18px; flex-shrink: 0;
+    }
+    .cu-modal__title { font-size: 16px; font-weight: 600; margin: 0; flex: 1; }
+    .cu-modal__close {
+        border: none; background: transparent; cursor: pointer;
+        padding: 6px; border-radius: 6px; color: #64748b;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .cu-modal__close:hover { background: rgba(148, 163, 184, 0.18); color: #0f172a; }
+    body.app-theme-dark .cu-modal__close { color: #94a3b8; }
+    body.app-theme-dark .cu-modal__close:hover { color: #e5e7eb; }
+
+    .cu-modal__body { padding: 14px 16px; overflow-y: auto; flex: 1; }
+    .cu-modal__footer {
+        padding: 14px 20px;
+        border-top: 1px solid rgba(148, 163, 184, 0.18);
+        display: flex; justify-content: flex-end; gap: 8px;
+        background: rgba(248, 250, 252, 0.6);
+    }
+    body.app-theme-dark .cu-modal__footer { background: rgba(15, 23, 42, 0.6); }
+
+    .cu-form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .cu-form-row label { font-size: 12px; font-weight: 600; color: #475569; }
+    body.app-theme-dark .cu-form-row label { color: #94a3b8; }
+    .cu-form-row input[type="text"],
+    .cu-form-row input[type="email"],
+    .cu-form-row input[type="tel"],
+    .cu-form-row input[type="password"],
+    .cu-form-row select {
+        padding: 9px 12px;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        border-radius: 8px;
+        font-size: 13px; font-family: inherit;
+        background: #ffffff; color: #0f172a;
+        outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    body.app-theme-dark .cu-form-row input[type="text"],
+    body.app-theme-dark .cu-form-row input[type="email"],
+    body.app-theme-dark .cu-form-row input[type="tel"],
+    body.app-theme-dark .cu-form-row input[type="password"],
+    body.app-theme-dark .cu-form-row select {
+        background: #0f172a; color: #e5e7eb; border-color: rgba(148, 163, 184, 0.3);
+    }
+    .cu-form-row input:focus,
+    .cu-form-row select:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+
+    /* Switch (toggle) — CLAUDE.md kurali: boolean alanlar checkbox degil switch. */
+    .cu-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .cu-switch-row > label { font-size: 13px; font-weight: 600; color: #334155; }
+    body.app-theme-dark .cu-switch-row > label { color: #cbd5e1; }
+    .cu-switch {
+        position: relative; display: inline-block; width: 44px; height: 24px;
+    }
+    .cu-switch input { opacity: 0; width: 0; height: 0; }
+    .cu-switch__track {
+        position: absolute; cursor: pointer; inset: 0;
+        background: #cbd5e1; border-radius: 24px; transition: background 0.2s;
+    }
+    .cu-switch__track::before {
+        content: ""; position: absolute;
+        height: 18px; width: 18px; left: 3px; top: 3px;
+        background: #ffffff; border-radius: 50%;
+        transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    }
+    .cu-switch input:checked + .cu-switch__track { background: #6366f1; }
+    .cu-switch input:checked + .cu-switch__track::before { transform: translateX(20px); }
+
+    /* Sistem Yönetimi modalıyla birebir alan stili (label üstte + input) */
+    .cu-field-label {
+        display: block; font-size: .72rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .04em;
+        color: #64748b; margin-bottom: 4px;
+    }
+    body.app-theme-dark .cu-field-label { color: #94a3b8; }
+    .cu-input {
+        width: 100%; padding: 8px 10px;
+        border: 1px solid rgba(148,163,184,.4); border-radius: 8px;
+        font-size: .85rem; font-family: inherit;
+        background: transparent; color: inherit; outline: none; box-sizing: border-box;
+        transition: border-color .12s, box-shadow .12s;
+    }
+    .cu-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    body.app-theme-dark .cu-input { border-color: rgba(148,163,184,.3); }
+    /* Read-only (edit modunda email gibi sabit field'lar) — gri arka plan,
+       kullanıcı düzenlenemeyeceğini görsel olarak anlasın. */
+    .cu-input.is-readonly,
+    .cu-input[readonly] {
+        background: rgba(148,163,184,0.10);
+        color: #64748b;
+        cursor: not-allowed;
+    }
+    body.app-theme-dark .cu-input.is-readonly,
+    body.app-theme-dark .cu-input[readonly] {
+        background: rgba(148,163,184,0.06);
+        color: #94a3b8;
+    }
+    .cu-input.is-readonly:focus,
+    .cu-input[readonly]:focus { box-shadow: none; border-color: rgba(148,163,184,.4); }
+
+    .cu-btn {
+        padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .cu-btn--ghost {
+        background: transparent; color: #475569;
+        border-color: rgba(148, 163, 184, 0.4);
+    }
+    .cu-btn--ghost:hover { background: rgba(148, 163, 184, 0.1); }
+    body.app-theme-dark .cu-btn--ghost { color: #cbd5e1; border-color: rgba(148, 163, 184, 0.3); }
+    .cu-btn--primary {
+        background: #6366f1; color: white;
+        border-color: #6366f1;
+    }
+    .cu-btn--primary:hover { background: #4f46e5; border-color: #4f46e5; }
+    .cu-btn--primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* 2026-06-06: Inline cu-error kaldırıldı — hata mesajı sağ alt köşede toast,
+       hatalı alan kırmızı border + shake animation gösterir. */
+    .cu-input.is-invalid {
+        border-color: #ef4444 !important;
+        box-shadow: 0 0 0 3px rgba(239,68,68,0.18) !important;
+        animation: cu-shake 0.45s cubic-bezier(.36,.07,.19,.97);
+    }
+    @@keyframes cu-shake {
+        10%, 90% { transform: translateX(-1px); }
+        20%, 80% { transform: translateX(2px); }
+        30%, 50%, 70% { transform: translateX(-5px); }
+        40%, 60% { transform: translateX(5px); }
+    }
+
+    /* Toast (sağ alt köşe) — modal dışında, kalıcı container */
+    .cu-toast-container {
+        position: fixed; bottom: 24px; right: 24px;
+        display: flex; flex-direction: column; gap: 10px;
+        z-index: 10000; pointer-events: none;
+    }
+    .cu-toast {
+        background: #1f2937; color: #f1f5f9;
+        padding: 12px 14px; border-radius: 10px;
+        box-shadow: 0 14px 36px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05);
+        font-size: 13px; min-width: 300px; max-width: 440px;
+        display: flex; align-items: flex-start; gap: 10px;
+        pointer-events: auto;
+        border-left: 4px solid #ef4444;
+        animation: cu-toast-in 0.24s cubic-bezier(.16,1,.3,1);
+    }
+    body.app-theme-light .cu-toast {
+        background: #ffffff; color: #1f2937;
+        box-shadow: 0 14px 36px rgba(15,23,42,0.18), 0 0 0 1px rgba(15,23,42,0.06);
+    }
+    .cu-toast--success { border-left-color: #10b981; }
+    .cu-toast--info    { border-left-color: #6366f1; }
+    .cu-toast.is-leaving { animation: cu-toast-out 0.2s ease-in forwards; }
+    @@keyframes cu-toast-in {
+        from { transform: translateX(120%); opacity: 0; }
+        to   { transform: translateX(0);    opacity: 1; }
+    }
+    @@keyframes cu-toast-out {
+        to { transform: translateX(120%); opacity: 0; }
+    }
+    .cu-toast__icon {
+        width: 22px; height: 22px; flex-shrink: 0; margin-top: 1px;
+        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        background: rgba(239,68,68,0.18); color: #ef4444;
+        font-weight: 700; font-size: 14px;
+    }
+    .cu-toast--success .cu-toast__icon { background: rgba(16,185,129,0.18); color: #10b981; }
+    .cu-toast--info    .cu-toast__icon { background: rgba(99,102,241,0.18); color: #818cf8; }
+    .cu-toast__body { flex: 1; line-height: 1.4; word-wrap: break-word; }
+    .cu-toast__close {
+        background: transparent; border: none;
+        color: rgba(241,245,249,0.4); cursor: pointer;
+        padding: 0 4px; font-size: 16px; line-height: 1; flex-shrink: 0;
+    }
+    body.app-theme-light .cu-toast__close { color: rgba(31,41,55,0.4); }
+    .cu-toast__close:hover { color: #ef4444; }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@* Modal markup — JS toggle ile gosterilir/gizlenir *@
+<div id="cuModalRoot" style="display:none;">
+    <div class="cu-modal-backdrop" id="cuModalBackdrop">
+        <div class="cu-modal" role="dialog" aria-modal="true" aria-labelledby="cuModalTitle">
+            <div class="cu-modal__header">
+                <div class="cu-modal__icon">U</div>
+                <h3 class="cu-modal__title" id="cuModalTitle">Yeni Kullanıcı</h3>
+                <button type="button" class="cu-modal__close" id="cuModalClose" aria-label="Kapat">✕</button>
+            </div>
+            <div class="cu-modal__body">
+                <form id="cuForm" style="display:flex;flex-direction:column;gap:0;">
+                    <input type="hidden" id="cuUserId" />
+
+                    @* Ad / Soyad *@
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                        <div>
+                            <label class="cu-field-label" for="cuFirstName">Ad <span style="color:#dc2626">*</span></label>
+                            <input type="text" id="cuFirstName" required autocomplete="off" maxlength="60" class="cu-input" />
+                        </div>
+                        <div>
+                            <label class="cu-field-label" for="cuLastName">Soyad <span style="color:#dc2626">*</span></label>
+                            <input type="text" id="cuLastName" required autocomplete="off" maxlength="60" class="cu-input" />
+                        </div>
+                    </div>
+
+                    @* E-posta *@
+                    <div style="margin-bottom:10px;">
+                        <label class="cu-field-label" for="cuEmail">E-posta <span style="color:#dc2626">*</span></label>
+                        <input type="email" id="cuEmail" required autocomplete="off" maxlength="200" class="cu-input" />
+                    </div>
+
+                    @* Şifre *@
+                    <div id="cuPasswordRow" style="margin-bottom:10px;">
+                        <label class="cu-field-label" id="cuPwdLabel" for="cuPassword">Şifre</label>
+                        <input type="password" id="cuPassword" autocomplete="new-password" maxlength="100" placeholder="Boş → 12345678 atanır" class="cu-input" />
+                        <div id="cuPwdHint" style="font-size:.69rem;color:#64748b;margin-top:3px;">İlk girişten sonra kullanıcı kendi şifresini değiştirebilir.</div>
+                    </div>
+
+                    @* Telefon *@
+                    <div style="margin-bottom:10px;">
+                        <label class="cu-field-label" for="cuPhoneNumber">Telefon</label>
+                        <input type="tel" id="cuPhoneNumber" autocomplete="off" maxlength="30" class="cu-input" />
+                    </div>
+
+                    @* Departman *@
+                    <div style="margin-bottom:10px;">
+                        <label class="cu-field-label" for="cuDepartment">Departman</label>
+                        <select id="cuDepartment" class="cu-input">
+                            <option value="">— Seçiniz —</option>
+                        </select>
+                    </div>
+
+                    @* Yetki / Aktif *@
+                    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:6px;">
+                        <div>
+                            <label class="cu-field-label" for="cuRole">Yetki <span style="color:#dc2626">*</span></label>
+                            <select id="cuRole" required class="cu-input">
+                                <option value="4">User</option>
+                                <option value="2">Admin</option>
+                                <option value="1">Sistem Admin</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:10px;padding-bottom:7px;">
+                            <span class="cu-field-label" style="margin-bottom:0;">Aktif</span>
+                            <label class="cu-switch">
+                                <input type="checkbox" id="cuIsActive" checked />
+                                <span class="cu-switch__track"></span>
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="cu-modal__footer">
+                <button type="button" class="cu-btn cu-btn--ghost" id="cuCancelBtn">Vazgeç</button>
+                <button type="button" class="cu-btn cu-btn--primary" id="cuSaveBtn">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Antiforgery token — POST endpoint'lerin ihtiyac duydugu hidden input *@
+<form id="cuAfTokenForm" style="display:none;">@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+<script>
+(function () {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+    var el = document.getElementById('reactSmartBoard');
+    if (!el) { console.error('[CompanyUsers] Mount element yok'); return; }
+
+    // ── SmartBoard mount ───────────────────────────────────────────
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;padding:20px;">'
+            + msg + '</div>';
+    }
+
+    function loadCss() {
+        var prev = document.querySelector('link[data-companyusers-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-companyusers-sb', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        var prev = document.querySelector('script[data-companyusers-sb]');
+        if (prev) prev.parentNode.removeChild(prev);
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL;
+        s.setAttribute('data-companyusers-sb', '1');
+        s.onload = function () { setTimeout(cb, 0); };
+        s.onerror = function () { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(s);
+    }
+
+    function doMount() {
+        if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            showError('SmartBoard mount fonksiyonu bulunamadı');
+            return;
+        }
+        try {
+            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            console.log('[CompanyUsers] SmartBoard mounted,', (BOARD_CONFIG.entities || []).length, 'kullanıcı');
+        } catch (ex) {
+            console.error('[CompanyUsers] Mount exception:', ex);
+            showError('Mount hatası: ' + (ex.message || ex));
+        }
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) doMount();
+    else loadScript(doMount);
+
+    // ── Antiforgery token erisimi ──────────────────────────────────
+    function getAfToken() {
+        var input = document.querySelector('#cuAfTokenForm input[name="__RequestVerificationToken"]');
+        return input ? input.value : '';
+    }
+
+    // ── Modal kontrolu ─────────────────────────────────────────────
+    var modalRoot      = document.getElementById('cuModalRoot');
+    var modalBackdrop  = document.getElementById('cuModalBackdrop');
+    var modalTitle     = document.getElementById('cuModalTitle');
+    var modalClose     = document.getElementById('cuModalClose');
+    var cancelBtn      = document.getElementById('cuCancelBtn');
+    var saveBtn        = document.getElementById('cuSaveBtn');
+    var form           = document.getElementById('cuForm');
+    var inpId          = document.getElementById('cuUserId');
+    var inpFirstName   = document.getElementById('cuFirstName');
+    var inpLastName    = document.getElementById('cuLastName');
+    var inpEmail       = document.getElementById('cuEmail');
+    var inpPhone       = document.getElementById('cuPhoneNumber');
+    var inpDept        = document.getElementById('cuDepartment');
+    var inpRole        = document.getElementById('cuRole');
+    var inpPassword    = document.getElementById('cuPassword');
+    var pwdLabel       = document.getElementById('cuPwdLabel');
+    var pwdHint        = document.getElementById('cuPwdHint');
+    var inpIsActive    = document.getElementById('cuIsActive');
+
+    var formDataLoaded = false;
+
+    // ── Toast (sağ alt köşe) ──────────────────────────────────────
+    function ensureToastContainer() {
+        var c = document.getElementById('cuToastContainer');
+        if (!c) {
+            c = document.createElement('div');
+            c.id = 'cuToastContainer';
+            c.className = 'cu-toast-container';
+            document.body.appendChild(c);
+        }
+        return c;
+    }
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function showToast(msg, type) {
+        type = type || 'error';
+        var c = ensureToastContainer();
+        var t = document.createElement('div');
+        t.className = 'cu-toast cu-toast--' + type;
+        var icon = type === 'success' ? '✓' : (type === 'info' ? 'i' : '!');
+        t.innerHTML =
+            '<div class="cu-toast__icon">' + icon + '</div>' +
+            '<div class="cu-toast__body">' + escHtml(msg) + '</div>' +
+            '<button class="cu-toast__close" type="button" aria-label="Kapat">✕</button>';
+        c.appendChild(t);
+        var closeBtn = t.querySelector('.cu-toast__close');
+        var timer = setTimeout(function () { removeToast(t); }, 4500);
+        closeBtn.addEventListener('click', function () {
+            clearTimeout(timer); removeToast(t);
+        });
+    }
+    function removeToast(t) {
+        if (!t || !t.parentNode) return;
+        t.classList.add('is-leaving');
+        setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 220);
+    }
+
+    // ── Shake helper ──────────────────────────────────────────────
+    function shake(inp, focusIt) {
+        if (!inp) return;
+        inp.classList.remove('is-invalid');
+        // Reflow tetikleyip animation'ı yeniden başlat
+        void inp.offsetWidth;
+        inp.classList.add('is-invalid');
+        if (focusIt !== false) {
+            try { inp.focus(); } catch (e) {}
+        }
+        // Border'ı 1.8sn sonra temizle (animation 0.45sn ama border'ı biraz tutalım)
+        setTimeout(function () { inp.classList.remove('is-invalid'); }, 1800);
+    }
+
+    // Backend hata mesajından hangi field'ı shake edeceğini tespit et
+    function detectFieldFromError(msg) {
+        var m = (msg || '').toLocaleLowerCase('tr-TR');
+        if (m.indexOf('e-posta') !== -1 || m.indexOf('email') !== -1) return inpEmail;
+        if (m.indexOf('şifre')   !== -1 || m.indexOf('parola') !== -1) return inpPassword;
+        if (m.indexOf('soyad')   !== -1) return inpLastName;
+        if (m.indexOf('ad soyad') !== -1 || m.indexOf('ad zorunlu') !== -1) return inpFirstName;
+        if (m.indexOf('rol')     !== -1 || m.indexOf('yetki') !== -1) return inpRole;
+        if (m.indexOf('telefon') !== -1) return inpPhone;
+        return null;
+    }
+
+    // Tek noktadan: toast göster + ilgili field varsa shake et
+    function notifyError(msg, fieldOverride) {
+        showToast(msg, 'error');
+        var f = fieldOverride !== undefined ? fieldOverride : detectFieldFromError(msg);
+        if (f) shake(f);
+    }
+    function notifySuccess(msg) { showToast(msg, 'success'); }
+
+    function loadFormData() {
+        if (formDataLoaded) return Promise.resolve();
+        return fetch('/CompanyUser/GetFormData', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                inpRole.innerHTML = '';
+                (data.roles || []).forEach(function (r) {
+                    var o = document.createElement('option');
+                    o.value = r.value; o.textContent = r.label;
+                    inpRole.appendChild(o);
+                });
+                // Departman listesi (— Seçiniz — + DB'den gelen aktif departmanlar)
+                inpDept.innerHTML = '<option value="">— Seçiniz —</option>';
+                (data.departments || []).forEach(function (d) {
+                    var o = document.createElement('option');
+                    o.value = d.id; o.textContent = d.name;
+                    inpDept.appendChild(o);
+                });
+                formDataLoaded = true;
+            });
+    }
+
+    function openModal(userId) {
+        modalRoot.style.display = 'block';
+        loadFormData().then(function () {
+            if (inpPassword) inpPassword.value = '';
+
+            if (userId) {
+                modalTitle.textContent = 'Kullanıcı Düzenle';
+                pwdLabel.innerHTML = 'Şifre';
+                if (inpPassword) inpPassword.placeholder = 'Değiştirmek için girin';
+                if (pwdHint) pwdHint.textContent = 'Boş bırakılırsa mevcut şifre korunur.';
+                // Edit: E-posta read-only — login identifier, değiştirilirse referanslar bozulur
+                inpEmail.readOnly = true;
+                inpEmail.classList.add('is-readonly');
+                fetch('/CompanyUser/Get?id=' + encodeURIComponent(userId), { credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data.ok) { notifyError(data.error || 'Kullanıcı yüklenemedi.'); return; }
+                        var u = data.user;
+                        // FullName → Ad / Soyad (SON boşluktan böl — son kelime Soyad,
+                        // kalan tümü Ad). "Zeynep Betül Akyüz" → Ad="Zeynep Betül", Soyad="Akyüz".
+                        // Tek kelime ise Soyad boş kalır.
+                        var fn = (u.fullName || '').trim();
+                        var lastSpace = fn.lastIndexOf(' ');
+                        inpId.value         = u.id;
+                        inpFirstName.value  = lastSpace >= 0 ? fn.substring(0, lastSpace) : fn;
+                        inpLastName.value   = lastSpace >= 0 ? fn.substring(lastSpace + 1) : '';
+                        inpEmail.value      = u.email || '';
+                        inpPhone.value      = u.phoneNumber || '';
+                        inpDept.value       = u.departmentId != null ? String(u.departmentId) : '';
+                        inpRole.value       = u.role;
+                        inpIsActive.checked = !!u.isActive;
+                        setTimeout(function () { inpFirstName.focus(); }, 30);
+                    })
+                    .catch(function (ex) { notifyError('Veri alınamadı: ' + (ex.message || ex)); });
+            } else {
+                modalTitle.textContent = 'Yeni Kullanıcı';
+                pwdLabel.innerHTML = 'Şifre';
+                if (inpPassword) inpPassword.placeholder = 'Boş → 12345678 atanır';
+                if (pwdHint) pwdHint.textContent = 'İlk girişten sonra kullanıcı kendi şifresini değiştirebilir.';
+                // New: E-posta editable
+                inpEmail.readOnly = false;
+                inpEmail.classList.remove('is-readonly');
+                inpId.value        = '';
+                inpFirstName.value = '';
+                inpLastName.value  = '';
+                inpEmail.value     = '';
+                inpPhone.value     = '';
+                inpDept.value      = '';
+                inpRole.value      = inpRole.options.length > 0 ? inpRole.options[0].value : '';
+                inpIsActive.checked = true;
+                setTimeout(function () { inpFirstName.focus(); }, 30);
+            }
+        });
+    }
+
+    function closeModal() {
+        modalRoot.style.display = 'none';
+        // Hash'i temizle ki sonraki #edit-user-... veya tekrar #open-new-user-modal hashchange fire etsin.
+        if (location.hash) {
+            history.replaceState(null, '', location.pathname + location.search);
+        }
+    }
+
+    modalClose.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    // 2026-06-06: Backdrop tıklamasında modal KAPANMAZ — yalnızca Kaydet / Vazgeç / X
+    // (kullanıcı talebi: yanlışlıkla form verisi kaybı önlensin). Esc da kapatmaz.
+    document.addEventListener('keydown', function (e) {
+        if (modalRoot.style.display !== 'none') {
+            if (e.key === 'Enter' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                saveBtn.click();
+            }
+        }
+    });
+
+    saveBtn.addEventListener('click', function () {
+        var firstName = (inpFirstName.value || '').trim();
+        var lastName  = (inpLastName.value || '').trim();
+        var email     = (inpEmail.value || '').trim();
+        if (!firstName) { notifyError('Ad zorunludur.',   inpFirstName); return; }
+        if (!lastName)  { notifyError('Soyad zorunludur.', inpLastName);  return; }
+        if (!email)     { notifyError('E-posta zorunludur.', inpEmail);   return; }
+
+        // Basit email format kontrolü (HTML5 type=email bypass edilebilir).
+        // NOT: Razor cshtml icinde at-isareti escape gerekir; iki tane yazinca
+        // bir tane output edilir, JS regex'i normal calisir.
+        var emailRx = new RegExp('^[^\\s@@]+@@[^\\s@@]+\\.[^\\s@@]+$');
+        if (!emailRx.test(email)) {
+            notifyError('Geçerli bir e-posta adresi girin.', inpEmail);
+            return;
+        }
+
+        var idVal = inpId.value || null;
+        var roleVal = parseInt(inpRole.value, 10);
+        var fullName = (firstName + ' ' + lastName).trim();
+
+        var pwdVal = (inpPassword && inpPassword.value) ? inpPassword.value : null;
+        if (!idVal && pwdVal && pwdVal.length > 0 && pwdVal.length < 6) {
+            notifyError('Şifre en az 6 karakter olmalı.', inpPassword);
+            return;
+        }
+
+        // Backend FullName (tek alan) bekliyor — Ad + Soyad birleştirilir.
+        // Personel Kodu / Departman / Amir / Grafana bu modalda yok; gönderilmez
+        // (backend create'te otomatik türetir, update'te mevcut değeri korur).
+        var deptVal = (inpDept.value || '').trim();
+        var payload = {
+            id:           idVal,
+            fullName:     fullName,
+            email:        email,
+            phoneNumber:  (inpPhone.value || '').trim() || null,
+            departmentId: deptVal ? parseInt(deptVal, 10) : null,
+            role:         roleVal,
+            isActive:     !!inpIsActive.checked,
+            password:     !idVal ? pwdVal : null,
+        };
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Kaydediliyor...';
+
+        fetch('/CompanyUser/Save', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': getAfToken(),
+            },
+            body: JSON.stringify(payload),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Kaydet';
+            if (data.ok) {
+                notifySuccess(idVal ? 'Kullanıcı güncellendi.' : 'Kullanıcı oluşturuldu.');
+                closeModal();
+                // C-Grid in-place refresh (CLAUDE.md: location.reload kullanılmaz)
+                if (typeof window._smartBoardRefreshAll === 'function') window._smartBoardRefreshAll();
+                else location.reload();
+            } else {
+                // Backend hatası — mesajdan field tespit edip shake + toast
+                notifyError(data.error || data.message || 'Kayıt başarısız.');
+            }
+        })
+        .catch(function (ex) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Kaydet';
+            notifyError('Sunucu hatası: ' + (ex.message || ex));
+        });
+    });
+
+    // ── Hashchange dinleyicisi — SmartBoard action URL'leri ────────
+    // SmartCard navigateInFrame ile `#open-new-user-modal` veya `#edit-user-{id}` hash'lerini
+    // workspace=1 ekleyip set eder. Burada hash'i parse edip modal'i aciyoruz.
+    function handleHash() {
+        var h = location.hash || '';
+        // workspace=1 querystring'i hash icine sokulmus olabilir.
+        var raw = h.replace(/^#/, '').split('?')[0];
+        if (raw === 'open-new-user-modal') {
+            openModal(null);
+        } else if (raw.indexOf('edit-user-') === 0) {
+            var userId = raw.substring('edit-user-'.length);
+            if (userId) openModal(userId);
+        }
+    }
+    window.addEventListener('hashchange', handleHash);
+    // Sayfa ilk yuklendiginde de kontrol et (deep link destegi).
+    if (location.hash) setTimeout(handleHash, 200);
+
+    window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+
+    // Public hook — manuel acmak isteyenler icin.
+    window.openCompanyUserModal = openModal;
+})();
+</script>
+}

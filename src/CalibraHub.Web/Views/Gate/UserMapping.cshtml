@@ -1,0 +1,584 @@
+@{
+    ViewData["Title"] = "Sistem Yönetimi — Kullanıcı Eşleme";
+    ViewData["BodyClass"] = "page-system-mgmt";
+}
+
+@section Styles {
+<style>
+    .page-system-mgmt .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important;
+        padding: 0 !important; max-width: none !important;
+        background: transparent !important; box-shadow: none !important;
+        border: none !important; border-radius: 0 !important;
+    }
+    .page-system-mgmt .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+    .workspace-frame-body.page-system-mgmt .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .workspace-frame-body.page-system-mgmt .integrator-dashboard {
+        flex: 1 1 auto; min-height: 0; height: 100%;
+    }
+
+    /* ── Mapping Modal ─────────────────────────────────────────────── */
+    .um-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(15,23,42,.62);
+        backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 9000; padding: 20px;
+        animation: um-fade .18s ease-out;
+    }
+    @@keyframes um-fade { from { opacity:0 } to { opacity:1 } }
+    .um-modal {
+        background: var(--surface-1, #ffffff);
+        color: var(--text-1, #0f172a);
+        border-radius: 14px;
+        box-shadow: 0 24px 48px rgba(15,23,42,.28), 0 0 0 1px rgba(99,102,241,.15);
+        width: 100%; max-width: 460px;
+        max-height: calc(100vh - 40px);
+        display: flex; flex-direction: column; overflow: hidden;
+        animation: um-slide .22s ease-out;
+    }
+    @@keyframes um-slide { from { transform:translateY(10px);opacity:0 } to { transform:translateY(0);opacity:1 } }
+    body.app-theme-dark .um-modal { background:#111827; color:#e5e7eb; }
+
+    .um-header {
+        display: flex; align-items: center; gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid rgba(148,163,184,.18);
+        background: linear-gradient(180deg, rgba(139,92,246,.09) 0%, rgba(139,92,246,.02) 100%);
+    }
+    .um-header__icon {
+        width: 36px; height: 36px; border-radius: 10px;
+        background: linear-gradient(135deg, #7c3aed, #a78bfa);
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .um-header__title { font-size: 15px; font-weight: 600; margin: 0; flex: 1; }
+    .um-header__close {
+        border: none; background: transparent; cursor: pointer;
+        padding: 6px; border-radius: 6px; color: #64748b;
+    }
+    .um-header__close:hover { background: rgba(148,163,184,.18); }
+
+    .um-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+
+    /* Kullanıcı bilgi satırı */
+    .um-user-info {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; border-radius: 9px;
+        background: rgba(99,102,241,.06); border: 1px solid rgba(99,102,241,.14);
+        margin-bottom: 18px;
+    }
+    .um-user-avatar {
+        width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px; font-weight: 700; color: #fff;
+    }
+    .um-user-name  { font-size: .88rem; font-weight: 600; }
+    .um-user-email { font-size: .75rem; color: #64748b; }
+    body.app-theme-dark .um-user-email { color: #94a3b8; }
+
+    .um-section-label {
+        font-size: .7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .06em; color: #64748b; margin-bottom: 8px;
+    }
+    body.app-theme-dark .um-section-label { color: #94a3b8; }
+
+    /* İki sütunlu gövde: sol form, sağ şirket erişimleri (aynı yükseklik) */
+    .um-grid {
+        display: grid;
+        grid-template-columns: 1fr 290px;
+        gap: 18px;
+        align-items: stretch;
+    }
+    .um-col-companies {
+        display: flex; flex-direction: column;
+        min-height: 0;   /* flex child'ın scroll edebilmesi için */
+    }
+    @@media (max-width: 640px) {
+        .um-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Şirket listesi — sağ sütunu doldurur, uzarsa kendi içinde scroll olur */
+    .um-company-list {
+        display: flex; flex-direction: column; gap: 6px;
+        flex: 1 1 auto; min-height: 120px; max-height: 340px;
+        overflow-y: auto;
+        padding: 8px;
+        border: 1px solid rgba(148,163,184,.25); border-radius: 10px;
+        background: rgba(148,163,184,.04);
+    }
+    body.app-theme-dark .um-company-list { border-color: rgba(148,163,184,.2); background: rgba(255,255,255,.02); }
+    .um-company-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 10px; border-radius: 9px;
+        border: 1.5px solid rgba(148,163,184,.25);
+        background: var(--surface-1, #fff);
+        transition: border-color .12s, background .12s;
+        flex-shrink: 0;
+    }
+    .um-company-item.is-checked { border-color: #6366f1; background: rgba(99,102,241,.07); }
+    body.app-theme-dark .um-company-item { border-color: rgba(148,163,184,.2); background: #0f172a; }
+    body.app-theme-dark .um-company-item.is-checked { border-color: #818cf8; background: rgba(99,102,241,.12); }
+
+    .um-company-name { font-size: .85rem; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .um-empty {
+        text-align: center; color: #94a3b8; font-size: .82rem; padding: 24px;
+    }
+
+    .um-footer {
+        padding: 14px 20px; border-top: 1px solid rgba(148,163,184,.18);
+        display: flex; justify-content: flex-end; gap: 8px;
+        background: rgba(248,250,252,.6);
+    }
+    body.app-theme-dark .um-footer { background: rgba(15,23,42,.6); }
+
+    .um-btn {
+        padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        border: 1px solid transparent; cursor: pointer;
+    }
+    .um-btn--ghost { background: transparent; color: #475569; border-color: rgba(148,163,184,.4); }
+    .um-btn--ghost:hover { background: rgba(148,163,184,.1); }
+    body.app-theme-dark .um-btn--ghost { color: #cbd5e1; }
+    .um-btn--primary { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+    .um-btn--primary:hover { background: #6d28d9; }
+    .um-btn--primary:disabled { opacity: .6; cursor: not-allowed; }
+
+    .um-field-label {
+        display: block; font-size: .72rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .04em;
+        color: #64748b; margin-bottom: 4px;
+    }
+    body.app-theme-dark .um-field-label { color: #94a3b8; }
+    .um-input {
+        width: 100%; padding: 8px 10px;
+        border: 1px solid rgba(148,163,184,.4); border-radius: 8px;
+        font-size: .85rem; font-family: inherit;
+        background: transparent; color: inherit; outline: none; box-sizing: border-box;
+        transition: border-color .12s, box-shadow .12s;
+    }
+    .um-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+    body.app-theme-dark .um-input { border-color: rgba(148,163,184,.3); }
+
+    /* Switch (Aktif toggle) */
+    .um-switch { position:relative;display:inline-block;width:44px;height:24px; }
+    .um-switch input { opacity:0;width:0;height:0; }
+    .um-switch__track {
+        position:absolute;cursor:pointer;inset:0;
+        background:#cbd5e1;border-radius:24px;transition:background .2s;
+    }
+    .um-switch__track::before {
+        content:"";position:absolute;height:18px;width:18px;left:3px;top:3px;
+        background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.18);
+    }
+    .um-switch input:checked + .um-switch__track { background:#6366f1; }
+    .um-switch input:checked + .um-switch__track::before { transform:translateX(20px); }
+
+    .um-error {
+        margin-top: 10px; padding: 8px 12px;
+        background: rgba(239,68,68,.08); color: #dc2626;
+        border: 1px solid rgba(239,68,68,.25); border-radius: 6px; font-size: 12px;
+    }
+    body.app-theme-dark .um-error { color: #fca5a5; }
+</style>
+}
+
+<partial name="_SistemAyarlariTabs" model='"usermapping"' />
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
+</section>
+
+@* Birleşik Kullanıcı Kaydet Modal (oluşturma + düzenleme) *@
+<div id="umModalRoot" style="display:none;">
+    <div class="um-backdrop" id="umBackdrop">
+        <div class="um-modal" role="dialog" aria-modal="true" style="max-width:760px;">
+            <div class="um-header">
+                <div class="um-header__icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                </div>
+                <h3 class="um-header__title" id="umModalTitle">Kullanıcı</h3>
+                <button type="button" class="um-header__close" id="umClose">✕</button>
+            </div>
+            <div class="um-body">
+                <input type="hidden" id="umUserId" />
+
+                <div class="um-grid">
+                    @* ───── SOL: Kullanıcı formu ───── *@
+                    <div class="um-col-form">
+                        @* Ad / Soyad *@
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                            <div>
+                                <label class="um-field-label">Ad <span style="color:#dc2626">*</span></label>
+                                <input type="text" id="umFirstName" required maxlength="60" autocomplete="off" class="um-input" />
+                            </div>
+                            <div>
+                                <label class="um-field-label">Soyad <span style="color:#dc2626">*</span></label>
+                                <input type="text" id="umLastName" required maxlength="60" autocomplete="off" class="um-input" />
+                            </div>
+                        </div>
+
+                        @* E-posta *@
+                        <div style="margin-bottom:10px;">
+                            <label class="um-field-label">E-posta <span style="color:#dc2626">*</span></label>
+                            <input type="email" id="umEmail" required maxlength="120" autocomplete="off" class="um-input" />
+                        </div>
+
+                        @* Şifre *@
+                        <div style="margin-bottom:10px;">
+                            <label class="um-field-label" id="umPwdLabel">Şifre <span style="color:#dc2626">*</span></label>
+                            <input type="password" id="umPassword" maxlength="100" autocomplete="new-password" class="um-input" />
+                            <div id="umPwdHint" style="font-size:.69rem;color:#64748b;margin-top:3px;"></div>
+                        </div>
+
+                        @* Telefon *@
+                        <div style="margin-bottom:10px;">
+                            <label class="um-field-label">Telefon</label>
+                            <input type="tel" id="umPhone" maxlength="30" autocomplete="off" class="um-input" />
+                        </div>
+
+                        @* Aktif *@
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <label class="um-field-label" style="margin-bottom:0;">Aktif</label>
+                            <label class="um-switch">
+                                <input type="checkbox" id="umIsActive" checked />
+                                <span class="um-switch__track"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    @* ───── SAĞ: Şirket erişimleri (scroll'lu) ───── *@
+                    <div class="um-col-companies">
+                        <div class="um-section-label" style="margin-bottom:8px;">
+                            Şirket Erişimleri
+                            <span style="display:block;color:#94a3b8;font-weight:400;text-transform:none;font-size:.7rem;margin-top:2px;">En az biri açık olmalı · şirket bazında yetki</span>
+                        </div>
+                        <div class="um-company-list" id="umCompanyList">
+                            <div class="um-empty">Yükleniyor…</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="umError" class="um-error" style="display:none;margin-top:10px;"></div>
+            </div>
+            <div class="um-footer">
+                <button type="button" class="um-btn um-btn--ghost" id="umCancel">Vazgeç</button>
+                <button type="button" class="um-btn um-btn--primary" id="umSave">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form id="umAfForm" style="display:none;">@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+<script>
+(function () {
+    /* ── SmartBoard yükleme ──────────────────────────────────────── */
+    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var el = document.getElementById('reactSmartBoard');
+
+    function boardErr(msg) {
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f87171;padding:20px;">' + msg + '</div>';
+    }
+    function mountBoard(cfg) {
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { boardErr('SmartBoard yüklenemedi'); return; }
+        try { window.CalibraHub.mountSmartBoard(el, cfg); }
+        catch (ex) { boardErr('Mount hatası: ' + (ex.message || ex)); }
+    }
+    function loadAndMount() {
+        fetch('/Setup/UserMappingBoardConfig', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (cfg) { mountBoard(cfg); })
+            .catch(function (ex) { boardErr('Config yüklenemedi: ' + ex.message); });
+    }
+    function initBoard() {
+        if (!document.querySelector('link[data-um-sb]')) {
+            var l = document.createElement('link');
+            l.rel = 'stylesheet'; l.href = CSS_URL; l.setAttribute('data-um-sb', '1');
+            document.head.appendChild(l);
+        }
+        if (window.CalibraHub && window.CalibraHub.mountSmartBoard) loadAndMount();
+        else {
+            var s = document.createElement('script');
+            s.src = BUNDLE_URL; s.setAttribute('data-um-sb', '1');
+            s.onload = function () { setTimeout(loadAndMount, 0); };
+            s.onerror = function () { boardErr('Bundle yüklenemedi'); };
+            document.head.appendChild(s);
+        }
+    }
+    initBoard();
+
+    /* ── Yardımcılar ─────────────────────────────────────────────── */
+    function getAf() {
+        var inp = document.querySelector('#umAfForm input[name="__RequestVerificationToken"]');
+        return inp ? inp.value : '';
+    }
+
+    /* ── State ───────────────────────────────────────────────────── */
+    var allCompanies  = [];        // [{ id, name, isActive }]
+    var selectedIds   = new Set(); // seçili şirket id'leri
+    var companyRoles  = {};        // { companyId: "User"|"Admin"|"SistemAdmin" }
+    var editMode      = false;
+
+    /* ── Yardımcı ────────────────────────────────────────────────── */
+    function _esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function showErr(m) { var e=document.getElementById('umError'); e.textContent=m; e.style.display='block'; }
+    function clearErr()  { var e=document.getElementById('umError'); e.style.display='none'; e.textContent=''; }
+
+    /* ── Şirket listesi render (switch + rol dropdown) ───────────── */
+    function renderCompanies() {
+        var list = document.getElementById('umCompanyList');
+        var active = allCompanies.filter(function(c){ return c.isActive; });
+        if (!active.length) { list.innerHTML='<div class="um-empty">Aktif şirket tanımlı değil.</div>'; return; }
+        list.innerHTML = '';
+        active.forEach(function(c) {
+            var checked = selectedIds.has(c.id);
+            var currentRole = companyRoles[c.id] || 'User';
+
+            var item = document.createElement('div');
+            item.className = 'um-company-item' + (checked ? ' is-checked' : '');
+            item.dataset.id = c.id;
+
+            // Switch (CLAUDE.md: boolean alanlar switch ile) — şirketi aç/kapat
+            var sw = document.createElement('label');
+            sw.className = 'um-switch';
+            sw.style.flexShrink = '0';
+            var swInput = document.createElement('input');
+            swInput.type = 'checkbox';
+            swInput.checked = checked;
+            var swTrack = document.createElement('span');
+            swTrack.className = 'um-switch__track';
+            sw.appendChild(swInput);
+            sw.appendChild(swTrack);
+
+            // Şirket adı
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'um-company-name';
+            nameSpan.textContent = c.name;
+
+            // Rol dropdown
+            var roleSelect = document.createElement('select');
+            roleSelect.style.cssText = 'padding:3px 6px;border:1px solid rgba(148,163,184,.35);border-radius:6px;font-size:.75rem;font-family:inherit;background:transparent;color:inherit;outline:none;cursor:pointer;min-width:84px;flex-shrink:0;';
+            roleSelect.innerHTML =
+                '<option value="User">User</option>'
+                + '<option value="Admin">Admin</option>'
+                + '<option value="SistemAdmin">Sistem Admin</option>';
+            roleSelect.value    = currentRole;
+            roleSelect.disabled = !checked;
+            roleSelect.style.opacity = checked ? '1' : '0.4';
+            roleSelect.addEventListener('change', function() {
+                companyRoles[parseInt(item.dataset.id, 10)] = this.value;
+            });
+
+            // Switch toggle → şirketi seç/bırak + dropdown enable/disable
+            swInput.addEventListener('change', function() {
+                var id = parseInt(item.dataset.id, 10);
+                if (this.checked) {
+                    selectedIds.add(id);
+                    item.classList.add('is-checked');
+                    roleSelect.disabled = false;
+                    roleSelect.style.opacity = '1';
+                    companyRoles[id] = roleSelect.value || 'User';
+                } else {
+                    selectedIds.delete(id);
+                    item.classList.remove('is-checked');
+                    roleSelect.disabled = true;
+                    roleSelect.style.opacity = '0.4';
+                }
+            });
+
+            item.appendChild(sw);
+            item.appendChild(nameSpan);
+            item.appendChild(roleSelect);
+            list.appendChild(item);
+        });
+    }
+
+    /* ── Modal kapat ─────────────────────────────────────────────── */
+    function closeModal() {
+        document.getElementById('umModalRoot').style.display = 'none';
+        selectedIds = new Set(); companyRoles = {}; editMode = false;
+        resetForm();
+        if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    }
+
+    /* ── Yeni Kullanıcı aç ───────────────────────────────────────── */
+    function resetForm() {
+        document.getElementById('umUserId').value          = '';
+        document.getElementById('umFirstName').value       = '';
+        document.getElementById('umLastName').value        = '';
+        document.getElementById('umEmail').value           = '';
+        document.getElementById('umPassword').value        = '';
+        document.getElementById('umPhone').value           = '';
+        document.getElementById('umIsActive').checked      = true;
+    }
+
+    function openNewUserModal() {
+        editMode = false; selectedIds = new Set(); companyRoles = {}; clearErr();
+        resetForm();
+        document.getElementById('umModalTitle').textContent = 'Yeni Kullanıcı';
+        document.getElementById('umPassword').placeholder  = 'En az 6 karakter';
+        document.getElementById('umPwdLabel').innerHTML    = 'Şifre <span style="color:#dc2626">*</span>';
+        document.getElementById('umPwdHint').textContent   = '';
+        document.getElementById('umSave').textContent      = 'Kullanıcı Oluştur';
+        document.getElementById('umCompanyList').innerHTML   = '<div class="um-empty">Yükleniyor…</div>';
+        document.getElementById('umModalRoot').style.display = 'block';
+
+        // Şirketler yüklü değilse yükle
+        if (!allCompanies.length) {
+            fetch('/Setup/GetCompaniesJson', { credentials: 'same-origin' })
+                .then(function(r){ return r.json(); })
+                .then(function(d){ allCompanies = d || []; renderCompanies(); })
+                .catch(function(){ document.getElementById('umCompanyList').innerHTML='<div class="um-empty">Şirketler yüklenemedi.</div>'; });
+        } else {
+            renderCompanies();
+        }
+        setTimeout(function(){ document.getElementById('umFirstName').focus(); }, 30);
+    }
+
+    /* ── Kullanıcı düzenle aç ────────────────────────────────────── */
+    function openEditModal(userId) {
+        editMode = true; selectedIds = new Set(); companyRoles = {}; clearErr();
+        resetForm();
+        document.getElementById('umModalTitle').textContent  = 'Kullanıcı Düzenle';
+        document.getElementById('umSave').textContent        = 'Kaydet';
+        document.getElementById('umCompanyList').innerHTML   = '<div class="um-empty">Yükleniyor…</div>';
+        document.getElementById('umModalRoot').style.display = 'block';
+        document.getElementById('umSave').disabled = true;
+
+        Promise.all([
+            fetch('/Setup/GetUsersJson', { credentials: 'same-origin' }).then(function(r){ return r.json(); }),
+            fetch('/Setup/GetCompaniesJson', { credentials: 'same-origin' }).then(function(r){ return r.json(); })
+        ]).then(function(res) {
+            allCompanies = res[1] || [];
+            var found = (res[0] || []).find(function(u){ return u.id == userId; });
+            if (!found) { showErr('Kullanıcı bulunamadı.'); return; }
+
+            // Mevcut şirket atamaları + roller
+            (found.companies || []).forEach(function(c) {
+                if (c.isActive) {
+                    selectedIds.add(c.id);
+                    companyRoles[c.id] = c.role || 'User';
+                }
+            });
+
+            // FullName → FirstName / LastName
+            var parts     = (found.fullName || '').trim().split(' ');
+            var firstName = parts[0] || '';
+            var lastName  = parts.slice(1).join(' ');
+
+            document.getElementById('umUserId').value          = found.id;
+            document.getElementById('umFirstName').value       = firstName;
+            document.getElementById('umLastName').value        = lastName;
+            document.getElementById('umEmail').value           = found.email || '';
+            document.getElementById('umPassword').placeholder  = 'Değiştirmek için girin';
+            document.getElementById('umPwdLabel').textContent  = 'Şifre';
+            document.getElementById('umPwdHint').textContent   = 'Boş bırakılırsa mevcut şifre korunur.';
+            document.getElementById('umPhone').value           = found.phoneNumber || '';
+            document.getElementById('umIsActive').checked      = !!found.isActive;
+            document.getElementById('umSave').disabled         = false;
+
+            renderCompanies();
+            setTimeout(function(){ document.getElementById('umFirstName').focus(); }, 30);
+        }).catch(function(ex){ showErr('Veri yüklenemedi: ' + ex.message); });
+    }
+
+    /* ── Event listener'lar (guard: React Shell'de modal HTML olmayabilir) ── */
+    if (!document.getElementById('umModalRoot')) return; // outer shell — iframe'de çalışacak
+
+    document.getElementById('umClose').addEventListener('click', closeModal);
+    document.getElementById('umCancel').addEventListener('click', closeModal);
+    document.getElementById('umBackdrop').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
+    document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape' && document.getElementById('umModalRoot').style.display !== 'none') closeModal();
+    });
+
+    /* ── Kaydet ──────────────────────────────────────────────────── */
+    document.getElementById('umSave').addEventListener('click', function() {
+        clearErr();
+        var firstName = (document.getElementById('umFirstName').value || '').trim();
+        var lastName  = (document.getElementById('umLastName').value  || '').trim();
+        var email     = (document.getElementById('umEmail').value     || '').trim();
+        var password  = (document.getElementById('umPassword').value  || '').trim();
+        var phone     = (document.getElementById('umPhone').value     || '').trim() || null;
+        var isActive  =  document.getElementById('umIsActive').checked;
+        var userId    =  document.getElementById('umUserId').value || null;
+
+        if (!firstName) { showErr('Ad zorunludur.'); document.getElementById('umFirstName').focus(); return; }
+        if (!lastName)  { showErr('Soyad zorunludur.'); document.getElementById('umLastName').focus(); return; }
+        if (!email)     { showErr('E-posta zorunludur.'); document.getElementById('umEmail').focus(); return; }
+        if (!editMode && !password) { showErr('Şifre zorunludur.'); document.getElementById('umPassword').focus(); return; }
+        if (password && password.length < 6) { showErr('Şifre en az 6 karakter olmalı.'); document.getElementById('umPassword').focus(); return; }
+
+        // ── Tek doğruluk kaynağı: DOM'daki işaretli satırlar + dropdown değerleri ──
+        var checkedIds   = [];
+        var companyRoleList = [];
+        document.querySelectorAll('#umCompanyList .um-company-item.is-checked').forEach(function(row) {
+            var cid = parseInt(row.dataset.id, 10);
+            var sel = row.querySelector('select');
+            var roleVal = sel ? (sel.value || 'User') : 'User';
+            checkedIds.push(cid);
+            companyRoleList.push({ companyId: cid, role: roleVal });
+        });
+
+        if (checkedIds.length === 0) { showErr('En az bir şirket seçilmelidir.'); return; }
+
+        var btn = document.getElementById('umSave');
+        btn.disabled = true; btn.textContent = editMode ? 'Kaydediliyor…' : 'Oluşturuluyor…';
+
+        fetch('/Setup/SaveUserJson', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getAf() },
+            body: JSON.stringify({
+                id:           userId ? parseInt(userId, 10) : null,
+                firstName:    firstName,
+                lastName:     lastName,
+                email:        email,
+                password:     password || null,
+                phoneNumber:  phone,
+                isActive:     isActive,
+                companyIds:   checkedIds,
+                companyRoles: companyRoleList
+            })
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+            btn.disabled = false; btn.textContent = editMode ? 'Kaydet' : 'Kullanıcı Oluştur';
+            if (d.success) {
+                closeModal();
+                // Bu board'u doğrudan yeniden fetch+mount et — _smartBoardRefreshAll
+                // birden fazla board olduğunda güvenilmez. loadAndMount taze veriyi getirir.
+                loadAndMount();
+            } else {
+                showErr(d.message || 'İşlem başarısız.');
+            }
+        })
+        .catch(function(ex){ btn.disabled=false; btn.textContent=editMode?'Kaydet':'Kullanıcı Oluştur'; showErr('Sunucu hatası: '+ex.message); });
+    });
+
+    /* ── Hash listener ───────────────────────────────────────────── */
+    function handleHash() {
+        var h = (location.hash || '').replace(/^#/, '').split('?')[0];
+        if (h === 'open-new-user-modal')       openNewUserModal();
+        else if (h.startsWith('edit-mapping-')) openEditModal(h.substring('edit-mapping-'.length));
+    }
+    window.addEventListener('hashchange', handleHash);
+    if (location.hash) setTimeout(handleHash, 200);
+    window.addEventListener('pageshow', function(e){ if(e.persisted) location.reload(); });
+})();
+</script>
+}

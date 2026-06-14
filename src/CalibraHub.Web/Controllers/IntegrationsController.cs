@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -124,8 +125,7 @@ public sealed class IntegrationsController : Controller
         if (request is null) return Json(new { success = false, error = "Request bos." });
         try
         {
-            var userName = User?.Identity?.Name ?? "system";
-            var id = await _service.SaveAsync(request, userName, ct);
+            var id = await _service.SaveAsync(request, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
         catch (ArgumentException ex)
@@ -177,8 +177,7 @@ public sealed class IntegrationsController : Controller
     {
         try
         {
-            var userName = User?.Identity?.Name ?? "system";
-            var newId = await _service.DuplicateAsync(id, userName, ct);
+            var newId = await _service.DuplicateAsync(id, CurrentUserId(), ct);
             return Json(new { success = true, id = newId });
         }
         catch (Exception ex)
@@ -221,6 +220,41 @@ public sealed class IntegrationsController : Controller
         {
             var forms = await _formMeta.ListFormsAsync(ct);
             return Json(new { success = true, forms });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 2026-05-22 Cascade: Wizard Step 2 "Bağımlılık" dropdown verisi —
+    /// aktif + AllowAsCascadeTarget=true olan tüm integration'lar.
+    /// Opsiyonel formCode filtre: belirli bir form için olan cascade hedefleri.
+    /// Genelde frontend hangi mapping satırının cascade edebileceğini bilmek için
+    /// formCode'a göre filtreler (örn. ItemId source field → ITEMS form'una mapping).
+    /// </summary>
+    [HttpGet("/Integrations/api/cascade-targets")]
+    public async Task<IActionResult> CascadeTargetsApi(
+        [FromQuery] string? formCode = null,
+        [FromQuery] int? excludeId = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var targets = await _repo.ListCascadeTargetsAsync(formCode, ct);
+            // excludeId: self-reference engelle — bir integration kendi kendine cascade edemez
+            var filtered = excludeId.HasValue
+                ? targets.Where(t => t.Id != excludeId.Value)
+                : targets;
+            var result = filtered.Select(t => new
+            {
+                id = t.Id,
+                name = t.Name,
+                description = t.Description,
+                sourceFormCode = t.SourceFormCode,
+            }).ToList();
+            return Json(new { success = true, targets = result });
         }
         catch (Exception ex)
         {
@@ -479,6 +513,12 @@ public sealed class IntegrationsController : Controller
     /// detay verir (UI ipucu). authConfigJson icindeki sirlar (password vb.)
     /// gonderilmez — sadece username + extraFields key sayisi.
     /// </summary>
+    private int? CurrentUserId()
+    {
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(raw, out var id) ? id : null;
+    }
+
     private static object BuildProfileSummary(Domain.Entities.IntegrationApiProfile p)
     {
         string? username = null;
@@ -589,8 +629,6 @@ public sealed class IntegrationsController : Controller
 
         try
         {
-            var userName = User?.Identity?.Name ?? "system";
-
             if (req.Id <= 0)
             {
                 // Create
@@ -603,7 +641,7 @@ public sealed class IntegrationsController : Controller
                     BodySchema = req.BodySchema,
                     Description = req.Description,
                     IsActive = req.IsActive,
-                    CreatedBy = userName,
+                    CreatedById = CurrentUserId(),
                 };
                 var id = await _repo.AddEndpointAsync(entity, ct);
                 return Json(new { success = true, id });
@@ -620,7 +658,7 @@ public sealed class IntegrationsController : Controller
                 existing.BodySchema = req.BodySchema;
                 existing.Description = req.Description;
                 existing.IsActive = req.IsActive;
-                existing.UpdatedBy = userName;
+                existing.UpdatedById = CurrentUserId();
                 existing.Updated = DateTime.UtcNow;
                 await _repo.UpdateEndpointAsync(existing, ct);
                 return Json(new { success = true, id = existing.Id });
@@ -662,7 +700,7 @@ public sealed class IntegrationsController : Controller
             var ep = await _repo.GetEndpointByIdAsync(id, ct);
             if (ep is null) return Json(new { success = false, error = "Endpoint bulunamadi." });
             ep.IsActive = !ep.IsActive;
-            ep.UpdatedBy = User?.Identity?.Name ?? "system";
+            ep.UpdatedById = CurrentUserId();
             ep.Updated = DateTime.UtcNow;
             await _repo.UpdateEndpointAsync(ep, ct);
             return Json(new { success = true, isActive = ep.IsActive });
@@ -859,8 +897,7 @@ public sealed class IntegrationsController : Controller
     {
         try
         {
-            var actor = User?.Identity?.Name;
-            var id = await catalog.SaveProviderAsync(req, actor, ct);
+            var id = await catalog.SaveProviderAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
         catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
@@ -873,11 +910,109 @@ public sealed class IntegrationsController : Controller
     {
         try
         {
-            var actor = User?.Identity?.Name;
-            await catalog.DeleteProviderAsync(id, actor, ct);
+            await catalog.DeleteProviderAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
         catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+    }
+
+    /// <summary>
+    /// Enum tanimi "Hangi Alanlarda Kullaniliyor" alani icin oneri listesi.
+    /// Kaynaklar:
+    ///   1) Tum DB endpoint'lerinin BodySchema JSON'u traverse edilerek dotted path
+    ///      ("FatUst.Tip", "Kalemler[].StokKodu" gibi) cikarilir.
+    ///   2) Mevcut tum enum tanimlarinin UsedInFieldPaths setine bakilarak ortak
+    ///      desenler de listeye eklenir.
+    /// Distinct + sirali doner.
+    /// </summary>
+    [HttpGet("/Integrations/api/doc-catalog/field-path-suggestions")]
+    public async Task<IActionResult> FieldPathSuggestionsApi(
+        [FromServices] CalibraHub.Application.Abstractions.Services.IIntegrationDocCatalogService catalog,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            // path → (endpointId, endpointLabel) — ilk endpoint kazanir
+            var pathMap = new Dictionary<string, (int? EndpointId, string? EndpointLabel)>(StringComparer.Ordinal);
+
+            // 1) Endpoint body schema'larindan field path'leri + endpoint bilgisini cikar
+            var endpoints = await _repo.ListEndpointsAsync(includeInactive: false, ct);
+            foreach (var ep in endpoints)
+            {
+                if (string.IsNullOrWhiteSpace(ep.BodySchema)) continue;
+                var epLabel = $"[{ep.HttpMethod}] {ep.Name}";
+                var epPaths = new HashSet<string>(StringComparer.Ordinal);
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(ep.BodySchema);
+                    CollectJsonPaths(doc.RootElement, prefix: string.Empty, sink: epPaths);
+                }
+                catch { /* malformed JSON — skip silently */ }
+                foreach (var p in epPaths)
+                    pathMap.TryAdd(p, (ep.Id, epLabel));
+            }
+
+            // 2) Mevcut enum kayitlarinin kullanildigi alanlari ekle.
+            //    Yeni model: UsedInFields[] -> {endpointId, path}. EndpointId varsa
+            //    map'e o eslesme ile gir, yoksa generic giris (null, null).
+            var enums = await catalog.ListEnumsAsync(providerId: null, includeInactive: true, ct);
+            foreach (var e in enums)
+            {
+                foreach (var u in e.UsedInFields)
+                {
+                    if (string.IsNullOrWhiteSpace(u.Path)) continue;
+                    pathMap.TryAdd(u.Path.Trim(), (u.EndpointId, null));
+                }
+            }
+
+            var suggestions = pathMap
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => new { path = kv.Key, endpointId = kv.Value.EndpointId, endpointLabel = kv.Value.EndpointLabel })
+                .ToArray();
+
+            return Json(new { success = true, suggestions });
+        }
+        catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
+    }
+
+    /// <summary>Recursive JSON traverse — leaf'lerde "a.b.c" ve dizi icin "a.b[].c" emit.</summary>
+    private static void CollectJsonPaths(System.Text.Json.JsonElement el, string prefix, HashSet<string> sink)
+    {
+        switch (el.ValueKind)
+        {
+            case System.Text.Json.JsonValueKind.Object:
+                foreach (var p in el.EnumerateObject())
+                {
+                    var nextPrefix = string.IsNullOrEmpty(prefix) ? p.Name : prefix + "." + p.Name;
+                    // Leaf ise prefix'i de ekle, dallaniyorsa sadece alt yapraklari ekle
+                    if (p.Value.ValueKind is System.Text.Json.JsonValueKind.Object
+                                          or System.Text.Json.JsonValueKind.Array)
+                    {
+                        CollectJsonPaths(p.Value, nextPrefix, sink);
+                    }
+                    else
+                    {
+                        sink.Add(nextPrefix);
+                    }
+                }
+                break;
+            case System.Text.Json.JsonValueKind.Array:
+                var arrPrefix = prefix + "[]";
+                foreach (var item in el.EnumerateArray())
+                {
+                    if (item.ValueKind is System.Text.Json.JsonValueKind.Object
+                                       or System.Text.Json.JsonValueKind.Array)
+                    {
+                        CollectJsonPaths(item, arrPrefix, sink);
+                    }
+                    else
+                    {
+                        sink.Add(arrPrefix);
+                    }
+                    break;  // sadece ilk eleman yeterli — dizi homojen varsayilir
+                }
+                break;
+        }
     }
 
     [HttpGet("/Integrations/api/doc-catalog/enums")]
@@ -917,8 +1052,7 @@ public sealed class IntegrationsController : Controller
     {
         try
         {
-            var actor = User?.Identity?.Name;
-            var id = await catalog.SaveEnumAsync(req, actor, ct);
+            var id = await catalog.SaveEnumAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
         catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
@@ -931,8 +1065,7 @@ public sealed class IntegrationsController : Controller
     {
         try
         {
-            var actor = User?.Identity?.Name;
-            await catalog.DeleteEnumAsync(id, actor, ct);
+            await catalog.DeleteEnumAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
         catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
@@ -976,8 +1109,7 @@ public sealed class IntegrationsController : Controller
     {
         try
         {
-            var actor = User?.Identity?.Name;
-            var id = await catalog.SaveFieldDocAsync(req, actor, ct);
+            var id = await catalog.SaveFieldDocAsync(req, CurrentUserId(), ct);
             return Json(new { success = true, id });
         }
         catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
@@ -990,8 +1122,7 @@ public sealed class IntegrationsController : Controller
     {
         try
         {
-            var actor = User?.Identity?.Name;
-            await catalog.DeleteFieldDocAsync(id, actor, ct);
+            await catalog.DeleteFieldDocAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
         catch (Exception ex) { return Json(new { success = false, error = ex.Message }); }
@@ -1153,8 +1284,6 @@ public sealed class IntegrationsController : Controller
 
         try
         {
-            var userName = User?.Identity?.Name ?? "system";
-
             // 1) Profile cozumle: id verildiyse onu kullan, yoksa newProfileName + baseUrl ile yarat
             Guid profileId;
             if (req.ApiProfileId.HasValue && req.ApiProfileId.Value != Guid.Empty)
@@ -1237,7 +1366,7 @@ public sealed class IntegrationsController : Controller
                         BodySchema = null,
                         Description = description,
                         IsActive = true,
-                        CreatedBy = userName,
+                        CreatedById = CurrentUserId(),
                     };
                     await _repo.AddEndpointAsync(entity, ct);
                     existingKeys.Add(dedupKey);
@@ -1474,7 +1603,7 @@ public sealed class IntegrationsController : Controller
                 Tags         = string.IsNullOrWhiteSpace(req.Tags)         ? null : req.Tags.Trim(),
                 IsBuiltIn    = false,
                 IsActive     = true,
-                CreatedBy    = User?.Identity?.Name ?? "system",
+                CreatedById  = CurrentUserId(),
             };
             var id = await templateRepo.AddAsync(entity, ct);
             return Json(new { success = true, id });
@@ -1657,8 +1786,7 @@ public sealed class IntegrationsController : Controller
 
         try
         {
-            var actor = User?.Identity?.Name ?? "system";
-            await statusRepo.SkipManyAsync(request.IntegrationId, request.RecordIds, request.Reason, actor, ct);
+            await statusRepo.SkipManyAsync(request.IntegrationId, request.RecordIds, request.Reason, CurrentUserId(), ct);
             return Json(new { success = true, count = request.RecordIds.Count });
         }
         catch (Exception ex)
@@ -1680,8 +1808,7 @@ public sealed class IntegrationsController : Controller
 
         try
         {
-            var actor = User?.Identity?.Name ?? "system";
-            await statusRepo.RestoreManyAsync(request.IntegrationId, request.RecordIds, actor, ct);
+            await statusRepo.RestoreManyAsync(request.IntegrationId, request.RecordIds, CurrentUserId(), ct);
             return Json(new { success = true, count = request.RecordIds.Count });
         }
         catch (Exception ex)
@@ -1708,4 +1835,85 @@ public sealed class IntegrationsController : Controller
     // Razor sayfasi mount noktasi — React buradan boot eder
     [HttpGet("/Integrations/Queue")]
     public IActionResult QueuePage() => View("Queue");
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 2026-05-21 Faz 1: Entegrasyon İçe / Dışa Aktarma (JSON bundle)
+    //   GET  /Integrations/api/export/{id}        → bundle JSON dosyası indir
+    //   POST /Integrations/api/import             → bundle JSON yükle + import
+    // ════════════════════════════════════════════════════════════════════════
+    [HttpGet("/Integrations/api/export/{integrationId:int}")]
+    public async Task<IActionResult> ExportIntegrationApi(
+        [FromServices] CalibraHub.Application.Abstractions.Services.IIntegrationBundleService bundleService,
+        int integrationId,
+        CancellationToken ct)
+    {
+        try
+        {
+            var actor = User?.Identity?.Name;
+            var bundle = await bundleService.ExportAsync(integrationId, actor, ct);
+
+            // Dosya adı: "{name-slug}-export-{utc-date}.json" (rasgele uzun değil, slug temiz)
+            var slug = Slugify(bundle.Integration.Name);
+            var date = DateTime.UtcNow.ToString("yyyyMMdd-HHmm");
+            var fileName = $"integration-{slug}-{date}.json";
+
+            var json = System.Text.Json.JsonSerializer.Serialize(bundle, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                WriteIndented = true,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+            });
+            var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+            return File(bytes, "application/json", fileName);
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost("/Integrations/api/import")]
+    public async Task<IActionResult> ImportIntegrationApi(
+        [FromServices] CalibraHub.Application.Abstractions.Services.IIntegrationBundleService bundleService,
+        [FromBody]    CalibraHub.Application.Contracts.ImportIntegrationRequest request,
+        CancellationToken ct)
+    {
+        try
+        {
+            var actor = User?.Identity?.Name;
+            var result = await bundleService.ImportAsync(request, actor, ct);
+            return Json(new
+            {
+                success         = result.Success,
+                status          = result.Status,
+                integrationId   = result.IntegrationId,
+                message         = result.Message,
+                warnings        = result.Warnings,
+            });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { success = false, status = "Failed", error = ex.Message });
+        }
+    }
+
+    private static string Slugify(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return "integration";
+        var lower = input.ToLowerInvariant().Trim();
+        var sb = new System.Text.StringBuilder(lower.Length);
+        foreach (var c in lower)
+        {
+            if (c is >= 'a' and <= 'z' or >= '0' and <= '9') sb.Append(c);
+            else if (c == 'ı') sb.Append('i');
+            else if (c == 'ş') sb.Append('s');
+            else if (c == 'ğ') sb.Append('g');
+            else if (c == 'ü') sb.Append('u');
+            else if (c == 'ö') sb.Append('o');
+            else if (c == 'ç') sb.Append('c');
+            else if (sb.Length > 0 && sb[^1] != '-') sb.Append('-');
+        }
+        var slug = sb.ToString().Trim('-');
+        return slug.Length > 50 ? slug[..50] : (slug.Length == 0 ? "integration" : slug);
+    }
 }

@@ -40,6 +40,14 @@ public sealed class ParametersController : Controller
         return int.TryParse(raw, out var id) ? id : 0;
     }
 
+    private const string ApprovalFormCode = "APPROVAL";
+    private const string InvoiceApprovalKey  = "INVOICE_APPROVAL_ENABLED";
+    private const string DispatchApprovalKey = "DISPATCH_APPROVAL_ENABLED";
+
+    private const string ProductionFormCode = "PRODUCTION";
+    public  const string ShopFloorMaxPinAttemptsKey = "SHOPFLOOR_MAX_PIN_ATTEMPTS";
+    public  const int    ShopFloorMaxPinAttemptsDefault = 5;
+
     /// <summary>
     /// /Admin/Parameters → sabit sol-tab listesi (Genel, Onay Islemleri, Is Emri,
     /// Satis Teklifi). Her tab kodla gomulu hardcoded UI kontrollerini gosterir.
@@ -54,6 +62,22 @@ public sealed class ParametersController : Controller
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
         var company = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);
         ViewData["IsEDocumentApprovalEnabled"] = company?.IsEDocumentApprovalEnabled ?? false;
+
+        // Onay İşlemleri tab'i: alış faturası + irsaliye onay parametreleri
+        var approvalParams = await _companyParameters.ListAsync(ApprovalFormCode, cancellationToken);
+        ViewData["IsInvoiceApprovalEnabled"]  = approvalParams
+            .FirstOrDefault(p => p.ParamKey == InvoiceApprovalKey)?.ParamValue == "true";
+        ViewData["IsDispatchApprovalEnabled"] = approvalParams
+            .FirstOrDefault(p => p.ParamKey == DispatchApprovalKey)?.ParamValue == "true";
+
+        // Üretim tab'i: shop-floor PIN lockout limiti
+        var productionParams = await _companyParameters.ListAsync(ProductionFormCode, cancellationToken);
+        var rawPin = productionParams
+            .FirstOrDefault(p => p.ParamKey == ShopFloorMaxPinAttemptsKey)?.ParamValue;
+        ViewData["ShopFloorMaxPinAttempts"] =
+            int.TryParse(rawPin, out var pinLim) && pinLim >= 0 && pinLim <= 50
+                ? pinLim
+                : ShopFloorMaxPinAttemptsDefault;
 
         return View("~/Views/Admin/Parameters.cshtml");
     }
@@ -137,6 +161,59 @@ public sealed class ParametersController : Controller
         }
     }
 
+    [HttpPost("/Admin/SaveApprovalParametersJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveApprovalParametersJson(
+        [FromBody] ApprovalParametersInput input,
+        CancellationToken ct)
+    {
+        try
+        {
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                ApprovalFormCode, InvoiceApprovalKey,
+                input.IsInvoiceApprovalEnabled ? "true" : "false",
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                ApprovalFormCode, DispatchApprovalKey,
+                input.IsDispatchApprovalEnabled ? "true" : "false",
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Bool), ct);
+
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    [HttpPost("/Admin/SaveProductionParametersJson")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveProductionParametersJson(
+        [FromBody] ProductionParametersInput input,
+        CancellationToken ct)
+    {
+        try
+        {
+            if (input.ShopFloorMaxPinAttempts < 0 || input.ShopFloorMaxPinAttempts > 50)
+                return Json(new { ok = false, error = "Hatalı PIN limiti 0 ile 50 arasında olmalı." });
+
+            await _companyParameters.SetAsync(new SetCompanyParameterRequest(
+                ProductionFormCode,
+                ShopFloorMaxPinAttemptsKey,
+                input.ShopFloorMaxPinAttempts.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                CalibraHub.Domain.Enums.CompanyParameterDataType.Int), ct);
+
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
     public sealed record GeneralParametersInput(bool IsEDocumentApprovalEnabled);
+    public sealed record ApprovalParametersInput(bool IsInvoiceApprovalEnabled, bool IsDispatchApprovalEnabled);
+    public sealed record ProductionParametersInput(int ShopFloorMaxPinAttempts);
     public sealed record DeleteCompanyParameterRequest(string FormCode, string ParamKey);
 }

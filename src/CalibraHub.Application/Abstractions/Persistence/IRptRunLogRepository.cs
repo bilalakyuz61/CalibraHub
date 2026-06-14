@@ -7,7 +7,7 @@ public interface IRptRunLogRepository
     Task<long> LogStartAsync(
         int? defId,
         int viewId,
-        Guid userId,
+        int userId,
         int? companyId,
         byte[] sqlHash,
         CancellationToken ct);
@@ -21,7 +21,7 @@ public interface IRptRunLogRepository
 
     Task<IReadOnlyCollection<RptRunLog>> GetRecentAsync(
         int? defId,
-        Guid? userId,
+        int? userId,
         int top,
         CancellationToken ct);
 }

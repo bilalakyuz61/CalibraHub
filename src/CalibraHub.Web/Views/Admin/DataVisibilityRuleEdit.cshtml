@@ -1,0 +1,779 @@
+@model CalibraHub.Web.Models.Admin.DataVisibilityRuleEditViewModel
+@using System.Text.Json
+@{
+    var isNew = Model.IsNew;
+    ViewData["Title"]     = isNew ? "Yeni Veri Görünürlük Kuralı" : $"Kural: {Model.Name}";
+    ViewData["FormCode"]  = "DATA_VISIBILITY";
+    ViewData["BodyClass"] = "page-dv-edit";
+
+    var valuesJson = JsonSerializer.Serialize(Model.Values ?? new List<string>());
+    var isEn = System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("en", StringComparison.OrdinalIgnoreCase);
+}
+
+@section Styles {
+<style>
+.dv-root {
+    --dv-bg:      #f1f5f9; --dv-surface: #ffffff; --dv-border: #e2e8f0;
+    --dv-text:    #0f172a; --dv-muted:   #64748b; --dv-accent: #6366f1;
+    display: flex; flex-direction: column; min-height: 100%; background: var(--dv-bg);
+}
+body.app-theme-dark .dv-root {
+    --dv-bg: #080c17; --dv-surface: #0d1323;
+    --dv-border: rgba(255,255,255,.09); --dv-text: #e2e8f0; --dv-muted: #94a3b8;
+}
+.workspace-frame-body.page-dv-edit .app-content-area--workspace-frame {
+    height: 100dvh; overflow: auto; padding: 0;
+}
+.dv-card {
+    width: 100%; max-width: none; background: var(--dv-surface);
+    border: none; border-radius: 0; box-shadow: none;
+    display: flex; flex-direction: column; flex: 1 1 auto; min-height: 100dvh;
+}
+.dv-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 18px 28px; border-bottom: 1px solid var(--dv-border);
+}
+.dv-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--dv-text); }
+.dv-back {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border-radius: 8px; border: 1px solid var(--dv-border); background: none;
+    color: var(--dv-muted); font-size: 13px; cursor: pointer;
+    text-decoration: none; transition: background .12s;
+}
+.dv-back:hover { background: var(--dv-bg); color: var(--dv-text); }
+.dv-spacer { flex: 1; }
+
+/* ── Tabs ── */
+.dv-body { display: flex; flex: 1 1 auto; min-height: 0; }
+.dv-tabs {
+    width: 170px; flex-shrink: 0; border-right: 1px solid var(--dv-border);
+    display: flex; flex-direction: column; padding: 14px 0;
+}
+.dv-tab {
+    display: flex; align-items: center; gap: 8px; padding: 9px 18px;
+    font-size: 13px; font-weight: 500; cursor: pointer; transition: all .12s;
+    color: var(--dv-muted); border: none; background: none; text-align: left;
+    border-left: 2px solid transparent; white-space: nowrap;
+}
+.dv-tab:hover { background: var(--dv-bg); color: var(--dv-text); }
+.dv-tab.active { color: var(--dv-accent); border-left-color: var(--dv-accent); background: rgba(99,102,241,.06); }
+.dv-panels { flex: 1; padding: 22px 28px; overflow-y: auto; max-width: 720px; }
+.dv-panel { display: none; }
+.dv-panel.active { display: block; }
+
+/* ── Form fields ── */
+.dv-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 18px; }
+.dv-field-row { display: flex; gap: 12px; }
+.dv-field-row .dv-field { flex: 1; }
+.dv-label { font-size: 12px; font-weight: 600; color: var(--dv-muted); }
+.dv-input, .dv-select {
+    padding: 9px 12px; border-radius: 8px; border: 1px solid var(--dv-border);
+    background: var(--dv-bg); color: var(--dv-text); font-size: 13px;
+    outline: none; transition: border-color .15s; font-family: inherit; width: 100%;
+}
+.dv-input:focus, .dv-select:focus { border-color: var(--dv-accent); }
+.dv-select {
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px;
+}
+.dv-hint { font-size: 11px; color: var(--dv-muted); margin-top: 2px; }
+
+/* ── Alan Türü switchkey (Kolon ⇄ Widget) ── */
+.dv-kindswitch { display: flex; align-items: center; gap: 10px; }
+.dv-kindswitch-lbl {
+    font-size: 13px; font-weight: 500; color: var(--dv-muted);
+    transition: color .15s; cursor: pointer; user-select: none;
+    /* fixed width prevents layout shift when color changes */
+    display: inline-block; min-width: 46px;
+}
+#dv-kolbl { text-align: right; }
+#dv-wilbl { text-align: left; }
+.dv-kindswitch-lbl.active { color: #10b981; }
+body.app-theme-dark .dv-kindswitch-lbl.active { color: #34d399; }
+/* Track rengi sabit — toggle'ın kendi açma/kapama rengi yok */
+.dv-kindsw { width: 52px !important; height: 28px !important; }
+.dv-kindsw .dv-track { background: #94a3b8 !important; }
+body.app-theme-dark .dv-kindsw .dv-track { background: #475569 !important; }
+.dv-kindsw .dv-track::after { height: 22px !important; width: 22px !important; }
+.dv-kindsw input:checked + .dv-track { background: #94a3b8 !important; }
+body.app-theme-dark .dv-kindsw input:checked + .dv-track { background: #475569 !important; }
+.dv-kindsw input:checked + .dv-track::after { transform: translateX(24px) !important; }
+
+/* ── Alan Türü + Kısıtlanacak Alan inline satır ── */
+.dv-fieldkind-row { display: flex; align-items: center; gap: 10px; }
+.dv-fieldkind-row .dv-select { flex: 1; width: auto; }
+
+/* ── Value list ── */
+.dv-kv-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.dv-kv-row { display: flex; gap: 6px; align-items: center; }
+.dv-kv-row .dv-input { flex: 1; padding: 7px 10px; font-size: 12px; }
+.dv-kv-del { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--dv-border); background: none; color: var(--dv-muted); cursor: pointer; flex-shrink: 0; }
+.dv-kv-del:hover { background: rgba(239,68,68,.1); color: #ef4444; border-color: transparent; }
+.dv-kv-add { font-size: 12px; font-weight: 500; color: var(--dv-accent); background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; gap: 4px; }
+.dv-kv-add:hover { opacity: .8; }
+
+/* ── Switch ── */
+.dv-switch-row { display: flex; align-items: center; gap: 10px; }
+.dv-switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
+.dv-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.dv-switch .dv-track { position: absolute; inset: 0; cursor: pointer; background: var(--dv-border); border-radius: 999px; transition: .2s; }
+.dv-switch .dv-track::after { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.dv-switch input:checked + .dv-track { background: var(--dv-accent); }
+.dv-switch input:checked + .dv-track::after { transform: translateX(18px); }
+.dv-switch-text { font-size: 13px; font-weight: 500; color: var(--dv-text); }
+
+/* ── Grant (izin) listesi ── */
+.dv-grant-hint { font-size: 12px; color: var(--dv-muted); margin-bottom: 16px; line-height: 1.55; }
+.dv-grant-type-row { display: flex; gap: 2px; background: var(--dv-bg); border-radius: 8px; padding: 3px; margin-bottom: 12px; }
+.dv-grant-type-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; border: none; background: none; color: var(--dv-muted); cursor: pointer; transition: all .15s; }
+.dv-grant-type-btn.active { background: var(--dv-surface); color: var(--dv-text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+body.app-theme-dark .dv-grant-type-btn.active { box-shadow: 0 1px 4px rgba(0,0,0,.45); }
+.dv-grant-search-wrap { margin-bottom: 6px; }
+.dv-grant-list { border: 1px solid var(--dv-border); border-radius: 8px; max-height: 220px; overflow-y: auto; }
+.dv-grant-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--dv-border); cursor: pointer; }
+.dv-grant-item:last-child { border-bottom: none; }
+.dv-grant-item:hover { background: var(--dv-bg); }
+.dv-grant-item input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--dv-accent); cursor: pointer; flex-shrink: 0; }
+.dv-grant-item-name { font-size: 13px; color: var(--dv-text); }
+.dv-grant-empty { padding: 16px 12px; text-align: center; font-size: 13px; color: var(--dv-muted); }
+
+/* ── Actions ── */
+.dv-actions { display: flex; gap: 8px; padding: 16px 28px; border-top: 1px solid var(--dv-border); }
+.dv-btn { padding: 9px 22px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: all .12s; }
+.dv-btn--primary { background: var(--dv-accent); color: #fff; border-color: #4f46e5; }
+.dv-btn--primary:hover { filter: brightness(1.1); }
+.dv-btn--primary:disabled { opacity: .5; cursor: not-allowed; }
+.dv-btn--ghost { background: none; border-color: var(--dv-border); color: var(--dv-text); text-decoration: none; display: inline-flex; align-items: center; }
+.dv-btn--ghost:hover { background: var(--dv-bg); }
+.dv-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
+body.app-theme-dark .dv-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
+.dv-btn--danger:hover { background: rgba(239,68,68,.08); }
+.dv-err { margin: 0 28px 12px; padding: 8px 12px; border-radius: 8px; font-size: 13px; background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2); }
+body.app-theme-dark .dv-err { color: #f87171; }
+
+/* ── Kural önizleme kutusu ── */
+.dv-rule-preview {
+    background: rgba(99,102,241,.06); border: 1px solid rgba(99,102,241,.18);
+    border-radius: 10px; padding: 12px 16px; margin-bottom: 22px;
+    font-size: 13px; color: var(--dv-text); line-height: 1.65;
+}
+body.app-theme-dark .dv-rule-preview {
+    background: rgba(99,102,241,.1); border-color: rgba(99,102,241,.28);
+}
+.dv-rp-label {
+    font-size: 10.5px; font-weight: 700; color: var(--dv-accent);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+}
+.dv-rp-hide { color: #dc2626; font-weight: 700; }
+body.app-theme-dark .dv-rp-hide { color: #f87171; }
+.dv-rp-dim { color: var(--dv-muted); font-style: italic; }
+
+/* ── Delete modal ── */
+.dv-modal-backdrop { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,.48); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; }
+.dv-modal { background: var(--dv-surface); border: 1px solid var(--dv-border); border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 24px 64px rgba(0,0,0,.35); }
+.dv-modal-icon { display: flex; justify-content: center; color: #ef4444; }
+.dv-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--dv-text); }
+.dv-modal-msg { font-size: 13px; color: var(--dv-muted); text-align: center; line-height: 1.55; }
+.dv-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
+.dv-modal-cancel { padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500; border: 1px solid var(--dv-border); background: var(--dv-surface); color: var(--dv-text); cursor: pointer; }
+.dv-modal-cancel:hover { background: var(--dv-bg); }
+.dv-modal-del { padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500; border: none; background: #ef4444; color: #fff; cursor: pointer; }
+.dv-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
+.dv-modal-del:disabled { opacity: .5; cursor: not-allowed; }
+</style>
+}
+
+<div class="dv-root">
+  <div class="dv-card">
+
+    <div class="dv-header">
+      <a class="dv-back" href="/Admin/DataVisibilityRules">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Kurallar
+      </a>
+      @if (!isNew)
+      {
+        <button class="dv-btn dv-btn--danger" id="dv-delete">Sil</button>
+      }
+      <button type="button" class="dv-btn dv-btn--ghost" onclick="dvNavBack()">İptal</button>
+      <button class="dv-btn dv-btn--primary" id="dv-save">Kaydet</button>
+      <span class="dv-spacer"></span>
+      <h1>@(isNew ? "Yeni Kural" : "Kuralı Düzenle")</h1>
+    </div>
+
+    <div class="dv-body">
+      <div class="dv-tabs">
+        <button class="dv-tab active" data-tab="general">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Genel
+        </button>
+        <button class="dv-tab" data-tab="grants">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Kısıtlamalar
+        </button>
+      </div>
+
+      <div class="dv-panels">
+
+        <!-- Genel -->
+        <div class="dv-panel active" id="panel-general">
+
+          <div class="dv-rule-preview" id="dv-rule-preview">
+            <div class="dv-rp-label">Kural Önizlemesi</div>
+            <div id="dv-rp-text" class="dv-rp-dim">Form, alan ve operatör seçilince kural özeti burada görüntülenir.</div>
+          </div>
+
+          <div class="dv-field">
+            <label class="dv-label" for="dv-name">Kural Adı *</label>
+            <input id="dv-name" class="dv-input" maxlength="200" value="@Model.Name" placeholder="Örn: ABC grubu gizliliği" />
+          </div>
+
+          <div class="dv-field">
+            <label class="dv-label" for="dv-form">Form *</label>
+            <select id="dv-form" class="dv-select">
+              <option value="">— Form seçiniz —</option>
+              @foreach (var f in Model.FormOptions)
+              {
+                <option value="@f.Code" selected="@(string.Equals(f.Code, Model.FormCode, StringComparison.OrdinalIgnoreCase))">@f.Name</option>
+              }
+            </select>
+            <span class="dv-hint">Kuralın uygulanacağı veri ekranı. Bu forma takılan satırlar herkesten gizlenir.</span>
+          </div>
+
+          <div class="dv-field">
+            <label class="dv-label">Alan Türü / Kısıtlanacak Alan *</label>
+            <div class="dv-fieldkind-row">
+              <div class="dv-kindswitch">
+                <span class="dv-kindswitch-lbl @(Model.FieldKind == 0 ? "active" : "")" id="dv-kolbl">Kolon</span>
+                <label class="dv-switch dv-kindsw">
+                  <input type="checkbox" id="dv-kindcb" @(Model.FieldKind == 1 ? "checked" : "") />
+                  <span class="dv-track"></span>
+                </label>
+                <span class="dv-kindswitch-lbl @(Model.FieldKind == 1 ? "active" : "")" id="dv-wilbl">Widget</span>
+              </div>
+              <select id="dv-fieldkey" class="dv-select">
+                <option value="">— Önce form seçiniz —</option>
+              </select>
+              <input type="hidden" id="dv-widgetid" value="@(Model.WidgetId?.ToString() ?? "")" />
+            </div>
+          </div>
+
+          <div class="dv-field">
+            <label class="dv-label" for="dv-operator">Operatör *</label>
+            <select id="dv-operator" class="dv-select"></select>
+            <span class="dv-hint">Bu koşulu sağlayan satırlar gizlenir.</span>
+          </div>
+
+          <div class="dv-field" id="dv-values-field">
+            <label class="dv-label">Değer(ler)</label>
+            <div id="dv-values"></div>
+          </div>
+
+          @if (!isNew)
+          {
+            <div class="dv-field">
+              <label class="dv-label">Durum</label>
+              <div class="dv-switch-row">
+                <label class="dv-switch">
+                  <input type="checkbox" id="dv-active" @(Model.IsActive ? "checked" : "") />
+                  <span class="dv-track"></span>
+                </label>
+                <span class="dv-switch-text" id="dv-active-label">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+              </div>
+            </div>
+          }
+
+        </div>
+
+        <!-- Kısıtlamalar -->
+        <div class="dv-panel" id="panel-grants">
+          <p class="dv-grant-hint">
+            Seçilen kullanıcılar veya departmanlar bu kuraldan etkilenir — eşleşen satırlar onlardan gizlenir.
+            Hiç seçilmezse kural tüm kullanıcılara uygulanır.
+          </p>
+
+          <div class="dv-grant-type-row">
+            <button type="button" class="dv-grant-type-btn active" id="dv-gt-user">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Kullanıcı
+            </button>
+            <button type="button" class="dv-grant-type-btn" id="dv-gt-dept">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+              Departman
+            </button>
+          </div>
+
+          <div class="dv-grant-search-wrap">
+            <input type="text" class="dv-input" id="dv-grant-search" placeholder="Ara…" autocomplete="off" />
+          </div>
+          <div class="dv-grant-list" id="dv-grant-list">
+            <div class="dv-grant-empty">Sekmeye geçince yüklenir…</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div id="dv-err" style="display:none;" class="dv-err"></div>
+  </div>
+</div>
+
+@if (!isNew)
+{
+  <div id="dv-modal" class="dv-modal-backdrop" style="display:none;" onclick="dvCloseModal()">
+    <div class="dv-modal" onclick="event.stopPropagation()">
+      <div class="dv-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="dv-modal-title">Kuralı Sil</div>
+      <div class="dv-modal-msg"><strong>@Model.Name</strong> kuralını silmek istediğinize emin misiniz?</div>
+      <div class="dv-modal-actions">
+        <button class="dv-modal-cancel" onclick="dvCloseModal()">Vazgeç</button>
+        <button class="dv-modal-del" id="dv-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var IS_EN = @(isEn ? "true" : "false");
+
+    var INIT = {
+        id:        @(Model.Id),
+        formCode:  '@Model.FormCode',
+        fieldKind: @(Model.FieldKind),
+        fieldKey:  '@Model.FieldKey',
+        operator:  '@Model.Operator',
+        widgetId:  '@(Model.WidgetId?.ToString() ?? "")',
+        values:    @Html.Raw(valuesJson)
+    };
+
+    var OPERATORS = [
+        { v: 'eq',         tr: 'Eşittir (=)',             en: 'Equals (=)',               arity: 1 },
+        { v: 'neq',        tr: 'Eşit değil (≠)',           en: 'Not equals (≠)',           arity: 1 },
+        { v: 'gt',         tr: 'Büyüktür (>)',             en: 'Greater than (>)',         arity: 1 },
+        { v: 'gte',        tr: 'Büyük veya eşit (≥)',      en: 'Greater or equal (≥)',    arity: 1 },
+        { v: 'lt',         tr: 'Küçüktür (<)',             en: 'Less than (<)',            arity: 1 },
+        { v: 'lte',        tr: 'Küçük veya eşit (≤)',      en: 'Less or equal (≤)',       arity: 1 },
+        { v: 'between',    tr: 'Arasında (BETWEEN)',       en: 'Between',                 arity: 2 },
+        { v: 'in',         tr: 'Listede (IN)',             en: 'In list (IN)',             arity: 'n' },
+        { v: 'not_in',     tr: 'Listede değil (NOT IN)',   en: 'Not in list (NOT IN)',    arity: 'n' },
+        { v: 'like',       tr: 'İçerir (LIKE)',            en: 'Contains (LIKE)',         arity: 1 },
+        { v: 'not_like',   tr: 'İçermez (NOT LIKE)',       en: 'Not contains (NOT LIKE)', arity: 1 },
+        { v: 'startswith', tr: 'İle başlar',               en: 'Starts with',             arity: 1 },
+        { v: 'endswith',   tr: 'İle biter',                en: 'Ends with',               arity: 1 },
+        { v: 'isnull',     tr: 'Boş (NULL)',               en: 'Is null (NULL)',           arity: 0 },
+        { v: 'isnotnull',  tr: 'Dolu (NOT NULL)',          en: 'Is not null (NOT NULL)',   arity: 0 }
+    ];
+
+    function opLabel(o) { return IS_EN ? o.en : o.tr; }
+    function arityOf(op) {
+        for (var i = 0; i < OPERATORS.length; i++) if (OPERATORS[i].v === op) return OPERATORS[i].arity;
+        return 1;
+    }
+
+    /* ── Tab geçişi ── */
+    document.querySelectorAll('.dv-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            var target = tab.dataset.tab;
+            document.querySelectorAll('.dv-tab').forEach(function (t) { t.classList.remove('active'); });
+            document.querySelectorAll('.dv-panel').forEach(function (p) { p.classList.remove('active'); });
+            tab.classList.add('active');
+            document.getElementById('panel-' + target).classList.add('active');
+            if (target === 'grants' && !grantsLoaded) loadGrants();
+        });
+    });
+
+    /* ── Operatör dropdown ── */
+    var opSelect = document.getElementById('dv-operator');
+    OPERATORS.forEach(function (o) {
+        var opt = document.createElement('option');
+        opt.value = o.v; opt.textContent = opLabel(o);
+        if (o.v === INIT.operator) opt.selected = true;
+        opSelect.appendChild(opt);
+    });
+    opSelect.addEventListener('change', function () {
+        renderValues(this.value, currentRawValues());
+        updateRulePreview();
+    });
+
+    /* ── Değer girişleri ── */
+    function currentRawValues() {
+        return Array.prototype.slice.call(document.querySelectorAll('#dv-values input'))
+            .map(function (i) { return i.value.trim(); }).filter(Boolean);
+    }
+    function makeInput(id, ph, val) {
+        var i = document.createElement('input');
+        i.className = 'dv-input'; i.placeholder = ph || 'Değer';
+        if (id) i.id = id; if (val) i.value = val;
+        return i;
+    }
+    function renderValues(op, preset) {
+        preset = preset || [];
+        var field = document.getElementById('dv-values-field');
+        var c = document.getElementById('dv-values');
+        c.innerHTML = '';
+        var a = arityOf(op);
+        if (a === 0) {
+            if (field) field.style.display = 'none';
+            return;
+        }
+        if (field) field.style.display = '';
+        if (a === 1) {
+            c.appendChild(makeInput('dv-val-single', 'Değer', preset[0] || ''));
+            return;
+        }
+        if (a === 2) {
+            var row = document.createElement('div'); row.className = 'dv-field-row';
+            var f0 = document.createElement('div'); f0.className = 'dv-field'; f0.style.marginBottom = '0';
+            f0.innerHTML = '<label class="dv-label">Başlangıç</label>';
+            f0.appendChild(makeInput('dv-val-0', 'Başlangıç', preset[0] || ''));
+            var f1 = document.createElement('div'); f1.className = 'dv-field'; f1.style.marginBottom = '0';
+            f1.innerHTML = '<label class="dv-label">Bitiş</label>';
+            f1.appendChild(makeInput('dv-val-1', 'Bitiş', preset[1] || ''));
+            row.appendChild(f0); row.appendChild(f1);
+            c.appendChild(row);
+            return;
+        }
+        var list = document.createElement('div'); list.className = 'dv-kv-list'; list.id = 'dv-val-list';
+        c.appendChild(list);
+        var addBtn = document.createElement('button');
+        addBtn.type = 'button'; addBtn.className = 'dv-kv-add'; addBtn.textContent = '+ Değer Ekle';
+        addBtn.addEventListener('click', function () { addListRow(''); });
+        c.appendChild(addBtn);
+        if (preset.length) preset.forEach(function (v) { addListRow(v); });
+        else addListRow('');
+    }
+    function addListRow(val) {
+        var list = document.getElementById('dv-val-list'); if (!list) return;
+        var row = document.createElement('div'); row.className = 'dv-kv-row';
+        var inp = makeInput(null, 'Değer', val);
+        var del = document.createElement('button');
+        del.type = 'button'; del.className = 'dv-kv-del'; del.title = 'Kaldır';
+        del.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        del.addEventListener('click', function () { row.remove(); });
+        row.appendChild(inp); row.appendChild(del);
+        list.appendChild(row);
+    }
+    function collectValues(op) {
+        var a = arityOf(op);
+        if (a === 0) return [];
+        if (a === 1) { var i = document.getElementById('dv-val-single'); return (i && i.value.trim()) ? [i.value.trim()] : []; }
+        if (a === 2) {
+            var v0 = document.getElementById('dv-val-0'), v1 = document.getElementById('dv-val-1');
+            return [v0 ? v0.value.trim() : '', v1 ? v1.value.trim() : ''];
+        }
+        return Array.prototype.slice.call(document.querySelectorAll('#dv-val-list input'))
+            .map(function (i) { return i.value.trim(); }).filter(Boolean);
+    }
+
+    /* ── Alan Türü switchkey ── */
+    var fieldKind = INIT.fieldKind;
+    var kindCb = document.getElementById('dv-kindcb');
+    var koLbl  = document.getElementById('dv-kolbl');
+    var wiLbl  = document.getElementById('dv-wilbl');
+    function onKindChange() {
+        var isWidget = kindCb.checked;
+        fieldKind = isWidget ? 1 : 0;
+        koLbl.classList.toggle('active', !isWidget);
+        wiLbl.classList.toggle('active', isWidget);
+        document.getElementById('dv-widgetid').value = '';
+        loadFields(document.getElementById('dv-form').value, fieldKind, null);
+    }
+    kindCb.addEventListener('change', onKindChange);
+    koLbl.addEventListener('click', function () { if (kindCb.checked) { kindCb.checked = false; onKindChange(); } });
+    wiLbl.addEventListener('click', function () { if (!kindCb.checked) { kindCb.checked = true; onKindChange(); } });
+
+    /* ── Alan listesi (dinamik) ── */
+    function loadFields(formCode, kind, presetKey) {
+        var sel = document.getElementById('dv-fieldkey');
+        if (!formCode) { sel.innerHTML = '<option value="">— Önce form seçiniz —</option>'; return; }
+        sel.innerHTML = '<option value="">— Yükleniyor… —</option>';
+        fetch('/Admin/GetFormFieldKeys?formCode=' + encodeURIComponent(formCode) + '&fieldKind=' + kind + '&isEn=' + IS_EN)
+            .then(function (r) { return r.json(); })
+            .then(function (items) {
+                sel.innerHTML = '<option value="">— Alan seçiniz —</option>';
+                (items || []).forEach(function (it) {
+                    var o = document.createElement('option');
+                    o.value = it.value; o.textContent = it.label || it.value;
+                    if (it.widgetId !== undefined && it.widgetId !== null) o.setAttribute('data-widget-id', it.widgetId);
+                    sel.appendChild(o);
+                });
+                if (presetKey) sel.value = presetKey;
+                syncWidgetId();
+                updateRulePreview();
+            })
+            .catch(function () { sel.innerHTML = '<option value="">— Alan yüklenemedi —</option>'; });
+    }
+    function syncWidgetId() {
+        var sel = document.getElementById('dv-fieldkey');
+        var opt = sel.options[sel.selectedIndex];
+        var wid = opt ? opt.getAttribute('data-widget-id') : null;
+        document.getElementById('dv-widgetid').value = wid || '';
+    }
+    document.getElementById('dv-fieldkey').addEventListener('change', function () {
+        syncWidgetId();
+        updateRulePreview();
+    });
+    document.getElementById('dv-form').addEventListener('change', function () {
+        loadFields(this.value, fieldKind, null);
+        updateRulePreview();
+    });
+    // Değer inputları dinamik oluştuğu için container'da delegasyon
+    document.getElementById('dv-values').addEventListener('input', function () {
+        updateRulePreview();
+    });
+
+    /* ── Aktif/Pasif switch etiketi ── */
+    var activeEl = document.getElementById('dv-active');
+    if (activeEl) {
+        activeEl.addEventListener('change', function () {
+            document.getElementById('dv-active-label').textContent = activeEl.checked ? 'Aktif' : 'Pasif';
+        });
+    }
+
+    /* ── Kısıtlama hedefi yönetimi ── */
+    var grantsLoaded = false;
+    var allUsers = [], allDepts = [];
+    var checkedUserIds = {}, checkedDeptIds = {};
+    var grantMode = 'user'; // 'user' | 'dept'
+
+    function setGrantMode(mode) {
+        grantMode = mode;
+        document.getElementById('dv-gt-user').classList.toggle('active', mode === 'user');
+        document.getElementById('dv-gt-dept').classList.toggle('active', mode === 'dept');
+        document.getElementById('dv-grant-search').value = '';
+        renderActiveGrantList();
+    }
+
+    function renderActiveGrantList() {
+        var items = grantMode === 'user' ? allUsers : allDepts;
+        var checkedMap = grantMode === 'user' ? checkedUserIds : checkedDeptIds;
+        renderGrantList(items, checkedMap);
+    }
+
+    function loadGrants() {
+        grantsLoaded = true;
+        document.getElementById('dv-grant-list').innerHTML = '<div class="dv-grant-empty">Yükleniyor…</div>';
+        var ruleId = INIT.id || 0;
+        fetch('/Admin/GetDataVisibilityGrantOptions?ruleId=' + ruleId)
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                allUsers = d.users || [];
+                allDepts = d.departments || [];
+                (d.grantUserIds || []).forEach(function (id) { checkedUserIds[id] = true; });
+                (d.grantDeptIds || []).forEach(function (id) { checkedDeptIds[id] = true; });
+                // Mevcut seçime göre başlangıç modu
+                var hasUsers = (d.grantUserIds || []).length > 0;
+                var hasDepts = (d.grantDeptIds || []).length > 0;
+                if (!hasUsers && hasDepts) grantMode = 'dept';
+                else grantMode = 'user';
+                document.getElementById('dv-gt-user').classList.toggle('active', grantMode === 'user');
+                document.getElementById('dv-gt-dept').classList.toggle('active', grantMode === 'dept');
+                renderActiveGrantList();
+            })
+            .catch(function () {
+                document.getElementById('dv-grant-list').innerHTML = '<div class="dv-grant-empty">Yüklenemedi.</div>';
+            });
+    }
+
+    function renderGrantList(items, checkedMap) {
+        var el = document.getElementById('dv-grant-list');
+        var q = (document.getElementById('dv-grant-search').value || '').toLowerCase();
+        var filtered = q ? items.filter(function (x) { return (x.name || '').toLowerCase().indexOf(q) >= 0; }) : items;
+        if (!filtered || filtered.length === 0) {
+            el.innerHTML = '<div class="dv-grant-empty">Kayıt bulunamadı.</div>';
+            return;
+        }
+        el.innerHTML = '';
+        filtered.forEach(function (item) {
+            var row = document.createElement('label');
+            row.className = 'dv-grant-item';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.dataset.id = item.id;
+            if (checkedMap[item.id]) cb.checked = true;
+            cb.addEventListener('change', function () {
+                if (cb.checked) checkedMap[item.id] = true;
+                else delete checkedMap[item.id];
+            });
+            var span = document.createElement('span');
+            span.className = 'dv-grant-item-name';
+            span.textContent = item.name;
+            row.appendChild(cb);
+            row.appendChild(span);
+            el.appendChild(row);
+        });
+    }
+
+    document.getElementById('dv-gt-user').addEventListener('click', function () { setGrantMode('user'); });
+    document.getElementById('dv-gt-dept').addEventListener('click', function () { setGrantMode('dept'); });
+    document.getElementById('dv-grant-search').addEventListener('input', function () { renderActiveGrantList(); });
+
+    /* ── Kural önizleme ── */
+    function escHtml(s) {
+        return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function updateRulePreview() {
+        var formSel  = document.getElementById('dv-form');
+        var fieldSel = document.getElementById('dv-fieldkey');
+        var formText  = formSel.selectedIndex  >= 0 ? formSel.options[formSel.selectedIndex].text   : '';
+        var fieldText = fieldSel.selectedIndex >= 0 ? fieldSel.options[fieldSel.selectedIndex].text : '';
+        var formCode  = formSel.value;
+        var fieldKey  = fieldSel.value;
+        var op        = opSelect.value;
+        var el        = document.getElementById('dv-rp-text');
+        if (!formCode || !fieldKey || !op) {
+            el.className = 'dv-rp-dim';
+            el.innerHTML = IS_EN
+                ? 'Select a form, field and operator to preview the rule.'
+                : 'Form, alan ve operatör seçilince kural özeti burada görüntülenir.';
+            return;
+        }
+        el.className = '';
+        var values = collectValues(op);
+        var a      = arityOf(op);
+        var valPart = '';
+        if (a === 1) {
+            valPart = values.length ? ' <strong>' + escHtml(values[0]) + '</strong>' : '';
+        } else if (a === 2) {
+            valPart = (values.length >= 2)
+                ? ' <strong>' + escHtml(values[0]) + '</strong> – <strong>' + escHtml(values[1]) + '</strong>'
+                : '';
+        } else if (a === 'n') {
+            valPart = values.length
+                ? ' (<strong>' + values.map(escHtml).join('</strong>, <strong>') + '</strong>)'
+                : '';
+        }
+        var opLabel = opSelect.options[opSelect.selectedIndex] ? opSelect.options[opSelect.selectedIndex].text : op;
+        var html;
+        if (IS_EN) {
+            html = '<strong>' + escHtml(formText) + '</strong> — rows where <strong>'
+                + escHtml(fieldText) + '</strong> ' + escHtml(opLabel)
+                + valPart + ' will be <span class="dv-rp-hide">hidden</span> from affected users.';
+        } else {
+            html = '<strong>' + escHtml(formText) + '</strong> formunda <strong>'
+                + escHtml(fieldText) + '</strong> alanı <em>' + escHtml(opLabel) + '</em>'
+                + valPart + ' olan satırlar etkilenen kullanıcılardan <span class="dv-rp-hide">gizlenecek</span>.';
+        }
+        el.innerHTML = html;
+    }
+
+    /* ── CSRF + hata ── */
+    function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function setErr(msg) {
+        var el = document.getElementById('dv-err');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; } else { el.style.display = 'none'; }
+    }
+
+    /* ── Kaydet ── */
+    var saveBtn = document.getElementById('dv-save');
+    saveBtn.addEventListener('click', function () {
+        var name = (document.getElementById('dv-name').value || '').trim();
+        var formCode = document.getElementById('dv-form').value || '';
+        var fieldKey = document.getElementById('dv-fieldkey').value || '';
+        var op = document.getElementById('dv-operator').value || 'eq';
+
+        if (!name) { setErr('Kural adı zorunlu.'); return; }
+        if (!formCode) { setErr('Form seçimi zorunlu.'); return; }
+        if (!fieldKey) { setErr('Kısıtlanacak alan zorunlu.'); return; }
+
+        var values = collectValues(op);
+        var a = arityOf(op);
+        if (a !== 0 && values.length === 0) { setErr('Bu operatör için en az bir değer girilmeli.'); return; }
+        if (a === 2 && (!values[0] || !values[1])) { setErr('BETWEEN için başlangıç ve bitiş değeri girilmeli.'); return; }
+
+        var widgetId = null;
+        if (fieldKind === 1) {
+            widgetId = parseInt(document.getElementById('dv-widgetid').value, 10);
+            if (!widgetId) { setErr('Widget alanı seçilmeli (WidgetId çözülemedi).'); return; }
+        }
+
+        var isActive = activeEl ? activeEl.checked : true;
+
+        var payload = {
+            id:       INIT.id || 0,
+            name:     name,
+            formCode: formCode,
+            fieldKind: fieldKind,
+            fieldKey: fieldKey,
+            operator: op,
+            widgetId: widgetId,
+            isActive: isActive,
+            values:   values
+        };
+
+        // Kısıtlamalar sekmesi açıldıysa: aktif modun seçimleri gönderilir, diğer mod boş.
+        if (grantsLoaded) {
+            if (grantMode === 'user') {
+                payload.grantUserIds = Object.keys(checkedUserIds).map(function (k) { return parseInt(k, 10); }).filter(Boolean);
+                payload.grantDeptIds = [];
+            } else {
+                payload.grantUserIds = [];
+                payload.grantDeptIds = Object.keys(checkedDeptIds).map(function (k) { return parseInt(k, 10); }).filter(Boolean);
+            }
+        }
+
+        saveBtn.disabled = true; setErr('');
+        fetch('/Admin/SaveDataVisibilityRule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+            body: JSON.stringify(payload)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d && d.success) { dvNavBack(); }
+            else { setErr((d && d.message) || 'Kayıt başarısız.'); saveBtn.disabled = false; }
+        })
+        .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
+    });
+
+    /* ── Sil ── */
+    var deleteBtn = document.getElementById('dv-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            document.getElementById('dv-modal').style.display = 'flex';
+            document.getElementById('dv-modal-del').focus();
+        });
+        var modalDel = document.getElementById('dv-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled = true; modalDel.textContent = 'Siliniyor…';
+                fetch('/Admin/DeleteDataVisibilityRule?id=' + (INIT.id || 0), {
+                    method: 'POST', headers: { 'RequestVerificationToken': csrf() }
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.success) { dvNavBack(); }
+                    else { dvCloseModal(); setErr((d && d.message) || 'Silinemedi.'); }
+                })
+                .catch(function () { dvCloseModal(); setErr('Bağlantı hatası.'); });
+            });
+        }
+    }
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') dvCloseModal(); });
+
+    /* ── İlk yükleme ── */
+    renderValues(INIT.operator, INIT.values);
+    updateRulePreview();
+    if (INIT.formCode) loadFields(INIT.formCode, INIT.fieldKind, INIT.fieldKey);
+})();
+
+function dvCloseModal() {
+    var m = document.getElementById('dv-modal'); if (m) m.style.display = 'none';
+    var btn = document.getElementById('dv-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
+function dvNavBack() {
+    // workspace-frame-nav-guard.js intercepts href setter inside iframe → adds ?workspace=1.
+    // Düz navigate yeterli; Shell API'si iframe src'yi güncellemediği için openWorkspaceTab gereksiz.
+    window.location.href = '/Admin/DataVisibilityRules';
+}
+</script>
+}

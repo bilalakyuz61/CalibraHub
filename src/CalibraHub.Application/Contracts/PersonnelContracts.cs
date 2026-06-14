@@ -11,7 +11,7 @@ public sealed record PersonnelDto(
     string? CardNo,
     bool IsProductionOperator,
     bool IsActive,
-    Guid? UserId,
+    int? UserId,
     string? UserFullName,
     string? Phone,
     string? Email,
@@ -29,7 +29,7 @@ public sealed record SavePersonnelRequest(
     string? CardNo,
     bool IsProductionOperator,
     bool IsActive,
-    Guid? UserId,
+    int? UserId,
     string? Phone,
     string? Email,
     string? Notes);

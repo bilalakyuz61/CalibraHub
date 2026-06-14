@@ -1,0 +1,1040 @@
+@{
+    ViewData["Title"] = "Yetki Yönetimi";
+    ViewData["BodyClass"] = "page-permissions workspace-frame-body";
+}
+
+@section Styles {
+<style>
+    /* Full-height shell */
+    .pm-shell {
+        display: flex; flex-direction: column;
+        height: 100dvh; min-height: 0; overflow: hidden;
+        background: #f8fafc;
+    }
+    body.app-theme-dark .pm-shell { background: #0a0d17; }
+
+    /* Top bar (radio + target + save) */
+    .pm-topbar {
+        display: flex; align-items: center; gap: 18px;
+        padding: 14px 22px; flex-shrink: 0;
+        background: rgba(255,255,255,0.96);
+        border-bottom: 1px solid #e2e8f0;
+        backdrop-filter: blur(12px);
+    }
+    body.app-theme-dark .pm-topbar {
+        background: rgba(13,19,35,0.92);
+        border-bottom-color: rgba(255,255,255,0.06);
+    }
+    /* Radio group — segmented pill */
+    .pm-radio-group {
+        display: inline-flex; gap: 0; padding: 4px;
+        background: rgba(148,163,184,0.12); border-radius: 10px;
+    }
+    .pm-radio-group label {
+        cursor: pointer; display: inline-flex; align-items: center;
+    }
+    .pm-radio-group input[type="radio"] { display: none; }
+    /* Tüm label-span'lar AYNI dimensions — checked olunca sadece bg/color değişir */
+    .pm-radio-group label span {
+        display: inline-block;
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #64748b;
+        transition: background .12s, color .12s;
+        line-height: 1.2;
+    }
+    .pm-radio-group input[type="radio"]:checked + span {
+        background: #6366f1; color: #fff;
+    }
+
+    /* Field + select — label SOLDA, select sağda (inline) */
+    .pm-field { display: inline-flex; align-items: center; gap: 10px; }
+    .pm-field label {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        color: #64748b; letter-spacing: .04em; white-space: nowrap;
+    }
+    .pm-field select {
+        width: 260px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+        font-size: 13px; background: #fff; color: #0f172a; outline: none;
+    }
+    body.app-theme-dark .pm-field select {
+        background: #0f172a; color: #e2e8f0; border-color: rgba(148,163,184,.3);
+    }
+
+    .pm-btn { padding: 9px 18px; border-radius: 8px; font-weight: 600; font-size: 13px;
+        cursor: pointer; border: 1px solid transparent; transition: background .12s; }
+    .pm-btn--primary { background: #6366f1; color: #fff; border-color: #6366f1; }
+    .pm-btn--primary:hover:not(:disabled) { background: #4f46e5; }
+    .pm-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* Departman bilgisi — kullanıcı seçilince topbar'da görünür */
+    #permDeptBadge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 5px 14px; border-radius: 999px;
+        background: rgba(20,184,166,.12); color: #0d9488;
+        border: 1px solid rgba(20,184,166,.25);
+        font-size: 14px; font-weight: 600; white-space: nowrap;
+    }
+    #permDeptBadge::before { content: '🏢'; font-size: 13px; }
+    body.app-theme-dark #permDeptBadge {
+        background: rgba(20,184,166,.15); color: #2dd4bf;
+        border-color: rgba(20,184,166,.3);
+    }
+    /* Hızlı filtre combobox — topbar'a taşındı */
+    .pm-quick-filter-sel {
+        height: 34px; padding: 0 10px;
+        border-radius: 8px; border: 1px solid #cbd5e1;
+        background: #fff; color: #334155;
+        font-size: 13px; font-weight: 500; cursor: pointer;
+        color-scheme: light;
+    }
+    body.app-theme-dark .pm-quick-filter-sel {
+        background: #0f172a; color: #cbd5e1;
+        border-color: rgba(148,163,184,.3); color-scheme: dark;
+    }
+
+    .pm-status { padding: 6px 22px; font-size: 12px; color: #64748b; min-height: 24px; flex-shrink: 0; }
+    .pm-status.ok  { color: #10b981; }
+    .pm-status.err { color: #ef4444; }
+
+    /* Hızlı filtre çubuğu — hedef seçimi sonrası görünür, izinleri kategorize eder */
+    .pm-filters {
+        display: flex; gap: 6px; padding: 8px 22px; flex-shrink: 0; flex-wrap: wrap;
+        background: rgba(248,250,252,0.6);
+        border-bottom: 1px solid #e2e8f0;
+        align-items: center;
+    }
+    body.app-theme-dark .pm-filters {
+        background: rgba(13,19,35,0.5);
+        border-bottom-color: rgba(255,255,255,0.06);
+    }
+    .pm-filters__label {
+        font-size: 11px; font-weight: 700; text-transform: uppercase; color: #94a3b8;
+        letter-spacing: .04em; margin-right: 4px;
+    }
+    .pm-filter {
+        padding: 5px 12px; border-radius: 999px; border: 1px solid #cbd5e1;
+        background: #fff; color: #475569; cursor: pointer;
+        font-size: 12px; font-weight: 600; line-height: 1.2;
+        transition: background .12s, color .12s, border-color .12s;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    body.app-theme-dark .pm-filter {
+        background: #0f172a; color: #cbd5e1; border-color: rgba(148,163,184,.3);
+    }
+    .pm-filter:hover:not(:disabled) { border-color: #94a3b8; }
+    .pm-filter:disabled {
+        opacity: .4; cursor: not-allowed;
+        pointer-events: none;
+    }
+    .pm-filter.is-active { background: #6366f1; color: #fff; border-color: #6366f1; }
+    .pm-filter.is-active.is-allow { background: #10b981; border-color: #10b981; }
+    .pm-filter.is-active.is-deny  { background: #ef4444; border-color: #ef4444; }
+    .pm-filter.is-active.is-dept  { background: #14b8a6; border-color: #14b8a6; }
+    .pm-filter.is-active.is-noDept { background: #f97316; border-color: #f97316; }
+    .pm-filter[data-user-only] { display: none; }
+    .pm-filters.is-user-mode .pm-filter[data-user-only] { display: inline-flex; }
+    .pm-filter__count {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 16px; height: 16px; padding: 0 5px; border-radius: 9px;
+        background: rgba(0,0,0,0.12); font-size: 10px; font-weight: 700;
+    }
+    .pm-filter.is-active .pm-filter__count { background: rgba(255,255,255,0.28); }
+
+    /* Body (left aside + right content) */
+    .pm-body {
+        flex: 1 1 auto; min-height: 0; overflow: hidden;
+        display: grid; grid-template-columns: 260px 1fr; gap: 0;
+    }
+    .pm-aside {
+        background: #ffffff; border-right: 1px solid #e2e8f0;
+        display: flex; flex-direction: column; min-height: 0;
+    }
+    body.app-theme-dark .pm-aside { background: #111827; border-right-color: rgba(255,255,255,0.06); }
+    .pm-aside__list { overflow-y: auto; padding: 8px 0; flex: 1; }
+
+    /* Arama input */
+    .pm-search {
+        position: relative; padding: 12px 14px 8px;
+        border-bottom: 1px solid #e2e8f0; flex-shrink: 0;
+    }
+    body.app-theme-dark .pm-search { border-bottom-color: rgba(255,255,255,0.06); }
+    .pm-search input {
+        width: 100%; padding: 8px 32px 8px 12px;
+        border: 1px solid #cbd5e1; border-radius: 8px;
+        font-size: 13px; background: #fff; color: #0f172a; outline: none;
+        transition: border-color .12s;
+    }
+    body.app-theme-dark .pm-search input {
+        background: #0f172a; color: #e2e8f0; border-color: rgba(148,163,184,.3);
+    }
+    .pm-search input:focus { border-color: #6366f1; }
+    .pm-search input::placeholder { color: #94a3b8; }
+    .pm-search__icon {
+        position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+        color: #94a3b8; pointer-events: none;
+    }
+
+    .pm-form-item {
+        display: flex; align-items: center; gap: 8px;
+        padding: 9px 16px; cursor: pointer;
+        border-left: 3px solid transparent;
+        font-size: 13px; color: #475569;
+        transition: background .12s, color .12s;
+    }
+    body.app-theme-dark .pm-form-item { color: #cbd5e1; }
+    .pm-form-item:hover { background: rgba(99,102,241,.07); color: #0f172a; }
+    body.app-theme-dark .pm-form-item:hover { color: #f1f5f9; }
+    .pm-form-item.is-active {
+        background: rgba(99,102,241,.10); color: #6366f1;
+        border-left-color: #6366f1; font-weight: 600;
+    }
+    body.app-theme-dark .pm-form-item.is-active { color: #a5b4fc; border-left-color: #a5b4fc; }
+    .pm-form-item__name { flex: 1; }
+    .pm-form-item__badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 18px; height: 18px; padding: 0 6px; border-radius: 9px;
+        background: #6366f1; color: #fff; font-size: 10px; font-weight: 700;
+    }
+
+    .pm-aside-empty { padding: 36px 22px; text-align: center; color: #94a3b8; font-size: 13px; }
+
+    /* Content (right) */
+    .pm-content {
+        display: flex; flex-direction: column; min-height: 0;
+    }
+    .pm-content__header {
+        padding: 20px 28px 12px; flex-shrink: 0;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex; align-items: center; gap: 16px;
+    }
+    body.app-theme-dark .pm-content__header { border-bottom-color: rgba(255,255,255,0.06); }
+    .pm-content__title-block { flex: 1; min-width: 0; }
+    .pm-content__title { font-size: 18px; font-weight: 700; margin: 0; color: #0f172a; }
+    body.app-theme-dark .pm-content__title { color: #f1f5f9; }
+    .pm-content__sub { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+    .pm-content__search {
+        position: relative; flex-shrink: 0;
+    }
+    .pm-content__search input {
+        width: 280px; padding: 8px 32px 8px 12px;
+        border: 1px solid #cbd5e1; border-radius: 8px;
+        font-size: 13px; background: #fff; color: #0f172a; outline: none;
+        transition: border-color .12s;
+    }
+    body.app-theme-dark .pm-content__search input {
+        background: #0f172a; color: #e2e8f0; border-color: rgba(148,163,184,.3);
+    }
+    .pm-content__search input:focus { border-color: #6366f1; }
+    .pm-content__search__icon {
+        position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+        color: #94a3b8; pointer-events: none;
+    }
+
+    .pm-content__body { overflow-y: auto; padding: 12px 16px; flex: 1; }
+
+    .pm-action-list { display: flex; flex-direction: column; gap: 2px; }
+    .pm-action-row {
+        display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+        padding: 4px 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px;
+        transition: opacity .15s; min-height: 34px;
+    }
+    body.app-theme-dark .pm-action-row { background: #111827; border-color: rgba(255,255,255,0.06); }
+    .pm-action-row__label { font-size: 13px; font-weight: 600; color: #0f172a; }
+    body.app-theme-dark .pm-action-row__label { color: #f1f5f9; }
+    /* VIEW kapalıyken bağımlı action'lar gri + tıklanamaz */
+    .pm-action-row.is-disabled { opacity: .45; pointer-events: none; }
+    .pm-action-row__note {
+        display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px;
+        background: rgba(245,158,11,.18); color: #d97706; font-weight: 600; margin-left: 8px;
+    }
+
+    /* ── İki switch çifti (Miras | İzinli) — tüm yetki satırları için standart ── */
+    .pm-perm-switches {
+        display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+    }
+    .pm-perm-sw-pair {
+        display: flex; align-items: center; gap: 10px;
+    }
+    .pm-perm-sw-wrap {
+        display: flex; flex-direction: row; align-items: center; gap: 5px;
+    }
+    .pm-perm-sw-wrap.is-passive { opacity: .4; pointer-events: none; cursor: default; }
+    .pm-perm-sw-lbl {
+        font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase;
+        letter-spacing: .03em; white-space: nowrap;
+    }
+    body.app-theme-dark .pm-perm-sw-lbl { color: #94a3b8; }
+    .pm-perm-sw-src {
+        font-size: 9px; color: #94a3b8; white-space: nowrap; line-height: 1;
+    }
+    .pm-perm-sw-src.src-user { color: #6366f1; }
+    .pm-perm-sw-src.src-dept { color: #14b8a6; }
+    /* Departman kaynağı rozeti — Miras label'ı içinde inline, yükseklik etkilemez */
+    .pm-dept-badge {
+        display: inline-block; font-size: 8px; font-weight: 700; line-height: 1;
+        padding: 1px 3px; border-radius: 3px; vertical-align: middle; margin-left: 3px;
+        background: rgba(20,184,166,.15); color: #14b8a6;
+    }
+    body.app-theme-dark .pm-dept-badge { background: rgba(20,184,166,.2); color: #2dd4bf; }
+
+    .pm-empty { padding: 60px 20px; text-align: center; color: #94a3b8; }
+    .pm-empty__icon { font-size: 40px; margin-bottom: 12px; opacity: .5; }
+
+    /* Admin-only form uyarısı — Operatör kullanıcıya AdminOnly formun izni verildiğinde */
+    .pm-admin-warning {
+        margin: 0 0 10px 0; padding: 12px 16px;
+        background: rgba(245,158,11,.10); border: 1px solid rgba(245,158,11,.30);
+        border-radius: 8px; display: flex; align-items: flex-start; gap: 10px;
+        font-size: 13px;
+    }
+    body.app-theme-dark .pm-admin-warning {
+        background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.25);
+    }
+    .pm-admin-warning__icon { font-size: 16px; flex-shrink: 0; line-height: 1.4; }
+    .pm-admin-warning__text { color: #92400e; line-height: 1.5; }
+    body.app-theme-dark .pm-admin-warning__text { color: #fbbf24; }
+    .pm-admin-warning__title { font-weight: 700; display: block; margin-bottom: 2px; }
+    .pm-admin-warning__detail { font-size: 12px; opacity: .85; }
+
+    /* Aside'daki admin-lock ikonu */
+    .pm-form-item__lock {
+        font-size: 10px; opacity: .55; flex-shrink: 0;
+    }
+
+    /* ── Switchkey ─────────────────────────────────────────────────────── */
+    .pm-switch {
+        display: inline-flex; align-items: center; cursor: pointer;
+        user-select: none; gap: 0;
+    }
+    .pm-switch__track {
+        width: 32px; height: 18px; border-radius: 9px;
+        background: #cbd5e1; position: relative;
+        transition: background .15s; flex-shrink: 0;
+        border: 1px solid #e2e8f0;
+    }
+    body.app-theme-dark .pm-switch__track {
+        background: rgba(148,163,184,.25); border-color: rgba(148,163,184,.2);
+    }
+    .pm-switch.is-on .pm-switch__track { background: #6366f1; border-color: #6366f1; }
+    body.app-theme-dark .pm-switch.is-on .pm-switch__track { background: #6366f1; border-color: #6366f1; }
+    .pm-switch__thumb {
+        width: 12px; height: 12px; border-radius: 50%;
+        background: #fff; position: absolute; top: 2px; left: 2px;
+        transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    }
+    .pm-switch.is-on .pm-switch__thumb { transform: translateX(14px); }
+    /* BUTTON:* satırında action-row arka planını biraz farklılaştır */
+    .pm-action-row.is-btn-perm {
+        background: rgba(99,102,241,.03);
+    }
+    body.app-theme-dark .pm-action-row.is-btn-perm {
+        background: rgba(99,102,241,.06);
+    }
+    .pm-action-row__badge {
+        display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 10px;
+        background: rgba(99,102,241,.12); color: #6366f1; font-weight: 700;
+        margin-left: 6px; vertical-align: middle;
+    }
+    body.app-theme-dark .pm-action-row__badge { background: rgba(99,102,241,.2); color: #a5b4fc; }
+</style>
+}
+
+<div class="pm-shell">
+    <div class="pm-topbar">
+        <div class="pm-radio-group" role="radiogroup" aria-label="Hedef Türü">
+            <label>
+                <input type="radio" name="permMode" value="dept" />
+                <span>Departman</span>
+            </label>
+            <label>
+                @* 2026-06-08 — Varsayılan mod: Kullanıcı. Tipik kullanım kullanıcıya yetki vermek;
+                   departman yetkilendirmesi daha az sıklıkla yapılır. *@
+                <input type="radio" name="permMode" value="user" checked />
+                <span>Kullanıcı</span>
+            </label>
+        </div>
+
+        <div class="pm-field">
+            <label for="permTargetId">Hedef</label>
+            <select id="permTargetId">
+                <option value="">— Seçiniz —</option>
+            </select>
+        </div>
+
+        <button type="button" id="permSaveBtn" class="pm-btn pm-btn--primary" disabled>Kaydet</button>
+
+        <select id="permQuickFilter" class="pm-quick-filter-sel" style="display:none;">
+            <option value="all">Tümü</option>
+            <option value="has">Sahip olduğu</option>
+            <option value="no">Sahip olmadığı</option>
+            <option value="fromGroup" data-user-only>Gruptan aldığı</option>
+            <option value="noFromGroup" data-user-only>Kendinde var, grupta yok</option>
+        </select>
+
+        <span id="permDeptBadge" class="pm-dept-badge" style="display:none;"></span>
+    </div>
+
+    <div id="permStatus" class="pm-status"></div>
+
+    <div class="pm-body">
+        <aside class="pm-aside">
+            <div class="pm-search">
+                <input type="text" id="permFormSearch" placeholder="Form ara…" autocomplete="off" />
+                <svg class="pm-search__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+            </div>
+            <div class="pm-aside__list" id="permAside">
+                <div class="pm-aside-empty">Yukarıdan hedef seçin.</div>
+            </div>
+        </aside>
+        <section class="pm-content" id="permContent">
+            <div class="pm-empty" id="permEmptyState">
+                <div class="pm-empty__icon">🛡️</div>
+                <div>Soldan bir form seçin</div>
+            </div>
+        </section>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var targetSel = document.getElementById('permTargetId');
+    var saveBtn   = document.getElementById('permSaveBtn');
+    var asideEl   = document.getElementById('permAside');
+    var contentEl = document.getElementById('permContent');
+    var statusEl  = document.getElementById('permStatus');
+
+    var deptBadgeEl = document.getElementById('permDeptBadge');
+
+    // Operatörlerin menüde görebileceği formlar (MenuDefinition.cs PermissionFormCode listesi).
+    // Bu liste dışındaki formlar AdminOnly=true olup operatörlere menüde hiç gösterilmez;
+    // yetki verilse dahi etkisizdir.
+    // Sistem yönetimi ekranları HARİÇ tüm form kodları — bu listedeki kodlar için
+    // yetki atanabilir ve operatör menüsünde göründüğünü UI uyarı vermez.
+    // Sadece şu kodlar YOKTUR (AdminOnly, grant yapılsa da menüde çıkmaz):
+    //   COMPANY_SETTINGS, COMPANY_PARAMETERS, COMPANY_USERS, DB_SCHEMA
+    var OPERATOR_VISIBLE_FORM_CODES = [
+        // Genel
+        'NOTES', 'ORG_CHART', 'WHATSAPP', 'BULK_MAIL',
+        // Raporlar
+        'DASHBOARDS', 'GRAFANA',
+        // Onay İşlemleri
+        'APPROVAL_PENDING', 'EINVOICE', 'EARCHIVE', 'EDISPATCH', 'APPROVAL_FLOWS',
+        // Lojistik — Malzeme
+        'MATERIAL_CARD_EDIT', 'PRODUCT_CONFIG', 'PRODUCT_FEATURE_EDIT', 'PRODUCT_COMBINATIONS',
+        // Lojistik — Satış
+        'SALES_QUOTE', 'SALES_QUOTE_NEW', 'SALES_QUOTE_EDIT', 'SALES_QUOTE_LINES',
+        'SALES_ORDER', 'SALES_ORDER_NEW', 'SALES_ORDER_EDIT', 'SALES_ORDER_LINES',
+        // Lojistik — Satın Alma
+        'PURCHASE_REQUEST', 'PURCHASE_REQUEST_NEW', 'PURCHASE_REQUEST_EDIT', 'PURCHASE_REQUEST_LINES',
+        'PURCHASE_FULFILLMENT',
+        'PURCHASE_QUOTE', 'PURCHASE_QUOTE_NEW', 'PURCHASE_QUOTE_EDIT', 'PURCHASE_QUOTE_LINES',
+        'PURCHASE_ORDER', 'PURCHASE_ORDER_NEW', 'PURCHASE_ORDER_EDIT', 'PURCHASE_ORDER_LINES',
+        'PURCHASE_DEMAND', 'PURCHASE_DEMAND_NEW', 'PURCHASE_DEMAND_EDIT', 'PURCHASE_DEMAND_LINES',
+        // Lojistik — Depo
+        'TRANSFER', 'TRANSFER_LINES', 'STOCK_IN', 'STOCK_IN_LINES', 'STOCK_OUT', 'STOCK_OUT_LINES', 'INVENTORY_COUNT',
+        // Üretim
+        'BOM_EDIT',
+        'WORK_ORDERS', 'WORK_ORDER_EDIT',
+        'OPERATIONS', 'OPERATION_EDIT',
+        'ROUTINGS', 'ROUTING_EDIT', 'ROUTING_OPERATION_EDIT',
+        'PERSONNEL', 'PERSONNEL_EDIT',
+        'SHIFTS', 'SHIFT_EDIT',
+        'ACTIVITY_REASONS', 'ACTIVITY_REASON_EDIT',
+        'SHOP_FLOOR', 'PRODUCTION_DEFS',
+        // Finans (CONTACT_EDIT, CONTACTS ile birleştirildi — 2026-06-13)
+        'CONTACTS',
+        // Genel Tanımlamalar
+        'SALES_REPS', 'CURRENCIES', 'LOCATIONS', 'MEASURE_UNITS',
+        'MATERIAL_GROUPS', 'CARD_GROUPS', 'DEPARTMENTS', 'PRICE_LIST', 'PRICE_GROUPS',
+        'MACHINES', 'MACHINE_TYPES',
+        // Varlık Yönetimi
+        'ASSETS',
+        // Tasarım
+        'DOC_TEMPLATES', 'DOC_LAYOUT_RULES', 'DOC_NUMBER_RULES',
+        // Ayarlar
+        'SCHEDULER', 'INTEGRATIONS', 'INTEGRATION_EVENTS',
+        'VIEW_SETTINGS', 'SETUP_DEFINITIONS', 'PERMISSION_MGMT', 'DATA_VISIBILITY', 'APPROVAL_FLOWS',
+    ];
+
+    var state = {
+        mode: 'user',
+        targetId: null,
+        targetRole: null,       // Backend'den dönen hedef kullanıcının rolü ('Operator', 'DepartmentManager', 'SystemAdmin')
+        items: [],              // tüm izinler (360)
+        byForm: {},             // { formCode: { name, items: [...] } }
+        selectedFormCode: null,
+        formSearchTerm: '',
+        actionSearchTerm: '',
+        quickFilter: 'all',     // 'all' | 'has' | 'no' | 'fromGroup' | 'noFromGroup'
+        targetHasDept: false,   // Kullanıcı modunda seçili kullanıcının departmanı var mı?
+        userDeptMap: {},        // { userId: { departmentId, departmentName } | null } — lookup yüklendiğinde dolar
+    };
+
+    var quickFilterSel = document.getElementById('permQuickFilter');
+
+    // Her item için hızlı filtre testleri — Kullanıcının nihai izin durumu
+    // (override + miras) sonrasında computeEffective ile karar verilir.
+    // - has         : computeEffective(it) === true  (sahip olduğu yetkiler)
+    // - no          : computeEffective(it) === false (sahip olmadığı yetkiler)
+    // - fromGroup   : departmandan geliyor + sahip (gruptan aldığı)
+    // - noFromGroup : kullanıcı sahip ama departmanında YOK (kendinde olup grubunda olmayan)
+    function isFromGroup(it) {
+        return it.source === 'DEPARTMENT' && it.isAllowed === true && it.override === 'inherit';
+    }
+    function passesQuickFilter(it) {
+        var f = state.quickFilter;
+        if (f === 'all') return true;
+        var eff = computeEffective(it);
+        if (f === 'has') return eff === true;
+        if (f === 'no')  return eff === false;
+        if (f === 'fromGroup')   return isFromGroup(it);
+        if (f === 'noFromGroup') return eff === true && !isFromGroup(it);
+        return true;
+    }
+
+    // Tüm filtre seçenekleri için option metinlerini sayıyla güncelle.
+    function updateFilterCounts() {
+        var counts = { all: 0, has: 0, no: 0, fromGroup: 0, noFromGroup: 0 };
+        state.items.forEach(function (it) {
+            counts.all++;
+            var eff = computeEffective(it);
+            if (eff) counts.has++; else counts.no++;
+            if (isFromGroup(it)) counts.fromGroup++;
+            if (eff && !isFromGroup(it)) counts.noFromGroup++;
+        });
+        var labels = { all: 'Tümü', has: 'Sahip olduğu', no: 'Sahip olmadığı',
+                       fromGroup: 'Gruptan aldığı', noFromGroup: 'Kendinde var, grupta yok' };
+        quickFilterSel.querySelectorAll('option').forEach(function (opt) {
+            var k = opt.value;
+            if (labels[k] !== undefined) opt.textContent = labels[k] + ' (' + (counts[k] || 0) + ')';
+        });
+    }
+
+    function token() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function setStatus(msg, cls) {
+        statusEl.textContent = msg || '';
+        statusEl.className = 'pm-status' + (cls ? ' ' + cls : '');
+    }
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // ── Mode değişti ──────────────────────────────────────────────────
+    document.querySelectorAll('input[name="permMode"]').forEach(function (r) {
+        r.addEventListener('change', function () {
+            if (!r.checked) return;
+            state.mode = r.value;
+            state.targetId = null;
+            state.targetRole = null;
+            state.quickFilter = 'all';
+            applyFilterActiveClass();
+            quickFilterSel.style.display = 'none';
+            updateDeptBadge(null);
+            asideEl.innerHTML = '<div class="pm-aside-empty">Yukarıdan hedef seçin.</div>';
+            contentEl.innerHTML = '<div class="pm-empty"><div class="pm-empty__icon">🛡️</div><div>Soldan bir form seçin</div></div>';
+            saveBtn.disabled = true;
+            loadTargets();
+        });
+    });
+
+    // ── Hızlı filtre combobox değişimi ───────────────────────────────
+    quickFilterSel.addEventListener('change', function () {
+        var f = quickFilterSel.value;
+        if (!f || f === state.quickFilter) return;
+        state.quickFilter = f;
+        renderAside();
+        if (state.selectedFormCode) {
+            var grp = state.byForm[state.selectedFormCode];
+            var matchCount = grp ? grp.items.filter(passesQuickFilter).length : 0;
+            if (matchCount === 0) {
+                var firstMatch = Object.keys(state.byForm).find(function (code) {
+                    return state.byForm[code].items.some(passesQuickFilter);
+                });
+                if (firstMatch) { selectForm(firstMatch); return; }
+            }
+        }
+        renderContent();
+    });
+
+    // Departmansız kullanıcı için user-only seçenekleri disable et
+    function applyFilterDisabledClass() {
+        var disableUserOnly = state.mode === 'user' && !state.targetHasDept;
+        quickFilterSel.querySelectorAll('option[data-user-only]').forEach(function (opt) {
+            opt.disabled = disableUserOnly;
+        });
+    }
+
+    // Aktif filtreyi combobox'ta göster
+    function applyFilterActiveClass() {
+        quickFilterSel.value = state.quickFilter;
+    }
+
+    // ── Departman badge (topbar) ──────────────────────────────────────
+    function updateDeptBadge(deptInfo) {
+        if (!deptBadgeEl) return;
+        if (deptInfo && deptInfo.name) {
+            deptBadgeEl.textContent = deptInfo.name;
+            deptBadgeEl.style.display = 'inline-flex';
+        } else {
+            deptBadgeEl.style.display = 'none';
+        }
+    }
+
+    // ── Hedef dropdown'ı doldur ───────────────────────────────────────
+    async function loadTargets() {
+        targetSel.innerHTML = '<option value="">— Seçiniz —</option>';
+        state.userDeptMap = {};
+        var url = state.mode === 'user' ? '/CompanyUser/UsersLookup' : '/Admin/GetDepartmentsLookup';
+        try {
+            var r = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+            var list = await r.json();
+            (list || []).forEach(function (x) {
+                var opt = document.createElement('option');
+                opt.value = x.id; opt.textContent = x.name || (x.fullName || '#' + x.id);
+                targetSel.appendChild(opt);
+                // Kullanıcı modunda departman bilgisini cache'le (chip disable + topbar badge için)
+                if (state.mode === 'user') {
+                    state.userDeptMap[x.id] = x.departmentId
+                        ? { id: x.departmentId, name: x.departmentName || null }
+                        : null;
+                }
+            });
+        } catch (e) {
+            setStatus('Hedef listesi yüklenemedi: ' + e.message, 'err');
+        }
+    }
+
+    targetSel.addEventListener('change', loadMatrix);
+
+    // ── Matrix yükle ──────────────────────────────────────────────────
+    async function loadMatrix() {
+        var id = parseInt(targetSel.value, 10);
+        if (!id) { updateDeptBadge(null); return; }
+        state.targetId = id;
+        setStatus('Yükleniyor...', '');
+
+        var url = state.mode === 'user'
+            ? '/Permission/User/' + id
+            : '/Permission/Department/' + id;
+        try {
+            var r = await fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            var data = await r.json();
+            if (!data.ok) throw new Error(data.error || 'Yetki listesi alınamadı.');
+            // Kullanıcı modunda hedefin rolünü kaydet — AdminOnly uyarısı için
+            state.targetRole = (state.mode === 'user') ? (data.role || null) : null;
+            state.items = (data.permissions || []).map(function (p) {
+                return {
+                    permissionDefId: p.permissionDefId,
+                    formCode: p.formCode,
+                    actionCode: p.actionCode,
+                    label: p.label,
+                    source: p.source,
+                    isAllowed: p.isAllowed,
+                    formSortOrder: p.formSortOrder == null ? 999999 : p.formSortOrder,
+                    override: 'inherit',
+                };
+            });
+            groupByForm();
+            // Filtre combobox: hedef seçildikten sonra görünür, departmansız kullanıcıda user-only seçenekler disabled.
+            quickFilterSel.style.display = 'inline-block';
+
+            // Departman bağlantısı: kullanıcı modunda lookup'tan cache'lediğimiz departmentId'ye bak.
+            // Departmansız kullanıcı için "Gruptan aldığı" ve "Grupta yok" anlamsız → disable.
+            var deptInfo = state.mode === 'user' ? (state.userDeptMap[state.targetId] || null) : null;
+            state.targetHasDept = state.mode === 'user'
+                ? !!(deptInfo)
+                : true; // departman modunda zaten hedef bir gruptur
+
+            // Topbar departman badge'i
+            updateDeptBadge(deptInfo);
+
+            // Mode değişimi VEYA departmansız kullanıcı seçimi durumlarında user-only filtre
+            // aktifse 'all'a düşür (disabled chip'in aktif kalması bug).
+            if ((state.mode !== 'user' || !state.targetHasDept) &&
+                (state.quickFilter === 'fromGroup' || state.quickFilter === 'noFromGroup')) {
+                state.quickFilter = 'all';
+            }
+            applyFilterDisabledClass();
+            applyFilterActiveClass();
+            updateFilterCounts();
+            renderAside();
+            // Önceki seçimi koru; yoksa veya filtreyi geçmiyorsa ilk eşleşene geç
+            var firstCode = Object.keys(state.byForm).find(function (code) {
+                return state.byForm[code].items.some(passesQuickFilter);
+            }) || Object.keys(state.byForm).sort()[0];
+            var prevCode = state.selectedFormCode;
+            var targetCode = (prevCode && state.byForm[prevCode] &&
+                state.byForm[prevCode].items.some(passesQuickFilter))
+                ? prevCode : firstCode;
+            if (targetCode) selectForm(targetCode);
+            setStatus('');
+            saveBtn.disabled = false;
+        } catch (e) {
+            asideEl.innerHTML = '<div class="pm-aside-empty">Hata: ' + escHtml(e.message) + '</div>';
+            contentEl.innerHTML = '';
+            setStatus('Yükleme hatası: ' + e.message, 'err');
+            saveBtn.disabled = true;
+        }
+    }
+
+    // ── Form'a göre grupla ────────────────────────────────────────────
+    function groupByForm() {
+        state.byForm = {};
+        state.items.forEach(function (it) {
+            // Label format: "FormName — ActionLabel"
+            var parts = (it.label || '').split(' — ');
+            var formName = parts[0] || it.formCode;
+            if (!state.byForm[it.formCode]) {
+                state.byForm[it.formCode] = {
+                    name: formName,
+                    sortOrder: it.formSortOrder == null ? 999999 : it.formSortOrder,
+                    items: [],
+                };
+            }
+            state.byForm[it.formCode].items.push(it);
+        });
+    }
+
+    // ── Sol pane (form listesi) ───────────────────────────────────────
+    function renderAside() {
+        var html = '';
+        var term = (state.formSearchTerm || '').toLocaleLowerCase('tr-TR');
+        var visibleCount = 0;
+        Object.keys(state.byForm).sort(function (a, b) {
+            // Menü sıralaması ile aynı: dbo.Forms.SortOrder ASC, eşitse FormName lokale ile alfabetik
+            var aSort = state.byForm[a].sortOrder;
+            var bSort = state.byForm[b].sortOrder;
+            if (aSort !== bSort) return aSort - bSort;
+            return state.byForm[a].name.localeCompare(state.byForm[b].name, 'tr');
+        }).forEach(function (formCode) {
+            var grp = state.byForm[formCode];
+            if (term) {
+                // İsim veya code içinde geçiyor mu
+                var matchName = grp.name.toLocaleLowerCase('tr-TR').indexOf(term) !== -1;
+                var matchCode = formCode.toLocaleLowerCase('tr-TR').indexOf(term) !== -1;
+                if (!matchName && !matchCode) return;
+            }
+            // Hızlı filtre aktifken sadece eşleşen item'ı olan formlar görünür.
+            var matchedItems = grp.items.filter(passesQuickFilter);
+            if (state.quickFilter !== 'all' && matchedItems.length === 0) return;
+
+            // Badge: filtre 'all' ise override sayısını, aktifse eşleşen item sayısını göster.
+            var badgeCount;
+            var badgeClass = 'pm-form-item__badge';
+            if (state.quickFilter === 'all') {
+                badgeCount = grp.items.filter(function (it) { return it.override !== 'inherit'; }).length;
+            } else {
+                badgeCount = matchedItems.length;
+            }
+            var badge = badgeCount > 0 ? '<span class="' + badgeClass + '">' + badgeCount + '</span>' : '';
+            // Operatöre admin-only form göstergeciği
+            var lockIcon = '';
+            if (state.mode === 'user' && state.targetRole === 'Operator'
+                && OPERATOR_VISIBLE_FORM_CODES.indexOf(formCode.toUpperCase()) === -1) {
+                lockIcon = '<span class="pm-form-item__lock" title="Bu form operatörlerin menüsünde görünmez">🔒</span>';
+            }
+            html += '<div class="pm-form-item' + (state.selectedFormCode === formCode ? ' is-active' : '') + '" data-form="' + escHtml(formCode) + '">'
+                  + '<div class="pm-form-item__name">' + escHtml(grp.name) + '</div>'
+                  + badge
+                  + lockIcon
+                  + '</div>';
+            visibleCount++;
+        });
+        asideEl.innerHTML = html
+            || '<div class="pm-aside-empty">' + (term ? 'Sonuç yok.' : 'Form yok.') + '</div>';
+    }
+
+    asideEl.addEventListener('click', function (e) {
+        var item = e.target.closest && e.target.closest('.pm-form-item');
+        if (!item) return;
+        var code = item.getAttribute('data-form');
+        if (code) selectForm(code);
+    });
+
+    function selectForm(code) {
+        state.selectedFormCode = code;
+        // Active class güncelle
+        asideEl.querySelectorAll('.pm-form-item').forEach(function (el) {
+            el.classList.toggle('is-active', el.getAttribute('data-form') === code);
+        });
+        renderContent();
+    }
+
+    // ── Sağ pane (seçili formun action'ları) ──────────────────────────
+    function renderContent() {
+        if (!state.selectedFormCode || !state.byForm[state.selectedFormCode]) {
+            contentEl.innerHTML = '<div class="pm-empty" id="permEmptyState"><div class="pm-empty__icon">🛡️</div><div>Soldan bir form seçin</div></div>';
+            return;
+        }
+        var grp = state.byForm[state.selectedFormCode];
+        var term = (state.actionSearchTerm || '').toLocaleLowerCase('tr-TR');
+        var filteredItems = grp.items.filter(function (it) {
+            // Önce hızlı filtre (Sahip/Sahip değil/Gruptan/Grupta yok)
+            if (!passesQuickFilter(it)) return false;
+            // Sonra serbest arama
+            if (!term) return true;
+            var actionLabel = (it.label || '').split(' — ').slice(1).join(' — ') || it.actionCode;
+            return actionLabel.toLocaleLowerCase('tr-TR').indexOf(term) !== -1
+                || it.actionCode.toLocaleLowerCase('tr-TR').indexOf(term) !== -1;
+        });
+
+        // AdminOnly uyarısı: operatör kullanıcıya menüde hiç görünmeyecek form için
+        var adminOnlyWarning = '';
+        var isOperatorTarget = state.mode === 'user' && state.targetRole === 'Operator';
+        var isAdminOnlyForm  = isOperatorTarget
+            && OPERATOR_VISIBLE_FORM_CODES.indexOf((state.selectedFormCode || '').toUpperCase()) === -1;
+        if (isAdminOnlyForm) {
+            adminOnlyWarning = '<div class="pm-admin-warning">'
+                + '<div class="pm-admin-warning__icon">🔒</div>'
+                + '<div class="pm-admin-warning__text">'
+                + '<span class="pm-admin-warning__title">Bu form operatör menüsünde görünmez</span>'
+                + '<span class="pm-admin-warning__detail">'
+                + 'Seçili kullanıcı <strong>Operatör</strong> rolündedir. Bu form menü ağacında yalnızca '
+                + 'Yönetici (DepartmentManager veya SystemAdmin) kullanıcılara gösterilir. '
+                + 'Verilen izinler DB\'ye kaydedilir ancak bu kullanıcının menüsünü etkilemez.'
+                + '</span>'
+                + '</div>'
+                + '</div>';
+        }
+
+        var html = '<div class="pm-content__header">'
+                 + '<div class="pm-content__title-block">'
+                 + '<h2 class="pm-content__title">' + escHtml(grp.name) + '</h2>'
+                 + '<div class="pm-content__sub">' + filteredItems.length + ' / ' + grp.items.length + ' yetki</div>'
+                 + '</div>'
+                 + '<div class="pm-content__search">'
+                 + '<input type="text" id="permActionSearch" placeholder="Yetki ara…" value="' + escHtml(state.actionSearchTerm) + '" autocomplete="off" />'
+                 + '<svg class="pm-content__search__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+                 + '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
+                 + '</div>'
+                 + '</div>';
+        // Hiyerarşi (UI görsel ipucu — zorlama server-side'da):
+        //   VIEW_OWN (Özel) → bağımsız temel izin
+        //   VIEW (Genel)    → VIEW_OWN gerektirir
+        //   CREATE          → VIEW_OWN gerektirir
+        //   EDIT_OWN        → VIEW_OWN gerektirir
+        //   DELETE_OWN      → VIEW_OWN gerektirir
+        //   EDIT_ALL        → VIEW (Genel) gerektirir
+        //   DELETE_ALL      → VIEW (Genel) gerektirir
+        var viewItem = grp.items.find(function (x) { return x.actionCode === 'VIEW'; });
+        var viewEffectiveAllowed = computeEffective(viewItem);
+
+        var editOwnItem    = grp.items.find(function (x) { return x.actionCode === 'EDIT_OWN'; });
+        var deleteOwnItem  = grp.items.find(function (x) { return x.actionCode === 'DELETE_OWN'; });
+        var viewOwnItem    = grp.items.find(function (x) { return x.actionCode === 'VIEW_OWN'; });
+        var editOwnActive   = computeEffective(editOwnItem);
+        var deleteOwnActive = computeEffective(deleteOwnItem);
+        var viewOwnActive   = computeEffective(viewOwnItem);
+
+        html += '<div class="pm-content__body"><div class="pm-action-list">';
+        if (adminOnlyWarning) html += adminOnlyWarning;
+        if (filteredItems.length === 0) {
+            html += '<div class="pm-empty"><div>Sonuç yok.</div></div>';
+        } else {
+            filteredItems.forEach(function (it) {
+                var actionLabel = (it.label || '').split(' — ').slice(1).join(' — ') || it.actionCode;
+                var isBtn = isButtonPerm(it.actionCode);
+                // VIEW (Genel) bağımsız ama VIEW_OWN aktifken verilemez (karşılıklı dışlama)
+                var isViewBlockedByOwn = it.actionCode === 'VIEW' && viewOwnActive;
+                // CREATE / EDIT_OWN / DELETE_OWN → VIEW_OWN VEYA VIEW yeterli
+                var isDependentOnViewOwn = it.actionCode === 'CREATE'
+                                        || it.actionCode === 'EDIT_OWN'
+                                        || it.actionCode === 'DELETE_OWN';
+                var anyViewActive = viewOwnActive || viewEffectiveAllowed;
+                // EDIT_ALL / DELETE_ALL → VIEW gerekli
+                var isDependentOnView = it.actionCode === 'EDIT_ALL' || it.actionCode === 'DELETE_ALL';
+                // VIEW_OWN aktifken VIEW verilemez → EDIT_ALL/DELETE_ALL da bloke
+                var isOwnLimited = (it.actionCode === 'EDIT_ALL'  && (editOwnActive || viewOwnActive))
+                                || (it.actionCode === 'DELETE_ALL' && (deleteOwnActive || viewOwnActive));
+                var isDisabled = isViewBlockedByOwn
+                              || (isDependentOnViewOwn && !anyViewActive)
+                              || (isDependentOnView && !viewEffectiveAllowed)
+                              || isOwnLimited;
+                var note = isDisabled
+                    ? (isViewBlockedByOwn || isOwnLimited
+                        ? ' <span class="pm-action-row__note">Özel izin aktif</span>'
+                        : (isDependentOnViewOwn
+                            ? ' <span class="pm-action-row__note">İzleme gerekli</span>'
+                            : ' <span class="pm-action-row__note">İzleme (Genel) gerekli</span>'))
+                    : '';
+                var badge = isBtn ? '<span class="pm-action-row__badge">Buton</span>' : '';
+                html += '<div class="pm-action-row' + (isDisabled ? ' is-disabled' : '') + (isBtn ? ' is-btn-perm' : '') + '" data-perm-id="' + it.permissionDefId + '">'
+                      + '<div class="pm-action-row__label">' + escHtml(actionLabel) + badge + note + '</div>'
+                      + '<div>' + renderPermSwitches(it) + '</div>'
+                      + '</div>';
+            });
+        }
+        html += '</div></div>';
+        contentEl.innerHTML = html;
+
+        // Action search input listener — re-render sırasında DOM yenilenir,
+        // her renderContent'te tekrar bind (focus korunması için)
+        var actionSearchInp = document.getElementById('permActionSearch');
+        if (actionSearchInp) {
+            actionSearchInp.addEventListener('input', function () {
+                state.actionSearchTerm = actionSearchInp.value;
+                var caret = actionSearchInp.selectionStart;
+                renderContent();
+                // Focus geri al
+                var newInp = document.getElementById('permActionSearch');
+                if (newInp) {
+                    newInp.focus();
+                    try { newInp.setSelectionRange(caret, caret); } catch (e) {}
+                }
+            });
+        }
+    }
+
+    function isButtonPerm(actionCode) {
+        return typeof actionCode === 'string' && actionCode.indexOf('BUTTON:') === 0;
+    }
+
+    function computeEffective(it) {
+        if (!it) return false;
+        if (it.override === 'allow') return true;
+        if (it.override === 'deny')  return false;
+        return !!it.isAllowed;
+    }
+
+    // Ortak iki-switch render: Miras toggle + Ver toggle
+    // isInherit: Miras switch açık mı; isAllow: Ver switch açık mı; src: kaynak etiketi
+    function renderDualSwitch(isInherit, isAllow, src) {
+        var mirasCls  = 'pm-switch' + (isInherit ? ' is-on' : '') + ' pm-sw-miras';
+        var verCls    = 'pm-switch' + (isAllow   ? ' is-on' : '') + ' pm-sw-ver';
+        var verWrapCls = 'pm-perm-sw-wrap';
+        var srcHtml = '';
+        // Departman kaynağı varsa Miras label yanında inline rozet — hizalamayı bozmaz
+        var deptBadge = (isInherit && src === 'DEPT') ? '<span class="pm-dept-badge">Dep</span>' : '';
+        return '<div class="pm-perm-switches">'
+            + '<div class="pm-perm-sw-pair">'
+            + '<div class="pm-perm-sw-wrap">'
+            + '<span class="pm-perm-sw-lbl">Miras' + deptBadge + '</span>'
+            + '<label class="' + mirasCls + '"><span class="pm-switch__track"><span class="pm-switch__thumb"></span></span></label>'
+            + '</div>'
+            + '<div class="' + verWrapCls + '">'
+            + '<span class="pm-perm-sw-lbl">İzinli</span>'
+            + '<label class="' + verCls + '"><span class="pm-switch__track"><span class="pm-switch__thumb"></span></span></label>'
+            + '</div>'
+            + '</div>'
+            + srcHtml
+            + '</div>';
+    }
+
+    function renderPermSwitches(it) {
+        var isInherit = it.override === 'inherit';
+        var isAllow   = isInherit ? computeEffective(it) : (it.override === 'allow');
+        var src = null;
+        if (isInherit) {
+            if (it.source === 'USER')       src = 'USER';
+            else if (it.source === 'DEPARTMENT') src = 'DEPT';
+            else src = 'Varsayılan';
+        }
+        return renderDualSwitch(isInherit, isAllow, src);
+    }
+
+    // ── Switch click — delegated (Miras + Ver) ───────────────────────
+    contentEl.addEventListener('click', function (e) {
+        var sw = e.target.closest && e.target.closest('.pm-switch');
+        if (!sw) return;
+
+        // ── Tekil satır switch ───────────────────────────────────────
+        var isMiras = sw.classList.contains('pm-sw-miras');
+        var isVer   = sw.classList.contains('pm-sw-ver');
+        if (!isMiras && !isVer) return;
+
+        var row = sw.closest('.pm-action-row');
+        if (!row || row.classList.contains('is-disabled')) return;
+
+        var id = parseInt(row.getAttribute('data-perm-id'), 10);
+        var item = state.items.find(function (x) { return x.permissionDefId === id; });
+        if (!item) return;
+
+        if (isMiras) {
+            // Miras açık → inherit; Miras kapalı → effective değerden başla (allow/deny)
+            item.override = item.override === 'inherit'
+                ? (computeEffective(item) ? 'allow' : 'deny')
+                : 'inherit';
+        } else {
+            // İzinli: Miras açıkken tıklanınca Miras'tan çık ve efektif değerin tersini set et
+            if (item.override === 'inherit') {
+                item.override = computeEffective(item) ? 'deny' : 'allow';
+            } else {
+                item.override = item.override === 'allow' ? 'deny' : 'allow';
+            }
+        }
+
+        if (item.actionCode === 'VIEW' || item.actionCode === 'VIEW_OWN'
+                || item.actionCode === 'EDIT_OWN' || item.actionCode === 'DELETE_OWN') {
+            renderContent(); // VIEW / VIEW_OWN / OWN değişirse bağımlı satırları yenile
+        } else {
+            row.children[1].innerHTML = renderPermSwitches(item);
+        }
+        updateFilterCounts(); renderAside();
+    });
+
+    // ── Kaydet ────────────────────────────────────────────────────────
+    async function save() {
+        if (!state.targetId) return;
+        var items = state.items
+            .filter(function (it) { return it.override === 'allow' || it.override === 'deny'; })
+            .map(function (it) {
+                return { permissionDefId: it.permissionDefId, isGranted: it.override === 'allow' };
+            });
+
+        var url = state.mode === 'user'
+            ? '/Permission/User/' + state.targetId + '/Save'
+            : '/Permission/Department/' + state.targetId + '/Save';
+
+        saveBtn.disabled = true;
+        setStatus('Kaydediliyor...', '');
+        try {
+            var r = await fetch(url, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({
+                    userId: state.mode === 'user' ? state.targetId : null,
+                    departmentId: state.mode === 'dept' ? state.targetId : null,
+                    items: items,
+                }),
+            });
+            var data = await r.json();
+            if (!data.ok) throw new Error(data.error || 'Kaydedilemedi.');
+            setStatus('Kaydedildi: ' + (data.count || 0) + ' satır.', 'ok');
+            // Refresh — kaynaklar değişmiş olabilir
+            await loadMatrix();
+        } catch (e) {
+            setStatus('Hata: ' + e.message, 'err');
+        } finally {
+            saveBtn.disabled = false;
+        }
+    }
+
+    saveBtn.addEventListener('click', save);
+
+    // Form arama input listener
+    var formSearchInp = document.getElementById('permFormSearch');
+    if (formSearchInp) {
+        formSearchInp.addEventListener('input', function () {
+            state.formSearchTerm = formSearchInp.value;
+            renderAside();
+        });
+    }
+
+    loadTargets();
+})();
+</script>
+}

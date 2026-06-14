@@ -2,6 +2,7 @@ using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CalibraHub.Web.Controllers;
@@ -18,6 +19,7 @@ namespace CalibraHub.Web.Controllers;
 ///   • Stok hareketi         → POST { eventName: "StockMovement",     recordId: "..." }
 ///   • Manuel tetikleme      → curl/Postman ile
 /// </summary>
+[Authorize]
 [ApiController]
 [Route("api/integration-events")]
 public sealed class IntegrationEventsController : ControllerBase

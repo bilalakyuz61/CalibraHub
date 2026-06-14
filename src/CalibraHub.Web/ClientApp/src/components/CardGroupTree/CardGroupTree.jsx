@@ -393,8 +393,8 @@ export default function CardGroupTree({ config }) {
     })
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}))
-      toast(err.error || 'Kayıt başarısız.', 'err')
-      throw new Error(err.error || 'Kayıt başarısız.')
+      toast(err.message || err.error || 'Kayıt başarısız.', 'err')
+      throw new Error(err.message || err.error || 'Kayıt başarısız.')
     }
     const data = await resp.json().catch(() => ({}))
     toast('Kaydedildi.', 'ok')
@@ -410,19 +410,29 @@ export default function CardGroupTree({ config }) {
     try {
       const resp = await fetch(`${config.deleteApiUrl}${deleteTarget.id}`, {
         method: 'POST',
-        headers: { RequestVerificationToken: getCsrf() },
+        headers: {
+          RequestVerificationToken: getCsrf(),
+          Accept: 'application/json',
+        },
       })
+      if (!resp.ok) {
+        // 403 = yetki yok, 400 = geçersiz istek vb. — JSON parse dene, olmasa generic mesaj
+        const errData = await resp.json().catch(() => ({}))
+        toast(errData.message || errData.error || 'Silinemedi.', 'err')
+        setDeleteTarget(null)
+        return
+      }
       const data = await resp.json()
-      if (data.success) {
+      if (data.success || data.ok) {
         toast('Grup silindi.', 'ok')
         setDeleteTarget(null)
         await refreshTree(null)
       } else {
-        toast(data.message || 'Silinemedi.', 'err')
+        toast(data.error || data.message || 'Silinemedi.', 'err')
         setDeleteTarget(null)
       }
     } catch {
-      toast('Sunucu hatası.', 'err')
+      toast('Silinemedi. Lütfen sayfayı yenileyip tekrar deneyin.', 'err')
       setDeleteTarget(null)
     } finally {
       setDeleting(false)

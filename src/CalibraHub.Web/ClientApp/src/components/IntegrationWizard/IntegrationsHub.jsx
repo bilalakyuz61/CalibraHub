@@ -27,23 +27,33 @@ const TABS = [
   { id: 'runs',         label: 'Çalıştırma Logu',     icon: Activity },
 ]
 
+// 2026-05-22: sessionStorage tab persistence — Wizard'a gidip donince (window.location.href
+// ile yapildigi icin URL hash kayboluyor) kullanici en son hangi tabdayidi onu hatirla.
+// Hierarchy: config.initialTab > URL hash > sessionStorage > "profiles".
+const TAB_STORAGE_KEY = 'calibrahub.integrationsHub.activeTab'
+
 export default function IntegrationsHub({ config }) {
-  // İlk tab seçimi: config.initialTab > URL hash > "profiles"
+  // İlk tab seçimi: config.initialTab > URL hash > sessionStorage > "profiles"
   const initial = (() => {
     if (config?.initialTab && TABS.find(t => t.id === config.initialTab)) return config.initialTab
     const hash = window.location.hash.replace('#', '')
     if (TABS.find(t => t.id === hash)) return hash
+    try {
+      const stored = sessionStorage.getItem(TAB_STORAGE_KEY)
+      if (stored && TABS.find(t => t.id === stored)) return stored
+    } catch { /* sessionStorage erişilemez (private mode vb.) — sessizce default'a düş */ }
     return 'profiles'
   })()
   const [tab, setTab] = useState(initial)
 
-  // Tab değişince URL hash'i güncelle (back/forward + paylaşılabilirlik için)
+  // Tab değişince URL hash + sessionStorage güncelle (Wizard donusu icin sessionStorage kritik).
   useEffect(() => {
     const newHash = '#' + tab
     if (window.location.hash !== newHash) {
       // pushState yerine replaceState — back butonu sayfaları kirletmesin
       window.history.replaceState(null, '', window.location.pathname + newHash)
     }
+    try { sessionStorage.setItem(TAB_STORAGE_KEY, tab) } catch { /* quota */ }
   }, [tab])
 
   // Browser back/forward → tab senkron

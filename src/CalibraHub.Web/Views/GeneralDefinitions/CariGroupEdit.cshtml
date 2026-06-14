@@ -128,6 +128,15 @@ body.app-theme-dark .cge-msg.err { color: #f87171; }
                     <input id="cgeName" class="cge-input" value="@Model.Name" maxlength="150" style="flex:1 1 auto;min-width:0;" placeholder="orn. Toptan / Perakende / VIP" />
                 </div>
                 <div class="cge-row">
+                    <label for="cgeCategory">Kategori</label>
+                    <select id="cgeCategory" class="cge-input" style="width:120px;">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            <option value="@i" selected="@(Model.GroupCategory == i)">@i</option>
+                        }
+                    </select>
+                </div>
+                <div class="cge-row">
                     <label for="cgeSort">Sira</label>
                     <input id="cgeSort" type="number" class="cge-input" value="@Model.SortOrder" min="0" style="width:120px;" />
                 </div>
@@ -152,11 +161,13 @@ body.app-theme-dark .cge-msg.err { color: #f87171; }
         if (!name) { shakeInvalid(nameEl); return; }
         var idVal = document.getElementById('cgeId').value;
         var sortVal = parseInt(document.getElementById('cgeSort').value, 10);
+        var catVal = parseInt(document.getElementById('cgeCategory').value, 10);
         var payload = {
             id: idVal ? parseInt(idVal) : null,
             name: name,
             sortOrder: isNaN(sortVal) ? 0 : sortVal,
-            isActive: document.getElementById('cgeIsActive').checked
+            isActive: document.getElementById('cgeIsActive').checked,
+            groupCategory: isNaN(catVal) ? 1 : catVal
         };
         fetch('/GeneralDefinitions/SaveCariGroupJson', {
             method: 'POST',

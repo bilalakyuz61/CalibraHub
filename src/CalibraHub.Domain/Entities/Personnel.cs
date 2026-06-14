@@ -39,7 +39,7 @@ public sealed class Personnel
     public bool IsActive { get; init; } = true;
 
     /// <summary>Opsiyonel: Sistem kullanıcısı varsa link. Operatör web/desktop login yapabilir mi.</summary>
-    public Guid? UserId { get; init; }
+    public int? UserId { get; init; }
 
     public string? Phone { get; init; }
     public string? Email { get; init; }

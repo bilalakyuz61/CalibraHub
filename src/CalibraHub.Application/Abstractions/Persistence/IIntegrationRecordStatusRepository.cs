@@ -25,21 +25,21 @@ public interface IIntegrationRecordStatusRepository
     /// </summary>
     Task UpsertRunResultAsync(int integrationId, string recordId,
         IntegrationRecordStatusType status, long? runId, string? error,
-        string? actor, CancellationToken ct);
+        int? actor, CancellationToken ct);
 
     /// <summary>
     /// Bir veya birden cok kaydi "Haric Tut" (Skipped) durumuna gec.
     /// Mevcut satir yoksa once Pending olarak yaratir, sonra Skipped'a alir.
     /// </summary>
     Task SkipManyAsync(int integrationId, IEnumerable<string> recordIds,
-        string? reason, string actor, CancellationToken ct);
+        string? reason, int? actor, CancellationToken ct);
 
     /// <summary>
     /// Skipped durumdaki kayitlari geri al — Status = Pending. Tekrar kuyrukta
     /// gorunur.
     /// </summary>
     Task RestoreManyAsync(int integrationId, IEnumerable<string> recordIds,
-        string actor, CancellationToken ct);
+        int? actor, CancellationToken ct);
 
     /// <summary>
     /// Bir entegrasyonun belirli durumdaki kayitlarini listele. Cagiran

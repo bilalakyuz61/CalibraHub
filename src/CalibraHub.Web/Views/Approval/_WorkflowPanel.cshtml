@@ -1,0 +1,167 @@
+@* Workflow instance durumu paneli. DocumentEdit.cshtml içine embed edilir. *@
+@* Kullanım: <partial name="~/Views/Approval/_WorkflowPanel.cshtml" model="@Model.DocumentId.Value" /> *@
+@* 2026-05-26: Eski /WorkflowRuntime/* endpoint'leri kaldirildi → /ApprovalFlow/* yeni API. *@
+@model int
+
+<div id="wf-panel-@Model" class="wf-instance-panel" data-document-id="@Model">
+    <div class="wf-panel-header">
+        <span class="wf-panel-icon"><i class="lucide" data-lucide="git-merge"></i></span>
+        <span class="wf-panel-title">Onay Akışı</span>
+        <span id="wf-status-badge-@Model" class="badge ms-2"></span>
+        <div class="ms-auto d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-primary"
+                    onclick="wfStartByDocument(@Model)" id="wf-start-btn-@Model">
+                Onaya Gönder
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success d-none"
+                    onclick="wfApproveCurrent(@Model)" id="wf-approve-btn-@Model">
+                Onayla
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger d-none"
+                    onclick="wfRejectCurrent(@Model)" id="wf-reject-btn-@Model">
+                Reddet
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger d-none"
+                    onclick="wfCancelCurrent(@Model)" id="wf-cancel-btn-@Model">
+                İptal
+            </button>
+        </div>
+    </div>
+    <div id="wf-summary-@Model" class="wf-summary mt-2"></div>
+</div>
+
+<style>
+    .wf-instance-panel { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-top: 16px; background: #fff; }
+    .wf-panel-header   { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: .9rem; }
+    .wf-panel-icon     { color: #6366f1; }
+    .wf-summary        { font-size: .85rem; color: #475569; }
+    .wf-summary-row    { display: flex; gap: 8px; padding: 4px 0; }
+    .wf-summary-label  { color: #64748b; min-width: 110px; }
+    .wf-summary-value  { color: #0f172a; font-weight: 500; }
+    body.app-theme-dark .wf-instance-panel { background: var(--app-surface, #0d1323); border-color: var(--app-border, rgba(255,255,255,.08)); }
+    body.app-theme-dark .wf-summary        { color: var(--app-text-muted, #94a3b8); }
+    body.app-theme-dark .wf-summary-label  { color: var(--app-text-muted, #64748b); }
+    body.app-theme-dark .wf-summary-value  { color: var(--app-text, #e2e8f0); }
+</style>
+<script>
+(function () {
+    var docId = @Model;
+    var currentInstanceId = null;
+
+    function token() {
+        return document.querySelector('[name=__RequestVerificationToken]')?.value || '';
+    }
+
+    function loadPanel() {
+        fetch('/ApprovalFlow/GetInstanceByDocument?documentId=' + docId, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { renderPanel(data); })
+            .catch(function () { });
+    }
+
+    function renderPanel(data) {
+        var startBtn   = document.getElementById('wf-start-btn-' + docId);
+        var approveBtn = document.getElementById('wf-approve-btn-' + docId);
+        var rejectBtn  = document.getElementById('wf-reject-btn-' + docId);
+        var cancelBtn  = document.getElementById('wf-cancel-btn-' + docId);
+        var badge      = document.getElementById('wf-status-badge-' + docId);
+        var summary    = document.getElementById('wf-summary-' + docId);
+
+        if (!data || !data.found) {
+            badge.className   = 'badge ms-2 bg-secondary';
+            badge.textContent = 'Başlatılmadı';
+            startBtn.classList.remove('d-none');
+            approveBtn.classList.add('d-none');
+            rejectBtn.classList.add('d-none');
+            cancelBtn.classList.add('d-none');
+            summary.innerHTML = '';
+            currentInstanceId = null;
+            return;
+        }
+
+        currentInstanceId = data.instanceId;
+        badge.textContent = data.status;
+        badge.className   = 'badge ms-2 ' +
+            (data.status === 'Active'    ? 'bg-primary' :
+             data.status === 'Completed' ? 'bg-success' :
+             data.status === 'Cancelled' || data.status === 'Rejected' ? 'bg-danger' : 'bg-secondary');
+
+        startBtn.classList.add('d-none');
+        var isActive = (data.status === 'Active');
+        approveBtn.classList.toggle('d-none', !isActive);
+        rejectBtn.classList.toggle('d-none', !isActive);
+        cancelBtn.classList.toggle('d-none', !isActive);
+
+        // TODO: Per-step timeline (DocumentApprovalStepRecord) — GetInstance su an step listesi
+        // dondurmuyor (sadece ozet). Adim adim gosterim icin GetInstance response'una steps[]
+        // eklenmeli veya ayrica /ApprovalFlow/GetInstanceSteps?instanceId=X eklenmeli.
+        var rows = [
+            ['Akış',         data.flowName || ''],
+            ['Adım',         (data.currentStep || 1) + ' / ' + (data.totalSteps || 1)],
+            ['Başlatan',     data.startedBy || ''],
+            ['Başlama',      data.startedAt || ''],
+        ];
+        if (data.rejectNote) rows.push(['Red Notu', data.rejectNote]);
+        summary.innerHTML = rows.map(function (r) {
+            return '<div class="wf-summary-row">' +
+                '<span class="wf-summary-label">' + r[0] + '</span>' +
+                '<span class="wf-summary-value">' + (r[1] || '—') + '</span>' +
+                '</div>';
+        }).join('');
+    }
+
+    window.wfStartByDocument = function (docId) {
+        // Modal'a gerek yok — backend StartByDocument kind/amount/department'i kendi cikartip
+        // ilk eslesen akisi baslatir. Birden fazla akis durumunda: MatchFlowAsync priority sirasinda
+        // ilk uygunu doner (MVP — kullanici secimi gerekirse modal eklenir).
+        fetch('/ApprovalFlow/StartByDocument?documentId=' + docId, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'RequestVerificationToken': token() },
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+              if (res.ok) { loadPanel(); }
+              else { alert(res.error || 'Onaya gönderilemedi.'); }
+          })
+          .catch(function (e) { alert('Onaya gönderme hatası: ' + e); });
+    };
+
+    // TODO (CLAUDE.md): prompt() yerine ortali custom modal (Views/PriceList/Report.cshtml
+    // showConfirm pattern'i). MVP icin prompt korunuyor — kapsam dar tutulsun.
+    window.wfApproveCurrent = function (docId) {
+        if (!currentInstanceId) return;
+        var note = prompt('Onay notu (opsiyonel):') || null;
+        fetch('/ApprovalFlow/ApproveStep', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+            // ApproverId/ApproverName non-null string contract — backend overrides from claims;
+            // empty string yeterli (controller `request with { ApproverId=userId, ApproverName=userName }`).
+            body: JSON.stringify({ InstanceId: currentInstanceId, ApproverId: '', ApproverName: '', Note: note }),
+        }).then(function (r) { return r.json(); })
+          .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+    };
+
+    window.wfRejectCurrent = function (docId) {
+        if (!currentInstanceId) return;
+        var reason = prompt('Red nedeni:');
+        if (reason === null) return; // kullanici iptal etti
+        fetch('/ApprovalFlow/RejectStep', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+            body: JSON.stringify({ InstanceId: currentInstanceId, ApproverId: '', ApproverName: '', Note: reason || '' }),
+        }).then(function (r) { return r.json(); })
+          .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+    };
+
+    window.wfCancelCurrent = function (docId) {
+        if (!currentInstanceId) return;
+        if (!confirm('Onay akışını iptal etmek istediğinizden emin misiniz?')) return;
+        fetch('/ApprovalFlow/CancelApproval?instanceId=' + currentInstanceId, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'RequestVerificationToken': token() },
+        }).then(function (r) { return r.json(); })
+          .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+    };
+
+    loadPanel();
+})();
+</script>

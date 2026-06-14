@@ -1,5 +1,6 @@
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -59,6 +60,10 @@ public sealed class GeneralDefinitionsController : Controller
 
     private static object BuildSalesRepsBoardConfig(IReadOnlyCollection<SalesRepresentativeDto> reps)
     {
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeStdWidget("w_active", "Durum", "boolean"),
+        };
         return new {
             boardKey   = "sales-reps",
             title      = "Satış Temsilcileri",
@@ -69,6 +74,7 @@ public sealed class GeneralDefinitionsController : Controller
             actions    = new[] {
                 new { id = "new", label = "Yeni Temsilci", icon = "Plus", variant = "primary", url = "/GeneralDefinitions/SalesRepEdit" }
             },
+            masterWidgets,
             entities = reps.Select(r => {
                 var editUrl = $"/GeneralDefinitions/SalesRepEdit?id={r.Id}";
                 return (object)new {
@@ -157,7 +163,8 @@ public sealed class GeneralDefinitionsController : Controller
         if (item is null) return RedirectToAction(nameof(CariGroups));
         return View(new CariGroupEditViewModel
         {
-            Id = item.Id, Name = item.Name, SortOrder = item.SortOrder, IsActive = item.IsActive
+            Id = item.Id, Name = item.Name, SortOrder = item.SortOrder, IsActive = item.IsActive,
+            GroupCategory = item.GroupCategory
         });
     }
 
@@ -166,16 +173,17 @@ public sealed class GeneralDefinitionsController : Controller
     {
         if (string.IsNullOrWhiteSpace(input.Name))
             return Json(new { success = false, message = "Grup adi bos olamaz." });
+        var category = input.GroupCategory <= 0 ? 1 : (input.GroupCategory > 5 ? 5 : input.GroupCategory);
         if (input.Id.HasValue && input.Id.Value > 0)
         {
             var (ok, err) = await _cariGroupService.UpdateAsync(
-                new UpdateCariGroupRequest(input.Id.Value, input.Name, input.SortOrder, input.IsActive), ct);
+                new UpdateCariGroupRequest(input.Id.Value, input.Name, input.SortOrder, input.IsActive, category), ct);
             return Json(new { success = ok, message = err });
         }
         else
         {
             var (ok, err, newId) = await _cariGroupService.CreateAsync(
-                new CreateCariGroupRequest(input.Name, input.SortOrder, input.IsActive), ct);
+                new CreateCariGroupRequest(input.Name, input.SortOrder, input.IsActive, category), ct);
             return Json(new { success = ok, message = err, id = newId });
         }
     }
@@ -197,6 +205,12 @@ public sealed class GeneralDefinitionsController : Controller
 
     private static object BuildCariGroupsBoardConfig(IReadOnlyCollection<CariGroupDto> groups)
     {
+        var categoryOptions = SmartBoardFilterHelpers.ToOptionsList(new[] { "1", "2", "3", "4", "5" });
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeOptionsWidget("w_category", "Kategori", categoryOptions),
+            SmartBoardFilterHelpers.MakeStdWidget("w_sort", "Sira", "numeric"),
+        };
         return new {
             boardKey   = "cari-groups",
             title      = "Cari Gruplari",
@@ -207,6 +221,7 @@ public sealed class GeneralDefinitionsController : Controller
             actions    = new[] {
                 new { id = "new", label = "Yeni Grup", icon = "Plus", variant = "primary", url = "/GeneralDefinitions/CariGroupEdit" }
             },
+            masterWidgets,
             entities = groups.Select(g => {
                 var editUrl = $"/GeneralDefinitions/CariGroupEdit?id={g.Id}";
                 return (object)new {
@@ -217,6 +232,15 @@ public sealed class GeneralDefinitionsController : Controller
                     statusBadge   = new { label = g.IsActive ? "Aktif" : "Pasif", color = g.IsActive ? "emerald" : "slate" },
                     primaryAction = new { type = "navigate", hideButton = true, url = editUrl },
                     widgets       = new object[] {
+                        new {
+                            id       = "w_category",
+                            type     = "data",
+                            dataType = "text",
+                            label    = "Kategori",
+                            value    = g.GroupCategory.ToString(),
+                            detail   = (string?)null,
+                            color    = "violet",
+                        },
                         new {
                             id       = "w_sort",
                             type     = "data",

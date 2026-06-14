@@ -159,14 +159,24 @@ export async function guideSearch(guideCode, opts) {
  * (Turkish_CI_AI) uygulanir → alfabetik kuyrukta gizli kalmis 200+ degerlere
  * de ulasilabilir. Returns: string[]
  */
-export async function guideDistinct(guideCode, column, search) {
+export async function guideDistinct(guideCode, column, search, constraints) {
   if (!guideCode) throw new Error('guideCode zorunlu')
   if (!column) throw new Error('column zorunlu')
   var url = GUIDE_BASE + '/' + encodeURIComponent(guideCode) +
             '/distinct/' + encodeURIComponent(column)
+  var params = new URLSearchParams()
   if (search && String(search).trim().length > 0) {
-    url += '?q=' + encodeURIComponent(String(search).trim())
+    params.set('q', String(search).trim())
   }
+  // Distinct popover'i listede gosterilen satirlarla tutarli olsun diye
+  // SearchAsync'e gonderilen ayni constraint'leri burada da gondeririz.
+  // (Backend GuideMas.DefaultFilterJson'i kendisi prepend eder; bu sadece
+  // FldSet field-filtresi + runtime token constraint'leri.)
+  if (constraints && String(constraints).length > 0) {
+    params.set('constraints', String(constraints))
+  }
+  var qs = params.toString()
+  if (qs) url += '?' + qs
   var resp = await fetch(url, {
     method: 'GET', credentials: 'same-origin',
     headers: { 'Accept': 'application/json' },

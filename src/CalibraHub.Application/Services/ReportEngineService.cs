@@ -178,7 +178,7 @@ public sealed partial class ReportEngineService : IReportEngineService
         var cols = await _views.GetColumnsAsync(req.ViewId, ct);
         ValidateConfig(cfg, cols);
 
-        Guid ownerId = caller.UserId;
+        int ownerId = caller.UserId;
         if (req.Id > 0)
         {
             var existing = await _defs.GetByIdAsync(req.Id, ct)

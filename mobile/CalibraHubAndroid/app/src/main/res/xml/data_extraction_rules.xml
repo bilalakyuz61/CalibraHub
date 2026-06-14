@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ veri çıkarma kuralları (cihaz transferi + Cloud backup) -->
+<data-extraction-rules>
+    <cloud-backup>
+        <!-- DataStore (cookies + session) backup'a dahil değil — güvenlik -->
+    </cloud-backup>
+    <device-transfer>
+        <!-- Hiçbir şey -->
+    </device-transfer>
+</data-extraction-rules>

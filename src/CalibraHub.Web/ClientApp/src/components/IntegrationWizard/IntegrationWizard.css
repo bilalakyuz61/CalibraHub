@@ -143,8 +143,11 @@ body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
 
 .il-card {
   display: grid;
-  /* Aksiyonlar sol basta (auto) → Ad/Acklama (1.5fr) → Akis (1fr) → Chip'ler (auto) */
-  grid-template-columns: auto minmax(220px, 1.5fr) minmax(180px, 1fr) auto;
+  /* 2026-05-22: Chip kolonu auto idi, chip sayisina gore genisleyip flow column'u
+     kaydirip metinler hizalanmiyordu (kart bazinda ⚡ trigger varsa fazladan chip).
+     Chips fixed 170px → flow column'un sag kenari her kartta ayni → metinler hizali. */
+  /* Aksiyonlar (auto) → Ad/Aciklama (1.5fr) → Akis/Endpoint (1fr) → Chip'ler (170px sabit) */
+  grid-template-columns: auto minmax(220px, 1.5fr) minmax(180px, 1fr) 170px;
   gap: 16px; align-items: center;
   padding: 12px 16px; border-radius: 10px;
   border: 1px solid var(--iw-border); background: var(--iw-surface);
@@ -161,7 +164,9 @@ body.app-theme-dark .iw-root, body.app-theme-dark .il-root {
 .il-card-flow span:first-child { color: var(--iw-muted); }
 .il-card-flow span:last-child { color: var(--iw-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.il-chips { display: flex; gap: 6px; flex-wrap: nowrap; }
+/* Chips sabit 170px kolonda sağa yaslı — her kartta aynı yere düşer, flow column
+   sol bitis kenari da hizalanmis olur. */
+.il-chips { display: flex; gap: 6px; flex-wrap: nowrap; justify-content: flex-end; }
 .il-chip {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 5px;
@@ -444,6 +449,55 @@ body.app-theme-dark .ih-root {
 .ih-content {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* ── IntegrationQueue — tema değişkenleri + color-scheme ── */
+/*
+ * Tüm renk ve semantik CSS değişkenleri burada tanımlıdır.
+ * IntegrationQueue.jsx içindeki tüm inline style'lar var(--iq-*) kullanır.
+ * color-scheme: light/dark → native form elemanları (checkbox, input) temaya uyar.
+ */
+.iq-root {
+  color-scheme: light;
+  --iq-bg:          #f1f5f9;
+  --iq-sidebar:     #f8fafc;
+  --iq-border:      #e2e8f0;
+  --iq-border2:     #cbd5e1;
+  --iq-text:        #0f172a;
+  --iq-muted:       #64748b;
+  --iq-muted2:      #94a3b8;
+  --iq-thead:       #f1f5f9;
+  --iq-row-sel:     #eff6ff;
+  --iq-input-bg:    #ffffff;
+  --iq-filter-bg:   #e2e8f0;
+  --iq-bulk-bg:     #1e40af;
+  --iq-progress-bg: #e2e8f0;
+  --iq-card-bg:     #ffffff;
+  --iq-card-bdr:    #e2e8f0;
+  --iq-err-bg:      #fef2f2;
+  --iq-err-bdr:     #fca5a5;
+  background: var(--iq-bg);
+  color: var(--iq-text);
+}
+body.app-theme-dark .iq-root {
+  color-scheme: dark;
+  --iq-bg:          #0b1220;
+  --iq-sidebar:     #0a1018;
+  --iq-border:      #1f2937;
+  --iq-border2:     #334155;
+  --iq-text:        #e2e8f0;
+  --iq-muted:       #64748b;
+  --iq-muted2:      #94a3b8;
+  --iq-thead:       #11192a;
+  --iq-row-sel:     #111c2e;
+  --iq-input-bg:    #1e293b;
+  --iq-filter-bg:   #1e293b;
+  --iq-bulk-bg:     #1e3a8a;
+  --iq-progress-bg: #1e293b;
+  --iq-card-bg:     #0a1018;
+  --iq-card-bdr:    #1f2937;
+  --iq-err-bg:      #0a1018;
+  --iq-err-bdr:     #7f1d1d;
 }
 
 /* ── EndpointEditModal — sol tab + sağ içerik (CLAUDE.md tabbed-modal pattern) ── */

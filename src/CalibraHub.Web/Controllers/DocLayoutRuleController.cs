@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -39,26 +40,48 @@ public sealed class DocLayoutRuleController : Controller
 
     // ── Sözlükler ────────────────────────────────────────────────────────────
 
+    // 2026-05-23: Tum satis + satin alma + depo belgeleri eklendi.
+    // Yeni belge tipi eklenince DocTypeLabels ve DocTypeColors'a ayni anahtarla satir ekleyin.
     private static readonly Dictionary<string, string> DocTypeLabels = new()
     {
-        ["sales_quote"]    = "Satış Teklifi",
-        ["sales_order"]    = "Satış Siparişi",
-        ["purchase_order"] = "Satın Alma Siparişi",
-        ["delivery_note"]  = "İrsaliye",
-        ["invoice"]        = "Fatura",
-        ["expense_note"]   = "Gider Pusulası",
-        ["custom"]         = "Özel Belge",
+        // ── Satis ──
+        ["sales_quote"]      = "Satış Teklifi",
+        ["sales_order"]      = "Satış Siparişi",
+        // ── Satin Alma ──
+        ["purchase_request"] = "İhtiyaç Kaydı",
+        ["purchase_quote"]   = "Satın Alma Teklif",
+        ["purchase_order"]   = "Satın Alma Sipariş",
+        // ── Depo ──
+        ["transfer"]         = "Depo Transferi",
+        ["stock_in"]         = "Ambar Giriş",
+        ["stock_out"]        = "Ambar Çıkış",
+        ["inventory_count"]  = "Sayım",
+        // ── Fatura / Belge ──
+        ["delivery_note"]    = "İrsaliye",
+        ["invoice"]          = "Fatura",
+        ["expense_note"]     = "Gider Pusulası",
+        ["custom"]           = "Özel Belge",
     };
 
     private static readonly Dictionary<string, string> DocTypeColors = new()
     {
-        ["sales_quote"]    = "indigo",
-        ["sales_order"]    = "blue",
-        ["purchase_order"] = "violet",
-        ["delivery_note"]  = "emerald",
-        ["invoice"]        = "amber",
-        ["expense_note"]   = "rose",
-        ["custom"]         = "slate",
+        // ── Satis (indigo/blue ailesi) ──
+        ["sales_quote"]      = "indigo",
+        ["sales_order"]      = "blue",
+        // ── Satin Alma (amber/violet ailesi) ──
+        ["purchase_request"] = "amber",
+        ["purchase_quote"]   = "blue",
+        ["purchase_order"]   = "violet",
+        // ── Depo (emerald ailesi) ──
+        ["transfer"]         = "emerald",
+        ["stock_in"]         = "emerald",
+        ["stock_out"]        = "rose",
+        ["inventory_count"]  = "amber",
+        // ── Fatura / Belge ──
+        ["delivery_note"]    = "emerald",
+        ["invoice"]          = "amber",
+        ["expense_note"]     = "rose",
+        ["custom"]           = "slate",
     };
 
     // ── Sayfalar ─────────────────────────────────────────────────────────────
@@ -186,11 +209,11 @@ public sealed class DocLayoutRuleController : Controller
         if (customerIds.Count == 0 && input.CustomerId.HasValue)
             customerIds.Add(input.CustomerId.Value);
 
-        var userIds = ParseGuidList(input.UserIds, out var userParseError);
+        var userIds = ParseUserIntList(input.UserIds, out var userParseError);
         if (userParseError != null) return Json(new { ok = false, error = userParseError });
         if (userIds.Count == 0 && !string.IsNullOrWhiteSpace(input.UserId))
         {
-            if (!Guid.TryParse(input.UserId, out var parsed))
+            if (!int.TryParse(input.UserId, out var parsed))
                 return Json(new { ok = false, error = "Geçersiz kullanıcı ID formatı." });
             userIds.Add(parsed);
         }
@@ -198,7 +221,7 @@ public sealed class DocLayoutRuleController : Controller
         // Hiç seçim yoksa wildcard mode: tek kural, null değerlerle.
         // Aksi halde cartesian product: customers × users → N rule.
         var custList = customerIds.Count > 0 ? customerIds.Select(c => (int?)c).ToList() : new List<int?> { null };
-        var userList = userIds.Count     > 0 ? userIds.Select(g => (Guid?)g).ToList()    : new List<Guid?> { null };
+        var userList = userIds.Count     > 0 ? userIds.Select(g => (int?)g).ToList()    : new List<int?> { null };
 
         try
         {
@@ -255,20 +278,20 @@ public sealed class DocLayoutRuleController : Controller
         return result.Distinct().ToList();
     }
 
-    // CSV "guid1,guid2" → List<Guid>; geçersiz formatta error mesajı döner.
-    private static List<Guid> ParseGuidList(string? csv, out string? error)
+    // CSV "1,2,3" → List<int>; geçersiz formatta error mesajı döner.
+    private static List<int> ParseUserIntList(string? csv, out string? error)
     {
         error = null;
-        var result = new List<Guid>();
+        var result = new List<int>();
         if (string.IsNullOrWhiteSpace(csv)) return result;
         foreach (var part in csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (!Guid.TryParse(part, out var g))
+            if (!int.TryParse(part, out var n))
             {
                 error = $"Geçersiz kullanıcı ID formatı: {part}";
-                return new List<Guid>();
+                return new List<int>();
             }
-            result.Add(g);
+            result.Add(n);
         }
         return result.Distinct().ToList();
     }
@@ -310,6 +333,13 @@ public sealed class DocLayoutRuleController : Controller
         var layoutById = layouts.ToDictionary(l => l.Id);
         _logger.LogInformation("[DLR.BuildBoardConfig] rules.Count={RulesCount} layouts.Count={LayoutsCount}",
             rules.Count, layouts.Count);
+        var docTypeOptions = SmartBoardFilterHelpers.ToOptionsList(DocTypeLabels.Values.Distinct());
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeOptionsWidget("w_doctype",  "Belge Tipi", docTypeOptions),
+            SmartBoardFilterHelpers.MakeStdWidget   ("w_layout",   "Tasarım",    "text"),
+            SmartBoardFilterHelpers.MakeStdWidget   ("w_priority", "Öncelik",    "numeric"),
+        };
 
         var entities = rules.Select(r =>
         {
@@ -340,7 +370,7 @@ public sealed class DocLayoutRuleController : Controller
                     {
                         id       = "w_doctype",
                         type     = "data",
-                        dataType = "text",
+                        dataType = "options",
                         label    = "Belge Tipi",
                         value    = docLabel,
                         detail   = (string?)null,
@@ -400,7 +430,7 @@ public sealed class DocLayoutRuleController : Controller
             {
                 new { id = "new", label = "Yeni Kural", icon = "Plus", variant = "primary", url = "/DocLayoutRule/New" },
             },
-            masterWidgets = Array.Empty<object>(),
+            masterWidgets,
             entities,
         };
     }

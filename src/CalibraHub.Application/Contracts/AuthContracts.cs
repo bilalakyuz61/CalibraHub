@@ -1,9 +1,10 @@
 namespace CalibraHub.Application.Contracts;
 
 public sealed record AuthenticatedUserDto(
-    Guid Id,
+    int Id,
     string FullName,
     string Email,
     string Role,
     int CompanyId,
-    string CompanyName);
+    string CompanyName,
+    int? DepartmentId = null);

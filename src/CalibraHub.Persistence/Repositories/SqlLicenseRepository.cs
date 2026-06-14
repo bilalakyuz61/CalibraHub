@@ -20,7 +20,7 @@ public sealed class SqlLicenseRepository : ILicenseRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[license_config]";
+        _table = $"[{schema}].[LicenseConfig]";
     }
 
     public async Task<LicenseRecord?> GetAsync(CancellationToken cancellationToken)
@@ -28,10 +28,10 @@ public sealed class SqlLicenseRepository : ILicenseRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [id],[license_key],[secret_encrypted],[is_valid],[expiry_date],[concurrent_limit],[total_user_limit],
-                   [last_error],[last_validated_at],[Created],[Updated]
+            SELECT [Id],[LicenseKey],[SecretEncrypted],[IsValid],[ExpiryDate],[ConcurrentLimit],[TotalUserLimit],
+                   [LastError],[LastValidatedAt],[Created],[Updated]
               FROM {_table}
-             WHERE [id] = 1;
+             WHERE [Id] = 1;
             """;
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         if (!await r.ReadAsync(cancellationToken)) return null;
@@ -46,8 +46,8 @@ public sealed class SqlLicenseRepository : ILicenseRepository
             TotalUserLimit  = r.IsDBNull(6) ? null : r.GetInt32(6),
             LastError       = r.IsDBNull(7) ? null : r.GetString(7),
             LastValidatedAt = r.IsDBNull(8) ? null : r.GetDateTime(8),
-            CreatedAt       = r.GetDateTime(9),
-            UpdatedAt       = r.GetDateTime(10),
+            Created         = r.GetDateTime(9),
+            Updated         = r.GetDateTime(10),
         };
     }
 
@@ -56,25 +56,25 @@ public sealed class SqlLicenseRepository : ILicenseRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_table} WHERE [id] = 1)
+            IF EXISTS (SELECT 1 FROM {_table} WHERE [Id] = 1)
             BEGIN
                 UPDATE {_table}
-                   SET [license_key]       = @Key,
-                       [secret_encrypted]  = @Secret,
-                       [is_valid]          = @IsValid,
-                       [expiry_date]       = @Expiry,
-                       [concurrent_limit]  = @Concurrent,
-                       [total_user_limit]  = @Total,
-                       [last_error]        = @Error,
-                       [last_validated_at] = @ValidatedAt,
-                       [Updated]        = GETUTCDATE()
-                 WHERE [id] = 1;
+                   SET [LicenseKey]       = @Key,
+                       [SecretEncrypted]  = @Secret,
+                       [IsValid]          = @IsValid,
+                       [ExpiryDate]       = @Expiry,
+                       [ConcurrentLimit]  = @Concurrent,
+                       [TotalUserLimit]   = @Total,
+                       [LastError]        = @Error,
+                       [LastValidatedAt]  = @ValidatedAt,
+                       [Updated]          = GETUTCDATE()
+                 WHERE [Id] = 1;
             END
             ELSE
             BEGIN
                 INSERT INTO {_table}
-                    ([id],[license_key],[secret_encrypted],[is_valid],[expiry_date],[concurrent_limit],[total_user_limit],
-                     [last_error],[last_validated_at],[Created],[Updated])
+                    ([Id],[LicenseKey],[SecretEncrypted],[IsValid],[ExpiryDate],[ConcurrentLimit],[TotalUserLimit],
+                     [LastError],[LastValidatedAt],[Created],[Updated])
                 VALUES
                     (1,@Key,@Secret,@IsValid,@Expiry,@Concurrent,@Total,@Error,@ValidatedAt,GETUTCDATE(),GETUTCDATE());
             END;

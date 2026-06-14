@@ -19,4 +19,6 @@ public sealed class LoginInputModel
     public IReadOnlyCollection<SelectListItem> CompanyOptions { get; set; } = Array.Empty<SelectListItem>();
     public bool RememberMe { get; set; }
     public string? ReturnUrl { get; set; }
+    /// <summary>Login sayfasındaki tema toggle'ından gelen tercih (dark|light). Boşsa değiştirilmez.</summary>
+    public string? ThemeCode { get; set; }
 }

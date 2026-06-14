@@ -152,6 +152,26 @@ export default function WizardStep5Trigger({ state, update, apiBase }) {
               Entegrasyon aktif
             </span>
           </div>
+
+          {/* 2026-05-22 Cascade target toggle — bu integration başka entegrasyonlar
+              tarafından cascade hedefi olarak seçilebilir mi? Default açık (true).
+              Kapatınca Wizard Step 2 "Bağımlılık" dropdown'larında bu integration listelenmez. */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 12 }}>
+            <button className={'iw-switch' + (state.allowAsCascadeTarget !== false ? ' is-on' : '')}
+                    onClick={() => update({ allowAsCascadeTarget: state.allowAsCascadeTarget === false })}>
+              <span className="iw-switch__thumb" />
+            </button>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: 'var(--iw-text)' }}>
+                Cascade hedefi olarak seçilebilir
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--iw-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                Aktifse: başka bir entegrasyon mapping'inde "Bağımlılık" olarak seçilebilir
+                (örn. Sipariş entegrasyonu ItemId için bu Stok entegrasyonunu cascade eder).
+                Manuel/Cron/OnSave tetikleyicileriniz bu seçimden etkilenmez.
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Sağ: Trigger cards */}
@@ -494,19 +514,33 @@ function SaveSummary({ state, formFields }) {
     0: 'Manuel Buton', 1: 'Cron', 2: 'Save Sonrası', 3: 'Özel Event',
   }
   const activeTriggers = (state.triggers || []).filter(t => t.isActive)
+  // "Sadece Prosedür" modu — kullanici hedef endpoint secmeden sadece pre/post
+  // prosedurleri kullaniyor olabilir. O zaman targetEndpointId ve mapping zorunlu degil.
+  const isProcedureOnly = !state.targetEndpointId
+                       && (!!state.preProcedureName?.trim() || !!state.postProcedureName?.trim())
+
+  // Hazirlik kontrolu — wizard'in actual save logic'iyle ayni:
+  //   - name zorunlu (her durumda)
+  //   - sourceFormCode zorunlu (her durumda)
+  //   - procedure-only ise: pre veya post prosedur tanimli olmali (zaten check edildi)
+  //   - normal modda: endpoint + en az 1 mapping
+  //   - tetikleyici: en az 1 aktif (her iki modda da)
   const ready =
     !!state.name?.trim() &&
-    activeTriggers.length > 0 &&
     !!state.sourceFormCode &&
-    !!state.targetEndpointId &&
-    (state.mappings?.length || 0) > 0
+    activeTriggers.length > 0 &&
+    (isProcedureOnly
+       ? true                                                  // pre/post zaten dolu (yukarida check edildi)
+       : (!!state.targetEndpointId && (state.mappings?.length || 0) > 0))
 
   const issues = []
   if (!state.name?.trim()) issues.push('Ad zorunlu')
-  if (activeTriggers.length === 0) issues.push('En az bir tetikleyici seç')
   if (!state.sourceFormCode) issues.push('Kaynak form yok (Step 1)')
-  if (!state.targetEndpointId) issues.push('Hedef endpoint yok (Step 2)')
-  if ((state.mappings?.length || 0) === 0) issues.push('Eşleme yok (Step 3)')
+  if (activeTriggers.length === 0) issues.push('En az bir tetikleyici seç')
+  if (!isProcedureOnly) {
+    if (!state.targetEndpointId) issues.push('Hedef endpoint yok (Step 2)')
+    if ((state.mappings?.length || 0) === 0) issues.push('Eşleme yok (Step 3)')
+  }
 
   const accent = ready ? 'var(--iw-emerald-color)' : 'var(--iw-amber-color)'
   const accentBg = ready ? 'var(--iw-emerald-bg)' : 'var(--iw-amber-bg)'

@@ -20,6 +20,7 @@ public sealed class DefinitionsController : Controller
     // ── CardGroups list (C-Grid / SmartBoard) ────────────────────────────────
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> CardGroups(CancellationToken ct)
     {
         var treeConfig = await BuildCardGroupsTreeConfigAsync(ct);
@@ -68,6 +69,7 @@ public sealed class DefinitionsController : Controller
     // ── CardGroupEdit ────────────────────────────────────────────────────────
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> CardGroupEdit(int? id, CancellationToken ct)
     {
         if (id.HasValue)
@@ -100,6 +102,7 @@ public sealed class DefinitionsController : Controller
     // SmartBoard-uyumlu silme endpoint'i — ID route'tan gelir
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> DeleteCardGroupById(int id, CancellationToken ct)
     {
         if (await _repo.HasChildrenAsync(id, ct))
@@ -112,6 +115,7 @@ public sealed class DefinitionsController : Controller
     // ── Full tree refresh for in-place React update ───────────────────────────
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> GetCardGroupsJson(CancellationToken ct)
     {
         var treeConfig = await BuildCardGroupsTreeConfigAsync(ct);
@@ -170,6 +174,7 @@ public sealed class DefinitionsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> SaveCardGroup([FromBody] SaveCardGroupRequest req, CancellationToken ct)
     {
         if (req.CardType is not (1 or 2)) return BadRequest(new { error = "Geçersiz kart tipi." });
@@ -223,6 +228,7 @@ public sealed class DefinitionsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [CalibraHub.Web.Authorization.PermissionScope(CalibraHub.Application.Constants.FormCodes.CardGroups)]
     public async Task<IActionResult> DeleteCardGroup([FromBody] DeleteCardGroupRequest req, CancellationToken ct)
     {
         if (await _repo.HasChildrenAsync(req.Id, ct))

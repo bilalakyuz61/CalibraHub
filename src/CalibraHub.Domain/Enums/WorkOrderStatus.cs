@@ -11,7 +11,7 @@ public enum WorkOrderStatus : byte
     [Description("Taslak — duzenleme serbest")]
     Planned = 0,
 
-    [Description("Salindi — uretime hazir")]
+    [Description("Yayimlandi — uretime hazir")]
     Released = 1,
 
     [Description("Devam ediyor — ilk hareket islendi")]

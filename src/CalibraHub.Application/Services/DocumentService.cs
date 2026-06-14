@@ -79,9 +79,11 @@ public sealed class DocumentService : IDocumentService
         var quotes = await _repo.GetAllAsync(search, status, ct);
         return quotes.Select(q => new DocumentListItemDto(
             q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
-            q.ContactName, q.Currency, q.GrandTotal,
+            q.ContactName, q.CurrencyId, q.GrandTotal,
             q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount,
-            q.ContactId
+            q.ContactId,
+            null,
+            q.CurrencyCode, q.CurrencySymbol
         )).ToArray();
     }
 
@@ -92,10 +94,11 @@ public sealed class DocumentService : IDocumentService
         return all.Where(q => q.ContactId == contactId)
             .Select(q => new DocumentListItemDto(
                 q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
-                q.ContactName, q.Currency, q.GrandTotal,
+                q.ContactName, q.CurrencyId, q.GrandTotal,
                 q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount,
                 q.ContactId,
-                q.DocumentTypeId
+                q.DocumentTypeId,
+                q.CurrencyCode, q.CurrencySymbol
             )).ToArray();
     }
 
@@ -111,10 +114,11 @@ public sealed class DocumentService : IDocumentService
         return q.OrderByDescending(d => d.DocumentDate).ThenByDescending(d => d.Id)
             .Select(d => new DocumentListItemDto(
                 d.Id, d.DocumentNumber, d.DocumentDate, d.ValidUntil,
-                d.ContactName, d.Currency, d.GrandTotal,
+                d.ContactName, d.CurrencyId, d.GrandTotal,
                 d.Status.ToString(), d.RevisionNo, d.IsActive, d.LineCount,
                 d.ContactId,
-                d.DocumentTypeId
+                d.DocumentTypeId,
+                d.CurrencyCode, d.CurrencySymbol
             )).ToArray();
     }
 
@@ -123,10 +127,15 @@ public sealed class DocumentService : IDocumentService
         var docs = await _repo.GetByTypeAsync(typeCode, search, status, ct);
         return docs.Select(q => new DocumentListItemDto(
             q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
-            q.ContactName, q.Currency, q.GrandTotal,
+            q.ContactName, q.CurrencyId, q.GrandTotal,
             q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount,
             q.ContactId,
-            q.DocumentTypeId
+            q.DocumentTypeId,
+            q.CurrencyCode, q.CurrencySymbol,
+            q.RequesterPersonnelId, q.RequesterPersonnelName,
+            FulfillPending: q.FulfillPending,
+            FulfillPartial: q.FulfillPartial,
+            FulfillFull:    q.FulfillFull
         )).ToArray();
     }
 
@@ -139,10 +148,11 @@ public sealed class DocumentService : IDocumentService
         var docs = await _repo.GetConvertibleQuotesAsync(fromDate, toDate, contactId, search, ct);
         return docs.Select(q => new DocumentListItemDto(
             q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
-            q.ContactName, q.Currency, q.GrandTotal,
+            q.ContactName, q.CurrencyId, q.GrandTotal,
             q.Status.ToString(), q.RevisionNo, q.IsActive, q.LineCount,
             q.ContactId,
-            q.DocumentTypeId
+            q.DocumentTypeId,
+            q.CurrencyCode, q.CurrencySymbol
         )).ToArray();
     }
 
@@ -169,7 +179,7 @@ public sealed class DocumentService : IDocumentService
     }
 
     public async Task<(bool Success, string? Error, DocumentDto? Quote)> SaveQuoteAsync(
-        SaveDocumentRequest request, string? createdBy, CancellationToken ct)
+        SaveDocumentRequest request, int? createdById, CancellationToken ct)
     {
         // ── Cari cozumleme ─────────────────────────────────────
         // contact_id otorite kaynaktir; client ContactName gondermiyor (label),
@@ -198,8 +208,21 @@ public sealed class DocumentService : IDocumentService
                 resolvedContactName = live.AccountTitle;
         }
 
-        if (!resolvedContactId.HasValue && string.IsNullOrWhiteSpace(resolvedContactName))
+        // 2026-05-23: İhtiyaç Kaydı (alis_talebi) bir IC belge — tedarikci/musteri
+        // bu asamada belli degil. Cari Kod zorunlulugu sadece diger belge tiplerinde geçerli.
+        var isPurchaseRequest = false;
+        if (request.DocumentTypeId.HasValue)
+        {
+            var dt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
+            isPurchaseRequest = string.Equals(dt?.Code, "alis_talebi", StringComparison.OrdinalIgnoreCase);
+        }
+        if (!isPurchaseRequest && !resolvedContactId.HasValue && string.IsNullOrWhiteSpace(resolvedContactName))
             return (false, "Cari (musteri) zorunludur. Kalem eklemeden once cari seciniz.", null);
+        // 2026-06-01: İhtiyaç Kaydı (alis_talebi) için Talep Eden personel zorunlu —
+        // onay akışı + raporlama bu personel üzerinden ilerler. Frontend de aynı
+        // kontrolü uyguluyor ama API'ye direkt POST atılırsa burada yakalanır.
+        if (isPurchaseRequest && (!request.RequesterPersonnelId.HasValue || request.RequesterPersonnelId.Value <= 0))
+            return (false, "İhtiyaç Kaydı için 'Talep Eden' personel seçilmelidir.", null);
         if (request.Lines.Count == 0)
             return (false, "En az bir satir eklenmeli.", null);
 
@@ -278,7 +301,8 @@ public sealed class DocumentService : IDocumentService
                 ContactName = request.ContactName,
                 ContactAddress = request.ContactAddress,
                 SalesRepId = request.SalesRepId,
-                Currency = request.Currency ?? "TRY",
+                RequesterPersonnelId = request.RequesterPersonnelId,
+                CurrencyId = request.CurrencyId > 0 ? request.CurrencyId : 1,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = request.DiscountRate,
                 DiscountAmount = discountAmount,
@@ -289,7 +313,7 @@ public sealed class DocumentService : IDocumentService
                 DeliveryTerms = request.DeliveryTerms,
                 DeliveryAddress = request.DeliveryAddress,
                 Notes = request.Notes,
-                CreatedBy = createdBy,
+                CreatedById = createdById,
                 Status = DocumentStatus.Draft
             };
         }
@@ -311,7 +335,8 @@ public sealed class DocumentService : IDocumentService
             existing.ContactName = request.ContactName;
             existing.ContactAddress = request.ContactAddress;
             existing.SalesRepId = request.SalesRepId;
-            existing.Currency = request.Currency ?? "TRY";
+            existing.RequesterPersonnelId = request.RequesterPersonnelId;
+            existing.CurrencyId = request.CurrencyId > 0 ? request.CurrencyId : 1;
             existing.SubTotal = Math.Round(subTotal, 4);
             existing.DiscountRate = request.DiscountRate;
             existing.DiscountAmount = discountAmount;
@@ -345,7 +370,8 @@ public sealed class DocumentService : IDocumentService
                 ContactAddress = quote.ContactAddress,
                 ContactCode = quote.ContactCode,
                 SalesRepId = quote.SalesRepId,
-                Currency = quote.Currency,
+                RequesterPersonnelId = quote.RequesterPersonnelId,
+                CurrencyId = quote.CurrencyId,
                 SubTotal = quote.SubTotal,
                 DiscountRate = quote.DiscountRate,
                 DiscountAmount = quote.DiscountAmount,
@@ -359,7 +385,7 @@ public sealed class DocumentService : IDocumentService
                 RevisionNo = quote.RevisionNo,
                 ParentDocumentId = quote.ParentDocumentId,
                 Notes = quote.Notes,
-                CreatedBy = quote.CreatedBy,
+                CreatedById = quote.CreatedById,
                 CreatedAt = quote.CreatedAt,
                 UpdatedAt = quote.UpdatedAt,
                 IsActive = quote.IsActive,
@@ -389,6 +415,14 @@ public sealed class DocumentService : IDocumentService
         }).ToArray();
 
         await _repo.SaveLinesAsync(quote.Id, finalLines, ct);
+
+        // İhtiyaç Kaydı → türetilen belge köprüsü. Sadece yeni belgede (isNew) ve
+        // FromRequestId verilmişse çalışır; mevcut belge güncellemelerinde atlenir.
+        if (isNew && request.FromRequestId.HasValue && request.FromRequestId.Value > 0)
+        {
+            await _docSourceRepo.EnsureSchemaAsync(ct);
+            await _docSourceRepo.AddAsync(quote.Id, request.FromRequestId.Value, ct);
+        }
 
         // Satir detaylarini (ozellik-deger-aciklama) kaydet — herhangi bir satirda
         // detay varsa line ID'leri icin ek sorgu at. Cogu teklif detaysiz (no-op save)
@@ -448,15 +482,17 @@ public sealed class DocumentService : IDocumentService
         q.Id, q.DocumentNumber, q.DocumentDate, q.ValidUntil,
         q.ContactId, q.ContactName, q.ContactAddress,
         q.SalesRepId,
-        q.Currency, q.SubTotal, q.DiscountRate, q.DiscountAmount,
+        q.CurrencyId, q.SubTotal, q.DiscountRate, q.DiscountAmount,
         q.TaxRate, q.TaxAmount, q.GrandTotal,
         q.PaymentTerms, q.DeliveryTerms, q.DeliveryAddress,
         q.Status.ToString(), q.RevisionNo, q.ParentDocumentId, q.Notes,
-        q.CreatedBy, q.CreatedAt, q.UpdatedAt, q.IsActive,
+        q.CreatedById, q.CreatedAt, q.UpdatedAt, q.IsActive,
         q.ContactCode,
         q.DocumentTypeId,
         q.DeliveryDate,        // Faz M
-        q.DeliveryDays);       // Faz M
+        q.DeliveryDays,        // Faz M
+        q.CurrencyCode, q.CurrencySymbol,
+        q.RequesterPersonnelId, q.RequesterPersonnelName);
 
     /// <summary>
     /// Satir revizyonu — repository katmanina delege eder. Widget degerlerinin
@@ -476,7 +512,7 @@ public sealed class DocumentService : IDocumentService
     /// Service-level transaction yok; document_source UNIQUE INDEX cift insert riskini engeller.
     /// </summary>
     public async Task<CreateOrdersFromQuotesResult> CreateOrdersFromQuotesAsync(
-        CreateOrdersFromQuotesRequest req, string? createdBy, CancellationToken ct)
+        CreateOrdersFromQuotesRequest req, int? createdById, CancellationToken ct)
     {
         if (req.QuoteIds == null || req.QuoteIds.Count == 0)
             return new CreateOrdersFromQuotesResult(false, "En az bir teklif secilmelidir.", 0, Array.Empty<int>());
@@ -555,7 +591,7 @@ public sealed class DocumentService : IDocumentService
                 ContactName = first.ContactName,
                 ContactAddress = first.ContactAddress,
                 SalesRepId = first.SalesRepId,
-                Currency = first.Currency,
+                CurrencyId = first.CurrencyId,
                 SubTotal = Math.Round(subTotal, 4),
                 DiscountRate = discountRate,
                 DiscountAmount = discountAmount,
@@ -568,7 +604,7 @@ public sealed class DocumentService : IDocumentService
                 Notes = grp.Count() > 1
                     ? $"Kaynak teklifler: {string.Join(", ", grp.Select(t => t.Quote.DocumentNumber))}"
                     : $"Kaynak teklif: {first.DocumentNumber}",
-                CreatedBy = createdBy,
+                CreatedById = createdById,
                 Status = DocumentStatus.Draft,
             };
 
@@ -659,7 +695,10 @@ public sealed class DocumentService : IDocumentService
         ln.CombinationId, ln.CombinationCode,
         ln.LocationId, ln.LocationCode, ln.LocationName,
         ln.Notes, details,
-        NotesPinned: ln.NotesPinned,
-        RevisedFromId: ln.RevisedFromId,
-        SourceLineId: ln.SourceLineId);
+        NotesPinned:         ln.NotesPinned,
+        RevisedFromId:       ln.RevisedFromId,
+        SourceLineId:        ln.SourceLineId,
+        FulfilledFromStock:  ln.FulfilledFromStock,
+        FulfilledByPurchase: ln.FulfilledByPurchase,
+        FulfillmentStatus:   ln.FulfillmentStatus);
 }

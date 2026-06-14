@@ -40,8 +40,8 @@ public sealed class IntegrationRecordStatus
 
     public bool IsActive { get; set; } = true;
 
-    public string? CreatedBy { get; set; }
+    public int? CreatedById { get; set; }
     public DateTime Created { get; set; } = DateTime.UtcNow;
-    public string? UpdatedBy { get; set; }
+    public int? UpdatedById { get; set; }
     public DateTime? Updated { get; set; }
 }

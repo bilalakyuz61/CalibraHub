@@ -61,7 +61,7 @@ public sealed class SetupDefinitionsViewModel
 
 public sealed class SetupUserInput
 {
-    public Guid? Id { get; set; }
+    public int? Id { get; set; }
 
     [Required(ErrorMessage = "Sirket secimi zorunludur.")]
     public int? CompanyId { get; set; }
@@ -99,6 +99,35 @@ public sealed class SetupUserInput
     /// Update sirasinda da uygulanir (mevcut rol farkli ise update, NULL'a inerse cikarilir).
     /// </summary>
     public string? GrafanaRole { get; set; }
+
+    /// <summary>
+    /// Çoklu şirket bağlantısı — React panel tarafından kullanılır.
+    /// Listedeki her şirket için ayrı UserProfile oluşturulur/güncellenir/pasife alınır.
+    /// Dolu gelirse CompanyId alanı göz ardı edilir.
+    /// </summary>
+    public List<int>? CompanyIds { get; set; }
+
+    [MaxLength(50)]
+    public string? EmployeeCode { get; set; }
+
+    [MaxLength(30)]
+    public string? PhoneNumber { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Şirket bazlı rol ataması — her öğe {CompanyId, Role} içerir.
+    /// CompanyIds ile birlikte gönderilirse her şirket için ayrı rol set edilir.
+    /// Boş/null ise tüm şirketlere Role alanı uygulanır.
+    /// </summary>
+    public List<CompanyRoleInput>? CompanyRoles { get; set; }
+}
+
+/// <summary>Şirket bazlı rol — UserMapping modal'dan gönderilir.</summary>
+public sealed class CompanyRoleInput
+{
+    public int    CompanyId { get; set; }
+    public string Role      { get; set; } = "User";
 }
 
 public sealed class SetupUserViewModel

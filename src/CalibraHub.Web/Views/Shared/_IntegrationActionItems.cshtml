@@ -74,12 +74,62 @@
             }
 
             function closeParentDropdown(node) {
-                // Sales DocumentEdit: sqe-actions-menu container'inin "is-open" class'i kaldirilirsa kapanir.
-                // Genel cozum: en yakin role="menu" parent'i bul ve gorunmez yap.
-                var menu = node.closest('.sqe-actions-dropdown') || node.closest('[role="menu"]');
-                if (menu) menu.style.display = 'none';
-                // Sales DocumentEdit ozel API'si varsa onu cagir (state'i de senkronla)
-                if (typeof window.sqCloseActionsMenu === 'function') window.sqCloseActionsMenu();
+                // BUG FIX: Daha onceki versiyon "menu.style.display = 'none'" ile inline
+                // style atip dropdown'i gizliyordu; sonraki acmalarda inline style oncelik
+                // alip menu hic acilmiyordu. Artik sadece state-owner'in resmi kapat
+                // API'sini cagiririz — class-bazli toggle dogru sekilde calisir.
+                if (typeof window.sqCloseActionsMenu === 'function') {
+                    window.sqCloseActionsMenu();
+                    return;
+                }
+                // Genel fallback — sadece "open" class'larini kaldir, inline style atma.
+                var dropdown = node.closest('.sqe-actions-dropdown');
+                var menu     = node.closest('.sqe-actions-menu');
+                if (dropdown) dropdown.classList.remove('is-open');
+                if (menu)     menu.classList.remove('is-open');
+            }
+
+            // Onay diyaloğu + sticky "Gönderiliyor…" toast birleşimi.
+            // CalibraAlert.confirm her sayfada hazır (Layout'tan yuklenir).
+            async function confirmAndDispatch(integration, rid) {
+                var ok = await CalibraAlert.confirm(
+                    '"' + (integration.name || 'Entegrasyon') + '" calistirilacak — devam edilsin mi?',
+                    {
+                        title: 'ERP\'ye Aktar',
+                        okText: 'Evet, Gonder',
+                        cancelText: 'Vazgec',
+                    });
+                if (!ok) return;
+
+                // Sticky toast — ttl:0 olunca kullanici kapatana kadar veya .dismiss()
+                // cagrilana kadar ekranda kalir. Spinner ikonu icin info kind kullanip
+                // mesaj ile uyumlu emoji koruyoruz.
+                var pendingHandle = null;
+                if (window.CalibraHub && window.CalibraHub.toast) {
+                    pendingHandle = window.CalibraHub.toast(
+                        '⌛ ' + (integration.name || 'Entegrasyon') + ' — ERP\'ye gonderiliyor…',
+                        'info',
+                        { ttl: 0 });
+                }
+
+                var url = '/Integration/Run/' + integration.id + '?recordId=' + encodeURIComponent(rid);
+                try {
+                    var r = await fetch(url, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'RequestVerificationToken': getCsrf() },
+                    });
+                    var d = await r.json();
+                    if (pendingHandle && pendingHandle.dismiss) pendingHandle.dismiss();
+                    if (d.success) {
+                        toast('✓ ' + integration.name + ' basarili (HTTP ' + (d.statusCode || '?') + ')', 'ok');
+                    } else {
+                        toast('✗ ' + integration.name + ': ' + (d.error || 'Hata'), 'err');
+                    }
+                } catch (e) {
+                    if (pendingHandle && pendingHandle.dismiss) pendingHandle.dismiss();
+                    toast('Sunucu hatasi: ' + e.message, 'err');
+                }
             }
 
             function buildItem(integration, recordId, host) {
@@ -105,30 +155,9 @@
                         closeParentDropdown(btn);
                         return;
                     }
-                    btn.disabled = true;
-                    var origHtml = btn.innerHTML;
-                    btn.innerHTML = '<span class="ch-int-spin">⌛</span><span>Calistiriliyor…</span>';
                     closeParentDropdown(btn);
-
-                    var url = '/Integration/Run/' + integration.id + '?recordId=' + encodeURIComponent(rid);
-                    fetch(url, {
-                        method: 'POST',
-                        credentials: 'same-origin',
-                        headers: { 'RequestVerificationToken': getCsrf() },
-                    })
-                    .then(function (r) { return r.json(); })
-                    .then(function (d) {
-                        if (d.success) {
-                            toast('✓ ' + integration.name + ' basarili (HTTP ' + (d.statusCode || '?') + ')', 'ok');
-                        } else {
-                            toast('✗ ' + integration.name + ': ' + (d.error || 'Hata'), 'err');
-                        }
-                    })
-                    .catch(function (e) { toast('Sunucu hatasi: ' + e.message, 'err'); })
-                    .finally(function () {
-                        btn.disabled = false;
-                        btn.innerHTML = origHtml;
-                    });
+                    // Onay diyaloğu + sticky toast + dispatch — hepsi confirmAndDispatch icinde
+                    confirmAndDispatch(integration, rid);
                 };
                 return btn;
             }
@@ -140,45 +169,65 @@
             }
 
             function renderHost(host) {
-                var formCode = host.getAttribute('data-form-code');
-                if (!formCode) return;
+                // Multi-formCode destegi: bir belge ekrani genelde birden cok form
+                // kodu uzerinden yonetilebilir (ornek SALES_QUOTE_NEW + SALES_QUOTE_EDIT).
+                // Wizard'da kullanici SADECE birini secer; ama edit ekraninda da Yeni'de de
+                // ayni entegrasyon gozukmesi gerek. Bu yuzden data-form-code virgulle
+                // ayrilmis liste destekler.
+                var raw = host.getAttribute('data-form-code') || '';
+                var formCodes = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+                if (formCodes.length === 0) return;
 
-                fetch('/Integrations/api/by-form/' + encodeURIComponent(formCode), { credentials: 'same-origin' })
-                    .then(function (r) { return r.json(); })
-                    .then(function (d) {
-                        // Onceki render'da eklenmis itemleri temizle
-                        var parent = host.parentNode;
-                        if (!parent) return;
-                        Array.prototype.slice.call(parent.querySelectorAll('.ch-int-action-item, .ch-int-action-divider, .ch-int-action-header'))
-                             .forEach(function (el) { el.remove(); });
+                // Tum form kodlari icin paralel fetch + merge.
+                Promise.all(formCodes.map(function (fc) {
+                    return fetch('/Integrations/api/by-form/' + encodeURIComponent(fc), { credentials: 'same-origin' })
+                        .then(function (r) { return r.ok ? r.json() : { success: false, items: [] }; })
+                        .catch(function ()  { return { success: false, items: [] }; });
+                })).then(function (results) {
+                    // Onceki render'da eklenmis itemleri temizle
+                    var parent = host.parentNode;
+                    if (!parent) return;
+                    Array.prototype.slice.call(parent.querySelectorAll('.ch-int-action-item, .ch-int-action-divider, .ch-int-action-header'))
+                         .forEach(function (el) { el.remove(); });
 
-                        if (!d.success || !(d.items && d.items.length > 0)) {
-                            host.setAttribute('data-rendered', 'empty');
-                            return;
-                        }
-
-                        // Items host'tan HEMEN sonra parent'a insert et (sira korunur)
-                        var divider = document.createElement('div');
-                        divider.className = 'ch-int-action-divider';
-                        var header = document.createElement('div');
-                        header.className = 'ch-int-action-header';
-                        header.textContent = 'Entegrasyonlar';
-
-                        var nodes = [divider, header];
-                        var recordId = host.getAttribute('data-record-id') || '';
+                    // Dedup by integration id (ayni entegrasyon iki form koduyla baglanmissa
+                    // tek satir gosterilir).
+                    var seen = new Set();
+                    var items = [];
+                    results.forEach(function (d) {
+                        if (!d || !d.success || !d.items) return;
                         d.items.forEach(function (it) {
-                            nodes.push(buildItem(it, recordId, host));
+                            if (it && it.id != null && !seen.has(it.id)) {
+                                seen.add(it.id);
+                                items.push(it);
+                            }
                         });
+                    });
 
-                        // host'un HEMEN ARDINA insert et — siralama bozulmaz
-                        var after = host.nextSibling;
-                        nodes.forEach(function (n) {
-                            if (after) parent.insertBefore(n, after);
-                            else       parent.appendChild(n);
-                        });
-                        host.setAttribute('data-rendered', '1');
-                    })
-                    .catch(function () { host.setAttribute('data-rendered', 'error'); });
+                    if (items.length === 0) {
+                        host.setAttribute('data-rendered', 'empty');
+                        return;
+                    }
+
+                    var divider = document.createElement('div');
+                    divider.className = 'ch-int-action-divider';
+                    var header = document.createElement('div');
+                    header.className = 'ch-int-action-header';
+                    header.textContent = 'Entegrasyonlar';
+
+                    var nodes = [divider, header];
+                    var recordId = host.getAttribute('data-record-id') || '';
+                    items.forEach(function (it) {
+                        nodes.push(buildItem(it, recordId, host));
+                    });
+
+                    var after = host.nextSibling;
+                    nodes.forEach(function (n) {
+                        if (after) parent.insertBefore(n, after);
+                        else       parent.appendChild(n);
+                    });
+                    host.setAttribute('data-rendered', '1');
+                });
             }
 
             function scan() {

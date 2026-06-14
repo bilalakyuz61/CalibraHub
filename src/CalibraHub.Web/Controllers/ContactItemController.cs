@@ -1,3 +1,4 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -40,6 +41,7 @@ public sealed class ContactItemController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ContactEdit)]
     public async Task<IActionResult> Save([FromBody] SaveContactItemInput? input, CancellationToken ct)
     {
         if (input == null || input.ContactId <= 0 || input.ItemId <= 0)
@@ -84,6 +86,7 @@ public sealed class ContactItemController : Controller
     public sealed class DeleteContactItemBody { public int Id { get; set; } }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.ContactEdit)]
     public async Task<IActionResult> Delete([FromBody] DeleteContactItemBody? body, CancellationToken ct)
     {
         if (body == null || body.Id <= 0)

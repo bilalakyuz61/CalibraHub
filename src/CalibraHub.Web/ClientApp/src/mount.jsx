@@ -23,6 +23,10 @@ import NotesWorkspace from './components/NotesWorkspace/NotesWorkspace'
 import CompanyUserManagementPanel from './components/CompanyUserManagement/CompanyUserManagementPanel'
 import InvoiceDataGrid from './components/InvoiceDataGrid/InvoiceDataGrid'
 import OrgChartWorkspace from './components/OrgChart/OrgChartWorkspace'
+import WorkflowEditor from './components/WorkflowEditor/WorkflowEditor'
+import ApprovalFlowDesigner from './components/ApprovalFlowDesigner/ApprovalFlowDesigner'
+import BpmFormDesigner from './components/BpmForm/BpmFormDesigner'
+import BpmFormFiller from './components/BpmForm/BpmFormFiller'
 import WhatsAppMessenger from './components/WhatsAppMessenger/WhatsAppMessenger'
 import './components/WhatsAppMessenger/WhatsAppMessenger.css'
 import CardGroupTree from './components/CardGroupTree/CardGroupTree'
@@ -44,7 +48,10 @@ import ConvertToOrdersModal from './components/ConvertToOrdersModal/ConvertToOrd
 import ConvertSingleQuoteModal from './components/ConvertToOrdersModal/ConvertSingleQuoteModal'
 import PriceGroupContactsModal from './components/PriceGroupContactsModal/PriceGroupContactsModal'
 import GuideLookupModal from './components/GuideLookup/GuideLookupModal'
+import FieldSettingsForm from './components/CalibraLineItemsGrid/FieldSettingsForm'
+import { Settings as SettingsIcon } from 'lucide-react'
 import { adaptFormatJson, extractValueDisplay } from './components/GuideLookup/guideLookupAdapters'
+import { getRuntimeBindings as getRuntimeBindingsForGuide } from './services/fieldSettingService'
 import { getRuntimeBindings } from './services/fieldSettingService'
 import './index.css'
 
@@ -317,6 +324,7 @@ function mountDynamicWidgetRenderer(element, config) {
         recordId: config.recordId || '',
         classPrefix: config.classPrefix || 'mce',
         containerId: element.id,
+        layout: config.layout || 'stacked',
         onMounted: function (h) { handleRef.current = h },
       })
     )
@@ -462,6 +470,26 @@ function mountOrgChart(element) {
   root.render(
     React.createElement(ErrorBoundary, null,
       React.createElement(OrgChartWorkspace, null)
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+
+/**
+ * WorkflowEditor mount — Gorsel workflow tanim editoru.
+ */
+function mountWorkflowEditor(element, opts) {
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(WorkflowEditor, { definitionId: (opts || {}).definitionId || null })
     )
   )
   return {
@@ -854,6 +882,35 @@ window.CalibraHub.toast = (function() {
   return show;
 })();
 
+/**
+ * unmountAllInside — PJAX swap oncesi cagrilir. Verilen DOM subtree icindeki
+ * tum aktif React root'lari guvenle unmount eder. Boylece eski mount'lardan
+ * arta kalan event listener / interval / subscription temizlenir.
+ *
+ * @param {HTMLElement} rootElement
+ * @returns {number} unmount edilen root sayisi
+ */
+function unmountAllInside(rootElement) {
+  if (!rootElement) return 0
+  var count = 0
+  var toRemove = []
+  mountedRoots.forEach(function (root, el) {
+    if (el === rootElement || (rootElement.contains && rootElement.contains(el))) {
+      toRemove.push(el)
+    }
+  })
+  for (var i = 0; i < toRemove.length; i++) {
+    var el = toRemove[i]
+    try {
+      mountedRoots.get(el).unmount()
+      count++
+    } catch (e) { /* ignore */ }
+    mountedRoots.delete(el)
+  }
+  return count
+}
+window.CalibraHub.unmountAllInside = unmountAllInside
+
 window.CalibraHub.mountSmartBoard = mountSmartBoard
 window.CalibraHub.mountMaterialList = mountMaterialList
 window.CalibraHub.mountAdminWidgetRegistry = mountAdminWidgetRegistry
@@ -867,6 +924,7 @@ window.CalibraHub.mountNotesWorkspace = mountNotesWorkspace
 window.CalibraHub.mountCompanyUserManagement = mountCompanyUserManagement
 window.CalibraHub.mountInvoiceDataGrid = mountInvoiceDataGrid
 window.CalibraHub.mountOrgChart = mountOrgChart
+window.CalibraHub.mountWorkflowEditor = mountWorkflowEditor
 window.CalibraHub.mountFixedFieldLookups = mountFixedFieldLookups
 window.CalibraHub.mountLookupForInput = mountLookupForInput
 window.CalibraHub.openCombinationPicker = openCombinationPicker
@@ -1003,11 +1061,121 @@ function openPriceGroupContactsModal(opts) {
 window.CalibraHub.openPriceGroupContactsModal = openPriceGroupContactsModal
 
 /**
+ * GuideLookupHost — openGuideLookup'in icinde mount edilen stateful sarmalayici.
+ * 2026-06-02: formCode + fieldKey verilirse header'da "Alan Ayarlari" Settings
+ * butonu cikar, tikladiginda FieldSettingsForm acilir (FixedFieldLookupBridge ile
+ * ayni pattern). Ayarlar kaydedilince schemaVersion++ ile modal kolonlari yenilenir.
+ */
+function GuideLookupHost(props) {
+  var [settingsOpen, setSettingsOpen] = React.useState(false)
+  var [schemaVersion, setSchemaVersion] = React.useState(0)
+  var [formatJson, setFormatJson] = React.useState(props.formatJson || null)
+  // 2026-06-02: Admin "Alan Ayarlari"ndan view degistirilirse setGuideCode ile
+  // state'i guncelliyoruz → GuideLookupModal yeni guideCode ile re-mount olur.
+  // Ilk yüklemede de FldSet binding'i varsa onu kullanir (kullanici kayitli
+  // tercihini her acilista almali — props.guideCode sadece "default" suggestion).
+  var [guideCode, setGuideCode] = React.useState(props.guideCode)
+  var [filterJson, setFilterJson] = React.useState(props.filterJson || null)
+
+  // FormCode + fieldKey verildiyse, mevcut FldSet binding'ini ilk acilista cek;
+  // kayitli viewName varsa props.guideCode'un yerine onu kullan.
+  React.useEffect(function () {
+    if (!props.formCode || !props.fieldKey) return
+    var alive = true
+    getRuntimeBindingsForGuide(props.formCode)
+      .then(function (bindings) {
+        if (!alive) return
+        var fresh = (bindings || []).find(function (b) { return b && b.fieldKey === props.fieldKey })
+        if (!fresh) return
+        // PR2+: ViewName primary; guideCode = ViewName aliasi
+        var savedView = fresh.viewName || fresh.guideCode
+        if (savedView && savedView !== guideCode) setGuideCode(savedView)
+        if (fresh.filterJson != null && fresh.filterJson !== filterJson) setFilterJson(fresh.filterJson)
+        if (fresh.formatJson != null && fresh.formatJson !== formatJson) setFormatJson(fresh.formatJson)
+      })
+      .catch(function () { /* sessiz — binding yoksa props.guideCode kalir */ })
+    return function () { alive = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.formCode, props.fieldKey])
+
+  var settingsColumnRef = React.useRef({
+    key: props.fieldKey || guideCode,
+    label: props.guideLabel || guideCode,
+    formCode: props.formCode || null,
+    guideCode: guideCode,
+    filterJson: filterJson,
+    formatJson: formatJson,
+  })
+  settingsColumnRef.current = {
+    key: props.fieldKey || guideCode,
+    label: props.guideLabel || guideCode,
+    formCode: props.formCode || null,
+    guideCode: guideCode,
+    filterJson: filterJson,
+    formatJson: formatJson,
+  }
+
+  var columnsAdapter = function (schemaCols) { return adaptFormatJson(formatJson, schemaCols) }
+
+  var headerActions = props.formCode ? React.createElement(
+    'button',
+    {
+      type: 'button',
+      onClick: function () { setSettingsOpen(true) },
+      title: 'Alan Ayarları',
+      className: 'gl-settings-btn',
+    },
+    React.createElement(SettingsIcon, { size: 15, strokeWidth: 2 })
+  ) : null
+
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement(GuideLookupModal, {
+      guideCode: guideCode,
+      guideLabel: props.guideLabel || null,
+      columnsAdapter: columnsAdapter,
+      open: true,
+      onClose: props.onClose,
+      onPick: props.onPick,
+      staticConstraint: filterJson,
+      schemaVersion: schemaVersion,
+      headerActions: headerActions,
+    }),
+    props.formCode ? React.createElement(FieldSettingsForm, {
+      column: settingsColumnRef.current,
+      isOpen: settingsOpen,
+      onClose: function () {
+        setSettingsOpen(false)
+        // FieldSettingsForm Kaydet sonrasi column.guideCode/viewName/filterJson/formatJson
+        // alanlarini mutate ediyor (handleSaved end of method). Burada state'e cek:
+        var nextView = settingsColumnRef.current.viewName
+                    || settingsColumnRef.current.guideCode
+        if (nextView && nextView !== guideCode) setGuideCode(nextView)
+        if (settingsColumnRef.current.filterJson !== filterJson) {
+          setFilterJson(settingsColumnRef.current.filterJson)
+        }
+        if (settingsColumnRef.current.formatJson !== formatJson) {
+          setFormatJson(settingsColumnRef.current.formatJson)
+        }
+        setSchemaVersion(function (v) { return v + 1 })
+      },
+    }) : null
+  )
+}
+
+/**
  * openGuideLookup — Standart rehber (Tip 1) modali'ni acar. Razor sayfalarindan
  * cagrilir; ornek: bir butona tikladiginda mevcut bir kayda navigasyon.
  *
  * @param {string} guideCode  — Standart rehber kodu (orn. 'SALES_ORDERS')
- * @param {{ formatJson?: string, onPick?: function, onClose?: function, guideLabel?: string }} opts
+ * @param {{
+ *   formatJson?: string,
+ *   filterJson?: string,
+ *   formCode?: string,     // 2026-06-02: verilirse header'a "Alan Ayarlari" butonu konur
+ *   fieldKey?:  string,    // FieldSettingsForm icin field id; yoksa guideCode kullanilir
+ *   onPick?: function, onClose?: function, guideLabel?: string
+ * }} opts
  *   onPick(row): row = { value, display, cells } — secilen satir
  */
 function openGuideLookup(guideCode, opts) {
@@ -1036,21 +1204,17 @@ function openGuideLookup(guideCode, opts) {
     if (typeof opts.onPick === 'function') opts.onPick(row)
   }
 
-  var formatJsonRaw = opts.formatJson || null
-  var columnsAdapter = function(schemaCols) {
-    return adaptFormatJson(formatJsonRaw, schemaCols)
-  }
-
   root.render(
     React.createElement(ErrorBoundary, null,
-      React.createElement(GuideLookupModal, {
+      React.createElement(GuideLookupHost, {
         guideCode: guideCode,
         guideLabel: opts.guideLabel || null,
-        columnsAdapter: columnsAdapter,
-        open: true,
+        formatJson: opts.formatJson || null,
+        filterJson: opts.filterJson || null,
+        formCode: opts.formCode || null,
+        fieldKey: opts.fieldKey || null,
         onClose: handleClose,
         onPick: handlePick,
-        staticConstraint: opts.filterJson || null,
       })
     )
   )
@@ -1288,6 +1452,12 @@ window.CalibraHub.mountIntegrationEndpointsList = mountIntegrationEndpointsList
  */
 function mountIntegrationsHub(element, config) {
   config = config || {}
+  // 2026-05-22 Null guard — workspace tab sistemi sayfa yeniden yuklerken element
+  // DOM'dan kopmus/null gelebilir. createRoot(null) React #299 firlatir; sessizce
+  // gec, retry'da dogru element ile yeniden cagrilir.
+  if (!element || !(element instanceof Element) || !element.isConnected) {
+    return { unmount: function() {} }
+  }
   if (mountedRoots.has(element)) {
     mountedRoots.get(element).unmount()
     mountedRoots.delete(element)
@@ -1326,3 +1496,148 @@ function mountIntegrationQueue(element, config) {
   return { unmount: function() { root.unmount(); mountedRoots.delete(element) } }
 }
 window.CalibraHub.mountIntegrationQueue = mountIntegrationQueue
+
+/**
+ * BpmFormDesigner mount — EBA-tarzı form tasarımcısı (drag-drop alan sürükleme).
+ * @param {HTMLElement} element
+ * @param {{ formId?: number|null }} opts
+ */
+function mountBpmFormDesigner(element, opts) {
+  opts = opts || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(BpmFormDesigner, { formId: opts.formId || null })
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+window.CalibraHub.mountBpmFormDesigner = mountBpmFormDesigner
+
+/**
+ * BpmFormFiller mount — Son kullanıcı form doldurma ve gönderim ekranı.
+ * @param {HTMLElement} element
+ * @param {{ formId: number }} opts
+ */
+function mountBpmFormFiller(element, opts) {
+  opts = opts || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(BpmFormFiller, { formId: opts.formId })
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+window.CalibraHub.mountBpmFormFiller = mountBpmFormFiller
+
+// 2026-05-23 — Şirket Ayarları "Yapay Zeka" tab içindeki React panel.
+// Razor sayfası tab açılınca tek seferlik mount eder (CompanySettings.cshtml içinden çağrılır).
+import AiProvidersPanel from './components/AiAssistant/AiProvidersPanel'
+import PurchaseRequestWizard from './components/PurchaseRequestWizard/PurchaseRequestWizard'
+function mountAiProvidersPanel(element) {
+  if (!element) return { unmount: function() {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(AiProvidersPanel)
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountAiProvidersPanel = mountAiProvidersPanel
+
+/**
+ * ApprovalFlowDesigner mount — Onay Akışı görsel tasarımcısı (React Flow).
+ *
+ * @param {HTMLElement} element
+ * @param {object} opts - {
+ *   apiBase: string,
+ *   flowId: number,
+ *   initialNodes: array,
+ *   initialEdges: array,
+ *   users: array,
+ *   departments: array,
+ *   onSave: function(payload)
+ * }
+ */
+function mountApprovalFlowDesigner(element, opts) {
+  opts = opts || {}
+  if (!element) return { unmount: function() {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(ApprovalFlowDesigner, {
+        apiBase:      opts.apiBase      || '/ApprovalFlow',
+        flowId:       opts.flowId       || 0,
+        initialNodes: Array.isArray(opts.initialNodes) ? opts.initialNodes : [],
+        initialEdges: Array.isArray(opts.initialEdges) ? opts.initialEdges : [],
+        initialRules: Array.isArray(opts.initialRules) ? opts.initialRules : [],
+        users:        Array.isArray(opts.users) ? opts.users : [],
+        departments:  Array.isArray(opts.departments) ? opts.departments : [],
+        cariGroups:   Array.isArray(opts.cariGroups) ? opts.cariGroups : [],
+        materialGroups: (opts.materialGroups && typeof opts.materialGroups === 'object') ? opts.materialGroups : {},
+        sqlQueries:   Array.isArray(opts.sqlQueries) ? opts.sqlQueries : [],
+        // Entity-agnostic plugin: backend registry'den entity tipi kataloğu + seçili tip.
+        entityTypes:        Array.isArray(opts.entityTypes) ? opts.entityTypes : [],
+        currentEntityType:  typeof opts.currentEntityType === 'string' ? opts.currentEntityType : 'Document',
+        canUseAdhoc:  opts.canUseAdhoc !== false,
+        onSave:       typeof opts.onSave === 'function' ? opts.onSave : null,
+      })
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+window.CalibraHub.mountApprovalFlowDesigner = mountApprovalFlowDesigner
+
+/**
+ * PurchaseRequestWizard mount — Satın Alma Talebi sihirbazı.
+ * @param {HTMLElement} element
+ * @param {{ antiForgeryToken: string }} config
+ */
+function mountPurchaseRequestWizard(element, config) {
+  config = config || {}
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(PurchaseRequestWizard, {
+        antiForgeryToken: config.antiForgeryToken || '',
+      })
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+window.CalibraHub.mountPurchaseRequestWizard = mountPurchaseRequestWizard

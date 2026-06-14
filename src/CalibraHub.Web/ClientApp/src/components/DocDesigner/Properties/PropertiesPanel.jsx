@@ -1,5 +1,22 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { BARCODE_TYPES } from '../designerReducer'
+import { listDocTypes } from '../services/docDesignerService'
+
+// 2026-05-26: Belge tipleri DB'den dinamik gelir (DocumentType tablosu) —
+// modül seviyesinde cache tutariz ki her PageGrid render'inda yeniden fetch olmasin.
+// İlk yuklemeden sonra in-memory cached liste kullanilir (sayfa yenilenmeden tasarimci
+// acilip kapatildiginda hatirli olur).
+let _docTypeCache = null
+let _docTypeFetching = null
+function fetchDocTypesCached() {
+  if (_docTypeCache) return Promise.resolve(_docTypeCache)
+  if (_docTypeFetching) return _docTypeFetching
+  _docTypeFetching = listDocTypes()
+    .then(list => { _docTypeCache = Array.isArray(list) ? list : []; return _docTypeCache })
+    .catch(() => { _docTypeCache = []; return _docTypeCache })
+    .finally(() => { _docTypeFetching = null })
+  return _docTypeFetching
+}
 
 // ─── Yardımcı bileşenler ──────────────────────────────────────────────────────
 
@@ -69,6 +86,27 @@ function PRow({ label, children, last }) {
         {label}
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '1px 4px' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Stacked variant — label ustte, icerik full-width altta. Uzun textarea / multi-line input icin.
+function PStackedRow({ label, children, last }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      borderBottom: last ? 'none' : '1px solid var(--dd-border, #f3f3f3)',
+      padding: '6px 8px 8px',
+    }}>
+      <div style={{
+        fontSize: 10.5, color: 'var(--dd-text-muted, #6b7280)',
+        marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em',
+      }}>
+        {label}
+      </div>
+      <div style={{ width: '100%' }}>
         {children}
       </div>
     </div>
@@ -501,6 +539,17 @@ function PageGrid({ meta, dispatch }) {
   const orientation = meta.pageW > meta.pageH ? 'landscape' : 'portrait'
   const isCustom    = paperSize === 'custom'
 
+  // Belge tipleri DB'den (DocumentType tablosu) — cache'li fetch.
+  const [docTypes, setDocTypes] = useState(_docTypeCache || [])
+  useEffect(() => {
+    if (_docTypeCache) return
+    fetchDocTypesCached().then(list => setDocTypes(list))
+  }, [])
+
+  // NOT: Mail-spesifik view/kolon yuklemeleri (listDbViews / getDbViewColumns) artik
+  // kullanilmiyor — eski 'email cikti modu' bloğuyla beraber kaldirildi. Mail
+  // sablonu artik sadece "useAsMailTemplate" toggle'i — standart dizayn akisi.
+
   const onPaperChange = value => {
     if (value === 'custom') return  // mevcut değerleri koru
     const p = PAPER_SIZES.find(x => x.value === value)
@@ -520,6 +569,43 @@ function PageGrid({ meta, dispatch }) {
       <PHeader kind="SAYFA" label="Sayfa Özellikleri" color="#6366f1" />
       <PCategory title="Genel" color="#6366f1" />
       <PRow label="Ad"><input value={meta.name} onChange={e => set({ name: e.target.value })} style={gi} /></PRow>
+
+      {/* Belge Tipi — TÜM tasarimlar bir DocumentType ile iliskilidir.
+          Onceden 'email cikti modu' bu satiri gizliyor + Mail Sablonu'na zorlu yordu;
+          kaldirildi. Toplu mail icin kullanici yeni bir belge tipi (orn. 'bulk_email')
+          tanimlar ve bu tipi seçer. 'custom' filtresi de kaldirildi — kullanici hangi
+          belge tipini tanimladiysa onu seçebilir. */}
+      <PRow label="Belge Tipi">
+        {(() => {
+          const currentVal = meta.documentTypeId != null
+            ? String(meta.documentTypeId)
+            : (docTypes.find(dt => dt.code === meta.docType)?.id != null
+                ? String(docTypes.find(dt => dt.code === meta.docType).id)
+                : '')
+          return (
+            <select value={currentVal}
+                    onChange={e => {
+                      const v = e.target.value
+                      const dt = docTypes.find(x => String(x.id) === v)
+                      if (dt) set({ documentTypeId: dt.id, docType: dt.code })
+                    }}
+                    style={{ ...gi, cursor: 'pointer' }}>
+              {docTypes.length === 0 && (
+                <option value="">— Yükleniyor —</option>
+              )}
+              {!currentVal && docTypes.length > 0 && (
+                <option value="" disabled>Seçim yapın</option>
+              )}
+              {docTypes.map(dt => (
+                <option key={dt.code} value={dt.id != null ? String(dt.id) : dt.code}>
+                  {dt.name || dt.code}
+                </option>
+              ))}
+            </select>
+          )
+        })()}
+      </PRow>
+
       <PRow label="Varsayılan">
         <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
           <input type="checkbox" checked={meta.isDefault ?? false}
@@ -529,20 +615,21 @@ function PageGrid({ meta, dispatch }) {
           </span>
         </label>
       </PRow>
-      <PRow label="Belge Tipi">
-        <select value={meta.docType} onChange={e => set({ docType: e.target.value })} style={{ ...gi, cursor: 'pointer' }}>
-          {[
-            ['sales_quote',    'Satış Teklifi'],
-            ['sales_order',    'Satış Siparişi'],
-            ['purchase_order', 'Satın Alma Siparişi'],
-            ['delivery_note',  'İrsaliye'],
-            ['invoice',        'Fatura'],
-            ['expense_note',   'Gider Pusulası'],
-            ['custom',         'Özel Belge'],
-          ].map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </select>
+
+      {/* "Mail şablonu olarak da kullan" toggle:
+          Acik ise bu dizayn mail compose ekraninda da listelenir. Cikti hala PDF
+          render mantigi ile uretilir (HTML body olarak); kullanici bir belgeyi
+          (orn. SalesQuote #123) sectiginde view'a belgeId parametresi gonderilir,
+          dizayn render edilir ve mail govdesi olur. Standart akista herhangi bir
+          ozel UI yok; bayrak DocLayout tablosunda use_as_mail_template kolonu. */}
+      <PRow label="Mail şablonu">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+          <input type="checkbox" checked={meta.useAsMailTemplate ?? false}
+            onChange={e => set({ useAsMailTemplate: e.target.checked })} />
+          <span style={{ fontSize: 10.5, color: 'var(--dd-text-muted, #6b7280)' }}>
+            Mail şablonu olarak da kullan
+          </span>
+        </label>
       </PRow>
 
       <PCategory title="Kağıt" color="#6366f1" />
@@ -607,6 +694,7 @@ const BAND_LABELS = {
   Detail: 'Detay Satırı',
   SubDetailHeader: 'Alt Detay Başlığı', SubDetail: 'Alt Detay Satırı', SubDetailFooter: 'Alt Detay Altı',
   TotalsBlock: 'Toplam Bloku', SignatureBlock: 'İmza Bloku', PageFooter: 'Sayfa Altı',
+  mail_body: 'Mail Gövdesi',
 }
 
 function BandGrid({ band, dataSources, dispatch }) {
@@ -744,30 +832,25 @@ function ElementGrid({ el, dispatch }) {
           ))}
         </div>
       </PRow>
+      {/* 2026-05-30: Dar properties panel'inde ikon-rozet seti okunaksiz oluyordu;
+          metin combobox'larina cevirdik. Hizalama + Dikey + Tasma uc satir da
+          standart `<select>` (gi style) ile homojen gozukur. */}
       <PRow label="Hizalama">
-        <IconRadioGroup
-          value={el.style?.align ?? 'left'}
-          onChange={v => setStyle({ align: v })}
-          color={color}
-          options={[
-            { value: 'left',    label: 'Sol',      icon: <AlignIcon variant="left"    /> },
-            { value: 'center',  label: 'Orta',     icon: <AlignIcon variant="center"  /> },
-            { value: 'right',   label: 'Sağ',      icon: <AlignIcon variant="right"   /> },
-            { value: 'justify', label: 'İki Yana', icon: <AlignIcon variant="justify" /> },
-          ]}
-        />
+        <select value={el.style?.align ?? 'left'} onChange={e => setStyle({ align: e.target.value })}
+          style={{ ...gi, cursor: 'pointer' }}>
+          <option value="left">Sol</option>
+          <option value="center">Orta</option>
+          <option value="right">Sağ</option>
+          <option value="justify">İki Yana</option>
+        </select>
       </PRow>
       <PRow label="Dikey">
-        <IconRadioGroup
-          value={el.style?.verticalAlign ?? 'middle'}
-          onChange={v => setStyle({ verticalAlign: v })}
-          color={color}
-          options={[
-            { value: 'top',    label: 'Üst',  icon: <VAlignIcon variant="top"    /> },
-            { value: 'middle', label: 'Orta', icon: <VAlignIcon variant="middle" /> },
-            { value: 'bottom', label: 'Alt',  icon: <VAlignIcon variant="bottom" /> },
-          ]}
-        />
+        <select value={el.style?.verticalAlign ?? 'middle'} onChange={e => setStyle({ verticalAlign: e.target.value })}
+          style={{ ...gi, cursor: 'pointer' }}>
+          <option value="top">Üst</option>
+          <option value="middle">Orta</option>
+          <option value="bottom">Alt</option>
+        </select>
       </PRow>
       {['Label','BoundField','AmountInWords'].includes(el.kind) && (
         <PRow label="Taşma">
@@ -806,6 +889,8 @@ function ElementGrid({ el, dispatch }) {
           </label>
         </div>
       </PRow>
+      {/* Kenarlik — etiketli 4 yön toggle (Üst / Sağ / Alt / Sol).
+          Combobox kaldirildi; her buton bagimsiz toggle, secili kenar mavi vurgulanir. */}
       <PRow label="Kenarlık">
         {(() => {
           const legacyAll = el.style?.border === true
@@ -815,16 +900,18 @@ function ElementGrid({ el, dispatch }) {
             bottom: el.style?.borderBottom ?? legacyAll,
             left:   el.style?.borderLeft   ?? legacyAll,
           }
-          const all = sides.top && sides.right && sides.bottom && sides.left
-          const none = !sides.top && !sides.right && !sides.bottom && !sides.left
+          const toggleSide = key => {
+            const cur = sides[key]
+            setStyle({
+              border: undefined,
+              [`border${key[0].toUpperCase() + key.slice(1)}`]: !cur,
+            })
+          }
           const sideBtn = (key, label, active) => (
             <button key={key} title={label}
-              onClick={() => setStyle({
-                border: undefined,
-                [`border${key[0].toUpperCase() + key.slice(1)}`]: !active,
-              })}
+              onClick={() => toggleSide(key)}
               style={{
-                width: 22, height: 20, padding: 0, cursor: 'pointer', fontSize: 9, fontWeight: 700,
+                flex: 1, height: 22, padding: 0, cursor: 'pointer', fontSize: 11, fontWeight: 600,
                 border: `1px solid ${active ? color : 'var(--dd-border, #d1d5db)'}`,
                 background: active ? `rgba(${hexToRgb(color)},0.18)` : 'var(--dd-surface, #fff)',
                 color: active ? color : 'var(--dd-text-muted, #555)',
@@ -834,33 +921,11 @@ function ElementGrid({ el, dispatch }) {
             </button>
           )
           return (
-            <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
-              {sideBtn('top',    '↑', sides.top)}
-              {sideBtn('right',  '→', sides.right)}
-              {sideBtn('bottom', '↓', sides.bottom)}
-              {sideBtn('left',   '←', sides.left)}
-              <button title="Tümü" onClick={() => setStyle({
-                  border: undefined, borderTop: true, borderRight: true, borderBottom: true, borderLeft: true,
-                })}
-                style={{
-                  height: 20, padding: '0 6px', fontSize: 9, fontWeight: 700, cursor: 'pointer',
-                  border: `1px solid ${all ? color : 'var(--dd-border, #d1d5db)'}`,
-                  background: all ? `rgba(${hexToRgb(color)},0.18)` : 'var(--dd-surface, #fff)',
-                  color: all ? color : 'var(--dd-text-muted, #555)', borderRadius: 3,
-                }}>
-                Tümü
-              </button>
-              <button title="Hiçbiri" onClick={() => setStyle({
-                  border: undefined, borderTop: false, borderRight: false, borderBottom: false, borderLeft: false,
-                })}
-                style={{
-                  height: 20, padding: '0 6px', fontSize: 9, fontWeight: 700, cursor: 'pointer',
-                  border: `1px solid ${none ? color : 'var(--dd-border, #d1d5db)'}`,
-                  background: none ? `rgba(${hexToRgb(color)},0.18)` : 'var(--dd-surface, #fff)',
-                  color: none ? color : 'var(--dd-text-muted, #555)', borderRadius: 3,
-                }}>
-                Yok
-              </button>
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center', width: '100%' }}>
+              {sideBtn('top',    '↑ Üst', sides.top)}
+              {sideBtn('right',  '→ Sağ', sides.right)}
+              {sideBtn('bottom', '↓ Alt', sides.bottom)}
+              {sideBtn('left',   '← Sol', sides.left)}
             </div>
           )
         })()}
@@ -929,46 +994,52 @@ function ElementGrid({ el, dispatch }) {
         </>
       )}
 
-      {/* Barkod / QR ayarları */}
-      {(el.kind === 'Barcode' || el.kind === 'QrCode') && (
-        <>
-          <PCategory title={el.kind === 'Barcode' ? 'Barkod Ayarları' : 'QR Ayarları'} color={color} />
-          {el.kind === 'Barcode' && (
-            <>
-              <PRow label="Barkod Tipi">
-                <select value={el.barcodeType ?? 'Code128'} onChange={e => set({ barcodeType: e.target.value })}
-                  style={{ ...gi, cursor: 'pointer' }}>
-                  {BARCODE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-              </PRow>
+      {/* Barkod ayarlari — QR ayri kind degil, barcodeType='QR' ile birlesik. */}
+      {el.kind === 'Barcode' && (() => {
+        const isQrType = el.barcodeType === 'QR'
+        return (
+          <>
+            <PCategory title={isQrType ? 'QR Ayarları' : 'Barkod Ayarları'} color={color} />
+            <PRow label="Barkod Tipi">
+              <select value={el.barcodeType ?? 'Code128'} onChange={e => set({ barcodeType: e.target.value })}
+                className="dd-select" style={{ ...gi, cursor: 'pointer' }}>
+                {BARCODE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </PRow>
+            {!isQrType && (
               <PRow label="Yazıyı Göster">
                 <input type="checkbox" checked={el.showBarcodeText ?? true}
                   onChange={e => set({ showBarcodeText: e.target.checked })} />
               </PRow>
-            </>
-          )}
-          {el.kind === 'QrCode' && (
-            <PRow label="Hata Düzeltme">
-              <select value={el.qrErrorCorrection ?? 'M'} onChange={e => set({ qrErrorCorrection: e.target.value })}
-                style={{ ...gi, cursor: 'pointer' }}>
-                <option value="L">L — %7</option>
-                <option value="M">M — %15</option>
-                <option value="Q">Q — %25</option>
-                <option value="H">H — %30</option>
-              </select>
+            )}
+            {isQrType && (
+              <PRow label="Hata Düzeltme">
+                <select value={el.qrErrorCorrection ?? 'M'} onChange={e => set({ qrErrorCorrection: e.target.value })}
+                  className="dd-select" style={{ ...gi, cursor: 'pointer' }}>
+                  <option value="L">L — %7</option>
+                  <option value="M">M — %15</option>
+                  <option value="Q">Q — %25</option>
+                  <option value="H">H — %30</option>
+                </select>
+              </PRow>
+            )}
+            <PRow label="Alias">
+              <input value={el.binding?.alias ?? ''} onChange={e => setBinding({ alias: e.target.value })} style={gi}
+                placeholder={isQrType ? 'Header' : 'Header'} />
             </PRow>
-          )}
-          <PRow label="Alias">
-            <input value={el.binding?.alias ?? ''} onChange={e => setBinding({ alias: e.target.value })} style={gi} placeholder="Header" />
-          </PRow>
-          <PRow label="Kolon">
-            <input value={el.binding?.col ?? ''} onChange={e => setBinding({ col: e.target.value })} style={gi} placeholder="QrValue" />
-          </PRow>
-          <PRow label="Sabit Değer">
-            <input value={el.text ?? ''} onChange={e => set({ text: e.target.value })} style={gi} placeholder="(binding boşsa)" />
-          </PRow>
-        </>
-      )}
+            <PRow label="Kolon">
+              <input value={el.binding?.col ?? ''} onChange={e => setBinding({ col: e.target.value })} style={gi}
+                placeholder={isQrType ? 'QrValue' : 'BarcodeValue'} />
+            </PRow>
+            <PRow label="Sabit Değer">
+              <input value={el.text ?? ''} onChange={e => set({ text: e.target.value })} style={gi} placeholder="(binding boşsa)" />
+            </PRow>
+            <div style={{ padding: '6px 10px', fontSize: 10.5, color: 'var(--dd-text-muted, #94a3b8)', lineHeight: 1.4 }}>
+              💡 Veriyi seçmek için barkod elementine <strong>çift tıklayın</strong> — kolon ağacından seçim yapabilirsiniz.
+            </div>
+          </>
+        )
+      })()}
 
       {/* Veri Bağlama */}
       {(el.kind === 'Label' || el.kind === 'BoundField' || el.kind === 'AmountInWords') && (

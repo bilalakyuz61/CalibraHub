@@ -26,7 +26,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
     }
 
     public async Task<IReadOnlyCollection<ReportDefinitionSummaryDto>> GetAccessibleAsync(
-        Guid userId,
+        int userId,
         IReadOnlyCollection<UserRole> roles,
         CancellationToken ct)
     {
@@ -77,7 +77,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
                 ViewCode: reader.GetString(4),
                 Category: (ReportCategory)reader.GetByte(5),
                 IsShared: reader.GetBoolean(6),
-                OwnerUserId: reader.GetGuid(7),
+                OwnerUserId: reader.GetInt32(7),
                 UpdatedAt: reader.GetDateTime(8)));
         }
         return list;
@@ -223,7 +223,7 @@ public sealed class SqlRptDefinitionRepository : IRptDefinitionRepository
         ViewId = r.GetInt32(3),
         Category = (ReportCategory)r.GetByte(4),
         ConfigJson = r.GetString(5),
-        OwnerUserId = r.GetGuid(6),
+        OwnerUserId = r.GetInt32(6),
         IsShared = r.GetBoolean(7),
         IsActive = r.GetBoolean(8),
         CreatedAt = r.GetDateTime(9),

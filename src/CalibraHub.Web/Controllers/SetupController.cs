@@ -116,7 +116,7 @@ public sealed class SetupController : Controller
 
     [HttpGet]
     public async Task<IActionResult> Definitions(
-        int? companyId, Guid? userId, string? activeTab,
+        int? companyId, int? userId, string? activeTab,
         int? companyPage, int? companyPageSize,
         int? userPage, int? userPageSize, CancellationToken cancellationToken)
     {
@@ -134,7 +134,7 @@ public sealed class SetupController : Controller
         return View(vm);
     }
 
-    private async Task<SetupUserInput> BuildSetupUserInputAsync(Guid? userId, CancellationToken cancellationToken)
+    private async Task<SetupUserInput> BuildSetupUserInputAsync(int? userId, CancellationToken cancellationToken)
     {
         if (!userId.HasValue) return new SetupUserInput();
         var user = await _userProfileRepository.GetByIdAsync(userId.Value, cancellationToken);
@@ -287,7 +287,7 @@ public sealed class SetupController : Controller
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeactivateUserDefinition(
-        Guid userId, CancellationToken cancellationToken)
+        int userId, CancellationToken cancellationToken)
     {
         var auth = RequireAuth();
         if (auth != null) return auth;
@@ -315,9 +315,14 @@ public sealed class SetupController : Controller
         return View(await BuildSetupCompanyViewModelAsync(input, page, pageSize, cancellationToken));
     }
 
-    [HttpPost]
+    // 2026-05-26 — Legacy "Companies" tek-sayfa form action'i.
+    // Yeni "Definitions" unified screen'i kullaniliyor, bu method legacy Companies.cshtml
+    // formundan POST aliyor. Ayni isimli SaveCompany action'i Definitions tarafinda da var,
+    // bu yuzden burada explicit unique route + ActionName veriyoruz.
+    [HttpPost("/Setup/SaveCompanyClassic")]
+    [ActionName("SaveCompanyClassic")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SaveCompany(
+    public async Task<IActionResult> SaveCompanyClassic(
         SetupCompanyInput input, int? page, int? pageSize, CancellationToken cancellationToken)
     {
         var auth = RequireAuth();
@@ -328,6 +333,18 @@ public sealed class SetupController : Controller
 
         try
         {
+            // Son aktif şirketi pasife alma koruması
+            if (!input.IsActive)
+            {
+                var all = await _companyDefinitionRepository.GetAllAsync(cancellationToken);
+                var activeOtherCount = all.Count(c => c.IsActive && c.Id != input.Id);
+                if (activeOtherCount == 0)
+                {
+                    ModelState.AddModelError(string.Empty, "Son aktif şirket pasife alınamaz. Sistemde en az bir aktif şirket bulunmalıdır.");
+                    return View(nameof(Companies), await BuildSetupCompanyViewModelAsync(input, page, pageSize, cancellationToken));
+                }
+            }
+
             await _adminManagementService.SaveCompanyAsync(
                 new SaveCompanyRequest(
                     input.Id,
@@ -335,7 +352,7 @@ public sealed class SetupController : Controller
                     input.Name,
                     "-", null, null, null,
                     "-", "-",
-                    false, true,
+                    false, input.IsActive,
                     BuildConnectionString(input.SqlServer, input.SqlDatabase, input.SqlUsername, input.SqlPassword)),
                 cancellationToken);
 
@@ -470,28 +487,106 @@ public sealed class SetupController : Controller
                 (x.Email ?? "").ToLowerInvariant().Contains(q) ||
                 (x.CompanyName ?? "").ToLowerInvariant().Contains(q));
         }
-        return Json(items.Select(x => new
-        {
-            x.Id, x.FullName, x.Email, x.CompanyName, x.CompanyId, x.Role, x.IsActive,
-            grafanaRole = x.GrafanaRole, // "Viewer"/"Designer"/"Admin"/null — frontend Düzenle akisi icin
-            // CalibraHub yetkisi UI'da 3 grubun radio butonu — backend 5 enum degerini bunlara map'ler.
-            //   SystemAdmin            → "SistemAdmin"
-            //   DepartmentManager      → "Admin"
-            //   Approver/Operator/Auditor → "User"
-            uiRole = MapUserRoleToUiRole(x.Role)
-        }).ToArray());
+
+        // Aynı e-postaya sahip birden fazla UserProfile (farklı şirket) → gruplama.
+        // Her grup = bir kişi; companies[] dizisi hangi şirketlerde aktif olduğunu taşır.
+        var grouped = items
+            .GroupBy(x => (x.Email ?? "").ToLowerInvariant())
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var primary = g.OrderBy(x => x.Id).First();
+                var uiRole  = MapUserRoleToUiRole(primary.Role);
+                return new
+                {
+                    id           = primary.Id,
+                    fullName     = primary.FullName,
+                    email        = primary.Email,
+                    isActive     = g.Any(x => x.IsActive),
+                    uiRole,
+                    grafanaRole  = primary.GrafanaRole,
+                    employeeCode = primary.EmployeeCode,
+                    // Geriye dönük uyumluluk için tek şirket alanları (eski kod için)
+                    companyId   = primary.CompanyId,
+                    companyName = string.Join(", ",
+                        g.Select(x => x.CompanyName).Where(n => !string.IsNullOrEmpty(n)).Distinct()),
+                    // Yeni: tüm şirket bağlantıları (rol dahil)
+                    companies = g.OrderBy(x => x.CompanyId).Select(x => new
+                    {
+                        id        = x.CompanyId,
+                        name      = x.CompanyName,
+                        profileId = x.Id,
+                        isActive  = x.IsActive,
+                        role      = MapUserRoleToUiRole(x.Role),
+                    }).ToArray()
+                };
+            });
+
+        return Json(grouped.ToArray());
     }
 
-    // UserRole enum stringinden UI radio button degerine donusum.
+    [HttpGet]
+    public async Task<IActionResult> GetCompanyUsersJson(int companyId, CancellationToken cancellationToken)
+    {
+        var auth = RequireAuth();
+        if (auth != null) return Json(new { success = false, message = "Yetkisiz erisim." });
+
+        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+        var users = snapshot.Users
+            .Where(u => u.CompanyId == companyId)
+            .OrderBy(u => u.FullName)
+            .Select(u => new
+            {
+                id       = u.Id,
+                fullName = u.FullName,
+                email    = u.Email,
+                isActive = u.IsActive,
+                role     = MapUserRoleToUiRole(u.Role)
+            })
+            .ToArray();
+        return Json(users);
+    }
+
+    // Rol string'inden UI değerine ("User"/"Admin"/"SistemAdmin") dönüşüm.
+    // ÖNEMLİ: DTO.Role artık Türkçe görünüm etiketi taşıyor ("Sistem Yoneticisi" vb.),
+    // bu yüzden hem İngilizce enum adını hem Türkçe etiketi çözebilen TryParseRole kullanılır.
+    // Eski sürüm yalnızca enum adıyla karşılaştırdığı için her zaman "User" dönüyordu.
     private static string MapUserRoleToUiRole(string? roleString)
     {
-        if (string.IsNullOrWhiteSpace(roleString)) return "User";
-        if (string.Equals(roleString, nameof(UserRole.SystemAdmin), StringComparison.OrdinalIgnoreCase))
-            return "SistemAdmin";
-        if (string.Equals(roleString, nameof(UserRole.DepartmentManager), StringComparison.OrdinalIgnoreCase))
-            return "Admin";
-        // Approver / Operator / Auditor → User
-        return "User";
+        if (!UserAuthorizationCatalog.TryParseRole(roleString, out var role))
+            return "User";
+        return role switch
+        {
+            UserRole.SystemAdmin       => "SistemAdmin",
+            UserRole.DepartmentManager => "Admin",
+            _                          => "User"
+        };
+    }
+
+    /// <summary>
+    /// "Admin"/"SistemAdmin"/"User" UI string'ini UserRole enum'a çevirir.
+    /// </summary>
+    private static UserRole ParseUiRole(string? uiRole) =>
+        (uiRole ?? "User").Trim().ToLowerInvariant() switch
+        {
+            "admin"       => UserRole.DepartmentManager,
+            "sistemadmin" => UserRole.SystemAdmin,
+            _             => UserRole.Operator
+        };
+
+    /// <summary>
+    /// Şirket bazlı rol: CompanyRoles listesinde companyId varsa onu, yoksa globalRole'ü döner.
+    /// </summary>
+    private static (UserRole role, IReadOnlyCollection<CalibraHub.Domain.Enums.UserPermission> perms)
+        GetRoleForCompany(SetupUserInput input, int companyId, UserRole globalRole)
+    {
+        var entry = input.CompanyRoles?.FirstOrDefault(r => r.CompanyId == companyId);
+        if (entry is not null)
+        {
+            var r = ParseUiRole(entry.Role);
+            return (r, UserAuthorizationCatalog.GetAllowedPermissions(r));
+        }
+        return (globalRole, UserAuthorizationCatalog.GetAllowedPermissions(globalRole));
     }
 
     [HttpPost]
@@ -500,20 +595,31 @@ public sealed class SetupController : Controller
         var auth = RequireAuth();
         if (auth != null) return auth;
 
-        if (!input.CompanyId.HasValue)
-            return Json(new { success = false, message = "Sirket secimi zorunludur." });
         if (string.IsNullOrWhiteSpace(input.FullName))
             return Json(new { success = false, message = "Ad Soyad zorunludur." });
         if (string.IsNullOrWhiteSpace(input.Email))
             return Json(new { success = false, message = "E-posta zorunludur." });
 
-        // Yeni kayit ise sifre zorunlu, edit ise bos birakilirsa mevcut sifre korunur.
-        var isUpdate = input.Id.HasValue;
+        // Hangi şirket(ler)e kayıt yapılacağını belirle:
+        //   companyIds (array) öncelik alır; yoksa tekil companyId'ye bakılır.
+        var effectiveCompanyIds = (input.CompanyIds?.Count > 0 ? input.CompanyIds : null)
+            ?? (input.CompanyId.HasValue ? [input.CompanyId.Value] : null);
+
+        if (effectiveCompanyIds is null || effectiveCompanyIds.Count == 0)
+            return Json(new { success = false, message = "En az bir şirket seçilmelidir." });
+
+        // Yeni kayıt ise şifre zorunlu; edit ise boş bırakılırsa mevcut şifre korunur.
+        // Multi-company modunda "update" = email ile eşleşen kayıt var demektir.
+        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+        var existingByEmail = snapshot.Users
+            .Where(u => string.Equals(u.Email, input.Email, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var isUpdate = input.Id.HasValue || existingByEmail.Count > 0;
+
         if (!isUpdate && string.IsNullOrWhiteSpace(input.Password))
             return Json(new { success = false, message = "Sifre zorunludur." });
 
-        // Grafana yetki seviyesi parse — bos/null = Grafana'ya eklenmez/cikartilir,
-        // "Viewer"/"Designer"/"Admin" = ilgili rol.
+        // Grafana yetki seviyesi parse
         CalibraHub.Domain.Enums.GrafanaRole? grafanaRole = null;
         if (!string.IsNullOrWhiteSpace(input.GrafanaRole))
         {
@@ -523,67 +629,267 @@ public sealed class SetupController : Controller
                 return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Designer/Admin/bos)." });
         }
 
-        // CalibraHub rol parse — UI 3 secenek, enum 5 deger.
-        // Default (Role bos / tanimsiz / yeni kayit) = "User" → Operator.
-        var uiRole = string.IsNullOrWhiteSpace(input.Role) ? "User" : input.Role.Trim();
-        UserRole calibraRole = uiRole.ToLowerInvariant() switch
-        {
-            "admin"        => UserRole.DepartmentManager,
-            "sistemadmin"  => UserRole.SystemAdmin,
-            "user"         => UserRole.Operator,
-            _              => UserRole.Operator
-        };
-        var calibraPermissions = UserAuthorizationCatalog.GetAllowedPermissions(calibraRole);
+        // Global rol parse (per-company override yoksa kullanılır)
+        var globalRole  = ParseUiRole(input.Role);
+        var globalPerms = UserAuthorizationCatalog.GetAllowedPermissions(globalRole);
+
+        // Grafana: modal artık bu alanı göndermiyor (rol tanımına taşınacak).
+        // null ise mevcut Grafana rolü KORUNUR; sadece açıkça gönderilirse güncellenir.
+        var setGrafana = input.GrafanaRole != null;
 
         try
         {
-            if (isUpdate)
+            // CompanyIds dizisi gönderildiyse — multi-company reconcile (şirket bazlı rol destekli)
+            if (input.CompanyIds?.Count > 0)
+            {
+                var requestedSet = new HashSet<int>(effectiveCompanyIds);
+                var existingMap  = existingByEmail.ToDictionary(u => u.CompanyId, u => u.Id);
+
+                // 1. Mevcut + istenen = güncelle (şirket bazlı rol + extra alanlar)
+                foreach (var (companyId, profileId) in existingMap.Where(kv => requestedSet.Contains(kv.Key)))
+                {
+                    var (compRole, _) = GetRoleForCompany(input, companyId, globalRole);
+                    await _adminManagementService.UpdateUserAsync(
+                        new UpdateUserRequest(
+                            profileId, companyId, input.FullName, input.Email,
+                            Password: string.IsNullOrWhiteSpace(input.Password) ? null : input.Password,
+                            SetGrafanaRole: setGrafana, GrafanaRole: grafanaRole,
+                            SetRole: true, Role: compRole),
+                        cancellationToken);
+                    await ApplyExtraFieldsAsync(input, companyId, cancellationToken);
+                }
+
+                // 2. Yeni şirketler = oluştur (şirket bazlı rol)
+                foreach (var companyId in requestedSet.Except(existingMap.Keys))
+                {
+                    var (compRole, compPerms) = GetRoleForCompany(input, companyId, globalRole);
+                    await CreateUserForCompanyAsync(companyId, input, compRole, compPerms, grafanaRole, cancellationToken);
+                }
+
+                // 3. Listeden çıkan şirketler = pasife al
+                foreach (var (companyId, profileId) in existingMap.Where(kv => !requestedSet.Contains(kv.Key)))
+                {
+                    var user = await _userProfileRepository.GetByIdAsync(profileId, cancellationToken);
+                    if (user is not null) { user.Deactivate(); await _userProfileRepository.UpdateAsync(user, cancellationToken); }
+                }
+
+                return Json(new { success = true, message = "Kullanici kaydedildi." });
+            }
+
+            // Tek şirket — eski davranış korunur
+            if (isUpdate && input.Id.HasValue)
             {
                 await _adminManagementService.UpdateUserAsync(
                     new UpdateUserRequest(
-                        input.Id!.Value,
-                        input.CompanyId.Value,
-                        input.FullName,
-                        input.Email,
+                        input.Id.Value, effectiveCompanyIds[0], input.FullName, input.Email,
                         Password: string.IsNullOrWhiteSpace(input.Password) ? null : input.Password,
-                        SetGrafanaRole: true,        // Form'dan her zaman uygulanir (bos = cikar, dolu = ekle/update)
-                        GrafanaRole: grafanaRole,
-                        SetRole: true,               // Form'dan rol her zaman uygulanir
-                        Role: calibraRole),
+                        SetGrafanaRole: setGrafana, GrafanaRole: grafanaRole,
+                        SetRole: true, Role: globalRole),
                     cancellationToken);
                 return Json(new { success = true, message = "Kullanici guncellendi." });
             }
 
-            var allDepts = await _departmentRepository.GetAllAsync(cancellationToken);
-            var dept = allDepts.FirstOrDefault(x => x.CompanyId == input.CompanyId.Value);
-            if (dept is null)
-            {
-                await _adminManagementService.CreateDepartmentAsync(
-                    new CreateDepartmentRequest(input.CompanyId.Value, "Yonetim"),
-                    cancellationToken);
-                allDepts = await _departmentRepository.GetAllAsync(cancellationToken);
-                dept = allDepts.First(x => x.CompanyId == input.CompanyId.Value);
-            }
-
-            await _adminManagementService.CreateUserAsync(
-                new CreateUserRequest(
-                    input.CompanyId.Value,
-                    input.FullName,
-                    input.Email,
-                    $"USR-{Guid.NewGuid().ToString()[..6].ToUpperInvariant()}",
-                    dept.Id,
-                    null,
-                    calibraRole,
-                    calibraPermissions,
-                    Password: input.Password,
-                    GrafanaRole: grafanaRole),
-                cancellationToken);
-
+            await CreateUserForCompanyAsync(effectiveCompanyIds[0], input, globalRole, globalPerms, grafanaRole, cancellationToken);
             return Json(new { success = true, message = "Kullanici olusturuldu." });
         }
         catch (Exception ex)
         {
             return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>Belirtilen şirket için yeni UserProfile oluşturur — departman yoksa "Yonetim" departmanı açar.</summary>
+    private async Task CreateUserForCompanyAsync(
+        int companyId, SetupUserInput input,
+        UserRole calibraRole, IReadOnlyCollection<CalibraHub.Domain.Enums.UserPermission> calibraPermissions,
+        CalibraHub.Domain.Enums.GrafanaRole? grafanaRole,
+        CancellationToken ct)
+    {
+        var allDepts = await _departmentRepository.GetAllAsync(ct);
+        var dept     = allDepts.FirstOrDefault(x => x.CompanyId == companyId);
+        if (dept is null)
+        {
+            await _adminManagementService.CreateDepartmentAsync(
+                new CreateDepartmentRequest(companyId, "Yonetim"), ct);
+            allDepts = await _departmentRepository.GetAllAsync(ct);
+            dept     = allDepts.First(x => x.CompanyId == companyId);
+        }
+
+        var employeeCode = string.IsNullOrWhiteSpace(input.EmployeeCode)
+            ? $"USR-{Guid.NewGuid().ToString()[..6].ToUpperInvariant()}"
+            : input.EmployeeCode.Trim();
+
+        await _adminManagementService.CreateUserAsync(
+            new CreateUserRequest(
+                companyId, input.FullName, input.Email,
+                employeeCode,
+                dept.Id, null,
+                calibraRole, calibraPermissions,
+                Password: input.Password,
+                GrafanaRole: grafanaRole),
+            ct);
+
+        // PhoneNumber ve IsActive CreateUserRequest'te yok — oluşturulduktan sonra doğrudan güncelle.
+        await ApplyExtraFieldsAsync(input, companyId, ct);
+    }
+
+    /// <summary>
+    /// PhoneNumber, EmployeeCode (güncelleme), IsActive — AdminManagementService'te olmayan alanları
+    /// UserProfileRepository üzerinden doğrudan set eder.
+    /// </summary>
+    private async Task ApplyExtraFieldsAsync(SetupUserInput input, int companyId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(input.PhoneNumber) && input.IsActive) return; // nothing to patch
+
+        var profile = await _userProfileRepository.GetByEmailAndCompanyIdAsync(
+            input.Email ?? string.Empty, companyId, ct);
+        if (profile is null) return;
+
+        var phone = NormalizePhone(input.PhoneNumber);
+        var rebuilt = new Domain.Entities.UserProfile
+        {
+            Id               = profile.Id,
+            CompanyId        = profile.CompanyId,
+            FullName         = profile.FullName,
+            Email            = profile.Email,
+            EmployeeCode     = !string.IsNullOrWhiteSpace(input.EmployeeCode) ? input.EmployeeCode.Trim() : profile.EmployeeCode,
+            DepartmentId     = profile.DepartmentId,
+            SupervisorUserId = profile.SupervisorUserId,
+            PhoneNumber      = phone ?? profile.PhoneNumber,
+            Role             = profile.Role,
+            Permissions      = profile.Permissions,
+            GrafanaRole      = profile.GrafanaRole,
+        };
+        rebuilt.SetPasswordHash(profile.PasswordHash);
+        rebuilt.SetInterfacePreferences(profile.LanguageCode, profile.ThemeCode);
+        rebuilt.SetGridPreferencesJson(profile.GridPreferencesJson);
+        if (!input.IsActive) rebuilt.Deactivate();
+        await _userProfileRepository.UpdateAsync(rebuilt, ct);
+    }
+
+    private static string? NormalizePhone(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var cleaned = new string(raw.Where(c => char.IsDigit(c) || c == '+').ToArray());
+        return cleaned.Length == 0 ? null : (cleaned.Length > 30 ? cleaned[..30] : cleaned);
+    }
+
+    // ── SmartBoard Board Config ─────────────────────────────────────────────────
+
+    [HttpGet]
+    public async Task<IActionResult> CompanyBoardConfig(CancellationToken cancellationToken)
+    {
+        var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+        var companies = snapshot.Companies.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+        var config = CalibraHub.Application.SmartBoard.SmartBoard.For(companies)
+            .WithBoardKey("setup-companies")
+            .WithTitle("Şirket Tanımları", subtitle: $"{companies.Count} şirket")
+            .WithIcon("Building2", "indigo")
+            .WithRefreshUrl("/Setup/CompanyBoardConfig")
+            .WithSearchPlaceholder("Şirket adı…")
+            .WithEmptyText("Henüz şirket tanımlanmamış")
+            .AddHeaderAction("new", "Yeni Şirket", "Plus", "#open-new-company-modal")
+            .MapEntities(c =>
+            {
+                // Şirket bazlı DB özelliği kaldırıldı — kartta SQL bağlantı widget'ı gösterilmez.
+                var eb = CalibraHub.Application.SmartBoard.SmartBoardEntity
+                    .For(c.Id.ToString(), c.Name)
+                    .WithStatusBadge(c.IsActive ? "Aktif" : "Pasif", c.IsActive ? "emerald" : "slate");
+
+                eb.WithPrimaryAction("Düzenle", "Edit", $"#edit-company-{c.Id}", "amber", hideButton: true);
+                eb.WithSecondaryAction("Sil", "Trash2",
+                    apiUrl: $"/Setup/DeleteCompanyPost?id={c.Id}",
+                    apiMethod: "POST",
+                    confirm: $"Bu şirketi silmek istediğinize emin misiniz? ({c.Name})");
+
+                return eb;
+            })
+            .Build();
+
+        return Json(config, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> UserMappingBoardConfig(CancellationToken ct)
+    {
+        var snapshot = await _adminReadService.GetSnapshotAsync(ct);
+
+        var grouped = snapshot.Users
+            .GroupBy(u => (u.Email ?? "").ToLowerInvariant())
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var primary = g.OrderBy(u => u.Id).First();
+                var assignments = g
+                    .OrderBy(u => u.CompanyId)
+                    .Where(u => !string.IsNullOrEmpty(u.CompanyName))
+                    .Select(u => new { u.CompanyId, u.CompanyName, Role = MapUserRoleToUiRole(u.Role) })
+                    .ToList();
+                return new { Primary = primary, Assignments = assignments };
+            })
+            .ToList();
+
+        string[] palette = ["indigo", "violet", "blue", "emerald", "amber"];
+
+        var config = CalibraHub.Application.SmartBoard.SmartBoard.For(grouped)
+            .WithBoardKey("setup-user-mapping")
+            .WithTitle("Kullanıcı-Şirket Eşleme", subtitle: $"{grouped.Count} kullanıcı")
+            .WithIcon("UserCog", "violet")
+            .WithRefreshUrl("/Setup/UserMappingBoardConfig")
+            .WithSearchPlaceholder("Ad, e-posta…")
+            .WithEmptyText("Henüz kullanıcı tanımlanmamış")
+            .AddHeaderAction("new-user", "Yeni Kullanıcı", "Plus", "#open-new-user-modal")
+            .MapEntities(item =>
+            {
+                var eb = CalibraHub.Application.SmartBoard.SmartBoardEntity
+                    .For(item.Primary.Id.ToString(), item.Primary.FullName, subtitle: item.Primary.Email)
+                    .WithDescription(item.Assignments.Count > 0
+                        ? string.Join(" · ", item.Assignments.Select(a => $"{a.CompanyName} ({a.Role})"))
+                        : "Şirket atanmamış")
+                    .WithStatusBadge(item.Primary.IsActive ? "Aktif" : "Pasif",
+                        item.Primary.IsActive ? "emerald" : "slate");
+
+                for (int i = 0; i < item.Assignments.Count; i++)
+                    eb.AddTextWidget($"w_co_{i}", item.Assignments[i].CompanyName ?? "Şirket",
+                        item.Assignments[i].Role,
+                        color: palette[i % palette.Length]);
+
+                eb.WithPrimaryAction("Düzenle", "Edit",
+                    url: $"#edit-mapping-{item.Primary.Id}",
+                    color: "violet", hideButton: true);
+
+                return eb;
+            })
+            .Build();
+
+        return Json(config, new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteCompanyPost(int id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var all = await _companyDefinitionRepository.GetAllAsync(cancellationToken);
+            if (all.Count <= 1)
+                return Json(new { ok = false, error = "Son şirket silinemez." });
+
+            await _companyDefinitionRepository.DeleteAsync(id, cancellationToken);
+            return Json(new { ok = true });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
         }
     }
 
@@ -675,21 +981,28 @@ public sealed class SetupController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeactivateCompanyJson(
+    public async Task<IActionResult> DeleteCompanyJson(
         [FromBody] SetupDeactivateRequest? request, CancellationToken cancellationToken)
     {
         var auth = RequireAuth();
         if (auth != null) return Json(new { success = false, message = "Yetkisiz erisim." });
 
-        if (request is null) return Json(new { success = false, message = "Gecersiz istek." });
+        if (request is null || request.Id <= 0)
+            return Json(new { success = false, message = "Gecersiz istek." });
 
-        var company = await _companyDefinitionRepository.GetByIdAsync(request.Id, cancellationToken);
-        if (company != null)
+        try
         {
-            company.Deactivate();
-            await _companyDefinitionRepository.UpdateAsync(company, cancellationToken);
+            var all = await _companyDefinitionRepository.GetAllAsync(cancellationToken);
+            if (all.Count <= 1)
+                return Json(new { success = false, message = "Son şirket silinemez. Sistemde en az bir şirket bulunmalıdır." });
+
+            await _companyDefinitionRepository.DeleteAsync(request.Id, cancellationToken);
+            return Json(new { success = true });
         }
-        return Json(new { success = true });
+        catch (Exception ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
     }
 
     [HttpPost]
@@ -701,23 +1014,36 @@ public sealed class SetupController : Controller
 
         if (request is null) return Json(new { success = false, message = "Gecersiz istek." });
 
-        var user = await _userProfileRepository.GetByIdAsync(request.Id, cancellationToken);
-        if (user != null)
+        if (!string.IsNullOrWhiteSpace(request.Email))
         {
-            user.Deactivate();
-            await _userProfileRepository.UpdateAsync(user, cancellationToken);
+            // Multi-company: e-postaya göre tüm profilleri pasife al
+            var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
+            var profiles = snapshot.Users
+                .Where(u => string.Equals(u.Email, request.Email, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            foreach (var p in profiles)
+            {
+                var user = await _userProfileRepository.GetByIdAsync(p.Id, cancellationToken);
+                if (user is not null) { user.Deactivate(); await _userProfileRepository.UpdateAsync(user, cancellationToken); }
+            }
         }
+        else
+        {
+            var user = await _userProfileRepository.GetByIdAsync(request.Id, cancellationToken);
+            if (user is not null) { user.Deactivate(); await _userProfileRepository.UpdateAsync(user, cancellationToken); }
+        }
+
         return Json(new { success = true });
     }
 
     // ── Yardımcılar ──────────────────────────────────────────────────────────
 
-    private IActionResult? RequireAuth()
-    {
-        if (User.Identity?.IsAuthenticated == true) return null;
-        var returnUrl = Request.Path.Value + Request.QueryString.Value;
-        return RedirectToAction("Login", "Account", new { returnUrl });
-    }
+    // 2026-05-26: RequireAuth() devre disi — [GateProtected] TOTP zaten yetkilendirmeyi
+    // saglar. Onceden hem Login hem Gate isteniyordu, iframe icinden Login'e duserdik.
+    // Artik Gate session unlock'i yetiyor; SetupController + SetupUserController buradan
+    // ortak rota olarak gecsin. RequireAuth() helper'i bos kalir, geri uyumluluk icin
+    // var ama her zaman null doner.
+    private IActionResult? RequireAuth() => null;
 
     private static string? BuildConnectionString(
         string? server, string? database, string? username, string? password)
@@ -917,5 +1243,7 @@ public sealed class SetupDeactivateRequest
 
 public sealed class SetupDeactivateUserRequest
 {
-    public Guid Id { get; set; }
+    public int Id { get; set; }
+    /// <summary>E-posta ile toplu pasife alma (multi-company). Dolu ise Id göz ardı edilir.</summary>
+    public string? Email { get; set; }
 }

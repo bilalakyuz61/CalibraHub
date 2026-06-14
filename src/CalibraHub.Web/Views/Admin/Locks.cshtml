@@ -68,11 +68,12 @@
         el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#f87171;font-size:14px;">' + msg + '</div>';
     }
 
+    var _locksHandle = null;
     function doMount() {
         if (!BOARD_CONFIG) { showError('Board config bulunamadı'); return; }
         if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) { showError('SmartBoard yüklenemedi'); return; }
         try {
-            window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+            _locksHandle = window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
         } catch (ex) {
             showError('Hata: ' + (ex.message || ex));
         }
@@ -111,8 +112,10 @@
         return fetch('/Admin/LocksBoardConfig', { credentials: 'same-origin', cache: 'no-store' })
             .then(function(r) { return r.json(); })
             .then(function(cfg) {
-                if (window.CalibraHub && window.CalibraHub.mountSmartBoard && el) {
-                    window.CalibraHub.mountSmartBoard(el, cfg);
+                if (_locksHandle && typeof _locksHandle.refresh === 'function') {
+                    _locksHandle.refresh(cfg);
+                } else if (window.CalibraHub && window.CalibraHub.mountSmartBoard && el) {
+                    _locksHandle = window.CalibraHub.mountSmartBoard(el, cfg);
                 }
             });
     }

@@ -31,7 +31,7 @@ public sealed class CollaborationStartupLoadService : IHostedService
 
             foreach (var lk in activeLocks)
             {
-                if (!Guid.TryParse(lk.UserId, out var userId))
+                if (!int.TryParse(lk.UserId, out var userId))
                 {
                     continue;
                 }

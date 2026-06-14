@@ -45,7 +45,8 @@ function parseViewFromSql(sql) {
 }
 
 export default function ElementEditorModal({ el, dataSources, onSave, onClose }) {
-  const isBound = el.kind === 'BoundField' || el.kind === 'AmountInWords'
+  // Barkod elementi de bir alana baglanir (Barcode/QR icin "deger" kaynagi).
+  const isBound = el.kind === 'BoundField' || el.kind === 'AmountInWords' || el.kind === 'Barcode'
   const initialExpr = isBound
     ? (el.binding?.alias && el.binding?.col ? `[${el.binding.alias}.${el.binding.col}]` : '')
     : (el.text ?? '')
@@ -154,6 +155,7 @@ export default function ElementEditorModal({ el, dataSources, onSave, onClose })
             {el.kind === 'Label' ? 'Etiket Düzenle'
              : el.kind === 'BoundField' ? 'Veri Alanı Düzenle'
              : el.kind === 'AmountInWords' ? 'Yazı ile Tutar Düzenle'
+             : el.kind === 'Barcode' ? (el.barcodeType === 'QR' ? 'QR Düzenle' : 'Barkod Düzenle')
              : 'Element Düzenle'}
           </span>
           <button onClick={onClose} style={closeBtn}>×</button>

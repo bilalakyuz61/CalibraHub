@@ -22,12 +22,12 @@ public sealed class MaterialCardDynamicFieldDefinition : Entity
     public int ColumnSpan { get; init; } = 1;
     public bool IsSystem { get; init; }
     public bool IsActive { get; private set; } = true;
-    public DateTime CreatedAt { get; init; } = DateTime.Now;
-    public DateTime UpdatedAt { get; private set; } = DateTime.Now;
+    public DateTime Created { get; init; } = DateTime.Now;
+    public DateTime Updated { get; private set; } = DateTime.Now;
 
     public void SetActive(bool isActive)
     {
         IsActive = isActive;
-        UpdatedAt = DateTime.Now;
+        Updated = DateTime.Now;
     }
 }

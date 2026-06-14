@@ -140,6 +140,8 @@ export default function SmartBoard(props) {
   }, [boardKey])
 
   // Master widget list
+  // 2026-05-24: Backend'den gelen ek field'lar (source, options, group, groupLabel)
+  // filter panel multi-select / collapsible icin gerekli — burada KORUNMALI.
   var masterWidgets = useMemo(function () {
     if (Array.isArray(props.masterWidgets)) {
       return props.masterWidgets.map(function (w) {
@@ -147,6 +149,9 @@ export default function SmartBoard(props) {
           id: w.id, dbId: w.dbId, type: w.type || 'data',
           dataType: w.dataType, icon: w.icon, label: w.label || w.id,
           color: w.color, isPlainField: w.isPlainField,
+          // Filter panel icin ek meta:
+          source: w.source, options: w.options,
+          group: w.group, groupLabel: w.groupLabel,
         }
       })
     }
@@ -162,6 +167,8 @@ export default function SmartBoard(props) {
           master.push({
             id: w.id, type: w.type || 'data', dataType: w.dataType,
             icon: w.icon, label: w.label || w.id, color: w.color,
+            source: w.source, options: w.options,
+            group: w.group, groupLabel: w.groupLabel,
           })
         }
       })
@@ -250,8 +257,14 @@ export default function SmartBoard(props) {
   }, [hasMore, loading, currentPage, searchQuery, fetchPage])
 
   // ── Intersection observer for infinite scroll ──
+  // 2026-05-24: Aktif filtre varken auto-load KAPALI — client-side filtering ile
+  // birlikte sonsuz loop'a giriyordu ("1 sonuc bulundu, 49 atlandi, sentinel hala
+  // gorunur, sonraki sayfayi getir, yine filtrelendi, ..." flickering).
+  // Filter aktifken kullanici "Daha Fazla Yukle" butonuna basarak manuel ilerler.
+  var hasActiveFilter = Array.isArray(filters) && filters.length > 0
   useEffect(function () {
     if (!isPaginated || !sentinelRef.current) return
+    if (hasActiveFilter) return  // filtre aktifken auto-load yok
     var observer = new IntersectionObserver(function (entries) {
       if (entries[0].isIntersecting && hasMore && !loading) {
         handleLoadMore()
@@ -259,21 +272,24 @@ export default function SmartBoard(props) {
     }, { rootMargin: '200px' })
     observer.observe(sentinelRef.current)
     return function () { observer.disconnect() }
-  }, [isPaginated, hasMore, loading, handleLoadMore])
+  }, [isPaginated, hasMore, loading, handleLoadMore, hasActiveFilter])
 
   // Client-side filtering — search + filter panel (her iki mod icin)
   // Not: Server-side paginated mode'da search server'da yapilir, ama filter panel
   // her iki modda da CLIENT-SIDE calisir. Server-side filter destegi sonra eklenebilir.
   var filteredEntities = useMemo(function () {
     var arr = entities
-    // 1) Search (client-side mode'da)
+    // 1) Search (client-side mode'da) — title/subtitle/description + opsiyonel searchTags
+    // searchTags: controller'in entity'ye eklediği gizli ek arama keywords'i
+    // (ör. enum kartlarinda endpoint adi + field path'leri). UI'da gosterilmez.
     if (!isPaginated && search.trim()) {
       var q = search.toLowerCase()
       arr = arr.filter(function (e) {
         return (
           (e.title && e.title.toLowerCase().indexOf(q) !== -1) ||
           (e.subtitle && e.subtitle.toLowerCase().indexOf(q) !== -1) ||
-          (e.description && e.description.toLowerCase().indexOf(q) !== -1)
+          (e.description && e.description.toLowerCase().indexOf(q) !== -1) ||
+          (e.searchTags && String(e.searchTags).toLowerCase().indexOf(q) !== -1)
         )
       })
     }

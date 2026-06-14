@@ -1,0 +1,32 @@
+@{
+    ViewData["Title"] = "Onay Akış Tanımları";
+    ViewData["BodyClass"] = "page-approval-flows";
+    var boardConfigJson = ViewData["BoardConfigJson"] as string ?? "{}";
+}
+
+@section Styles {
+<link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide">
+    <div class="integrator-dashboard__content" style="padding:0;height:100%;">
+        <div id="reactApprovalFlowBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;height:100%;"></div>
+    </div>
+</section>
+
+@section Scripts {
+<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script>
+(function () {
+    var cfg = @Html.Raw(boardConfigJson);
+    var el  = document.getElementById('reactApprovalFlowBoard');
+    function doMount() {
+        if (el && window.CalibraHub?.mountSmartBoard)
+            window.CalibraHub.mountSmartBoard(el, cfg);
+    }
+    if (window.CalibraHub?.mountSmartBoard) doMount();
+    else document.addEventListener('DOMContentLoaded', doMount);
+    window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
+})();
+</script>
+}

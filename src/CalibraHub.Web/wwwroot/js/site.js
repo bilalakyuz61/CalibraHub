@@ -1213,6 +1213,62 @@
         const findPanelByKey = (key) => Array.from(panelStack.querySelectorAll("[data-workspace-panel]"))
             .find((panel) => panel instanceof HTMLElement && panel.dataset.workspaceKey === key) ?? null;
 
+        // Bir workspace iframe'inin OTORITER basligini okur.
+        // Tek dogru kaynak: yuklenen sayfanin `body[data-page-title]` (ViewData["Title"]).
+        // Boylece sekme basligi, linkin metninden degil sayfanin kendi basligindan gelir.
+        const readFrameTitle = (frame) => {
+            if (!(frame instanceof HTMLIFrameElement)) {
+                return "";
+            }
+
+            try {
+                const doc = frame.contentDocument;
+                if (!doc) {
+                    return "";
+                }
+
+                const bodyTitle = doc.body?.getAttribute("data-page-title");
+                return normalizeTitle(bodyTitle || doc.title) || "";
+            } catch {
+                // Farkli origin / erisilemez durum — sessizce gec.
+                return "";
+            }
+        };
+
+        // Sekme basligini sayfanin gercek basligiyla uzlastirir (idempotent).
+        // Yanlis/teknik bir placeholder ( or. action adi) yuklenmeden once gosterilmis olsa
+        // bile, sayfa yuklenince burada dogru baslikla degistirilir ve kalici hale gelir.
+        const reconcileTabTitle = (key, rawTitle) => {
+            const title = normalizeTitle(rawTitle);
+            if (!key || !title) {
+                return;
+            }
+
+            const index = tabs.findIndex((entry) => entry.key === key);
+            if (index < 0 || tabs[index].title === title) {
+                return;
+            }
+
+            tabs[index] = { ...tabs[index], title };
+            writeTabs(tabs);
+
+            const panel = findPanelByKey(key);
+            if (panel instanceof HTMLElement) {
+                panel.dataset.workspaceTitle = title;
+                const frame = panel.querySelector("iframe");
+                if (frame instanceof HTMLIFrameElement) {
+                    frame.title = title;
+                }
+            }
+
+            if (key === activeKey) {
+                root.setAttribute("data-page-title", title);
+                document.title = `${title} - CalibraHub`;
+            }
+
+            render();
+        };
+
         const createFramePanel = (tab) => {
             const panel = document.createElement("section");
             panel.className = "workspace-panel";
@@ -1230,6 +1286,8 @@
             frame.setAttribute("loading", "eager");
             frame.setAttribute("data-workspace-frame", "");
             frame.addEventListener("load", () => {
+                // Sayfa yuklendi: sekme basligini sayfanin gercek basligiyla uzlastir.
+                reconcileTabTitle(tab.key, readFrameTitle(frame));
                 if (panel.classList.contains("is-active")) {
                     requestWorkspaceToolbarSync();
                 }
@@ -1595,6 +1653,21 @@
         if (activeKey) {
             setActiveTab(activeKey, { history: "replace" });
         }
+
+        // Guvence: setActiveTab cagrisindan ONCE yuklenmis (cache'li) iframe'ler load
+        // olayini kacirmis olabilir — acilista bir kez mevcut frame'leri uzlastir.
+        panelStack.querySelectorAll("[data-workspace-panel] iframe").forEach((frame) => {
+            if (!(frame instanceof HTMLIFrameElement)) {
+                return;
+            }
+
+            const panel = frame.closest("[data-workspace-panel]");
+            const key = panel instanceof HTMLElement ? panel.dataset.workspaceKey : "";
+            const title = readFrameTitle(frame);
+            if (key && title) {
+                reconcileTabTitle(key, title);
+            }
+        });
     };
 
     const setupFormDrafts = () => {

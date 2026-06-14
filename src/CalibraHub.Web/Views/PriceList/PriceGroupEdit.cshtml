@@ -2,6 +2,11 @@
     var groupId = (int?)ViewBag.PriceGroupId ?? 0;
     ViewData["Title"]    = groupId > 0 ? "Fiyat Grubu Duzenle" : "Yeni Fiyat Grubu";
     ViewData["FormCode"] = "PRICE_LIST";
+    // 2026-06-02: workspace-frame-body sınıfı, body'yi 100dvh + overflow:hidden yapar.
+    // Bu sayede openGuideLookup'ın createPortal ile body'e mount ettiği `position:fixed`
+    // modal viewport'a tam ortalanır. Önceden body height değişken olduğu için modal
+    // sayfanın altında konumlanıyordu.
+    ViewData["BodyClass"] = "workspace-frame-body page-price-group-edit";
     ViewData["DbInfo"]   = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
         + "<tr style='border-bottom:1px solid #e2e8f0;'><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>PriceGroup</td><td style='padding:6px 8px;'>Fiyat grubu master kayitlari</td></tr>"
         + "</table>";
@@ -25,6 +30,7 @@
     }
     body.app-theme-light .pge-action-bar { background: rgba(248,250,252,.95); border-bottom-color: #e2e8f0; }
     .pge-meta { font-size: .76rem; color: rgba(255,255,255,.55); margin-left: 16px; }
+    body.app-theme-light .pge-meta { color: #64748b; }
     body.app-theme-light .pge-meta { color: #475569; }
 
     .pge-btn {
@@ -39,6 +45,7 @@
     .pge-btn--secondary { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.10); color: rgba(255,255,255,.65); }
     body.app-theme-light .pge-btn--secondary { background: #fff; border-color: #e2e8f0; color: #475569; }
     .pge-btn--secondary:hover:not(:disabled) { background: rgba(255,255,255,.10); color: #fff; }
+    body.app-theme-light .pge-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #0f172a; border-color: #cbd5e1; }
     body.app-theme-light .pge-btn--secondary:hover:not(:disabled) { background: #f1f5f9; color: #1e293b; }
     .pge-btn--danger    { background: #ef4444; border-color: #dc2626; color: #fff; }
     .pge-btn--danger:hover:not(:disabled)    { background: #dc2626; }
@@ -89,6 +96,10 @@
     }
     .pge-switch input:checked + .pge-switch-slider { background: #6366f1; }
     .pge-switch input:checked + .pge-switch-slider:before { transform: translateX(16px); }
+    /* 2026-06-02: Acik temada unchecked toggle track'i beyaza yakindi (rgba(255,255,255,.15))
+       → fiyat tipleri togglesi (Alış) tamamen gorunmez oluyordu. Acik temada slate-300 yaptik. */
+    body.app-theme-light .pge-switch-slider { background: #cbd5e1; }
+    body.app-theme-light .pge-switch input:checked + .pge-switch-slider { background: #6366f1; }
 
     .pge-chip {
         display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 700;
@@ -96,96 +107,226 @@
     .pge-chip--buy   { background: rgba(99,102,241,.18); color: #a5b4fc; }
     .pge-chip--sell  { background: rgba(16,185,129,.18); color: #6ee7b7; }
     .pge-chip--cost  { background: rgba(245,158,11,.18); color: #fcd34d; }
+    body.app-theme-light .pge-chip--buy  { background: #e0e7ff; color: #4338ca; }
+    body.app-theme-light .pge-chip--sell { background: #d1fae5; color: #047857; }
+    body.app-theme-light .pge-chip--cost { background: #fef3c7; color: #92400e; }
 
     .pge-msg {
         padding: 8px 12px; border-radius: 6px; font-size: 12.5px; margin-top: 8px;
     }
     .pge-msg.ok  { background: rgba(16,185,129,.15); color: #6ee7b7; }
     .pge-msg.err { background: rgba(239,68,68,.15);  color: #fca5a5; }
+    body.app-theme-light .pge-msg.ok  { background: #d1fae5; color: #065f46; }
+    body.app-theme-light .pge-msg.err { background: #fee2e2; color: #991b1b; }
 
-    /* ── Cariler paneli (tam yukseklik birlesik liste) ── */
-    .pge-c-search-wrap { position: relative; margin-bottom: 12px; }
-    .pge-c-search-wrap .pge-input { padding-left: 34px; }
-    .pge-c-search-wrap .pge-c-search-icon {
-        position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
-        color: rgba(255,255,255,.45); pointer-events: none;
+    /* ── Cariler paneli (Toplu Mail Alıcı Listesi pattern) ──────────────────
+       Üst bar (sayaç + arama + toplu eylem) + sticky-head grid + DAHİL toggle.
+       2026-06-02: Eski 'pge-c-*' (section'lı liste) yerine 'pgec-*' tablo grid.
+    */
+    .pgec-bar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 12px; flex-shrink: 0;
+        background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+        border-radius: 8px; margin-bottom: 10px;
     }
-    body.app-theme-light .pge-c-search-wrap .pge-c-search-icon { color: #94a3b8; }
-    .pge-c-search-wrap .pge-c-clear {
-        position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-        background: none; border: none; color: rgba(255,255,255,.5); cursor: pointer;
-        padding: 4px; border-radius: 4px;
+    body.app-theme-light .pgec-bar { background: #f8fafc; border-color: #e2e8f0; }
+    .pgec-bar__summary { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.85); white-space: nowrap; }
+    body.app-theme-light .pgec-bar__summary { color: #1e293b; }
+    .pgec-bar__summary .pgec-num-inc { color: #10b981; font-weight: 700; }
+    .pgec-bar__summary .pgec-num-exc { color: #f43f5e; font-weight: 700; }
+    .pgec-bar__spacer { flex: 1 1 auto; }
+    .pgec-bar__search {
+        flex: 0 1 240px; min-width: 160px;
+        padding: 6px 10px; border-radius: 6px; font-size: 12.5px; outline: none;
+        background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); color: #e2e8f0;
     }
-    .pge-c-search-wrap .pge-c-clear:hover { background: rgba(255,255,255,.08); color: #fff; }
+    body.app-theme-light .pgec-bar__search { background: #fff; border-color: #cbd5e1; color: #0f172a; }
+    .pgec-bar__search:focus { border-color: #6366f1; }
+    .pgec-bar__btn {
+        padding: 6px 11px; border-radius: 6px; font-size: 12px; font-weight: 600;
+        background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+        color: rgba(255,255,255,.75); cursor: pointer; white-space: nowrap;
+        transition: all .12s ease;
+    }
+    body.app-theme-light .pgec-bar__btn { background: #fff; border-color: #cbd5e1; color: #475569; }
+    .pgec-bar__btn:hover { color: #6366f1; border-color: #6366f1; }
+    .pgec-bar__btn.is-active { background: #6366f1; border-color: #4f46e5; color: #fff; }
+    .pgec-bar__btn.is-active:hover { filter: brightness(1.08); }
 
-    .pge-c-list {
-        flex: 1 1 auto; min-height: 0; overflow: auto;
+    .pgec-grid {
+        flex: 1 1 auto; min-height: 0; overflow: hidden;
+        display: flex; flex-direction: column;
         background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.07);
         border-radius: 8px;
     }
-    body.app-theme-light .pge-c-list { background: #f8fafc; border-color: #e2e8f0; }
+    body.app-theme-light .pgec-grid { background: #fff; border-color: #e2e8f0; }
 
-    /* Section header (Atanmis / Diger) — sticky to top */
-    .pge-c-section-hdr {
-        position: sticky; top: 0; z-index: 1;
-        padding: 8px 14px; font-size: 10.5px; font-weight: 700;
-        letter-spacing: .04em; text-transform: uppercase;
-        background: rgba(15,23,42,.95); color: rgba(255,255,255,.55);
-        border-bottom: 1px solid rgba(255,255,255,.08);
-        display: flex; align-items: center; gap: 8px;
+    .pgec-grid__head, .pgec-row {
+        display: grid;
+        grid-template-columns: 110px 2fr 1fr 80px;
+        gap: 10px; align-items: center;
+        padding: 8px 14px;
     }
-    body.app-theme-light .pge-c-section-hdr { background: #f1f5f9; color: #64748b; border-bottom-color: #e2e8f0; }
-    .pge-c-section-hdr .pge-c-section-count {
-        background: rgba(99,102,241,.20); color: #a5b4fc;
-        padding: 1px 7px; border-radius: 10px; font-size: 10px;
+    .pgec-grid__head {
+        font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+        background: rgba(15,23,42,.65); color: rgba(255,255,255,.55);
+        border-bottom: 1px solid rgba(255,255,255,.08); flex-shrink: 0;
     }
-    body.app-theme-light .pge-c-section-hdr .pge-c-section-count { background: #e0e7ff; color: #4338ca; }
+    body.app-theme-light .pgec-grid__head { background: #f1f5f9; color: #64748b; border-bottom-color: #e2e8f0; }
 
-    .pge-c-row {
-        display: flex; align-items: center; gap: 12px; padding: 10px 14px;
-        border-bottom: 1px solid rgba(255,255,255,.05); font-size: 12.5px;
-    }
-    body.app-theme-light .pge-c-row { border-bottom-color: #f1f5f9; }
-    .pge-c-row:last-child { border-bottom: none; }
-    .pge-c-row.pge-c-row--assigned { background: rgba(99,102,241,.04); }
-    body.app-theme-light .pge-c-row.pge-c-row--assigned { background: rgba(99,102,241,.04); }
-    .pge-c-row.pge-c-row--busy { opacity: .5; pointer-events: none; }
+    .pgec-grid__body { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 
-    .pge-c-row .pge-c-info { flex: 1; min-width: 0; }
-    .pge-c-row .pge-c-info strong { display: inline-block; min-width: 75px; font-family: 'JetBrains Mono','Consolas',monospace; font-size: 12px; color: #e2e8f0; margin-right: 8px; }
-    body.app-theme-light .pge-c-row .pge-c-info strong { color: #1e293b; }
-    .pge-c-row .pge-c-meta { color: rgba(255,255,255,.55); font-size: 11px; margin-top: 2px; }
-    body.app-theme-light .pge-c-row .pge-c-meta { color: #64748b; }
+    .pgec-row {
+        font-size: 12.5px;
+        border-bottom: 1px solid rgba(255,255,255,.05);
+        transition: background .12s;
+    }
+    body.app-theme-light .pgec-row { border-bottom-color: #f1f5f9; }
+    .pgec-row:last-child { border-bottom: none; }
+    .pgec-row:hover { background: rgba(99,102,241,.04); }
+    .pgec-row.is-excluded { opacity: .5; }
+    .pgec-row.is-included { box-shadow: inset 3px 0 0 rgba(16,185,129,.55); }
+    .pgec-row.is-busy { opacity: .4; pointer-events: none; }
 
-    .pge-c-badge {
-        font-size: 10px; padding: 2px 7px; border-radius: 5px; font-weight: 700;
-        background: rgba(245,158,11,.18); color: #fcd34d; margin-left: 6px;
-    }
-    body.app-theme-light .pge-c-badge { background: #fef3c7; color: #92400e; }
+    .pgec-row__cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .pgec-row__code  { font-family: 'JetBrains Mono','Consolas',monospace; font-size: 12px; font-weight: 700; color: #e2e8f0; }
+    body.app-theme-light .pgec-row__code { color: #1e293b; }
+    .pgec-row__title { color: rgba(255,255,255,.85); }
+    body.app-theme-light .pgec-row__title { color: #0f172a; }
+    .pgec-row__city  { color: rgba(255,255,255,.55); font-size: 12px; }
+    body.app-theme-light .pgec-row__city { color: #64748b; }
+    .pgec-row__toggle { display: flex; justify-content: flex-end; align-items: center; }
 
-    /* Switch toggle — kaynak olarak Durum togglesinin asyon-aware versiyonu */
-    .pge-c-switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; cursor: pointer; }
-    .pge-c-switch input { opacity: 0; width: 0; height: 0; }
-    .pge-c-switch-slider {
-        position: absolute; cursor: pointer; inset: 0;
-        background: rgba(255,255,255,.18); border-radius: 22px;
-        transition: background .18s ease;
+    /* Infinite scroll loader */
+    .pgec-loader {
+        padding: 12px 14px; text-align: center; font-size: 12px;
+        color: rgba(255,255,255,.55); border-top: 1px solid rgba(255,255,255,.06);
+        flex-shrink: 0;
     }
-    .pge-c-switch-slider:before {
-        position: absolute; content: ""; height: 18px; width: 18px; left: 2px; bottom: 2px;
-        background: #fff; border-radius: 50%; transition: transform .18s ease, background .18s ease;
+    body.app-theme-light .pgec-loader { color: #64748b; border-top-color: #f1f5f9; }
+    .pgec-loader__spinner {
+        display: inline-block; width: 12px; height: 12px;
+        border: 2px solid currentColor; border-top-color: transparent;
+        border-radius: 50%; vertical-align: middle; margin-right: 6px;
+        animation: pgec-spin .8s linear infinite;
     }
-    .pge-c-switch input:checked + .pge-c-switch-slider {
-        background: #6366f1;
-    }
-    .pge-c-switch input:checked + .pge-c-switch-slider:before {
-        transform: translateX(16px);
-    }
-    body.app-theme-light .pge-c-switch-slider { background: #cbd5e1; }
-    body.app-theme-light .pge-c-switch input:checked + .pge-c-switch-slider { background: #6366f1; }
+    @@keyframes pgec-spin { to { transform: rotate(360deg); } }
 
-    .pge-c-empty { padding: 28px; text-align: center; color: rgba(255,255,255,.45); font-style: italic; font-size: 12.5px; }
-    body.app-theme-light .pge-c-empty { color: #94a3b8; }
+    .pgec-row__badge {
+        display: inline-block; font-size: 9.5px; padding: 1px 5px; border-radius: 4px;
+        background: rgba(245,158,11,.18); color: #fcd34d; margin-left: 6px; font-weight: 600;
+        vertical-align: middle;
+    }
+    body.app-theme-light .pgec-row__badge { background: #fef3c7; color: #92400e; }
+
+    /* DAHİL toggle — Toplu Mail'deki cp-switch yapısıyla aynı */
+    .pgec-switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; cursor: pointer; display: inline-block; }
+    .pgec-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .pgec-switch__track {
+        position: absolute; inset: 0; background: rgba(255,255,255,.18);
+        border-radius: 22px; transition: background .18s;
+    }
+    body.app-theme-light .pgec-switch__track { background: #cbd5e1; }
+    .pgec-switch__thumb {
+        position: absolute; height: 18px; width: 18px; left: 2px; top: 2px;
+        background: #fff; border-radius: 50%; transition: transform .18s;
+        box-shadow: 0 1px 2px rgba(0,0,0,.2);
+    }
+    .pgec-switch input:checked ~ .pgec-switch__track { background: #10b981; }
+    .pgec-switch input:checked ~ .pgec-switch__thumb { transform: translateX(16px); }
+
+    .pgec-empty { padding: 28px; text-align: center; color: rgba(255,255,255,.45); font-style: italic; font-size: 12.5px; }
+    body.app-theme-light .pgec-empty { color: #94a3b8; }
+
+    /* Satira eklenen "Kaldir" butonu — satis teklif kalem silme paterni */
+    .pgec-row-remove {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; border-radius: 8px;
+        background: transparent; border: 1px solid rgba(239,68,68,.22);
+        color: #f87171; cursor: pointer; transition: all .12s;
+        margin-left: auto;
+    }
+    .pgec-row-remove:hover { background: rgba(239,68,68,.16); color: #fff; border-color: rgba(239,68,68,.45); }
+    body.app-theme-light .pgec-row-remove { border-color: #fecaca; color: #dc2626; }
+    body.app-theme-light .pgec-row-remove:hover { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+    .pgec-row__action { display: flex; justify-content: flex-end; }
+
+    /* Cari picker → CalibraHub.openGuideLookup('CUSTOMERS') ile standart Tip 1 rehber kullanilir;
+       özel modal CSS'ine gerek yok. */
+
+    /* Üst bar — Tedarikci-stili "Cari Ekle" input grubu */
+    .pgec-add-label {
+        font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+        color: rgba(255,255,255,.55); white-space: nowrap;
+    }
+    body.app-theme-light .pgec-add-label { color: #64748b; }
+
+    .pgec-add-wrap {
+        display: inline-flex; align-items: stretch;
+        background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+        border-radius: 8px; overflow: hidden;
+        transition: border-color .12s;
+    }
+    .pgec-add-wrap:focus-within { border-color: #6366f1; }
+    body.app-theme-light .pgec-add-wrap { background: #fff; border-color: #cbd5e1; }
+
+    .pgec-add-input {
+        background: transparent; border: none; outline: none;
+        padding: 6px 10px; color: #e2e8f0; font-size: 12.5px;
+        width: 200px; font-family: 'JetBrains Mono','Consolas',monospace;
+        cursor: text;
+    }
+    body.app-theme-light .pgec-add-input { color: #0f172a; }
+    .pgec-add-input::placeholder { color: rgba(255,255,255,.35); font-family: 'Inter', sans-serif; }
+    body.app-theme-light .pgec-add-input::placeholder { color: #94a3b8; }
+
+    .pgec-add-btn {
+        background: rgba(99,102,241,.18); border: none; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 0 10px; color: #a5b4fc; transition: background .12s, color .12s;
+    }
+    .pgec-add-btn:hover { background: rgba(99,102,241,.32); color: #fff; }
+    body.app-theme-light .pgec-add-btn { background: #eef2ff; color: #4338ca; }
+    body.app-theme-light .pgec-add-btn:hover { background: #c7d2fe; color: #1e1b4b; }
+
+    .pgec-add-btn--clear {
+        background: transparent; color: rgba(255,255,255,.5);
+    }
+    .pgec-add-btn--clear:hover { background: rgba(239,68,68,.18); color: #fca5a5; }
+    body.app-theme-light .pgec-add-btn--clear { background: transparent; color: #94a3b8; }
+    body.app-theme-light .pgec-add-btn--clear:hover { background: #fee2e2; color: #b91c1c; }
+
+    .pgec-add-display {
+        font-size: 12.5px; color: rgba(255,255,255,.85); margin-left: 10px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        max-width: 240px; flex-shrink: 1; min-width: 0;
+    }
+    body.app-theme-light .pgec-add-display { color: #1e293b; }
+    .pgec-add-display.pgec-add-display--ok  { color: #6ee7b7; }
+    .pgec-add-display.pgec-add-display--err { color: #fca5a5; }
+    body.app-theme-light .pgec-add-display.pgec-add-display--ok  { color: #047857; }
+    body.app-theme-light .pgec-add-display.pgec-add-display--err { color: #b91c1c; }
+
+    /* Ekle butonu — rehber input'unun sağında primary CTA */
+    .pgec-bar__btn--primary {
+        display: inline-flex; align-items: center;
+        background: #6366f1; border-color: #4f46e5; color: #fff;
+        margin-left: 8px; font-weight: 700;
+    }
+    .pgec-bar__btn--primary:hover:not(:disabled) { background: #4f46e5; }
+    .pgec-bar__btn--primary:disabled {
+        background: rgba(99,102,241,.25); border-color: rgba(99,102,241,.25);
+        cursor: not-allowed; color: rgba(255,255,255,.55);
+    }
+    body.app-theme-light .pgec-bar__btn--primary:disabled {
+        background: #e0e7ff; border-color: #c7d2fe; color: #94a3b8;
+    }
+    /* Icon-only varyant — sabit kare boyut, sadece "+" ikonu.
+       Cari ismi (display label) uzunluğundan etkilenmez. */
+    .pgec-bar__btn--icon {
+        width: 30px; height: 30px; padding: 0; flex-shrink: 0;
+        justify-content: center;
+    }
 
     /* ── Onay modali (CLAUDE.md silme onay standardi) ── */
     .pge-modal-backdrop {
@@ -257,17 +398,17 @@
                     <label class="pge-switch-row" style="cursor:pointer;">
                         <span class="pge-switch"><input id="pgeAllowsBuying" type="checkbox" checked /><span class="pge-switch-slider"></span></span>
                         <span style="font-size:.78rem;">Alış</span>
-                        <span class="pge-chip pge-chip--buy" style="margin-left:auto;">b</span>
+                        <span class="pge-chip pge-chip--buy" style="margin-left:auto;">A</span>
                     </label>
                     <label class="pge-switch-row" style="cursor:pointer;">
                         <span class="pge-switch"><input id="pgeAllowsSelling" type="checkbox" checked /><span class="pge-switch-slider"></span></span>
                         <span style="font-size:.78rem;">Satış</span>
-                        <span class="pge-chip pge-chip--sell" style="margin-left:auto;">s</span>
+                        <span class="pge-chip pge-chip--sell" style="margin-left:auto;">S</span>
                     </label>
                     <label class="pge-switch-row" style="cursor:pointer;">
                         <span class="pge-switch"><input id="pgeAllowsCost" type="checkbox" checked /><span class="pge-switch-slider"></span></span>
                         <span style="font-size:.78rem;">Maliyet</span>
-                        <span class="pge-chip pge-chip--cost" style="margin-left:auto;">m</span>
+                        <span class="pge-chip pge-chip--cost" style="margin-left:auto;">M</span>
                     </label>
                 </div>
                 <div style="font-size:11px;opacity:.5;margin-top:4px;">
@@ -278,26 +419,48 @@
             <div id="pgeMsg"></div>
         </div>
 
-        <!-- Sag: cariler eslestirme — tek birlesik liste, switch toggle ile sec/kaldir -->
+        <!-- Sag: cariler eslestirme — 2026-06-02 redesign -->
+        <!-- Satış teklif kalem ekleme paterni: Atanmış cariler listede; "+ Cari Ekle" -->
+        <!-- butonu rehber modalı acar, kullanıcı arar ve seçer, kayıt anlık. -->
         <div class="pge-card pge-card--contacts">
-            <div class="pge-section-title" style="display:flex;align-items:center;gap:8px;">
-                <span>Eşleşmiş Cariler</span>
-                <span id="pgeContactsCount" style="font-size:10.5px;font-weight:600;opacity:.6;letter-spacing:0;">—</span>
-            </div>
-
-            <div class="pge-c-search-wrap">
-                <span class="pge-c-search-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                </span>
-                <input type="search" id="pgeContactSearch" class="pge-input"
-                       placeholder="Kod veya unvan ile cari ara…" autocomplete="off" />
-                <button type="button" id="pgeContactSearchClear" class="pge-c-clear" style="display:none;" title="Aramayı temizle">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <div class="pgec-bar">
+                <!-- Sol: Cari Rehberi input + arama + Ekle butonu (Satın Alma Teklif Tedarikçi paterni) -->
+                <!-- Rehberden seç → input dolar → "Ekle" basınca fiyat grubuna eklenir. -->
+                <label class="pgec-add-label" for="pgeAddContactCode">Cari</label>
+                <div class="pgec-add-wrap">
+                    <input id="pgeAddContactCode" type="text" class="pgec-add-input"
+                           placeholder="Cari kodu yazın veya rehberden seçin…" autocomplete="off" maxlength="50" />
+                    <button type="button" class="pgec-add-btn pgec-add-btn--search" id="pgeAddContactSearch" title="Rehberden seç">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    </button>
+                    <button type="button" class="pgec-add-btn pgec-add-btn--clear" id="pgeAddContactClear" title="Temizle" style="display:none;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <!-- 2026-06-02: Ekle butonu input'un HEMEN yanında — sadece "+" ikonu.
+                     Display label sağa düşer; butonun pozisyonu cari ismi uzunluğundan etkilenmez. -->
+                <button type="button" class="pgec-bar__btn pgec-bar__btn--primary pgec-bar__btn--icon" id="pgeAddContactBtn" disabled title="Önce rehberden bir cari seçin" aria-label="Ekle">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </button>
+                <span class="pgec-add-display" id="pgeAddContactDisplay"></span>
+                <div class="pgec-bar__spacer"></div>
+                <!-- Sağ: sayaç -->
+                <div class="pgec-bar__summary">
+                    <span class="pgec-num-inc" id="pgeIncCount">0</span> cari atanmış
+                </div>
             </div>
 
-            <div id="pgeContactsList" class="pge-c-list">
-                <div class="pge-c-empty">Yükleniyor…</div>
+            <!-- Atanmış cariler listesi (yalnızca bu gruba dahil olanlar) -->
+            <div class="pgec-grid">
+                <div class="pgec-grid__head">
+                    <div>Kod</div>
+                    <div>Ünvan</div>
+                    <div>Şehir</div>
+                    <div style="text-align:right;">İşlem</div>
+                </div>
+                <div id="pgeContactRows" class="pgec-grid__body">
+                    <div class="pgec-empty">Yükleniyor…</div>
+                </div>
             </div>
         </div>
     </div>
@@ -319,6 +482,9 @@
 </div>
 
 @section Scripts {
+<!-- 2026-06-02: Tip 1 standart rehber (CalibraHub.openGuideLookup) icin bundle.
+     Workspace tab iframe'inde _Layout bundle'i otomatik gelmiyor — explicit ekliyoruz. -->
+<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
 <script>
 (function () {
     var API = function (a) { return '/PriceList/' + a; };
@@ -363,7 +529,7 @@
                 syncStatusLabel();
                 document.getElementById('pgeMeta').textContent = (d.code || '') + ' · ' + (d.name || '');
                 document.getElementById('pgeBtnDelete').disabled = false;
-                loadAssigned();
+                loadContacts();
             });
     }
 
@@ -399,7 +565,7 @@
                         groupId = d.id;
                         document.getElementById('pgeId').value = d.id;
                         document.getElementById('pgeBtnDelete').disabled = false;
-                        loadAssigned();
+                        loadContacts();
                     }
                 } else {
                     pgeMsg(d.message || 'Hata', false);
@@ -427,208 +593,332 @@
         });
     });
 
-    // ── Cariler eslestirme — tek birlesik liste, switch toggle ile sec/kaldir ─
-    // State: assignedContacts (server'dan) + searchResults (kullanici aradiginda)
-    // Render: assigned'lar her zaman ustte (sticky section), search results altta
-    // (assigned'larda olanlar tekrar gosterilmez).
-    var assignedContacts = [];   // bu gruba atanmis cariler
-    var searchResults    = [];   // arama sonuclari (her cari icin currentPriceGroupId vs. flag'leri)
-    var contactSearchTimer = 0;
-    var inflightToggle = {};     // race condition korumasi: toggle'da olan id'ler
+    // ── Cariler eşleştirme — 2026-06-02 redesign ──
+    // Satış teklif kalem ekleme paterni: atanmış cariler liste; "+ Cari Ekle"
+    // standart Tip 1 rehber (CalibraHub.openGuideLookup('CUSTOMERS')) acar,
+    // secince anlık POST SetContactPriceGroup. Liste anında refresh.
+    var _contacts        = [];   // sadece bu gruba atanmış cariler
+    var _busyContactId   = null; // race condition guardi
 
-    function loadAssigned(then) {
-        if (!groupId) { renderContacts(); return; }
-        fetch(API('GetGroupContacts') + '?groupId=' + groupId)
+    var $rows          = document.getElementById('pgeContactRows');
+    var $incCount      = document.getElementById('pgeIncCount');
+    var $addCode       = document.getElementById('pgeAddContactCode');
+    var $addSearch     = document.getElementById('pgeAddContactSearch');
+    var $addClear      = document.getElementById('pgeAddContactClear');
+    var $addDisplay    = document.getElementById('pgeAddContactDisplay');
+    var $addBtn        = document.getElementById('pgeAddContactBtn');
+
+    // Rehberden seçilen cari (Ekle butonu basılana kadar sadece UI'da bekler)
+    var _pickedContact = null;
+
+    // ── 1) Atanmış cariler — yükle + render ────────────────────────────────────
+    function loadContacts() {
+        if (!groupId) {
+            _contacts = [];
+            $rows.innerHTML = '<div class="pgec-empty">Grup kaydedildikten sonra cariler eklenebilir.</div>';
+            updateCounters();
+            $addCode.disabled = true; $addSearch.disabled = true; $addBtn.disabled = true;
+            $addCode.placeholder = 'Önce grubu kaydedin…';
+            return;
+        }
+        $addCode.disabled = false; $addSearch.disabled = false;
+        $addCode.placeholder = 'Rehberden seçin…';
+        $rows.innerHTML = '<div class="pgec-empty">Yükleniyor…</div>';
+        fetch(API('GetAssignedContactsForGroup') + '?groupId=' + groupId, { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
-            .then(function (data) {
-                assignedContacts = Array.isArray(data) ? data : [];
+            .then(function (res) {
+                _contacts = (res && res.ok && Array.isArray(res.data)) ? res.data : [];
                 renderContacts();
-                if (then) then();
             })
             .catch(function () {
-                assignedContacts = [];
-                renderContacts();
+                $rows.innerHTML = '<div class="pgec-empty">Cariler yüklenemedi.</div>';
+                updateCounters();
             });
     }
 
-    var searchInput = document.getElementById('pgeContactSearch');
-    var clearBtn    = document.getElementById('pgeContactSearchClear');
-
-    searchInput.addEventListener('input', function () {
-        clearBtn.style.display = searchInput.value ? '' : 'none';
-        clearTimeout(contactSearchTimer);
-        contactSearchTimer = setTimeout(runContactSearch, 280);
-    });
-    clearBtn.addEventListener('click', function () {
-        searchInput.value = '';
-        clearBtn.style.display = 'none';
-        searchResults = [];
-        renderContacts();
-        searchInput.focus();
-    });
-
-    function runContactSearch() {
-        if (!groupId) return;
-        var q = (searchInput.value || '').trim();
-        if (!q) { searchResults = []; renderContacts(); return; }
-        fetch(API('SearchContactsForGroup') + '?q=' + encodeURIComponent(q) +
-              '&excludeGroupId=' + groupId + '&pageSize=100')
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                searchResults = Array.isArray(data) ? data : [];
-                renderContacts();
-            })
-            .catch(function () { searchResults = []; renderContacts(); });
+    function updateCounters() {
+        $incCount.textContent = _contacts.length;
     }
 
     function renderContacts() {
-        var list = document.getElementById('pgeContactsList');
-        var countEl = document.getElementById('pgeContactsCount');
-
-        // Assigned set (id → c) — search results ile duplikasyondan kacin
-        var assignedIds = {};
-        assignedContacts.forEach(function (c) { assignedIds[c.id] = true; });
-
-        // Sayac: assigned sayisi (her zaman)
-        countEl.textContent = (assignedContacts.length || 0) + ' atanmış';
-
-        // Henuz hicbir veri yok ve sayfa ilk acilis
-        if (assignedContacts.length === 0 && searchResults.length === 0 && !searchInput.value) {
-            list.innerHTML = '<div class="pge-c-empty">Bu gruba atanmış cari yok.<br><br>Aramak için yukarıdaki kutuya yazmaya başlayın.</div>';
-            return;
+        if (_contacts.length === 0) {
+            $rows.innerHTML = '<div class="pgec-empty">Henüz cari atanmamış. Yukarıdaki "+ Cari Ekle" ile rehberden seçin.</div>';
+            updateCounters(); return;
         }
-
-        var html = '';
-
-        // ── Section 1: Atanmis cariler (her zaman ustte, switch ON) ────────
-        if (assignedContacts.length > 0) {
-            html += '<div class="pge-c-section-hdr">' +
-                        '<span>Bu gruba atanmış</span>' +
-                        '<span class="pge-c-section-count">' + assignedContacts.length + '</span>' +
+        var html = _contacts.map(function (c) {
+            return '<div class="pgec-row is-included" data-id="' + c.id + '">' +
+                        '<div class="pgec-row__cell pgec-row__code"  title="' + esc(c.accountCode  || '') + '">' + esc(c.accountCode  || '—') + '</div>' +
+                        '<div class="pgec-row__cell pgec-row__title" title="' + esc(c.accountTitle || '') + '">' + esc(c.accountTitle || '—') + '</div>' +
+                        '<div class="pgec-row__cell pgec-row__city"  title="' + esc(c.city  || '') + '">' + esc(c.city  || '—') + '</div>' +
+                        '<div class="pgec-row__action">' +
+                            '<button type="button" class="pgec-row-remove" data-cid="' + c.id + '" title="Bu cariyi gruptan kaldır">' +
+                                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+                            '</button>' +
+                        '</div>' +
                     '</div>';
-            html += assignedContacts.map(function (c) {
-                return contactRowHtml(c, /*assigned*/ true, /*hasOtherGroup*/ false);
-            }).join('');
-        }
+        }).join('');
+        $rows.innerHTML = html;
+        updateCounters();
 
-        // ── Section 2: Arama sonuclari (atanmamislar) ─────────────────────
-        var searchOnly = searchResults.filter(function (c) { return !assignedIds[c.id]; });
-        if (searchOnly.length > 0) {
-            html += '<div class="pge-c-section-hdr">' +
-                        '<span>Arama sonuçları</span>' +
-                        '<span class="pge-c-section-count">' + searchOnly.length + '</span>' +
-                    '</div>';
-            html += searchOnly.map(function (c) {
-                return contactRowHtml(c, /*assigned*/ false, /*hasOtherGroup*/ !!c.isAssignedElsewhere);
-            }).join('');
-        } else if (searchInput.value && searchResults.length === 0) {
-            html += '<div class="pge-c-section-hdr"><span>Arama sonuçları</span></div>';
-            html += '<div class="pge-c-empty">Cari bulunamadı.</div>';
-        }
-
-        list.innerHTML = html;
-
-        // Switch event'leri bind et
-        list.querySelectorAll('input[type="checkbox"][data-contact-id]').forEach(function (input) {
-            input.addEventListener('change', function () {
-                var contactId = parseInt(input.getAttribute('data-contact-id'), 10);
-                var willBeChecked = input.checked;
-                var hasOther = input.getAttribute('data-has-other') === '1';
-                onToggleContact(input, contactId, willBeChecked, hasOther);
+        // Sil buton event'leri
+        $rows.querySelectorAll('.pgec-row-remove').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var cid = parseInt(btn.getAttribute('data-cid'), 10);
+                removeContact(cid);
             });
         });
     }
 
-    function contactRowHtml(c, isAssigned, hasOtherGroup) {
-        var meta = [c.phone, c.email, c.city].filter(Boolean).join(' · ');
-        var badge = '';
-        if (!isAssigned && hasOtherGroup) {
-            badge = '<span class="pge-c-badge" title="Şu an başka bir gruba atanmış">Başka grupta</span>';
-        }
-        var rowClass = 'pge-c-row' + (isAssigned ? ' pge-c-row--assigned' : '');
-        return '<div class="' + rowClass + '" data-id="' + c.id + '">' +
-                    '<label class="pge-c-switch" title="' + (isAssigned ? 'Eşleşmeyi kaldır' : 'Bu gruba ata') + '">' +
-                        '<input type="checkbox" data-contact-id="' + c.id + '"' +
-                            (isAssigned ? ' checked' : '') +
-                            ' data-has-other="' + (hasOtherGroup ? '1' : '0') + '" />' +
-                        '<span class="pge-c-switch-slider"></span>' +
-                    '</label>' +
-                    '<div class="pge-c-info">' +
-                        '<strong>' + esc(c.accountCode) + '</strong>' +
-                        esc(c.accountTitle) +
-                        badge +
-                        (meta ? '<div class="pge-c-meta">' + esc(meta) + '</div>' : '') +
-                    '</div>' +
-                '</div>';
-    }
-
-    function onToggleContact(input, contactId, willBeChecked, hasOther) {
-        if (inflightToggle[contactId]) { input.checked = !willBeChecked; return; }
-        var row = input.closest('.pge-c-row');
-
-        function applyServer(newPriceGroupId) {
-            inflightToggle[contactId] = true;
-            if (row) row.classList.add('pge-c-row--busy');
-            input.disabled = true;
+    function removeContact(contactId) {
+        if (_busyContactId === contactId) return;
+        var c = _contacts.find(function (x) { return x.id === contactId; });
+        if (!c) return;
+        showConfirm({
+            title:   'Eşleşme kaldırılacak',
+            message: '"' + (c.accountTitle || c.accountCode || '#' + contactId) + '" carisinin bu gruptan eşleşmesi kaldırılsın mı?',
+            okLabel: 'Kaldır'
+        }).then(function (ok) {
+            if (!ok) return;
+            _busyContactId = contactId;
             fetch(API('SetContactPriceGroup'), {
                 method: 'POST', credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contactId: contactId, priceGroupId: newPriceGroupId })
+                body: JSON.stringify({ contactId: contactId, priceGroupId: null })
             })
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
-                    delete inflightToggle[contactId];
-                    if (!d.success) {
-                        // Geri al
-                        input.checked = !willBeChecked;
-                        if (row) row.classList.remove('pge-c-row--busy');
-                        input.disabled = false;
-                        pgeMsg(d.message || 'İşlem başarısız', false);
-                        return;
+                    _busyContactId = null;
+                    if (d.success) {
+                        _contacts = _contacts.filter(function (x) { return x.id !== contactId; });
+                        renderContacts();
+                        pgeMsg('Cari eşleşmesi kaldırıldı.', true);
+                    } else {
+                        pgeMsg(d.message || 'Kaldırma başarısız.', false);
                     }
-                    // Basarili: assigned listesini ve arama sonuclarini tazele
-                    loadAssigned(function () {
-                        // Eger arama acik ise yeniden ara (badge'lar guncellensin)
-                        if (searchInput.value) runContactSearch();
-                    });
                 })
                 .catch(function () {
-                    delete inflightToggle[contactId];
-                    input.checked = !willBeChecked;
-                    if (row) row.classList.remove('pge-c-row--busy');
-                    input.disabled = false;
-                    pgeMsg('Sunucu hatası', false);
+                    _busyContactId = null;
+                    pgeMsg('Sunucu hatası.', false);
                 });
-        }
-
-        if (willBeChecked) {
-            // ATAMA: hasOther ise once onay al
-            if (hasOther) {
-                showConfirm({
-                    title:   'Cari başka gruptan taşınacak',
-                    message: 'Bu cari şu an başka bir fiyat grubuna atanmış.\n\nYeni gruba taşınsın mı?',
-                    okLabel: 'Taşı'
-                }).then(function (ok) {
-                    if (!ok) { input.checked = false; return; }
-                    applyServer(groupId);
-                });
-            } else {
-                applyServer(groupId);
-            }
-        } else {
-            // KALDIRMA: onay al
-            showConfirm({
-                title:   'Eşleşme kaldırılacak',
-                message: 'Bu carinin fiyat grubu eşleşmesi kaldırılsın mı?',
-                okLabel: 'Kaldır'
-            }).then(function (ok) {
-                if (!ok) { input.checked = true; return; }
-                applyServer(null);
-            });
-        }
+        });
     }
 
+    // ── 2) "Cari Ekle" — Tip 1 standart rehber (Cari Hesap Rehberi) ────────────
+    // CalibraHub.openGuideLookup('CUSTOMERS', { onPick: row => ... })
+    // → Standart guide modal (cbv_Guide_Contacts view'u, Id/AccountCode/AccountTitle/...).
+    // Bundle async yüklenebilir; çağrı sırasında handle yoksa hint ver, retry'a gerek yok
+    // (kullanici saniyeler sonra tekrar tıklayacak — bundle o zamana yüklü olur).
+    // 2026-06-02: Bu sayfa workspace tab iframe icinde caliisir. Rehber modal'i
+    // iframe'in *icine* mount edilirse sadece iframe area'sini kaplar — kullanici
+    // tarafindan ust menu/tab bar gorulebilir, modal hissi yarim kalir. Çözüm:
+    // parent window (Shell) varsa onun CalibraHub.openGuideLookup'unu cagir — modal
+    // Shell document'inde mount olur, tum tarayici viewport'unu kaplar.
+    // onPick callback'i iframe scope'undan gecirilir; parent React tree closure'i
+    // cross-frame cagirabilir (klasik realm geçişi).
+    function getGuideHost() {
+        try {
+            if (window.parent && window.parent !== window
+                && window.parent.CalibraHub
+                && typeof window.parent.CalibraHub.openGuideLookup === 'function') {
+                return window.parent.CalibraHub;
+            }
+        } catch (e) { /* cross-origin? — düş */ }
+        return (window.CalibraHub && typeof window.CalibraHub.openGuideLookup === 'function')
+            ? window.CalibraHub
+            : null;
+    }
+
+    // Bundle async yüklenir; click anında hazır değilse 100ms aralıkla bekle
+    // (toplam ~3 sn). Sonunda yine yoksa kullanıcı hata mesajıyla bilgilendirilir.
+    function whenGuideReady(cb, attempt) {
+        attempt = attempt || 0;
+        if (getGuideHost()) { cb(getGuideHost()); return; }
+        if (attempt >= 30) {  // 30 × 100ms = 3 sn
+            pgeMsg('Rehber bileşeni yüklenemedi. Sayfayı yenileyip tekrar deneyin.', false);
+            return;
+        }
+        setTimeout(function () { whenGuideReady(cb, attempt + 1); }, 100);
+    }
+
+    function setAddDisplay(text, kind) {
+        $addDisplay.textContent = text || '';
+        $addDisplay.className = 'pgec-add-display' + (kind ? ' pgec-add-display--' + kind : '');
+    }
+    function setPicked(picked) {
+        _pickedContact = picked;
+        if (picked) {
+            $addCode.value = picked.accountCode || '';
+            setAddDisplay(picked.accountTitle || '', '');
+            $addClear.style.display = '';
+            $addBtn.disabled = false;
+            $addBtn.title = '"' + (picked.accountTitle || picked.accountCode) + '" carisini bu fiyat grubuna ekle';
+        } else {
+            $addCode.value = '';
+            setAddDisplay('', '');
+            $addClear.style.display = 'none';
+            $addBtn.disabled = true;
+            $addBtn.title = 'Önce rehberden bir cari seçin';
+        }
+    }
+    function clearAdd() { setPicked(null); }
+
+    function openAddPicker() {
+        if (!groupId) { pgeMsg('Önce grubu kaydedin.', false); return; }
+        whenGuideReady(function (host) {
+            host.openGuideLookup('CUSTOMERS', {
+                guideLabel: 'Cari Hesap Rehberi',
+                // formCode: header'a "Alan Ayarlari" (⚙) butonu koyar — admin rehberin
+                // gorunur kolonlarini / default siralamasini bu form bazinda ozellestirebilir.
+                // 'PRICE_GROUPS' dbo.Forms'da seed'li (Fiyat Listesi > Gruplar).
+                formCode: 'PRICE_GROUPS',
+                fieldKey: 'pgeAddContactCode',
+                onPick: function (row) {
+                    var cells = (row && row.cells) || {};
+                    var pickedId = parseInt(cells.Id, 10);
+                    if (!pickedId || pickedId <= 0) {
+                        setAddDisplay('Seçilen satırda cari ID yok.', 'err');
+                        return;
+                    }
+                    // 2026-06-02: Eskiden seçim anlık ekleniyordu; artık seçim sadece
+                    // input'u doldurur, kullanici "Ekle" butonuna basinca atama yapilir.
+                    setPicked({
+                        id:           pickedId,
+                        accountCode:  cells.AccountCode || '',
+                        accountTitle: cells.AccountTitle || '',
+                        city:         cells.City || '',
+                        phone:        cells.Phone || '',
+                        email:        cells.Email || ''
+                    });
+                    // Eğer zaten gruba ekliyse uyari göster (Ekle butonu yine aktif kalir;
+                    // tıklayinca "Zaten ekli" feedback'i verecek).
+                    if (_contacts.find(function (x) { return x.id === pickedId; })) {
+                        setAddDisplay('Zaten ekli: ' + (cells.AccountTitle || ''), 'err');
+                    }
+                }
+            });
+        });
+    }
+
+    // Sadece büyüteç ikonu rehberi açar — input click/focus rehberi tetiklemez.
+    // (Kullanıcı kodu biliyorsa elle yazıp Ekle'ye basabilir; rehbere zorlanmaz.)
+    $addSearch.addEventListener('click', openAddPicker);
+    $addClear.addEventListener('click', clearAdd);
+
+    // Manuel input — kullanıcı yazınca _pickedContact (rehberden seçilen) ile
+    // input arasındaki uyumu kaybetmemek için sıfırlanır. Boşsa Ekle disable.
+    $addCode.addEventListener('input', function () {
+        var typed = ($addCode.value || '').trim();
+        if (_pickedContact && _pickedContact.accountCode !== typed) {
+            _pickedContact = null;
+            setAddDisplay('', '');
+        }
+        $addBtn.disabled = typed.length === 0;
+        $addClear.style.display = typed.length > 0 ? '' : 'none';
+        $addBtn.title = typed.length === 0
+            ? 'Önce rehberden seçin veya cari kodu yazın'
+            : 'Bu cariyi fiyat grubuna ekle';
+    });
+
+    // Enter → Ekle butonu (rehbere basmadan hızlı ekleme)
+    $addCode.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !$addBtn.disabled) {
+            e.preventDefault();
+            $addBtn.click();
+        }
+    });
+
+    $addBtn.addEventListener('click', function () {
+        if (!groupId) return;
+        var typed = ($addCode.value || '').trim();
+        if (!typed) return;
+
+        // Yol 1: Rehberden seçim → direkt ata (lookup yapmaya gerek yok)
+        if (_pickedContact && _pickedContact.accountCode === typed) {
+            doAssignChecked(_pickedContact);
+            return;
+        }
+
+        // Yol 2: Manuel kod → backend'den ID'ye çöz, sonra ata
+        $addBtn.disabled = true;
+        setAddDisplay('Cari aranıyor…', '');
+        fetch(API('ResolveContactByCode') + '?code=' + encodeURIComponent(typed), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (!res || !res.ok || !res.data) {
+                    $addBtn.disabled = false;
+                    setAddDisplay(res && res.message ? res.message : 'Cari bulunamadı.', 'err');
+                    return;
+                }
+                var d = res.data;
+                doAssignChecked({
+                    id: d.id, accountCode: d.accountCode, accountTitle: d.accountTitle,
+                    city: d.city, phone: d.phone, email: d.email,
+                });
+            })
+            .catch(function () {
+                $addBtn.disabled = false;
+                setAddDisplay('Sunucu hatası.', 'err');
+            });
+    });
+
+    function doAssignChecked(picked) {
+        if (_contacts.find(function (x) { return x.id === picked.id; })) {
+            setAddDisplay('Zaten ekli: ' + (picked.accountTitle || picked.accountCode), 'err');
+            $addBtn.disabled = false;
+            return;
+        }
+        assignContact(picked.id, {
+            accountCode:  picked.accountCode,
+            accountTitle: picked.accountTitle,
+            city:         picked.city,
+            phone:        picked.phone,
+            email:        picked.email
+        });
+    }
+
+    function assignContact(contactId, hint) {
+        setAddDisplay('Ekleniyor…', '');
+        fetch(API('SetContactPriceGroup'), {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contactId: contactId, priceGroupId: groupId })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.success) {
+                    setAddDisplay(d.message || 'Eklenemedi.', 'err');
+                    return;
+                }
+                // Local listeye ekle — server'a tekrar gitmeden hızlı UI feedback.
+                _contacts.push({
+                    id:                    contactId,
+                    accountCode:           hint.accountCode || '',
+                    accountTitle:          hint.accountTitle || '',
+                    city:                  hint.city || '',
+                    phone:                 hint.phone || '',
+                    email:                 hint.email || '',
+                    currentPriceGroupId:   groupId,
+                    isAssignedToThisGroup: true,
+                    isAssignedElsewhere:   false
+                });
+                _contacts.sort(function (a, b) {
+                    return String(a.accountCode || '').localeCompare(String(b.accountCode || ''), 'tr');
+                });
+                renderContacts();
+                // Eklendi feedback'i + input/picked state'i sıfırla — yeni cari için hazır
+                setPicked(null);
+                setAddDisplay('Eklendi: ' + (hint.accountTitle || hint.accountCode || '#' + contactId), 'ok');
+                setTimeout(function () {
+                    if ($addDisplay.textContent.indexOf('Eklendi:') === 0) setAddDisplay('', '');
+                }, 1800);
+            })
+            .catch(function () { setAddDisplay('Sunucu hatası.', 'err'); });
+    }
+
+    // İlk yükleme: loadGroup içinden groupId>0 olduğunda loadContacts() çağrılır
+    // (groupId=0 yeni grup → caris yüklenmez, "Grup kaydedildikten sonra…" mesajı görünür).
     loadGroup();
+    if (!groupId) renderContacts();   // boş state'i göster
 })();
 </script>
 }

@@ -1,7 +1,10 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.DesignProvider;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Security;
+using CalibraHub.Domain.Enums;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Models.Logistics;
@@ -27,9 +30,12 @@ public sealed class SalesController : Controller
     private readonly IFieldSettingRepository _fieldSettings;
     private readonly IDocumentTypeRepository _documentTypeRepo;
     private readonly IFormMetadataService _formMetadata;
+    private readonly IPersonnelService _personnelService;
     private readonly IWorkOrderService _workOrderService;
     private readonly IPrintDispatcher _printDispatcher;
     private readonly IIntegrationOnSaveDispatcher _onSaveDispatcher;
+    private readonly IApprovalFlowService _approvalFlowService;
+    private readonly IPermissionService _permService;
     private readonly ILogger<SalesController> _logger;
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly string _schema;
@@ -56,9 +62,12 @@ public sealed class SalesController : Controller
         IFieldSettingRepository fieldSettings,
         IDocumentTypeRepository documentTypeRepo,
         IFormMetadataService formMetadata,
+        IPersonnelService personnelService,
         IWorkOrderService workOrderService,
         IPrintDispatcher printDispatcher,
         IIntegrationOnSaveDispatcher onSaveDispatcher,
+        IApprovalFlowService approvalFlowService,
+        IPermissionService permService,
         ILogger<SalesController> logger,
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions dbOptions)
@@ -72,27 +81,40 @@ public sealed class SalesController : Controller
         _fieldSettings = fieldSettings;
         _documentTypeRepo = documentTypeRepo;
         _formMetadata = formMetadata;
+        _personnelService = personnelService;
         _workOrderService = workOrderService;
         _printDispatcher = printDispatcher;
         _onSaveDispatcher = onSaveDispatcher;
+        _approvalFlowService = approvalFlowService;
+        _permService = permService;
         _logger = logger;
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
 
-    private Guid GetUserId()
+    private int GetUserId()
     {
         var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(raw, out var id) ? id : Guid.Empty;
+        return int.TryParse(raw, out var id) ? id : 0;
+    }
+
+    private int? CurrentUserId()
+    {
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(raw, out var id) ? id : null;
     }
 
     [HttpGet]
-    public async Task<IActionResult> Documents(CancellationToken ct)
+    [Route("/Sales/Quotes")]               // YENI tercih edilen URL — teklif-spesifik (CamelCase + anlamli)
+    [Route("/Sales/Documents")]            // ESKI route'u yasatiyoruz — mevcut bookmark/integration'lar kirilmasin.
+                                            // Yeni baglantilar Quotes'i kullanir; eski URL'i sessizce ayni view'a yonlendirir.
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
+    public async Task<IActionResult> Quotes(CancellationToken ct)
     {
         var userId = GetUserId();
         var cols = await _uiConfigurationService.GetGridColumnPreferencesAsync(userId, "sales-quotes", ct);
-        var boardConfig = await BuildDocumentsBoardConfigAsync(ct);
-        return View(new DocumentsViewModel
+        var boardConfig = await BuildQuotesBoardConfigAsync(ct);
+        return View("Documents", new DocumentsViewModel
         {
             AvailableColumns = DocumentGridColumns,
             VisibleColumns = cols.Count > 0 ? cols : DefaultDocumentColumns,
@@ -100,8 +122,13 @@ public sealed class SalesController : Controller
         });
     }
 
+    // Geri uyum: eski cagirim noktalari hala "Documents" action'ini referans verebilir.
+    // Sadece Quotes'a delege et.
+    [HttpGet]
+    public Task<IActionResult> Documents(CancellationToken ct) => Quotes(ct);
+
     // ════════════════════════════════════════════════════════════════
-    // BuildDocumentsBoardConfigAsync
+    // BuildQuotesBoardConfigAsync
     //
     // SmartBoard (CalibraSmartBoard) icin server-side BoardConfig objesi
     // uretir. Malzeme Kartlari ekraninin ayni mimarisi — "Zeki Veri, Aptal
@@ -109,33 +136,27 @@ public sealed class SalesController : Controller
     //
     // Widget JSON kontrati: { id, type:"data", dataType, label, value, detail, color }
     // ════════════════════════════════════════════════════════════════
-    private async Task<object> BuildDocumentsBoardConfigAsync(CancellationToken ct)
+    private async Task<object> BuildQuotesBoardConfigAsync(CancellationToken ct)
     {
-        var quotes = await _quoteService.GetQuotesAsync(search: null, status: null, ct);
+        // DocumentType "satis_teklifi" filtresi — eski GetQuotesAsync ad/davranis
+        // uyumsuzdu: tum belgeleri (siparis dahil) cekiyor, ekrana siparis kayitlari
+        // da dusuyordu (bug raporu 2026-05-20). GetByTypeAsync ile dogru filtrelenir.
+        var quotes = await _quoteService.GetByTypeAsync("satis_teklifi", search: null, status: null, ct);
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
 
-        // ── Master widget sablonu (SmartBoardConfigPanel icin) ──
-        // Sadece SALES_QUOTE_EDIT form kodundaki admin-tanimli dinamik widget'lar eklenir.
-        // Sistem alanlari (tutar, durum vb.) widget olarak tanimlanmadikca listede gorünmez.
-        var masterWidgets = new List<object>();
+        // 2026-05-24: SmartBoardFilterHelpers ile standardize.
         var sqSchema = await _widgetService.GetFormSchemaByCodeAsync("SALES_QUOTE_EDIT", ct);
-        if (sqSchema != null)
-        {
-            foreach (var w in sqSchema.Widgets.Where(w => w.IsActive
-                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
-            {
-                masterWidgets.Add(new
-                {
-                    id           = w.WidgetCode,
-                    dbId         = w.Id,
-                    isPlainField = w.IsPlainField,
-                    type         = "data",
-                    dataType     = w.DataType.ToLowerInvariant(),
-                    label        = w.Label,
-                });
-            }
-        }
+        var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(sqSchema);
+        // Sistem alanlari — "Standart Alanlar" collapsible
+        var statusOptions = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(
+            new[] { "Taslak", "Gonderildi", "Onaylandi", "Reddedildi", "Iptal", "Kapali" });
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_tutar", "Toplam Tutar", "currency"));
+        var sqDurumW = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_durum", "Durum", "options");
+        sqDurumW["options"] = statusOptions;
+        masterWidgets.Add(sqDurumW);
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_kalem", "Kalem Sayısı", "numeric"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_tarih", "Tarih", "date"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_valid", "Geçerlilik Tarihi", "date"));
 
         // Batch widget degerleri — tum teklifler icin tek sorgu
         var recordIds = quotes.Select(q => q.Id.ToString()).ToArray();
@@ -150,9 +171,9 @@ public sealed class SalesController : Controller
 
             // ── Sistem widget'lari ──
             widgets.Add(new { id = "w_tutar", type = "data", dataType = "currency", label = "Toplam Tutar",
-                value = quote.GrandTotal.ToString("N2", trCulture), detail = quote.Currency ?? "TRY",
+                value = quote.GrandTotal.ToString("N2", trCulture), detail = quote.CurrencyCode ?? "TRY",
                 color = "blue" });
-            widgets.Add(new { id = "w_durum", type = "data", dataType = "text", label = "Durum",
+            widgets.Add(new { id = "w_durum", type = "data", dataType = "options", label = "Durum",
                 value = TranslateStatus(quote.Status), detail = (string?)null,
                 color = StatusColor(quote.Status) });
             widgets.Add(new { id = "w_kalem", type = "data", dataType = "numeric", label = "Kalem Sayisi",
@@ -240,7 +261,8 @@ public sealed class SalesController : Controller
                             quoteNumber = quote.DocumentNumber,
                             contactName = quote.ContactName,
                             grandTotal = quote.GrandTotal,
-                            currency = quote.Currency,
+                            currencyId = quote.CurrencyId,
+                            currency = quote.CurrencyCode,    // display-only
                             lineCount = quote.LineCount,
                         },
                     },
@@ -331,6 +353,7 @@ public sealed class SalesController : Controller
     // ════════════════════════════════════════════════════════════════
 
     [HttpGet]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesOrder)]
     public async Task<IActionResult> Orders(CancellationToken ct)
     {
         var boardConfig = await BuildOrdersBoardConfigAsync(ct);
@@ -347,15 +370,27 @@ public sealed class SalesController : Controller
         var orders = await _quoteService.GetByTypeAsync("satis_siparisi", search: null, status: null, ct);
         var trCulture = CultureInfo.GetCultureInfo("tr-TR");
 
+        // 2026-05-24: SmartBoardFilterHelpers — admin form widgets + sistem alanlar collapsible
+        var soSchema = await _widgetService.GetFormSchemaByCodeAsync("SALES_ORDER_EDIT", ct);
+        var masterWidgets = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.BuildAdminFormWidgets(soSchema);
+        var statusOptions = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.ToOptionsList(
+            new[] { "Taslak", "Gonderildi", "Onaylandi", "Reddedildi", "Iptal", "Kapali" });
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_tutar", "Toplam Tutar", "currency"));
+        var soDurumW = CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_durum", "Durum", "options");
+        soDurumW["options"] = statusOptions;
+        masterWidgets.Add(soDurumW);
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_kalem", "Kalem Sayısı", "numeric"));
+        masterWidgets.Add(CalibraHub.Web.Helpers.SmartBoardFilterHelpers.MakeStdWidget("w_tarih", "Sipariş Tarihi", "date"));
+
         var entities = new List<object>();
         foreach (var order in orders)
         {
             var widgets = new List<object>
             {
                 new { id = "w_tutar", type = "data", dataType = "currency", label = "Toplam Tutar",
-                    value = order.GrandTotal.ToString("N2", trCulture), detail = order.Currency ?? "TRY",
+                    value = order.GrandTotal.ToString("N2", trCulture), detail = order.CurrencyCode ?? "TRY",
                     color = "blue" },
-                new { id = "w_durum", type = "data", dataType = "text", label = "Durum",
+                new { id = "w_durum", type = "data", dataType = "options", label = "Durum",
                     value = TranslateStatus(order.Status), detail = (string?)null,
                     color = StatusColor(order.Status) },
                 new { id = "w_kalem", type = "data", dataType = "numeric", label = "Kalem Sayisi",
@@ -422,7 +457,7 @@ public sealed class SalesController : Controller
                     trigger = "convert-orders-modal",
                 },
             },
-            masterWidgets = Array.Empty<object>(),
+            masterWidgets,
             entities,
         };
     }
@@ -443,8 +478,7 @@ public sealed class SalesController : Controller
     public async Task<IActionResult> CreateOrdersFromQuotes(
         [FromBody] CreateOrdersFromQuotesRequest req, CancellationToken ct)
     {
-        var createdBy = User?.Identity?.Name;
-        var result = await _quoteService.CreateOrdersFromQuotesAsync(req, createdBy, ct);
+        var result = await _quoteService.CreateOrdersFromQuotesAsync(req, CurrentUserId(), ct);
         if (!result.Success)
             return Json(new { success = false, error = result.Error });
         return Json(new
@@ -467,10 +501,9 @@ public sealed class SalesController : Controller
         if (req == null || req.QuoteId <= 0)
             return Json(new { success = false, error = "Teklif id gecersiz." });
 
-        var createdBy = User?.Identity?.Name;
         var orderResult = await _quoteService.CreateOrdersFromQuotesAsync(
             new CreateOrdersFromQuotesRequest(new[] { req.QuoteId }, req.OrderDate),
-            createdBy, ct);
+            CurrentUserId(), ct);
 
         if (!orderResult.Success || orderResult.OrderIds.Count == 0)
             return Json(new { success = false, error = orderResult.Error ?? "Siparis olusturulamadi." });
@@ -539,13 +572,14 @@ public sealed class SalesController : Controller
     public async Task<IActionResult> SaveDocumentGridColumns([FromBody] string[] columns, CancellationToken ct)
     {
         var userId = GetUserId();
-        if (userId == Guid.Empty) return Unauthorized();
+        if (userId <= 0) return Unauthorized();
         await _uiConfigurationService.SaveGridColumnPreferencesAsync(userId, "sales-quotes", columns, ct);
         return Ok(new { success = true });
     }
 
     [HttpGet]
-    public async Task<IActionResult> DocumentEdit(int? id, string? type, CancellationToken ct)
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
+    public async Task<IActionResult> DocumentEdit(int? id, string? type, int? fromRequest, CancellationToken ct)
     {
         // Iframe/tarayici cache nedeniyle eski HTML icerigi yapis(an)mayi
         // onlemek icin her GET'te no-cache header'lari set edilir.
@@ -572,29 +606,42 @@ public sealed class SalesController : Controller
         {
             typeCode = "satis_siparisi";
         }
+        // 2026-05-23: Satin alma belge tipleri — type query param dogrudan document_type.code alabilir
+        // (alis_talebi/alis_teklifi/alis_siparisi) veya kisaltma (purchase_request/quote/order).
+        else if (!string.IsNullOrWhiteSpace(type))
+        {
+            var t = type.Trim();
+            typeCode = t.ToLowerInvariant() switch
+            {
+                "purchase_request" or "alis_talebi"           => "alis_talebi",
+                "purchase_quote"   or "alis_teklifi"          => "alis_teklifi",
+                "purchase_order"   or "alis_siparisi"         => "alis_siparisi",
+                "purchase_demand"  or "satin_alma_talebi"     => "satin_alma_talebi",
+                _ => typeCode,  // tanimsiz — varsayilani koru
+            };
+        }
 
         // DocumentType sadece kavramsal belge tipi (Document.DocumentTypeId FK + raporlama).
         // UI metadata (ListUrl/Icon/IsTransferable) Forms tablosundan beslenir — Faz N hub.
         var docType = await _documentTypeRepo.GetByCodeAsync(typeCode, ct);
         if (typeId == null) typeId = docType?.Id;
 
-        // Edit form code (SALES_QUOTE_EDIT / SALES_ORDER_EDIT) — bu formdaki UI metadata'si
-        // ListUrl/Icon/IsTransferable'i belirler. Yeni belge tipleri (DISPATCH, PURCHASE_ORDER vb.)
-        // eklenince sadece Forms seed'i yeterli; controller dokunulmaz.
-        var editFormCode = string.Equals(typeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase)
-            ? "SALES_ORDER_EDIT" : "SALES_QUOTE_EDIT";
+        // 2026-05-23: Form code haritası tek noktadan — DocumentTypeFormMap.
+        // Eski iki-yonlu if/else yerine tablo lookup; 5 belge tipi (satis_teklifi/siparisi,
+        // alis_talebi/teklifi/siparisi) ayni controller yolunu kullanir.
+        var formCodes = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(typeCode);
+        var editFormCode = formCodes.Header;
+        var lineFormCode = formCodes.Lines;
         var formMeta = await _formMetadata.GetFormAsync(editFormCode, ct);
 
-        // Satır grid kolonlarına rehber binding'lerini runtime'da inject et — belge tipine göre form kodu seç
-        var lineFormCode = string.Equals(typeCode, "satis_siparisi", StringComparison.OrdinalIgnoreCase)
-            ? "SALES_ORDER_LINES"
-            : "SALES_QUOTE_LINES";
+        // Satır grid kolonlarına rehber binding'lerini runtime'da inject et
         var bindings = await _fieldSettings.GetGuideBindingsForFormAsync(lineFormCode, ct);
-        // Fallback: sipariş satırları için kendi form kodunda binding yoksa teklif kodundan devral.
-        // Her iki belge tipinin kalem yapısı özdeş — aynı rehber konfigürasyonu uygulanabilir.
-        if (bindings.Count == 0 && string.Equals(lineFormCode, "SALES_ORDER_LINES", StringComparison.OrdinalIgnoreCase))
+        // Fallback: Sipariş / talep / alis-* satırları için kendi form kodunda binding yoksa
+        // teklif (SALES_QUOTE_LINES) varsayilanindan devral — kalem yapilari ozdes.
+        if (bindings.Count == 0 && !string.Equals(lineFormCode, "SALES_QUOTE_LINES", StringComparison.OrdinalIgnoreCase))
             bindings = await _fieldSettings.GetGuideBindingsForFormAsync("SALES_QUOTE_LINES", ct);
-        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode);
+        var hidePricing = string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase);
+        var lineGridConfig = BuildDocumentLineGridConfig(bindings, lineFormCode, hidePricing);
         var jsonOpts = new System.Text.Json.JsonSerializerOptions
         {
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -607,14 +654,82 @@ public sealed class SalesController : Controller
             DocumentTypeCode = typeCode,
             DocumentTypeId = typeId,
             // Faz N — Forms tablosundan beslenen UI/entegrasyon metadata.
-            // DocumentType.Name (Satış Siparişi) header label icin; gerisi form-seviyesi.
-            ListReturnUrl         = formMeta?.ListUrl  ?? "/Sales/Documents",
+            ListReturnUrl         = formMeta?.ListUrl ?? formCodes.ListUrl,
             NewUrl                = formMeta?.NewUrl,
-            DocumentTypeName      = docType?.Name      ?? (typeCode == "satis_siparisi" ? "Satış Siparişi" : "Satış Teklifi"),
+            DocumentTypeName      = docType?.Name ?? typeCode switch
+            {
+                "satis_siparisi" => "Satış Siparişi",
+                "alis_talebi"    => "İhtiyaç Kaydı",
+                "alis_teklifi"   => "Satın Alma Teklif",
+                "alis_siparisi"  => "Satın Alma Sipariş",
+                _                 => "Satış Teklifi",
+            },
             DocumentTypeIcon      = formMeta?.Icon,
             DocumentTypeIconColor = formMeta?.IconColor,
             IsTransferable        = formMeta?.IsTransferable ?? true,
+            // 2026-05-23: Form code haritasi — view artik bunlardan okur (hardcoded yok).
+            HeaderFormCode    = formCodes.Header,
+            HeaderFormCodeNew = formCodes.HeaderNew,
+            LineFormCode      = formCodes.Lines,
+            // fromRequest: İhtiyaç kaydından teklif oluşturma — kalemler pre-fill edilir.
+            FromRequestId     = (fromRequest.HasValue && fromRequest.Value > 0) ? fromRequest : null,
         };
+
+        // İhtiyaç Kaydı (alis_talebi) için "Talep Eden" dropdown — Personnel listesi.
+        // Parametrik yetkiler: CREATE_ON_BEHALF (başkası adına) + CREATE_ON_BEHALF_DEPT_ONLY (kapsam).
+        if (string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase))
+        {
+            var personnel = await _personnelService.ListAsync(false, false, ct);
+
+            var curUserId = GetUserId();
+            var roleStr   = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            var deptStr   = User.FindFirstValue("department_id");
+            UserAuthorizationCatalog.TryParseRole(roleStr, out var userRole);
+            int? userDeptId = int.TryParse(deptStr, out var _d) && _d > 0 ? _d : null;
+
+            var canOnBehalf = await _permService.CheckAsync(curUserId, userRole, userDeptId,
+                FormCodes.PurchaseRequest,
+                FormButtonCatalog.BuildActionCode("CREATE_ON_BEHALF"), ct);
+
+            var deptOnlyScope = canOnBehalf && await _permService.CheckAsync(curUserId, userRole, userDeptId,
+                FormCodes.PurchaseRequest,
+                FormButtonCatalog.BuildActionCode("CREATE_ON_BEHALF_DEPT_ONLY"), ct);
+
+            // Mevcut kullanıcıya ait personel kaydı (UserId bağlantısı üzerinden).
+            var currentPersonnel = curUserId > 0
+                ? personnel.FirstOrDefault(p => p.UserId == curUserId)
+                : null;
+
+            IEnumerable<PersonnelDto> filtered;
+            if (!canOnBehalf)
+            {
+                // Yetkisi yok → sadece kendisi (otomatik kilitli).
+                filtered = currentPersonnel != null
+                    ? (IEnumerable<PersonnelDto>)new[] { currentPersonnel }
+                    : Enumerable.Empty<PersonnelDto>();
+            }
+            else if (deptOnlyScope)
+            {
+                // Yetki var ama sadece departmanındaki kişiler.
+                var dept = currentPersonnel?.Department;
+                filtered = string.IsNullOrWhiteSpace(dept)
+                    ? personnel  // departman belirlenemezse tüm liste
+                    : personnel.Where(p => string.Equals(p.Department?.Trim(), dept.Trim(),
+                          StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                filtered = personnel;
+            }
+
+            ViewData["RequesterPersonnels"] = filtered
+                .OrderBy(p => p.FullName)
+                .Select(p => new { p.Id, Name = p.FullName, Dept = p.Department ?? "" })
+                .ToList();
+            ViewData["CanCreateOnBehalf"]      = canOnBehalf;
+            ViewData["RequesterLocked"]        = !canOnBehalf;
+            ViewData["CurrentUserPersonnelId"] = currentPersonnel?.Id;
+        }
 
         return View("DocumentEdit", vm);
     }
@@ -632,7 +747,8 @@ public sealed class SalesController : Controller
     // ════════════════════════════════════════════════════════════════
     private object BuildDocumentLineGridConfig(
         IReadOnlyCollection<FieldGuideBindingDto>? bindings = null,
-        string lineFormCode = "SALES_QUOTE_LINES")
+        string lineFormCode = "SALES_QUOTE_LINES",
+        bool hidePricing = false)
     {
         // Binding sözlüğü: fieldKey → (guideCode, isRequired, filterJson)
         var bindingMap = (bindings ?? [])
@@ -641,144 +757,93 @@ public sealed class SalesController : Controller
         // materialCode kolonu için binding varsa guide ekle, yoksa lookupUrl fallback
         bindingMap.TryGetValue("materialCode", out var matBinding);
 
+        // Kolon listesi — hidePricing=true olduğunda fiyat/iskonto/kdv/toplam kolonları dahil edilmez.
+        var cols = new List<object>
+        {
+            new
+            {
+                key = "materialCode",
+                label = "Malzeme Kodu",
+                type = "text-lookup",
+                guideCode      = matBinding?.GuideCode,
+                filterJson     = matBinding?.FilterJson,
+                formCode       = lineFormCode,
+                formatJson     = matBinding?.FormatJson,
+                lookupUrl      = matBinding == null ? "/Sales/GetMaterials" : (string?)null,
+                lookupValueKey = "materialCode",
+                lookupLabelKey = "materialName",
+                lookupFillMap = new Dictionary<string, string>
+                {
+                    ["materialName"]      = "materialName",
+                    ["stockCardId"]       = "id",
+                    ["trackCombinations"] = "trackCombinations",
+                    ["taxRate"]           = "taxRate",
+                    ["locationId"]        = "defaultLocationId",
+                    ["unitId"]            = "unitId",
+                },
+                width    = 220,
+                required = matBinding?.IsRequired ?? false,
+                align    = "left",
+                icon     = "Hash",
+            },
+            new
+            {
+                key = "materialName",
+                label = "Malzeme Adi",
+                type = "text",
+                width = "flex",
+                @readonly = true,
+                align = "left",
+                icon = "FileText",
+            },
+            new
+            {
+                key = "combinationCode",
+                label = "Kombinasyon",
+                type = "combination-lookup",
+                width = 140,
+                align = "center",
+                icon = "CircleDot",
+                visibleWhenKey = "trackCombinations",
+            },
+            new
+            {
+                key = "unitId",
+                label = "Birim",
+                type = "select",
+                optionsUrl = "/Sales/GetMaterialUnits?materialCode={materialCode}",
+                optionsValueKey = "id",
+                optionsLabelKey = "name",
+                autoSelectFirst = true,
+                width = 90,
+                align = "center",
+                icon = "Ruler",
+            },
+            new
+            {
+                key = "quantity",
+                label = "Miktar",
+                type = "number",
+                width = 100,
+                precision = 2,
+                min = 0,
+                align = "right",
+                icon = "Sigma",
+            },
+        };
+        if (!hidePricing)
+        {
+            cols.Add(new { key = "unitPrice",    label = "Birim Fiyat",   type = "currency", width = 130, precision = 2, min = 0,       align = "right", icon = "DollarSign" });
+            cols.Add(new { key = "discountRate", label = "Iskonto %",     type = "percent",  width = 100, precision = 2, min = 0, max = 100, align = "right", icon = "Percent" });
+            cols.Add(new { key = "taxRate",      label = "KDV %",         type = "percent",  width = 90,  precision = 2, min = 0, max = 100, @readonly = true, align = "right", icon = "Percent" });
+            cols.Add(new { key = "lineTotal",    label = "Satir Toplami", type = "currency", width = 140, computed = true, formula = "quantity * unitPrice * (1 - (discountRate / 100))", align = "right", icon = "Calculator" });
+        }
+        cols.Add(new { key = "notes", label = "Not", type = "text", placement = "row-below", align = "left", icon = "StickyNote" });
+
         return new
         {
             schemaVersion = "v1",
-            columns = new object[]
-            {
-                new
-                {
-                    key = "materialCode",
-                    label = "Malzeme Kodu",
-                    type = "text-lookup",
-                    // Binding varsa guide mode, yoksa doğrudan URL ile inline dropdown
-                    guideCode      = matBinding?.GuideCode,
-                    filterJson     = matBinding?.FilterJson,
-                    formCode       = lineFormCode,
-                    formatJson     = matBinding?.FormatJson,
-                    lookupUrl      = matBinding == null ? "/Sales/GetMaterials" : (string?)null,
-                    lookupValueKey = "materialCode",
-                    lookupLabelKey = "materialName",
-                    lookupFillMap = new Dictionary<string, string>
-                    {
-                        // ASP.NET Core default JSON naming policy camelCase — source key'leri kucuk harf
-                        ["materialName"]      = "materialName",
-                        ["stockCardId"]       = "id",
-                        ["trackCombinations"] = "trackCombinations",
-                        ["taxRate"]           = "taxRate",
-                        ["locationId"]        = "defaultLocationId",
-                        // Stok kartinin master birimi — view'dan gelmezse enrichMaterialPatch fallback olur
-                        ["unitId"]            = "unitId",
-                    },
-                    width    = 220,
-                    required = matBinding?.IsRequired ?? false,
-                    align    = "left",
-                    icon     = "Hash",
-                },
-                new
-                {
-                    key = "materialName",
-                    label = "Malzeme Adi",
-                    type = "text",
-                    width = "flex",
-                    @readonly = true,
-                    align = "left",
-                    icon = "FileText",
-                },
-                new
-                {
-                    key = "combinationCode",
-                    label = "Kombinasyon",
-                    type = "combination-lookup",
-                    width = 140,
-                    align = "center",
-                    icon = "CircleDot",
-                    // Sadece row.trackCombinations=true iken aktif olur (client-side kontrol)
-                    visibleWhenKey = "trackCombinations",
-                },
-                new
-                {
-                    key = "unitId",
-                    label = "Birim",
-                    type = "select",
-                    optionsUrl = "/Sales/GetMaterialUnits?materialCode={materialCode}",
-                    optionsValueKey = "id",
-                    optionsLabelKey = "name",
-                    // Secenekler geldiginde hucre bos ise ilk option (master birim)
-                    // otomatik atanir. Kullanici farkli birim secmek isterse degistirebilir.
-                    autoSelectFirst = true,
-                    width = 90,
-                    align = "center",
-                    icon = "Ruler",
-                },
-                new
-                {
-                    key = "quantity",
-                    label = "Miktar",
-                    type = "number",
-                    width = 100,
-                    precision = 2,
-                    min = 0,
-                    align = "right",
-                    icon = "Sigma",
-                },
-                new
-                {
-                    key = "unitPrice",
-                    label = "Birim Fiyat",
-                    type = "currency",
-                    width = 130,
-                    precision = 2,
-                    min = 0,
-                    align = "right",
-                    icon = "DollarSign",
-                },
-                new
-                {
-                    key = "discountRate",
-                    label = "Iskonto %",
-                    type = "percent",
-                    width = 100,
-                    precision = 2,
-                    min = 0,
-                    max = 100,
-                    align = "right",
-                    icon = "Percent",
-                },
-                new
-                {
-                    key = "taxRate",
-                    label = "KDV %",
-                    type = "percent",
-                    width = 90,
-                    precision = 2,
-                    min = 0,
-                    max = 100,
-                    @readonly = true,
-                    align = "right",
-                    icon = "Percent",
-                },
-                new
-                {
-                    key = "lineTotal",
-                    label = "Satir Toplami",
-                    type = "currency",
-                    width = 140,
-                    computed = true,
-                    formula = "quantity * unitPrice * (1 - (discountRate / 100))",
-                    align = "right",
-                    icon = "Calculator",
-                },
-                new
-                {
-                    key = "notes",
-                    label = "Not",
-                    type = "text",
-                    placement = "row-below",
-                    align = "left",
-                    icon = "StickyNote",
-                },
-            },
+            columns = cols,
             rows = System.Array.Empty<object>(),     // Baslangic bos — mevcut teklif yuklenirken JS bridge doldurur
             labels = new
             {
@@ -790,8 +855,8 @@ public sealed class SalesController : Controller
             },
             footer = new
             {
-                showSubtotal = true,
-                subtotalColumns = new[] { "lineTotal" },
+                showSubtotal = !hidePricing,
+                subtotalColumns = hidePricing ? System.Array.Empty<string>() : new[] { "lineTotal" },
             },
         };
     }
@@ -799,7 +864,10 @@ public sealed class SalesController : Controller
     [HttpGet]
     public async Task<IActionResult> GetDocuments(string? search, string? status, CancellationToken ct)
     {
-        var quotes = await _quoteService.GetQuotesAsync(search, status, ct);
+        // Bug fix 2026-05-20: GetQuotesAsync ad-ile-davranis uyumsuzdu (tum belgeleri
+        // donduruyordu). Teklif listesi endpoint'i sadece "satis_teklifi" tipini
+        // dondurmeli — siparisler GetOrders'tan, transferler kendi controllerinden.
+        var quotes = await _quoteService.GetByTypeAsync("satis_teklifi", search, status, ct);
         return Json(quotes);
     }
 
@@ -825,7 +893,13 @@ public sealed class SalesController : Controller
         // Kalem-bazli zorunlu widget kontrolu — ⚙ butonlarinin baslangic renklerini
         // belirlemek icin satir ID'lerinde eksik zorunlu alanlar var mi?
         var lineIds = lines.Select(l => l.Id.ToString()).ToArray();
-        var missing = await _widgetService.ValidateRequiredAsync("SALES_QUOTE_LINES", lineIds, ct);
+        var lineFormCode = "SALES_QUOTE_LINES";
+        if (quote.DocumentTypeId.HasValue)
+        {
+            var dt = await _documentTypeRepo.GetByIdAsync(quote.DocumentTypeId.Value, ct);
+            lineFormCode = DocumentTypeFormMap.Resolve(dt?.Code).Lines;
+        }
+        var missing = await _widgetService.ValidateRequiredAsync(lineFormCode, lineIds, ct);
         var invalidLineIds = missing.Keys
             .Select(k => int.TryParse(k, out var v) ? v : 0)
             .Where(v => v > 0)
@@ -900,8 +974,8 @@ public sealed class SalesController : Controller
         if (!string.IsNullOrWhiteSpace(unitCode))
         {
             var allUnits = await _logisticsService.GetUnitsAsync(ct);
-            var unit = allUnits.FirstOrDefault(u => string.Equals(u.UnitCode, unitCode, StringComparison.OrdinalIgnoreCase));
-            unitName = unit?.UnitName ?? unitCode;
+            var unit = allUnits.FirstOrDefault(u => string.Equals(u.Code, unitCode, StringComparison.OrdinalIgnoreCase));
+            unitName = unit?.Name ?? unitCode;
         }
         return Json(new { unitCode, unitName });
     }
@@ -931,8 +1005,8 @@ public sealed class SalesController : Controller
         {
             if (!id.HasValue || !seenIds.Add(id.Value)) return;
             if (!unitById.TryGetValue(id.Value, out var u)) return;
-            seenLegacyCodes.Add(u.UnitCode);
-            result.Add(new { id = (int?)u.Id, code = u.UnitCode, name = u.UnitName });
+            seenLegacyCodes.Add(u.Code);
+            result.Add(new { id = (int?)u.Id, code = u.Code, name = u.Name });
         }
 
         void PushByCode(string code)
@@ -940,8 +1014,8 @@ public sealed class SalesController : Controller
             if (string.IsNullOrWhiteSpace(code) || !seenLegacyCodes.Add(code)) return;
             // Aktif birim kodu ise Id resolve, degilse legacy code-only entry (Id=null)
             var match = unitById.Values.FirstOrDefault(u =>
-                string.Equals(u.UnitCode, code, StringComparison.OrdinalIgnoreCase));
-            if (match != null) { seenIds.Add(match.Id); result.Add(new { id = (int?)match.Id, code = match.UnitCode, name = match.UnitName }); }
+                string.Equals(u.Code, code, StringComparison.OrdinalIgnoreCase));
+            if (match != null) { seenIds.Add(match.Id); result.Add(new { id = (int?)match.Id, code = match.Code, name = match.Name }); }
             else                { result.Add(new { id = (int?)null, code, name = code }); }
         }
 
@@ -1001,7 +1075,7 @@ public sealed class SalesController : Controller
     public async Task<IActionResult> GetMeasureUnits(CancellationToken ct)
     {
         var units = await _logisticsService.GetUnitsAsync(ct);
-        return Json(units.Where(u => u.IsActive).Select(u => new { code = u.UnitCode, name = u.UnitName }));
+        return Json(units.Where(u => u.IsActive).Select(u => new { code = u.Code, name = u.Name }));
     }
 
     [HttpGet]
@@ -1079,15 +1153,15 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
     public async Task<IActionResult> SaveDocument([FromBody] SaveDocumentRequest? request, CancellationToken ct)
     {
         if (request is null)
             return Json(new { success = false, message = "Gecersiz istek govdesi. Tarih ve zorunlu alanlari kontrol ediniz." });
 
-        var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
         try
         {
-            var (success, error, quote) = await _quoteService.SaveQuoteAsync(request, userName, ct);
+            var (success, error, quote) = await _quoteService.SaveQuoteAsync(request, CurrentUserId(), ct);
             if (!success) return Json(new { success = false, message = error });
 
             // SALES_QUOTE_LINES formunda IsRequired=true widget'lar varsa, her satirin
@@ -1098,7 +1172,13 @@ public sealed class SalesController : Controller
             {
                 var savedLines = await _quoteService.GetQuoteLinesAsync(quote.Id, ct);
                 var lineIds    = savedLines.Select(l => l.Id.ToString()).ToArray();
-                var missing    = await _widgetService.ValidateRequiredAsync("SALES_QUOTE_LINES", lineIds, ct);
+                var saveLineFormCode = "SALES_QUOTE_LINES";
+                if (request.DocumentTypeId.HasValue)
+                {
+                    var dt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
+                    saveLineFormCode = DocumentTypeFormMap.Resolve(dt?.Code).Lines;
+                }
+                var missing    = await _widgetService.ValidateRequiredAsync(saveLineFormCode, lineIds, ct);
                 if (missing.Count > 0)
                 {
                     var parts = missing.Select(kvp =>
@@ -1128,10 +1208,39 @@ public sealed class SalesController : Controller
                 _onSaveDispatcher.FireOnSave(
                     new[] { "SALES_QUOTE_NEW", "SALES_QUOTE_EDIT", "SALES_ORDER_NEW", "SALES_ORDER_EDIT" },
                     quote.Id.ToString(),
-                    userName);
+                    User?.Identity?.Name);
             }
 
-            return Json(new { success = true, quote });
+            // İhtiyaç Kaydı (alis_talebi) — yeni kayıt ise onay akışı kontrolü.
+            // Mevcut kayıt güncellemesinde akış yeniden başlatılmaz (isNew kontrolü DocumentTypeId üzerinden).
+            var approvalTriggered = false;
+            if (quote != null && quote.Id > 0 && request.DocumentTypeId.HasValue)
+            {
+                var docType = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
+                var isRequest = string.Equals(docType?.Code, "alis_talebi", StringComparison.OrdinalIgnoreCase);
+                var isNewDoc  = !request.Id.HasValue || request.Id.Value == 0;
+                if (isRequest && isNewDoc)
+                {
+                    try
+                    {
+                        var flow = await _approvalFlowService.MatchFlowAsync(
+                            "Document", quote.GrandTotal, null, null, ct);
+                        if (flow != null)
+                        {
+                            var docGuid = Guid.Parse($"00000000-0000-0000-0000-{quote.Id:D12}");
+                            await _approvalFlowService.StartAsync(
+                                new CalibraHub.Application.Contracts.StartApprovalRequest(docGuid, flow.Id, User?.Identity?.Name ?? "system"), ct);
+                            approvalTriggered = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "İhtiyaç kaydı onay akışı başlatılamadı (docId={DocId})", quote.Id);
+                    }
+                }
+            }
+
+            return Json(new { success = true, quote, approvalTriggered });
         }
         catch (Exception ex)
         {
@@ -1140,6 +1249,7 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
     public async Task<IActionResult> DeleteDocument([FromBody] DeleteQuoteBody body, CancellationToken ct)
     {
         await _quoteService.DeleteQuoteAsync(body.Id, ct);
@@ -1154,6 +1264,7 @@ public sealed class SalesController : Controller
     /// pattern'i ile ayni).
     /// </summary>
     [HttpPost]
+    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
     public async Task<IActionResult> DeleteDocumentJson(int id, CancellationToken ct)
     {
         try
@@ -1420,7 +1531,7 @@ public sealed class SalesController : Controller
                 DocType        = "sales_quote",
                 CustomerId     = quote.ContactId,
                 ContactGroupId = contactGroupId,
-                UserId         = userId == Guid.Empty ? null : (Guid?)userId,
+                UserId         = userId <= 0 ? null : (int?)userId,
                 BranchId       = null,    // ileride quote.BranchId
                 WarehouseId    = null,
             };

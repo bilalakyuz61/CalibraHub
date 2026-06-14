@@ -8,9 +8,7 @@ public sealed class CreateMachineRequestValidator : AbstractValidator<CreateMach
     public CreateMachineRequestValidator()
     {
         RuleFor(x => x.LocationId).GreaterThan(0).WithMessage("Lokasyon secimi zorunludur.");
-        RuleFor(x => x.MachineCode)
-            .NotEmpty().WithMessage("Makine kodu zorunludur.")
-            .MaximumLength(50);
+        // Code UI'dan kaldirildi — backend MAC-{hex} olarak otomatik uretir (CLAUDE.md: kullanici kod girmez).
 
         // HourlyCapacity opsiyonel ama girilirse pozitif olmali
         When(x => x.HourlyCapacity.HasValue, () =>
@@ -27,7 +25,7 @@ public sealed class UpdateMachineRequestValidator : AbstractValidator<UpdateMach
     {
         RuleFor(x => x.Id).GreaterThan(0).WithMessage("Makine ID zorunludur.");
         RuleFor(x => x.LocationId).GreaterThan(0).WithMessage("Lokasyon secimi zorunludur.");
-        RuleFor(x => x.MachineCode).NotEmpty().MaximumLength(50);
+        // Code UI'dan kaldirildi — backend mevcut kodu korur (CLAUDE.md: kullanici kod girmez).
     }
 }
 

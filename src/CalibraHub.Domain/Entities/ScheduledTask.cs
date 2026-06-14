@@ -79,6 +79,6 @@ public sealed class ScheduledTask
     /// </summary>
     public bool IsRunning { get; set; }
 
-    public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime Created { get; init; } = DateTime.UtcNow;
+    public DateTime Updated { get; set; } = DateTime.UtcNow;
 }

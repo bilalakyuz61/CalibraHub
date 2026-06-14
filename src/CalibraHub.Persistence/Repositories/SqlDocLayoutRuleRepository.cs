@@ -220,7 +220,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
         cmd.Parameters.Add(new SqlParameter("@LayoutId", SqlDbType.Int)         { Value = req.LayoutId });
         cmd.Parameters.Add(new SqlParameter("@CustomerId",     SqlDbType.Int)              { Value = (object?)req.CustomerId     ?? DBNull.Value });
         cmd.Parameters.Add(new SqlParameter("@ContactGroupId", SqlDbType.Int)              { Value = (object?)req.ContactGroupId ?? DBNull.Value });
-        cmd.Parameters.Add(new SqlParameter("@UserId",         SqlDbType.UniqueIdentifier) { Value = (object?)req.UserId         ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@UserId",         SqlDbType.Int)              { Value = (object?)req.UserId         ?? DBNull.Value });
         cmd.Parameters.Add(new SqlParameter("@BranchId",       SqlDbType.Int)              { Value = (object?)req.BranchId       ?? DBNull.Value });
         cmd.Parameters.Add(new SqlParameter("@WarehouseId",    SqlDbType.Int)              { Value = (object?)req.WarehouseId    ?? DBNull.Value });
         cmd.Parameters.Add(new SqlParameter("@IsActive",       SqlDbType.Bit)              { Value = req.IsActive });
@@ -273,7 +273,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
                 Id:             reader.GetInt32(0),
                 LayoutId:       reader.GetInt32(1),
                 CustomerId:     reader.IsDBNull(2) ? null : reader.GetInt32(2),
-                UserId:         reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                UserId:         reader.IsDBNull(3) ? null : reader.GetInt32(3),
                 BranchId:       reader.IsDBNull(4) ? null : reader.GetInt32(4),
                 WarehouseId:    reader.IsDBNull(5) ? null : reader.GetInt32(5),
                 UpdatedAt:      reader.GetDateTime(6),
@@ -285,7 +285,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
     private DocLayoutRuleDto MapRule(SqlDataReader r)
     {
         var customerId     = r.IsDBNull(4) ? (int?)null  : r.GetInt32(4);
-        var userId         = r.IsDBNull(5) ? (Guid?)null : r.GetGuid(5);
+        var userId         = r.IsDBNull(5) ? (int?)null  : r.GetInt32(5);
         var branchId       = r.IsDBNull(6) ? (int?)null  : r.GetInt32(6);
         var warehouseId    = r.IsDBNull(7) ? (int?)null  : r.GetInt32(7);
         var contactGroupId = r.IsDBNull(10) ? (int?)null : r.GetInt32(10);

@@ -560,10 +560,10 @@ body.app-theme-dark .wiz-hlabel {
                             </div>
                             <div class="wiz-hrow">
                                 <label class="wiz-hlabel">Para Birimi</label>
-                                <select id="wizCurrency" class="form-select form-select-sm wiz-hinput" style="max-width:120px;">
-                                    <option value="TRY">TRY — Türk Lirası</option>
-                                    <option value="USD">USD — Dolar</option>
-                                    <option value="EUR">EUR — Euro</option>
+                                <!-- value=currencies.id, data-code=ISO. Page load'da
+                                     /PriceList/GetCurrencies'ten dinamik dolar (wizLoadCurrencies). -->
+                                <select id="wizCurrency" class="form-select form-select-sm wiz-hinput" style="max-width:140px;">
+                                    <option value="1" data-code="TRY">TRY</option>
                                 </select>
                             </div>
                             <div class="wiz-hrow">
@@ -759,6 +759,7 @@ body.app-theme-dark .wiz-hlabel {
 
         (async function () {
             try { await loadSalesReps(); } catch (e) { console.error('[Wiz] salesReps:', e); }
+            try { await wizLoadCurrencies(); } catch (e) { console.error('[Wiz] currencies:', e); }
             // Müşteri rehber butonu — React bundle yüklendikten sonra bağla
             attachCustomerGuide();
         })();
@@ -768,6 +769,26 @@ body.app-theme-dark .wiz-hlabel {
     });
 
     // ── Data loaders ──────────────────────────────────────────────
+    // Currency dropdown'unu /PriceList/GetCurrencies'ten dinamik doldur.
+    // value=currencies.id (Document.CurrencyId FK'sine yazilir), data-code=ISO.
+    async function wizLoadCurrencies() {
+        try {
+            var r = await fetch('/PriceList/GetCurrencies', { credentials: 'same-origin' });
+            if (!r.ok) return;
+            var list = await r.json();
+            var sel = $id('wizCurrency');
+            if (!sel || !Array.isArray(list) || list.length === 0) return;
+            var currentId = sel.value || '1';
+            sel.innerHTML = list.map(function (c) {
+                return '<option value="' + c.id + '" data-code="' + c.code + '">' +
+                       c.code + (c.name ? ' — ' + c.name : '') + '</option>';
+            }).join('');
+            if (Array.from(sel.options).some(function (o) { return o.value === currentId; })) {
+                sel.value = currentId;
+            }
+        } catch (_) { /* sessiz: TRY fallback option zaten render edilmis */ }
+    }
+
     window.wizGoToCustomerCard = function () {
         var custId = $id('wizCustomerId').value
         if (!custId) return
@@ -1055,8 +1076,10 @@ body.app-theme-dark .wiz-hlabel {
                 '<div class="wiz-summary-meta">Yeni Satış Teklifi</div>' +
             '</div>';
 
-        // Chips
-        var cur  = $id('wizCurrency').value;
+        // Chips — currency display ISO code (data-code attribute), value=id
+        var curSel = $id('wizCurrency');
+        var curOpt = curSel.options[curSel.selectedIndex];
+        var cur  = (curOpt && curOpt.getAttribute('data-code')) || 'TRY';
         var date = $id('wizQuoteDate').value || '—';
         var vld  = $id('wizValidUntil').value || '—';
         var repSel = $id('wizSalesRepId');
@@ -1146,7 +1169,7 @@ body.app-theme-dark .wiz-hlabel {
             contactName:     custText,
             contactAddress:  null,
             salesRepId:      parseInt($id('wizSalesRepId').value) || null,
-            currency:        $id('wizCurrency').value,
+            currencyId:      parseInt($id('wizCurrency').value) || 1,
             discountRate:    parseFloat($id('wizDiscountRate').value || 0),
             taxRate:         parseFloat($id('wizTaxRate').value || 0),
             paymentTerms:    $id('wizPaymentTerms').value || null,
@@ -1184,7 +1207,7 @@ body.app-theme-dark .wiz-hlabel {
             setTimeout(function () {
                 var dest = quoteId
                     ? '/Sales/DocumentEdit?id=' + quoteId
-                    : '/Sales/Documents';
+                    : '/Sales/Quotes';
                 window.location.href = dest;
             }, 1800);
 

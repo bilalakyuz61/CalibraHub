@@ -1,6 +1,7 @@
 /**
  * CompanyUserManagementPanel — Şirket ve Kullanıcı Yönetim Ekranı
  * React tabanlı, koyu/açık tema desteği (CSS değişkenleri aracılığıyla)
+ * Multi-company: bir kullanıcı birden fazla şirkete bağlanabilir.
  */
 import { useState, useEffect, useCallback } from 'react'
 import {
@@ -15,9 +16,10 @@ import {
 
 // sqlPassword: '' = değiştirilmedi (sunucu mevcut şifreyi korur), hasPassword: mevcut şifre var mı
 var EMPTY_COMPANY = { id: null, name: '', sqlServer: '', sqlDatabase: '', sqlUsername: '', sqlPassword: '', hasPassword: false, isActive: true }
-// role: CalibraHub yetkisi — 'Admin' / 'SistemAdmin' / 'User' (default User = en kisitli)
-// grafanaRole: Grafana yetkisi — 'Admin' / 'Designer' / 'Viewer' (default Viewer)
-var EMPTY_USER    = { id: null, companyId: null, firstName: '', lastName: '', email: '', password: '', role: 'User', grafanaRole: 'Viewer', isActive: true }
+// companyIds: kullanıcının bağlı olduğu şirket ID'leri listesi (multi-company)
+// role: CalibraHub yetkisi — 'Admin' / 'SistemAdmin' / 'User'
+// grafanaRole: Grafana yetkisi — 'Admin' / 'Designer' / 'Viewer'
+var EMPTY_USER = { companyIds: [], firstName: '', lastName: '', email: '', password: '', role: 'User', grafanaRole: 'Viewer', isActive: true }
 
 export default function CompanyUserManagementPanel() {
 
@@ -29,7 +31,7 @@ export default function CompanyUserManagementPanel() {
   var [compLoading,      setCompLoading]      = useState(true)
   var [compError,        setCompError]        = useState(null)
   var [compSearch,       setCompSearch]       = useState('')
-  var [editingComp,      setEditingComp]      = useState(null)   // null=kapalı, 'new', veya id
+  var [editingComp,      setEditingComp]      = useState(null)
   var [compForm,         setCompForm]         = useState(EMPTY_COMPANY)
   var [compSaving,       setCompSaving]       = useState(false)
   var [compFormErr,      setCompFormErr]      = useState(null)
@@ -39,17 +41,17 @@ export default function CompanyUserManagementPanel() {
   var [confirmDelComp,   setConfirmDelComp]   = useState(null)
 
   // ── User state ─────────────────────────────────────────────
-  var [users,            setUsers]            = useState([])
-  var [userLoading,      setUserLoading]      = useState(true)
-  var [userError,        setUserError]        = useState(null)
-  var [userSearch,       setUserSearch]       = useState('')
-  var [userCompanyFilter,setUserCompanyFilter]= useState('all')   // 'all' = filtre yok; aksi halde companyId
-  var [editingUser,      setEditingUser]      = useState(null)
-  var [userForm,         setUserForm]         = useState(EMPTY_USER)
-  var [userSaving,       setUserSaving]       = useState(false)
-  var [userFormErr,      setUserFormErr]      = useState(null)
-  var [showUserPwd,      setShowUserPwd]      = useState(false)
-  var [confirmDelUser,   setConfirmDelUser]   = useState(null)
+  var [users,               setUsers]               = useState([])
+  var [userLoading,         setUserLoading]         = useState(true)
+  var [userError,           setUserError]           = useState(null)
+  var [userSearch,          setUserSearch]          = useState('')
+  var [userCompanyFilter,   setUserCompanyFilter]   = useState('all')
+  var [editingUser,         setEditingUser]         = useState(null)   // null | 'new' | email string
+  var [userForm,            setUserForm]            = useState(EMPTY_USER)
+  var [userSaving,          setUserSaving]          = useState(false)
+  var [userFormErr,         setUserFormErr]         = useState(null)
+  var [showUserPwd,         setShowUserPwd]         = useState(false)
+  var [confirmDelUserEmail, setConfirmDelUserEmail] = useState(null)  // email to deactivate
 
   // ── Toast ──────────────────────────────────────────────────
   var [toast, setToast] = useState(null)
@@ -89,9 +91,7 @@ export default function CompanyUserManagementPanel() {
     setEditingComp(c.id)
     setCompForm({ id: c.id, name: c.name, sqlServer: c.sqlServer || '',
       sqlDatabase: c.sqlDatabase || '', sqlUsername: c.sqlUsername || '',
-      sqlPassword: '',              // Şifre asla sunucudan gelmez — değiştirilmek istenirse yeni girilir
-      hasPassword: !!c.hasPassword, // Sunucu "şifre var" bilgisini gönderir
-      isActive: c.isActive })
+      sqlPassword: '', hasPassword: !!c.hasPassword, isActive: c.isActive })
     setCompFormErr(null); setConnResult(null); setShowPwd(false)
   }
 
@@ -129,57 +129,75 @@ export default function CompanyUserManagementPanel() {
     if (!compForm.sqlServer.trim()) { setConnResult({ success: false, message: 'SQL Sunucu zorunludur.' }); return }
     setConnTesting(true); setConnResult(null)
     var r = await testConnectionJson({
-      id:       compForm.id,
-      server:   compForm.sqlServer,
-      database: compForm.sqlDatabase,
-      username: compForm.sqlUsername,
-      password: compForm.sqlPassword   // Boşsa sunucu kayıttaki şifreyi kullanır
+      id: compForm.id, server: compForm.sqlServer,
+      database: compForm.sqlDatabase, username: compForm.sqlUsername, password: compForm.sqlPassword
     })
     setConnTesting(false); setConnResult(r)
   }
 
   // ── User handlers ──────────────────────────────────────────
   function handleNewUser() {
-    setEditingUser('new'); setUserForm(EMPTY_USER)
+    setEditingUser('new'); setUserForm(Object.assign({}, EMPTY_USER, { companyIds: [] }))
     setUserFormErr(null); setShowUserPwd(false)
   }
 
   function handleEditUser(u) {
-    // FullName'i Ad/Soyad'a ayır — ilk kelime Ad, kalan Soyad
     var fullName = (u.fullName || '').trim()
     var spaceIdx = fullName.indexOf(' ')
     var firstName = spaceIdx === -1 ? fullName : fullName.substring(0, spaceIdx)
     var lastName  = spaceIdx === -1 ? ''       : fullName.substring(spaceIdx + 1).trim()
-    setEditingUser(u.id)
+    // companyIds: mevcut şirket bağlantılarından al (companies dizisi)
+    var companyIds = (u.companies || []).map(function (c) { return c.id })
+    setEditingUser(u.email)
     setUserForm({
-      id: u.id,
-      companyId: u.companyId,
-      firstName: firstName,
-      lastName: lastName,
-      email: u.email || '',
-      password: '',  // boş = mevcut şifre korunur
-      role: u.uiRole || 'User',           // CalibraHub yetkisi (Admin/SistemAdmin/User) — backend mapping
-      grafanaRole: u.grafanaRole || 'Viewer', // Grafana yetkisi (Admin/Designer/Viewer); null kayit edit'te Viewer'a default
-      isActive: u.isActive
+      email:      u.email || '',
+      companyIds: companyIds,
+      firstName:  firstName,
+      lastName:   lastName,
+      password:   '',
+      role:       u.uiRole || 'User',
+      grafanaRole: u.grafanaRole || 'Viewer',
+      isActive:   u.isActive
     })
     setUserFormErr(null); setShowUserPwd(false)
   }
 
   function handleCancelUser() { setEditingUser(null); setUserFormErr(null) }
 
+  function toggleCompanyId(id) {
+    var ids = userForm.companyIds || []
+    setUserForm(Object.assign({}, userForm, {
+      companyIds: ids.includes(id) ? ids.filter(function (x) { return x !== id }) : ids.concat(id)
+    }))
+  }
+
   async function handleSaveUser(e) {
     e.preventDefault()
-    if (!userForm.companyId) { setUserFormErr('Şirket seçimi zorunludur.'); return }
+    if (!userForm.companyIds || userForm.companyIds.length === 0) {
+      setUserFormErr('En az bir şirket seçilmelidir.'); return
+    }
     if (!userForm.firstName.trim()) { setUserFormErr('Ad zorunludur.'); return }
     if (!userForm.email.trim()) { setUserFormErr('E-posta zorunludur.'); return }
     var isEditing = editingUser !== 'new' && editingUser !== null
     if (!isEditing) {
-      if (!userForm.password || userForm.password.length < 8) { setUserFormErr('Şifre en az 8 karakter olmalıdır.'); return }
+      if (!userForm.password || userForm.password.length < 8) {
+        setUserFormErr('Şifre en az 8 karakter olmalıdır.'); return
+      }
     } else if (userForm.password && userForm.password.length < 8) {
       setUserFormErr('Şifre değiştirmek için en az 8 karakter girin (boş bırakırsanız değişmez).'); return
     }
     setUserSaving(true); setUserFormErr(null)
-    var result = await saveUserJson(userForm)
+    var payload = {
+      email:      userForm.email,
+      companyIds: userForm.companyIds,
+      firstName:  userForm.firstName,
+      lastName:   userForm.lastName,
+      password:   userForm.password || null,
+      role:       userForm.role,
+      grafanaRole: userForm.grafanaRole,
+      isActive:   userForm.isActive
+    }
+    var result = await saveUserJson(payload)
     setUserSaving(false)
     if (result.success) {
       showToast('success', isEditing ? 'Kullanıcı güncellendi.' : 'Kullanıcı oluşturuldu.')
@@ -190,10 +208,11 @@ export default function CompanyUserManagementPanel() {
   }
 
   async function handleDeactivateUser() {
-    var id = confirmDelUser; setConfirmDelUser(null)
-    var result = await deactivateUserJson(id)
+    var email = confirmDelUserEmail; setConfirmDelUserEmail(null)
+    var result = await deactivateUserJson(email)
     if (result && result.success !== false) {
       showToast('success', 'Kullanıcı pasife alındı.')
+      if (editingUser === email) setEditingUser(null)
       loadUsers()
     } else {
       showToast('error', (result && result.message) || 'İşlem başarısız.')
@@ -208,15 +227,18 @@ export default function CompanyUserManagementPanel() {
   })
 
   var filteredUsers = users.filter(function (u) {
-    // Şirket filtresi (üst dropdown) — 'all' = tüm şirketler
-    if (userCompanyFilter !== 'all' && String(u.companyId) !== String(userCompanyFilter)) return false
-    // Arama metni
+    if (userCompanyFilter !== 'all') {
+      var hasComp = (u.companies || []).some(function (c) { return String(c.id) === String(userCompanyFilter) })
+      if (!hasComp) return false
+    }
     if (!userSearch.trim()) return true
     var q = userSearch.toLowerCase()
     return (u.fullName || '').toLowerCase().includes(q) ||
            (u.email || '').toLowerCase().includes(q) ||
            (u.companyName || '').toLowerCase().includes(q)
   })
+
+  var activeCompanies = companies.filter(function (c) { return c.isActive })
 
   // ── Render ─────────────────────────────────────────────────
   return (
@@ -230,7 +252,7 @@ export default function CompanyUserManagementPanel() {
         </div>
       )}
 
-      {/* Confirm delete company */}
+      {/* Confirm deactivate company */}
       {confirmDelComp && (
         <div className="cum-overlay">
           <div className="cum-confirm-box">
@@ -244,15 +266,15 @@ export default function CompanyUserManagementPanel() {
         </div>
       )}
 
-      {/* Confirm delete user */}
-      {confirmDelUser && (
+      {/* Confirm deactivate user */}
+      {confirmDelUserEmail && (
         <div className="cum-overlay">
           <div className="cum-confirm-box">
             <AlertCircle size={22} className="cum-confirm-ico" />
-            <p>Bu kullanıcı <strong>pasife</strong> alınacak. Devam edilsin mi?</p>
+            <p>Bu kullanıcı <strong>tüm şirket bağlantılarıyla birlikte</strong> pasife alınacak. Devam edilsin mi?</p>
             <div className="cum-confirm-btns">
               <button type="button" className="cum-btn cum-btn--danger" onClick={handleDeactivateUser}>Pasife Al</button>
-              <button type="button" className="cum-btn cum-btn--ghost" onClick={function () { setConfirmDelUser(null) }}>İptal</button>
+              <button type="button" className="cum-btn cum-btn--ghost" onClick={function () { setConfirmDelUserEmail(null) }}>İptal</button>
             </div>
           </div>
         </div>
@@ -277,8 +299,6 @@ export default function CompanyUserManagementPanel() {
       {/* ═══ COMPANIES ═══ */}
       {activeTab === 'companies' && (
         <div className="cum-body">
-
-          {/* List panel */}
           <div className={'cum-list-panel' + (editingComp !== null ? ' cum-list-panel--narrow' : '')}>
             <div className="cum-toolbar">
               <button type="button" className="cum-btn cum-btn--primary" onClick={handleNewComp}>
@@ -362,7 +382,7 @@ export default function CompanyUserManagementPanel() {
             )}
           </div>
 
-          {/* Form panel */}
+          {/* Company form panel */}
           {editingComp !== null && (
             <div className="cum-form-panel">
               <div className="cum-form-header">
@@ -481,7 +501,6 @@ export default function CompanyUserManagementPanel() {
                 <Plus size={14} /> Yeni Kullanıcı
               </button>
 
-              {/* Şirket filtresi — companies state'ini dropdown'da listeler */}
               <div className="cum-filter-wrap" title="Şirket filtresi">
                 <Building2 size={13} className="cum-filter-ico" />
                 <select className="cum-filter-select"
@@ -489,7 +508,9 @@ export default function CompanyUserManagementPanel() {
                   onChange={function (e) { setUserCompanyFilter(e.target.value) }}>
                   <option value="all">Tüm Şirketler ({users.length})</option>
                   {companies.map(function (c) {
-                    var cnt = users.filter(function (u) { return String(u.companyId) === String(c.id) }).length
+                    var cnt = users.filter(function (u) {
+                      return (u.companies || []).some(function (uc) { return String(uc.id) === String(c.id) })
+                    }).length
                     return <option key={c.id} value={c.id}>{c.name} ({cnt})</option>
                   })}
                 </select>
@@ -536,7 +557,7 @@ export default function CompanyUserManagementPanel() {
                     <tr>
                       <th>Ad Soyad</th>
                       <th>E-posta</th>
-                      <th>Şirket</th>
+                      <th>Şirketler</th>
                       <th>Durum</th>
                       <th></th>
                     </tr>
@@ -544,13 +565,24 @@ export default function CompanyUserManagementPanel() {
                   <tbody>
                     {filteredUsers.map(function (u) {
                       return (
-                        <tr key={u.id}>
+                        <tr key={u.email} className={editingUser === u.email ? 'is-selected' : ''}>
                           <td className="cum-td-name">
                             <Shield size={12} style={{ opacity: 0.4, marginRight: 6, flexShrink: 0 }} />
                             {u.fullName}
                           </td>
                           <td className="cum-td-email">{u.email}</td>
-                          <td><span className="cum-pill cum-pill--blue">{u.companyName || '—'}</span></td>
+                          <td className="cum-td-companies">
+                            {(u.companies || []).length > 0
+                              ? (u.companies || []).map(function (c) {
+                                  return (
+                                    <span key={c.id} className="cum-pill cum-pill--blue" style={{ marginRight: 3, marginBottom: 2 }}>
+                                      {c.name || '—'}
+                                    </span>
+                                  )
+                                })
+                              : <span className="cum-pill cum-pill--gray">—</span>
+                            }
+                          </td>
                           <td>
                             <span className={'cum-pill ' + (u.isActive ? 'cum-pill--green' : 'cum-pill--red')}>
                               {u.isActive ? 'Aktif' : 'Pasif'}
@@ -561,7 +593,7 @@ export default function CompanyUserManagementPanel() {
                               <Pencil size={13} />
                             </button>
                             <button type="button" className="cum-action-btn cum-action-btn--danger"
-                              onClick={function () { setConfirmDelUser(u.id) }} title="Pasife Al">
+                              onClick={function () { setConfirmDelUserEmail(u.email) }} title="Pasife Al">
                               <Trash2 size={13} />
                             </button>
                           </td>
@@ -574,7 +606,7 @@ export default function CompanyUserManagementPanel() {
             )}
           </div>
 
-          {/* Form panel */}
+          {/* User form panel */}
           {editingUser !== null && (
             <div className="cum-form-panel">
               <div className="cum-form-header">
@@ -586,17 +618,41 @@ export default function CompanyUserManagementPanel() {
               </div>
 
               <form className="cum-form" onSubmit={handleSaveUser} autoComplete="off">
+
+                {/* Şirket çoklu seçim */}
                 <div className="cum-field">
-                  <label className="cum-label">Şirket <span className="cum-req">*</span></label>
-                  <select className="cum-select" value={userForm.companyId || ''}
-                    onChange={function (e) {
-                      setUserForm(Object.assign({}, userForm, { companyId: e.target.value ? parseInt(e.target.value) : null }))
-                    }}>
-                    <option value="">Seçiniz…</option>
-                    {companies.filter(function (c) { return c.isActive }).map(function (c) {
-                      return <option key={c.id} value={c.id}>{c.name}</option>
-                    })}
-                  </select>
+                  <label className="cum-label">
+                    Şirketler <span className="cum-req">*</span>
+                    <span style={{fontWeight:400,fontSize:'.69rem',color:'var(--cum-text-muted)',marginLeft:5,textTransform:'none',letterSpacing:0}}>
+                      — birden fazla seçilebilir
+                    </span>
+                  </label>
+                  {activeCompanies.length === 0 ? (
+                    <p className="cum-empty-hint">Önce şirket tanımlamalısınız.</p>
+                  ) : (
+                    <div className="cum-company-checks">
+                      {activeCompanies.map(function (c) {
+                        var checked = (userForm.companyIds || []).includes(c.id)
+                        return (
+                          <label key={c.id} className={'cum-check-item' + (checked ? ' is-checked' : '')}
+                                 title={checked ? c.name + ' seçili — kaldırmak için tıklayın' : c.name + ' — seçmek için tıklayın'}>
+                            <input type="checkbox" checked={checked} style={{display:'none'}}
+                              onChange={function () { toggleCompanyId(c.id) }} />
+                            <span className="cum-check-dot" aria-hidden="true"></span>
+                            <span className="cum-check-label">{c.name}</span>
+                            {checked && (
+                              <span style={{marginLeft:'auto',fontSize:'.69rem',color:'var(--cum-accent)',fontWeight:700}}>✓</span>
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {(userForm.companyIds || []).length > 0 && (
+                    <p style={{fontSize:'.71rem',color:'var(--cum-text-muted)',margin:'3px 0 0'}}>
+                      {(userForm.companyIds || []).length} şirket seçili
+                    </p>
+                  )}
                 </div>
 
                 <div className="cum-field-row">
@@ -615,11 +671,16 @@ export default function CompanyUserManagementPanel() {
                 <div className="cum-field">
                   <label className="cum-label">E-posta <span className="cum-req">*</span></label>
                   <input type="email" className="cum-input" value={userForm.email}
-                    onChange={function (e) { setUserForm(Object.assign({}, userForm, { email: e.target.value })) }} />
+                    readOnly={editingUser !== 'new'}
+                    style={editingUser !== 'new' ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
+                    onChange={function (e) { if (editingUser === 'new') setUserForm(Object.assign({}, userForm, { email: e.target.value })) }} />
                 </div>
 
                 <div className="cum-field">
-                  <label className="cum-label">Şifre <span className="cum-req">*</span></label>
+                  <label className="cum-label">
+                    Şifre {editingUser === 'new' && <span className="cum-req">*</span>}
+                    {editingUser !== 'new' && <span className="cum-field-hint"> — boş bırakılırsa değiştirilmez</span>}
+                  </label>
                   <div className="cum-pw-wrap">
                     <input type={showUserPwd ? 'text' : 'password'} className="cum-input cum-input--pw"
                       value={userForm.password}
@@ -631,7 +692,7 @@ export default function CompanyUserManagementPanel() {
                   </div>
                 </div>
 
-                {/* CalibraHub Yetkisi — radio (3 secenek): Admin / Sistem Admin / User */}
+                {/* CalibraHub Yetkisi */}
                 <div className="cum-field">
                   <label className="cum-label">CalibraHub Yetkisi <span className="cum-req">*</span></label>
                   <div className="cum-radio-group" role="radiogroup">
@@ -657,7 +718,7 @@ export default function CompanyUserManagementPanel() {
                   </div>
                 </div>
 
-                {/* Grafana Yetkisi — radio (3 secenek): Admin / Designer / Viewer */}
+                {/* Grafana Yetkisi */}
                 <div className="cum-field">
                   <label className="cum-label">Grafana Yetkisi <span className="cum-req">*</span></label>
                   <div className="cum-radio-group" role="radiogroup">
@@ -692,7 +753,7 @@ export default function CompanyUserManagementPanel() {
                 <div className="cum-form-footer">
                   <button type="submit" className="cum-btn cum-btn--primary" disabled={userSaving}>
                     {userSaving ? <Loader2 size={13} className="cum-spin" /> : <Check size={13} />}
-                    {userSaving ? 'Oluşturuluyor…' : 'Oluştur'}
+                    {userSaving ? 'Kaydediliyor…' : (editingUser === 'new' ? 'Oluştur' : 'Kaydet')}
                   </button>
                   <button type="button" className="cum-btn cum-btn--ghost" onClick={handleCancelUser}>İptal</button>
                 </div>

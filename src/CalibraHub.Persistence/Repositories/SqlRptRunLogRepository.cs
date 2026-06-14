@@ -21,7 +21,7 @@ public sealed class SqlRptRunLogRepository : IRptRunLogRepository
     public async Task<long> LogStartAsync(
         int? defId,
         int viewId,
-        Guid userId,
+        int userId,
         int? companyId,
         byte[] sqlHash,
         CancellationToken ct)
@@ -58,7 +58,7 @@ public sealed class SqlRptRunLogRepository : IRptRunLogRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<IReadOnlyCollection<RptRunLog>> GetRecentAsync(int? defId, Guid? userId, int top, CancellationToken ct)
+    public async Task<IReadOnlyCollection<RptRunLog>> GetRecentAsync(int? defId, int? userId, int top, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -82,7 +82,7 @@ public sealed class SqlRptRunLogRepository : IRptRunLogRepository
                 Id = reader.GetInt64(0),
                 DefId = reader.IsDBNull(1) ? null : reader.GetInt32(1),
                 ViewId = reader.GetInt32(2),
-                UserId = reader.GetGuid(3),
+                UserId = reader.GetInt32(3),
                 CompanyId = reader.IsDBNull(4) ? null : reader.GetInt32(4),
                 StartedAt = reader.GetDateTime(5),
                 DurationMs = reader.IsDBNull(6) ? null : reader.GetInt32(6),

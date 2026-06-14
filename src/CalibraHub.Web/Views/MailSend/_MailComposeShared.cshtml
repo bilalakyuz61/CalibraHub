@@ -1,0 +1,500 @@
+<style>
+    /* Full-viewport 3 sekmeli compose ekrani */
+    .workspace-frame-body.page-mailsend-compose .app-content-area--workspace-frame {
+        height: 100dvh; display: flex; flex-direction: column;
+        overflow: hidden; padding: 0;
+    }
+    .page-mailsend-compose .integrator-dashboard {
+        height: 100% !important; min-height: 0 !important; padding: 0 !important;
+        max-width: none !important; background: transparent !important;
+        box-shadow: none !important; border: none !important; border-radius: 0 !important;
+    }
+    .page-mailsend-compose .integrator-dashboard__content {
+        display: flex !important; flex-direction: column !important;
+        width: 100% !important; max-width: none !important;
+        min-height: 0 !important; padding: 0 !important;
+        margin: 0 !important; overflow: hidden !important;
+    }
+
+    .mc-app {
+        display: flex; flex-direction: column;
+        height: 100%; width: 100%; min-height: 0; overflow: hidden;
+        --mc-border: rgba(148,163,184,.28);
+        --mc-surface: #ffffff;
+        --mc-surface-2: #f8fafc;
+        --mc-text: #1e293b;
+        --mc-muted: #64748b;
+        --mc-accent: #6366f1;
+        --mc-accent-dim: rgba(99,102,241,.16);
+        --mc-emerald: #10b981;
+        --mc-rose: #ef4444;
+        color: var(--mc-text);
+    }
+    body.app-theme-dark .mc-app {
+        --mc-border: rgba(255,255,255,.10);
+        --mc-surface: #0f172a;
+        --mc-surface-2: #0b1220;
+        --mc-text: rgba(255,255,255,.92);
+        --mc-muted: rgba(255,255,255,.55);
+        --mc-accent-dim: rgba(99,102,241,.22);
+    }
+
+    /* Top bar */
+    .mc-topbar {
+        flex: 0 0 auto;
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 18px;
+        background: var(--mc-surface);
+        border-bottom: 1px solid var(--mc-border);
+    }
+    .mc-topbar__icon {
+        width: 36px; height: 36px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, rgba(99,102,241,.22), rgba(168,85,247,.18));
+        border: 1px solid rgba(99,102,241,.35); color: #6366f1;
+    }
+    .mc-topbar__title { font-size: 15px; font-weight: 700; margin: 0; }
+    .mc-topbar__sub   { font-size: 11.5px; color: var(--mc-muted); margin-top: 2px; }
+    .mc-topbar__spacer { flex: 1 1 auto; }
+
+    .mce-btn {
+        font: inherit; font-size: 12.5px; font-weight: 700; padding: 9px 16px;
+        border-radius: 8px; cursor: pointer; border: 1px solid transparent;
+        transition: filter .12s, transform .1s;
+        display: inline-flex; align-items: center; gap: 7px;
+    }
+    .mce-btn:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+    .mce-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .mce-btn--primary {
+        background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff;
+        box-shadow: 0 4px 14px rgba(99,102,241,.28);
+    }
+    .mce-btn--secondary {
+        background: transparent; border-color: var(--mc-border); color: var(--mc-text);
+    }
+    .mce-btn--secondary:hover { border-color: var(--mc-accent); color: var(--mc-accent); }
+
+    /* Body: sidenav + content */
+    .mc-body {
+        flex: 1 1 auto; min-height: 0;
+        display: grid; grid-template-columns: 248px 1fr;
+        background: var(--mc-surface-2);
+    }
+    .mc-sidenav {
+        background: var(--mc-surface);
+        border-right: 1px solid var(--mc-border);
+        display: flex; flex-direction: column;
+        padding: 14px 10px;
+        overflow-y: auto;
+        /* 2026-05-20: Sidenav her zaman ust seviyede sabit. Layout zaten grid
+           huucresi olarak yukseklikte sinirli (mc-body height) ama position:sticky
+           ile garantilenir — content scroll'unda asla kaymaz. */
+        position: sticky;
+        top: 0;
+        align-self: start;
+        max-height: 100%;
+    }
+    .cs-tab-btn {
+        text-align: left;
+        display: flex; align-items: center; gap: 10px;
+        background: transparent; border: 1px solid transparent;
+        padding: 11px 12px; border-radius: 9px;
+        font: inherit; font-size: 13px; font-weight: 600;
+        color: var(--mc-text);
+        cursor: pointer;
+        transition: background .12s, border-color .12s, color .12s;
+        margin-bottom: 4px;
+    }
+    .cs-tab-btn:hover { background: var(--mc-accent-dim); color: var(--mc-accent); }
+    .cs-tab-btn.is-active {
+        background: var(--mc-accent-dim);
+        border-color: rgba(99,102,241,.4);
+        color: var(--mc-accent);
+    }
+    .cs-tab-btn__step {
+        width: 22px; height: 22px; border-radius: 50%;
+        background: var(--mc-surface-2); border: 1px solid var(--mc-border);
+        color: var(--mc-muted);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 700; flex: 0 0 auto;
+    }
+    .cs-tab-btn.is-active .cs-tab-btn__step {
+        background: var(--mc-accent); border-color: var(--mc-accent); color: #fff;
+    }
+    .cs-tab-btn.is-done .cs-tab-btn__step {
+        background: var(--mc-emerald); border-color: var(--mc-emerald); color: #fff;
+    }
+    .cs-tab-btn__icon { display: flex; align-items: center; }
+    .cs-tab-btn__label { flex: 1 1 auto; }
+    .cs-tab-btn__hint { font-size: 10.5px; color: var(--mc-muted); margin-top: 2px; font-weight: 500; }
+
+    .mc-content {
+        display: flex; flex-direction: column; min-height: 0; min-width: 0;
+        overflow: hidden;
+    }
+    .cs-tab-pane {
+        flex: 1 1 auto;
+        display: none; flex-direction: column;
+        overflow: hidden;
+        padding: 18px 22px 0;
+    }
+    .cs-tab-pane.is-active { display: flex; }
+    .cs-tab-pane__head { flex: 0 0 auto; padding-bottom: 12px; border-bottom: 1px solid var(--mc-border); margin-bottom: 16px; }
+    .cs-tab-pane__head h2 { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+    .cs-tab-pane__head .sub { font-size: 12px; color: var(--mc-muted); }
+    .cs-tab-pane__body { flex: 1 1 auto; overflow-y: auto; padding-right: 4px; padding-bottom: 18px; }
+    .cs-tab-pane__footer {
+        flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 8px;
+        padding: 12px 0; border-top: 1px solid var(--mc-border);
+    }
+
+    /* Form fields */
+    .mc-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    .mc-field__label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--mc-muted); }
+    .mc-field__label .req { color: #ef4444; }
+    .mc-input, .mc-textarea, .mc-select {
+        font: inherit; font-size: 13px; padding: 9px 12px; border-radius: 8px;
+        border: 1px solid var(--mc-border); background: var(--mc-surface); color: var(--mc-text);
+        outline: none; width: 100%; box-sizing: border-box;
+        transition: border-color .12s, box-shadow .12s;
+    }
+    .mc-textarea { resize: vertical; min-height: 220px; font-family: inherit; line-height: 1.5; }
+    .mc-input:focus, .mc-textarea:focus, .mc-select:focus {
+        border-color: var(--mc-accent);
+        box-shadow: 0 0 0 3px var(--mc-accent-dim);
+    }
+
+    /* Cari Grup Kodu cascade grid — 5 satir, label 70px + select */
+    .mc-group-grid {
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 12px 14px;
+        background: var(--mc-surface);
+        border: 1px solid var(--mc-border);
+        border-radius: 8px;
+    }
+    .mc-group-row {
+        display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 12px;
+    }
+    .mc-group-row__label {
+        font-size: 12px; font-weight: 600; color: var(--mc-muted);
+    }
+    .mc-group-row .mc-select { padding: 7px 10px; font-size: 12.5px; }
+
+    /* Title combobox (multi-select) */
+    .ms-combo { position: relative; }
+    .ms-combo__btn {
+        width: 100%; min-height: 40px;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+        padding: 6px 32px 6px 9px;
+        background: var(--mc-surface); border: 1px solid var(--mc-border); border-radius: 8px;
+        cursor: pointer; text-align: left; font: inherit; font-size: 13px; color: var(--mc-text);
+        transition: border-color .12s, box-shadow .12s;
+        position: relative;
+    }
+    .ms-combo.is-open .ms-combo__btn,
+    .ms-combo__btn:hover { border-color: var(--mc-accent); }
+    .ms-combo.is-open .ms-combo__btn { box-shadow: 0 0 0 3px var(--mc-accent-dim); }
+    .ms-combo__placeholder { color: var(--mc-muted); padding: 3px 4px; }
+    .ms-combo__caret {
+        position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+        opacity: .55; pointer-events: none; transition: transform .15s;
+    }
+    .ms-combo.is-open .ms-combo__caret { transform: translateY(-50%) rotate(180deg); }
+    .ms-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 7px 3px 9px; border-radius: 99px;
+        background: var(--mc-accent-dim); color: var(--mc-accent); font-size: 11.5px; font-weight: 600;
+        border: 1px solid rgba(99,102,241,.35);
+    }
+    body.app-theme-dark .ms-chip { color: #a5b4fc; }
+    .ms-chip__x {
+        margin-left: 2px; width: 16px; height: 16px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        background: transparent; border: none; cursor: pointer; color: inherit;
+        font-size: 14px; line-height: 1; padding: 0;
+    }
+    .ms-chip__x:hover { background: rgba(99,102,241,.25); }
+    .ms-combo__panel {
+        position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+        max-height: 320px;
+        background: var(--mc-surface);
+        border: 1px solid var(--mc-border);
+        border-radius: 10px;
+        box-shadow: 0 16px 40px rgba(15,23,42,.18);
+        z-index: 50;
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    body.app-theme-dark .ms-combo__panel { box-shadow: 0 16px 40px rgba(0,0,0,.55); }
+    .ms-combo.is-open .ms-combo__panel { display: flex; }
+    .ms-combo__search {
+        flex: 0 0 auto; padding: 8px; border-bottom: 1px solid var(--mc-border);
+        display: flex; gap: 6px; align-items: center;
+    }
+    .ms-combo__search input {
+        flex: 1 1 auto; font: inherit; font-size: 12.5px; padding: 6px 8px;
+        background: var(--mc-surface-2); border: 1px solid var(--mc-border); border-radius: 6px;
+        color: var(--mc-text); outline: none;
+    }
+    .ms-combo__bulk { display: flex; gap: 4px; }
+    .ms-combo__bulk button {
+        font: inherit; font-size: 11px; font-weight: 600; padding: 5px 9px;
+        background: var(--mc-surface-2); border: 1px solid var(--mc-border); border-radius: 6px;
+        color: var(--mc-muted); cursor: pointer;
+    }
+    .ms-combo__bulk button:hover { color: var(--mc-accent); border-color: var(--mc-accent); }
+    .ms-combo__list {
+        flex: 1 1 auto; overflow-y: auto; max-height: 240px;
+        padding: 4px 0;
+    }
+    .ms-combo__row {
+        display: flex; align-items: center; gap: 9px;
+        padding: 7px 12px; cursor: pointer; font-size: 12.5px;
+    }
+    .ms-combo__row:hover { background: var(--mc-surface-2); }
+    .ms-combo__row.is-disabled { opacity: .45; }
+    .ms-combo__row input[type=checkbox] {
+        width: 14px; height: 14px; cursor: pointer; accent-color: var(--mc-accent);
+    }
+    .ms-combo__row .name { flex: 1 1 auto; }
+    .ms-combo__row .count {
+        font-size: 10.5px; padding: 1px 7px; border-radius: 99px;
+        background: var(--mc-surface-2); border: 1px solid var(--mc-border);
+        color: var(--mc-muted);
+    }
+    .ms-combo__row.has-usage .count { color: var(--mc-accent); border-color: rgba(99,102,241,.4); }
+    .ms-combo__empty { padding: 14px; text-align: center; font-size: 12px; color: var(--mc-muted); }
+
+    /* Tab 2 — body + token side */
+    .tab2-grid {
+        display: grid; grid-template-columns: 1fr 240px; gap: 18px;
+    }
+    .token-card {
+        background: var(--mc-surface); border: 1px solid var(--mc-border);
+        border-radius: 10px; padding: 12px 14px;
+        align-self: flex-start;
+    }
+    .token-card h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mc-muted); }
+    .token-list { display: flex; flex-direction: column; gap: 5px; }
+    .token-chip {
+        font: inherit; font-size: 11.5px; font-family: 'Consolas', monospace;
+        background: var(--mc-surface-2); border: 1px solid var(--mc-border);
+        border-radius: 6px; padding: 5px 8px; cursor: pointer;
+        color: var(--mc-text); text-align: left;
+        transition: border-color .1s, color .1s;
+    }
+    .token-chip:hover { border-color: var(--mc-accent); color: var(--mc-accent); }
+    .token-chip .desc { color: var(--mc-muted); font-family: inherit; font-size: 10.5px; margin-left: 6px; }
+
+    /* Tab 3 — recipients
+       2026-05-20: recip-bar sticky — scroll'da ust kenara yapisip kullanicinin
+       arama + bulk butonlarina erisimini her zaman korur. top:0 ile tab-pane__body
+       (scroll konteyneri) icinde sabit. */
+    .recip-bar {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        padding: 10px 12px;
+        background: var(--mc-surface); border: 1px solid var(--mc-border); border-radius: 10px;
+        margin-bottom: 12px;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        box-shadow: 0 4px 12px rgba(0,0,0,.04);
+    }
+    body.app-theme-dark .recip-bar {
+        box-shadow: 0 4px 16px rgba(0,0,0,.32);
+    }
+    .recip-bar__summary { font-size: 13px; font-weight: 600; }
+    .recip-bar__summary .num-inc { color: var(--mc-emerald); }
+    .recip-bar__summary .num-exc { color: var(--mc-rose); }
+    .recip-bar__spacer { flex: 1 1 auto; }
+    .recip-bar__btn {
+        font: inherit; font-size: 12px; font-weight: 600; padding: 6px 11px;
+        background: var(--mc-surface-2); border: 1px solid var(--mc-border); border-radius: 7px;
+        color: var(--mc-muted); cursor: pointer;
+    }
+    .recip-bar__btn:hover { color: var(--mc-accent); border-color: var(--mc-accent); }
+    .recip-bar__btn.is-active {
+        color: #fff; background: var(--mc-accent); border-color: var(--mc-accent);
+    }
+    .recip-bar__btn.is-active:hover { filter: brightness(1.08); }
+    .recip-bar__search {
+        font: inherit; font-size: 12.5px; padding: 7px 10px;
+        background: var(--mc-surface-2); border: 1px solid var(--mc-border); border-radius: 7px;
+        color: var(--mc-text); outline: none; min-width: 220px;
+    }
+
+    /* Liste görünümü — kart yerine sıkı satır listesi */
+    .recip-grid {
+        display: flex; flex-direction: column;
+        background: var(--mc-surface); border: 1px solid var(--mc-border);
+        border-radius: 10px; overflow: hidden;
+    }
+    .recip-grid__head {
+        display: grid;
+        grid-template-columns: minmax(180px,1.4fr) minmax(160px,1.2fr) minmax(120px,0.8fr) minmax(220px,1.6fr) 56px;
+        gap: 12px; padding: 9px 14px;
+        font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+        color: var(--mc-muted);
+        background: var(--mc-surface-2);
+        border-bottom: 1px solid var(--mc-border);
+    }
+    .recip-row {
+        display: grid;
+        grid-template-columns: minmax(180px,1.4fr) minmax(160px,1.2fr) minmax(120px,0.8fr) minmax(220px,1.6fr) 56px;
+        gap: 12px; align-items: center;
+        padding: 9px 14px;
+        border-bottom: 1px solid var(--mc-border);
+        transition: background .12s, opacity .12s;
+        font-size: 12.5px;
+    }
+    .recip-row:last-child { border-bottom: none; }
+    .recip-row:hover { background: var(--mc-surface-2); }
+    .recip-row.is-excluded { opacity: .5; }
+    .recip-row.is-excluded .recip-row__email { text-decoration: line-through; }
+    .recip-row.is-included { box-shadow: inset 3px 0 0 rgba(16,185,129,.55); }
+    .recip-row__cell {
+        min-width: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .recip-row__name    { font-weight: 700; color: var(--mc-text); }
+    .recip-row__contact { color: var(--mc-muted); font-size: 12px; }
+    .recip-row__title   { color: var(--mc-muted); font-size: 12px; }
+    .recip-row__email   { font-family: 'Consolas', monospace; font-size: 12px; color: var(--mc-text); }
+    .recip-row__toggle  { display: flex; justify-content: flex-end; }
+
+    /* Dar ekran — header gizle, satır 2 satıra yığılsın */
+    @@media (max-width: 900px) {
+        .recip-grid__head { display: none; }
+        .recip-row {
+            grid-template-columns: 1fr 48px;
+            grid-template-areas:
+                "name toggle"
+                "contact toggle"
+                "title  toggle"
+                "email  toggle";
+            row-gap: 2px;
+        }
+        .recip-row__name    { grid-area: name; }
+        .recip-row__contact { grid-area: contact; }
+        .recip-row__title   { grid-area: title; }
+        .recip-row__email   { grid-area: email; }
+        .recip-row__toggle  { grid-area: toggle; align-self: center; }
+    }
+
+    /* Switchkey (toggle) — CLAUDE.md: native checkbox kullanma */
+    .cp-switch {
+        position: relative; display: inline-block;
+        width: 38px; height: 22px;
+        flex: 0 0 auto;
+        cursor: pointer;
+    }
+    .cp-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .cp-switch__track {
+        position: absolute; inset: 0;
+        background: rgba(148,163,184,.4);
+        border-radius: 99px;
+        transition: background .15s;
+    }
+    .cp-switch__thumb {
+        position: absolute; top: 2px; left: 2px;
+        width: 18px; height: 18px; border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 2px 6px rgba(0,0,0,.18);
+        transition: transform .15s;
+    }
+    .cp-switch input:checked + .cp-switch__track { background: var(--mc-emerald); }
+    .cp-switch input:checked + .cp-switch__track + .cp-switch__thumb { transform: translateX(16px); }
+
+    .recip-empty {
+        text-align: center; padding: 40px 20px; color: var(--mc-muted); font-size: 13px;
+    }
+
+    /* Toast / confirm — preview modal */
+    .mc-toast {
+        position: fixed; right: 18px; bottom: 18px; padding: 11px 16px;
+        border-radius: 10px; font-size: 13px; font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,.25); opacity: 0;
+        transition: opacity .2s; z-index: 9999;
+    }
+    .mc-toast.show { opacity: 1; }
+    .mc-toast--ok  { background: rgba(34,197,94,.96); color: #fff; }
+    .mc-toast--err { background: rgba(239,68,68,.96); color: #fff; }
+
+    /* mc-modal genellikle <section class="mc-app"> DISINDA renderlanir (body
+       seviyesi). .mc-app icindeki tema degiskenleri buraya akmaz — bu yuzden
+       degiskenleri burada da tanimliyoruz. Dark override body.app-theme-dark
+       uzerinden gelir (selector body seviyesinde). */
+    .mc-modal {
+        --mc-surface:     #ffffff;
+        --mc-surface-2:   #f8fafc;
+        --mc-border:      rgba(148,163,184,.28);
+        --mc-text:        #1e293b;
+        --mc-muted:       #64748b;
+        --mc-accent:      #6366f1;
+        --mc-accent-dim:  rgba(99,102,241,.16);
+        position: fixed; inset: 0; z-index: 9200;
+        background: rgba(15,23,42,.62); backdrop-filter: blur(4px);
+        display: none; align-items: center; justify-content: center;
+    }
+    body.app-theme-dark .mc-modal {
+        --mc-surface:     #0f172a;
+        --mc-surface-2:   #0b1220;
+        --mc-border:      rgba(255,255,255,.10);
+        --mc-text:        rgba(255,255,255,.92);
+        --mc-muted:       rgba(255,255,255,.55);
+        --mc-accent-dim:  rgba(99,102,241,.22);
+        background: rgba(0,0,0,.72);
+    }
+    .mc-modal.is-open { display: flex; }
+    .mc-modal__card {
+        width: min(460px, 92vw); background: var(--mc-surface); border: 1px solid var(--mc-border);
+        border-radius: 14px; padding: 22px 22px 18px; text-align: center;
+        box-shadow: 0 30px 80px rgba(0,0,0,.4); color: var(--mc-text);
+    }
+    .mc-modal__icon {
+        width: 52px; height: 52px; border-radius: 50%; background: var(--mc-accent-dim);
+        display: flex; align-items: center; justify-content: center;
+        color: var(--mc-accent); margin: 0 auto 12px;
+    }
+    .mc-modal__card h4 { margin: 0 0 6px; font-size: 16px; font-weight: 700; color: var(--mc-text); }
+    .mc-modal__card p  { margin: 0 0 16px; color: var(--mc-muted); font-size: 12.5px; }
+    .mc-modal__actions { display: flex; gap: 8px; justify-content: center; }
+
+    .mc-preview-modal { z-index: 9100; }
+    .mc-preview-modal__card {
+        width: min(960px, 95vw); height: min(80vh, 720px);
+        background: var(--mc-surface); border: 1px solid var(--mc-border);
+        border-radius: 14px; display: flex; flex-direction: column; overflow: hidden;
+        box-shadow: 0 30px 80px rgba(0,0,0,.4); color: var(--mc-text);
+    }
+    .mc-preview-modal__head { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--mc-border); gap: 10px; }
+    .mc-preview-modal__head h3 { margin: 0; font-size: 14px; font-weight: 700; }
+    .mc-preview-modal__head .spacer { flex: 1 1 auto; }
+    .mc-preview-modal__close {
+        font: inherit; background: transparent; border: 1px solid var(--mc-border);
+        border-radius: 7px; padding: 5px 10px; cursor: pointer; color: var(--mc-text);
+    }
+    .mc-preview-modal__body { flex: 1 1 auto; overflow: hidden; }
+    .mc-preview-modal__body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+
+    /* Ek dosya chip'leri */
+    .cmp-attach-chip {
+        display:inline-flex; align-items:center; gap:6px;
+        padding:5px 10px; border-radius:14px;
+        background:rgba(99,102,241,.12); border:1px solid rgba(99,102,241,.30);
+        font-size:.72rem; color:#c7d2fe;
+        max-width:280px;
+    }
+    .cmp-attach-chip__name {
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        max-width:170px;
+    }
+    .cmp-attach-chip__size { opacity:.65; font-size:.66rem; }
+    .cmp-attach-chip__del {
+        background:transparent; border:0; color:inherit; cursor:pointer;
+        padding:0; margin-left:2px; font-size:14px; line-height:1;
+        opacity:.7; transition:opacity .12s, color .12s;
+    }
+    .cmp-attach-chip__del:hover { opacity:1; color:#fca5a5; }
+</style>

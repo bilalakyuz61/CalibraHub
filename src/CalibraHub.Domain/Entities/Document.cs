@@ -49,8 +49,20 @@ public sealed class Document
     [Description("Satis temsilcisi. FK -> SalesRepresentative.Id")]
     public int? SalesRepId { get; set; }
 
-    [Description("Belge para birimi (ISO 4217 kodu: TRY, USD, EUR...).")]
-    public string Currency { get; set; } = "TRY";
+    [Description("Talep eden personel (Ihtiyac Kaydi icin). FK -> Personnel.Id.")]
+    public int? RequesterPersonnelId { get; set; }
+
+    /// <summary>Personnel.FullName — transient (JOIN ile doldurulur, persist edilmez).</summary>
+    public string? RequesterPersonnelName { get; set; }
+
+    [Description("Belge para birimi. FK -> currencies.id. Varsayilan 1 (TRY). Display kodu (CurrencyCode) ve sembol (CurrencySymbol) repository JOIN ile transient olarak doldurulur, DB'de saklanmaz.")]
+    public int CurrencyId { get; set; } = 1;
+
+    // ── Transient display alanlari (repository JOIN ile doldurulur, persist edilmez) ──
+    /// <summary>Para birimi kodu (TRY/USD/EUR). Salt-okunur, INSERT/UPDATE'te kullanilmaz.</summary>
+    public string? CurrencyCode { get; set; }
+    /// <summary>Para birimi simgesi (₺/$/€). Salt-okunur, INSERT/UPDATE'te kullanilmaz.</summary>
+    public string? CurrencySymbol { get; set; }
 
     public decimal SubTotal { get; set; }
     public decimal DiscountRate { get; set; }
@@ -73,7 +85,7 @@ public sealed class Document
     public int? ParentDocumentId { get; set; }
 
     public string? Notes { get; set; }
-    public string? CreatedBy { get; set; }
+    public int? CreatedById { get; set; }
     public DateTime CreatedAt { get; init; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
@@ -82,6 +94,11 @@ public sealed class Document
 
     /// <summary>Computed — satir sayisi (liste sorgusu icin).</summary>
     public int LineCount { get; set; }
+
+    // ── İhtiyaç Kaydı karşılama özeti (transient — GetByTypeAsync aggregate subquery) ──
+    public int FulfillPending { get; set; }
+    public int FulfillPartial { get; set; }
+    public int FulfillFull { get; set; }
 
     /// <summary>
     /// Bellek-icindeki satir koleksiyonu (rich domain modu icin). Mevcut service'ler

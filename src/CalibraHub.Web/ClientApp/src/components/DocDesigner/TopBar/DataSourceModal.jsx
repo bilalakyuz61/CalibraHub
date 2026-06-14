@@ -125,25 +125,59 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
     setError(null)
   }
 
-  // Inline "+ Ekle" — Kaynak tab'ında combobox yanından çağrılır
-  const handleAddSource = () => {
+  // Inline "+ Ekle" — Kaynak tab'ında combobox yanından çağrılır.
+  // 2026-06-03: WHERE klozunda referans edilen kolonlar view'da gercekten var mi
+  // diye dogrulanir; yoksa ekleme yapilmaz, hangi kolonlarin bulunamadigi gosterilir.
+  const handleAddSource = async () => {
     setError(null)
     let sql = null, dbViewName = null, aliasBase = ''
+    let whereForValidation = ''     // hangi WHERE kullanildi → kolon kontrolu icin
     if (mode === 'db') {
       if (!dbView) { setError('Bir view seçin'); return }
       sql = buildSqlForDbView(dbView, whereExtra, orderBy)
       dbViewName = dbView
       aliasBase = dbView.split('.').slice(-1)[0]
+      whereForValidation = whereExtra
     } else {
       if (!adHocSql.trim()) { setError('SQL boş olamaz'); return }
       sql = adHocSql.trim()
       const m = sql.match(/FROM\s+\[?(\w+)\]?\.\[?(\w+)\]?/i) || sql.match(/FROM\s+\[?(\w+)\]?/i)
       aliasBase = m ? (m[2] || m[1]) : 'sql'
+      // Ad-hoc SQL'de WHERE'i kullanicinin yazdigi tam metinden cikar
+      whereForValidation = parseWhereFromSql(sql)
+      dbViewName = m ? (m[2] ? `${m[1]}.${m[2]}` : m[1]) : null
     }
+
+    // ── WHERE kolon validation ───────────────────────────────────────────────
+    // <col> = @<param> bind'lerini cikar, view kolon listesi ile karsilastir.
+    // dbView yoksa (ad-hoc, FROM parse edilemedi) skip — kullanici sorumlu.
+    // Kolon listesi {colName, displayName}[] formatinda doner — colName ile karsilastir.
+    const bindings = parseWhereBindings(whereForValidation)
+    if (bindings.length > 0 && dbViewName) {
+      try {
+        const cols = (await getDbViewColumns(dbViewName)) || []
+        const colNamesLc = cols.map(c => String(c?.colName || c).toLowerCase())
+        const missing = bindings.filter(b => !colNamesLc.includes(b.column.toLowerCase()))
+        if (missing.length > 0) {
+          const expected = bindings.map(b => b.column).join(', ')
+          const missingNames = missing.map(b => b.column).join(', ')
+          setError(
+            `View "${dbViewName}" bağlanamadı.\n` +
+            `Beklenen kolonlar: ${expected}\n` +
+            `Eksik: ${missingNames}`
+          )
+          return
+        }
+      } catch (e) {
+        // Kolon listesi alinamadi → uyari ama bloklamayalim (network hatasi vb.)
+        console.warn('[DocDesigner] Kolon listesi alinamadi, validation atlandi:', e)
+      }
+    }
+
     const finalAlias = makeUniqueAlias(aliasBase)
     onAdd({
       alias: finalAlias, role: autoRole,
-      viewId: null, adHocSql: sql, dbView: dbViewName,
+      viewId: null, adHocSql: sql, dbView: mode === 'db' ? dbViewName : null,
       joinOn: null, parentAlias: null, ordinal: totalExisting,
     })
     setFlash(finalAlias); setTimeout(() => setFlash(null), 2000)
@@ -308,46 +342,138 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
         }}>✓ <strong>{flash}</strong> eklendi</div>
       )}
 
-      {/* Eklenmiş Kaynaklar — etiket */}
+      {/* Eklenmiş Kaynaklar — alias chip + uygulanacak WHERE/ORDER BY önizleme.
+          2026-06-03: Kullanici view secince hangi filtrenin uygulanacagini gormeli
+          (ornek: BelgeId = @DocumentId). Onceden sadece chip vardi — filtre Filtre
+          tab'inda gizli kaliyordu. Artik her kaynagin altinda monospace satir gosterir. */}
       {totalExisting > 0 && (
         <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--dd-border, #e5e7eb)' }}>
           <div style={{
             fontSize: 10.5, fontWeight: 700, color: 'var(--dd-text-muted, #6b7280)',
             textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8,
           }}>Eklenmiş Kaynaklar ({totalExisting})</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {existingSources.map(src => {
               const isConfirming = confirmingAlias === src.alias
               const sourceName = src.dbView ?? extractFromSql(src.adHocSql)
+              const whereStr = parseWhereFromSql(src.adHocSql)
+              const orderStr = parseOrderFromSql(src.adHocSql)
               return (
-                <div key={src.alias} title={sourceName + (src.parentAlias ? `  •  ⇆ ${src.parentAlias} (${src.joinOn})` : '')}
+                <div key={src.alias}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    padding: '4px 4px 4px 8px',
-                    background: isConfirming ? 'rgba(220,38,38,0.12)' : 'var(--dd-accent-soft, rgba(99,102,241,0.10))',
-                    border: `1px solid ${isConfirming ? '#dc2626' : 'var(--dd-accent, #6366f1)'}`,
-                    borderRadius: 14, fontSize: 11.5,
-                    color: isConfirming ? '#dc2626' : 'var(--dd-accent, #4338ca)',
-                    fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                    padding: '8px 10px',
+                    background: isConfirming ? 'rgba(220,38,38,0.06)' : 'var(--dd-accent-soft, rgba(99,102,241,0.06))',
+                    border: `1px solid ${isConfirming ? '#dc2626' : 'var(--dd-border, #e5e7eb)'}`,
+                    borderRadius: 8,
                   }}>
-                  <span style={{ fontWeight: 600 }}>{src.alias}</span>
-                  {isConfirming ? (
-                    <>
-                      <span style={{ fontSize: 10, fontWeight: 600 }}>Sil?</span>
-                      <button type="button" onClick={() => handleDeleteSource(src.alias)} title="Onayla"
-                              style={{ ...tagBtn, background: '#dc2626', borderColor: '#dc2626', color: '#fff' }}>✓</button>
-                      <button type="button" onClick={() => setConfirmingAlias(null)} title="Vazgeç"
-                              style={tagBtn}>×</button>
-                    </>
-                  ) : (
-                    <button type="button" onClick={() => setConfirmingAlias(src.alias)} title="Bu kaynağı sil"
-                            style={{ ...tagBtn, color: 'var(--dd-text-muted, #9ca3af)' }}
-                            onMouseEnter={e => e.currentTarget.style.color = '#dc2626'}
-                            onMouseLeave={e => e.currentTarget.style.color = 'var(--dd-text-muted, #9ca3af)'}>×</button>
-                  )}
+                  {/* Üst satır: alias chip + sil */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span title={sourceName + (src.parentAlias ? `  •  ⇆ ${src.parentAlias} (${src.joinOn})` : '')}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '3px 8px',
+                        background: 'var(--dd-accent-soft, rgba(99,102,241,0.12))',
+                        border: '1px solid var(--dd-accent, #6366f1)',
+                        borderRadius: 12, fontSize: 11.5, fontWeight: 600,
+                        color: isConfirming ? '#dc2626' : 'var(--dd-accent, #4338ca)',
+                        fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+                      }}>{src.alias}</span>
+                    <span style={{ flex: 1, fontSize: 10.5, color: 'var(--dd-text-muted, #6b7280)' }}>
+                      {sourceName}{src.parentAlias ? `  ⇆ ${src.parentAlias} (${src.joinOn})` : ''}
+                    </span>
+                    {isConfirming ? (
+                      <>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626' }}>Sil?</span>
+                        <button type="button" onClick={() => handleDeleteSource(src.alias)} title="Onayla"
+                                style={{ ...tagBtn, background: '#dc2626', borderColor: '#dc2626', color: '#fff' }}>✓</button>
+                        <button type="button" onClick={() => setConfirmingAlias(null)} title="Vazgeç"
+                                style={tagBtn}>×</button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={() => setConfirmingAlias(src.alias)} title="Bu kaynağı sil"
+                              style={{ ...tagBtn, color: 'var(--dd-text-muted, #9ca3af)' }}
+                              onMouseEnter={e => e.currentTarget.style.color = '#dc2626'}
+                              onMouseLeave={e => e.currentTarget.style.color = 'var(--dd-text-muted, #9ca3af)'}>×</button>
+                    )}
+                  </div>
+                  {/* Alt satır: WHERE + ORDER BY önizleme + mapping listesi */}
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                    paddingLeft: 2, fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+                    fontSize: 11, lineHeight: 1.45,
+                  }}>
+                    {whereStr ? (
+                      <div title="Bu view sorgulanırken uygulanacak filtre"
+                           style={{ color: 'var(--dd-text, #374151)', wordBreak: 'break-word' }}>
+                        <span style={{ color: 'var(--dd-accent, #6366f1)', fontWeight: 700 }}>WHERE </span>
+                        {whereStr}
+                      </div>
+                    ) : (
+                      <div style={{ color: 'var(--dd-text-muted, #9ca3af)', fontStyle: 'italic' }}>
+                        (WHERE yok — tüm satırlar gelir)
+                      </div>
+                    )}
+                    {orderStr && (
+                      <div style={{ color: 'var(--dd-text, #374151)', wordBreak: 'break-word' }}>
+                        <span style={{ color: 'var(--dd-accent, #6366f1)', fontWeight: 700 }}>ORDER BY </span>
+                        {orderStr}
+                      </div>
+                    )}
+                    {/* Mapping listesi: view kolonu ↔ runtime parametresi */}
+                    {(() => {
+                      const bindings = parseWhereBindings(whereStr)
+                      if (bindings.length === 0) return null
+                      return (
+                        <div style={{
+                          marginTop: 4, paddingLeft: 10,
+                          borderLeft: '2px solid var(--dd-accent-soft, rgba(99,102,241,0.25))',
+                          display: 'flex', flexDirection: 'column', gap: 2,
+                        }}>
+                          <div style={{
+                            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.4px',
+                            color: 'var(--dd-text-muted, #6b7280)', textTransform: 'uppercase',
+                            fontFamily: 'system-ui, sans-serif',
+                          }}>Eşleşmeler</div>
+                          {bindings.map((b, i) => {
+                            const desc = PARAM_DESCRIPTIONS[b.param.toLowerCase()]
+                            return (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <span style={{
+                                  padding: '1px 6px', borderRadius: 4,
+                                  background: 'rgba(99,102,241,0.10)',
+                                  color: 'var(--dd-accent, #4338ca)', fontWeight: 600,
+                                }}>view.{b.column}</span>
+                                <span style={{ color: 'var(--dd-text-muted, #9ca3af)', fontSize: 12 }}>↔</span>
+                                <span style={{
+                                  padding: '1px 6px', borderRadius: 4,
+                                  background: 'rgba(16,185,129,0.10)',
+                                  color: '#047857', fontWeight: 600,
+                                }}>@{b.param}</span>
+                                {desc && (
+                                  <span style={{
+                                    color: 'var(--dd-text-muted, #6b7280)', fontSize: 10.5,
+                                    fontFamily: 'system-ui, sans-serif', fontStyle: 'italic',
+                                  }}>— {desc}</span>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
+                  </div>
                 </div>
               )
             })}
+          </div>
+          <div style={{
+            marginTop: 8, fontSize: 10.5, color: 'var(--dd-text-muted, #9ca3af)',
+            lineHeight: 1.5,
+          }}>
+            <strong>İpucu:</strong> WHERE'i değiştirmek için <em>Filtre</em> sekmesine geçin.
+            {' '}<code style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>@DocumentId</code> /
+            {' '}<code style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>@KalemId</code> gibi parametreler runtime'da otomatik dolar.
           </div>
         </div>
       )}
@@ -365,6 +491,34 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
     if (!sql) return ''
     const m = sql.match(/\bORDER\s+BY\b\s+(.*?)$/is)
     return m ? m[1].trim() : ''
+  }
+
+  // 2026-06-03: WHERE klozundan "<view_kolonu> = @<runtime_parametresi>" ciftlerini
+  // cikar. View kolon validation + UI'da mapping listesi gosterimi icin kullanilir.
+  // Desteklenen formatlar:  Id = @DocumentId  |  [Id] = @DocumentId  |  c.Id = @x
+  // Sol taraf bir kolon ifadesi (alias.col, [col]); sag taraf @parametre
+  const parseWhereBindings = (whereStr) => {
+    if (!whereStr) return []
+    const re = /(?:\[?(\w+)\]?\.)?\[?(\w+)\]?\s*=\s*@(\w+)/g
+    const out = []
+    let m
+    while ((m = re.exec(whereStr)) !== null) {
+      out.push({
+        tableAlias: m[1] || '',     // varsa "a.col"un "a"si
+        column:     m[2],           // kolon adi
+        param:      m[3],           // @parametre adi
+      })
+    }
+    return out
+  }
+
+  // Runtime'da otomatik bind edilen parametreler — açıklamaları ipucu için
+  const PARAM_DESCRIPTIONS = {
+    documentid:   'Belge Id (render edilen master kayıt)',
+    kalemid:      'Kalem Id (detail iterasyonunda satır)',
+    companyid:    'Aktif şirket Id',
+    kullaniciid:  'Giriş yapan kullanıcı Id',
+    userid:       'Giriş yapan kullanıcı Id',
   }
 
   // SQL'i yeniden inşa et: base SELECT (mevcut FROM kısmı korunur) + yeni WHERE + ORDER BY
@@ -696,9 +850,10 @@ export default function DataSourceModal({ existingSources = [], onAdd, onDelete,
 
             {error && (
               <div style={{
-                marginTop: 14, padding: '8px 10px', borderRadius: 6,
+                marginTop: 14, padding: '10px 12px', borderRadius: 6,
                 background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.4)',
-                color: '#dc2626', fontSize: 12,
+                color: '#dc2626', fontSize: 12, lineHeight: 1.55,
+                whiteSpace: 'pre-wrap', fontFamily: 'system-ui, sans-serif',
               }}>{error}</div>
             )}
           </div>

@@ -239,7 +239,7 @@ body.app-theme-dark .cge-toast--err { background: rgba(239,68,68,.18); color: #f
             body: JSON.stringify(payload)
         })
         .then(function(r) {
-            if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Sunucu hatası'); });
+            if (!r.ok) return r.json().then(function(e) { throw new Error(e.message || e.error || 'Kayıt başarısız.'); });
             return r.json();
         })
         .then(function() {

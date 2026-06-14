@@ -854,9 +854,10 @@
             updateConnectionStatus(ui.statusConnecting);
             await connection.start();
             updateConnectionStatus(ui.statusConnected);
-            if (state.hadDisconnect && typeof window.showToast === "function") {
-                window.showToast({ type: "success", message: ui.connectionRestoredToast, duration: 2500 });
-            }
+            // 2026-05-25 (UX): "tekrar kuruldu" success toast'u kaldirildi — sik server
+            // restart / iframe sleep / WebSocket idle timeout senaryolarinda asiri tetikleniyordu.
+            // Status indicator (durum noktasi) zaten gorsel feedback veriyor; "kesildi" warning
+            // tetiklendigi zaman kullanici bilgilendiriliyor, "kuruldu" gereksiz tekrar.
             state.hadDisconnect = false;
             await subscribeToRecords();
             await sendHeartbeat();

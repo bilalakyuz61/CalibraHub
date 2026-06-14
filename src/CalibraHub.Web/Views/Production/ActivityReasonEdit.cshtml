@@ -1,0 +1,290 @@
+@using CalibraHub.Domain.Enums
+@using System.ComponentModel
+@using System.Reflection
+@model CalibraHub.Application.Contracts.ActivityReasonDto?
+@{
+    ViewData["Title"] = Model is null ? "Yeni Aktivite Sebebi" : $"Sebep: {Model.Name}";
+    ViewData["BodyClass"] = "page-activity-reason-edit workspace-frame-body";
+    ViewData["FormCode"] = "ACTIVITY_REASON_EDIT";
+    var isNew = Model is null;
+
+    string LabelOf(WorkOrderActivityType t)
+    {
+        var m = typeof(WorkOrderActivityType).GetMember(t.ToString()).FirstOrDefault();
+        var a = m?.GetCustomAttribute<DescriptionAttribute>();
+        return a?.Description ?? t.ToString();
+    }
+}
+
+<partial name="_ProductionDefsTabs" model='"activityreasons"' />
+
+@* PJAX wrapper *@
+<div id="pdt-tab-content" data-pdt-key="activityreasons" data-pdt-body-class="page-activity-reason-edit">
+
+<div class="ux-edit-shell">
+  <header class="ux-edit-bar">
+    <div class="ux-edit-bar__left">
+      <a class="ux-edit-bar__back" href="/Production/ActivityReasons">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <h1 class="ux-edit-bar__title">@(isNew ? "Yeni Aktivite Sebebi" : (Model!.Name ?? "Sebep Düzenle"))</h1>
+      @if (!isNew)
+      {
+        var pillCls = Model!.IsActive ? "ux-edit-bar__status" : "ux-edit-bar__status ux-edit-bar__status--off";
+        <span class="@pillCls">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+      }
+    </div>
+    <div class="ux-edit-bar__right">
+      <a class="ux-edit-bar__btn" href="/Production/ActivityReasons">İptal</a>
+      <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="are-save">Kaydet</button>
+      @if (!isNew)
+      {
+        <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--danger" id="are-delete">Sil</button>
+      }
+    </div>
+  </header>
+
+  <div class="ux-edit-body">
+    <aside class="ux-edit-nav" id="areNav">
+      <button type="button" class="ux-edit-nav__tab is-active" data-tab="general">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+        <span>Genel Bilgiler</span>
+      </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="areNavWidgets" style="display:none;">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        <span>Ek Alanlar</span>
+      </button>
+    </aside>
+
+    <section class="ux-edit-content">
+      <div class="ux-edit-pane is-active" data-tab="general">
+        <h2>Genel Bilgiler</h2>
+        <div class="ux-edit-hint">Operatör Durum Değiştir akışında alt sebep olarak listelenir.</div>
+
+        <input type="hidden" id="f-id" value="@(Model?.Id ?? 0)" />
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-type">Aktivite Tipi *</label>
+          <select id="f-type">
+            @foreach (var t in Enum.GetValues<WorkOrderActivityType>())
+            {
+              <option value="@((byte)t)" selected="@(Model?.ActivityType == t)">@LabelOf(t)</option>
+            }
+          </select>
+          <span class="ux-hint">Sebep hangi aktivite tipinin alt sebebi? Operatör Durum Değiştir → bu tipi seçince listeden seçer.</span>
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-name">Ad *</label>
+          <input type="text" id="f-name" maxlength="200" value="@Model?.Name" placeholder="Örn: Sensör arızası" />
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="f-desc">Açıklama</label>
+          <textarea id="f-desc" maxlength="500" placeholder="Opsiyonel açıklama">@Model?.Description</textarea>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="f-color">Renk</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input type="color" id="f-color" value="@(Model?.ColorHex ?? "#f59e0b")" style="width:48px; height:36px; padding:2px; cursor:pointer;" />
+              <input type="text" id="f-color-hex" maxlength="9" value="@Model?.ColorHex" placeholder="#RRGGBB" style="width:120px;" />
+            </div>
+            <span class="ux-hint">UI sebep rozetinin tonu (opsiyonel).</span>
+          </div>
+          <div class="ux-field">
+            <label for="f-sort">Sıra</label>
+            <input type="number" id="f-sort" min="0" step="1" value="@(Model?.SortOrder ?? 0)" />
+          </div>
+        </div>
+
+        <div class="ux-field">
+          <label>Durum</label>
+          <div class="ux-switch-row">
+            <label class="ux-switch">
+              <input type="checkbox" id="f-active" @(Model?.IsActive ?? true ? "checked" : "") />
+              <span class="ux-switch-track"></span>
+            </label>
+            <span class="ux-switch-label" id="f-active-label">@(Model?.IsActive ?? true ? "Aktif" : "Pasif")</span>
+          </div>
+          <span class="ux-hint">Pasif yapılırsa Durum Değiştir dropdown'unda görünmez.</span>
+        </div>
+
+        <div id="are-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      <div class="ux-edit-pane" data-tab="widgets">
+        <h2>Ek Alanlar</h2>
+        <div class="ux-edit-hint">Admin → Widget Tanımları → ACTIVITY_REASON_EDIT'te tanımlanan ek alanlar.</div>
+        <div class="ux-dyn-widgets">
+          <div id="areDynamicWidgets"
+               data-form-code="ACTIVITY_REASON_EDIT"
+               data-record-id="@(Model?.Id.ToString() ?? "")">
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+<script>
+(function () {
+    function notify(text, ok) {
+        var el = document.getElementById('are-err');
+        if (!el) return;
+        if (!text) { el.style.display = 'none'; return; }
+        el.textContent = text;
+        el.style.display = '';
+        el.style.background = ok ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.08)';
+        el.style.borderColor = ok ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.22)';
+        el.style.color = ok ? '#059669' : '#dc2626';
+        activateTab('general');
+        if (ok) setTimeout(function () { el.style.display = 'none'; }, 2200);
+    }
+    function token() {
+        return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    }
+
+    // ── Tab switching ──
+    function activateTab(key) {
+        document.querySelectorAll('#areNav .ux-edit-nav__tab').forEach(function (b) {
+            b.classList.toggle('is-active', b.dataset.tab === key);
+        });
+        document.querySelectorAll('.ux-edit-pane').forEach(function (p) {
+            p.classList.toggle('is-active', p.dataset.tab === key);
+        });
+    }
+    document.querySelectorAll('#areNav .ux-edit-nav__tab').forEach(function (b) {
+        b.addEventListener('click', function () {
+            if (b.disabled) return;
+            activateTab(b.dataset.tab);
+        });
+    });
+
+    // ── Active label sync ──
+    var activeEl = document.getElementById('f-active');
+    var activeLabel = document.getElementById('f-active-label');
+    if (activeEl && activeLabel) {
+        activeEl.addEventListener('change', function () {
+            activeLabel.textContent = activeEl.checked ? 'Aktif' : 'Pasif';
+        });
+    }
+
+    // ── Color picker sync ──
+    var colorEl    = document.getElementById('f-color');
+    var colorHexEl = document.getElementById('f-color-hex');
+    colorEl.addEventListener('input', function () { colorHexEl.value = colorEl.value; });
+    colorHexEl.addEventListener('input', function () {
+        var v = colorHexEl.value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(v) || /^#[0-9a-fA-F]{8}$/.test(v)) colorEl.value = v.substring(0,7);
+    });
+
+    document.getElementById('are-save').addEventListener('click', async function () {
+        var name = document.getElementById('f-name').value.trim();
+        var payload = {
+            id:           parseInt(document.getElementById('f-id').value, 10) || null,
+            activityType: parseInt(document.getElementById('f-type').value, 10),
+            code:         name,
+            name:         name,
+            description:  document.getElementById('f-desc').value.trim() || null,
+            colorHex:     colorHexEl.value.trim() || null,
+            sortOrder:    parseInt(document.getElementById('f-sort').value, 10) || 0,
+            isActive:     document.getElementById('f-active').checked,
+        };
+        if (!payload.name) { notify('Ad zorunlu.', false); return; }
+
+        try {
+            var r = await fetch('/Production/SaveActivityReason', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify(payload)
+            });
+            var d = await r.json();
+            if (!d.ok) { notify(d.error || 'Kaydedilemedi.', false); return; }
+            notify('Kaydedildi.', true);
+            if (!payload.id || payload.id === 0) {
+                setTimeout(function () { location.href = '/Production/ActivityReasonEdit?id=' + d.id; }, 600);
+            }
+        } catch (e) { notify('Hata: ' + e.message, false); }
+    });
+
+    var btnDel = document.getElementById('are-delete');
+    if (btnDel) {
+        btnDel.addEventListener('click', async function () {
+            var ok = (typeof showConfirm === 'function')
+                ? await showConfirm({ title: 'Sebep Sil', message: 'Bu sebebi silmek istediğinize emin misiniz?', okLabel: 'Sil' })
+                : confirm('Bu sebebi silmek istediğinize emin misiniz?');
+            if (!ok) return;
+            var id = parseInt(document.getElementById('f-id').value, 10);
+            try {
+                var r = await fetch('/Production/DeleteActivityReason/' + id, {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'RequestVerificationToken': token() }
+                });
+                var d = await r.json();
+                if (!d.ok) { notify(d.error || 'Silinemedi.', false); return; }
+                location.href = '/Production/ActivityReasons';
+            } catch (e) { notify('Hata: ' + e.message, false); }
+        });
+    }
+})();
+
+// ── DynamicWidgetRenderer mount (stacked layout) ──
+(function () {
+    var el = document.getElementById('areDynamicWidgets');
+    if (!el) return;
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+        try {
+            window._areDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode:    el.getAttribute('data-form-code') || 'ACTIVITY_REASON_EDIT',
+                recordId:    el.getAttribute('data-record-id') || '',
+                classPrefix: 'are',
+                layout:      'stacked',
+                onMounted:   function (handle) {
+                    var attempts = 0;
+                    var iv = setInterval(function () {
+                        attempts++;
+                        try {
+                            if (handle && typeof handle.getHasWidgets === 'function' && handle.getHasWidgets()) {
+                                var nav = document.getElementById('areNavWidgets');
+                                if (nav) nav.style.display = '';
+                                clearInterval(iv);
+                                return;
+                            }
+                        } catch (_) {}
+                        if (attempts > 25) clearInterval(iv);
+                    }, 200);
+                }
+            });
+        } catch (e) { console.warn('[ARE] mountDynamicWidgetRenderer hatasi:', e); }
+    }
+    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+        doMount();
+    } else {
+        var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+        var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        if (!document.querySelector('link[data-are-bundle]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = cssUrl;
+            link.setAttribute('data-are-bundle', '1');
+            document.head.appendChild(link);
+        }
+        if (!document.querySelector('script[data-are-bundle]')) {
+            var script = document.createElement('script');
+            script.src = jsUrl;
+            script.setAttribute('data-are-bundle', '1');
+            script.onload  = function () { setTimeout(doMount, 0); };
+            script.onerror = function () { console.error('[ARE] Bundle yuklenemedi'); };
+            document.head.appendChild(script);
+        }
+    }
+})();
+</script>
+
+</div>
+@* /pdt-tab-content *@

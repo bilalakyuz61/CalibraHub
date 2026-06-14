@@ -19,16 +19,38 @@ public sealed class RoutingService : IRoutingService
     public Task<IReadOnlyCollection<RoutingOperationDto>> GetOperationsAsync(int routingId, CancellationToken ct)
         => _repo.GetOperationsAsync(routingId, ct);
 
-    public Task<int> SaveAsync(SaveRoutingRequest req, CancellationToken ct)
+    public async Task<int> SaveAsync(SaveRoutingRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Code)) throw new ArgumentException("Rota kodu zorunlu.");
         if (string.IsNullOrWhiteSpace(req.Name)) throw new ArgumentException("Rota adı zorunlu.");
+
+        var name = req.Name.Trim();
+
+        // K6 (CLAUDE.md): "Kullanıcı tarafından girilen kod alanı yok" — UI'dan Kod
+        // alınmaz, isim üzerinden uniqueness + code auto-derive.
+        var all = await _repo.ListAsync(null, ct);
+        if (all.Any(r => r.Id != req.Id &&
+                         string.Equals(r.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException($"Aynı isimde başka bir rota zaten tanımlı: '{name}'");
+        }
+
+        // Code DB'de var ama UI gostermez — auto-turetilir (mevcut record'sa onun kodunu koru)
+        string code;
+        if (req.Id > 0)
+        {
+            var existing = all.FirstOrDefault(r => r.Id == req.Id);
+            code = !string.IsNullOrWhiteSpace(existing?.Code) ? existing!.Code : DeriveCode(name);
+        }
+        else
+        {
+            code = DeriveCode(name);
+        }
 
         var header = new Routing
         {
             Id = req.Id,
-            Code = req.Code.Trim(),
-            Name = req.Name.Trim(),
+            Code = code,
+            Name = name,
             ItemId = req.ItemId,
             ConfigId = req.ConfigId,
             Description = string.IsNullOrWhiteSpace(req.Description) ? null : req.Description.Trim(),
@@ -46,7 +68,16 @@ public sealed class RoutingService : IRoutingService
             Notes = string.IsNullOrWhiteSpace(o.Notes) ? null : o.Notes.Trim(),
         }).ToArray();
 
-        return _repo.SaveAsync(header, ops, ct);
+        return await _repo.SaveAsync(header, ops, ct);
+    }
+
+    // Backward-compat: Code DB'de var ama UI'dan kaldirildi (K6).
+    // Yeni kayit icin name'den turet (50 char ile sinirla — NVARCHAR(50)).
+    private static string DeriveCode(string name)
+    {
+        var t = (name ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(t)) t = "AUTO_" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        return t.Length > 50 ? t[..50] : t;
     }
 
     public Task DeleteAsync(int id, CancellationToken ct) => _repo.DeleteAsync(id, ct);

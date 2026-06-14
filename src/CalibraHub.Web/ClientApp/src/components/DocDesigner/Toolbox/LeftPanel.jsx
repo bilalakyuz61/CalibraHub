@@ -4,13 +4,14 @@ import { BAND_TYPES } from '../designerReducer'
 
 // ── Sabitler ────────────────────────────────────────────────────────────────
 
+// QR ayri buton degil — Barkod elementinin tipi olarak secilir (BARCODE_TYPES).
+// Kullanici Barkod elementi ekleyip sag panelden tipi "QR Kod" yapar.
 const ELEMENT_KINDS = [
   { kind: 'Label',         label: 'Etiket',         shortLabel: 'Etiket',   icon: 'T',   color: '#6366f1' },
   { kind: 'BoundField',    label: 'Veri Alanı',     shortLabel: 'Veri',     icon: '{}',  color: '#3b82f6' },
   { kind: 'Image',         label: 'Resim',          shortLabel: 'Resim',    icon: '▣',   color: '#10b981' },
   { kind: 'Shape',         label: 'Çizgi / Şekil',  shortLabel: 'Şekil',    icon: '━',   color: '#8b5cf6' },
-  { kind: 'Barcode',       label: 'Barkod',         shortLabel: 'Barkod',   icon: '▥',   color: '#0ea5e9' },
-  { kind: 'QrCode',        label: 'QR Kod',         shortLabel: 'QR',       icon: '▦',   color: '#14b8a6' },
+  { kind: 'Barcode',       label: 'Barkod / QR',    shortLabel: 'Barkod',   icon: '▥',   color: '#0ea5e9' },
   { kind: 'AmountInWords', label: 'Yazı ile Tutar', shortLabel: 'YazıTutar',icon: '₺',   color: '#f59e0b' },
   { kind: 'PageNumber',    label: 'Sayfa No',       shortLabel: 'SayfaNo',  icon: '#',   color: '#ec4899' },
   { kind: 'DateTimeNow',   label: 'Tarih / Saat',   shortLabel: 'Tarih',    icon: '⏱',   color: '#06b6d4' },

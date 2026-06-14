@@ -13,7 +13,8 @@ public interface IEmailSender
         string subject,
         string body,
         IReadOnlyCollection<EmailAttachment>? attachments,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool isHtml = false);
 }
 
 public sealed record EmailAttachment(string FileName, byte[] Content, string ContentType);

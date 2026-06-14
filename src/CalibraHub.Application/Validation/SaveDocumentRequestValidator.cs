@@ -13,9 +13,8 @@ public sealed class SaveDocumentRequestValidator : AbstractValidator<SaveDocumen
             .GreaterThanOrEqualTo(new DateTime(2000, 1, 1))
             .WithMessage("Belge tarihi makul bir araliga olmalidir.");
 
-        RuleFor(x => x.Currency)
-            .NotEmpty().WithMessage("Para birimi zorunludur.")
-            .Length(3).WithMessage("Para birimi 3 karakter olmali (TRY/USD/EUR).");
+        RuleFor(x => x.CurrencyId)
+            .GreaterThan(0).WithMessage("Para birimi secimi zorunludur.");
 
         RuleFor(x => x.DiscountRate)
             .InclusiveBetween(0m, 100m).WithMessage("Indirim orani 0-100 araliginda olmalidir.");

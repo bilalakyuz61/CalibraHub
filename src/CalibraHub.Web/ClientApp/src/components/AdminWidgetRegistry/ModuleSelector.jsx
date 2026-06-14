@@ -1,44 +1,36 @@
 /**
- * ModuleSelector — Form (screen) secim dropdown'u
+ * ModuleSelector — Entity-based form seçim dropdown'u (modül bazlı gruplu)
  *
- * Eski sekme bar (yan yana tab) yerine tek secimli, ikonlu dropdown.
- * Yer tasarrufu saglar ve ileride 5-6+ modul eklendiginde sekme bar dar
- * kalmayacak sekilde olceklenir.
+ * 2026-06-09: DB-driven — ENTITY_REGISTRY statik listesine bağımlılık kaldırıldı.
+ *   Dropdown, backend /api/widgets/forms endpoint'inden gelen form listesini
+ *   SubModule'e göre gruplayarak entity türetir; ardından Module alanına göre
+ *   section header'larla gruplar.
  *
- * Sadece `UsesMaterialCardSchema = true` olan screen'ler gosterilir:
- *   - material_cards  → Malzeme Kartlari
- *   - contact_accounts → Cari Hesaplar
+ * 2026-06-09b: Modül bazlı kırılımlı dropdown — her Module ayrı bir başlık altında
+ *   gösterilir (Genel, Lojistik, Satış, Üretim …). SubModule aynı formlar tek entity
+ *   olarak görünür; variant toggle (Üst Bilgi / Kalem Bilgisi) parent panel tarafında.
  */
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Check } from 'lucide-react'
 import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
+import { buildEntitiesFromForms, getDefaultFormCode } from './entityRegistry'
 
-/**
- * Faz B — Form katalogu metadata'si. Anahtar: FormCode (dbo.Forms.FormCode).
- * Backend whitelist (Faz B): ITEMS, CONTACTS, SALES_QUOTE_EDIT, PRODUCT_TREES, PRODUCT_CONFIG
- * Ayrica geriye donuk uyumluluk icin eski snake_case kodlari da tutuyoruz.
- */
-var MODULE_META = {
-  // Yeni Faz B FormMas kodlari (dbo.Forms)
-  ITEMS:             { label: 'Malzeme Kartları',              icon: 'Package',   color: 'indigo' },
-  CONTACTS:          { label: 'Cari Hesaplar',                 icon: 'Building2', color: 'cyan'   },
-  SALES_QUOTE_EDIT:  { label: 'Satış Teklifi — Üst Bilgi',     icon: 'FileText',  color: 'violet' },
-  SALES_QUOTE_LINES: { label: 'Satış Teklifi — Kalem Bilgisi', icon: 'List',      color: 'amber'  },
-  SALES_ORDER_EDIT:  { label: 'Satış Siparişi — Üst Bilgi',    icon: 'FileText',  color: 'violet' },
-  SALES_ORDER_LINES: { label: 'Satış Siparişi — Kalem Bilgisi', icon: 'List',     color: 'amber'  },
-  PRODUCT_TREES:     { label: 'Ürün Ağacı',                    icon: 'GitBranch',     color: 'emerald'},
-  WORK_ORDER_EDIT:   { label: 'İş Emirleri',                   icon: 'ClipboardList', color: 'rose'   },
-  OPERATION_EDIT:    { label: 'Operasyon',                     icon: 'Hammer',        color: 'indigo' },
-  ROUTING_EDIT:      { label: 'Rota',                          icon: 'Workflow',      color: 'indigo' },
-  PERSONNEL_EDIT:    { label: 'Personel',                      icon: 'Users',         color: 'indigo' },
-  MACHINES:          { label: 'Makineler',                     icon: 'Cog',           color: 'slate'  },
-  PRODUCT_CONFIG:    { label: 'Ürün Konfigürasyonu',           icon: 'Sliders',       color: 'teal'   },
-  // Legacy (eski admin akisi)
-  material_cards:        { label: 'Malzeme Kartları',    icon: 'Package',   color: 'indigo' },
-  contact_accounts:      { label: 'Cari Hesaplar',       icon: 'Building2', color: 'cyan'   },
-  sales_quotes:          { label: 'Satış Teklifleri',    icon: 'FileText',  color: 'violet' },
-  product_configuration: { label: 'Ürün Konfigürasyonu', icon: 'Sliders',   color: 'teal'   },
+// 2026-06-02: Iframe/workspace tab içinde Tailwind `dark:` her zaman tetiklenmiyor;
+// body.app-theme-light class'ı tüm sayfada ve iframe body'sinde kesinlikle doğru.
+function useThemeIsLight() {
+  var [light, setLight] = useState(function () {
+    if (typeof document === 'undefined') return false
+    return document.body.classList.contains('app-theme-light')
+  })
+  useEffect(function () {
+    var obs = new MutationObserver(function () {
+      setLight(document.body.classList.contains('app-theme-light'))
+    })
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    return function () { obs.disconnect() }
+  }, [])
+  return light
 }
 
 export default function ModuleSelector(props) {
@@ -50,7 +42,7 @@ export default function ModuleSelector(props) {
   var [open, setOpen] = useState(false)
   var wrapperRef = useRef(null)
 
-  // Disari tiklama -> kapat
+  // Dışarı tıklama → kapat
   useEffect(function() {
     if (!open) return undefined
     function onDocClick(e) {
@@ -62,28 +54,99 @@ export default function ModuleSelector(props) {
     return function() { document.removeEventListener('mousedown', onDocClick) }
   }, [open])
 
-  // Sadece MaterialCardSchema kullanan modulleri filtrele
-  var supported = options.filter(function(opt) {
-    return MODULE_META[opt.value] != null
+  var isLight = useThemeIsLight()
+
+  // Backend options'ı form-like nesneye dönüştür; module alanını da geçir
+  var formLike = options.map(function(opt) {
+    return {
+      formCode: opt.value,
+      formName: opt.label,
+      subModule: opt.subModule || null,
+      module: opt.module || null,
+      icon: opt.icon || null,
+      iconColor: opt.color || null,
+    }
   })
 
-  if (supported.length === 0) {
+  // SubModule'e göre grupla → entity listesi (DB-driven)
+  var displayEntities = buildEntitiesFromForms(formLike)
+
+  if (displayEntities.length === 0) {
     return null
   }
 
-  var selectedOpt = supported.find(function(o) { return o.value === selectedCode }) || supported[0]
-  var selectedMeta = MODULE_META[selectedOpt.value]
-  var selectedPalette = resolveColor(selectedMeta.color)
-  var SelectedIcon = resolveIcon(selectedMeta.icon)
+  // Seçili formCode'a karşılık gelen entity'yi bul; bulamazsak ilk entity'ye fallback.
+  var selectedEntity = (function() {
+    if (!selectedCode || displayEntities.length === 0) return displayEntities[0] || null
+    var target = String(selectedCode).toUpperCase()
+    for (var i = 0; i < displayEntities.length; i++) {
+      var e = displayEntities[i]
+      if (e.formCode && String(e.formCode).toUpperCase() === target) return e
+      if (Array.isArray(e.variants)) {
+        for (var j = 0; j < e.variants.length; j++) {
+          if (String(e.variants[j].formCode).toUpperCase() === target) return e
+        }
+      }
+    }
+    return displayEntities[0]
+  })()
 
-  // Body grid'i ile ayni olculer: grid-cols-[1fr_2fr] + gap-4 + px-5.
-  // Secici 1fr (sol form eninde), trailing 2fr (sag liste eninde).
-  // Trigger w-full ile kolon genisligini kaplar — secilen formun etiketine
-  // gore boyutu degismez.
+  var selectedPalette = resolveColor(selectedEntity.color || 'slate')
+  var SelectedIcon = resolveIcon(selectedEntity.icon || 'Layers')
+
+  // ── Module bazlı gruplama ──────────────────────────────────────────────────
+  // entityKey → module adı haritası (formLike'daki module alanından).
+  // Hem SubModule key hem formCode indekslenir: "view-type olmayan" gruplar
+  // buildEntitiesFromForms tarafından formCode bazlı ayrı entity'lere patlatılır,
+  // bu durumda entity.key = formCode olur → formCode → module lookup gerekir.
+  var entityModuleMap = {}
+  formLike.forEach(function(f) {
+    var subModKey = f.subModule ? String(f.subModule).trim() : f.formCode
+    if (!entityModuleMap[subModKey]) {
+      entityModuleMap[subModKey] = f.module || 'Diğer'
+    }
+    // formCode → module (patlatılmış entity'ler için)
+    if (f.formCode && !entityModuleMap[f.formCode]) {
+      entityModuleMap[f.formCode] = f.module || 'Diğer'
+    }
+  })
+
+  // displayEntities'i module'e göre grupla; sıralamayı koru
+  var moduleOrder = []
+  var moduleGroups = {}  // moduleName → entity[]
+  displayEntities.forEach(function(entity) {
+    var mod = entityModuleMap[entity.key] || 'Diğer'
+    if (!moduleGroups[mod]) {
+      moduleGroups[mod] = []
+      moduleOrder.push(mod)
+    }
+    moduleGroups[mod].push(entity)
+  })
+  // Render için dizi: [{moduleName, entities[]}]
+  var groupedSections = moduleOrder.map(function(m) {
+    return { moduleName: m, entities: moduleGroups[m] }
+  })
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function handlePickEntity(entity) {
+    setOpen(false)
+    if (!entity || !onChange) return
+    var target = getDefaultFormCode(entity)
+    if (target) onChange(target)
+  }
+
+  // Styling helpers
+  var dropBg      = isLight ? '#ffffff' : 'rgba(8,11,20,0.96)'
+  var dropBorder  = isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.10)'
+  var dropShadow  = isLight ? '0 12px 40px rgba(15,23,42,0.12)' : '0 12px 40px rgba(0,0,0,0.4)'
+  var headerColor = isLight ? '#94a3b8' : 'rgba(255,255,255,0.28)'
+  var headerBorder = isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.07)'
+
   return (
     <div className="px-5 py-2.5 border-b border-slate-200/50 dark:border-white/[0.06] flex-shrink-0 grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4 items-center">
       <div className="relative min-w-0" ref={wrapperRef}>
-        {/* Trigger — kompakt: sadece ikon + etiket + chevron */}
+
+        {/* Trigger */}
         <button
           type="button"
           onClick={function() { setOpen(function(o) { return !o }) }}
@@ -101,7 +164,7 @@ export default function ModuleSelector(props) {
           >
             <SelectedIcon size={12} style={{ color: selectedPalette.icon }} strokeWidth={1.8} />
           </div>
-          <span className="flex-1 min-w-0 text-left truncate">{selectedMeta.label}</span>
+          <span className="flex-1 min-w-0 text-left truncate">{selectedEntity.label}</span>
           <motion.span
             animate={{ rotate: open ? 180 : 0 }}
             transition={{ duration: 0.2 }}
@@ -111,7 +174,7 @@ export default function ModuleSelector(props) {
           </motion.span>
         </button>
 
-        {/* Dropdown panel */}
+        {/* Dropdown panel — modül bazlı kırılımlı */}
         <AnimatePresence>
           {open && (
             <motion.div
@@ -119,47 +182,72 @@ export default function ModuleSelector(props) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute left-0 top-full mt-1 z-50 rounded-xl overflow-hidden whitespace-nowrap"
+              className="absolute left-0 top-full mt-1 z-50 rounded-xl"
               style={{
-                minWidth: '100%',
-                background: 'rgba(8, 11, 20, 0.96)',
-                backdropFilter: 'blur(24px)',
-                WebkitBackdropFilter: 'blur(24px)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                boxShadow: '0 12px 40px rgba(0, 0, 0, 0.4)',
+                minWidth: '220px',
+                maxHeight: '70vh',
+                overflowY: 'auto',
+                background: dropBg,
+                border: dropBorder,
+                boxShadow: dropShadow,
+                backdropFilter: isLight ? undefined : 'blur(24px)',
+                WebkitBackdropFilter: isLight ? undefined : 'blur(24px)',
               }}
             >
-              {supported.map(function(opt) {
-                var meta = MODULE_META[opt.value]
-                var palette = resolveColor(meta.color)
-                var Icon = resolveIcon(meta.icon)
-                var isSel = opt.value === selectedCode
+              {groupedSections.map(function(section, si) {
                 return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={function() {
-                      if (onChange) onChange(opt.value)
-                      setOpen(false)
-                    }}
-                    className={
-                      'w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left ' +
-                      (isSel ? 'bg-white/[0.08]' : 'hover:bg-white/[0.04]')
-                    }
-                  >
+                  <div key={section.moduleName}>
+                    {/* Modül başlığı */}
                     <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: palette.bg, border: '1px solid ' + palette.border }}
+                      style={{
+                        borderTop: si > 0 ? headerBorder : 'none',
+                        color: headerColor,
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                        padding: si === 0 ? '8px 16px 4px' : '10px 16px 4px',
+                      }}
                     >
-                      <Icon size={14} style={{ color: palette.icon }} strokeWidth={1.8} />
+                      {section.moduleName}
                     </div>
-                    <div className="flex flex-col flex-1 min-w-0">
-                      <span className="text-sm font-semibold text-white/90">{meta.label}</span>
-                    </div>
-                    {isSel && <Check size={14} className="text-indigo-400 flex-shrink-0" />}
-                  </button>
+
+                    {/* Modül altındaki entity'ler */}
+                    {section.entities.map(function(entity) {
+                      var palette = resolveColor(entity.color || 'slate')
+                      var Icon = resolveIcon(entity.icon || 'Layers')
+                      var isSel = entity.key === selectedEntity.key
+                      var rowBg = isSel
+                        ? (isLight ? '#eef2ff' : 'rgba(255,255,255,0.08)')
+                        : 'transparent'
+                      var hoverBg = isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)'
+                      return (
+                        <button
+                          key={entity.key}
+                          type="button"
+                          onClick={function() { handlePickEntity(entity) }}
+                          className="w-full flex items-center gap-3 px-4 py-2 transition-colors text-left"
+                          style={{ background: rowBg, color: isLight ? '#1e293b' : 'rgba(255,255,255,0.90)' }}
+                          onMouseEnter={function(e) { if (!isSel) e.currentTarget.style.background = hoverBg }}
+                          onMouseLeave={function(e) { if (!isSel) e.currentTarget.style.background = 'transparent' }}
+                        >
+                          <div
+                            className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                            style={{ background: palette.bg, border: '1px solid ' + palette.border }}
+                          >
+                            <Icon size={12} style={{ color: palette.icon }} strokeWidth={1.8} />
+                          </div>
+                          <span className="flex-1 min-w-0 text-[13px] font-medium truncate">{entity.label}</span>
+                          {isSel && <Check size={13} style={{ color: isLight ? '#6366f1' : '#a5b4fc' }} className="flex-shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
                 )
               })}
+
+              {/* Alt padding */}
+              <div style={{ height: '6px' }} />
             </motion.div>
           )}
         </AnimatePresence>

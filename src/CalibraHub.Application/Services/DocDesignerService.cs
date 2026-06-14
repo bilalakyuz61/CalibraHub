@@ -226,5 +226,14 @@ public sealed partial class DocDesignerService : IDocDesignerService
             DataSources: sources.Select(s => new DocLayoutDsDto(
                 s.Id, s.LayoutId, s.Alias, s.Role,
                 s.ViewId, s.AdHocSql, s.JoinOn, s.ParentAlias, s.Ordinal
-            )).ToList());
+            )).ToList(),
+            DocumentTypeId: layout.DocumentTypeId,
+            OutputFormat:   layout.OutputFormat,
+            DefaultSubject: layout.DefaultSubject,
+            DefaultBody:    layout.DefaultBody,
+            DefaultsViewName:      layout.DefaultsViewName,
+            DefaultsSubjectColumn: layout.DefaultsSubjectColumn,
+            DefaultsBodyColumn:    layout.DefaultsBodyColumn,
+            DefaultsWhere:         layout.DefaultsWhere,
+            UseAsMailTemplate:     layout.UseAsMailTemplate);
 }

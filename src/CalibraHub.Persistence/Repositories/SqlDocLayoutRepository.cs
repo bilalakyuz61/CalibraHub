@@ -26,7 +26,9 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[Code],[Name],[DocType],[Description],[IsDefault],[OwnerUserId],[UpdatedAt]
+            SELECT [Id],[Code],[Name],[DocType],[Description],[IsDefault],[OwnerUserId],[UpdatedAt],
+                   [DocumentTypeId],[OutputFormat],[DefaultSubject],[DefaultBody],
+                   ISNULL([UseAsMailTemplate], 0) AS [UseAsMailTemplate]
             FROM {_layout}
             WHERE [IsActive] = 1
               AND (@DocType IS NULL OR [DocType] = @DocType)
@@ -42,11 +44,16 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
                 Id: reader.GetInt32(0),
                 Code: reader.GetString(1),
                 Name: reader.GetString(2),
-                DocType: reader.GetString(3),
+                DocType: reader.IsDBNull(3) ? null : reader.GetString(3),
                 Description: reader.IsDBNull(4) ? null : reader.GetString(4),
                 IsDefault: reader.GetBoolean(5),
-                OwnerUserId: reader.GetGuid(6),
-                UpdatedAt: reader.GetDateTime(7)));
+                OwnerUserId: reader.GetInt32(6),
+                UpdatedAt: reader.GetDateTime(7),
+                DocumentTypeId: reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                OutputFormat: reader.IsDBNull(9) ? "pdf" : reader.GetString(9),
+                DefaultSubject: reader.IsDBNull(10) ? null : reader.GetString(10),
+                DefaultBody: reader.IsDBNull(11) ? null : reader.GetString(11),
+                UseAsMailTemplate: !reader.IsDBNull(12) && reader.GetBoolean(12)));
         }
         return list;
     }
@@ -58,7 +65,10 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
         cmd.CommandText = $@"
             SELECT [Id],[Code],[Name],[DocType],[Description],[LayoutJson],
                    [PageW],[PageH],[MarginTop],[MarginBot],[MarginLeft],[MarginRight],
-                   [OwnerUserId],[IsDefault],[IsActive],[CreatedAt],[UpdatedAt]
+                   [OwnerUserId],[IsDefault],[IsActive],[CreatedAt],[UpdatedAt],[DocumentTypeId],[OutputFormat],
+                   [DefaultSubject],[DefaultBody],
+                   [DefaultsViewName],[DefaultsSubjectColumn],[DefaultsBodyColumn],[DefaultsWhere],
+                   ISNULL([UseAsMailTemplate], 0) AS [UseAsMailTemplate]
             FROM {_layout} WHERE [Id] = @Id AND [IsActive] = 1;";
         cmd.Parameters.AddWithValue("@Id", id);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -93,7 +103,7 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
         return list;
     }
 
-    public async Task<int> UpsertAsync(SaveDocLayoutRequest req, Guid ownerUserId, CancellationToken ct)
+    public async Task<int> UpsertAsync(SaveDocLayoutRequest req, int ownerUserId, CancellationToken ct)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
@@ -102,29 +112,45 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
             USING (SELECT @Code AS Code) AS S ON T.[Code] = S.Code
             WHEN MATCHED THEN
                 UPDATE SET
-                    [Name]        = @Name,
-                    [DocType]     = @DocType,
-                    [Description] = @Description,
-                    [LayoutJson]  = @LayoutJson,
-                    [PageW]       = @PageW,
-                    [PageH]       = @PageH,
-                    [MarginTop]   = @MarginTop,
-                    [MarginBot]   = @MarginBot,
-                    [MarginLeft]  = @MarginLeft,
-                    [MarginRight] = @MarginRight,
-                    [IsDefault]   = @IsDefault,
-                    [UpdatedAt]   = SYSUTCDATETIME()
+                    [Name]           = @Name,
+                    [DocType]        = @DocType,
+                    [DocumentTypeId] = @DocumentTypeId,
+                    [Description]    = @Description,
+                    [LayoutJson]     = @LayoutJson,
+                    [PageW]          = @PageW,
+                    [PageH]          = @PageH,
+                    [MarginTop]      = @MarginTop,
+                    [MarginBot]      = @MarginBot,
+                    [MarginLeft]     = @MarginLeft,
+                    [MarginRight]    = @MarginRight,
+                    [IsDefault]      = @IsDefault,
+                    [OutputFormat]   = @OutputFormat,
+                    [DefaultSubject] = @DefaultSubject,
+                    [DefaultBody]    = @DefaultBody,
+                    [DefaultsViewName]      = @DefaultsViewName,
+                    [DefaultsSubjectColumn] = @DefaultsSubjectColumn,
+                    [DefaultsBodyColumn]    = @DefaultsBodyColumn,
+                    [DefaultsWhere]         = @DefaultsWhere,
+                    [UseAsMailTemplate]     = @UseAsMailTemplate,
+                    [UpdatedAt]      = SYSUTCDATETIME()
             WHEN NOT MATCHED THEN
-                INSERT ([Code],[Name],[DocType],[Description],[LayoutJson],
+                INSERT ([Code],[Name],[DocType],[DocumentTypeId],[Description],[LayoutJson],
                         [PageW],[PageH],[MarginTop],[MarginBot],[MarginLeft],[MarginRight],
-                        [OwnerUserId],[IsDefault])
-                VALUES (@Code,@Name,@DocType,@Description,@LayoutJson,
+                        [OwnerUserId],[IsDefault],[OutputFormat],[DefaultSubject],[DefaultBody],
+                        [DefaultsViewName],[DefaultsSubjectColumn],[DefaultsBodyColumn],[DefaultsWhere],
+                        [UseAsMailTemplate])
+                VALUES (@Code,@Name,@DocType,@DocumentTypeId,@Description,@LayoutJson,
                         @PageW,@PageH,@MarginTop,@MarginBot,@MarginLeft,@MarginRight,
-                        @OwnerUserId,@IsDefault);
+                        @OwnerUserId,@IsDefault,@OutputFormat,@DefaultSubject,@DefaultBody,
+                        @DefaultsViewName,@DefaultsSubjectColumn,@DefaultsBodyColumn,@DefaultsWhere,
+                        @UseAsMailTemplate);
             SELECT [Id] FROM {_layout} WHERE [Code] = @Code;";
         cmd.Parameters.AddWithValue("@Code",        req.Code);
         cmd.Parameters.AddWithValue("@Name",        req.Name);
-        cmd.Parameters.AddWithValue("@DocType",     req.DocType);
+        cmd.Parameters.Add(new SqlParameter("@DocType", System.Data.SqlDbType.NVarChar, 60)
+            { Value = (object?)req.DocType ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@DocumentTypeId", System.Data.SqlDbType.Int)
+            { Value = (object?)req.DocumentTypeId ?? DBNull.Value });
         cmd.Parameters.Add(new SqlParameter("@Description", System.Data.SqlDbType.NVarChar, 500)
             { Value = (object?)req.Description ?? DBNull.Value });
         cmd.Parameters.AddWithValue("@LayoutJson",  req.LayoutJson);
@@ -136,6 +162,22 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
         cmd.Parameters.AddWithValue("@MarginRight", req.MarginRight);
         cmd.Parameters.AddWithValue("@OwnerUserId", ownerUserId);
         cmd.Parameters.AddWithValue("@IsDefault",   req.IsDefault);
+        cmd.Parameters.Add(new SqlParameter("@OutputFormat", System.Data.SqlDbType.NVarChar, 20)
+            { Value = string.IsNullOrWhiteSpace(req.OutputFormat) ? "pdf" : req.OutputFormat });
+        cmd.Parameters.Add(new SqlParameter("@DefaultSubject", System.Data.SqlDbType.NVarChar, 500)
+            { Value = string.IsNullOrWhiteSpace(req.DefaultSubject) ? (object)DBNull.Value : req.DefaultSubject });
+        cmd.Parameters.Add(new SqlParameter("@DefaultBody", System.Data.SqlDbType.NVarChar, -1)
+            { Value = string.IsNullOrWhiteSpace(req.DefaultBody) ? (object)DBNull.Value : req.DefaultBody });
+        cmd.Parameters.Add(new SqlParameter("@DefaultsViewName", System.Data.SqlDbType.NVarChar, 128)
+            { Value = string.IsNullOrWhiteSpace(req.DefaultsViewName) ? (object)DBNull.Value : req.DefaultsViewName });
+        cmd.Parameters.Add(new SqlParameter("@DefaultsSubjectColumn", System.Data.SqlDbType.NVarChar, 128)
+            { Value = string.IsNullOrWhiteSpace(req.DefaultsSubjectColumn) ? (object)DBNull.Value : req.DefaultsSubjectColumn });
+        cmd.Parameters.Add(new SqlParameter("@DefaultsBodyColumn", System.Data.SqlDbType.NVarChar, 128)
+            { Value = string.IsNullOrWhiteSpace(req.DefaultsBodyColumn) ? (object)DBNull.Value : req.DefaultsBodyColumn });
+        cmd.Parameters.Add(new SqlParameter("@DefaultsWhere", System.Data.SqlDbType.NVarChar, 2000)
+            { Value = string.IsNullOrWhiteSpace(req.DefaultsWhere) ? (object)DBNull.Value : req.DefaultsWhere });
+        cmd.Parameters.Add(new SqlParameter("@UseAsMailTemplate", System.Data.SqlDbType.Bit)
+            { Value = req.UseAsMailTemplate });
         var result = await cmd.ExecuteScalarAsync(ct);
         return result != null ? Convert.ToInt32(result) : 0;
     }
@@ -199,37 +241,54 @@ public sealed class SqlDocLayoutRepository : IDocLayoutRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
+        // DocumentTypeId varsa o uzerinden gruplandirir (ID-tabanli, tercih edilen).
+        // Yoksa legacy DocType uzerinden — eski "custom" tasarimlar icin dahi calisir.
         cmd.CommandText = $@"
-            DECLARE @DocType nvarchar(60);
-            SELECT @DocType = [DocType] FROM {_layout} WHERE [Id] = @Id AND [IsActive] = 1;
-            IF @DocType IS NULL
+            DECLARE @DocType        nvarchar(60);
+            DECLARE @DocumentTypeId int;
+            SELECT @DocType = [DocType], @DocumentTypeId = [DocumentTypeId]
+            FROM {_layout} WHERE [Id] = @Id AND [IsActive] = 1;
+            IF @DocType IS NULL AND @DocumentTypeId IS NULL
                 THROW 51001, 'Layout bulunamadi veya pasif.', 1;
             UPDATE {_layout}
             SET [IsDefault] = CASE WHEN [Id] = @Id THEN 1 ELSE 0 END,
                 [UpdatedAt] = SYSUTCDATETIME()
-            WHERE [DocType] = @DocType AND [IsActive] = 1;";
+            WHERE [IsActive] = 1
+              AND (
+                    (@DocumentTypeId IS NOT NULL AND [DocumentTypeId] = @DocumentTypeId)
+                 OR (@DocumentTypeId IS NULL     AND [DocType] = @DocType)
+              );";
         cmd.Parameters.AddWithValue("@Id", id);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static DocLayout MapLayout(SqlDataReader r) => new()
     {
-        Id          = r.GetInt32(0),
-        Code        = r.GetString(1),
-        Name        = r.GetString(2),
-        DocType     = r.GetString(3),
-        Description = r.IsDBNull(4) ? null : r.GetString(4),
-        LayoutJson  = r.GetString(5),
-        PageW       = r.GetDecimal(6),
-        PageH       = r.GetDecimal(7),
-        MarginTop   = r.GetDecimal(8),
-        MarginBot   = r.GetDecimal(9),
-        MarginLeft  = r.GetDecimal(10),
-        MarginRight = r.GetDecimal(11),
-        OwnerUserId = r.GetGuid(12),
-        IsDefault   = r.GetBoolean(13),
-        IsActive    = r.GetBoolean(14),
-        CreatedAt   = r.GetDateTime(15),
-        UpdatedAt   = r.GetDateTime(16)
+        Id             = r.GetInt32(0),
+        Code           = r.GetString(1),
+        Name           = r.GetString(2),
+        DocType        = r.IsDBNull(3) ? null : r.GetString(3),
+        Description    = r.IsDBNull(4) ? null : r.GetString(4),
+        LayoutJson     = r.GetString(5),
+        PageW          = r.GetDecimal(6),
+        PageH          = r.GetDecimal(7),
+        MarginTop      = r.GetDecimal(8),
+        MarginBot      = r.GetDecimal(9),
+        MarginLeft     = r.GetDecimal(10),
+        MarginRight    = r.GetDecimal(11),
+        OwnerUserId    = r.GetInt32(12),
+        IsDefault      = r.GetBoolean(13),
+        IsActive       = r.GetBoolean(14),
+        CreatedAt      = r.GetDateTime(15),
+        UpdatedAt      = r.GetDateTime(16),
+        DocumentTypeId = r.IsDBNull(17) ? null : r.GetInt32(17),
+        OutputFormat   = r.IsDBNull(18) ? "pdf" : r.GetString(18),
+        DefaultSubject = r.IsDBNull(19) ? null : r.GetString(19),
+        DefaultBody    = r.IsDBNull(20) ? null : r.GetString(20),
+        DefaultsViewName      = r.IsDBNull(21) ? null : r.GetString(21),
+        DefaultsSubjectColumn = r.IsDBNull(22) ? null : r.GetString(22),
+        DefaultsBodyColumn    = r.IsDBNull(23) ? null : r.GetString(23),
+        DefaultsWhere         = r.IsDBNull(24) ? null : r.GetString(24),
+        UseAsMailTemplate     = !r.IsDBNull(25) && r.GetBoolean(25),
     };
 }

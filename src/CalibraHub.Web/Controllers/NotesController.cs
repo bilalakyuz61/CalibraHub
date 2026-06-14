@@ -1,22 +1,32 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Security;
+using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
+using CalibraHub.Persistence.Database;
+using CalibraHub.Persistence.Options;
 using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Notes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.Data.SqlClient;
 using System.Security.Claims;
 
 namespace CalibraHub.Web.Controllers;
 
 [Authorize]
+[CalibraHub.Web.Authorization.PermissionScope(FormCodes.Notes)]
 public sealed class NotesController : Controller
 {
     private readonly INoteRepository _noteRepository;
     private readonly IAttachmentRepository _attachmentRepository;
     private readonly IUserProfileRepository _userProfileRepository;
-    private readonly IWebHostEnvironment _env;
+    private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly INoteEncryptionService _noteEncryption;
+    private readonly INoteOcrService _noteOcr;
+    private readonly string _schema;
     private const long MaxAttachmentBytes = 20L * 1024 * 1024; // 20 MB
     private const string NoteEntityType = "Note";
 
@@ -24,16 +34,19 @@ public sealed class NotesController : Controller
         INoteRepository noteRepository,
         IAttachmentRepository attachmentRepository,
         IUserProfileRepository userProfileRepository,
-        IWebHostEnvironment env)
+        SqlServerConnectionFactory connectionFactory,
+        INoteEncryptionService noteEncryption,
+        INoteOcrService noteOcr,
+        CalibraDatabaseOptions dbOptions)
     {
         _noteRepository = noteRepository;
         _attachmentRepository = attachmentRepository;
         _userProfileRepository = userProfileRepository;
-        _env = env;
+        _connectionFactory = connectionFactory;
+        _noteEncryption = noteEncryption;
+        _noteOcr = noteOcr;
+        _schema = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
     }
-
-    private string LegacyAttachmentDir(Guid noteId) =>
-        Path.Combine(_env.ContentRootPath, "note-attachments", noteId.ToString("N"));
 
     [HttpGet]
     public async Task<IActionResult> Index(Guid? id, Guid? folderId, bool trash = false, CancellationToken cancellationToken = default)
@@ -368,17 +381,14 @@ public sealed class NotesController : Controller
             bytes = ms.ToArray();
         }
 
-        var storedName = Guid.NewGuid().ToString("N") + Path.GetExtension(file.FileName);
         var attachment = new Attachment
         {
             EntityType    = NoteEntityType,
             EntityId      = noteId.ToString(),
             FileName      = Path.GetFileName(file.FileName),
-            StoredName    = storedName,
             ContentType   = file.ContentType,
             FileSize      = file.Length,
             Description   = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
-            CreatedBy     = userId.ToString(),
             BinaryContent = bytes
         };
 
@@ -398,7 +408,7 @@ public sealed class NotesController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> DownloadAttachment(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DownloadAttachment(int id, bool inline = false, CancellationToken cancellationToken = default)
     {
         var (companyId, userId) = GetCurrentUser();
         var attachment = await _attachmentRepository.GetByIdAsync(id, cancellationToken);
@@ -409,19 +419,19 @@ public sealed class NotesController : Controller
         if (!IsOwner(note, companyId, userId)) return Forbid();
 
         var bytes = await _attachmentRepository.GetBinaryAsync(id, cancellationToken);
-        if (bytes is { Length: > 0 })
-            return File(bytes, attachment.ContentType ?? "application/octet-stream", attachment.FileName);
+        if (bytes is not { Length: > 0 }) return NotFound();
 
-        // Legacy fallback — eski upload'lar file system'de (note_attachments tablosundan kopyalanmamis).
-        var path = Path.Combine(LegacyAttachmentDir(noteId), attachment.StoredName);
-        if (System.IO.File.Exists(path))
-            return PhysicalFile(path, attachment.ContentType ?? "application/octet-stream", attachment.FileName);
-
-        return NotFound();
+        var contentType = attachment.ContentType ?? "application/octet-stream";
+        if (inline)
+        {
+            Response.Headers.Append("Content-Disposition", $"inline; filename*=UTF-8''{Uri.EscapeDataString(attachment.FileName)}");
+            return File(bytes, contentType);
+        }
+        return File(bytes, contentType, attachment.FileName);
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeleteAttachment(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteAttachment(int id, CancellationToken cancellationToken)
     {
         var (companyId, userId) = GetCurrentUser();
         var attachment = await _attachmentRepository.GetByIdAsync(id, cancellationToken);
@@ -536,6 +546,7 @@ public sealed class NotesController : Controller
         return Json(new
         {
             currentUserName = currentUser?.FullName ?? string.Empty,
+            companyId = companyId,
             folders = folders.Select(f => new
             {
                 id = f.Id,
@@ -553,7 +564,17 @@ public sealed class NotesController : Controller
                 isPinned = n.IsPinned,
                 isFullyEncrypted = n.IsFullyEncrypted,
                 encryptionHint = n.EncryptionHint,
+                tags = n.Tags,
+                linkedEntityType  = n.LinkedEntityType,
+                linkedEntityId    = n.LinkedEntityId,
+                linkedEntityLabel = n.LinkedEntityLabel,
+                visibility        = n.Visibility,
+                isOwner           = n.UserId == userId,
                 reminderCount = reminderCounts.TryGetValue(n.Id, out var c) ? c : 0,
+                shareToken               = n.ShareToken,
+                shareIsPublic            = n.ShareIsPublic,
+                shareIncludeAttachments  = n.ShareIncludeAttachments,
+                ocrText                  = n.OcrText,
             }),
         });
     }
@@ -562,6 +583,9 @@ public sealed class NotesController : Controller
     [HttpPost]
     public async Task<IActionResult> SaveJson([FromBody] SaveNoteInput input, CancellationToken cancellationToken)
     {
+        if (input is null)
+            return Json(new { success = false, message = "Geçersiz istek gövdesi." });
+
         var (companyId, userId) = GetCurrentUser();
 
         Note note;
@@ -577,6 +601,11 @@ public sealed class NotesController : Controller
             existing.UpdatedAt = DateTime.Now;
             existing.IsFullyEncrypted = input.IsFullyEncrypted ?? existing.IsFullyEncrypted;
             existing.EncryptionHint   = input.EncryptionHint  ?? existing.EncryptionHint;
+            existing.Tags = input.Tags ?? existing.Tags;
+            existing.LinkedEntityType  = input.LinkedEntityType;
+            existing.LinkedEntityId    = input.LinkedEntityId;
+            existing.LinkedEntityLabel = input.LinkedEntityLabel;
+            existing.Visibility        = input.Visibility;
             note = existing;
         }
         else
@@ -589,8 +618,29 @@ public sealed class NotesController : Controller
                 Title = string.IsNullOrWhiteSpace(input.Title) ? "Adsız Not" : input.Title.Trim(),
                 Content = input.Content ?? string.Empty,
                 IsFullyEncrypted = input.IsFullyEncrypted ?? false,
-                EncryptionHint   = input.EncryptionHint
+                EncryptionHint   = input.EncryptionHint,
+                Tags = input.Tags,
+                LinkedEntityType  = input.LinkedEntityType,
+                LinkedEntityId    = input.LinkedEntityId,
+                LinkedEntityLabel = input.LinkedEntityLabel,
+                Visibility        = input.Visibility,
             };
+        }
+
+        // E2E şifreli notlarda içerik zaten ciphertext — OCR yapılamaz.
+        // Normal notlarda HTML içindeki base64 görseller varsa OCR metni çıkar.
+        if (!note.IsFullyEncrypted)
+        {
+            try
+            {
+                var ocrText = await _noteOcr.ExtractTextFromImagesAsync(note.Content, cancellationToken);
+                note.OcrText = ocrText;
+            }
+            catch { /* OCR hatası kaydetmeyi engellemesin */ }
+        }
+        else
+        {
+            note.OcrText = null; // E2E notlarda önceki OCR metnini temizle
         }
 
         await _noteRepository.SaveAsync(note, cancellationToken);
@@ -634,7 +684,7 @@ public sealed class NotesController : Controller
         var reminders = await _noteRepository.GetRemindersAsync(noteId, cancellationToken);
 
         // Target display isimlerini cekmek icin tek seferlik sirket user map'i
-        var userMap = new Dictionary<Guid, string>();
+        var userMap = new Dictionary<int, string>();
         if (reminders.Any(r => r.TargetUserIds.Count > 0))
         {
             var users = await _userProfileRepository.GetAllAsync(cancellationToken);
@@ -686,6 +736,131 @@ public sealed class NotesController : Controller
             }));
     }
 
+    // ── Kullanıcı bazlı paylaşım (note_shares) ─────────────────────────────
+
+    /// <summary>Bir notun kullanıcı paylaşım listesini döner (kullanıcı adları dahil).</summary>
+    [HttpGet]
+    public async Task<IActionResult> GetNoteSharesJson(Guid noteId, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(noteId, cancellationToken);
+        if (!IsOwner(note, companyId, userId))
+            return Json(new { ok = false, error = "Erişim reddedildi." });
+
+        var shares = await _noteRepository.GetSharesAsync(noteId, cancellationToken);
+        var users  = await _userProfileRepository.GetAllAsync(cancellationToken);
+        var userMap = users.ToDictionary(u => u.Id);
+
+        var result = shares.Select(s =>
+        {
+            userMap.TryGetValue(s.SharedWithUserId, out var u);
+            return new
+            {
+                shareId  = s.Id,
+                userId   = s.SharedWithUserId,
+                fullName = u?.FullName ?? "?",
+                email    = u?.Email ?? "",
+                canEdit  = s.CanEdit,
+                sharedAt = s.SharedAt.ToString("yyyy-MM-dd HH:mm"),
+            };
+        }).ToList();
+
+        return Json(new { ok = true, shares = result });
+    }
+
+    /// <summary>Nota kullanıcı paylaşımı ekle veya güncelle (upsert).</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveUserShareJson([FromBody] SaveUserShareInput input, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
+        if (!IsOwner(note, companyId, userId))
+            return Json(new { ok = false, error = "Erişim reddedildi." });
+        if (input.UserId == userId)
+            return Json(new { ok = false, error = "Notu kendinizle paylaşamazsınız." });
+
+        var share = new NoteShare
+        {
+            Id = Guid.NewGuid(),
+            NoteId = input.NoteId,
+            SharedWithUserId = input.UserId,
+            SharedAt = DateTime.UtcNow,
+            CanEdit = input.CanEdit,
+        };
+        await _noteRepository.AddShareAsync(share, cancellationToken);
+
+        var users = await _userProfileRepository.GetAllAsync(cancellationToken);
+        var u = users.FirstOrDefault(x => x.Id == input.UserId);
+        return Json(new
+        {
+            ok = true,
+            share = new
+            {
+                shareId  = share.Id,
+                userId   = share.SharedWithUserId,
+                fullName = u?.FullName ?? "?",
+                email    = u?.Email ?? "",
+                canEdit  = share.CanEdit,
+                sharedAt = share.SharedAt.ToString("yyyy-MM-dd HH:mm"),
+            }
+        });
+    }
+
+    /// <summary>Kullanıcı paylaşım iznini (canEdit) günceller.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateSharePermissionJson([FromBody] UpdateSharePermissionInput input, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
+        if (!IsOwner(note, companyId, userId))
+            return Json(new { ok = false, error = "Erişim reddedildi." });
+
+        await _noteRepository.UpdateSharePermissionAsync(input.ShareId, input.CanEdit, cancellationToken);
+        return Json(new { ok = true });
+    }
+
+    /// <summary>Kullanıcı paylaşımını kaldırır.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveUserShareJson([FromBody] RemoveUserShareInput input, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
+        if (!IsOwner(note, companyId, userId))
+            return Json(new { ok = false, error = "Erişim reddedildi." });
+
+        await _noteRepository.DeleteShareAsync(input.ShareId, cancellationToken);
+        return Json(new { ok = true });
+    }
+
+    /// <summary>
+    /// Mevcut bir notun görsellerini OCR ile yeniden işler ve ocr_text'i günceller.
+    /// Özellikle OCR özelliği aktif edilmeden önce kaydedilmiş notlar için kullanılır.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReOcrNoteJson([FromBody] ReOcrNoteInput input, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
+        if (note is null || note.CompanyId != companyId || note.IsFullyEncrypted)
+            return Json(new { ok = false, ocrText = (string?)null });
+
+        try
+        {
+            var ocrText = await _noteOcr.ExtractTextFromImagesAsync(note.Content, cancellationToken);
+            note.OcrText = ocrText;
+            await _noteRepository.SaveAsync(note, cancellationToken);
+            return Json(new { ok = true, ocrText });
+        }
+        catch
+        {
+            return Json(new { ok = false, ocrText = (string?)null });
+        }
+    }
+
     /// <summary>Nota hatirlatici ekle — JSON.</summary>
     [HttpPost]
     public async Task<IActionResult> AddReminderJson([FromBody] AddReminderInput input, CancellationToken cancellationToken)
@@ -698,7 +873,7 @@ public sealed class NotesController : Controller
             return Json(new { success = false, message = "Hatirlatma zamani gelecekte olmali." });
 
         // Hedef kullanicilar — her biri sirket icinde ve aktif olmali
-        var validTargets = new List<(Guid Id, string FullName)>();
+        var validTargets = new List<(int Id, string FullName)>();
         if (input.TargetUserIds is not null && input.TargetUserIds.Count > 0)
         {
             var allUsers = await _userProfileRepository.GetAllAsync(cancellationToken);
@@ -707,7 +882,7 @@ public sealed class NotesController : Controller
                 .ToDictionary(u => u.Id, u => u.FullName);
             foreach (var tid in input.TargetUserIds.Distinct())
             {
-                if (tid == Guid.Empty) continue;
+                if (tid <= 0) continue;
                 if (!userLookup.TryGetValue(tid, out var fn))
                     return Json(new { success = false, message = "Gecersiz hedef kullanici." });
                 validTargets.Add((tid, fn));
@@ -824,7 +999,7 @@ public sealed class NotesController : Controller
         }
 
         if (enexNotes.Count == 0)
-            return Json(new { success = true, imported = 0, folderId = (Guid?)null });
+            return Json(new { success = true, imported = 0, folderId = (int?)null });
 
         NoteFolder folder;
         var existingFolders = await _noteRepository.GetFoldersAsync(companyId, userId, cancellationToken);
@@ -851,7 +1026,7 @@ public sealed class NotesController : Controller
                 await _noteRepository.SaveFolderAsync(folder, cancellationToken);
         }
 
-        int imported = 0, failed = 0;
+        int imported = 0, failed = 0, totalSkippedAttachments = 0;
         foreach (var enexNote in enexNotes)
         {
             try
@@ -864,28 +1039,29 @@ public sealed class NotesController : Controller
                     Title      = string.IsNullOrWhiteSpace(enexNote.Title) ? "Adsız Not" : enexNote.Title.Trim(),
                     Content    = enexNote.HtmlContent,
                     CreatedAt  = enexNote.Created ?? DateTime.Now,
-                    UpdatedAt  = enexNote.Created ?? DateTime.Now
+                    UpdatedAt  = enexNote.Updated ?? enexNote.Created ?? DateTime.Now,
+                    Tags       = enexNote.Tags.Count > 0
+                                    ? System.Text.Json.JsonSerializer.Serialize(enexNote.Tags)
+                                    : null,
                 };
                 await _noteRepository.SaveAsync(note, cancellationToken);
 
+                // EnexImporter zaten 20 MB üstünü atladı; buradaki liste temiz
                 foreach (var res in enexNote.Attachments)
                 {
-                    if (res.Data.Length > MaxAttachmentBytes) continue;   // 20 MB sınırı
-                    var storedName = Guid.NewGuid().ToString("N") + Path.GetExtension(res.FileName);
                     var attachment = new Attachment
                     {
                         EntityType    = NoteEntityType,
                         EntityId      = note.Id.ToString(),
                         FileName      = res.FileName,
-                        StoredName    = storedName,
                         ContentType   = res.Mime,
                         FileSize      = res.Data.Length,
-                        CreatedBy     = userId.ToString(),
                         BinaryContent = res.Data
                     };
                     await _attachmentRepository.AddAsync(attachment, cancellationToken);
                 }
 
+                totalSkippedAttachments += enexNote.SkippedAttachmentCount;
                 imported++;
             }
             catch
@@ -894,7 +1070,7 @@ public sealed class NotesController : Controller
             }
         }
 
-        return Json(new { success = true, imported, failed, folderId = folder.Id });
+        return Json(new { success = true, imported, failed, skippedAttachments = totalSkippedAttachments, folderId = folder.Id });
     }
 
     /// <summary>Çöp kutusundaki (is_deleted=1) notları döner — JSON.</summary>
@@ -935,12 +1111,236 @@ public sealed class NotesController : Controller
         return Json(new { success = true });
     }
 
+    /// <summary>Notun genel link durumunu değiştirir — isPublic=true ise token üretir, false ise pasife alır.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetSharePublicJson([FromBody] SetSharePublicInput input, CancellationToken cancellationToken)
+    {
+        var (companyId, userId) = GetCurrentUser();
+        var note = await _noteRepository.GetByIdAsync(input.NoteId, cancellationToken);
+        if (!IsOwner(note, companyId, userId))
+            return Json(new { ok = false, error = "Not bulunamadı." });
+
+        string? token = note!.ShareToken;
+        if (input.IsPublic && string.IsNullOrEmpty(token))
+            token = Guid.NewGuid().ToString("N"); // 32 hex char, 128-bit random
+
+        await _noteRepository.SetSharePublicAsync(input.NoteId, input.IsPublic, token, input.ShareIncludeAttachments, cancellationToken);
+
+        return Json(new { ok = true, shareToken = input.IsPublic ? token : note.ShareToken, shareIsPublic = input.IsPublic, shareIncludeAttachments = input.ShareIncludeAttachments });
+    }
+
+    /// <summary>Genel link ile not görüntüleme — login gerektirmez. cid=companyId, t=token.</summary>
+    [AllowAnonymous]
+    [HttpGet("/Notes/Public")]
+    public async Task<IActionResult> PublicShare(int cid, string t, CancellationToken cancellationToken)
+    {
+        if (cid <= 0 || string.IsNullOrWhiteSpace(t) || t.Length > 40)
+            return NotFound();
+
+        // Güvenlik başlıkları: token arama motoru tarafından indekslenmesin;
+        // harici linklere tıklanınca Referer ile token sızdırılmasın.
+        Response.Headers.Append("X-Robots-Tag", "noindex, nofollow");
+        Response.Headers.Append("Referrer-Policy", "no-referrer");
+        Response.Headers.Append("X-Frame-Options", "DENY");
+
+        // Company'ye ait per-company bağlantıyı direkt aç — HTTP context claim'e gerek yok
+        var connStr = _connectionFactory.ResolveConnectionStringForCompany(cid);
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(connStr);
+        await conn.OpenAsync(cancellationToken);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [Id], [CompanyId], [UserId], [Title], [Content], [Created], [Updated], [FolderId],
+                   [IsPinned], [IsFullyEncrypted], [EncryptionHint], [Tags],
+                   [linked_entity_type], [linked_entity_id], [linked_entity_label], [visibility],
+                   [share_token], [share_is_public], [share_include_attachments]
+            FROM [{_schema}].[notes]
+            WHERE [share_token] = @Token AND [share_is_public] = 1 AND [IsDeleted] = 0;
+            """;
+        cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Token", t));
+        Note? note = null;
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        if (await reader.ReadAsync(cancellationToken))
+        {
+            // Temel alanları manuel map et — içeriği şifre çözme servisiyle oku
+            var rawContent = reader.IsDBNull(4) ? string.Empty : reader.GetString(4);
+            note = new Note
+            {
+                Id                = reader.GetGuid(0),
+                CompanyId         = reader.GetInt32(1),
+                UserId            = reader.GetInt32(2),
+                Title             = reader.GetString(3),
+                Content           = _noteEncryption.Unprotect(rawContent) ?? string.Empty,
+                CreatedAt         = reader.GetDateTime(5),
+                UpdatedAt         = reader.GetDateTime(6),
+                FolderId          = reader.IsDBNull(7) ? null : reader.GetGuid(7),
+                IsPinned          = !reader.IsDBNull(8) && reader.GetBoolean(8),
+                IsFullyEncrypted  = !reader.IsDBNull(9) && reader.GetBoolean(9),
+                ShareToken               = reader.IsDBNull(16) ? null : reader.GetString(16),
+                ShareIsPublic            = !reader.IsDBNull(17) && reader.GetBoolean(17),
+                ShareIncludeAttachments  = !reader.IsDBNull(18) && reader.GetBoolean(18),
+            };
+        }
+
+        if (note == null) return NotFound();
+        if (note.IsFullyEncrypted) return View("PublicEncrypted", note);
+
+        // Not sahibinin adını çek
+        await using var ownerConn = new Microsoft.Data.SqlClient.SqlConnection(connStr);
+        await ownerConn.OpenAsync(cancellationToken);
+        await using var ownerCmd = ownerConn.CreateCommand();
+        ownerCmd.CommandText = $"SELECT [FullName] FROM [{_schema}].[Users] WHERE [Id] = @Id";
+        ownerCmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Id", note.UserId));
+        var ownerName = await ownerCmd.ExecuteScalarAsync(cancellationToken) as string;
+        ViewBag.OwnerName  = ownerName ?? "Bilinmeyen Kullanıcı";
+        ViewBag.CompanyId  = cid;
+        ViewBag.ShareToken = note.ShareToken;
+
+        // Ekler — sadece share_include_attachments = 1 ise yükle
+        if (note.ShareIncludeAttachments)
+        {
+            var attachments = await _attachmentRepository.GetByEntityAsync(NoteEntityType, note.Id.ToString(), cancellationToken);
+            ViewBag.Attachments = attachments
+                .Where(a => a.IsActive)
+                .Select(a => new { a.Id, a.FileName, a.FileSize, a.ContentType, a.Description })
+                .ToList();
+        }
+
+        return View("Public", note);
+    }
+
+    /// <summary>Herkese açık notta paylaşılan eki indir — login gerektirmez; share token + ek sahipliği doğrulanır.</summary>
+    [AllowAnonymous]
+    [HttpGet("/Notes/PublicAttachment")]
+    public async Task<IActionResult> PublicAttachment(int cid, string t, int aid, CancellationToken cancellationToken)
+    {
+        if (cid <= 0 || string.IsNullOrWhiteSpace(t) || t.Length > 40 || aid <= 0)
+            return NotFound();
+
+        // Token doğrula + share_include_attachments kontrolü
+        var connStr = _connectionFactory.ResolveConnectionStringForCompany(cid);
+        await using var conn = new SqlConnection(connStr);
+        await conn.OpenAsync(cancellationToken);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT [Id] FROM [{_schema}].[notes]
+            WHERE [share_token] = @Token AND [share_is_public] = 1 AND [share_include_attachments] = 1 AND [IsDeleted] = 0;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Token", t));
+        var noteIdObj = await cmd.ExecuteScalarAsync(cancellationToken);
+        if (noteIdObj is null) return NotFound();
+        var noteId = (Guid)noteIdObj;
+
+        // Ek bu nota ait mi?
+        var attachment = await _attachmentRepository.GetByIdAsync(aid, cancellationToken);
+        if (attachment is null || !attachment.IsActive) return NotFound();
+        if (attachment.EntityType != NoteEntityType || attachment.EntityId != noteId.ToString()) return NotFound();
+
+        var bytes = await _attachmentRepository.GetBinaryAsync(aid, cancellationToken);
+        if (bytes is null || bytes.Length == 0) return NotFound();
+
+        var contentType = attachment.ContentType ?? "application/octet-stream";
+        Response.Headers.Append("Content-Disposition", $"attachment; filename*=UTF-8''{Uri.EscapeDataString(attachment.FileName)}");
+        return File(bytes, contentType);
+    }
+
+    /// <summary>Mevcut notu kopyalar — aynı başlık + " (Kopya)", aynı içerik/klasör, isPinned=false, isFullyEncrypted=false.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CloneNoteJson([FromBody] CloneNoteRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var (companyId, userId) = GetCurrentUser();
+            var source = await _noteRepository.GetByIdAsync(req.NoteId, ct);
+            if (!IsOwner(source, companyId, userId))
+                return Json(new { ok = false, error = "Not bulunamadı veya erişim reddedildi." });
+
+            var clone = new Note
+            {
+                CompanyId        = companyId,
+                UserId           = userId,
+                FolderId         = source.FolderId,
+                Title            = source.Title + " (Kopya)",
+                Content          = source.Content,
+                IsPinned         = false,
+                IsFullyEncrypted = false,
+                EncryptionHint   = null,
+                Tags             = source.Tags,
+            };
+
+            await _noteRepository.SaveAsync(clone, ct);
+
+            return Json(new
+            {
+                ok   = true,
+                note = new
+                {
+                    id        = clone.Id,
+                    title     = clone.Title,
+                    content   = clone.Content,
+                    folderId  = clone.FolderId,
+                    createdAt = clone.CreatedAt,
+                    updatedAt = clone.UpdatedAt,
+                    tags      = clone.Tags,
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message });
+        }
+    }
+
+    /// <summary>Kayit baglantisi icin entity arama — type: Personnel | Machine | Contact | Document.</summary>
+    [HttpGet]
+    public async Task<IActionResult> EntitySearchJson(string type, string q, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+            return Json(Array.Empty<object>());
+
+        var search = q.Trim();
+        var results = await SearchEntitiesAsync(type, search, cancellationToken);
+        return Json(results);
+    }
+
+    private async Task<IEnumerable<object>> SearchEntitiesAsync(string type, string search, CancellationToken cancellationToken)
+    {
+        string? sql = type switch
+        {
+            "Personnel" => $"SELECT TOP 10 [Id], [FullName] AS [Label] FROM [{_schema}].[Personnel] WHERE [IsActive]=1 AND [FullName] LIKE '%'+@q+'%' ORDER BY [FullName]",
+            "Machine"   => $"SELECT TOP 10 [Id], [Name] AS [Label] FROM [{_schema}].[Machine] WHERE [IsActive]=1 AND [Name] LIKE '%'+@q+'%' ORDER BY [Name]",
+            "Contact"   => $"SELECT TOP 10 [Id], [AccountTitle] AS [Label] FROM [{_schema}].[Contact] WHERE [IsActive]=1 AND [AccountTitle] LIKE '%'+@q+'%' ORDER BY [AccountTitle]",
+            "Document"  => $"SELECT TOP 10 [Id], [DocumentNumber] AS [Label] FROM [{_schema}].[Document] WHERE [IsActive]=1 AND [DocumentNumber] LIKE '%'+@q+'%' ORDER BY [Created] DESC",
+            _           => null
+        };
+        if (sql == null) return Array.Empty<object>();
+
+        var list = new List<object>();
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.Parameters.Add(new SqlParameter("@q", search));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            list.Add(new { id = reader.GetInt32(0), label = reader.GetString(1) });
+        }
+        return list;
+    }
+
     public sealed record NoteIdInput(Guid Id);
     public sealed record DeleteNoteJsonInput(Guid Id);
+    public sealed record SetSharePublicInput(Guid NoteId, bool IsPublic, bool ShareIncludeAttachments = false);
     public sealed record TogglePinInput(Guid Id);
     public sealed record SaveFolderJsonInput(string Name, Guid? ParentFolderId);
     public sealed record RenameFolderJsonInput(Guid Id, string Name);
     public sealed record DeleteFolderJsonInput(Guid Id);
+    public sealed record CloneNoteRequest(Guid NoteId);
+    public sealed record SaveUserShareInput(Guid NoteId, int UserId, bool CanEdit = false);
+    public sealed record UpdateSharePermissionInput(Guid NoteId, Guid ShareId, bool CanEdit);
+    public sealed record RemoveUserShareInput(Guid NoteId, Guid ShareId);
+    public sealed record ReOcrNoteInput(Guid NoteId);
 
     private static IReadOnlyCollection<NoteFolderItem> FlattenFolders(IReadOnlyCollection<NoteFolder> folders)
     {
@@ -958,11 +1358,11 @@ public sealed class NotesController : Controller
         }
     }
 
-    private (int CompanyId, Guid UserId) GetCurrentUser()
+    private (int CompanyId, int UserId) GetCurrentUser()
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
         var companyIdStr = User.FindFirstValue("company_id") ?? string.Empty;
-        Guid.TryParse(userIdStr, out var userId);
+        int.TryParse(userIdStr, out var userId);
         int.TryParse(companyIdStr, out var companyId);
         return (companyId, userId);
     }
@@ -972,7 +1372,7 @@ public sealed class NotesController : Controller
     /// Ayni userId farkli sirketlerde bulunabilir (ileride multi-tenant userlar);
     /// dolayisiyla sadece UserId check'i yeterli degil.
     /// </summary>
-    private static bool IsOwner(Note? note, int companyId, Guid userId)
+    private static bool IsOwner(Note? note, int companyId, int userId)
         => note is not null && note.UserId == userId && note.CompanyId == companyId;
 }
 

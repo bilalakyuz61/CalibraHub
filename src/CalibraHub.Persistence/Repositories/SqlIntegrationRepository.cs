@@ -47,9 +47,10 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.CommandText = $"""
             SELECT [Id],[Name],[Description],[SourceFormCode],[TargetEndpointId],
                    [ErrorBehavior],[RetryCount],[IsActive],[VersionNo],
-                   [CreatedBy],[Created],[UpdatedBy],[Updated],
+                   [CreatedById],[Created],[UpdatedById],[Updated],
                    [PreProcedureName],[PreProcedureParamsJson],
-                   [PostProcedureName],[PostProcedureParamsJson]
+                   [PostProcedureName],[PostProcedureParamsJson],
+                   [SourceFilterJson],[AllowAsCascadeTarget]
             FROM {_integrationTable}
             {(includeInactive ? "" : "WHERE [IsActive] = 1")}
             ORDER BY [Name];
@@ -70,7 +71,10 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             cmd.CommandText = $"""
                 SELECT [Id],[Name],[Description],[SourceFormCode],[TargetEndpointId],
                        [ErrorBehavior],[RetryCount],[IsActive],[VersionNo],
-                       [CreatedBy],[Created],[UpdatedBy],[Updated]
+                       [CreatedById],[Created],[UpdatedById],[Updated],
+                       [PreProcedureName],[PreProcedureParamsJson],
+                       [PostProcedureName],[PostProcedureParamsJson],
+                       [SourceFilterJson]
                 FROM {_integrationTable}
                 WHERE [Id] = @Id;
                 """;
@@ -99,9 +103,10 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.CommandText = $"""
             SELECT i.[Id],i.[Name],i.[Description],i.[SourceFormCode],i.[TargetEndpointId],
                    i.[ErrorBehavior],i.[RetryCount],i.[IsActive],i.[VersionNo],
-                   i.[CreatedBy],i.[Created],i.[UpdatedBy],i.[Updated],
+                   i.[CreatedById],i.[Created],i.[UpdatedById],i.[Updated],
                    i.[PreProcedureName],i.[PreProcedureParamsJson],
-                   i.[PostProcedureName],i.[PostProcedureParamsJson]
+                   i.[PostProcedureName],i.[PostProcedureParamsJson],
+                   i.[SourceFilterJson],i.[AllowAsCascadeTarget]
             FROM {_integrationTable} i
             INNER JOIN {_triggerTable} t ON t.[IntegrationId] = i.[Id]
             WHERE i.[SourceFormCode] = @FormCode
@@ -127,9 +132,10 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.CommandText = $"""
             SELECT DISTINCT i.[Id],i.[Name],i.[Description],i.[SourceFormCode],i.[TargetEndpointId],
                    i.[ErrorBehavior],i.[RetryCount],i.[IsActive],i.[VersionNo],
-                   i.[CreatedBy],i.[Created],i.[UpdatedBy],i.[Updated],
+                   i.[CreatedById],i.[Created],i.[UpdatedById],i.[Updated],
                    i.[PreProcedureName],i.[PreProcedureParamsJson],
-                   i.[PostProcedureName],i.[PostProcedureParamsJson]
+                   i.[PostProcedureName],i.[PostProcedureParamsJson],
+                   i.[SourceFilterJson],i.[AllowAsCascadeTarget]
             FROM {_integrationTable} i
             INNER JOIN {_triggerTable} t ON t.[IntegrationId] = i.[Id]
             WHERE i.[IsActive] = 1
@@ -151,15 +157,17 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.CommandText = $"""
             INSERT INTO {_integrationTable}
               ([Name],[Description],[SourceFormCode],[TargetEndpointId],
-               [ErrorBehavior],[RetryCount],[IsActive],[VersionNo],[CreatedBy],
+               [ErrorBehavior],[RetryCount],[IsActive],[VersionNo],[CreatedById],
                [PreProcedureName],[PreProcedureParamsJson],
-               [PostProcedureName],[PostProcedureParamsJson])
+               [PostProcedureName],[PostProcedureParamsJson],
+               [SourceFilterJson],[AllowAsCascadeTarget])
             OUTPUT INSERTED.[Id]
             VALUES
               (@Name,@Description,@SourceFormCode,@TargetEndpointId,
-               @ErrorBehavior,@RetryCount,@IsActive,@VersionNo,@CreatedBy,
+               @ErrorBehavior,@RetryCount,@IsActive,@VersionNo,@CreatedById,
                @PreProcedureName,@PreProcedureParamsJson,
-               @PostProcedureName,@PostProcedureParamsJson);
+               @PostProcedureName,@PostProcedureParamsJson,
+               @SourceFilterJson,@AllowAsCascadeTarget);
             """;
         AddIntegrationParameters(cmd, integration);
         var newId = (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
@@ -184,7 +192,9 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 [PreProcedureParamsJson] = @PreProcedureParamsJson,
                 [PostProcedureName] = @PostProcedureName,
                 [PostProcedureParamsJson] = @PostProcedureParamsJson,
-                [UpdatedBy] = @UpdatedBy,
+                [SourceFilterJson] = @SourceFilterJson,
+                [AllowAsCascadeTarget] = @AllowAsCascadeTarget,
+                [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
             WHERE [Id] = @Id;
             """;
@@ -204,6 +214,40 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<IReadOnlyCollection<Integration>> ListCascadeTargetsAsync(
+        string? sourceFormCode, CancellationToken ct)
+    {
+        // 2026-05-22 Cascade: Wizard Step 2 "Bağımlılık" dropdown verisi.
+        // Aktif + AllowAsCascadeTarget=true filtre. Opsiyonel formCode kısıtı —
+        // parent integration kendi formuyla aynı form'a cascade etmeye genelde
+        // ihtiyaç duymaz, ama API caller (frontend) seçici filtre uygulayabilir.
+        // Aggregate children (mappings, triggers, endpoint) DOLDURULMAZ — performance.
+        var list = new List<Integration>();
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        var where = "[IsActive] = 1 AND [AllowAsCascadeTarget] = 1";
+        if (!string.IsNullOrWhiteSpace(sourceFormCode))
+        {
+            where += " AND [SourceFormCode] = @FormCode";
+            cmd.Parameters.Add(new SqlParameter("@FormCode", sourceFormCode));
+        }
+        cmd.CommandText = $"""
+            SELECT [Id],[Name],[Description],[SourceFormCode],[TargetEndpointId],
+                   [ErrorBehavior],[RetryCount],[IsActive],[VersionNo],
+                   [CreatedById],[Created],[UpdatedById],[Updated],
+                   [PreProcedureName],[PreProcedureParamsJson],
+                   [PostProcedureName],[PostProcedureParamsJson],
+                   [SourceFilterJson],[AllowAsCascadeTarget]
+            FROM {_integrationTable}
+            WHERE {where}
+            ORDER BY [Name];
+            """;
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(MapIntegration(reader));
+        return list;
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyCollection<IntegrationMapping>> GetMappingsAsync(int integrationId, CancellationToken ct)
@@ -215,7 +259,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             SELECT [Id],[IntegrationId],[TargetPath],[TargetDataType],[SourceType],
                    [SourceValue],[LookupSourceField],[DefaultValue],[FormatPattern],
                    [IsRequired],[SortOrder],[GroupKey],[SourceSection],
-                   [LookupFiltersJson],[LookupReturnColumn],[LookupParam]
+                   [LookupFiltersJson],[LookupReturnColumn],[LookupParam],
+                   [CascadeToIntegrationId]
             FROM {_mappingTable}
             WHERE [IntegrationId] = @IntegrationId
             ORDER BY [SortOrder], [Id];
@@ -250,11 +295,13 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                     INSERT INTO {_mappingTable}
                       ([IntegrationId],[TargetPath],[TargetDataType],[SourceType],[SourceValue],
                        [LookupSourceField],[DefaultValue],[FormatPattern],[IsRequired],[SortOrder],[GroupKey],
-                       [SourceSection],[LookupFiltersJson],[LookupReturnColumn],[LookupParam])
+                       [SourceSection],[LookupFiltersJson],[LookupReturnColumn],[LookupParam],
+                       [CascadeToIntegrationId])
                     VALUES
                       (@IntegrationId,@TargetPath,@TargetDataType,@SourceType,@SourceValue,
                        @LookupSourceField,@DefaultValue,@FormatPattern,@IsRequired,@SortOrder,@GroupKey,
-                       @SourceSection,@LookupFiltersJson,@LookupReturnColumn,@LookupParam);
+                       @SourceSection,@LookupFiltersJson,@LookupReturnColumn,@LookupParam,
+                       @CascadeToIntegrationId);
                     """;
                 ins.Parameters.Add(new SqlParameter("@IntegrationId", integrationId));
                 ins.Parameters.Add(new SqlParameter("@TargetPath", m.TargetPath));
@@ -272,6 +319,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 ins.Parameters.Add(new SqlParameter("@LookupFiltersJson",  (object?)m.LookupFiltersJson  ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@LookupReturnColumn", (object?)m.LookupReturnColumn ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@LookupParam",        (object?)m.LookupParam        ?? DBNull.Value));
+                ins.Parameters.Add(new SqlParameter("@CascadeToIntegrationId",
+                    (object?)m.CascadeToIntegrationId ?? DBNull.Value));
                 await ins.ExecuteNonQueryAsync(ct);
             }
 
@@ -354,7 +403,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[ApiProfileId],[Name],[HttpMethod],[UrlTemplate],[BodySchema],
-                   [Description],[IsActive],[CreatedBy],[Created],[UpdatedBy],[Updated]
+                   [Description],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_endpointTable}
             {(includeInactive ? "" : "WHERE [IsActive] = 1")}
             ORDER BY [Name];
@@ -372,7 +421,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[ApiProfileId],[Name],[HttpMethod],[UrlTemplate],[BodySchema],
-                   [Description],[IsActive],[CreatedBy],[Created],[UpdatedBy],[Updated]
+                   [Description],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_endpointTable}
             WHERE [ApiProfileId] = @ApiProfileId AND [IsActive] = 1
             ORDER BY [Name];
@@ -390,7 +439,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[ApiProfileId],[Name],[HttpMethod],[UrlTemplate],[BodySchema],
-                   [Description],[IsActive],[CreatedBy],[Created],[UpdatedBy],[Updated]
+                   [Description],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_endpointTable}
             WHERE [Id] = @Id;
             """;
@@ -406,11 +455,11 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.CommandText = $"""
             INSERT INTO {_endpointTable}
               ([ApiProfileId],[Name],[HttpMethod],[UrlTemplate],[BodySchema],
-               [Description],[IsActive],[CreatedBy])
+               [Description],[IsActive],[CreatedById])
             OUTPUT INSERTED.[Id]
             VALUES
               (@ApiProfileId,@Name,@HttpMethod,@UrlTemplate,@BodySchema,
-               @Description,@IsActive,@CreatedBy);
+               @Description,@IsActive,@CreatedById);
             """;
         AddEndpointParameters(cmd, endpoint);
         return (int)(await cmd.ExecuteScalarAsync(ct) ?? 0);
@@ -429,7 +478,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
                 [BodySchema] = @BodySchema,
                 [Description] = @Description,
                 [IsActive] = @IsActive,
-                [UpdatedBy] = @UpdatedBy,
+                [UpdatedById] = @UpdatedById,
                 [Updated] = SYSUTCDATETIME()
             WHERE [Id] = @Id;
             """;
@@ -457,12 +506,12 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             INSERT INTO {_runTable}
               ([IntegrationId],[TriggerType],[SourceRecordId],[StartedAt],[FinishedAt],
                [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
-               [ErrorMessage],[RetryAttempt],[TriggeredBy])
+               [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId])
             OUTPUT INSERTED.[Id]
             VALUES
               (@IntegrationId,@TriggerType,@SourceRecordId,@StartedAt,@FinishedAt,
                @DurationMs,@Status,@HttpStatusCode,@RequestBody,@ResponseBody,
-               @ErrorMessage,@RetryAttempt,@TriggeredBy);
+               @ErrorMessage,@RetryAttempt,@TriggeredBy,@ParentRunId);
             """;
         AddRunParameters(cmd, run);
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct) ?? 0L);
@@ -498,7 +547,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             SELECT TOP (@Limit)
                    [Id],[IntegrationId],[TriggerType],[SourceRecordId],[StartedAt],[FinishedAt],
                    [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
-                   [ErrorMessage],[RetryAttempt],[TriggeredBy]
+                   [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId]
             FROM {_runTable}
             WHERE [IntegrationId] = @IntegrationId
             ORDER BY [StartedAt] DESC, [Id] DESC;
@@ -519,7 +568,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             SELECT TOP 1
                    [Id],[IntegrationId],[TriggerType],[SourceRecordId],[StartedAt],[FinishedAt],
                    [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
-                   [ErrorMessage],[RetryAttempt],[TriggeredBy]
+                   [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId]
             FROM {_runTable}
             WHERE [IntegrationId] = @IntegrationId AND [SourceRecordId] = @SourceRecordId
             ORDER BY [StartedAt] DESC, [Id] DESC;
@@ -564,7 +613,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             SELECT TOP (@Limit)
                    [Id],[IntegrationId],[TriggerType],[SourceRecordId],[StartedAt],[FinishedAt],
                    [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
-                   [ErrorMessage],[RetryAttempt],[TriggeredBy]
+                   [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId]
             FROM {_runTable}
             WHERE {where}
             ORDER BY [StartedAt] DESC, [Id] DESC;
@@ -583,7 +632,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.CommandText = $"""
             SELECT [Id],[IntegrationId],[TriggerType],[SourceRecordId],[StartedAt],[FinishedAt],
                    [DurationMs],[Status],[HttpStatusCode],[RequestBody],[ResponseBody],
-                   [ErrorMessage],[RetryAttempt],[TriggeredBy]
+                   [ErrorMessage],[RetryAttempt],[TriggeredBy],[ParentRunId]
             FROM {_runTable}
             WHERE [Id] = @Id;
             """;
@@ -605,14 +654,16 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         RetryCount = r.GetInt32(r.GetOrdinal("RetryCount")),
         IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
         VersionNo = r.GetInt32(r.GetOrdinal("VersionNo")),
-        CreatedBy = r.IsDBNull(r.GetOrdinal("CreatedBy")) ? null : r.GetString(r.GetOrdinal("CreatedBy")),
+        CreatedById = SafeGetInt(r, "CreatedById"),
         Created = r.GetDateTime(r.GetOrdinal("Created")),
-        UpdatedBy = r.IsDBNull(r.GetOrdinal("UpdatedBy")) ? null : r.GetString(r.GetOrdinal("UpdatedBy")),
+        UpdatedById = SafeGetInt(r, "UpdatedById"),
         Updated = r.IsDBNull(r.GetOrdinal("Updated")) ? null : r.GetDateTime(r.GetOrdinal("Updated")),
         PreProcedureName        = SafeGetString(r, "PreProcedureName"),
         PreProcedureParamsJson  = SafeGetString(r, "PreProcedureParamsJson"),
         PostProcedureName       = SafeGetString(r, "PostProcedureName"),
         PostProcedureParamsJson = SafeGetString(r, "PostProcedureParamsJson"),
+        SourceFilterJson        = SafeGetString(r, "SourceFilterJson"),
+        AllowAsCascadeTarget    = SafeGetBool(r, "AllowAsCascadeTarget", defaultValue: true),
     };
 
     private static IntegrationMapping MapMapping(SqlDataReader r) => new()
@@ -633,6 +684,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         LookupFiltersJson  = SafeGetString(r, "LookupFiltersJson"),
         LookupReturnColumn = SafeGetString(r, "LookupReturnColumn"),
         LookupParam        = SafeGetString(r, "LookupParam"),
+        CascadeToIntegrationId = SafeGetInt(r, "CascadeToIntegrationId"),
     };
 
     private static string? SafeGetString(SqlDataReader r, string columnName)
@@ -643,6 +695,36 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             return r.IsDBNull(ord) ? null : r.GetString(ord);
         }
         catch (IndexOutOfRangeException) { return null; }   // kolon yok (eski schema)
+    }
+
+    private static bool SafeGetBool(SqlDataReader r, string columnName, bool defaultValue)
+    {
+        try
+        {
+            var ord = r.GetOrdinal(columnName);
+            return r.IsDBNull(ord) ? defaultValue : r.GetBoolean(ord);
+        }
+        catch (IndexOutOfRangeException) { return defaultValue; }
+    }
+
+    private static int? SafeGetInt(SqlDataReader r, string columnName)
+    {
+        try
+        {
+            var ord = r.GetOrdinal(columnName);
+            return r.IsDBNull(ord) ? null : r.GetInt32(ord);
+        }
+        catch (IndexOutOfRangeException) { return null; }
+    }
+
+    private static long? SafeGetInt64(SqlDataReader r, string columnName)
+    {
+        try
+        {
+            var ord = r.GetOrdinal(columnName);
+            return r.IsDBNull(ord) ? null : r.GetInt64(ord);
+        }
+        catch (IndexOutOfRangeException) { return null; }
     }
 
     private static IntegrationTrigger MapTrigger(SqlDataReader r) => new()
@@ -665,9 +747,9 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         BodySchema = r.IsDBNull(r.GetOrdinal("BodySchema")) ? null : r.GetString(r.GetOrdinal("BodySchema")),
         Description = r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description")),
         IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
-        CreatedBy = r.IsDBNull(r.GetOrdinal("CreatedBy")) ? null : r.GetString(r.GetOrdinal("CreatedBy")),
+        CreatedById = SafeGetInt(r, "CreatedById"),
         Created = r.GetDateTime(r.GetOrdinal("Created")),
-        UpdatedBy = r.IsDBNull(r.GetOrdinal("UpdatedBy")) ? null : r.GetString(r.GetOrdinal("UpdatedBy")),
+        UpdatedById = SafeGetInt(r, "UpdatedById"),
         Updated = r.IsDBNull(r.GetOrdinal("Updated")) ? null : r.GetDateTime(r.GetOrdinal("Updated")),
     };
 
@@ -687,6 +769,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         ErrorMessage = r.IsDBNull(r.GetOrdinal("ErrorMessage")) ? null : r.GetString(r.GetOrdinal("ErrorMessage")),
         RetryAttempt = r.GetInt32(r.GetOrdinal("RetryAttempt")),
         TriggeredBy = r.IsDBNull(r.GetOrdinal("TriggeredBy")) ? null : r.GetString(r.GetOrdinal("TriggeredBy")),
+        ParentRunId = SafeGetInt64(r, "ParentRunId"),
     };
 
     private static void AddIntegrationParameters(SqlCommand cmd, Integration integration)
@@ -700,8 +783,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.Parameters.Add(new SqlParameter("@RetryCount", integration.RetryCount));
         cmd.Parameters.Add(new SqlParameter("@IsActive", integration.IsActive));
         cmd.Parameters.Add(new SqlParameter("@VersionNo", integration.VersionNo));
-        cmd.Parameters.Add(new SqlParameter("@CreatedBy", (object?)integration.CreatedBy ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@UpdatedBy", (object?)integration.UpdatedBy ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)integration.CreatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)integration.UpdatedById ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PreProcedureName",
             (object?)integration.PreProcedureName ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PreProcedureParamsJson",
@@ -710,6 +793,9 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
             (object?)integration.PostProcedureName ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@PostProcedureParamsJson",
             (object?)integration.PostProcedureParamsJson ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@SourceFilterJson",
+            (object?)integration.SourceFilterJson ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@AllowAsCascadeTarget", integration.AllowAsCascadeTarget));
     }
 
     private static void AddEndpointParameters(SqlCommand cmd, IntegrationEndpoint endpoint)
@@ -721,8 +807,8 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.Parameters.Add(new SqlParameter("@BodySchema", (object?)endpoint.BodySchema ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Description", (object?)endpoint.Description ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@IsActive", endpoint.IsActive));
-        cmd.Parameters.Add(new SqlParameter("@CreatedBy", (object?)endpoint.CreatedBy ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@UpdatedBy", (object?)endpoint.UpdatedBy ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CreatedById", (object?)endpoint.CreatedById ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById", (object?)endpoint.UpdatedById ?? DBNull.Value));
     }
 
     private static void AddRunParameters(SqlCommand cmd, IntegrationRun run)
@@ -740,6 +826,7 @@ public sealed class SqlIntegrationRepository : IIntegrationRepository
         cmd.Parameters.Add(new SqlParameter("@ErrorMessage", (object?)run.ErrorMessage ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@RetryAttempt", run.RetryAttempt));
         cmd.Parameters.Add(new SqlParameter("@TriggeredBy", (object?)run.TriggeredBy ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@ParentRunId", (object?)run.ParentRunId ?? DBNull.Value));
     }
 
     private static T ParseEnum<T>(string s) where T : struct

@@ -4,15 +4,22 @@ public sealed record DocumentDto(
     int Id, string DocumentNumber, DateTime DocumentDate, DateTime? ValidUntil,
     int? ContactId, string? ContactName, string? ContactAddress,
     int? SalesRepId,
-    string Currency, decimal SubTotal, decimal DiscountRate, decimal DiscountAmount,
+    // CurrencyId DB'deki gercek FK; CurrencyCode/Symbol display alanlari (currencies JOIN'den)
+    int CurrencyId,
+    decimal SubTotal, decimal DiscountRate, decimal DiscountAmount,
     decimal TaxRate, decimal TaxAmount, decimal GrandTotal,
     string? PaymentTerms, string? DeliveryTerms, string? DeliveryAddress,
     string Status, int RevisionNo, int? ParentDocumentId, string? Notes,
-    string? CreatedBy, DateTime CreatedAt, DateTime UpdatedAt, bool IsActive,
+    int? CreatedById, DateTime CreatedAt, DateTime UpdatedAt, bool IsActive,
     string? ContactCode = null,
     int? DocumentTypeId = null,
     DateTime? DeliveryDate = null,        // Faz M — sipariş için talep edilen teslim tarihi
-    int? DeliveryDays = null);            // Faz M — teslim süresi (gün), DocumentDate'e eklenir
+    int? DeliveryDays = null,             // Faz M — teslim süresi (gün), DocumentDate'e eklenir
+    string? CurrencyCode = null,          // Display (TRY/USD/EUR) — currencies.code
+    string? CurrencySymbol = null,        // Display (₺/$/€) — currencies.symbol
+    // Talep Eden — Personnel.Id FK (İhtiyaç Kaydı).
+    int? RequesterPersonnelId = null,
+    string? RequesterPersonnelName = null);   // Personnel.FullName (JOIN ile gelir)
 
 /// <summary>
 /// DocumentLineDto — UI'a gonderilen satir goruntusu. ItemId + CombinationId tablodaki
@@ -32,7 +39,11 @@ public sealed record DocumentLineDto(
     // Revize zinciri — NULL ise orijinal satir, aksi halde revize edildigi satirin Id'si.
     int? RevisedFromId = null,
     // Kalem bazli kaynak iz — bu satir hangi kaynak satirdan turetildi (siparis clone'u).
-    int? SourceLineId = null);
+    int? SourceLineId = null,
+    // İhtiyaç Kaydı karşılama takip alanları (alis_talebi satırları için; diğerlerinde 0).
+    decimal FulfilledFromStock = 0m,
+    decimal FulfilledByPurchase = 0m,
+    int FulfillmentStatus = 0);
 
 public sealed record DocumentLineDetailDto(
     int Id, int QuoteLineId,
@@ -41,22 +52,38 @@ public sealed record DocumentLineDetailDto(
 
 public sealed record DocumentListItemDto(
     int Id, string DocumentNumber, DateTime DocumentDate, DateTime? ValidUntil,
-    string? ContactName, string Currency, decimal GrandTotal,
+    string? ContactName,
+    int CurrencyId,
+    decimal GrandTotal,
     string Status, int RevisionNo, bool IsActive, int LineCount,
     int? ContactId = null,
-    int? DocumentTypeId = null);
+    int? DocumentTypeId = null,
+    string? CurrencyCode = null,
+    string? CurrencySymbol = null,
+    // Talep Eden — Personnel.Id FK (İhtiyaç Kaydı liste kartları).
+    int? RequesterPersonnelId = null,
+    string? RequesterPersonnelName = null,
+    // İhtiyaç Kaydı satır karşılama özeti (alis_talebi listesi için; diğerlerinde 0).
+    int FulfillPending = 0,
+    int FulfillPartial = 0,
+    int FulfillFull = 0);
 
 public sealed record SaveDocumentRequest(
     int? Id, DateTime DocumentDate, DateTime? ValidUntil,
     int? ContactId, string? ContactName, string? ContactAddress,
     int? SalesRepId,
-    string Currency, decimal DiscountRate, decimal TaxRate,
+    int CurrencyId, decimal DiscountRate, decimal TaxRate,
     string? PaymentTerms, string? DeliveryTerms, string? DeliveryAddress,
     string? Notes, IReadOnlyCollection<SaveDocumentLineRequest> Lines,
     string? ContactCode = null,
     int? DocumentTypeId = null,
     DateTime? DeliveryDate = null,        // Faz M — sipariş için
-    int? DeliveryDays = null);            // Faz M — teslim süresi (gün)
+    int? DeliveryDays = null,             // Faz M — teslim süresi (gün)
+    // Talep Eden — Personnel.Id FK (İhtiyaç Kaydı).
+    int? RequesterPersonnelId = null,
+    // Kaynak İhtiyaç Kaydı ID'si — teklif/sipariş bu İhtiyaç'tan türetiliyorsa set edilir.
+    // Yeni belge kaydedilince document_source köprüsü otomatik eklenir.
+    int? FromRequestId = null);
 
 /// <summary>
 /// Client'tan gelen kayit istegi. ItemId zorunludur — malzeme kodu/adi tabloda tutulmaz,

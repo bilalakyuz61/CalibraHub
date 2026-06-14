@@ -8,23 +8,26 @@ namespace CalibraHub.Application.Services;
 /// <summary>
 /// Cari grup service — kullanici Kod girmez (CLAUDE.md "kod alani yok kurali").
 /// Code Name'den auto-turetilir (truncate + unique fallback).
-/// Uniqueness ad uzerinden (per-company).
+/// Uniqueness ad uzerinden (per-company + kategori).
+/// 5 kategorili yapi: MaterialGroups deseninin ayni — kategori 1 default (legacy).
 /// </summary>
 public sealed class CariGroupService : ICariGroupService
 {
     private readonly ICariGroupRepository _repo;
     public CariGroupService(ICariGroupRepository repo) => _repo = repo;
 
-    public async Task<IReadOnlyCollection<CariGroupDto>> GetAllAsync(CancellationToken ct)
+    public Task<IReadOnlyCollection<CariGroupDto>> GetAllAsync(CancellationToken ct) => GetAllAsync(null, ct);
+
+    public async Task<IReadOnlyCollection<CariGroupDto>> GetAllAsync(int? category, CancellationToken ct)
     {
-        var all = await _repo.GetAllAsync(ct);
-        return all.Select(x => new CariGroupDto(x.Id, x.Code, x.Name, x.SortOrder, x.IsActive)).ToArray();
+        var all = await _repo.GetAllAsync(category, ct);
+        return all.Select(x => new CariGroupDto(x.Id, x.Code, x.Name, x.SortOrder, x.IsActive, x.GroupCategory)).ToArray();
     }
 
     public async Task<CariGroupDto?> GetByIdAsync(int id, CancellationToken ct)
     {
         var e = await _repo.GetByIdAsync(id, ct);
-        return e is null ? null : new CariGroupDto(e.Id, e.Code, e.Name, e.SortOrder, e.IsActive);
+        return e is null ? null : new CariGroupDto(e.Id, e.Code, e.Name, e.SortOrder, e.IsActive, e.GroupCategory);
     }
 
     public async Task<(bool Success, string? Error, int? Id)> CreateAsync(CreateCariGroupRequest request, CancellationToken ct)
@@ -33,13 +36,16 @@ public sealed class CariGroupService : ICariGroupService
         if (string.IsNullOrEmpty(name))
             return (false, "Grup adi bos olamaz.", null);
 
-        // Ad uniqueness — per-company (repo zaten CompanyId'ye gore tarar)
-        var all = await _repo.GetAllAsync(ct);
-        if (all.Any(x => x.Name.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)))
-            return (false, $"Ayni isimde baska bir cari grup zaten tanimli: '{name}'", null);
+        var category = NormalizeCategory(request.GroupCategory);
+
+        // Ad uniqueness — per-company + kategori (ayni adli grup farkli kategoride olabilir)
+        var allInCategory = await _repo.GetAllAsync(category, ct);
+        if (allInCategory.Any(x => x.Name.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)))
+            return (false, $"Ayni isimde baska bir cari grup zaten tanimli (Kategori {category}): '{name}'", null);
 
         // Code auto-derive: Name'i 50 karaktere kirp; cakisma durumunda fallback
-        var code = DeriveCode(name, all.Select(x => x.Code));
+        // Code uniqueness kontrolu kategori scope'unda yeterli (ux index per-category)
+        var code = DeriveCode(name, allInCategory.Select(x => x.Code));
 
         var newId = await _repo.AddAsync(new CariGroup
         {
@@ -47,6 +53,7 @@ public sealed class CariGroupService : ICariGroupService
             Name = name,
             SortOrder = request.SortOrder,
             IsActive = request.IsActive,
+            GroupCategory = category,
         }, ct);
 
         return (true, null, newId);
@@ -61,21 +68,24 @@ public sealed class CariGroupService : ICariGroupService
         var existing = await _repo.GetByIdAsync(request.Id, ct);
         if (existing is null) return (false, "Cari grup bulunamadi.");
 
-        var all = await _repo.GetAllAsync(ct);
-        if (all.Any(x => x.Id != request.Id &&
+        var category = NormalizeCategory(request.GroupCategory);
+
+        var allInCategory = await _repo.GetAllAsync(category, ct);
+        if (allInCategory.Any(x => x.Id != request.Id &&
                          x.Name.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)))
-            return (false, $"Ayni isimde baska bir cari grup zaten tanimli: '{name}'");
+            return (false, $"Ayni isimde baska bir cari grup zaten tanimli (Kategori {category}): '{name}'");
 
         // Update: Code'u koru (eski referanslar bozulmasin)
         var updated = new CariGroup
         {
-            Id        = existing.Id,
-            CompanyId = existing.CompanyId,
-            Code      = existing.Code,
-            Name      = name,
-            SortOrder = request.SortOrder,
-            IsActive  = request.IsActive,
-            CreatedAt = existing.CreatedAt,
+            Id            = existing.Id,
+            CompanyId     = existing.CompanyId,
+            Code          = existing.Code,
+            Name          = name,
+            SortOrder     = request.SortOrder,
+            IsActive      = request.IsActive,
+            GroupCategory = category,
+            Created       = existing.Created,
         };
         await _repo.UpdateAsync(updated, ct);
         return (true, null);
@@ -87,6 +97,20 @@ public sealed class CariGroupService : ICariGroupService
         if (existing is null) return (false, "Cari grup bulunamadi.");
         await _repo.DeleteAsync(id, ct);
         return (true, null);
+    }
+
+    public Task<IReadOnlyDictionary<int, IReadOnlyList<ContactGroupMappingDto>>> GetContactGroupMappingsBatchAsync(
+        IReadOnlyCollection<int> contactIds, CancellationToken ct)
+        => _repo.GetContactGroupMappingsBatchAsync(contactIds, ct);
+
+    public Task SaveContactGroupMappingsAsync(int contactId, IReadOnlyCollection<(int Slot, string Code)> mappings, CancellationToken ct)
+        => _repo.SaveContactGroupMappingsAsync(contactId, mappings, ct);
+
+    private static int NormalizeCategory(int category)
+    {
+        if (category < 1) return 1;
+        if (category > 5) return 5;
+        return category;
     }
 
     private static string DeriveCode(string name, IEnumerable<string> existingCodes)

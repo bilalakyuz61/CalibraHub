@@ -1,5 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
+using CalibraHub.Web.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,6 +22,7 @@ namespace CalibraHub.Web.Controllers;
 /// gosteriliyor — view ViewBag uzerinden config'i okur).
 /// </summary>
 [Authorize]
+[PermissionScope(FormCodes.CompanySettings)]
 public sealed class WhatsAppAdminController : Controller
 {
     [HttpPost("/Admin/WhatsApp/Save")]
@@ -28,7 +31,7 @@ public sealed class WhatsAppAdminController : Controller
         [FromServices] IWhatsAppService whatsAppService,
         int provider, string? accessToken, string? phoneNumberId,
         string? businessAccountId, string? webhookVerifyToken,
-        string? webQrBridgeUrl, bool isEnabled, bool? respectQuietHours, CancellationToken ct)
+        string? webQrBridgeUrl, bool isEnabled, CancellationToken ct)
     {
         // Provider seçimi: 0=CloudApi, 1=WebQr
         var existing = await whatsAppService.GetConfigAsync(ct);
@@ -64,19 +67,6 @@ public sealed class WhatsAppAdminController : Controller
 
         await configRepo.SaveAsync(cfg, ct);
 
-        // Safety Rules — sessiz saatler toggle'i (opsiyonel, sadece bool gelirse guncelle)
-        if (respectQuietHours.HasValue)
-        {
-            var safetyRepo = HttpContext.RequestServices.GetRequiredService<IWhatsAppSafetyRulesRepository>();
-            var rules = await safetyRepo.GetAsync(ct);
-            if (rules is not null && rules.RespectQuietHours != respectQuietHours.Value)
-            {
-                rules.RespectQuietHours = respectQuietHours.Value;
-                rules.UpdatedAt = DateTime.UtcNow;
-                await safetyRepo.SaveAsync(rules, ct);
-            }
-        }
-
         return Json(new { success = true, message = "Yapılandırma kaydedildi." });
     }
 
@@ -100,7 +90,10 @@ public sealed class WhatsAppAdminController : Controller
         [FromServices] IWhatsAppService whatsAppService,
         string toPhone, string message, CancellationToken ct)
     {
-        var result = await whatsAppService.SendTextMessageAsync(toPhone ?? "", message ?? "", ct);
+        // 2026-05-23 fix: Şirket Ayarları "Test Mesajı Gönder" butonu kullanıcının elle
+        // tetiklediği manuel bir çağrı — insan-benzeri 3-15sn rastgele gecikme uygulanmasın
+        // (interactive=true). Aksi halde admin test ederken sebepsiz bekletme yaşar.
+        var result = await whatsAppService.SendTextMessageAsync(toPhone ?? "", message ?? "", ct, interactive: true);
         return Json(new { success = result.Success, message = result.Message, messageId = result.MessageId });
     }
 

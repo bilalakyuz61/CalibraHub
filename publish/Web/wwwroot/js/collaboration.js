@@ -232,11 +232,21 @@
         actions.append(messageButton);
         banner.append(body, actions);
 
-        const toolbar = context.card?.querySelector(".entity-form-toolbar");
-        if (toolbar instanceof HTMLElement) {
-            toolbar.appendChild(banner);
+        // Banner host secimi (oncelik sirasi):
+        //   1) [data-collaboration-banner-host] — sayfanin onerdigi konum
+        //   2) .entity-form-toolbar — entity formlarinin klasik toolbar'i
+        //   3) Hidden marker form senaryosu icin: form'un ust kismina degil,
+        //      sabit pozisyonlu kompakt overlay olarak en uste tutturulur.
+        const explicitHost = document.querySelector("[data-collaboration-banner-host]");
+        const legacyToolbar = context.card?.querySelector(".entity-form-toolbar");
+        if (explicitHost instanceof HTMLElement) {
+            explicitHost.appendChild(banner);
+        } else if (legacyToolbar instanceof HTMLElement) {
+            legacyToolbar.appendChild(banner);
         } else {
-            context.form.insertAdjacentElement("beforebegin", banner);
+            // Hidden marker form: banner'i kompakt overlay olarak konumla
+            banner.classList.add("collaboration-lock-banner--floating");
+            document.body.appendChild(banner);
         }
 
         context.banner = banner;
@@ -246,16 +256,86 @@
         return banner;
     };
 
+    // Salt-okunur modda DOKUNULMAYACAK (whitelist) elemanlari belirleyen kurallar.
+    // React-rendered marker form senaryosunda butun sayfayi kapsariz — ama bu cogu
+    // sayfada navigasyon/sidebar/tablar gibi guvenli alanlari da disable etmek
+    // anlamina geliyor. Whitelist bu yan etkiyi engeller: cikis butonlari, tab
+    // navigasyonu, ana menu vb. salt-okunur modda dahi calismaya devam eder.
+    const isWhitelistedFromLock = (el) => {
+        if (el.hasAttribute("data-collaboration-allow")) return true;
+        if (el.closest(".collaboration-lock-banner")) return true;
+
+        // Ana navigasyon / topbar / sidebar / tab shell
+        if (el.closest("nav.side-nav, .app-sidebar, .admin-sidebar, .app-topbar, .navbar, " +
+                       ".workspace-tabs, .workspace-action-bar, [data-collaboration-allow-scope]")) return true;
+
+        // ARIA tab pattern — role="tab" veya parent role="tablist"
+        // NOT: role="menuitem"/"menu" whitelist DEGIL — yazma aksiyonu olabilir.
+        const role = el.getAttribute("role");
+        if (role === "tab") return true;
+        if (el.closest('[role="tablist"]')) return true;
+
+        // Sayfa-ici section/tab navigasyon butonlari — yaygin attribute/class pattern'leri
+        if (el.hasAttribute("data-nav-target") || el.closest("[data-nav-target]")) return true;
+        if (el.hasAttribute("data-tab") || el.closest("[data-tab]")) return true;
+
+        // Class pattern: *-tab-btn, *-nav-btn, *-section-btn (universal navigasyon adlandirma)
+        const cls = (el.className || "").toString().toLowerCase();
+        if (/(^|\s|-)(tab|nav|section|side|sidebar)-?btn(\s|$|-)/i.test(cls)) return true;
+        if (/(^|\s)(tab|nav|section)-button(\s|$)/i.test(cls)) return true;
+
+        // Data-* attribute pattern: data-*-tab-btn, data-*-tab-target (sqe-tab-btn benzeri)
+        for (const attr of el.attributes) {
+            const name = attr.name.toLowerCase();
+            if (name.startsWith("data-") && (
+                name.endsWith("-tab-btn") || name.endsWith("-tab") || name.endsWith("-tab-target") ||
+                name.endsWith("-nav") || name.endsWith("-nav-target") || name.endsWith("-section"))) {
+                return true;
+            }
+        }
+
+        // Geri/Liste/Iptal butonlari — id veya class pattern
+        const idAttr = (el.id || "").toLowerCase();
+        if (idAttr.endsWith("backbtn") || idAttr.endsWith("listbtn") || idAttr.endsWith("cancelbtn")
+            || idAttr.endsWith("listebtn") || idAttr.endsWith("listeyebtn")) return true;
+        if (/(^|\s|-)(back|cancel|liste|geri)-?btn(\s|$|-)/i.test(cls)) return true;
+
+        // Geri/Liste linkleri (a tag) — "Listeye Don" gibi
+        if (el.tagName === "A" || el.tagName === "a") return true; // <a> linkler navigasyon kabul edilir
+
+        // Sol sidebar section tablari (id "nav" geciyorsa, mceNavGeneral vb.)
+        if (idAttr.includes("nav")) return true;
+
+        return false;
+    };
+
     const getInteractiveElements = (context) => {
+        const hasExplicitMarker = !!(
+            context.form.dataset.collaborationRecordType &&
+            context.form.dataset.collaborationRecordId);
+
+        if (hasExplicitMarker) {
+            // React-rendered + hidden marker senaryosu: tum sayfayi kapsa, whitelist ile koru.
+            // Kullanici hicbir form widget'iyla etkilesemez (Kaydet, Sil, dropdown, Ekle, Kaldir,
+            // radio, switch, vb. hepsi disable). Whitelist'teki elemanlar (Liste, sol tablar,
+            // banner butonu, ana menu) hala calisir.
+            return Array.from(document.body.querySelectorAll("input, select, textarea, button"))
+                .filter((el) => {
+                    if (!(el instanceof HTMLElement)) return false;
+                    if (el instanceof HTMLInputElement && el.type === "hidden") return false;
+                    if (isWhitelistedFromLock(el)) return false;
+                    return true;
+                });
+        }
+
+        // Klasik (form-icinde-input) senaryo: form ve toolbar control'leri.
         const formControls = Array.from(context.form.querySelectorAll("input, select, textarea, button"))
             .filter((element) => {
-                if (!(element instanceof HTMLElement)) {
-                    return false;
-                }
-                if (element instanceof HTMLInputElement && element.type === "hidden") {
-                    return false;
-                }
-                return !element.hasAttribute("data-collaboration-allow");
+                if (!(element instanceof HTMLElement)) return false;
+                if (element instanceof HTMLInputElement && element.type === "hidden") return false;
+                if (element.hasAttribute("data-collaboration-allow")) return false;
+                if (element.closest(".collaboration-lock-banner")) return false;
+                return true;
             });
 
         const toolbarControls = Array.from((context.card ?? context.form).querySelectorAll(".entity-form-toolbar button, .entity-form-toolbar input"))
@@ -264,28 +344,80 @@
         return [...formControls, ...toolbarControls];
     };
 
+    const disableOne = (element) => {
+        if (!(element instanceof HTMLInputElement ||
+              element instanceof HTMLButtonElement ||
+              element instanceof HTMLSelectElement ||
+              element instanceof HTMLTextAreaElement)) {
+            return;
+        }
+        if (!element.disabled) {
+            element.dataset.collaborationDisabledByLock = "1";
+            element.disabled = true;
+        }
+    };
+
+    const enableOne = (element) => {
+        if (!(element instanceof HTMLInputElement ||
+              element instanceof HTMLButtonElement ||
+              element instanceof HTMLSelectElement ||
+              element instanceof HTMLTextAreaElement)) {
+            return;
+        }
+        if (element.dataset.collaborationDisabledByLock === "1") {
+            element.disabled = false;
+            delete element.dataset.collaborationDisabledByLock;
+        }
+    };
+
     const setReadOnlyState = (context, readOnly) => {
-        getInteractiveElements(context).forEach((element) => {
-            if (!(element instanceof HTMLInputElement ||
-                element instanceof HTMLButtonElement ||
-                element instanceof HTMLSelectElement ||
-                element instanceof HTMLTextAreaElement)) {
-                return;
-            }
+        if (readOnly) {
+            getInteractiveElements(context).forEach(disableOne);
+            // Body class — CSS taraftan ek gorsel feedback (cursor:not-allowed vs.)
+            document.body.classList.add("collaboration-locked-by-other");
+            startReadOnlyObserver(context);
+        } else {
+            // Re-enable: hem mevcut DOM'u tara, hem onceden lock ile disable edilmis
+            // ama artik DOM'da olmayan elemanlari atla (dataset attribute zaten silinmis olur).
+            Array.from(document.body.querySelectorAll('[data-collaboration-disabled-by-lock="1"]'))
+                .forEach(enableOne);
+            getInteractiveElements(context).forEach(enableOne);
+            document.body.classList.remove("collaboration-locked-by-other");
+            stopReadOnlyObserver(context);
+        }
+    };
 
-            if (readOnly) {
-                if (!element.disabled) {
-                    element.dataset.collaborationDisabledByLock = "1";
-                    element.disabled = true;
+    // Sayfa-ici dinamik elemanlar (React render, "Ekle" ile yeni satir vb.) icin observer.
+    // Salt-okunur modda yeni eklenen input/button'lari da otomatik disable et.
+    const startReadOnlyObserver = (context) => {
+        if (context.readOnlyObserver) return;
+
+        const observer = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                for (const node of m.addedNodes) {
+                    if (!(node instanceof HTMLElement)) continue;
+                    // Eklenen alt agacta input/select/textarea/button bul ve disable et
+                    const candidates = node.matches?.("input, select, textarea, button")
+                        ? [node]
+                        : Array.from(node.querySelectorAll?.("input, select, textarea, button") || []);
+                    candidates.forEach((el) => {
+                        if (!(el instanceof HTMLElement)) return;
+                        if (el instanceof HTMLInputElement && el.type === "hidden") return;
+                        if (isWhitelistedFromLock(el)) return;
+                        disableOne(el);
+                    });
                 }
-                return;
-            }
-
-            if (element.dataset.collaborationDisabledByLock === "1") {
-                element.disabled = false;
-                delete element.dataset.collaborationDisabledByLock;
             }
         });
+        observer.observe(document.body, { childList: true, subtree: true });
+        context.readOnlyObserver = observer;
+    };
+
+    const stopReadOnlyObserver = (context) => {
+        if (context.readOnlyObserver) {
+            context.readOnlyObserver.disconnect();
+            context.readOnlyObserver = null;
+        }
     };
 
     const applyLockState = (context, lockInfo) => {
@@ -334,7 +466,8 @@
         setReadOnlyState(context, true);
     };
 
-    const buildTrackedForms = () => Array.from(document.querySelectorAll("form.integrator-form"))
+    const buildTrackedForms = () => {
+        return Array.from(document.querySelectorAll("form.integrator-form"))
         .filter((form) => !form.closest(".integrator-inline-form"))
         .map((form) => {
             if (!(form instanceof HTMLFormElement)) {
@@ -368,12 +501,34 @@
                 acquireLock(context);
             };
 
+            // Form'un kendi event'leri (klasik HTML form senaryosu)
             form.addEventListener("focusin", acquireIfNeeded);
             form.addEventListener("input", acquireIfNeeded);
             form.addEventListener("change", acquireIfNeeded);
+
+            // React-rendered ekranlar icin: marker form display:none ve icinde input yok,
+            // bu yuzden form-level event'ler hic firelmaz. Marker'lara explicit
+            // data-collaboration-record-* attribute'lari vardir; bunlari document-level
+            // event'le yakaliyoruz — sayfada herhangi bir kullanici eylemi (tikla/yaz/odakla)
+            // tetiklendiginde marker'in kilidini almaya calisiyoruz. Bu, ITEM_EDIT/SALES_QUOTE_EDIT
+            // gibi React/JSX render edilen, native <input>/<select> ICERMEYEN custom widget'lara
+            // sahip sayfalar icin gereklidir. `acquireIfNeeded` icindeki gate (lockMode/inFlight)
+            // ayni kilidi tekrar tekrar talep etmemizi engeller.
+            const hasExplicitMarker =
+                !!(form.dataset.collaborationRecordType && form.dataset.collaborationRecordId);
+            if (hasExplicitMarker) {
+                const docAcquire = () => acquireIfNeeded();
+                document.addEventListener("focusin",  docAcquire);
+                document.addEventListener("input",    docAcquire);
+                document.addEventListener("change",   docAcquire);
+                document.addEventListener("click",    docAcquire);
+                document.addEventListener("keydown",  docAcquire);
+            }
+
             return context;
         })
         .filter((context) => context !== null);
+    };
 
     const persistState = () => {
         writeJson(conversationsStorageKey, state.conversations);
@@ -699,9 +854,10 @@
             updateConnectionStatus(ui.statusConnecting);
             await connection.start();
             updateConnectionStatus(ui.statusConnected);
-            if (state.hadDisconnect && typeof window.showToast === "function") {
-                window.showToast({ type: "success", message: ui.connectionRestoredToast, duration: 2500 });
-            }
+            // 2026-05-25 (UX): "tekrar kuruldu" success toast'u kaldirildi — sik server
+            // restart / iframe sleep / WebSocket idle timeout senaryolarinda asiri tetikleniyordu.
+            // Status indicator (durum noktasi) zaten gorsel feedback veriyor; "kesildi" warning
+            // tetiklendigi zaman kullanici bilgilendiriliyor, "kuruldu" gereksiz tekrar.
             state.hadDisconnect = false;
             await subscribeToRecords();
             await sendHeartbeat();

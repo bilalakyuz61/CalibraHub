@@ -17,11 +17,11 @@ public interface IIntegrationLookupFunctionDefinitionRepository
     /// <summary>Code uniqueness check (Save oncesi). Mevcut Id verirsen onu hesaba katar.</summary>
     Task<bool> CodeExistsAsync(string code, int? excludeId, CancellationToken ct);
 
-    Task<int> InsertAsync(IntegrationLookupFunctionDefinition entity, string? userName, CancellationToken ct);
-    Task UpdateAsync(IntegrationLookupFunctionDefinition entity, string? userName, CancellationToken ct);
+    Task<int> InsertAsync(IntegrationLookupFunctionDefinition entity, int? userId, CancellationToken ct);
+    Task UpdateAsync(IntegrationLookupFunctionDefinition entity, int? userId, CancellationToken ct);
 
     /// <summary>Soft delete — IsActive=0. Hard delete admin override icin DeleteHard.</summary>
-    Task SoftDeleteAsync(int id, string? userName, CancellationToken ct);
+    Task SoftDeleteAsync(int id, int? userId, CancellationToken ct);
     Task DeleteHardAsync(int id, CancellationToken ct);
 
     /// <summary>

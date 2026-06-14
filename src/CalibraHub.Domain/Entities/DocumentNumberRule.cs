@@ -64,9 +64,9 @@ public sealed class DocumentNumberRule
     public int Weight { get; set; }
 
     public bool IsActive { get; set; } = true;
-    public string? CreatedBy { get; set; }
+    public int? CreatedById { get; set; }
     public DateTime Created { get; init; } = DateTime.UtcNow;
-    public string? UpdatedBy { get; set; }
+    public int? UpdatedById { get; set; }
     public DateTime? Updated { get; set; }
 }
 

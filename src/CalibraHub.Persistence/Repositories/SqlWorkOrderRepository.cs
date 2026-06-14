@@ -1,4 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
@@ -15,13 +17,15 @@ namespace CalibraHub.Persistence.Repositories;
 public sealed class SqlWorkOrderRepository : IWorkOrderRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
+    private readonly IDataVisibilityFilter _dvFilter;
     private readonly string _schema;
     private readonly string _woTable;
     private readonly string _srcTable;
 
-    public SqlWorkOrderRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options)
+    public SqlWorkOrderRepository(SqlServerConnectionFactory factory, CalibraDatabaseOptions options, IDataVisibilityFilter dvFilter)
     {
         _connectionFactory = factory;
+        _dvFilter = dvFilter;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         var s = _schema.Replace("]", "]]");
         _woTable = $"[{s}].[WorkOrder]";
@@ -34,26 +38,30 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         var statusFilter = status.HasValue ? "AND w.[Status] = @Status" : "";
+        // Satır görünürlük kuralları (row-level security) — alan-değer-operatör kısıtları.
+        var dv = await _dvFilter.BuildAsync(FormCodes.WorkOrders, "w", "Id", ct);
         cmd.CommandText = $@"
             SELECT w.[Id], w.[OrderNumber], w.[OrderDate], w.[ItemId],
                    i.[Code] AS ItemCode, i.[Name] AS ItemName,
                    w.[ConfigId], w.[PlannedQuantity], w.[ProducedQuantity],
-                   w.[UnitId], u.[UnitCode] AS UnitCode,
+                   w.[UnitId], u.[Code] AS UnitCode,
                    w.[Status], w.[Priority],
                    w.[PlannedStartDate], w.[PlannedEndDate],
-                   w.[AssignedUserId], usr.[full_name] AS AssignedUserName,
+                   w.[AssignedUserId], usr.[FullName] AS AssignedUserName,
                    w.[RevisionNo],
                    w.[AssignedPersonnelId], ap.[FullName] AS AssignedPersonnelName
             FROM {_woTable} w
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = w.[UnitId]
-            LEFT JOIN [{_schema}].[User] usr ON usr.[id] = w.[AssignedUserId]
+            LEFT JOIN [{_schema}].[Users] usr ON usr.[Id] = w.[AssignedUserId]
             LEFT JOIN [{_schema}].[Personnel] ap ON ap.[Id] = w.[AssignedPersonnelId]
             WHERE w.[CompanyId] = @CompanyId AND w.[IsActive] = 1
             {statusFilter}
+            {dv.Sql}
             ORDER BY w.[OrderDate] DESC, w.[Id] DESC;";
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         if (status.HasValue) cmd.Parameters.AddWithValue("@Status", (byte)status.Value);
+        foreach (var prm in dv.Parameters) cmd.Parameters.AddWithValue(prm.Name, prm.Value);
 
         var list = new List<WorkOrderListItemDto>();
         await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -75,7 +83,7 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 Priority: (WorkOrderPriority)r.GetByte(12),
                 PlannedStartDate: r.IsDBNull(13) ? null : r.GetDateTime(13),
                 PlannedEndDate: r.IsDBNull(14) ? null : r.GetDateTime(14),
-                AssignedUserId: r.IsDBNull(15) ? null : r.GetGuid(15),
+                AssignedUserId: r.IsDBNull(15) ? null : r.GetInt32(15),
                 AssignedUserName: r.IsDBNull(16) ? null : r.GetString(16),
                 RevisionNo: r.GetInt32(17),
                 AssignedPersonnelId: r.FieldCount > 18 && !r.IsDBNull(18) ? r.GetInt32(18) : null,
@@ -97,25 +105,30 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                        w.[ItemId], i.[Code] AS ItemCode, i.[Name] AS ItemName,
                        w.[ConfigId],
                        w.[PlannedQuantity], w.[ProducedQuantity], w.[ScrapQuantity],
-                       w.[UnitId], u.[UnitCode],
+                       w.[UnitId], u.[Code] AS UnitCode,
                        w.[PlannedStartDate], w.[PlannedEndDate],
                        w.[ActualStartDate], w.[ActualEndDate],
                        w.[Status], w.[Priority],
-                       w.[AssignedUserId], usr.[full_name],
+                       w.[AssignedUserId], usr.[FullName],
                        w.[WarehouseLocationId], loc.[LocationCode],
                        w.[RevisionNo], w.[ParentWorkOrderId], w.[RevisedFromId],
                        w.[RoutingId], rt.[Code] AS RoutingCode, rt.[Name] AS RoutingName,
-                       w.[DefaultMachineId], dm.[MachineCode] AS DefaultMachineCode, dm.[MachineName] AS DefaultMachineName,
+                       w.[DefaultMachineId], dm.[Code] AS DefaultMachineCode, dm.[Name] AS DefaultMachineName,
                        w.[AssignedPersonnelId], ap.[FullName] AS AssignedPersonnelName,
-                       w.[Notes], w.[Created], w.[Updated]
+                       w.[Notes], w.[Created], w.[Updated],
+                       -- 2026-05-22: Standart rehber pattern A icin ek display kolonlari
+                       ap.[Code] AS AssignedPersonnelCode,
+                       loc.[LocationName] AS WarehouseLocationName,
+                       w.[ArgeProjectId], apr.[Name] AS ArgeProjectName
                 FROM {_woTable} w
                 LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
                 LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = w.[UnitId]
-                LEFT JOIN [{_schema}].[User] usr ON usr.[id] = w.[AssignedUserId]
+                LEFT JOIN [{_schema}].[Users] usr ON usr.[Id] = w.[AssignedUserId]
                 LEFT JOIN [{_schema}].[Location] loc ON loc.[Id] = w.[WarehouseLocationId]
                 LEFT JOIN [{_schema}].[Routing] rt ON rt.[Id] = w.[RoutingId]
                 LEFT JOIN [{_schema}].[Machine] dm ON dm.[Id] = w.[DefaultMachineId]
                 LEFT JOIN [{_schema}].[Personnel] ap ON ap.[Id] = w.[AssignedPersonnelId]
+                LEFT JOIN [{_schema}].[ArgeProject] apr ON apr.[DocumentId] = w.[ArgeProjectId]
                 WHERE w.[Id] = @Id AND w.[CompanyId] = @CompanyId;";
             cmd.Parameters.AddWithValue("@Id", id);
             cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -142,7 +155,7 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 ActualEndDate: r.IsDBNull(16) ? null : r.GetDateTime(16),
                 Status: (WorkOrderStatus)r.GetByte(17),
                 Priority: (WorkOrderPriority)r.GetByte(18),
-                AssignedUserId: r.IsDBNull(19) ? null : r.GetGuid(19),
+                AssignedUserId: r.IsDBNull(19) ? null : r.GetInt32(19),
                 AssignedUserName: r.IsDBNull(20) ? null : r.GetString(20),
                 WarehouseLocationId: r.IsDBNull(21) ? null : r.GetInt32(21),
                 WarehouseLocationCode: r.IsDBNull(22) ? null : r.GetString(22),
@@ -160,7 +173,11 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 Notes: r.IsDBNull(34) ? null : r.GetString(34),
                 Created: r.GetDateTime(35),
                 Updated: r.IsDBNull(36) ? null : r.GetDateTime(36),
-                Sources: Array.Empty<WorkOrderSourceDto>());
+                Sources: Array.Empty<WorkOrderSourceDto>(),
+                AssignedPersonnelCode: r.IsDBNull(37) ? null : r.GetString(37),
+                WarehouseLocationName: r.IsDBNull(38) ? null : r.GetString(38),
+                ArgeProjectId: r.IsDBNull(39) ? null : r.GetInt32(39),
+                ArgeProjectName: r.IsDBNull(40) ? null : r.GetString(40));
         }
 
         var sources = await GetSourcesInternalAsync(conn, id, ct);
@@ -179,14 +196,14 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                  [PlannedStartDate],[PlannedEndDate],
                  [Status],[Priority],[AssignedUserId],[WarehouseLocationId],
                  [RevisionNo],[ParentWorkOrderId],[RevisedFromId],[RoutingId],[DefaultMachineId],
-                 [AssignedPersonnelId],[Notes],[CreatedBy],[Created],[IsActive])
+                 [AssignedPersonnelId],[Notes],[ArgeProjectId],[CreatedById],[Created],[IsActive])
             VALUES
                 (@CompanyId,@OrderNumber,@OrderDate,
                  @ItemId,@ConfigId,@PlannedQuantity,@UnitId,
                  @PlannedStartDate,@PlannedEndDate,
                  @Status,@Priority,@AssignedUserId,@WarehouseLocationId,
                  @RevisionNo,@ParentWorkOrderId,@RevisedFromId,@RoutingId,@DefaultMachineId,
-                 @AssignedPersonnelId,@Notes,@CreatedBy,SYSUTCDATETIME(),1);
+                 @AssignedPersonnelId,@Notes,@ArgeProjectId,@CreatedById,SYSUTCDATETIME(),1);
             SELECT CAST(SCOPE_IDENTITY() AS INT);";
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         cmd.Parameters.AddWithValue("@OrderNumber", e.OrderNumber);
@@ -208,12 +225,13 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         cmd.Parameters.AddWithValue("@DefaultMachineId", (object?)e.DefaultMachineId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@AssignedPersonnelId", (object?)e.AssignedPersonnelId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Notes", (object?)e.Notes ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@CreatedBy", (object?)e.CreatedBy ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ArgeProjectId", (object?)e.ArgeProjectId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@CreatedById", (object?)e.CreatedById ?? DBNull.Value);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
     }
 
-    public async Task UpdateAsync(int id, UpdateWorkOrderRequest req, Guid? updatedBy, CancellationToken ct)
+    public async Task UpdateAsync(int id, UpdateWorkOrderRequest req, int? updatedBy, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -231,7 +249,8 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 [DefaultMachineId]=@DefaultMachineId,
                 [AssignedPersonnelId]=@AssignedPersonnelId,
                 [Notes]=@Notes,
-                [UpdatedBy]=@UpdatedBy,
+                [ArgeProjectId]=@ArgeProjectId,
+                [UpdatedById]=@UpdatedById,
                 [Updated]=SYSUTCDATETIME()
             WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
@@ -247,11 +266,12 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
         cmd.Parameters.AddWithValue("@DefaultMachineId", (object?)req.DefaultMachineId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@AssignedPersonnelId", (object?)req.AssignedPersonnelId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Notes", (object?)req.Notes ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@UpdatedBy", (object?)updatedBy ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ArgeProjectId", (object?)req.ArgeProjectId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@UpdatedById", (object?)updatedBy ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task ChangeStatusAsync(int id, WorkOrderStatus newStatus, Guid? userId, CancellationToken ct)
+    public async Task ChangeStatusAsync(int id, WorkOrderStatus newStatus, int? userId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -262,17 +282,17 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
             SET [Status]=@Status,
                 [ActualStartDate] = CASE WHEN @Status = 2 AND [ActualStartDate] IS NULL THEN SYSUTCDATETIME() ELSE [ActualStartDate] END,
                 [ActualEndDate]   = CASE WHEN @Status = 3 AND [ActualEndDate] IS NULL THEN SYSUTCDATETIME() ELSE [ActualEndDate] END,
-                [UpdatedBy]=@UpdatedBy,
+                [UpdatedById]=@UpdatedById,
                 [Updated]=SYSUTCDATETIME()
             WHERE [Id]=@Id AND [CompanyId]=@CompanyId;";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
         cmd.Parameters.AddWithValue("@Status", (byte)newStatus);
-        cmd.Parameters.AddWithValue("@UpdatedBy", (object?)userId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@UpdatedById", (object?)userId ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<int> CreateRevisionAsync(int existingId, Guid? userId, CancellationToken ct)
+    public async Task<int> CreateRevisionAsync(int existingId, int? userId, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -291,7 +311,7 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                          [PlannedStartDate],[PlannedEndDate],
                          [Status],[Priority],[AssignedUserId],[WarehouseLocationId],
                          [RevisionNo],[ParentWorkOrderId],[RevisedFromId],[RoutingId],[DefaultMachineId],
-                         [AssignedPersonnelId],[Notes],[CreatedBy],[Created],[IsActive])
+                         [AssignedPersonnelId],[Notes],[CreatedById],[Created],[IsActive])
                     SELECT [CompanyId],
                            [OrderNumber] + N'-R' + CAST([RevisionNo]+1 AS NVARCHAR(4)),
                            SYSUTCDATETIME(),
@@ -318,7 +338,7 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 cmd.CommandText = $@"
                     UPDATE {_woTable}
                     SET [Status] = 5 /* Cancelled */,
-                        [UpdatedBy] = @UserId,
+                        [UpdatedById] = @UserId,
                         [Updated] = SYSUTCDATETIME()
                     WHERE [Id] = @Id AND [CompanyId] = @CompanyId;";
                 cmd.Parameters.AddWithValue("@Id", existingId);
@@ -465,14 +485,14 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
             SELECT w.[Id], w.[OrderNumber], w.[OrderDate], w.[ItemId],
                    i.[Code], i.[Name],
                    w.[ConfigId], w.[PlannedQuantity], w.[ProducedQuantity],
-                   w.[UnitId], u.[UnitCode],
+                   w.[UnitId], u.[Code] AS UnitCode,
                    w.[Status], w.[Priority],
                    w.[PlannedStartDate], w.[PlannedEndDate],
                    w.[AssignedUserId], usr.[FullName], w.[RevisionNo]
             FROM {_woTable} w
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = w.[ItemId]
             LEFT JOIN [{_schema}].[Unit] u ON u.[Id] = w.[UnitId]
-            LEFT JOIN [{_schema}].[User] usr ON usr.[id] = w.[AssignedUserId]
+            LEFT JOIN [{_schema}].[Users] usr ON usr.[Id] = w.[AssignedUserId]
             WHERE w.[CompanyId] = @CompanyId
               AND w.[ItemId] = @ItemId
               {configFilter}
@@ -503,7 +523,7 @@ public sealed class SqlWorkOrderRepository : IWorkOrderRepository
                 Priority: (WorkOrderPriority)r.GetByte(12),
                 PlannedStartDate: r.IsDBNull(13) ? null : r.GetDateTime(13),
                 PlannedEndDate: r.IsDBNull(14) ? null : r.GetDateTime(14),
-                AssignedUserId: r.IsDBNull(15) ? null : r.GetGuid(15),
+                AssignedUserId: r.IsDBNull(15) ? null : r.GetInt32(15),
                 AssignedUserName: r.IsDBNull(16) ? null : r.GetString(16),
                 RevisionNo: r.GetInt32(17),
                 AssignedPersonnelId: r.FieldCount > 18 && !r.IsDBNull(18) ? r.GetInt32(18) : null,

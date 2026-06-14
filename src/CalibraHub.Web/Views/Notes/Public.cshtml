@@ -1,0 +1,455 @@
+@model CalibraHub.Domain.Entities.Note
+@{
+    Layout = null;
+    var title = Model.Title ?? "Not";
+    var dateStr = Model.UpdatedAt.ToString("dd MMMM yyyy", new System.Globalization.CultureInfo("tr-TR"));
+    var attachments = ViewBag.Attachments as System.Collections.IList ?? new System.Collections.ArrayList();
+    int cid = ViewBag.CompanyId is int c ? c : 0;
+    // reading time
+    var wordCount = System.Text.RegularExpressions.Regex.Replace(Model.Content ?? "", "<[^>]+>", " ").Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+    var readMin = Math.Max(1, (int)Math.Ceiling(wordCount / 200.0));
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>@title — CalibraHub</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f1f5f9;
+            color: #0f172a;
+            min-height: 100vh;
+        }
+
+        /* ── Top brand bar ─────────────────────────────── */
+        .pub-topbar {
+            background: #ffffff;
+            border-bottom: 1px solid #e8edf4;
+            padding: 0 24px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            backdrop-filter: blur(8px);
+        }
+        .pub-topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #1e293b;
+            text-decoration: none;
+        }
+        .pub-topbar-logo {
+            width: 28px; height: 28px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            border-radius: 7px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .pub-topbar-logo svg { display: block; }
+        .pub-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: #6366f1;
+            background: #ede9fe;
+            border-radius: 20px;
+            padding: 3px 10px 3px 8px;
+            letter-spacing: 0.01em;
+        }
+        .pub-badge svg { flex-shrink: 0; }
+
+        /* ── Page wrapper ──────────────────────────────── */
+        .pub-wrap {
+            max-width: 740px;
+            margin: 40px auto 80px;
+            padding: 0 16px;
+        }
+
+        /* ── Card ──────────────────────────────────────── */
+        .pub-card {
+            background: #ffffff;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 8px rgba(0,0,0,.04), 0 8px 32px rgba(0,0,0,.06);
+            overflow: hidden;
+        }
+
+        /* accent line */
+        .pub-card-accent {
+            height: 4px;
+            background: linear-gradient(90deg, #6366f1 0%, #a78bfa 60%, #818cf8 100%);
+        }
+
+        /* ── Header ────────────────────────────────────── */
+        .pub-header {
+            padding: 32px 36px 24px;
+        }
+
+        .pub-title {
+            font-size: 26px;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.35;
+            word-break: break-word;
+            letter-spacing: -0.01em;
+        }
+
+        .pub-meta {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .pub-date-read {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        .pub-date-read span { display: flex; align-items: center; gap: 4px; }
+        .pub-dot { width: 3px; height: 3px; border-radius: 50%; background: #cbd5e1; }
+
+        /* divider */
+        .pub-divider {
+            height: 1px;
+            background: #f1f5f9;
+            margin: 0 36px;
+        }
+
+        /* ── Body ──────────────────────────────────────── */
+        .pub-body {
+            padding: 28px 36px 32px;
+        }
+
+        /* TipTap / ProseMirror content */
+        .pub-content {
+            line-height: 1.8;
+            font-size: 15.5px;
+            color: #1e293b;
+            word-break: break-word;
+        }
+        .pub-content > * + * { margin-top: 0.85em; }
+        .pub-content h1, .pub-content h2, .pub-content h3 { font-weight: 700; letter-spacing: -0.01em; }
+        .pub-content h1 { font-size: 1.65em; color: #0f172a; margin-top: 1.4em; }
+        .pub-content h2 { font-size: 1.3em;  color: #0f172a; margin-top: 1.3em; }
+        .pub-content h3 { font-size: 1.1em;  color: #0f172a; margin-top: 1.2em; }
+        .pub-content p { margin-bottom: 0; }
+        .pub-content ul, .pub-content ol { padding-left: 1.5em; }
+        .pub-content li + li { margin-top: 0.2em; }
+        .pub-content blockquote {
+            border-left: 3px solid #818cf8;
+            padding: 6px 18px;
+            margin: 1.2em 0;
+            color: #475569;
+            background: #f8f7ff;
+            border-radius: 0 8px 8px 0;
+        }
+        .pub-content code {
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.87em;
+            color: #6366f1;
+        }
+        .pub-content pre {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 16px 20px;
+            overflow-x: auto;
+        }
+        .pub-content pre code { background: none; border: none; padding: 0; color: inherit; font-size: 13px; }
+        .pub-content img { max-width: 100%; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.1); }
+        .pub-content a { color: #6366f1; text-decoration: underline; text-underline-offset: 2px; }
+        .pub-content hr { border: none; border-top: 1px solid #e2e8f0; }
+        .pub-content table { border-collapse: collapse; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+        .pub-content th, .pub-content td { border: 1px solid #e2e8f0; padding: 9px 14px; font-size: 14px; }
+        .pub-content th { background: #f8fafc; font-weight: 600; color: #475569; }
+        .pub-content [data-type="taskList"] { list-style: none; padding-left: 0; }
+        .pub-content [data-type="taskItem"] { display: flex; gap: 8px; align-items: flex-start; }
+        .pub-content [data-type="taskItem"] > label { margin-top: 3px; }
+
+        /* ── Footer ────────────────────────────────────── */
+        .pub-footer {
+            padding: 14px 36px;
+            border-top: 1px solid #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .pub-footer-text {
+            font-size: 12px;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .pub-footer-text svg { flex-shrink: 0; color: #a3e635; }
+        .pub-footer-brand {
+            font-size: 11.5px;
+            color: #cbd5e1;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+        }
+
+        /* ── Attachments ───────────────────────────────────── */
+        .pub-attachments { padding: 0 36px 28px; }
+        .pub-attachments-title {
+            font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; color: #94a3b8; margin-bottom: 10px;
+        }
+        .pub-attach-list { display: flex; flex-direction: column; gap: 6px; }
+        .pub-attach-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 14px; background: #f8fafc;
+            border: 1px solid #e8edf4; border-radius: 10px;
+            text-decoration: none; color: inherit;
+            transition: background .15s, border-color .15s;
+        }
+        .pub-attach-item:hover { background: #f1f5ff; border-color: #c7d2fe; }
+        .pub-attach-icon {
+            width: 34px; height: 34px; border-radius: 8px;
+            background: #ede9fe; color: #6366f1;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .pub-attach-info { flex: 1; min-width: 0; }
+        .pub-attach-name {
+            font-size: 13px; font-weight: 600; color: #1e293b;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pub-attach-meta { font-size: 11.5px; color: #94a3b8; margin-top: 1px; }
+        .pub-attach-dl { color: #6366f1; flex-shrink: 0; }
+
+        /* ── PDF button ────────────────────────────────────── */
+        .pub-pdf-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #6366f1;
+            background: #f0f0ff;
+            border: 1px solid #c7d2fe;
+            border-radius: 8px;
+            padding: 5px 12px;
+            cursor: pointer;
+            transition: background .15s, border-color .15s, opacity .15s;
+            white-space: nowrap;
+        }
+        .pub-pdf-btn:hover { background: #e0e7ff; border-color: #a5b4fc; }
+        .pub-pdf-btn:disabled { opacity: .55; cursor: default; }
+        .pub-pdf-btn svg { flex-shrink: 0; }
+
+        @@media print { .pub-topbar, .pub-footer, .pub-pdf-btn { display: none !important; } }
+
+        @@media (max-width: 600px) {
+            .pub-wrap { margin-top: 24px; }
+            .pub-header, .pub-body, .pub-attachments, .pub-footer { padding-left: 20px; padding-right: 20px; }
+            .pub-divider { margin: 0 20px; }
+            .pub-title { font-size: 21px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Top bar -->
+    <header class="pub-topbar">
+        <a class="pub-topbar-brand" href="#">
+            <div class="pub-topbar-logo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+            </div>
+            CalibraHub
+        </a>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <button id="pdfBtn" class="pub-pdf-btn" onclick="downloadPdf()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                PDF İndir
+            </button>
+            <div class="pub-badge">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                Herkese Açık Not
+            </div>
+        </div>
+    </header>
+
+    <div class="pub-wrap">
+        <div class="pub-card">
+            <div class="pub-card-accent"></div>
+
+            <div class="pub-header">
+                <h1 class="pub-title">@title</h1>
+                <div class="pub-meta">
+                    <div class="pub-date-read">
+                        <span>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            @dateStr
+                        </span>
+                        <div class="pub-dot"></div>
+                        <span>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            @readMin dk okuma
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pub-divider"></div>
+
+            <div class="pub-body">
+                <div class="pub-content">
+                    @Html.Raw(Model.Content)
+                </div>
+            </div>
+
+            @if (attachments.Count > 0)
+            {
+                <div class="pub-divider"></div>
+                <div class="pub-attachments">
+                    <div class="pub-attachments-title">Ekler (@attachments.Count)</div>
+                    <div class="pub-attach-list">
+                        @foreach (dynamic att in attachments)
+                        {
+                            var dlUrl = "/Notes/PublicAttachment?cid=" + cid + "&t=" + Model.ShareToken + "&aid=" + att.Id;
+                            var sizeStr = att.FileSize < 1024 ? att.FileSize + " B"
+                                        : att.FileSize < 1048576 ? Math.Round((double)att.FileSize / 1024, 1) + " KB"
+                                        : Math.Round((double)att.FileSize / 1048576, 1) + " MB";
+                            <a class="pub-attach-item" href="@dlUrl" download="@att.FileName">
+                                <div class="pub-attach-icon">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.41A2 2 0 0 1 6.59 14.59l8.49-8.49"/>
+                                    </svg>
+                                </div>
+                                <div class="pub-attach-info">
+                                    <div class="pub-attach-name">@att.FileName</div>
+                                    <div class="pub-attach-meta">@sizeStr@(att.Description != null ? " · " + att.Description : "")</div>
+                                </div>
+                                <div class="pub-attach-dl">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg>
+                                </div>
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="pub-footer">
+                <div class="pub-footer-text">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    Bu not sahibi tarafından herkese açık olarak paylaşılmıştır.
+                </div>
+                <div class="pub-footer-brand">CalibraHub Notları</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var html2pdfLoaded = false;
+
+        function loadHtml2Pdf(cb) {
+            if (html2pdfLoaded) { cb(); return; }
+            var s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+            s.onload = function () { html2pdfLoaded = true; cb(); };
+            s.onerror = function () { alert('PDF kütüphanesi yüklenemedi. İnternet bağlantınızı kontrol edin.'); };
+            document.head.appendChild(s);
+        }
+
+        function downloadPdf() {
+            var btn = document.getElementById('pdfBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:spin .8s linear infinite"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Hazırlanıyor…';
+
+            loadHtml2Pdf(function () {
+                var titleEl = document.querySelector('.pub-title');
+                var contentEl = document.querySelector('.pub-content');
+                var metaEl = document.querySelector('.pub-date-read');
+
+                var container = document.createElement('div');
+                container.style.cssText = 'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; padding: 32px 40px; max-width: 800px; margin: 0 auto;';
+
+                var header = document.createElement('div');
+                header.style.cssText = 'border-bottom: 2px solid #6366f1; padding-bottom: 20px; margin-bottom: 28px;';
+
+                var titleDiv = document.createElement('h1');
+                titleDiv.style.cssText = 'font-size: 26px; font-weight: 700; color: #0f172a; margin: 0 0 12px;';
+                titleDiv.textContent = titleEl ? titleEl.textContent : '';
+
+                var metaDiv = document.createElement('div');
+                metaDiv.style.cssText = 'font-size: 12px; color: #64748b;';
+                metaDiv.textContent = metaEl ? metaEl.textContent.replace(/\s+/g, ' ').trim() : '';
+
+                header.appendChild(titleDiv);
+                header.appendChild(metaDiv);
+                container.appendChild(header);
+
+                var body = document.createElement('div');
+                body.style.cssText = 'font-size: 14px; line-height: 1.75; color: #1e293b;';
+                body.innerHTML = contentEl ? contentEl.innerHTML : '';
+
+                /* inline image srcları korunur — base64 veri URI'leri aynen kalır */
+                container.appendChild(body);
+
+                var noteTitle = (titleEl ? titleEl.textContent.trim() : 'not').replace(/[^a-z0-9ğüşıöçÇÖŞİÜĞ\s-]/gi, '').trim().replace(/\s+/g, '_');
+                var fileName = 'CalibraHub_' + (noteTitle.slice(0, 40) || 'not') + '.pdf';
+
+                html2pdf().set({
+                    margin: [12, 12, 16, 12],
+                    filename: fileName,
+                    image: { type: 'jpeg', quality: 0.92 },
+                    html2canvas: { scale: 2, useCORS: true, logging: false },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css'] }
+                }).from(container).save().then(function () {
+                    btn.disabled = false;
+                    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> PDF İndir';
+                }).catch(function () {
+                    btn.disabled = false;
+                    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> PDF İndir';
+                });
+            });
+        }
+    </script>
+    <style>
+        @@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    </style>
+</body>
+</html>

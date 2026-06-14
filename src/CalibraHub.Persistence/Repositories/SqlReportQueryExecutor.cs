@@ -87,7 +87,7 @@ public sealed class SqlReportQueryExecutor : IReportQueryExecutor
         ReportDataType.Integer => SqlDbType.BigInt,
         ReportDataType.Decimal => SqlDbType.Decimal,
         ReportDataType.Date => SqlDbType.Date,
-        ReportDataType.DateTime => SqlDbType.DateTime2,
+        ReportDataType.DateTime => SqlDbType.DateTime,
         ReportDataType.Boolean => SqlDbType.Bit,
         _ => SqlDbType.NVarChar
     };

@@ -126,14 +126,14 @@ public sealed record CreateUserRequest(
     string Email,
     string EmployeeCode,
     int? DepartmentId,
-    Guid? SupervisorUserId,
+    int? SupervisorUserId,
     UserRole Role,
     IReadOnlyCollection<UserPermission> Permissions,
     string? Password = null,
     GrafanaRole? GrafanaRole = null);
 
 public sealed record UpdateUserRequest(
-    Guid Id,
+    int Id,
     int CompanyId,
     string FullName,
     string Email,

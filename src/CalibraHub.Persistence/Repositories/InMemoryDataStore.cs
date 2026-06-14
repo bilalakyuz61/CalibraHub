@@ -10,9 +10,9 @@ public sealed class InMemoryDataStore
     private const int DefaultCompanyId = 1;
     private const int FinanceDepartmentId = 1;
     private const int OperationsDepartmentId = 2;
-    private static readonly Guid AccountingManagerId = Guid.Parse("05fae97c-b5df-48e1-9755-2a8346a85dbc");
-    private static readonly Guid AccountantId = Guid.Parse("39fa17cf-a4ea-4c95-95fb-b4972cbad358");
-    private static readonly Guid OperationsLeadId = Guid.Parse("c0188522-5752-43e5-a25f-f91fb5264f17");
+    private const int AccountingManagerId = 1;
+    private const int AccountantId = 2;
+    private const int OperationsLeadId = 3;
     private const int IntegratorId = 1;
     private static readonly Guid NetsisErpId = Guid.Parse("5f01964e-9071-4dbc-9f3b-48fb9eae4665");
 
@@ -90,10 +90,10 @@ public sealed class InMemoryDataStore
                 })
         });
 
-    public ConcurrentDictionary<Guid, UserProfile> Users { get; } = new(
+    public ConcurrentDictionary<int, UserProfile> Users { get; } = new(
         new[]
         {
-            new KeyValuePair<Guid, UserProfile>(
+            new KeyValuePair<int, UserProfile>(
                 AccountingManagerId,
                 new UserProfile
                 {
@@ -117,7 +117,7 @@ public sealed class InMemoryDataStore
                         UserPermission.ViewAuditLogs
                     }
                 }),
-            new KeyValuePair<Guid, UserProfile>(
+            new KeyValuePair<int, UserProfile>(
                 AccountantId,
                 new UserProfile
                 {
@@ -136,7 +136,7 @@ public sealed class InMemoryDataStore
                         UserPermission.RejectDocuments
                     }
                 }),
-            new KeyValuePair<Guid, UserProfile>(
+            new KeyValuePair<int, UserProfile>(
                 OperationsLeadId,
                 new UserProfile
                 {

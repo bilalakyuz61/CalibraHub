@@ -4,7 +4,7 @@ namespace CalibraHub.Application.Contracts;
 
 // ── Caller context (built from claims in the controller) ───────────────────
 public sealed record ReportCallerContext(
-    Guid UserId,
+    int UserId,
     int CompanyId,
     IReadOnlyCollection<UserRole> Roles,
     IReadOnlyCollection<UserPermission> Permissions)
@@ -52,7 +52,7 @@ public sealed record ReportDefinitionSummaryDto(
     string ViewCode,
     ReportCategory Category,
     bool IsShared,
-    Guid OwnerUserId,
+    int OwnerUserId,
     DateTime UpdatedAt);
 
 public sealed record RptDefRoleDto(UserRole Role, bool CanView, bool CanEdit, bool CanDelete);
@@ -64,7 +64,7 @@ public sealed record ReportDefinitionDto(
     int ViewId,
     ReportCategory Category,
     string ConfigJson,
-    Guid OwnerUserId,
+    int OwnerUserId,
     bool IsShared,
     bool IsActive,
     IReadOnlyCollection<RptDefRoleDto> Roles);
@@ -108,7 +108,7 @@ public sealed record UpsertRptDefinitionRequest(
     int ViewId,
     ReportCategory Category,
     string ConfigJson,
-    Guid OwnerUserId,
+    int OwnerUserId,
     bool IsShared,
     bool IsActive);
 

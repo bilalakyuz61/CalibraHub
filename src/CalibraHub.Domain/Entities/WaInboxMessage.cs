@@ -53,4 +53,35 @@ public sealed class WaInboxMessage
 
     /// <summary>Byte cinsinden boyut.</summary>
     public int? MediaSize { get; init; }
+
+    /// <summary>
+    /// contact_phone alanı bir LID identifier içeriyorsa true.
+    /// LID'ler gerçek telefon numarası değil; UI'da "Bilinmeyen kişi" gösterilir.
+    /// </summary>
+    public bool IsLid { get; init; }
+
+    // ── Faz 4: grup alanları ─────────────────────────────────────────────
+
+    /// <summary>Grup JID'i (@g.us). Null ise 1:1 sohbet.</summary>
+    public string? GroupJid { get; init; }
+
+    /// <summary>Grupta mesajı gönderen üyenin JID'i.</summary>
+    public string? SenderJid { get; init; }
+
+    /// <summary>Grupta mesajı gönderen üyenin adı (pushName).</summary>
+    public string? SenderName { get; init; }
+
+    // ── Faz 3 alanları ───────────────────────────────────────────────────
+
+    /// <summary>Alıntı/yanıt: üst mesajın BridgeMsgId'si. Null ise doğrudan mesaj.</summary>
+    public string? QuotedMsgId { get; init; }
+
+    /// <summary>Bu mesaja verilen emoji reaksiyonu (varsa). Birden fazla: virgülle ayrılır.</summary>
+    public string? ReactionEmoji { get; init; }
+
+    /// <summary>Mesaj karşı taraf tarafından silindiyse true; UI'da tombstone gösterir.</summary>
+    public bool IsDeleted { get; init; }
+
+    /// <summary>Gönderilen mesaj için iletim durumu: sent | delivered | read.</summary>
+    public string? DeliveryStatus { get; init; }
 }

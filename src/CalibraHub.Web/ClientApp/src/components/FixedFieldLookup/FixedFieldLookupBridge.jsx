@@ -400,6 +400,14 @@ export default function FixedFieldLookupBridge(props) {
             if (settingsColumnRef.current.formatJson !== formatJson) {
               setFormatJson(settingsColumnRef.current.formatJson)
             }
+            // FilterJson refresh — admin Alan Ayarlari'nda SQL kisit (WHERE fragment)
+            // duzenleyince state hemen guncellenmiyordu, kullanici modal'i kapatip
+            // tekrar acmak zorundaydi. Burada column.filterJson mutate edilmis halde,
+            // local state'e yansitiriz; staticConstraint prop'u yenilenir, modal
+            // bir sonraki acilista yeni WHERE ile sorgular.
+            if (settingsColumnRef.current.filterJson !== filterJson) {
+              setFilterJson(settingsColumnRef.current.filterJson)
+            }
             // GuideCode/ViewName refresh — admin farkli view sectiyse override guncellenir,
             // ayni default'a dondurduyse override sifirlanir. Iframe yenileme gerekmez.
             var newCode = settingsColumnRef.current.viewName || settingsColumnRef.current.guideCode

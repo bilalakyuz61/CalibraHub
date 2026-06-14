@@ -46,6 +46,74 @@ function tryPretty(text) {
   catch { return text }
 }
 
+/**
+ * 2026-05-21: Hata tab'inin üstündeki "friendly" mesaj.
+ * Netsis response body örneği:
+ *   { "IsSuccessful": false, "ErrorCode": "101",
+ *     "ErrorDesc": "Hata Kodu : 402\r\nDetay : ...<ErrorHeader>...</ErrorHeader>\r\n<Hata>\r\nTKL202600000013 Nolu Evrak Daha önceden kaydedilmiş..." }
+ * <Hata>...</Hata> içeriği (veya kapanış yoksa sona kadar) parse edilip kullanıcı dostu kısa mesaj olarak gösterilir.
+ *
+ * Diğer provider'lar için extension: <Error>, <Message>, <Detail> pattern'leri de denenir.
+ * Hiçbiri eşleşmezse null döner — caller ham mesajı zaten gösterir.
+ *
+ * @returns {{ label: string, text: string } | null}
+ */
+function extractFriendlyError(errorMessage, responseBody) {
+  var sources = [errorMessage, responseBody].filter(Boolean)
+  // Önce JSON parse — ErrorDesc / Message / errorMessage gibi alanları ara
+  for (var i = 0; i < sources.length; i++) {
+    var src = sources[i]
+    if (typeof src !== 'string') continue
+    var unescaped = src.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\r/g, '\n')
+
+    // 1) Netsis <Hata>...</Hata> (kapanış opsiyonel — sona kadar)
+    var m = unescaped.match(/<Hata>\s*([\s\S]*?)(?:<\/Hata>|$)/i)
+    if (m && m[1]) {
+      var msg = cleanupError(m[1])
+      if (msg) return { label: 'Hata Mesajı', text: msg }
+    }
+
+    // 2) <Error>...</Error>
+    m = unescaped.match(/<Error>\s*([\s\S]*?)(?:<\/Error>|$)/i)
+    if (m && m[1]) {
+      var em = cleanupError(m[1])
+      if (em) return { label: 'Hata', text: em }
+    }
+
+    // 3) JSON ErrorDesc / Message / errorMessage / errorDetail alanları
+    try {
+      var obj = JSON.parse(src)
+      var candidates = [
+        obj.ErrorDesc, obj.errorDesc, obj.Message, obj.message,
+        obj.errorMessage, obj.error_message, obj.errorDetail, obj.detail,
+        obj.error && obj.error.message,
+      ].filter(function (x) { return x && typeof x === 'string' })
+      // JSON içindeki ilk uygun field'da yine <Hata> ara, yoksa ilk satırı dön
+      for (var k = 0; k < candidates.length; k++) {
+        var unesc = candidates[k].replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\r/g, '\n')
+        var inner = unesc.match(/<Hata>\s*([\s\S]*?)(?:<\/Hata>|$)/i)
+        if (inner && inner[1]) {
+          var v = cleanupError(inner[1])
+          if (v) return { label: 'Hata Mesajı', text: v }
+        }
+        // <Hata> yoksa ilk satır + 'Hata Kodu' bilgisi
+        var firstLine = unesc.split('\n').map(function (l) { return l.trim() }).filter(Boolean)[0]
+        if (firstLine && firstLine.length < 200) return { label: 'Hata', text: firstLine }
+      }
+    } catch (_) { /* JSON değil — skip */ }
+  }
+  return null
+}
+
+function cleanupError(raw) {
+  return String(raw || '')
+    .replace(/<[^>]+>/g, ' ')        // diğer iç tag'leri at
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function RunDetailModal({ runId, onClose }) {
   const [run, setRun]         = useState(null)
   const [loading, setLoading] = useState(true)
@@ -158,11 +226,48 @@ function RunDetailModal({ runId, onClose }) {
           {!loading && run && tab === 'response' && (
             <pre style={preStyle}>{tryPretty(run.responseBody) || '(boş)'}</pre>
           )}
-          {!loading && run && tab === 'error' && run.errorMessage && (
-            <pre style={{ ...preStyle, color: 'var(--iw-rose-color)', borderColor: 'var(--iw-rose-color)' }}>
-              {run.errorMessage}
-            </pre>
-          )}
+          {!loading && run && tab === 'error' && run.errorMessage && (() => {
+            // 2026-05-21: Hata tab'ında üstte parse edilmiş kısa mesaj (örn. Netsis
+            // <Hata>...</Hata> içeriği), altında ham errorMessage. Provider'a göre
+            // pattern eşleştirme — eşleşme yoksa ham metin tek başına gösterilir.
+            var parsed = extractFriendlyError(run.errorMessage, run.responseBody);
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {parsed && (
+                  <div style={{
+                    padding: '14px 16px',
+                    borderRadius: 8,
+                    background: 'rgba(244, 63, 94, 0.10)',
+                    border: '1px solid var(--iw-rose-color)',
+                    color: 'var(--iw-rose-color)',
+                    fontSize: 13.5, fontWeight: 600,
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}>
+                    <div style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
+                      textTransform: 'uppercase', opacity: 0.7, marginBottom: 6,
+                    }}>
+                      {parsed.label}
+                    </div>
+                    {parsed.text}
+                  </div>
+                )}
+                <details open={!parsed}>
+                  <summary style={{
+                    cursor: 'pointer', fontSize: 11, color: 'var(--iw-muted)',
+                    padding: '6px 0', userSelect: 'none',
+                  }}>
+                    Ham hata mesajı (provider yanıtı tam içerik)
+                  </summary>
+                  <pre style={{ ...preStyle, color: 'var(--iw-rose-color)', borderColor: 'var(--iw-rose-color)', marginTop: 6 }}>
+                    {run.errorMessage}
+                  </pre>
+                </details>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Footer */}

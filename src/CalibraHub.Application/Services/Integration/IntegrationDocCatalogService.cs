@@ -122,7 +122,7 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
             fdocCnt.GetValueOrDefault(p.Id, 0))).ToList();
     }
 
-    public async Task<int> SaveProviderAsync(SaveIntegrationProviderRequest req, string? actor, CancellationToken ct)
+    public async Task<int> SaveProviderAsync(SaveIntegrationProviderRequest req, int? actor, CancellationToken ct)
     {
         var entity = new IntegrationProvider
         {
@@ -140,7 +140,7 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
         return id;
     }
 
-    public async Task DeleteProviderAsync(int id, string? actor, CancellationToken ct)
+    public async Task DeleteProviderAsync(int id, int? actor, CancellationToken ct)
     {
         await _repo.DeleteProviderAsync(id, actor, ct);
         InvalidateCache();
@@ -159,7 +159,7 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
             e.Values.OrderBy(v => v.SortOrder)
                 .Select(v => new IntegrationEnumValueDto(v.Id, v.Value, v.Label, v.TechnicalCode, v.Description, v.SortOrder))
                 .ToList(),
-            ParseFieldPaths(e.UsedInFieldPaths))).ToList();
+            ParseFieldUsages(e.UsedInFieldPaths))).ToList();
     }
 
     public async Task<IntegrationEnumDefinitionAdminDto?> GetEnumAsync(int id, CancellationToken ct)
@@ -172,7 +172,7 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
             e.Values.OrderBy(v => v.SortOrder)
                 .Select(v => new IntegrationEnumValueDto(v.Id, v.Value, v.Label, v.TechnicalCode, v.Description, v.SortOrder))
                 .ToList(),
-            ParseFieldPaths(e.UsedInFieldPaths));
+            ParseFieldUsages(e.UsedInFieldPaths));
     }
 
     private static IntegrationEnumRuntimeDto ToRuntimeEnum(IntegrationEnumDefinition en) =>
@@ -186,19 +186,79 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
                 .Select(v => new IntegrationEnumValueRuntimeDto(v.Value, v.Label, v.TechnicalCode, v.Description))
                 .ToList());
 
-    /// <summary>UsedInFieldPaths kolonu JSON array string olarak saklanir; parse hatasinda bos liste.</summary>
+    /// <summary>
+    /// UsedInFieldPaths kolonu JSON array string olarak saklanir; parse hatasinda bos liste.
+    /// LEGACY format: string[] — sadece path. Yeni format: object[] (EndpointId+Path).
+    /// Compat: legacy okumalar artik kullanilmiyor (sadece sentez yolunda path lazim).
+    /// </summary>
     private static IReadOnlyList<string> ParseFieldPaths(string? json)
+        => ParseFieldUsages(json).Select(u => u.Path).Distinct().ToArray();
+
+    /// <summary>
+    /// Endpoint-bilincli parser (2026-05-20). Iki formati da kabul eder:
+    ///   - Legacy: ["FatUst.Tip", "Kalemler[].Tip"]      → EndpointId = null
+    ///   - Yeni:   [{"e":5,"p":"FatUst.Tip"}, ...]      → EndpointId = 5
+    /// Hatali parse veya bos input → bos liste.
+    /// </summary>
+    private static IReadOnlyList<IntegrationEnumFieldUsageDto> ParseFieldUsages(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<IntegrationEnumFieldUsageDto>();
         try
         {
-            var arr = System.Text.Json.JsonSerializer.Deserialize<string[]>(json);
-            return arr?.Where(s => !string.IsNullOrWhiteSpace(s)).ToArray() ?? Array.Empty<string>();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return Array.Empty<IntegrationEnumFieldUsageDto>();
+            var list = new List<IntegrationEnumFieldUsageDto>();
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                if (el.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    // Legacy format — sadece path string
+                    var p = el.GetString();
+                    if (!string.IsNullOrWhiteSpace(p))
+                        list.Add(new IntegrationEnumFieldUsageDto(null, p!.Trim()));
+                }
+                else if (el.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    // Yeni format — {e:int?, p:string}
+                    int? endpointId = null;
+                    string? path = null;
+                    if (el.TryGetProperty("e", out var eEl)
+                        && eEl.ValueKind == System.Text.Json.JsonValueKind.Number
+                        && eEl.TryGetInt32(out var eVal) && eVal > 0)
+                        endpointId = eVal;
+                    if (el.TryGetProperty("p", out var pEl)
+                        && pEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                        path = pEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(path))
+                        list.Add(new IntegrationEnumFieldUsageDto(endpointId, path!.Trim()));
+                }
+            }
+            return list;
         }
-        catch { return Array.Empty<string>(); }
+        catch { return Array.Empty<IntegrationEnumFieldUsageDto>(); }
     }
 
-    public async Task<int> SaveEnumAsync(SaveIntegrationEnumDefinitionRequest req, string? actor, CancellationToken ct)
+    /// <summary>
+    /// Yeni format ile UsedInFieldPaths kolonu icin JSON string'i uretir.
+    /// Bos liste -> null (kolon NULL kalir).
+    /// </summary>
+    private static string? SerializeFieldUsages(IReadOnlyList<IntegrationEnumFieldUsageDto>? usages)
+    {
+        if (usages is null || usages.Count == 0) return null;
+        var clean = usages
+            .Where(u => !string.IsNullOrWhiteSpace(u.Path))
+            .Select(u => new { e = u.EndpointId, p = u.Path.Trim() })
+            // Dedup: (endpointId, path) pair ile (StringComparer ile case-sensitive)
+            .GroupBy(x => (x.e ?? 0, x.p), tuple => tuple)
+            .Select(g => g.First())
+            .ToArray();
+        return clean.Length == 0
+            ? null
+            : System.Text.Json.JsonSerializer.Serialize(clean);
+    }
+
+    public async Task<int> SaveEnumAsync(SaveIntegrationEnumDefinitionRequest req, int? actor, CancellationToken ct)
     {
         var entity = new IntegrationEnumDefinition
         {
@@ -209,11 +269,9 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
             Description = req.Description,
             SourceInfo  = req.SourceInfo,
             IsActive    = req.IsActive,
-            UsedInFieldPaths = (req.UsedInFieldPaths is { Count: > 0 })
-                ? System.Text.Json.JsonSerializer.Serialize(
-                    req.UsedInFieldPaths.Where(s => !string.IsNullOrWhiteSpace(s))
-                                        .Select(s => s.Trim()).Distinct().ToArray())
-                : null,
+            // YENI: object[] formatinda saklanir ([{e,p},...]) — endpoint-bilincli
+            // (2026-05-20). SerializeFieldUsages dedup + null collapse yapar.
+            UsedInFieldPaths = SerializeFieldUsages(req.UsedInFields),
             Values      = (req.Values ?? Array.Empty<SaveIntegrationEnumValueRequest>())
                             .Select((v, i) => new IntegrationEnumValue
                             {
@@ -229,7 +287,7 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
         return id;
     }
 
-    public async Task DeleteEnumAsync(int id, string? actor, CancellationToken ct)
+    public async Task DeleteEnumAsync(int id, int? actor, CancellationToken ct)
     {
         await _repo.DeleteEnumAsync(id, actor, ct);
         InvalidateCache();
@@ -267,7 +325,7 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
             d.IsRequired, d.SortOrder, d.IsActive);
     }
 
-    public async Task<int> SaveFieldDocAsync(SaveIntegrationFieldDocRequest req, string? actor, CancellationToken ct)
+    public async Task<int> SaveFieldDocAsync(SaveIntegrationFieldDocRequest req, int? actor, CancellationToken ct)
     {
         var entity = new IntegrationFieldDoc
         {
@@ -289,7 +347,7 @@ public sealed class IntegrationDocCatalogService : IIntegrationDocCatalogService
         return id;
     }
 
-    public async Task DeleteFieldDocAsync(int id, string? actor, CancellationToken ct)
+    public async Task DeleteFieldDocAsync(int id, int? actor, CancellationToken ct)
     {
         await _repo.DeleteFieldDocAsync(id, actor, ct);
         InvalidateCache();

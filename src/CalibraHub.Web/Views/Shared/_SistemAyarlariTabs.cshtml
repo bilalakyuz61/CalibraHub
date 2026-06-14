@@ -1,0 +1,67 @@
+@*
+   Sistem Yönetimi sekme barı — Gate/Dashboard, License, DbSettings, PasswordPage ekranları
+   tek bir kavramsal "Sistem Yönetimi" altında sekmeyle gezilir.
+
+   Her view bunu üst kısma çağırır:
+       <partial name="_SistemAyarlariTabs" model='"companies"' />
+   model = aktif tab key (büyük/küçük duyarsız). Boş veya tanımsızsa hiçbir tab active olmaz.
+*@
+@model string
+@{
+    var current = (Model ?? string.Empty).ToLowerInvariant();
+    string TabClass(string key) =>
+        string.Equals(key, current, StringComparison.OrdinalIgnoreCase) ? "pdt-tab active" : "pdt-tab";
+}
+
+<style>
+    /* Sistem Yönetimi tab navigasyonu — _ProductionDefsTabs ile aynı pdt-* class'ları kullanır. */
+    .pdt-tabs {
+        display: flex; gap: 0; padding: 0 16px;
+        background: transparent;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        flex-shrink: 0;
+    }
+    .pdt-tab {
+        padding: 10px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        color: rgba(148, 163, 184, 0.85);
+        text-decoration: none;
+        display: inline-flex; align-items: center; gap: 7px;
+        transition: color .12s, border-color .12s;
+    }
+    .pdt-tab:hover { color: #6366f1; }
+    .pdt-tab.active {
+        color: #6366f1;
+        border-bottom-color: #6366f1;
+        font-weight: 600;
+    }
+    body.app-theme-dark .pdt-tab.active { color: #a5b4fc; border-bottom-color: #a5b4fc; }
+    body.app-theme-dark .pdt-tab:hover  { color: #a5b4fc; }
+    .pdt-tab svg { opacity: 0.85; }
+</style>
+
+<div class="pdt-tabs">
+    <a href="/Gate/Dashboard" class="@TabClass("companies")">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
+        Şirket Tanımları
+    </a>
+    <a href="/Gate/UserMapping" class="@TabClass("usermapping")">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Kullanıcı Eşleme
+    </a>
+    <a href="/Gate/License" class="@TabClass("license")">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="14" y2="13"/></svg>
+        Lisans Yönetimi
+    </a>
+    <a href="/Gate/DbSettings" class="@TabClass("db")">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6"/></svg>
+        Veri Tabanı Ayarları
+    </a>
+    <a href="/Gate/PasswordPage" class="@TabClass("password")">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Şifre Değiştir
+    </a>
+</div>

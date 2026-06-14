@@ -12,12 +12,12 @@ public sealed class ErpConnectionSettings : Entity
     public required string Username { get; init; }
     public required string Password { get; init; }
     public bool IsActive { get; private set; } = true;
-    public DateTime CreatedAt { get; init; } = DateTime.Now;
-    public DateTime UpdatedAt { get; private set; } = DateTime.Now;
+    public DateTime Created { get; init; } = DateTime.Now;
+    public DateTime Updated { get; private set; } = DateTime.Now;
 
     public void Deactivate()
     {
         IsActive = false;
-        UpdatedAt = DateTime.Now;
+        Updated = DateTime.Now;
     }
 }

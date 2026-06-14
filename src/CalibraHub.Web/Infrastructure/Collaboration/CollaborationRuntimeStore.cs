@@ -141,7 +141,7 @@ public sealed class CollaborationRuntimeStore
     }
 
     public bool ReleaseLock(
-        Guid userId,
+        int userId,
         string sessionId,
         CollaborationRecordReference record,
         out CollaborationRecordLockChangedEvent releasedEvent)
@@ -167,7 +167,7 @@ public sealed class CollaborationRuntimeStore
     }
 
     public IReadOnlyCollection<CollaborationRecordLockChangedEvent> ReleaseLocksForSession(
-        Guid userId,
+        int userId,
         string sessionId,
         IReadOnlyCollection<CollaborationRecordReference>? records)
     {
@@ -199,7 +199,7 @@ public sealed class CollaborationRuntimeStore
     }
 
     public void Heartbeat(
-        Guid userId,
+        int userId,
         string connectionId,
         string sessionId,
         IReadOnlyCollection<CollaborationRecordReference>? activeRecords,
@@ -389,7 +389,7 @@ public sealed class CollaborationRuntimeStore
     private sealed record ConnectionState(
         string ConnectionId,
         string SessionId,
-        Guid UserId,
+        int UserId,
         string DisplayName,
         DateTime ConnectedAt,
         DateTime LastSeenAt);
@@ -398,7 +398,7 @@ public sealed class CollaborationRuntimeStore
         string RecordKey,
         string RecordType,
         string RecordId,
-        Guid OwnerUserId,
+        int OwnerUserId,
         string OwnerDisplayName,
         string SessionId,
         string ConnectionId,

@@ -48,6 +48,15 @@ public sealed class DocumentLine
     [Description("Kalem bazli kaynak iz — bu sat�r hangi kaynak satirdan turetildi? Tekliften siparise donustururken her sipariş satirinin hangi teklif satirindan geldigini gosterir. NULL ise orijinal/manuel girilmis. FK -> DocumentLine.Id (self-referencing).")]
     public int? SourceLineId { get; set; }
 
+    // ── İhtiyaç Kaydı karşılama takip alanları (alis_talebi satırları için) ──
+    // Diğer belge tiplerinde 0 kalır. DB'de FulfilledFromStock/ByPurchase/FulfillmentStatus kolonları.
+    /// <summary>Stoktan depo transferi ile karşılanan miktar (alis_talebi). Diğer belge tiplerinde 0.</summary>
+    public decimal FulfilledFromStock { get; set; }
+    /// <summary>Satın alma belgeleri (teklif/sipariş) ile karşılanan miktar. Diğer belge tiplerinde 0.</summary>
+    public decimal FulfilledByPurchase { get; set; }
+    /// <summary>Karşılama durumu: 0=Pending, 1=Partial, 2=Full, 3=Cancelled.</summary>
+    public int FulfillmentStatus { get; set; }
+
     // ── Transient display fields (Item + Unit + ProductConfiguration + Location JOIN ile okunur; tabloya yazilmaz) ──
     public string? MaterialCode { get; set; }
     public string? MaterialName { get; set; }

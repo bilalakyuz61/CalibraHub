@@ -34,17 +34,20 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             SELECT d.id, d.company_id, d.doc_type, d.doc_no, d.doc_date,
                    d.from_location_id, fl.LocationName AS from_location_name,
                    d.to_location_id,   tl.LocationName AS to_location_name,
-                   d.ref_no, d.notes, d.created_by, d.created, d.is_active,
-                   COUNT(l.id) AS line_count
+                   d.ref_no, d.notes, d.created_by_id, d.created, d.is_active,
+                   COUNT(l.id) AS line_count,
+                   d.arge_project_id, ap.Name AS arge_project_name
             FROM {T("stock_doc")} d
             LEFT JOIN {T("Location")} fl ON fl.Id = d.from_location_id
             LEFT JOIN {T("Location")} tl ON tl.Id = d.to_location_id
             LEFT JOIN {T("stock_doc_line")} l ON l.doc_id = d.id
+            LEFT JOIN {T("ArgeProject")} ap ON ap.DocumentId = d.arge_project_id
             WHERE d.company_id = @CompanyId AND d.doc_type IN ({paramList}) AND d.is_active = 1
             GROUP BY d.id, d.company_id, d.doc_type, d.doc_no, d.doc_date,
                      d.from_location_id, fl.LocationName,
                      d.to_location_id, tl.LocationName,
-                     d.ref_no, d.notes, d.created_by, d.created, d.is_active
+                     d.ref_no, d.notes, d.created_by_id, d.created, d.is_active,
+                     d.arge_project_id, ap.Name
             ORDER BY d.created DESC;
             """;
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -67,17 +70,20 @@ public sealed class SqlStockDocRepository : IStockDocRepository
             SELECT d.id, d.company_id, d.doc_type, d.doc_no, d.doc_date,
                    d.from_location_id, fl.LocationName AS from_location_name,
                    d.to_location_id,   tl.LocationName AS to_location_name,
-                   d.ref_no, d.notes, d.created_by, d.created, d.is_active,
-                   COUNT(l.id) AS line_count
+                   d.ref_no, d.notes, d.created_by_id, d.created, d.is_active,
+                   COUNT(l.id) AS line_count,
+                   d.arge_project_id, ap.Name AS arge_project_name
             FROM {T("stock_doc")} d
             LEFT JOIN {T("Location")} fl ON fl.Id = d.from_location_id
             LEFT JOIN {T("Location")} tl ON tl.Id = d.to_location_id
             LEFT JOIN {T("stock_doc_line")} l ON l.doc_id = d.id
+            LEFT JOIN {T("ArgeProject")} ap ON ap.DocumentId = d.arge_project_id
             WHERE d.id = @Id AND d.company_id = @CompanyId
             GROUP BY d.id, d.company_id, d.doc_type, d.doc_no, d.doc_date,
                      d.from_location_id, fl.LocationName,
                      d.to_location_id, tl.LocationName,
-                     d.ref_no, d.notes, d.created_by, d.created, d.is_active;
+                     d.ref_no, d.notes, d.created_by_id, d.created, d.is_active,
+                     d.arge_project_id, ap.Name;
             """;
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -92,12 +98,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         cmd.CommandText = $"""
             SELECT l.id, l.doc_id, l.line_no, l.item_id,
                    i.Code AS material_code, i.Name AS material_name,
-                   l.unit_id, u.UnitCode AS unit_code,
+                   l.unit_id, u.Code AS unit_code,
                    l.qty, l.combination_id,
-                   cfg.Code AS combination_code,
+                   cfg.RecordCode AS combination_code,
                    l.notes,
                    l.from_location_id, fl.LocationName AS from_location_name,
-                   l.to_location_id,   tl.LocationName AS to_location_name
+                   l.to_location_id,   tl.LocationName AS to_location_name,
+                   l.unit_cost
             FROM {T("stock_doc_line")} l
             LEFT JOIN {T("Items")} i ON i.Id = l.item_id
             LEFT JOIN {T("Unit")} u ON u.Id = l.unit_id
@@ -129,12 +136,13 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 FromLocationId:   r.IsDBNull(12) ? null : r.GetInt32(12),
                 FromLocationName: r.IsDBNull(13) ? null : r.GetString(13),
                 ToLocationId:     r.IsDBNull(14) ? null : r.GetInt32(14),
-                ToLocationName:   r.IsDBNull(15) ? null : r.GetString(15)));
+                ToLocationName:   r.IsDBNull(15) ? null : r.GetString(15),
+                UnitCost:         r.IsDBNull(16) ? null : r.GetDecimal(16)));
         }
         return result;
     }
 
-    public async Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, string? createdBy, CancellationToken ct)
+    public async Task<(int Id, string DocNo)> SaveAsync(SaveStockDocRequest request, int? createdById, CancellationToken ct)
     {
         var companyId = _connectionFactory.ResolveCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
@@ -157,7 +165,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                         from_location_id = @FromLoc,
                         to_location_id   = @ToLoc,
                         ref_no           = @RefNo,
-                        notes            = @Notes
+                        notes            = @Notes,
+                        arge_project_id  = @ArgeProjectId
                     WHERE id = @Id AND company_id = @CompanyId;
                     SELECT doc_no FROM {T("stock_doc")} WHERE id = @Id;
                     """;
@@ -168,6 +177,7 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 upd.Parameters.AddWithValue("@ToLoc",   (object?)request.ToLocationId   ?? DBNull.Value);
                 upd.Parameters.AddWithValue("@RefNo",   (object?)request.RefNo           ?? DBNull.Value);
                 upd.Parameters.AddWithValue("@Notes",   (object?)request.Notes           ?? DBNull.Value);
+                upd.Parameters.AddWithValue("@ArgeProjectId", (object?)request.ArgeProjectId ?? DBNull.Value);
                 var res = await upd.ExecuteScalarAsync(ct);
                 docNo = res?.ToString() ?? docNo;
             }
@@ -179,9 +189,9 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ins.Transaction = tx;
                 ins.CommandText = $"""
                     INSERT INTO {T("stock_doc")}
-                        (company_id, doc_type, doc_no, doc_date, from_location_id, to_location_id, ref_no, notes, created_by)
+                        (company_id, doc_type, doc_no, doc_date, from_location_id, to_location_id, ref_no, notes, created_by_id, arge_project_id)
                     VALUES
-                        (@CompanyId, @DocType, @DocNo, @DocDate, @FromLoc, @ToLoc, @RefNo, @Notes, @CreatedBy);
+                        (@CompanyId, @DocType, @DocNo, @DocDate, @FromLoc, @ToLoc, @RefNo, @Notes, @CreatedById, @ArgeProjectId);
                     SELECT SCOPE_IDENTITY();
                     """;
                 ins.Parameters.AddWithValue("@CompanyId", companyId);
@@ -192,7 +202,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 ins.Parameters.AddWithValue("@ToLoc",     (object?)request.ToLocationId   ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@RefNo",     (object?)request.RefNo           ?? DBNull.Value);
                 ins.Parameters.AddWithValue("@Notes",     (object?)request.Notes           ?? DBNull.Value);
-                ins.Parameters.AddWithValue("@CreatedBy", (object?)createdBy               ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@CreatedById", (object?)createdById             ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@ArgeProjectId", (object?)request.ArgeProjectId ?? DBNull.Value);
                 docId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
             }
 
@@ -211,13 +222,18 @@ public sealed class SqlStockDocRepository : IStockDocRepository
 
                 await using var lineIns = conn.CreateCommand();
                 lineIns.Transaction = tx;
+                // unit_cost: UI'dan gelen manuel deger ELSE PriceList 'm' (maliyet) fiyatindan fis tarihinde snapshot.
                 lineIns.CommandText = $"""
                     INSERT INTO {T("stock_doc_line")}
                         (doc_id, line_no, item_id, unit_id, qty, combination_id, notes,
-                         from_location_id, to_location_id)
+                         from_location_id, to_location_id, unit_cost)
                     VALUES
                         (@DocId, @LineNo, @ItemId, @UnitId, @Qty, @CombId, @Notes,
-                         @FromLoc, @ToLoc);
+                         @FromLoc, @ToLoc,
+                         COALESCE(@UnitCost, (SELECT TOP 1 pl.[Price] FROM {T("PriceList")} pl
+                                              WHERE pl.[ItemId] = @ItemId AND pl.[PriceType] = N'm' AND pl.[IsActive] = 1
+                                                AND pl.[ValidFrom] <= @DocDate AND (pl.[ValidTo] IS NULL OR pl.[ValidTo] >= @DocDate)
+                                              ORDER BY pl.[ValidFrom] DESC)));
                     """;
                 lineIns.Parameters.AddWithValue("@DocId",   docId);
                 lineIns.Parameters.AddWithValue("@LineNo",  lineNo++);
@@ -228,6 +244,8 @@ public sealed class SqlStockDocRepository : IStockDocRepository
                 lineIns.Parameters.AddWithValue("@Notes",   (object?)line.Notes         ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@FromLoc", (object?)line.FromLocationId ?? DBNull.Value);
                 lineIns.Parameters.AddWithValue("@ToLoc",   (object?)line.ToLocationId   ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@UnitCost", (object?)line.UnitCost      ?? DBNull.Value);
+                lineIns.Parameters.AddWithValue("@DocDate", request.DocDate.Date);
                 await lineIns.ExecuteNonQueryAsync(ct);
             }
 
@@ -265,10 +283,12 @@ public sealed class SqlStockDocRepository : IStockDocRepository
         ToLocationName:   r.IsDBNull(8)  ? null : r.GetString(8),
         RefNo:            r.IsDBNull(9)  ? null : r.GetString(9),
         Notes:            r.IsDBNull(10) ? null : r.GetString(10),
-        CreatedBy:        r.IsDBNull(11) ? null : r.GetString(11),
+        CreatedById:      r.IsDBNull(11) ? null : r.GetInt32(11),
         Created:          r.GetDateTime(12),
         IsActive:         r.GetBoolean(13),
-        LineCount:        r.GetInt32(14));
+        LineCount:        r.GetInt32(14),
+        ArgeProjectId:    r.IsDBNull(15) ? null : r.GetInt32(15),
+        ArgeProjectName:  r.IsDBNull(16) ? null : r.GetString(16));
 
     private async Task<string> GenerateDocNoAsync(
         SqlConnection conn, SqlTransaction tx, int companyId, string docType, CancellationToken ct)

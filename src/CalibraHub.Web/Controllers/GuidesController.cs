@@ -152,13 +152,32 @@ public sealed class GuidesController : ControllerBase
         string guideCode,
         string column,
         [FromQuery] string? q,
-        CancellationToken ct)
+        [FromQuery] string? constraints = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(column))
             return BadRequest(new { success = false, message = "column parametresi bos olamaz." });
         try
         {
-            var values = await _guideService.GetDistinctValuesAsync(guideCode, column, q, ct);
+            // Constraints — Search ile ayni JSON formati. Distinct popover'i listede
+            // gosterilen satirlarla tutarli kalsin diye SearchAsync'e gonderilen ayni
+            // WHERE fragment burada da uygulanir (rapor: 2026-05-18 kullanici geri bildirimi).
+            IReadOnlyCollection<GuideConstraintDto>? parsedConstraints = null;
+            if (!string.IsNullOrWhiteSpace(constraints))
+            {
+                try
+                {
+                    parsedConstraints = JsonSerializer.Deserialize<List<GuideConstraintDto>>(
+                        constraints,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (Exception parseEx)
+                {
+                    Console.Error.WriteLine($"[GuideDistinct] Constraint JSON parse hatasi (guide='{guideCode}'): {parseEx.Message}; raw='{constraints}'");
+                }
+            }
+
+            var values = await _guideService.GetDistinctValuesAsync(guideCode, column, q, ct, parsedConstraints);
             if (values == null)
                 return NotFound(new { success = false, message = $"Rehber bulunamadi: '{guideCode}'" });
             return Ok(values);

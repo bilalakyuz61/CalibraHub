@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Antiforgery
 @inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
 @inject IAntiforgery Antiforgery
+@inject CalibraHub.Application.Abstractions.Services.IPermissionService PermService
 @{
     // Workspace (iframe) mode: ya ?workspace=1 query flag'i var, YA DA
     // request bir iframe'den geliyor (Sec-Fetch-Dest: iframe). Ikincisi
@@ -36,9 +37,9 @@
     // React Shell (yeni nesil kabuk) — authenticated + non-workspace + non-account
     // durumlarinda devreye girer. Workspace iframe, login sayfasi ve anonim ziyaretciler
     // eski minimal layout ile calismaya devam eder.
-    var isSystemAdmin = string.Equals(
-        User.FindFirstValue(ClaimTypes.Email), "admin@calibra.local",
-        StringComparison.OrdinalIgnoreCase);
+    var isSystemAdmin = CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(
+        User.FindFirstValue(ClaimTypes.Role), out var _layoutRole)
+        && _layoutRole == CalibraHub.Domain.Enums.UserRole.SystemAdmin;
     var shouldUseReactShell = isAuthenticated && !isWorkspaceFrame && controllerName != "account";
     var shellAntiforgeryToken = shouldUseReactShell
         ? (Antiforgery.GetAndStoreTokens(Context).RequestToken ?? string.Empty)
@@ -91,6 +92,45 @@
         {
             AddToast(type, message);
         }
+    }
+
+    // 2026-06-07 — Menü VIEW yetkisi filtresi. SystemAdmin tüm menüyü görür;
+    // diğer rollerde PermissionFormCode taşıyan öğeler izinli ise gösterilir.
+    // 2026-06-09 (Faz 3) — Dual-track: DB yeterli veri içeriyorsa DB-driven; yoksa statik fallback.
+    async Task<IReadOnlyList<CalibraHub.Web.Models.Navigation.MenuDefinition.MenuNode>> BuildMenuForCurrentUserAsync()
+    {
+        var menuService = Context.RequestServices
+            .GetService<CalibraHub.Application.Abstractions.Services.IMenuService>();
+
+        IReadOnlyList<CalibraHub.Web.Models.Navigation.MenuDefinition.MenuNode> full;
+
+        // Dual-track: DB yeterli veri içeriyorsa DB-driven; yoksa statik fallback
+        if (menuService != null && await menuService.HasMenuDataAsync(Context.RequestAborted))
+        {
+            var dbItems = await menuService.GetMenuItemsAsync(Context.RequestAborted);
+            var isEn = string.Equals(uiRuntime?.LanguageCode, "en-US", StringComparison.OrdinalIgnoreCase);
+            var staticBase = CalibraHub.Web.Models.Navigation.MenuDefinition.GetMainMenu(isSystemAdmin, uiRuntime?.LanguageCode);
+            full = CalibraHub.Web.Models.Navigation.MenuDefinition.InjectDbItems(staticBase, dbItems, isEn);
+        }
+        else
+        {
+#pragma warning disable CS0618 // obsolete — intentional fallback
+            full = CalibraHub.Web.Models.Navigation.MenuDefinition.GetMainMenu(isSystemAdmin, uiRuntime?.LanguageCode);
+#pragma warning restore CS0618
+        }
+
+        if (!isAuthenticated) return full;
+
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdStr, out var userId) || userId <= 0) return full;
+        var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        var role = CalibraHub.Application.Security.UserAuthorizationCatalog.TryParseRole(roleStr, out var r)
+            ? r : CalibraHub.Domain.Enums.UserRole.Operator;
+        var deptStr = User.FindFirstValue("department_id");
+        int? deptId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;
+
+        return await CalibraHub.Web.Models.Navigation.MenuDefinition.FilterByPermissionAsync(
+            full, PermService, userId, role, deptId, Context.RequestAborted);
     }
 
     AddToastMessage("AdminSuccess", "success");
@@ -254,7 +294,7 @@
                 year = DateTime.Now.Year.ToString(),
                 status = layoutUi.Text("system_status"),
             },
-            menu = CalibraHub.Web.Models.Navigation.MenuDefinition.GetMainMenu(isSystemAdmin),
+            menu = await BuildMenuForCurrentUserAsync(),
             theme = uiRuntime.ThemeCode,
             lang = uiRuntime.LanguageCode,
             initialUrl = currentUrl,
@@ -545,6 +585,17 @@ else if (!useDashboardShell)
 
     @if (showMainSidebar)
     {
+        <button type="button"
+                class="app-shell-expand-fab"
+                data-sidebar-toggle
+                aria-label="Menüyü aç"
+                title="Menüyü aç">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="6"  x2="21" y2="6"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+        </button>
         <div class="app-shell">
             <aside class="app-sidebar">
                 @await Html.PartialAsync("_MainMenu")
@@ -721,12 +772,19 @@ else
     // Eski PWA/Service Worker temizleyici — tek seferlik, idempotent.
     // Telefonlarda kalmis eski SW'lerden gelen "senkronizasyon tamamlandi"
     // sistem bildirimlerini durdurmak icin sayfa yuklenir yuklenmez calisir.
+    // 2026-06-08: Yeni offline fallback SW (/sw.js) korunur — yalniz eski/yabanci
+    // SW kayitlari unregister edilir.
     (async function cleanupLegacyServiceWorker() {
         try {
             if (!('serviceWorker' in navigator)) return;
             const regs = await navigator.serviceWorker.getRegistrations();
             if (!regs || regs.length === 0) return;
             for (const reg of regs) {
+                // Yeni offline fallback SW'i koru
+                var scriptUrl = (reg.active && reg.active.scriptURL)
+                    || (reg.installing && reg.installing.scriptURL)
+                    || (reg.waiting && reg.waiting.scriptURL) || '';
+                if (scriptUrl.endsWith('/sw.js')) continue;
                 try {
                     const sub = reg.pushManager && await reg.pushManager.getSubscription();
                     if (sub) { try { await sub.unsubscribe(); } catch (_) {} }
@@ -735,9 +793,28 @@ else
             }
             if ('caches' in window) {
                 const keys = await caches.keys();
-                await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+                // Bizim offline cache'imizi koru (calibra-offline-*)
+                await Promise.all(keys.map(function (k) {
+                    if (k && k.indexOf('calibra-offline-') === 0) return Promise.resolve();
+                    return caches.delete(k);
+                }));
             }
         } catch (_) { /* sessiz kal */ }
+    })();
+
+    // 2026-06-08 — Offline fallback service worker'i kayit et.
+    // Sunucu kapaliyken tarayicinin native ERR_CONNECTION_REFUSED ekrani yerine
+    // CalibraHub temali offline.html gosterilir; sunucu ayaga kalkinca otomatik
+    // yeniden yonlendirir. Sadece HTTPS veya localhost'ta calisir (SW kosulu).
+    (function registerOfflineSW() {
+        if (!('serviceWorker' in navigator)) return;
+        // Idle moment'ta kayit et — page load'u bloklamasin
+        var doReg = function () {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .catch(function (e) { console.warn('[OfflineSW] register failed:', e && e.message); });
+        };
+        if (document.readyState === 'complete') doReg();
+        else window.addEventListener('load', doReg, { once: true });
     })();
 </script>
 
@@ -751,6 +828,8 @@ else
 <script src="~/js/calibraAlert.js" asp-append-version="true"></script>
 <script src="~/js/confirm-modal.js" asp-append-version="true"></script>
 <script src="~/js/autofocus-first-input.js" asp-append-version="true" defer></script>
+<script src="~/js/production-defs-pjax.js" asp-append-version="true" defer></script>
+<script src="~/js/calibra-permissions.js" asp-append-version="true" defer></script>
 @if (collaborationLocksEnabled)
 {
     <script src="~/js/collaboration.js" asp-append-version="true" defer></script>
@@ -826,5 +905,56 @@ else
 @* React shell DOM'unun tam yapisini bilmeden guvenli enjeksiyon zor, *@
 @* yanlis kapsayiciya eklenip sayfa dipinde floating durabiliyor. *@
 @* Su an URL ile erisim: /Reporting/Designer. Kalici cozum React bundle rebuild. *@
+
+@if (User.Identity?.IsAuthenticated == true)
+{
+@* 2026-05-22: Onay Kuyrugu badge'i gecici devre disi — WorkflowRuntimeController hala
+   inşa edilmedi, her dakika 404 logluyordu. Controller eklenince bu blogu geri ac. *@
+<script>
+(function () { /* disabled until WorkflowRuntimeController is implemented */ })();
+/*
+(function () {
+    var BADGE_ID = 'wf-pending-badge';
+    var QUEUE_URL = '/WorkflowRuntime/MyQueue';
+
+    function ensureBadge() {
+        if (document.getElementById(BADGE_ID)) return;
+        // Shell nav alaninda uygun slot bul — yoksa body'e ekle
+        var target = document.querySelector('.shell-nav-right, .profile-dropdown-trigger, #profileDropdown') || document.body;
+        var a = document.createElement('a');
+        a.href = QUEUE_URL;
+        a.id = BADGE_ID;
+        a.title = 'Onay Kuyruğum';
+        a.style.cssText = 'display:none;position:relative;margin-right:8px;color:inherit;text-decoration:none;';
+        a.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+            + '<span id="wf-pending-count" style="position:absolute;top:-6px;right:-8px;background:#ef4444;color:#fff;border-radius:99px;font-size:10px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;"></span>';
+        target.insertAdjacentElement('afterbegin', a);
+    }
+
+    function updateBadge() {
+        fetch('/WorkflowRuntime/MyPendingCount', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : { count: 0 }; })
+            .then(function (data) {
+                ensureBadge();
+                var badge = document.getElementById(BADGE_ID);
+                var countEl = document.getElementById('wf-pending-count');
+                if (!badge || !countEl) return;
+                var n = (data && data.count) || 0;
+                badge.style.display = n > 0 ? 'inline-flex' : 'none';
+                countEl.textContent = n > 9 ? '9+' : String(n);
+            })
+            .catch(function () { });
+    }
+
+    updateBadge();
+    setInterval(updateBadge, 60000);
+})();
+*/
+</script>
+}
+@if (uiRuntime.LanguageCode?.StartsWith("en", StringComparison.OrdinalIgnoreCase) == true)
+{
+    <script src="~/js/ui-translate-en.js" asp-append-version="true"></script>
+}
 </body>
 </html>

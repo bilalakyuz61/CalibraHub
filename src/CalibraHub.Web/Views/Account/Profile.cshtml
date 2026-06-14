@@ -1,0 +1,211 @@
+@model CalibraHub.Web.Models.Account.ProfileInputModel
+@{
+    ViewData["Title"] = "Profil Bilgileri";
+    // workspace=1 ise iframe icindeyiz → "Vazgec" iframe'i / ye yonlendirip
+    // matruska kabuk yaratir. Onun yerine tab'i kapatilabilen hint goster.
+    var inWorkspace = string.Equals(Context.Request.Query["workspace"], "1", StringComparison.Ordinal)
+                      || string.Equals(Context.Request.Headers["Sec-Fetch-Dest"], "iframe", StringComparison.OrdinalIgnoreCase);
+}
+
+@section Styles {
+<style>
+    .ap-wrap {
+        max-width: 720px; margin: 24px auto; padding: 0 16px;
+        font-family: inherit;
+    }
+    .ap-card {
+        background: #ffffff; color: #0f172a;
+        border: 1px solid #e2e8f0; border-radius: 14px;
+        padding: 24px; box-shadow: 0 8px 24px rgba(15,23,42,.06);
+    }
+    body.app-theme-dark .ap-card {
+        background: #0f172a; color: #e2e8f0;
+        border-color: rgba(255,255,255,.1);
+        box-shadow: 0 12px 36px rgba(0,0,0,.4);
+    }
+    .ap-head { display:flex; align-items:center; gap:14px; margin-bottom:22px; padding-bottom:18px; border-bottom: 1px solid rgba(148,163,184,.18); }
+    .ap-avatar {
+        width:48px; height:48px; border-radius:12px;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color:#fff; display:flex; align-items:center; justify-content:center;
+        font-weight:700; font-size:1.15rem;
+    }
+    .ap-title { margin:0; font-size:1.1rem; font-weight:600; }
+    .ap-subtitle { margin:2px 0 0 0; font-size:.82rem; color:#64748b; }
+    body.app-theme-dark .ap-subtitle { color: #94a3b8; }
+
+    .ap-row { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+    .ap-label { font-size:.75rem; font-weight:600; color:#475569; text-transform: uppercase; letter-spacing:.04em; }
+    body.app-theme-dark .ap-label { color: #94a3b8; }
+    .ap-grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    @@media (max-width: 540px) { .ap-grid-2 { grid-template-columns: 1fr; } }
+
+    .ap-input, .ap-select {
+        padding:9px 12px; font-size:.88rem; font-family: inherit;
+        border: 1px solid rgba(148,163,184,.4); border-radius: 8px;
+        background:#fff; color:#0f172a; outline:none;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    body.app-theme-dark .ap-input, body.app-theme-dark .ap-select {
+        background:#020617; color:#e2e8f0; border-color: rgba(148,163,184,.3);
+    }
+    .ap-input:focus, .ap-select:focus { border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.18); }
+    .ap-input:disabled, .ap-input[readonly] {
+        background:#f1f5f9; color:#64748b; cursor:not-allowed;
+    }
+    body.app-theme-dark .ap-input:disabled, body.app-theme-dark .ap-input[readonly] {
+        background: rgba(255,255,255,.03); color:#94a3b8;
+    }
+    .ap-hint { font-size:.72rem; color:#64748b; margin-top:4px; }
+    body.app-theme-dark .ap-hint { color: #94a3b8; }
+
+    .ap-actions { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:22px; padding-top:18px; border-top: 1px solid rgba(148,163,184,.18); }
+    .ap-btn {
+        padding:9px 22px; border-radius:8px; font-size:.88rem; font-weight:600;
+        border:1px solid transparent; cursor:pointer; font-family: inherit;
+        transition: all .15s;
+    }
+    .ap-btn--primary { background:#6366f1; color:#fff; border-color:#6366f1; }
+    .ap-btn--primary:hover { background:#4f46e5; border-color:#4f46e5; }
+    .ap-btn--ghost { background:transparent; color:#475569; border-color: rgba(148,163,184,.4); }
+    .ap-btn--ghost:hover { background: rgba(148,163,184,.1); }
+    body.app-theme-dark .ap-btn--ghost { color:#cbd5e1; border-color: rgba(148,163,184,.3); }
+    .ap-btn--link { color:#6366f1; text-decoration:none; font-size:.82rem; font-weight:600; }
+    .ap-btn--link:hover { text-decoration: underline; }
+
+    .ap-alert {
+        padding:10px 14px; border-radius:8px; font-size:.85rem;
+        margin-bottom:16px;
+    }
+    .ap-alert--ok {
+        background: rgba(16,185,129,.1); color:#047857;
+        border: 1px solid rgba(16,185,129,.3);
+    }
+    .ap-alert--err {
+        background: rgba(239,68,68,.1); color:#dc2626;
+        border: 1px solid rgba(239,68,68,.3);
+    }
+    body.app-theme-dark .ap-alert--ok { color:#34d399; }
+    body.app-theme-dark .ap-alert--err { color:#fca5a5; }
+
+    .ap-pill {
+        display:inline-block; padding:3px 10px; border-radius:999px;
+        font-size:.72rem; font-weight:600;
+        background: rgba(99,102,241,.12); color:#4f46e5;
+    }
+    body.app-theme-dark .ap-pill { background: rgba(129,140,248,.18); color:#a5b4fc; }
+
+    .field-validation-error { color:#dc2626; font-size:.78rem; margin-top:4px; }
+    body.app-theme-dark .field-validation-error { color:#fca5a5; }
+</style>
+}
+
+<div class="ap-wrap">
+    <div class="ap-card">
+        <div class="ap-head">
+            <div class="ap-avatar">@(string.IsNullOrEmpty(Model.FullName) ? "?" : Model.FullName.Substring(0, Math.Min(2, Model.FullName.Length)).ToUpperInvariant())</div>
+            <div>
+                <h2 class="ap-title">Profil Bilgileri</h2>
+                <p class="ap-subtitle">Hesap bilgilerinizi buradan güncelleyebilirsiniz. <span class="ap-pill">@Model.RoleLabel</span></p>
+            </div>
+        </div>
+
+        @if (TempData["ProfileSuccess"] is string okMsg)
+        {
+            <div class="ap-alert ap-alert--ok">@okMsg</div>
+        }
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="ap-alert ap-alert--err">
+                @foreach (var err in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <div>@err.ErrorMessage</div>
+                }
+            </div>
+        }
+
+        <form asp-action="Profile" method="post" autocomplete="off">
+            @Html.AntiForgeryToken()
+
+            <div class="ap-grid-2">
+                <div class="ap-row">
+                    <label class="ap-label" for="Email">E-posta</label>
+                    <input class="ap-input" id="Email" type="email" value="@Model.Email" readonly />
+                    <div class="ap-hint">E-posta değiştirilemez. Değişiklik için yöneticinize başvurun.</div>
+                </div>
+                <div class="ap-row">
+                    <label class="ap-label">Şirket</label>
+                    <input class="ap-input" type="text" value="@Model.CompanyName" readonly />
+                </div>
+            </div>
+
+            <div class="ap-grid-2">
+                <div class="ap-row">
+                    <label class="ap-label" for="FullName">Ad Soyad *</label>
+                    <input asp-for="FullName" class="ap-input" maxlength="100" required />
+                    <span asp-validation-for="FullName" class="field-validation-error"></span>
+                </div>
+                <div class="ap-row">
+                    <label class="ap-label" for="PhoneNumber">Cep Telefonu</label>
+                    <input asp-for="PhoneNumber" class="ap-input" type="tel" maxlength="30" placeholder="+90 5XX XXX XX XX" />
+                    <div class="ap-hint">WhatsApp bildirimleri için kullanılır.</div>
+                </div>
+            </div>
+
+            <div class="ap-grid-2">
+                <div class="ap-row">
+                    <label class="ap-label" for="EmployeeCode">Personel Kodu</label>
+                    <input asp-for="EmployeeCode" class="ap-input" maxlength="30" />
+                </div>
+                <div class="ap-row">
+                    <label class="ap-label" for="DepartmentId">Departman</label>
+                    <select asp-for="DepartmentId" asp-items="Model.Departments" class="ap-select"></select>
+                </div>
+            </div>
+
+            <div class="ap-grid-2">
+                <div class="ap-row">
+                    <label class="ap-label" for="SupervisorUserId">Amir</label>
+                    <select asp-for="SupervisorUserId" asp-items="Model.Supervisors" class="ap-select"></select>
+                </div>
+                <div class="ap-row">
+                    <label class="ap-label">Rol</label>
+                    <input class="ap-input" type="text" value="@Model.RoleLabel" readonly />
+                    <div class="ap-hint">Yöneticiniz tarafından atanır.</div>
+                </div>
+            </div>
+
+            <div class="ap-grid-2">
+                <div class="ap-row">
+                    <label class="ap-label" for="LanguageCode">Dil</label>
+                    <select asp-for="LanguageCode" class="ap-select">
+                        <option value="tr-TR">Türkçe</option>
+                        <option value="en-US">English</option>
+                    </select>
+                </div>
+                <div class="ap-row">
+                    <label class="ap-label" for="ThemeCode">Tema</label>
+                    <select asp-for="ThemeCode" class="ap-select">
+                        <option value="light">Açık</option>
+                        <option value="dark">Koyu</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="ap-actions">
+                <a class="ap-btn--link" asp-action="ChangePassword">Şifre değiştir →</a>
+                <div style="display:flex;gap:10px;">
+                    @if (!inWorkspace)
+                    {
+                        <a class="ap-btn ap-btn--ghost" href="/">Vazgeç</a>
+                    }
+                    <button type="submit" class="ap-btn ap-btn--primary">Kaydet</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

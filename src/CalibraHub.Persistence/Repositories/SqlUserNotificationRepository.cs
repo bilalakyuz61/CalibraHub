@@ -15,7 +15,7 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _table = $"[{schema}].[user_notifications]";
+        _table = $"[{schema}].[UserNotification]";
     }
 
     public async Task AddAsync(UserNotification notification, CancellationToken cancellationToken)
@@ -24,25 +24,25 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             INSERT INTO {_table}
-                ([id],[company_id],[user_id],[Created],[title],[body],
-                 [source_type],[source_id],[link],[is_read],[read_at])
+                ([CompanyId],[UserId],[Created],[Title],[Body],
+                 [SourceType],[SourceId],[Link],[IsRead],[ReadAt])
             VALUES
-                (@Id,@CompanyId,@UserId,@CreatedAt,@Title,@Body,
+                (@CompanyId,@UserId,@Created,@Title,@Body,
                  @SourceType,@SourceId,@Link,0,NULL);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
-        cmd.Parameters.Add(new SqlParameter("@Id",         notification.Id));
         cmd.Parameters.Add(new SqlParameter("@CompanyId",  notification.CompanyId));
         cmd.Parameters.Add(new SqlParameter("@UserId",     notification.UserId));
-        cmd.Parameters.Add(new SqlParameter("@CreatedAt",  notification.CreatedAt));
+        cmd.Parameters.Add(new SqlParameter("@Created",    notification.Created));
         cmd.Parameters.Add(new SqlParameter("@Title",      notification.Title));
         cmd.Parameters.Add(new SqlParameter("@Body",       (object?)notification.Body ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SourceType", (object?)notification.SourceType ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@SourceId",   (object?)notification.SourceId ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Link",       (object?)notification.Link ?? DBNull.Value));
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        notification.Id = Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken));
     }
 
-    public async Task<IReadOnlyCollection<UserNotification>> GetRecentAsync(Guid userId, int take, CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<UserNotification>> GetRecentAsync(int userId, int take, CancellationToken cancellationToken)
     {
         if (take <= 0 || take > 200) take = 30;
 
@@ -51,11 +51,11 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = $"""
             SELECT TOP (@Take)
-                   [id],[company_id],[user_id],[Created],[title],[body],
-                   [source_type],[source_id],[link],[is_read],[read_at]
+                   [Id],[CompanyId],[UserId],[Created],[Title],[Body],
+                   [SourceType],[SourceId],[Link],[IsRead],[ReadAt]
             FROM {_table}
-            WHERE [user_id] = @UserId
-            ORDER BY [is_read] ASC, [Created] DESC;
+            WHERE [UserId] = @UserId
+            ORDER BY [IsRead] ASC, [Created] DESC;
             """;
         cmd.Parameters.Add(new SqlParameter("@Take",   take));
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
@@ -64,32 +64,32 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
         return list;
     }
 
-    public async Task<int> GetUnreadCountAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<int> GetUnreadCountAsync(int userId, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"SELECT COUNT(*) FROM {_table} WHERE [user_id] = @UserId AND [is_read] = 0;";
+        cmd.CommandText = $"SELECT COUNT(*) FROM {_table} WHERE [UserId] = @UserId AND [IsRead] = 0;";
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
         var v = await cmd.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(v);
     }
 
-    public async Task MarkReadAsync(Guid notificationId, Guid userId, DateTime readAt, CancellationToken cancellationToken)
+    public async Task MarkReadAsync(int notificationId, int userId, DateTime readAt, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [is_read] = 1, [read_at] = @ReadAt WHERE [id] = @Id AND [user_id] = @UserId;";
+        cmd.CommandText = $"UPDATE {_table} SET [IsRead] = 1, [ReadAt] = @ReadAt WHERE [Id] = @Id AND [UserId] = @UserId;";
         cmd.Parameters.Add(new SqlParameter("@Id",     notificationId));
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
         cmd.Parameters.Add(new SqlParameter("@ReadAt", readAt));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task MarkAllReadAsync(Guid userId, DateTime readAt, CancellationToken cancellationToken)
+    public async Task MarkAllReadAsync(int userId, DateTime readAt, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"UPDATE {_table} SET [is_read] = 1, [read_at] = @ReadAt WHERE [user_id] = @UserId AND [is_read] = 0;";
+        cmd.CommandText = $"UPDATE {_table} SET [IsRead] = 1, [ReadAt] = @ReadAt WHERE [UserId] = @UserId AND [IsRead] = 0;";
         cmd.Parameters.Add(new SqlParameter("@UserId", userId));
         cmd.Parameters.Add(new SqlParameter("@ReadAt", readAt));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -99,14 +99,14 @@ public sealed class SqlUserNotificationRepository : IUserNotificationRepository
     {
         var n = new UserNotification
         {
-            Id         = r.GetGuid(0),
+            Id         = r.GetInt32(0),
             CompanyId  = r.GetInt32(1),
-            UserId     = r.GetGuid(2),
-            CreatedAt  = r.GetDateTime(3),
+            UserId     = r.GetInt32(2),
+            Created    = r.GetDateTime(3),
             Title      = r.GetString(4),
             Body       = r.IsDBNull(5) ? null : r.GetString(5),
             SourceType = r.IsDBNull(6) ? null : r.GetString(6),
-            SourceId   = r.IsDBNull(7) ? (Guid?)null : r.GetGuid(7),
+            SourceId   = r.IsDBNull(7) ? (int?)null : r.GetInt32(7),
             Link       = r.IsDBNull(8) ? null : r.GetString(8),
         };
         if (r.GetBoolean(9))

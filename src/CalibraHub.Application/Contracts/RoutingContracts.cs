@@ -24,8 +24,8 @@ public sealed record RoutingOperationDto(
     string? OperationCode,
     string? OperationName,
     int? MachineId,
-    string? MachineCode,
-    string? MachineName,
+    string? Code,
+    string? Name,
     decimal? OverrideDuration,
     DurationUnit DurationUnit,
     string? Notes);

@@ -27,7 +27,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
     {
         _connectionFactory = connectionFactory;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{_schema}].[incoming_documents]";
+        _tableName = $"[{_schema}].[IncomingDocument]";
         _ebelgeMasTableName = $"[{_schema}].[CBT_EBELGEMAS]";
         _ebelgeMasTaxTableName = $"[{_schema}].[CBT_EBELGEMASTAX]";
         _ebelgeKalemTableName = $"[{_schema}].[CBT_EBELGEKALEM]";
@@ -57,7 +57,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             return Convert.ToInt32(legacyResult) > 0;
         }
 
-        if (!await TableExistsAsync(connection, "incoming_documents", cancellationToken))
+        if (!await TableExistsAsync(connection, "IncomingDocument", cancellationToken))
         {
             return false;
         }
@@ -120,7 +120,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             return Convert.ToInt32(legacyResult) > 0;
         }
 
-        if (!await TableExistsAsync(connection, "incoming_documents", cancellationToken))
+        if (!await TableExistsAsync(connection, "IncomingDocument", cancellationToken))
         {
             return false;
         }
@@ -137,7 +137,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         var hasLegacyTables = await LegacyTablesExistAsync(connection, cancellationToken);
-        var hasIncomingDocumentsTable = await TableExistsAsync(connection, "incoming_documents", cancellationToken);
+        var hasIncomingDocumentsTable = await TableExistsAsync(connection, "IncomingDocument", cancellationToken);
         var hasLegacyBelgeTipi = hasLegacyTables &&
                                  await ColumnExistsAsync(connection, "CBT_EBELGEMAS", "BELGE_TIPI", cancellationToken);
         var hasLegacyMasTax = hasLegacyTables &&
@@ -168,7 +168,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         else
         {
             throw new InvalidOperationException(
-                $"Ne {_schema}.CBT_EBELGE* ne de {_schema}.incoming_documents tablolari bulundu.");
+                $"Ne {_schema}.CBT_EBELGE* ne de {_schema}.IncomingDocument tablolari bulundu.");
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -211,22 +211,22 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             }
         }
 
-        if (documents.Count == 0 && await TableExistsAsync(connection, "incoming_documents", cancellationToken))
+        if (documents.Count == 0 && await TableExistsAsync(connection, "IncomingDocument", cancellationToken))
         {
-            var hasProcessedColumn = await ColumnExistsAsync(connection, "incoming_documents", "is_processed", cancellationToken);
-            var isProcessedSelectSql = hasProcessedColumn ? "[is_processed]" : "CAST(0 AS BIT) AS [is_processed]";
+            var hasProcessedColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IsProcessed", cancellationToken);
+            var isProcessedSelectSql = hasProcessedColumn ? "[IsProcessed]" : "CAST(0 AS BIT) AS [IsProcessed]";
             var isProcessedFilterSql = string.Empty;
             if (isProcessed.HasValue && hasProcessedColumn)
             {
-                isProcessedFilterSql = isProcessed.Value ? " AND [is_processed] = 1" : " AND [is_processed] = 0";
+                isProcessedFilterSql = isProcessed.Value ? " AND [IsProcessed] = 1" : " AND [IsProcessed] = 0";
             }
 
             await using var command = connection.CreateCommand();
             command.CommandText = $"""
-                SELECT [id], [integrator_settings_id], [envelope_id], [document_number], [kind], [issue_date], [sender_tax_number], [recipient_tax_number], CAST(SUBSTRING([payload_raw], 1, 1000) AS NVARCHAR(MAX)) AS [payload_raw], [approval_status], [imported_at], ISNULL([sender_name], N'') AS [sender_name], {isProcessedSelectSql}
+                SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], CAST(SUBSTRING([PayloadRaw], 1, 1000) AS NVARCHAR(MAX)) AS [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}
                 FROM {_tableName}
-                WHERE [approval_status] = @ApprovalStatus {isProcessedFilterSql}
-                ORDER BY [imported_at] DESC;
+                WHERE [ApprovalStatus] = @ApprovalStatus {isProcessedFilterSql}
+                ORDER BY [ImportedAt] DESC;
                 """;
             command.Parameters.Add(new SqlParameter("@ApprovalStatus", ApprovalStatus.Pending.ToString()));
 
@@ -276,19 +276,19 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
             return null;
         }
 
-        if (!await TableExistsAsync(connection, "incoming_documents", cancellationToken))
+        if (!await TableExistsAsync(connection, "IncomingDocument", cancellationToken))
         {
             return null;
         }
 
-        var hasProcessedColumn = await ColumnExistsAsync(connection, "incoming_documents", "is_processed", cancellationToken);
-        var isProcessedSelectSql = hasProcessedColumn ? "[is_processed]" : "CAST(0 AS BIT) AS [is_processed]";
+        var hasProcessedColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IsProcessed", cancellationToken);
+        var isProcessedSelectSql = hasProcessedColumn ? "[IsProcessed]" : "CAST(0 AS BIT) AS [IsProcessed]";
 
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [integrator_settings_id], [envelope_id], [document_number], [kind], [issue_date], [sender_tax_number], [recipient_tax_number], [payload_raw], [approval_status], [imported_at], ISNULL([sender_name], N'') AS [sender_name], {isProcessedSelectSql}
+            SELECT [Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt], ISNULL([SenderName], N'') AS [SenderName], {isProcessedSelectSql}
             FROM {_tableName}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
 
@@ -310,7 +310,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         command.CommandText = $"""
             SELECT COUNT(1)
             FROM {_tableName}
-            WHERE [envelope_id] = @EnvelopeId;
+            WHERE [EnvelopeId] = @EnvelopeId;
             """;
         command.Parameters.Add(new SqlParameter("@EnvelopeId", envelopeId));
 
@@ -329,9 +329,9 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         command.CommandText = $"""
             SELECT COUNT(1)
             FROM {_tableName}
-            WHERE [document_number] = @DocumentNumber
-              AND [recipient_tax_number] = @RecipientTaxNumber
-              AND [kind] = @Kind;
+            WHERE [DocumentNumber] = @DocumentNumber
+              AND [RecipientTaxNumber] = @RecipientTaxNumber
+              AND [Kind] = @Kind;
             """;
         command.Parameters.Add(CreateParameter("@DocumentNumber", documentNumber));
         command.Parameters.Add(CreateParameter("@RecipientTaxNumber", recipientTaxNumber));
@@ -377,7 +377,7 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
         command.Transaction = transaction;
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([id], [integrator_settings_id], [envelope_id], [document_number], [kind], [issue_date], [sender_tax_number], [sender_name], [recipient_tax_number], [payload_raw], [approval_status], [imported_at])
+                ([Id], [IntegratorSettingsId], [EnvelopeId], [DocumentNumber], [Kind], [IssueDate], [SenderTaxNumber], [SenderName], [RecipientTaxNumber], [PayloadRaw], [ApprovalStatus], [ImportedAt])
             VALUES
                 (@Id, @IntegratorSettingsId, @EnvelopeId, @DocumentNumber, @Kind, @IssueDate, @SenderTaxNumber, @SenderName, @RecipientTaxNumber, @PayloadRaw, @ApprovalStatus, @ImportedAt);
             """;
@@ -1636,13 +1636,13 @@ public sealed class SqlIncomingDocumentRepository : IIncomingDocumentRepository
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
         }
-        else if (await TableExistsAsync(connection, "incoming_documents", cancellationToken))
+        else if (await TableExistsAsync(connection, "IncomingDocument", cancellationToken))
         {
-            var hasProcessedColumn = await ColumnExistsAsync(connection, "incoming_documents", "is_processed", cancellationToken);
+            var hasProcessedColumn = await ColumnExistsAsync(connection, "IncomingDocument", "IsProcessed", cancellationToken);
             if (hasProcessedColumn)
             {
                 await using var command = connection.CreateCommand();
-                command.CommandText = $"UPDATE {_tableName} SET [is_processed] = @IsProcessed WHERE [id] = @Id";
+                command.CommandText = $"UPDATE {_tableName} SET [IsProcessed] = @IsProcessed WHERE [Id] = @Id";
                 command.Parameters.Add(CreateParameter("@IsProcessed", isProcessed ? 1 : 0));
                 command.Parameters.Add(CreateParameter("@Id", id));
                 await command.ExecuteNonQueryAsync(cancellationToken);

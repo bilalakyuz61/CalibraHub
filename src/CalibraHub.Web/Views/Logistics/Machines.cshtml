@@ -1,5 +1,6 @@
 @model CalibraHub.Web.Models.Logistics.MachinesSmartBoardViewModel
 @using System.Text.Json
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
 @{
     ViewData["Title"] = "Makine Tanımlamaları";
     ViewData["FormCode"] = "MACHINES";
@@ -21,7 +22,10 @@
         : "null";
 }
 
-@section Styles {
+<partial name="_ProductionDefsTabs" model='"machines"' />
+
+@* PJAX wrapper — production-defs-pjax.js sadece bu div'i swap eder. *@
+<div id="pdt-tab-content" data-pdt-key="machines" data-pdt-body-class="page-machines">
 <style>
     .page-machines .integrator-dashboard {
         height: 100% !important; min-height: 0 !important;
@@ -43,26 +47,24 @@
         flex: 1 1 auto; min-height: 0; height: 100%;
     }
 </style>
-}
 
 <section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
     <div id="reactSmartBoard" style="flex:1 1 auto;min-height:0;overflow:hidden;"></div>
 </section>
 
-@section Scripts {
 <script>
 (function() {
     var BOARD_CONFIG = @Html.Raw(boardConfigJson);
-    var BUNDLE_URL = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
-    var CSS_URL    = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
 
     var el = document.getElementById('reactSmartBoard');
     if (!el) { console.error('[Machines] Mount element yok'); return; }
 
     function showError(msg) {
-        el.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;background:#0c0f1a;color:#f87171;font-size:14px;gap:12px;">'
+        el.innerHTML = '<div class="cb-mount-error">'
             + '<div>' + msg + '</div>'
-            + '<button onclick="location.reload()" style="padding:8px 20px;border-radius:8px;border:1px solid #4f46e5;background:#6366f1;color:#fff;cursor:pointer;font-size:13px;">Sayfayı Yenile</button>'
+            + '<button onclick="location.reload()">Sayfayı Yenile</button>'
             + '</div>';
     }
 
@@ -82,8 +84,7 @@
     }
 
     function loadCss() {
-        var prev = document.querySelector('link[data-machines-sb]');
-        if (prev) prev.parentNode.removeChild(prev);
+        if (document.querySelector('link[data-machines-sb]')) return;
         var link = document.createElement('link');
         link.rel = 'stylesheet'; link.href = CSS_URL;
         link.setAttribute('data-machines-sb', '1');
@@ -91,8 +92,7 @@
     }
 
     function loadScript(cb) {
-        var prev = document.querySelector('script[data-machines-sb]');
-        if (prev) prev.parentNode.removeChild(prev);
+        if (document.querySelector('script[data-machines-sb]')) { cb(); return; }
         var script = document.createElement('script');
         script.src = BUNDLE_URL;
         script.setAttribute('data-machines-sb', '1');
@@ -107,8 +107,6 @@
     } else {
         loadScript(doMount);
     }
-
-    window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
 })();
 </script>
-}
+</div>

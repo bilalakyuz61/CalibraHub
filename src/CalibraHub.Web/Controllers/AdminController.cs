@@ -1,9 +1,12 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Security;
 using CalibraHub.Application.Ui;
 using CalibraHub.Domain.Enums;
+using CalibraHub.Web.Authorization;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Infrastructure.Collaboration;
 using CalibraHub.Web.Models.Admin;
 using CalibraHub.Web.Models.Shared;
@@ -230,6 +233,7 @@ public sealed class AdminController : Controller
     // NOT: CompanySettings GET+POST CompanySettingsController'a tasindi (rapor 2.3 split).
 
     [HttpGet]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> Logs(
         string? searchTerm,
         string? level,
@@ -244,6 +248,7 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> ProjectInstructions(CancellationToken cancellationToken)
     {
         SetActiveMenu("project-instructions");
@@ -255,6 +260,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> SaveProjectInstructions(
         ProjectInstructionsViewModel model,
         CancellationToken cancellationToken)
@@ -271,6 +277,7 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> IntegratorSettings(
         int? id,
         int? page,
@@ -333,6 +340,7 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> MailSettings(
         Guid? smtpId,
         int? page,
@@ -386,6 +394,7 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> ErpSettings(
         Guid? erpId,
         int? page,
@@ -438,6 +447,7 @@ public sealed class AdminController : Controller
     }
 
     [HttpGet]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> ViewSettings(
         string? screenCode,
         Guid? groupId,
@@ -479,6 +489,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> SaveFieldGroup(
         MaterialCardViewSettingsViewModel model,
         CancellationToken cancellationToken)
@@ -566,6 +577,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> SaveMaterialCardDynamicField(
         MaterialCardViewSettingsViewModel model,
         CancellationToken cancellationToken)
@@ -661,6 +673,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> SaveScreenLayout(
         StandardScreenDesignViewModel model,
         CancellationToken cancellationToken)
@@ -708,6 +721,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> IntegratorSettings(
         IntegratorSettingsInput input,
         int? page,
@@ -783,6 +797,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> DeleteIntegratorSettings(
         int id,
         int? page,
@@ -1142,6 +1157,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> SaveErpSettings(
         [Bind(Prefix = "ErpInput")] ErpConnectionInput erpInput,
         int? page,
@@ -1203,6 +1219,7 @@ public sealed class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> DeleteErpSettings(
         Guid id,
         int? page,
@@ -1249,6 +1266,19 @@ public sealed class AdminController : Controller
     // NOT: GetProjectInstructionsJson + SaveProjectInstructionsJson ProjectInstructionsJsonController'a tasindi (rapor 2.3 split).
 
     [HttpGet]
+    /// <summary>
+    /// 2026-06-06 — Yetkilendirme yönetim ekranı. Admin kullanıcı veya departman seçip
+    /// her form için 6 standart action'ı (Ver / Reddet / Miras) düzenler.
+    /// API: GET/POST /Permission/User/{id} ve /Permission/Department/{id}.
+    /// Convention routing: /Admin/Permissions.
+    /// </summary>
+    [HttpGet]
+    public IActionResult Permissions()
+    {
+        SetActiveMenu("permissions");
+        return View();
+    }
+
     public async Task<IActionResult> Departments(
         int? page,
         int? pageSize,
@@ -1281,6 +1311,10 @@ public sealed class AdminController : Controller
             .OrderBy(d => d.Name)
             .ToArray();
 
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeStdWidget("w_active", "Durum", "boolean"),
+        };
         var entities = new List<object>();
         foreach (var d in departments)
         {
@@ -1347,7 +1381,7 @@ public sealed class AdminController : Controller
                     url     = "/Admin/DepartmentEdit",
                 },
             },
-            masterWidgets = Array.Empty<object>(),
+            masterWidgets,
             entities,
         };
     }
@@ -2466,10 +2500,10 @@ public sealed class AdminController : Controller
         };
     }
 
-    private Guid? GetCurrentUserId()
+    private int? GetCurrentUserId()
     {
         var rawUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(rawUserId, out var userId) ? userId : null;
+        return int.TryParse(rawUserId, out var userId) ? userId : null;
     }
 
     private async Task<int> ResolveGridPageSizeAsync(
@@ -2488,7 +2522,7 @@ public sealed class AdminController : Controller
             ? requestedPageSize!.Value
             : storedPageSize;
 
-        if (userId.HasValue && userId.Value != Guid.Empty && resolvedPageSize != storedPageSize)
+        if (userId.HasValue && userId.Value > 0 && resolvedPageSize != storedPageSize)
         {
             await _uiConfigurationService.SaveGridPageSizePreferenceAsync(
                 userId.Value,

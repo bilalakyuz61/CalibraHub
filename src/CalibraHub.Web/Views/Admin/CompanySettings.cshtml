@@ -1,4 +1,9 @@
 @model CalibraHub.Web.Models.Admin.CompanyManagementViewModel
+@inject CalibraHub.Application.Abstractions.Services.IPermissionService PermService
+@using System.Security.Claims
+@using CalibraHub.Application.Security
+@using CalibraHub.Application.Services.Security
+@using CalibraHub.Domain.Enums
 @{
     ViewData["Title"] = "Şirket Ayarları";
     ViewData["FormCode"] = "COMPANY_SETTINGS";
@@ -6,6 +11,58 @@
     ViewData["DbInfo"] = "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'>"
         + "<tr><td style='padding:6px 8px;font-weight:600;color:#2563eb;white-space:nowrap;'>company</td><td style='padding:6px 8px;'>Sirket bilgileri (unvan, vergi no, adres, logo, ayarlar). Sistem DB'de tutulur.</td></tr>"
         + "</table>";
+
+    // 2026-06-08 — Tab bazlı yetki kontrolü. Şirket Ayarları TEK form (COMPANY_SETTINGS);
+    // tab erişimleri form-içi BUTTON:TAB_* aksiyonlarıyla yetkilendirilir. Yetki Yönetimi
+    // UI'da tek "Şirket Ayarları" satırı görünür; tab izinleri altta listelenir.
+    //
+    // - "general" tab: COMPANY_SETTINGS form-level VIEW yetkisine bağlı (ayrı buton yok)
+    // - Diğer tab'lar: BUTTON:TAB_<KEY> yetkisi gerektirir
+    var tabPermissionMap = new (string Key, string ButtonKey, string Label)[]
+    {
+        ("general",    "",                "Genel Bilgiler"),     // VIEW yetisi varsa görünür
+        ("mail",       "TAB_MAIL",        "Mail Ayarlari"),
+        ("integrator", "TAB_INTEGRATOR",  "Entegrator Ayarlari"),
+        ("addresses",  "TAB_ADDRESSES",   "Adres Kataloğu"),
+        ("whatsapp",   "TAB_WHATSAPP",    "WhatsApp"),
+        ("ai",         "TAB_AI",          "Yapay Zeka"),
+        ("satinalma",  "TAB_SATINALMA",   "Satın Alma"),
+    };
+
+    var visibleTabs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var isSysAdmin = User.IsInRole("SystemAdmin")
+                     || string.Equals(User.FindFirstValue(ClaimTypes.Role), "SystemAdmin", StringComparison.OrdinalIgnoreCase);
+
+    if (isSysAdmin)
+    {
+        foreach (var (key, _, _) in tabPermissionMap) visibleTabs.Add(key);
+    }
+    else
+    {
+        var uidStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var rStr   = User.FindFirstValue(ClaimTypes.Role) ?? "Operator";
+        var dStr   = User.FindFirstValue("department_id");
+        int.TryParse(uidStr, out var uid);
+        int? did = int.TryParse(dStr, out var d) && d > 0 ? d : null;
+        UserAuthorizationCatalog.TryParseRole(rStr, out var rEnum);
+        if (uid > 0)
+        {
+            // Önce COMPANY_SETTINGS:VIEW — formu açma yetkisi varsa Genel tab görünür
+            var hasView = await PermService.CheckAsync(uid, rEnum, did, "COMPANY_SETTINGS", "VIEW", Context.RequestAborted);
+            if (hasView) visibleTabs.Add("general");
+
+            // Diğer tab'lar — BUTTON:TAB_* yetkisine bağlı
+            foreach (var (key, btnKey, _) in tabPermissionMap)
+            {
+                if (string.IsNullOrEmpty(btnKey)) continue; // general zaten yukarıda
+                if (await PermService.CanInvokeButtonAsync(uid, rEnum, did, "COMPANY_SETTINGS", btnKey, Context.RequestAborted))
+                    visibleTabs.Add(key);
+            }
+        }
+    }
+
+    // Aktif olacak ilk görünür tab (varsa). Hiçbiri yoksa form boş gözükür (empty state).
+    var firstVisible = tabPermissionMap.FirstOrDefault(t => visibleTabs.Contains(t.Key)).Key ?? string.Empty;
 }
 
 @section Styles {
@@ -86,6 +143,42 @@
     .cs-instruction li { margin-bottom: 4px; }
     .cs-instruction code { background: #e0f2fe; padding: 1px 5px; border-radius: 3px; font-size: 0.74rem; }
     .cs-instruction a { color: #0369a1; text-decoration: underline; }
+
+    /* ── WhatsApp entegrasyon switch ─────────────────────────────────── */
+    .wa-toggle-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 14px; border-radius: 10px;
+        background: var(--app-muted-surface,#f8fafc);
+        border: 1px solid var(--app-border,#e2e8f0);
+        margin-bottom: 14px;
+    }
+    .wa-toggle-label {
+        font-size: .85rem; font-weight: 600; color: var(--app-text,#1e293b); flex: 1;
+    }
+    .wa-toggle-label small {
+        display: block; font-weight: 400; font-size: .72rem; color: var(--app-text-muted,#64748b); margin-top: 1px;
+    }
+    /* Bootstrap-style switch */
+    .wa-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+    .wa-switch input { opacity: 0; width: 0; height: 0; }
+    .wa-switch-track {
+        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
+        background: var(--app-border-strong,#94a3b8);
+        transition: background .2s;
+    }
+    .wa-switch-track::before {
+        content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%;
+        left: 3px; top: 3px; background: #fff;
+        transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .wa-switch input:checked + .wa-switch-track { background: #25d366; }
+    .wa-switch input:checked + .wa-switch-track::before { transform: translateX(20px); }
+    /* Pasifken bağlantı paneli soluk */
+    .wa-body--disabled { opacity: .45; pointer-events: none; user-select: none; }
+    body.app-theme-dark.page-admin-company .wa-toggle-row {
+        background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12);
+    }
+    body.app-theme-dark.page-admin-company .wa-toggle-label { color: #e2e8f0; }
 
     /* ── WhatsApp tab ─────────────────────────────────────────────────── */
     .wa-prov-card {
@@ -229,6 +322,23 @@
         margin-left:138px; font-size:.7rem; line-height:1.5;
         color: var(--app-text-muted, #64748b);
     }
+    .wa-connect-methods {
+        display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px;
+    }
+    .wa-connect-col {
+        border:1px solid var(--app-border,#e2e8f0); border-radius:10px; padding:16px;
+        background:var(--app-surface,#fff);
+    }
+    .wa-connect-col__title {
+        font-weight:700; font-size:.85rem; margin-bottom:4px; color:var(--app-text,#1e293b);
+    }
+    .wa-connect-col__hint {
+        font-size:.72rem; color:var(--app-text-muted,#64748b); line-height:1.4; margin-bottom:12px;
+    }
+    body.app-theme-dark.page-admin-company .wa-connect-col {
+        border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.03);
+    }
+    body.app-theme-dark.page-admin-company .wa-connect-col__title { color:#e2e8f0; }
     body.app-theme-dark.page-admin-company .wa-qr-area {
         background: rgba(129,140,248,.05);
         border-color: rgba(255,255,255,.18);
@@ -288,20 +398,29 @@
 
         <div class="cs-body">
             <div class="cs-tab-nav">
-                <button type="button" class="cs-tab-btn is-active" data-cs-tab="general">Genel Bilgiler</button>
-                <button type="button" class="cs-tab-btn" data-cs-tab="mail">Mail Ayarlari</button>
-                @* Entegrasyon API tab'ı kaldırıldı — yönetim Hub'a tasindi:
-                   /Integrations#profiles (Entegrasyon Wizard > Profiller tab) *@
-                <button type="button" class="cs-tab-btn" data-cs-tab="integrator">Entegrator Ayarlari</button>
-                @* "Genel Parametreler" sekmesi /Admin/Parameters > Genel altina tasindi (E-Belge Onay Sistemi). *@
-                <button type="button" class="cs-tab-btn" data-cs-tab="addresses">Adres Kataloğu</button>
-                <button type="button" class="cs-tab-btn" data-cs-tab="whatsapp">WhatsApp</button>
+                @* 2026-06-08 — Tab visibility, kullanıcının ilgili FormCode'a VIEW yetkisi
+                   olup olmadığına göre belirlenir. SystemAdmin'a hepsi açık. *@
+                @foreach (var (key, _, label) in tabPermissionMap)
+                {
+                    if (!visibleTabs.Contains(key)) { continue; }
+                    var isActive = string.Equals(key, firstVisible, StringComparison.OrdinalIgnoreCase) ? " is-active" : "";
+                    <button type="button" class="cs-tab-btn@(isActive)" data-cs-tab="@key">@label</button>
+                }
             </div>
 
             <div class="cs-tab-content">
 
+                @if (visibleTabs.Count == 0)
+                {
+                    <div style="padding: 60px 28px; text-align: center; color: #94a3b8;">
+                        <div style="font-size: 40px; margin-bottom: 12px; opacity: .5;">🛡️</div>
+                        <div style="font-size: 14px; font-weight: 600; color: #475569;">Şirket Ayarları için tanımlı yetkiniz yok.</div>
+                        <div style="font-size: 12px; margin-top: 6px;">Yöneticinizle iletişime geçin.</div>
+                    </div>
+                }
+
                 <!-- Genel Bilgiler -->
-                <div class="cs-tab-pane is-active" id="cs-pane-general">
+                <div class="cs-tab-pane@(firstVisible == "general" ? " is-active" : "")" id="cs-pane-general" data-cs-pane-key="general">
                     <div class="cs-line">
                         <label>Sirket Adi</label>
                         <input asp-for="Input.Name" class="form-control form-control-sm" readonly
@@ -345,7 +464,7 @@
                 </div>
 
                 <!-- Mail Ayarlari -->
-                <div class="cs-tab-pane" id="cs-pane-mail">
+                <div class="cs-tab-pane@(firstVisible == "mail" ? " is-active" : "")" id="cs-pane-mail" data-cs-pane-key="mail">
                     <div class="cs-line">
                         <label>SMTP Host</label>
                         <input asp-for="SmtpInput.Host" class="form-control form-control-sm" placeholder="smtp.gmail.com" />
@@ -452,7 +571,7 @@
                    sadece bu UI tab'i kaldirildi. *@
 
                 <!-- Entegrator Ayarlari -->
-                <div class="cs-tab-pane" id="cs-pane-integrator">
+                <div class="cs-tab-pane@(firstVisible == "integrator" ? " is-active" : "")" id="cs-pane-integrator" data-cs-pane-key="integrator">
                     <span id="isrToolbarMsg"></span>
                     <div class="isr-form" style="max-width:720px;">
                         <input type="hidden" id="isrId" />
@@ -564,7 +683,7 @@
                 </div>
 
                 <!-- Adres Kataloğu (PTT) -->
-                <div class="cs-tab-pane" id="cs-pane-addresses">
+                <div class="cs-tab-pane@(firstVisible == "addresses" ? " is-active" : "")" id="cs-pane-addresses" data-cs-pane-key="addresses">
                     <div class="cs-section-title">PTT Posta Kodu Kataloğu</div>
                     <p style="margin:6px 0 14px;font-size:.82rem;color:rgba(100,116,139,.9);">
                         Cari kartlarındaki İl / İlçe / Mahalle dropdown'ları bu katalogdan beslenir. PTT verisini
@@ -651,35 +770,48 @@
 
                 @{
                     var waCfg = ViewBag.WhatsAppConfig as CalibraHub.Domain.Entities.WhatsAppConfig;
-                    var waSafety = ViewBag.WhatsAppSafetyRules as CalibraHub.Domain.Entities.WhatsAppSafetyRules;
-                    var waQuietHoursActive = waSafety?.RespectQuietHours ?? true;
                     var waProviderInt = waCfg is null ? 0 : (int)waCfg.Provider;
                 }
 
                 <!-- WhatsApp Tab Pane -->
-                <div class="cs-tab-pane" id="cs-pane-whatsapp">
+                <div class="cs-tab-pane@(firstVisible == "whatsapp" ? " is-active" : "")" id="cs-pane-whatsapp" data-cs-pane-key="whatsapp">
                     <div class="cs-section-title">WhatsApp Yönetimi</div>
 
-                    @if (waCfg is null || !waCfg.IsEnabled)
+                    <!-- Entegrasyon switch — en üstte -->
+                    <div class="wa-toggle-row">
+                        <div class="wa-toggle-label">
+                            WhatsApp Entegrasyonu
+                            <small>Kapalıyken mesaj gönderme/alma devre dışı kalır</small>
+                        </div>
+                        <label class="wa-switch" title="WhatsApp entegrasyonunu etkinleştir/devre dışı bırak">
+                            <input type="checkbox" id="waEnabled" @(waCfg?.IsEnabled == true ? "checked" : "") onchange="waToggleEnabled(this.checked)" />
+                            <span class="wa-switch-track"></span>
+                        </label>
+                    </div>
+
+                    @if (!waCfg?.IsEnabled ?? true)
                     {
-                        <div class="wa-status wa-status--off">
-                            ● Henüz yapılandırılmadı veya pasif. Aşağıdaki Bağlantı Yöntemi'ni seç ve gerekli bilgileri gir.
+                        <div class="wa-status wa-status--off" style="margin-bottom:10px;">
+                            ● Entegrasyon pasif. Switch'i açıp kaydedin.
                         </div>
                     }
                     else if (!string.IsNullOrEmpty(waCfg.DisplayPhoneNumber))
                     {
-                        <div class="wa-status wa-status--ok">
+                        <div class="wa-status wa-status--ok" style="margin-bottom:10px;">
                             ✓ Aktif — <b>@waCfg.DisplayPhoneNumber</b> (@(waCfg.Provider == CalibraHub.Domain.Entities.WhatsAppProviderType.CloudApi ? "Cloud API" : "Web QR"))
                         </div>
                     }
                     else
                     {
-                        <div class="wa-status wa-status--warn">
+                        <div class="wa-status wa-status--warn" style="margin-bottom:10px;">
                             ⚠ Yapılandırıldı ama bağlantı henüz test edilmedi.
                         </div>
                     }
 
-                    <div class="cs-section-title" style="margin-top:14px;">Bağlantı Yöntemi</div>
+                    <!-- Bağlantı gövdesi — switch kapalıyken soluk/devre dışı -->
+                    <div id="waBody" class="@(waCfg?.IsEnabled == true ? "" : "wa-body--disabled")">
+
+                    <div class="cs-section-title">Bağlantı Yöntemi</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
                         <button type="button" class="wa-prov-card @(waProviderInt == 0 ? "is-active" : "")" data-wa-provider="0" onclick="waSelectProvider(0)">
                             <div class="wa-prov-card__title">
@@ -730,69 +862,49 @@
 
                     <!-- Web QR panel -->
                     <div id="waPanelWebQr" style="@(waProviderInt == 1 ? "" : "display:none;")">
-                        <div class="cs-instruction">
-                            <strong>Web QR Bridge Kurulumu:</strong>
-                            <p style="margin:6px 0;">Bridge sunucuda Windows Service olarak çalışır. Kurulum sırasında atladıysan iki yöntemle ekleyebilirsin:</p>
-                            <ol style="margin:6px 0 4px 18px; padding:0;">
-                                <li><b>En kolay:</b> CalibraHub kurulum klasöründe <code>WhatsAppBridge\install-bridge.bat</code> dosyasına sağ tık → <b>Yönetici olarak çalıştır</b>. Otomatik olarak npm install + service kaydı yapar.</li>
-                                <li><b>Manuel (ileri):</b> Admin PowerShell'de:
-                                    <code style="display:block; margin:4px 0;">cd "C:\Program Files\CalibraHub\WhatsAppBridge"<br/>npm install<br/>node install-service.js</code>
-                                </li>
-                            </ol>
-                            <p style="margin:6px 0 0;"><b>Gereksinim:</b> <a href="https://nodejs.org" target="_blank">Node.js 18+</a> sunucuda yüklü olmalı.</p>
-                            <p style="margin:6px 0 0;">Servis kurulduktan sonra: telefondan WhatsApp → <b>Bağlı Cihazlar → Cihaz Bağla</b> → aşağıdaki Bridge URL'in <code>/qr</code> endpoint'inden QR'ı al ve tara.</p>
-                        </div>
                         <div class="cs-line" style="margin-top:10px;">
                             <label>Bridge URL</label>
-                            <input type="text" class="form-control form-control-sm" id="waBridgeUrl" placeholder="http://localhost:61100" value="@(waCfg?.WebQrBridgeUrl ?? "http://localhost:61100")" />
+                            <input type="text" class="form-control form-control-sm" id="waBridgeUrl"
+                                   placeholder="http://localhost:61100"
+                                   value="@(waCfg?.WebQrBridgeUrl ?? "http://localhost:61100")" />
                         </div>
-                        <div class="cs-line">
-                            <label>Pairing Code</label>
-                            <span style="display:flex; gap:8px; align-items:center; flex:1;">
-                                <input type="tel" class="form-control form-control-sm" id="waPairPhone"
-                                       placeholder="905338168150 (ülke kodu dahil, +'sız)" maxlength="14" style="flex:1;" />
-                                <button type="button" class="btn btn-sm" id="waPairBtn"
-                                        style="background:linear-gradient(135deg,#25d366,#128c7e); color:#fff; border:none; padding:6px 16px; border-radius:6px; font-weight:600; white-space:nowrap;">
-                                    Kod Al
-                                </button>
-                            </span>
-                        </div>
-                        <div id="waPairResult" class="cs-line" style="display:none; margin-top:6px;">
-                            <label></label>
-                            <div style="flex:1;">
-                                <div style="font-size:.8rem; color:var(--app-text-muted, #64748b); margin-bottom:6px; line-height:1.5;">
-                                    <b>Telefonda yapılacaklar:</b><br/>
-                                    1. WhatsApp aç → ⋮ menü → <b>Bağlı Cihazlar</b><br/>
-                                    2. <b>"Cihaz Bağla"</b> → <b>"Telefon numarasıyla bağla"</b><br/>
-                                    3. Aşağıdaki kodu <b>60 saniye içinde</b> gir
+
+                        <div class="wa-connect-methods">
+                            <!-- QR Kod kolonu -->
+                            <div class="wa-connect-col">
+                                <div class="wa-connect-col__title">📷 QR Kod ile Bağlan</div>
+                                <div class="wa-connect-col__hint">WhatsApp → Bağlı Cihazlar → Cihaz Bağla → QR tara</div>
+                                <div id="waQrArea" class="wa-qr-area">
+                                    <div id="waQrMsg" class="wa-qr-area__msg">Bridge URL kaydet ve bağlantıyı başlat…</div>
+                                    <img id="waQrImg" class="wa-qr-area__img" alt="" style="display:none;" />
                                 </div>
-                                <div id="waPairCode"
-                                     style="font-family:'Courier New',monospace; font-size:1.6rem; font-weight:700; letter-spacing:6px; padding:10px 16px; background:rgba(37,211,102,.12); color:#16a34a; border:2px solid rgba(37,211,102,.4); border-radius:8px; display:inline-block; user-select:all; cursor:pointer;"
-                                     title="Tıkla → kopyala">—</div>
+                            </div>
+
+                            <!-- Pairing Code kolonu -->
+                            <div class="wa-connect-col">
+                                <div class="wa-connect-col__title">🔢 Telefon Kodu ile Bağlan</div>
+                                <div class="wa-connect-col__hint">WhatsApp → Bağlı Cihazlar → Cihaz Bağla → Telefon numarasıyla bağla</div>
+                                <div style="display:flex; gap:8px; align-items:center;">
+                                    <input type="tel" class="form-control form-control-sm" id="waPairPhone"
+                                           placeholder="905XXXXXXXXX (ülke kodu, +'sız)" maxlength="14" style="flex:1;" />
+                                    <button type="button" class="btn btn-sm" id="waPairBtn"
+                                            style="background:linear-gradient(135deg,#25d366,#128c7e); color:#fff; border:none; padding:6px 16px; border-radius:6px; font-weight:600; white-space:nowrap;">
+                                        Kod Al
+                                    </button>
+                                </div>
+                                <div id="waPairResult" style="display:none; margin-top:14px; text-align:center;">
+                                    <div style="font-size:.72rem; color:var(--app-text-muted,#64748b); margin-bottom:8px;">
+                                        60 saniye içinde WhatsApp'a gir:
+                                    </div>
+                                    <div id="waPairCode"
+                                         style="font-family:'Courier New',monospace; font-size:1.6rem; font-weight:700; letter-spacing:6px; padding:10px 16px; background:rgba(37,211,102,.12); color:#16a34a; border:2px solid rgba(37,211,102,.4); border-radius:8px; display:inline-block; user-select:all; cursor:pointer;"
+                                         title="Tıkla → kopyala">—</div>
+                                </div>
                             </div>
                         </div>
-                        <!-- waQrArea hidden — sadece JS internal kullanim icin (msg gostermek istersek) -->
-                        <div id="waQrArea" class="wa-qr-area" style="display:none;">
-                            <div id="waQrMsg" class="wa-qr-area__msg"></div>
-                            <img id="waQrImg" class="wa-qr-area__img" alt="" style="display:none;" />
-                        </div>
                     </div>
 
-                    <div class="cs-line" style="margin-top:8px;">
-                        <label></label>
-                        <label class="wa-enabled-toggle">
-                            <input type="checkbox" id="waEnabled" @(waCfg?.IsEnabled == true ? "checked" : "") />
-                            <span>WhatsApp entegrasyonunu etkinleştir</span>
-                        </label>
-                    </div>
-
-                    <div class="cs-line" style="margin-top:4px;">
-                        <label></label>
-                        <label class="wa-enabled-toggle" title="Aktifken 20:00-08:00 arasi mesaj gonderimi engellenir (anti-ban koruma).">
-                            <input type="checkbox" id="waQuietHours" @(waQuietHoursActive ? "checked" : "") />
-                            <span>Sessiz saatler aktif (20:00-08:00 arası mesaj gönderme)</span>
-                        </label>
-                    </div>
+                    </div><!-- /waBody -->
 
                     <div id="waMsg" style="margin: 8px 0; min-height:24px; font-size:.8rem;"></div>
 
@@ -818,7 +930,7 @@
                         </div>
                         <div class="wa-safety-note">
                             Safety Layer aktif: dakikada max 5, saatte 60, günde 300 mesaj. Aynı alıcıya günde 3.
-                            Sessiz saatler 20:00-08:00. İnsan-benzeri 3-15sn rastgele gecikme. Aynı içerik günde max 10.
+                            İnsan-benzeri 3-15sn rastgele gecikme. Aynı içerik günde max 10.
                         </div>
                     }
 
@@ -828,6 +940,59 @@
                             <strong>Son hata:</strong> @waCfg.LastError
                         </div>
                     }
+                </div>
+
+                @* ───────────────────────────────────────────────────────────────
+                   2026-05-23 — Yapay Zeka tab
+                   React AiProvidersPanel mount edilir (window.CalibraHub.mountAiProvidersPanel).
+                   Provider tanımları + admin CRUD + bağlantı test.
+                   ─────────────────────────────────────────────────────────────── *@
+                <div class="cs-tab-pane@(firstVisible == "ai" ? " is-active" : "")" id="cs-pane-ai" data-cs-pane-key="ai">
+                    <div class="cs-instruction" style="margin-bottom:14px;">
+                        <strong>Yapay Zeka Provider Yönetimi.</strong> Birden fazla provider
+                        (OpenAI, Anthropic, Azure OpenAI, Google Gemini) aynı anda tanımlanabilir.
+                        Kullanıcılar sohbet ederken provider seçer; seçmezse <em>Varsayılan</em>
+                        işaretli olan kullanılır.
+                    </div>
+                    <div id="ai-providers-root" data-mount="ai-providers"
+                         style="min-height: 240px;"></div>
+                </div>
+
+                @* ── Satın Alma ── *@
+                <div class="cs-tab-pane@(firstVisible == "satinalma" ? " is-active" : "")" id="cs-pane-satinalma" data-cs-pane-key="satinalma">
+                    <div class="cs-section-title">İhtiyaç Karşılama Depo Ayarları</div>
+                    <p style="font-size:.82rem;color:var(--bs-secondary-color,#6c757d);margin-bottom:14px;">
+                        "Depodan Karşıla" aksiyonu çalışırken hangi depoların stok bakiyesine bakılacağını belirleyin.
+                    </p>
+
+                    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+                        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid var(--app-border,#e2e8f0);">
+                            <input type="radio" name="fcLocMode" id="fcLocModeSpecific" value="SPECIFIC" style="margin-top:3px;accent-color:#6366f1;">
+                            <div>
+                                <div style="font-size:.83rem;font-weight:600;color:var(--bs-body-color,#0f172a);">Belirli Depolar Kullan</div>
+                                <div style="font-size:.76rem;color:var(--bs-secondary-color,#6c757d);">Aşağıdan seçtiğiniz depolar stok kontrolünde kullanılır.</div>
+                            </div>
+                        </label>
+                        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid var(--app-border,#e2e8f0);">
+                            <input type="radio" name="fcLocMode" id="fcLocModeDefault" value="ITEM_DEFAULT" style="margin-top:3px;accent-color:#6366f1;">
+                            <div>
+                                <div style="font-size:.83rem;font-weight:600;color:var(--bs-body-color,#0f172a);">Stok Kartındaki Varsayılan Depoyu Kullan</div>
+                                <div style="font-size:.76rem;color:var(--bs-secondary-color,#6c757d);">Her malzeme için stok kartında tanımlı "varsayılan konum" kullanılır.</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div id="fcLocListWrap" style="display:none;margin-bottom:14px;">
+                        <div style="font-size:.78rem;font-weight:600;color:var(--bs-secondary-color,#6c757d);margin-bottom:6px;">Karşılama Depoları</div>
+                        <div id="fcLocList" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border:1px solid var(--app-border,#e2e8f0);border-radius:8px;min-height:40px;">
+                            <span style="color:var(--bs-secondary-color,#6c757d);font-size:.78rem;font-style:italic;" id="fcLocLoading">Yükleniyor…</span>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-primary btn-sm" onclick="fcSaveLocConfig()">
+                        Kaydet
+                    </button>
+                    <span id="fcLocSaveRes" style="margin-left:8px;font-size:.78rem;font-weight:600;display:none;"></span>
                 </div>
 
             </div>
@@ -922,9 +1087,168 @@
                 if (pane) pane.classList.add('is-active');
                 // 'apiprofile' tab'i kaldirildi (Hub'a tasindi).
                 if (tab === 'integrator' && !window._isrInited) { window._isrInited = true; isrInit(); }
+                // 2026-05-23 — Yapay Zeka tab: ilk açılışta React panel mount edilir.
+                if (tab === 'ai' && !window._aiPanelMounted) { window._aiPanelMounted = true; mountAiPanel(); }
+                // Satın Alma tab: ilk açılışta depo listesi yüklenir.
+                if (tab === 'satinalma' && !window._fcLocInited) { window._fcLocInited = true; fcLocInit(); }
             });
         });
     })();
+
+    // 2026-05-23 — Yapay Zeka panel mount yardımcısı.
+    // Şirket Ayarları sayfası React bundle'ı default yüklemez (Razor-only sayfa);
+    // tab ilk açılınca on-demand <script>+<link> ekleyip mount eder.
+    function mountAiPanel() {
+        console.log('[AI] mountAiPanel called');
+        var el = document.getElementById('ai-providers-root');
+        if (!el) { console.error('[AI] ai-providers-root element bulunamadı'); return; }
+        el.innerHTML = '<div style="padding:20px;color:#94a3b8;">React panel yükleniyor…</div>';
+
+        // Bundle script + css yüklü mü? Değilse şimdi ekle.
+        var BUNDLE_JS  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        var BUNDLE_CSS = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+
+        if (!document.querySelector('link[data-ai-bundle]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = BUNDLE_CSS;
+            link.setAttribute('data-ai-bundle', '1');
+            document.head.appendChild(link);
+        }
+
+        function tryMount() {
+            if (window.CalibraHub && window.CalibraHub.mountAiProvidersPanel) {
+                try {
+                    console.log('[AI] mountAiProvidersPanel çağrılıyor');
+                    window.CalibraHub.mountAiProvidersPanel(el);
+                    console.log('[AI] mount başarılı');
+                    return true;
+                } catch (err) {
+                    console.error('[AI] mount sırasında hata:', err);
+                    el.innerHTML = '<div style="padding:20px;color:#dc2626;">Mount hatası: ' + (err.message || err) + '</div>';
+                    return true;  // tekrar deneme
+                }
+            }
+            return false;
+        }
+        function doMount() {
+            if (tryMount()) return;
+            // Bundle henüz yüklenmemiş — script yükle + load event'inde mount et
+            if (!document.querySelector('script[data-ai-bundle]')) {
+                var script = document.createElement('script');
+                script.src = BUNDLE_JS;
+                script.setAttribute('data-ai-bundle', '1');
+                script.onload = function () {
+                    // window.CalibraHub.* hazır olana kadar 100ms aralıkla 4sn dene
+                    var tries = 0;
+                    var timer = setInterval(function () {
+                        if (tryMount() || ++tries >= 40) clearInterval(timer);
+                    }, 100);
+                };
+                script.onerror = function () {
+                    el.innerHTML = '<div style="padding:20px;color:#dc2626;">React bundle yüklenemedi (' + BUNDLE_JS + ').</div>';
+                };
+                document.head.appendChild(script);
+            } else {
+                // Script tag zaten ekli ama henüz parse edilmemiş — bekle
+                var tries = 0;
+                var timer = setInterval(function () {
+                    if (tryMount() || ++tries >= 40) clearInterval(timer);
+                }, 100);
+            }
+        }
+        doMount();
+    }
+
+    // ── Satın Alma — İhtiyaç Karşılama Depo Ayarları ─────────────────────────
+    var _fcLocs = [];  // { id, name }
+
+    function fcLocInit() {
+        // Mevcut konfigürasyonu yükle
+        fetch('/Purchase/FulfillmentLocationConfig')
+            .then(function(r) { return r.json(); })
+            .then(function(cfg) {
+                var mode = cfg.mode || 'SPECIFIC';
+                var radio = document.getElementById(mode === 'ITEM_DEFAULT' ? 'fcLocModeDefault' : 'fcLocModeSpecific');
+                if (radio) radio.checked = true;
+                fcLocModeChanged(mode, cfg.locationIds || []);
+            })
+            .catch(function() {
+                var r = document.getElementById('fcLocModeSpecific');
+                if (r) r.checked = true;
+                fcLocModeChanged('SPECIFIC', []);
+            });
+
+        // Radio change handlers
+        document.querySelectorAll('input[name="fcLocMode"]').forEach(function(r) {
+            r.addEventListener('change', function() { fcLocModeChanged(this.value, []); });
+        });
+    }
+
+    function fcLocModeChanged(mode, selectedIds) {
+        var wrap = document.getElementById('fcLocListWrap');
+        if (!wrap) return;
+        wrap.style.display = mode === 'SPECIFIC' ? '' : 'none';
+        if (mode !== 'SPECIFIC') return;
+        if (_fcLocs.length) {
+            fcRenderLocList(selectedIds);
+        } else {
+            fetch('/Warehouse/GetLocationsJson')
+                .then(function(r) { return r.json(); })
+                .then(function(locs) {
+                    _fcLocs = locs || [];
+                    fcRenderLocList(selectedIds);
+                })
+                .catch(function() {
+                    var el = document.getElementById('fcLocList');
+                    if (el) el.innerHTML = '<span style="color:#dc2626;font-size:.78rem;">Depolar yüklenemedi</span>';
+                });
+        }
+    }
+
+    function fcRenderLocList(selectedIds) {
+        var el = document.getElementById('fcLocList');
+        if (!el) return;
+        if (!_fcLocs.length) { el.innerHTML = '<span style="color:#94a3b8;font-size:.78rem;font-style:italic;">Tanımlı depo bulunamadı</span>'; return; }
+        el.innerHTML = _fcLocs.map(function(l) {
+            var checked = (selectedIds || []).indexOf(l.id) >= 0;
+            return '<label style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;cursor:pointer;'
+                + 'border:1px solid var(--app-border,#e2e8f0);font-size:.78rem;white-space:nowrap;">'
+                + '<input type="checkbox" class="fc-loc-cb" value="' + l.id + '"'
+                + (checked ? ' checked' : '') + ' style="accent-color:#6366f1;">'
+                + (l.locationName || l.locationCode || 'Depo ' + l.id)
+                + '</label>';
+        }).join('');
+    }
+
+    window.fcSaveLocConfig = function() {
+        var mode = (document.querySelector('input[name="fcLocMode"]:checked') || {}).value || 'SPECIFIC';
+        var ids  = Array.from(document.querySelectorAll('.fc-loc-cb:checked')).map(function(cb) { return parseInt(cb.value); });
+        var token = (document.querySelector('#company-form [name="__RequestVerificationToken"]') || {}).value || '';
+        var res = document.getElementById('fcLocSaveRes');
+
+        function saveParam(key, val) {
+            return fetch('/Admin/SaveParameter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: key, paramValue: val, dataType: 1 })
+            }).then(function(r) { return r.json(); });
+        }
+
+        Promise.all([
+            saveParam('FULFILLMENT_LOCATION_MODE', mode),
+            saveParam('FULFILLMENT_LOCATION_IDS', ids.join(','))
+        ]).then(function(results) {
+            var ok = results.every(function(r) { return r.ok; });
+            if (res) {
+                res.textContent = ok ? '✓ Kaydedildi' : '✕ Kayıt hatası';
+                res.style.color = ok ? '#16a34a' : '#dc2626';
+                res.style.display = 'inline';
+                setTimeout(function() { res.style.display = 'none'; }, 3000);
+            }
+        }).catch(function() {
+            if (res) { res.textContent = '✕ Bağlantı hatası'; res.style.color = '#dc2626'; res.style.display = 'inline'; }
+        });
+    };
     </script>
     <script>
 (function() {
@@ -1428,6 +1752,13 @@
             + bg + ';color:' + cl + ';border:1px solid ' + br + ';">' + text + '</span>';
     }
 
+    window.waToggleEnabled = function (checked) {
+        var body = document.getElementById('waBody');
+        if (body) body.classList.toggle('wa-body--disabled', !checked);
+        if (checked && _isWebQrSelected()) _startQrPoll();
+        else if (!checked) _stopQrPoll();
+    };
+
     window.waSelectProvider = function (p) {
         var hidden = document.getElementById('waProvider');
         if (!hidden) return;
@@ -1439,6 +1770,7 @@
         var qr  = document.getElementById('waPanelWebQr');
         if (cap) cap.style.display = (p === 0 ? '' : 'none');
         if (qr)  qr.style.display  = (p === 1 ? '' : 'none');
+        if (p === 1 && _isWaEnabled()) _startQrPoll(); else _stopQrPoll();
     };
 
     window.waSave = function () {
@@ -1452,8 +1784,6 @@
         fd.append('webhookVerifyToken', (document.getElementById('waWebhookToken') || {}).value || '');
         fd.append('webQrBridgeUrl', (document.getElementById('waBridgeUrl') || {}).value || '');
         fd.append('isEnabled', document.getElementById('waEnabled').checked ? 'true' : 'false');
-        var qhEl = document.getElementById('waQuietHours');
-        if (qhEl) fd.append('respectQuietHours', qhEl.checked ? 'true' : 'false');
         fd.append('__RequestVerificationToken', getCsrf());
         waMsg('Kaydediliyor...', null);
         fetch('/Admin/WhatsApp/Save', { method: 'POST', body: fd, credentials: 'same-origin' })
@@ -1539,19 +1869,6 @@
         });
     }
     waSetupPairingButton();
-
-    // QR Yenile butonu — tek seferlik /Admin/WhatsApp/Qr cek
-    var qrRefreshBtn = document.getElementById('waQrRefreshBtn');
-    if (qrRefreshBtn) {
-        qrRefreshBtn.addEventListener('click', function () {
-            qrRefreshBtn.disabled = true;
-            qrRefreshBtn.textContent = '⏳ Yukleniyor...';
-            _pollQrOnce().finally(function () {
-                qrRefreshBtn.disabled = false;
-                qrRefreshBtn.textContent = '🔄 QR Yenile';
-            });
-        });
-    }
 
     // ── Web QR polling (Bridge'in /status + /qr cevabini server uzerinden cek) ──
     var _qrTimer = null;
@@ -1640,12 +1957,18 @@
         var p = document.getElementById('waProvider');
         return p && parseInt(p.value, 10) === 1;
     }
+    function _isWaEnabled() {
+        var el = document.getElementById('waEnabled');
+        return el ? el.checked : false;
+    }
 
-    // Polling artik OTOMATIK BASLAMIYOR — kullanici "Test Et" / "Pairing Code Al" butonlariyla
-    // tetikler. Tab gecislerine zarar verme riski sifir.
-    // Tab arkaplanda gizlenince calisan polling varsa durdur (manuel baslatildiysa).
+    // Web QR zaten seciliyse ve entegrasyon aktifse polling'i hemen baslatıyoruz
+    if (_isWebQrSelected() && _isWaEnabled()) _startQrPoll();
+
+    // Sayfa arka plana gecince polling durdur; geri gelince tekrar baslatiyoruz
     document.addEventListener('visibilitychange', function () {
         if (document.hidden) _stopQrPoll();
+        else if (_isWebQrSelected()) _startQrPoll();
     });
 })();
     </script>

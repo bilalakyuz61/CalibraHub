@@ -1,0 +1,1556 @@
+/**
+ * ApprovalFlowDesigner — sağ panel.
+ *
+ *   StepNode      → Adım Adı + Onaylayıcı Türü + (User dropdown / Departman chips)
+ *   DecisionNode  → Koşul ifadesi textarea + ipuçları
+ *   StartNode/EndNode → sabit, sadece sil butonu
+ *   Edge          → label input + edge kind seçimi
+ */
+import React, { useEffect, useState } from 'react'
+import { Trash2, Save, Plus, X } from 'lucide-react'
+import { useUpdateNodeData } from './nodeDataContext.js'
+
+/* ── Karar (Decision) node için yapısal koşul satırları ── */
+// Belge üst bilgisi + kalem (line-item) alanları. Her alan field code + label + type
+// + scope taşır:
+//   scope='header'    → belge üst bilgisinden tek deger
+//   scope='lineAny'   → en az bir kalem koşulu sağlarsa true (herhangi biri)
+//   scope='lineAll'   → tüm kalemler koşulu sağlarsa true
+//   scope='lineAgg'   → kalem-agrege metrik (örn: kalem sayısı, kalemlerdeki max tutar)
+//
+// 2026-05-25 (entity-agnostic plugin): Bu sabit liste artık SADECE FALLBACK'tir —
+// gerçek alanlar backend ApprovalEntityTypeRegistry'den (Document/WorkOrder/Item/...)
+// `entityTypeFields` prop'u ile gelir. Aşağıdaki Document field'ları geriye dönük
+// fallback ve build-time IntelliSense için korunur.
+var DECISION_FIELDS = [
+  // ── Kullanıcı Bilgileri (belgeyi oluşturan kişi / talep eden) ──
+  { code: 'user.departmentId', label: 'Departman',          type: 'lookup',  scope: 'header', groupLabel: 'Kullanıcı Bilgileri', lookupSource: 'departments' },
+  { code: 'user.userId',       label: 'Belgeyi Oluşturan',  type: 'lookup',  scope: 'header', groupLabel: 'Kullanıcı Bilgileri', lookupSource: 'users' },
+  // ── Belge Üst Bilgileri ──
+  { code: 'amount',         label: 'Toplam Tutar',          type: 'numeric', scope: 'header', groupLabel: 'Belge Üst Bilgileri' },
+  { code: 'documentDate',   label: 'Belge Tarihi',          type: 'date',    scope: 'header', groupLabel: 'Belge Üst Bilgileri' },
+  { code: 'taxNo',          label: 'Tedarikçi/Müşteri VKN', type: 'text',    scope: 'header', groupLabel: 'Belge Üst Bilgileri' },
+  { code: 'contactName',    label: 'Tedarikçi/Müşteri Adı', type: 'text',    scope: 'header', groupLabel: 'Belge Üst Bilgileri' },
+  // 5 ayrı Cari Grubu kategorisi (card_groups cardType=2)
+  { code: 'contactGroup1',  label: 'Cari Grubu 1',          type: 'lookup',  scope: 'header', groupLabel: 'Belge Üst Bilgileri', lookupSource: 'cariGroups[1]' },
+  { code: 'contactGroup2',  label: 'Cari Grubu 2',          type: 'lookup',  scope: 'header', groupLabel: 'Belge Üst Bilgileri', lookupSource: 'cariGroups[2]' },
+  { code: 'contactGroup3',  label: 'Cari Grubu 3',          type: 'lookup',  scope: 'header', groupLabel: 'Belge Üst Bilgileri', lookupSource: 'cariGroups[3]' },
+  { code: 'contactGroup4',  label: 'Cari Grubu 4',          type: 'lookup',  scope: 'header', groupLabel: 'Belge Üst Bilgileri', lookupSource: 'cariGroups[4]' },
+  { code: 'contactGroup5',  label: 'Cari Grubu 5',          type: 'lookup',  scope: 'header', groupLabel: 'Belge Üst Bilgileri', lookupSource: 'cariGroups[5]' },
+  // ── Belge Kalem Bilgileri — herhangi bir kalem koşulu sağlarsa ──
+  { code: 'line.itemCode',     label: 'Stok Kodu',      type: 'text',    scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri' },
+  { code: 'line.itemName',     label: 'Stok Adı',       type: 'text',    scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri' },
+  { code: 'line.quantity',     label: 'Miktar',         type: 'numeric', scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri' },
+  { code: 'line.unitPrice',    label: 'Birim Fiyat',    type: 'numeric', scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri' },
+  { code: 'line.lineTotal',    label: 'Satır Tutarı',   type: 'numeric', scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri' },
+  // 5 ayrı Stok Grubu kategorisi
+  { code: 'line.materialGroup1', label: 'Stok Grubu 1', type: 'lookup', scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri', lookupSource: 'materialGroups[1]' },
+  { code: 'line.materialGroup2', label: 'Stok Grubu 2', type: 'lookup', scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri', lookupSource: 'materialGroups[2]' },
+  { code: 'line.materialGroup3', label: 'Stok Grubu 3', type: 'lookup', scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri', lookupSource: 'materialGroups[3]' },
+  { code: 'line.materialGroup4', label: 'Stok Grubu 4', type: 'lookup', scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri', lookupSource: 'materialGroups[4]' },
+  { code: 'line.materialGroup5', label: 'Stok Grubu 5', type: 'lookup', scope: 'lineAny', groupLabel: 'Belge Kalem Bilgileri', lookupSource: 'materialGroups[5]' },
+  // Kalem agregeleri — aynı grupta (Belge Kalem Bilgileri)
+  { code: 'lineCount',      label: 'Kalem Sayısı (toplam)',     type: 'numeric', scope: 'lineAgg', groupLabel: 'Belge Kalem Bilgileri' },
+  { code: 'lineMaxTotal',   label: 'En Büyük Satır Tutarı',     type: 'numeric', scope: 'lineAgg', groupLabel: 'Belge Kalem Bilgileri' },
+  { code: 'lineSumQty',     label: 'Toplam Miktar',             type: 'numeric', scope: 'lineAgg', groupLabel: 'Belge Kalem Bilgileri' },
+  // ── SQL tabanli kosul (kutuphaneden secim veya adhoc SQL) ──
+  { code: 'sql.queryResult', label: 'SQL Sorgu Sonucu',         type: 'sql',     scope: 'sql',     groupLabel: 'SQL Tabanlı Koşul' },
+]
+
+// lookupSource string → ilgili array (cariGroups[N] | materialGroups[N] | departments | users)
+function resolveLookupSource(lookupSource, ctx) {
+  if (!lookupSource || !ctx) return []
+  if (lookupSource === 'departments') return Array.isArray(ctx.departments) ? ctx.departments : []
+  if (lookupSource === 'users') {
+    // UsersDto: {id, name, email} → label "name (email)" formatı
+    return Array.isArray(ctx.users) ? ctx.users.map(function (u) {
+      return { id: u.id, name: u.name + (u.email ? ' (' + u.email + ')' : '') }
+    }) : []
+  }
+  // Geriye donuk: eski 'cariGroups' (array) hala destekleniyor
+  if (lookupSource === 'cariGroups')  return Array.isArray(ctx.cariGroups) ? ctx.cariGroups : []
+  var m = lookupSource.match(/^materialGroups\[(\d+)\]$/)
+  if (m) {
+    var arr = ctx.materialGroups && ctx.materialGroups[m[1]]
+    return Array.isArray(arr) ? arr : []
+  }
+  var m2 = lookupSource.match(/^cariGroups\[(\d+)\]$/)
+  if (m2) {
+    var arr2 = ctx.cariGroups && ctx.cariGroups[m2[1]]
+    return Array.isArray(arr2) ? arr2 : []
+  }
+  return []
+}
+var DECISION_OPS_BY_TYPE = {
+  numeric: [
+    { v: 'eq',  l: '= eşit' },
+    { v: 'neq', l: '≠ eşit değil' },
+    { v: 'gt',  l: '> büyük' },
+    { v: 'gte', l: '≥ büyük eşit' },
+    { v: 'lt',  l: '< küçük' },
+    { v: 'lte', l: '≤ küçük eşit' },
+    { v: 'between', l: 'arasında (min,max)' },
+  ],
+  text: [
+    { v: 'eq',         l: '= eşit' },
+    { v: 'neq',        l: '≠ eşit değil' },
+    { v: 'contains',   l: 'içerir' },
+    { v: 'startswith', l: 'ile başlar' },
+  ],
+  date: [
+    { v: 'eq',     l: '= eşit' },
+    { v: 'before', l: 'önce' },
+    { v: 'after',  l: 'sonra' },
+    { v: 'between',l: 'arasında' },
+  ],
+  lookup: [
+    { v: 'eq', l: '= eşit' },
+    { v: 'in', l: 'şu departmanlardan biri' },
+  ],
+  sql: [
+    { v: 'eq',  l: '= eşit' },
+    { v: 'neq', l: '≠ eşit değil' },
+    { v: 'gt',  l: '> büyük' },
+    { v: 'gte', l: '≥ büyük eşit' },
+    { v: 'lt',  l: '< küçük' },
+    { v: 'lte', l: '≤ küçük eşit' },
+  ],
+}
+// 2026-05-25 (entity-agnostic): findField artık prop ile gelen dinamik field listesi
+// kullanır. Liste boşsa eski DOC fallback'ine düşer.
+function findField(code, fields) {
+  var list = (fields && fields.length > 0) ? fields : DECISION_FIELDS
+  return list.find(function (f) { return f.code === code }) || list[0] || DECISION_FIELDS[0]
+}
+function ruleToExpr(r, departments, fields) {
+  if (!r || !r.field) return ''
+  var f = findField(r.field, fields)
+  // Kapsam etiketi — "Kalem(?):" prefix kalem alanlari icin
+  var prefix = ''
+  if (f.scope === 'lineAny') prefix = 'Kalem(?): '
+  else if (f.scope === 'lineAll') prefix = 'Kalem(∀): '
+  // lineAgg ve header icin prefix yok (label kendini anlatir)
+
+  // SQL tabanli kosul — kutuphaneden secilmis veya adhoc
+  if (f.type === 'sql') {
+    var op2 = (DECISION_OPS_BY_TYPE.sql || []).find(function (o) { return o.v === r.op })
+    var opLbl2 = op2 ? op2.l.replace(/^[=≠><≥≤]\s*/, '') : r.op
+    var label
+    if (r.sqlMode === 'library' && r.sqlQueryId) {
+      label = 'SQL[' + (r.sqlQueryName || ('#' + r.sqlQueryId)) + ']'
+    } else if (r.sqlMode === 'adhoc' && r.sqlText) {
+      label = 'SQL[özel]'
+    } else {
+      label = 'SQL[?]'
+    }
+    return label + ' ' + opLbl2 + ' ' + (r.value || '')
+  }
+
+  if (f.type === 'lookup' && (r.op === 'eq' || r.op === 'in') && r.value) {
+    var ids = String(r.value).split(',').filter(Boolean)
+    var names = ids.map(function (id) {
+      var d = (departments || []).find(function (x) { return String(x.id) === String(id) })
+      return d ? d.name : id
+    })
+    return prefix + f.label + (r.op === 'in' ? ' ∈ [' : ' = ') + names.join(', ') + (r.op === 'in' ? ']' : '')
+  }
+  var op = (DECISION_OPS_BY_TYPE[f.type] || []).find(function (o) { return o.v === r.op })
+  var opLbl = op ? op.l.replace(/^[=≠><≥≤]\s*/, '') : r.op
+  return prefix + f.label + ' ' + opLbl + ' ' + (r.value || '')
+}
+
+/* ── SqlConditionEditor — sql tipi alan icin ozel renderer ─────────────
+   Mode toggle: Kutuphaneden Sec / Ozel SQL (canUseAdhoc=false ise Ozel SQL gizli).
+   Library:  dropdown (sqlQueries) — auto-token parametre kullanir (documentId, contactId, amount, userId vs).
+   Adhoc:    textarea (monospace), token destekli {documentId} {contactId} {amount} {userId}.
+   Validate butonu — POST /Admin/SqlQueryLibrary/Validate. Backend yoksa toast hatasi sessiz.
+*/
+function SqlConditionEditor({ rule, sqlQueries, canUseAdhoc, onChange }) {
+  var queries = Array.isArray(sqlQueries) ? sqlQueries : []
+  var mode = rule.sqlMode || 'library'
+  var canAdhoc = canUseAdhoc !== false
+  var [validating, setValidating] = useState(false)
+
+  function selectedQuery() {
+    if (mode !== 'library' || !rule.sqlQueryId) return null
+    return queries.find(function (q) { return String(q.id) === String(rule.sqlQueryId) }) || null
+  }
+
+  function handleModeChange(newMode) {
+    if (newMode === 'adhoc' && !canAdhoc) return
+    onChange({
+      sqlMode: newMode,
+      sqlQueryId: newMode === 'library' ? rule.sqlQueryId : null,
+      sqlQueryName: newMode === 'library' ? rule.sqlQueryName : null,
+      sqlText: newMode === 'adhoc' ? (rule.sqlText || '') : null,
+    })
+  }
+
+  function handleQueryPick(e) {
+    var id = e.target.value
+    if (!id) {
+      onChange({ sqlQueryId: null, sqlQueryName: null })
+      return
+    }
+    var q = queries.find(function (x) { return String(x.id) === String(id) })
+    onChange({ sqlQueryId: id ? parseInt(id, 10) : null, sqlQueryName: q ? q.name : null })
+  }
+
+  async function handleValidate() {
+    var sql = mode === 'adhoc' ? (rule.sqlText || '') : ''
+    if (mode === 'library') {
+      var q = selectedQuery()
+      sql = q ? (q.sqlText || '') : ''
+    }
+    if (!sql || !sql.trim()) {
+      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Doğrulanacak SQL boş.', 'warn')
+      return
+    }
+    setValidating(true)
+    try {
+      var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || ''
+      var res = await fetch('/Admin/SqlQueryLibrary/Validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+        body: JSON.stringify(sql),
+      })
+      var ct = res.headers.get('content-type') || ''
+      if (!res.ok || ct.indexOf('json') < 0) {
+        if (window.CalibraHub && window.CalibraHub.toast) {
+          window.CalibraHub.toast('Doğrulama servisine ulaşılamadı (backend hazır olmayabilir).', 'err')
+        }
+        return
+      }
+      var data = await res.json()
+      if (data && data.ok) {
+        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('SQL geçerli.', 'ok')
+      } else {
+        if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('SQL hatası: ' + ((data && data.error) || 'bilinmeyen'), 'err')
+      }
+    } catch (ex) {
+      if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast('Doğrulama hatası: ' + ex.message, 'err')
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Mode toggle */}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          type="button"
+          className={'afd-props__input' + (mode === 'library' ? ' is-on' : '')}
+          style={{
+            flex: 1, padding: '6px 8px', cursor: 'pointer', fontSize: '.72rem', fontWeight: 600,
+            borderColor: mode === 'library' ? 'var(--afd-accent, #6366f1)' : undefined,
+            background: mode === 'library' ? 'rgba(99,102,241,.12)' : undefined,
+          }}
+          onClick={function () { handleModeChange('library') }}
+        >
+          Kütüphaneden Seç
+        </button>
+        {canAdhoc && (
+          <button
+            type="button"
+            className={'afd-props__input' + (mode === 'adhoc' ? ' is-on' : '')}
+            style={{
+              flex: 1, padding: '6px 8px', cursor: 'pointer', fontSize: '.72rem', fontWeight: 600,
+              borderColor: mode === 'adhoc' ? 'var(--afd-accent, #6366f1)' : undefined,
+              background: mode === 'adhoc' ? 'rgba(99,102,241,.12)' : undefined,
+            }}
+            onClick={function () { handleModeChange('adhoc') }}
+          >
+            Özel SQL
+          </button>
+        )}
+      </div>
+
+      {/* Library mode */}
+      {mode === 'library' && (
+        <>
+          <select
+            className="afd-props__input"
+            value={rule.sqlQueryId == null ? '' : String(rule.sqlQueryId)}
+            onChange={handleQueryPick}
+          >
+            <option value="">— Sorgu seçin —</option>
+            {queries.length === 0 && (
+              <option value="" disabled>Kütüphanede sorgu yok</option>
+            )}
+            {queries.map(function (q) {
+              return <option key={q.id} value={q.id}>{q.name}{q.description ? ' — ' + q.description : ''}</option>
+            })}
+          </select>
+          {selectedQuery() && (
+            <div className="afd-props__hint" style={{ marginTop: 0, fontSize: '.7rem' }}>
+              <strong>Parametreler:</strong>{' '}
+              {(function () {
+                var q = selectedQuery()
+                if (!q || !q.parameters) return 'otomatik (documentId, contactId, amount, userId)'
+                var parsed
+                try { parsed = typeof q.parameters === 'string' ? JSON.parse(q.parameters) : q.parameters }
+                catch (e) { parsed = null }
+                if (!Array.isArray(parsed) || parsed.length === 0) return 'otomatik'
+                return parsed.map(function (p) { return p.name + ':' + p.type }).join(', ')
+              })()}
+              <div style={{ marginTop: 4, opacity: .85 }}>
+                Parametreler runtime'da belgenin alanlarından otomatik bind edilir.
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Adhoc mode */}
+      {mode === 'adhoc' && (
+        <>
+          <textarea
+            className="afd-props__input afd-props__input--ta"
+            rows={5}
+            style={{ fontFamily: 'Consolas, Menlo, Monaco, "Courier New", monospace', fontSize: '.78rem' }}
+            value={rule.sqlText || ''}
+            onChange={function (e) { onChange({ sqlText: e.target.value }) }}
+            placeholder={"SELECT COUNT(*) FROM dbo.SalesOrder WHERE ContactId = {contactId} AND IsActive = 1"}
+          />
+          <div className="afd-props__hint" style={{ marginTop: 0, fontSize: '.7rem' }}>
+            <strong>Token'lar:</strong> <code>{'{documentId}'}</code> <code>{'{contactId}'}</code>{' '}
+            <code>{'{amount}'}</code> <code>{'{userId}'}</code>
+          </div>
+        </>
+      )}
+
+      <button
+        type="button"
+        className="afd-props__input"
+        style={{ cursor: 'pointer', padding: '6px 8px', fontSize: '.72rem', fontWeight: 600 }}
+        disabled={validating}
+        onClick={handleValidate}
+      >
+        {validating ? 'Doğrulanıyor…' : 'Doğrula'}
+      </button>
+    </div>
+  )
+}
+
+// Tek koşul satırı: [Alan] [Op] [Değer] [✕]
+function DecisionRuleRow({ rule, fields, users, departments, cariGroups, materialGroups, sqlQueries, canUseAdhoc, onChange, onRemove }) {
+  var availableFields = (fields && fields.length > 0) ? fields : DECISION_FIELDS
+  var fld = findField(rule.field, availableFields)
+  var ops = DECISION_OPS_BY_TYPE[fld.type] || []
+  var op = rule.op || ops[0].v
+  var isBetween = op === 'between'
+  var lookupCtx = { users: users, departments: departments, cariGroups: cariGroups, materialGroups: materialGroups }
+
+  function renderValueInput() {
+    if (fld.type === 'sql') {
+      return (
+        <>
+          <SqlConditionEditor
+            rule={rule}
+            sqlQueries={sqlQueries}
+            canUseAdhoc={canUseAdhoc}
+            onChange={onChange}
+          />
+          <input
+            type="number"
+            className="afd-props__input"
+            style={{ marginTop: 4 }}
+            value={rule.value || ''}
+            placeholder="Karşılaştırma değeri (sayısal)"
+            onChange={function (e) { onChange({ value: e.target.value }) }}
+          />
+        </>
+      )
+    }
+    if (fld.type === 'lookup') {
+      // lookupSource'a göre uygun listeyi al (Cari Grubu / Departman / Stok Grubu kategorisi)
+      var options = resolveLookupSource(fld.lookupSource, lookupCtx)
+      var selectedIds = String(rule.value || '')
+        .split(',').map(function (x) { return x.trim() }).filter(Boolean)
+      return (
+        <div className="afd-props__chips" style={{ marginTop: 6 }}>
+          {options.length === 0 && (
+            <span className="afd-props__hint-italic">Aktif tanım yok</span>
+          )}
+          {options.map(function (d) {
+            var on = selectedIds.indexOf(String(d.id)) !== -1
+            return (
+              <label key={d.id} className={'afd-props__chip' + (on ? ' is-on' : '')}>
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={function (e) {
+                    var ids = selectedIds.slice()
+                    if (e.target.checked) {
+                      if (ids.indexOf(String(d.id)) === -1) ids.push(String(d.id))
+                    } else {
+                      ids = ids.filter(function (x) { return x !== String(d.id) })
+                    }
+                    onChange({ value: ids.join(',') })
+                  }}
+                />
+                <span>{d.name}</span>
+              </label>
+            )
+          })}
+        </div>
+      )
+    }
+    var inputType = fld.type === 'numeric' ? 'number'
+                  : fld.type === 'date' ? 'date'
+                  : 'text'
+    if (isBetween) {
+      var parts = String(rule.value || '').split(',')
+      return (
+        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+          <input
+            type={inputType}
+            className="afd-props__input"
+            style={{ flex: 1, minWidth: 0 }}
+            value={parts[0] || ''}
+            placeholder="Min"
+            onChange={function (e) { onChange({ value: e.target.value + ',' + (parts[1] || '') }) }}
+          />
+          <input
+            type={inputType}
+            className="afd-props__input"
+            style={{ flex: 1, minWidth: 0 }}
+            value={parts[1] || ''}
+            placeholder="Max"
+            onChange={function (e) { onChange({ value: (parts[0] || '') + ',' + e.target.value }) }}
+          />
+        </div>
+      )
+    }
+    return (
+      <input
+        type={inputType}
+        className="afd-props__input"
+        style={{ marginTop: 4 }}
+        value={rule.value || ''}
+        placeholder="Değer"
+        onChange={function (e) { onChange({ value: e.target.value }) }}
+      />
+    )
+  }
+
+  return (
+    <div className="afd-rule-row">
+      <div className="afd-rule-row__top">
+        <select
+          className="afd-rule-row__type"
+          value={rule.field}
+          onChange={function (e) {
+            // alan değişince op'u uyumla, value'yu sıfırla
+            var newFld = findField(e.target.value, availableFields)
+            var newOps = DECISION_OPS_BY_TYPE[newFld.type] || []
+            onChange({ field: e.target.value, op: (newOps[0] && newOps[0].v) || 'eq', value: '' })
+          }}>
+          {(function () {
+            // Field'lari groupLabel'a gore optgroup'la
+            var groups = {}
+            var order = []
+            availableFields.forEach(function (f) {
+              var g = f.groupLabel || 'Alanlar'
+              if (!groups[g]) { groups[g] = []; order.push(g) }
+              groups[g].push(f)
+            })
+            return order.map(function (g) {
+              return (
+                <optgroup key={g} label={g}>
+                  {groups[g].map(function (f) {
+                    return <option key={f.code} value={f.code}>{f.label}</option>
+                  })}
+                </optgroup>
+              )
+            })
+          })()}
+        </select>
+        <select
+          className="afd-rule-row__type"
+          style={{ flex: '0 0 140px' }}
+          value={op}
+          onChange={function (e) { onChange({ op: e.target.value, value: '' }) }}>
+          {ops.map(function (o) {
+            return <option key={o.v} value={o.v}>{o.l}</option>
+          })}
+        </select>
+        <button
+          type="button"
+          className="afd-props__del"
+          onClick={onRemove}
+          title="Koşulu kaldır">
+          <X size={12} />
+        </button>
+      </div>
+      {renderValueInput()}
+    </div>
+  )
+}
+
+/* ── Start node tetikleme koşulları için kural tipleri ── */
+var RULE_TYPES = [
+  { v: 'Always',      l: 'Her Zaman (koşulsuz)' },
+  { v: 'MinAmount',   l: 'Min Tutar (≥)' },
+  { v: 'MaxAmount',   l: 'Maks Tutar (≤)' },
+  { v: 'AmountRange', l: 'Tutar Aralığı' },
+  { v: 'SenderTaxNo', l: 'VKN (gönderici)' },
+  { v: 'Department',  l: 'Departman' },
+]
+
+function rulePlaceholder(type) {
+  return type === 'AmountRange' ? 'min,max (örn: 10000,50000)'
+       : type === 'SenderTaxNo' ? 'VKN (10 hane)'
+       : type === 'Always'      ? ''
+       : 'Tutar (TL)'
+}
+
+export default function NodePropertiesPanel({
+  selected,        // { kind:'node'|'edge', id, data, type? }
+  edges,           // canvas edge listesi — SLA hedef (timeout edge) tespiti icin
+  nodes,           // canvas node listesi — SLA hedef adi icin
+  users,
+  departments,
+  cariGroups,      // [{id, name}] — Karar koşulları için
+  materialGroups,  // { "1": [{id, name}], "2": [...], ... "5": [...] } — Karar koşulları için
+  sqlQueries,      // [{id, name, description, sqlText, parameters, resultType}] — Karar SQL koşulu için
+  integrations,    // [{id, name, sourceFormCode, sourceFormLabel, endpointName, hasEndpoint, isActive}] — Entegrasyon node için
+  entityTypeFields, // entity-agnostic plugin: aktif entity tipinin field listesi (backend registry'den)
+  entityTypeCode,   // aktif entity type code (Document/WorkOrder/Item/Contact/ProductionRecord)
+  canUseAdhoc,     // bool — adhoc SQL textarea kullanim izni (ileride rol bazli)
+  rules,           // Start node için: [{ id, ruleType, ruleValue, isActive }]
+  onRulesChange,   // (newRules) => void
+  variables,       // Surec-scoped degisken tanim listesi: [{ name, typeCode, defaultValue, description }]
+  onChange,        // (newData) => void
+  onDelete,        // () => void
+}) {
+  // entityTypeFields prop'u boş gelirse Document fallback (DECISION_FIELDS) kullanılır.
+  var availableFields = (Array.isArray(entityTypeFields) && entityTypeFields.length > 0)
+    ? entityTypeFields : DECISION_FIELDS
+  // Edge panel'inde Gecikme edge'i secildiginde kaynak adimin SLA verisini guncellemek icin.
+  var updateNodeData = useUpdateNodeData()
+  // Form state'i seçim değişince re-init et
+  var [stepName, setStepName] = useState('')
+  var [approverType, setApproverType] = useState('AnyUser')
+  var [approverId, setApproverId] = useState('')
+  var [approverLabel, setApproverLabel] = useState('')
+  var [condition, setCondition] = useState('')
+  var [edgeLabel, setEdgeLabel] = useState('')
+  var [edgeKind, setEdgeKind] = useState('default')
+
+  useEffect(function () {
+    if (!selected) return
+    var d = selected.data || {}
+    if (selected.kind === 'node') {
+      setStepName(d.stepName || '')
+      setApproverType(d.approverType || 'AnyUser')
+      setApproverId(d.approverId == null ? '' : String(d.approverId))
+      setApproverLabel(d.approverLabel || '')
+      setCondition(d.condition || '')
+    } else if (selected.kind === 'edge') {
+      setEdgeLabel(selected.label || d.label || '')
+      setEdgeKind(d.edgeKind || 'default')
+      setCondition(d.condition || '')
+    }
+  }, [selected])
+
+  if (!selected) {
+    return (
+      <div className="afd-props">
+        <div className="afd-props__empty">
+          <div className="afd-props__empty-emoji">·</div>
+          <div>Düğüm veya bağlantı seçin</div>
+        </div>
+      </div>
+    )
+  }
+
+  /* ── helpers ── */
+  function commitNode(patch) {
+    if (typeof onChange === 'function') onChange(patch)
+  }
+
+  /* ── STEP node ── */
+  if (selected.kind === 'node' && selected.type === 'step') {
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge afd-props__head-badge--step">Adım</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil">
+            <Trash2 size={14} />
+          </button>
+        </div>
+
+        <label className="afd-props__label">Adım Adı</label>
+        <input
+          className="afd-props__input"
+          value={stepName}
+          onChange={function (e) {
+            setStepName(e.target.value)
+            commitNode({ stepName: e.target.value })
+          }}
+          placeholder="Örn: Müdür Onayı"
+        />
+
+        <label className="afd-props__label">Onaylayıcı Türü</label>
+        <select
+          className="afd-props__input"
+          value={approverType}
+          onChange={function (e) {
+            var v = e.target.value
+            setApproverType(v)
+            setApproverId(''); setApproverLabel('')
+            commitNode({ approverType: v, approverId: null, approverLabel: null })
+          }}
+        >
+          <option value="AnyUser">Herhangi Kullanıcı</option>
+          <option value="SpecificUser">Belirli Kullanıcı</option>
+          <option value="Department">Departman</option>
+          <option value="ManagerOfRequester">Kişinin Amiri</option>
+        </select>
+
+        {approverType === 'SpecificUser' && (
+          <>
+            <label className="afd-props__label">Kullanıcı</label>
+            <select
+              className="afd-props__input"
+              value={approverId}
+              onChange={function (e) {
+                var v = e.target.value
+                var opt = e.target.options[e.target.selectedIndex]
+                var lbl = opt && opt.value ? opt.textContent : null
+                setApproverId(v); setApproverLabel(lbl)
+                commitNode({ approverId: v || null, approverLabel: lbl })
+              }}
+            >
+              <option value="">— Kullanıcı seçin —</option>
+              {users.map(function (u) {
+                return (
+                  <option key={u.id} value={u.id}>
+                    {u.name}{u.email ? ' (' + u.email + ')' : ''}
+                  </option>
+                )
+              })}
+            </select>
+          </>
+        )}
+
+        {approverType === 'Department' && (
+          <>
+            <label className="afd-props__label">Departman(lar)</label>
+            <div className="afd-props__chips">
+              {departments.length === 0 && (
+                <span className="afd-props__hint-italic">
+                  Aktif departman tanımı yok.
+                </span>
+              )}
+              {departments.map(function (d) {
+                var selectedIds = String(approverId || '')
+                  .split(',').map(function (x) { return x.trim() }).filter(Boolean)
+                var on = selectedIds.indexOf(String(d.id)) !== -1
+                return (
+                  <label
+                    key={d.id}
+                    className={'afd-props__chip' + (on ? ' is-on' : '')}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={function (e) {
+                        var ids = selectedIds.slice()
+                        if (e.target.checked) {
+                          if (ids.indexOf(String(d.id)) === -1) ids.push(String(d.id))
+                        } else {
+                          ids = ids.filter(function (x) { return x !== String(d.id) })
+                        }
+                        var newId = ids.join(',')
+                        var newLabel = departments
+                          .filter(function (x) { return ids.indexOf(String(x.id)) !== -1 })
+                          .map(function (x) { return x.name })
+                          .join(', ')
+                        setApproverId(newId); setApproverLabel(newLabel)
+                        commitNode({
+                          approverId: newId || null,
+                          approverLabel: newLabel || null,
+                        })
+                      }}
+                    />
+                    <span>{d.name}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* ── SLA + Gecikme Aksiyonu ── 2026-05-25 */}
+        <StepSlaEditor
+          data={selected.data || {}}
+          nodeId={selected.id}
+          edges={Array.isArray(edges) ? edges : []}
+          nodes={Array.isArray(nodes) ? nodes : []}
+          users={users}
+          departments={departments}
+          onChange={commitNode}
+        />
+      </div>
+    )
+  }
+
+  /* ── DECISION node ── */
+  // 2026-05-25: Karar = yapısal koşul satırları (Alan / Operatör / Değer). Free-form
+  // ifade yerine belge üst bilgileri üzerinde kolay seçim. Onaylayıcı YOK — koşul
+  // sistem tarafından otomatik değerlendirilir, sonraki Adım node'larında insan onayı alınır.
+  if (selected.kind === 'node' && selected.type === 'decision') {
+    var decisionData = selected.data || {}
+    var cRules = Array.isArray(decisionData.conditionRules) ? decisionData.conditionRules : []
+
+    // Surec degiskenleri Karar koşul alanları olarak da seçilebilir.
+    // field code: "var:<ad>" — runtime executor "var:" prefix'i ile per-instance
+    // variable degerini cozer.
+    function varTypeToFieldType(tc) {
+      if (tc === 'int' || tc === 'decimal') return 'numeric'
+      if (tc === 'date') return 'date'
+      return 'text' // bool + string → text op'lari kullan (eq/neq/contains)
+    }
+    var variableFields = (Array.isArray(variables) ? variables : []).map(function (v) {
+      return {
+        code: 'var:' + v.name,
+        label: v.name + (v.description ? ' — ' + v.description : ''),
+        type: varTypeToFieldType(v.typeCode),
+        scope: 'variable',
+        groupLabel: 'Süreç Değişkenleri',
+      }
+    })
+    var decisionFields = variableFields.length > 0
+      ? availableFields.concat(variableFields)
+      : availableFields
+
+    function commitDecisionRules(newRules) {
+      // condition display text de generate et (geri-uyumluluk + debug)
+      var exprText = newRules
+        .filter(function (r) { return r && r.field && r.op })
+        .map(function (r) { return ruleToExpr(r, departments, decisionFields) })
+        .filter(Boolean)
+        .join(' AND ')
+      commitNode({ conditionRules: newRules, condition: exprText || null })
+    }
+
+    function addDecisionRule() {
+      // Entity tipine göre varsayılan ilk alan + op seç (Document'ta amount/gt,
+      // diğer tiplerde listenin ilk field'ı + ilk uygun operatör).
+      var defField = decisionFields[0] || { code: 'amount', type: 'numeric' }
+      var defOps = DECISION_OPS_BY_TYPE[defField.type] || []
+      var next = cRules.slice()
+      next.push({ field: defField.code, op: (defOps[0] && defOps[0].v) || 'eq', value: '' })
+      commitDecisionRules(next)
+    }
+    function updateDecisionRule(idx, patch) {
+      var next = cRules.map(function (r, i) { return i === idx ? Object.assign({}, r, patch) : r })
+      commitDecisionRules(next)
+    }
+    function removeDecisionRule(idx) {
+      var next = cRules.filter(function (_, i) { return i !== idx })
+      commitDecisionRules(next)
+    }
+
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge afd-props__head-badge--decision">Karar</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil">
+            <Trash2 size={14} />
+          </button>
+        </div>
+
+        <label className="afd-props__label">Koşullar (VE)</label>
+        {cRules.length === 0 && (
+          <div className="afd-props__hint" style={{ marginTop: 0 }}>
+            Henüz koşul yok. Her zaman <em>Evet</em> dalı işlenir.
+          </div>
+        )}
+        {cRules.map(function (r, idx) {
+          return (
+            <DecisionRuleRow
+              key={idx}
+              rule={r}
+              fields={decisionFields}
+              users={users}
+              departments={departments}
+              cariGroups={cariGroups}
+              materialGroups={materialGroups}
+              sqlQueries={sqlQueries}
+              canUseAdhoc={canUseAdhoc}
+              onChange={function (patch) { updateDecisionRule(idx, patch) }}
+              onRemove={function () { removeDecisionRule(idx) }}
+            />
+          )
+        })}
+        <button
+          type="button"
+          className="afd-rule-add"
+          onClick={addDecisionRule}
+          style={{ marginTop: 6 }}>
+          <Plus size={12} /> Koşul Ekle
+        </button>
+
+        <div className="afd-props__hint">
+          Tüm koşullar sağlanırsa <em>Evet</em> kolu, aksi halde <em>Hayır</em> kolu işlenir.
+          Her dal sonraki <em>Adım</em> node'una yönlendirilir; onay/red kararını orada atanan kullanıcı verir.
+        </div>
+      </div>
+    )
+  }
+
+  /* ── PARALLEL node ── Split + Join gateway (BPMN). Sadece bilgi paneli, ayar gerektirmez */
+  if (selected.kind === 'node' && selected.type === 'parallel') {
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge" style={{ background: 'rgba(139,92,246,.14)', color: '#6d28d9' }}>Paralel</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil">
+            <Trash2 size={14} />
+          </button>
+        </div>
+
+        <div className="afd-props__hint">
+          <strong>Paralel Kapı (Split &amp; Join)</strong> — BPMN paralel gateway.
+          <ul>
+            <li><strong>Split</strong>: Bir giriş, çoklu çıkış. Tüm dallar AYNI ANDA başlar.</li>
+            <li><strong>Join</strong>: Çoklu giriş, bir çıkış. TÜM dallar tamamlanınca devam.</li>
+          </ul>
+          Topolojiyi runtime executor çıkarır — manuel mod seçimi gerekmez.
+          <br/><br/>
+          <strong>Kullanım:</strong> "Belge farklı stok gruplarına ait kalemler içeriyor → ilgili her grup
+          sahibi paralel onaylar" gibi senaryolarda. Paralel Split sonrası her dala bir Adım node'u
+          bağlayın, sonra Paralel Join'de birleştirip Bitir'e gidin.
+        </div>
+      </div>
+    )
+  }
+
+  /* ── NOTIFICATION node ── Mail / WhatsApp / Both gönderir, akış akmaya devam eder */
+  if (selected.kind === 'node' && selected.type === 'notification') {
+    var nData = selected.data || {}
+    var notifyType = nData.notificationType || 'mail'
+    var recipientMode = nData.recipientMode || 'creator'  // creator | approver | specificUser | department | customEmail
+    var subject = nData.subject || ''
+    var body = nData.body || ''
+    var recipientId = nData.recipientId == null ? '' : String(nData.recipientId)
+    var customEmail = nData.customEmail || ''
+    var customPhone = nData.customPhone || ''
+    var attachPdf = nData.attachPdf === true
+
+    function commitN(patch) { commitNode(patch) }
+
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge" style={{ background: 'rgba(6,182,212,.14)', color: '#0e7490' }}>Bildirim</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil">
+            <Trash2 size={14} />
+          </button>
+        </div>
+
+        <label className="afd-props__label">Bildirim Türü</label>
+        <select className="afd-props__input" value={notifyType}
+                onChange={function (e) { commitN({ notificationType: e.target.value }) }}>
+          <option value="mail">📧 Mail</option>
+          <option value="whatsapp">💬 WhatsApp</option>
+          <option value="both">📧 + 💬 Mail + WhatsApp</option>
+        </select>
+
+        <label className="afd-props__label">Alıcı</label>
+        <select className="afd-props__input" value={recipientMode}
+                onChange={function (e) {
+                  commitN({ recipientMode: e.target.value, recipientId: null, recipientLabel: null,
+                            customEmail: null, customPhone: null })
+                }}>
+          <option value="creator">Belgeyi Oluşturan Kullanıcı</option>
+          <option value="approver">Önceki Adımın Onaylayıcısı</option>
+          <option value="specificUser">Belirli Kullanıcı</option>
+          <option value="department">Departman (üyelerine)</option>
+          <option value="custom">Manuel (mail / telefon)</option>
+        </select>
+
+        {recipientMode === 'specificUser' && (
+          <>
+            <label className="afd-props__label">Kullanıcı</label>
+            <select className="afd-props__input" value={recipientId}
+                    onChange={function (e) {
+                      var opt = e.target.options[e.target.selectedIndex]
+                      var lbl = opt && opt.value ? opt.textContent : null
+                      commitN({ recipientId: e.target.value || null, recipientLabel: lbl })
+                    }}>
+              <option value="">— Kullanıcı seçin —</option>
+              {(users || []).map(function (u) {
+                return <option key={u.id} value={u.id}>{u.name}{u.email ? ' (' + u.email + ')' : ''}</option>
+              })}
+            </select>
+          </>
+        )}
+
+        {recipientMode === 'department' && (
+          <>
+            <label className="afd-props__label">Departman(lar)</label>
+            <div className="afd-props__chips">
+              {(departments || []).length === 0 && (
+                <span className="afd-props__hint-italic">Aktif departman yok</span>
+              )}
+              {(departments || []).map(function (d) {
+                var selectedIds = String(recipientId || '').split(',').map(function(x){return x.trim()}).filter(Boolean)
+                var on = selectedIds.indexOf(String(d.id)) !== -1
+                return (
+                  <label key={d.id} className={'afd-props__chip' + (on ? ' is-on' : '')}>
+                    <input type="checkbox" checked={on} onChange={function (e) {
+                      var ids = selectedIds.slice()
+                      if (e.target.checked) { if (ids.indexOf(String(d.id)) === -1) ids.push(String(d.id)) }
+                      else { ids = ids.filter(function(x){return x !== String(d.id)}) }
+                      var nid = ids.join(',')
+                      var nlbl = (departments || []).filter(function(x){ return ids.indexOf(String(x.id)) !== -1 })
+                        .map(function(x){return x.name}).join(', ')
+                      commitN({ recipientId: nid || null, recipientLabel: nlbl || null })
+                    }} />
+                    <span>{d.name}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {recipientMode === 'custom' && (notifyType === 'mail' || notifyType === 'both') && (
+          <>
+            <label className="afd-props__label">E-posta</label>
+            <input className="afd-props__input" type="email" value={customEmail}
+                   onChange={function (e) { commitN({ customEmail: e.target.value }) }}
+                   placeholder="ornek@firma.com" />
+          </>
+        )}
+        {recipientMode === 'custom' && (notifyType === 'whatsapp' || notifyType === 'both') && (
+          <>
+            <label className="afd-props__label">Telefon (WhatsApp)</label>
+            <input className="afd-props__input" type="tel" value={customPhone}
+                   onChange={function (e) { commitN({ customPhone: e.target.value }) }}
+                   placeholder="+90 5XX XXX XX XX" />
+          </>
+        )}
+
+        {(notifyType === 'mail' || notifyType === 'both') && (
+          <>
+            <label className="afd-props__label">Konu (Mail)</label>
+            <input className="afd-props__input" value={subject}
+                   onChange={function (e) { commitN({ subject: e.target.value }) }}
+                   placeholder="Onay bekliyor: {documentNumber}" />
+          </>
+        )}
+
+        <label className="afd-props__label">Mesaj</label>
+        <textarea className="afd-props__input afd-props__input--ta" rows={4} value={body}
+                  onChange={function (e) { commitN({ body: e.target.value }) }}
+                  placeholder={"Merhaba, {documentNumber} numaralı belge onay sürecinde {currentStepName} adımındadır.\n\nTutar: {amount}\nCari: {contactName}"} />
+
+        <label className="afd-switch" style={{ marginTop: 10 }}>
+          <input type="checkbox" checked={attachPdf}
+                 onChange={function (e) { commitN({ attachPdf: e.target.checked }) }} />
+          <span className="afd-switch__track"></span>
+          <span style={{ marginLeft: 8, fontSize: '.85rem' }}>📎 Belge PDF'ini ekle</span>
+        </label>
+        {attachPdf && (
+          <div className="afd-props__hint" style={{ marginTop: 6 }}>
+            Belgenin PDF'i mevcut <strong>Doküman Dizayn Kuralları</strong> (DocLayoutRule) kullanılarak
+            otomatik render edilir — Cari / Cari Grubu / Departman / Şube / Depo koşullarına göre
+            doğru dizayn seçilir. (Tasarım → Doküman Tasarım Kuralları menüsünden yönetilir.)
+          </div>
+        )}
+
+        <div className="afd-props__hint">
+          <strong>Token'lar:</strong> <code>{'{documentNumber}'}</code>, <code>{'{amount}'}</code>,
+          <code>{'{contactName}'}</code>, <code>{'{currentStepName}'}</code>, <code>{'{flowName}'}</code> mesajda kullanılabilir.
+          Bildirim node'u akışı durdurmaz — bildirim gönderilir, sonraki adıma otomatik geçer.
+        </div>
+      </div>
+    )
+  }
+
+  /* ── INTEGRATION node ── Mevcut Integration tanımını tetikler (örn. satış
+     siparişi onaylandıktan sonra ERP'ye aktar). Fire-and-forget mantığı —
+     haltOnError işaretliyse hata akışı durdurur, aksi halde sonraki adıma geçer. */
+  if (selected.kind === 'node' && selected.type === 'integration') {
+    var iData = selected.data || {}
+    var iId = iData.integrationId == null ? '' : String(iData.integrationId)
+    var iRecSrc = iData.recordIdSource || 'entity'
+    var iCustomRec = iData.customRecordId || ''
+    var iHalt = iData.haltOnError !== false
+    var integList = Array.isArray(integrations) ? integrations : []
+
+    function commitI(patch) { commitNode(patch) }
+
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge" style={{ background: 'rgba(139,92,246,.14)', color: '#6d28d9' }}>Entegrasyon</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil">
+            <Trash2 size={14} />
+          </button>
+        </div>
+
+        <label className="afd-props__label">Entegrasyon Tanımı</label>
+        {integList.length === 0 ? (
+          <div className="afd-props__hint" style={{ color: '#dc2626', background: 'rgba(220,38,38,.06)', padding: '10px 12px', borderRadius: 8 }}>
+            Henüz aktif bir entegrasyon tanımlanmamış. <br />
+            <strong>Entegrasyonlar</strong> menüsünden yeni bir entegrasyon
+            tanımlayıp aktif edin, sonra buraya geri dönün.
+          </div>
+        ) : (
+          <select className="afd-props__input" value={iId}
+                  onChange={function (e) {
+                    var v = e.target.value
+                    var sel = integList.find(function (x) { return String(x.id) === v })
+                    commitI({
+                      integrationId:   v ? parseInt(v, 10) : null,
+                      integrationName: sel ? sel.name : null,
+                    })
+                  }}>
+            <option value="">— Entegrasyon seçin —</option>
+            {integList.map(function (it) {
+              var lbl = it.name
+              if (it.sourceFormLabel) lbl += ' · ' + it.sourceFormLabel
+              if (!it.hasEndpoint) lbl += ' (yalnız prosedür)'
+              return <option key={it.id} value={it.id}>{lbl}</option>
+            })}
+          </select>
+        )}
+
+        <label className="afd-props__label" style={{ marginTop: 12 }}>Kayıt ID Kaynağı</label>
+        <select className="afd-props__input" value={iRecSrc}
+                onChange={function (e) { commitI({ recordIdSource: e.target.value, customRecordId: null }) }}>
+          <option value="entity">Onaydaki Belge / Kayıt</option>
+          <option value="custom">Sabit (manuel ID)</option>
+        </select>
+        {iRecSrc === 'custom' && (
+          <>
+            <label className="afd-props__label">Sabit Kayıt ID</label>
+            <input className="afd-props__input" value={iCustomRec}
+                   onChange={function (e) { commitI({ customRecordId: e.target.value }) }}
+                   placeholder="Örn. 12345 (test amaçlı)" />
+          </>
+        )}
+
+        <label className="afd-switch" style={{ marginTop: 14 }}>
+          <input type="checkbox" checked={iHalt}
+                 onChange={function (e) { commitI({ haltOnError: e.target.checked }) }} />
+          <span className="afd-switch__track"></span>
+          <span style={{ marginLeft: 8, fontSize: '.85rem' }}>Entegrasyon başarısız olursa akışı durdur</span>
+        </label>
+
+        <div className="afd-props__hint">
+          Bu düğüme akış geldiğinde seçili entegrasyon tetiklenir
+          (<code>IntegrationRunner.RunAsync</code>, trigger=Cascade). Sonuç
+          <strong> Entegrasyonlar → Run Log</strong>'unda görüntülenebilir.
+          Başarılıysa veya <em>"hata durdur"</em> kapalıysa akış sonraki
+          düğümle devam eder.
+        </div>
+      </div>
+    )
+  }
+
+  /* ── SET VARIABLE node ── */
+  // 2026-06-14: Surec-scoped degisken atama. Variables prop'undan secilebilir; ifade
+  // free-form (runtime executor evaluate edecek). Basit ornekler:
+  //   42                       → sabit
+  //   gecikmeAdedi + 1         → mevcut deger + 1
+  //   {var:diger} - 5          → baska degiskenle aritmetik
+  //   true                     → bool
+  if (selected.kind === 'node' && selected.type === 'setVariable') {
+    var setData = selected.data || {}
+    var availableVars = Array.isArray(variables) ? variables : []
+    var selectedVar = availableVars.find(function (v) { return v.name === setData.variableName })
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge" style={{ background: 'rgba(100,116,139,.18)', color: '#475569' }}>Değişken Ata</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil">
+            <Trash2 size={14} />
+          </button>
+        </div>
+
+        <label className="afd-props__label">Hedef Değişken</label>
+        {availableVars.length === 0 ? (
+          <div className="afd-props__hint-italic" style={{
+            padding: '8px 10px', borderRadius: 6,
+            background: 'rgba(245,158,11,.10)', border: '1px solid rgba(245,158,11,.4)',
+            color: '#b45309',
+          }}>
+            Henüz değişken tanımı yok. Üst toolbar'daki <strong>𝑥 Değişkenler</strong> butonundan ekleyin.
+          </div>
+        ) : (
+          <select className="afd-props__input"
+                  value={setData.variableName || ''}
+                  onChange={function (e) { commitNode({ variableName: e.target.value || null }) }}>
+            <option value="">— değişken seçin —</option>
+            {availableVars.map(function (v) {
+              return <option key={v.name} value={v.name}>{v.name} ({v.typeCode})</option>
+            })}
+          </select>
+        )}
+
+        <label className="afd-props__label">İfade</label>
+        <input className="afd-props__input"
+               value={setData.expression || ''}
+               placeholder={
+                 selectedVar && selectedVar.typeCode === 'int'    ? 'örn: ' + (setData.variableName || 'x') + ' + 1'
+               : selectedVar && selectedVar.typeCode === 'bool'   ? 'örn: true / false'
+               : selectedVar && selectedVar.typeCode === 'string' ? 'örn: "tamam"'
+               : selectedVar && selectedVar.typeCode === 'date'   ? 'örn: 2026-06-30'
+               : 'sabit veya basit aritmetik (x + 1, y - 2)'
+               }
+               onChange={function (e) { commitNode({ expression: e.target.value }) }} />
+
+        <div className="afd-props__hint">
+          Bu düğüm çalıştığında <code>{setData.variableName || '?'}</code> değişkenine
+          ifadenin değeri yazılır. Aritmetik için aynı değişkenin adını ya da başka
+          değişken adını kullanabilirsiniz. Akış sonraki düğüme otomatik geçer.
+        </div>
+      </div>
+    )
+  }
+
+  /* ── START / END node ── */
+  if (selected.kind === 'node' && (selected.type === 'start' || selected.type === 'end')) {
+    var isStart = selected.type === 'start'
+
+    // END node — sade panel
+    if (!isStart) {
+      return (
+        <div className="afd-props">
+          <div className="afd-props__head">
+            <span className="afd-props__head-badge afd-props__head-badge--end">Bitir</span>
+            <button className="afd-props__del" onClick={onDelete} title="Sil">
+              <Trash2 size={14} />
+            </button>
+          </div>
+          <div className="afd-props__hint">
+            Akışın bitiş noktası. Tüm dallar nihayetinde bir Bitir düğümüne ulaşmalıdır.
+          </div>
+        </div>
+      )
+    }
+
+    // START node — Tetikleme Koşulları editörü
+    var activeRules = Array.isArray(rules)
+      ? rules.filter(function (r) { return r.isActive !== false })
+      : []
+
+    function commitRules(updater) {
+      if (typeof onRulesChange !== 'function') return
+      var current = Array.isArray(rules) ? rules.slice() : []
+      onRulesChange(updater(current))
+    }
+
+    function handleAddRule() {
+      commitRules(function (arr) {
+        arr.push({ id: 0, ruleType: 'Always', ruleValue: '', isActive: true })
+        return arr
+      })
+    }
+
+    function handleRuleTypeChange(realIdx, newType) {
+      commitRules(function (arr) {
+        var r = Object.assign({}, arr[realIdx], { ruleType: newType, ruleValue: '' })
+        arr[realIdx] = r
+        return arr
+      })
+    }
+
+    function handleRuleValueChange(realIdx, newValue) {
+      commitRules(function (arr) {
+        arr[realIdx] = Object.assign({}, arr[realIdx], { ruleValue: newValue })
+        return arr
+      })
+    }
+
+    function handleRuleDelete(realIdx) {
+      commitRules(function (arr) {
+        arr[realIdx] = Object.assign({}, arr[realIdx], { isActive: false })
+        return arr
+      })
+    }
+
+    function handleDeptToggle(realIdx, deptId, checked) {
+      commitRules(function (arr) {
+        var r = arr[realIdx]
+        var ids = String(r.ruleValue || '')
+          .split(',').map(function (x) { return x.trim() }).filter(Boolean)
+        var key = String(deptId)
+        if (checked) {
+          if (ids.indexOf(key) === -1) ids.push(key)
+        } else {
+          ids = ids.filter(function (x) { return x !== key })
+        }
+        arr[realIdx] = Object.assign({}, r, { ruleValue: ids.join(',') })
+        return arr
+      })
+    }
+
+    // map activeRules → real index in rules array (for mutation)
+    function realIndexOf(r) {
+      if (!Array.isArray(rules)) return -1
+      return rules.indexOf(r)
+    }
+
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge afd-props__head-badge--start">Başla</span>
+        </div>
+
+        <div style={{ fontSize: '.85rem', fontWeight: 700, color: 'var(--afd-text)', marginBottom: 4 }}>
+          Tetikleme Koşulları
+        </div>
+        <div style={{ fontSize: '.72rem', color: 'var(--afd-muted)', marginBottom: 12, lineHeight: 1.45 }}>
+          Bu akış hangi belgelerde tetiklenir? Koşul tanımlanmazsa her belgeye uygulanır.
+          Birden fazla koşul varsa hepsi sağlanmalıdır (VE mantığı).
+        </div>
+
+        {activeRules.length === 0 && (
+          <div className="afd-props__hint-italic" style={{ padding: '8px 0' }}>
+            Henüz koşul yok — akış tüm belgelerde tetiklenir.
+          </div>
+        )}
+
+        {activeRules.map(function (r) {
+          var realIdx = realIndexOf(r)
+          return (
+            <div key={realIdx + '_' + r.ruleType} className="afd-rule-row">
+              <div className="afd-rule-row__top">
+                <select
+                  className="afd-props__input afd-rule-row__type"
+                  value={r.ruleType}
+                  onChange={function (e) { handleRuleTypeChange(realIdx, e.target.value) }}
+                >
+                  {RULE_TYPES.map(function (rt) {
+                    return <option key={rt.v} value={rt.v}>{rt.l}</option>
+                  })}
+                </select>
+                <button
+                  className="afd-props__del"
+                  onClick={function () { handleRuleDelete(realIdx) }}
+                  title="Koşulu Sil"
+                  type="button"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {r.ruleType === 'Always' && (
+                <div className="afd-props__hint-italic" style={{ marginTop: 6 }}>
+                  Bu kural her zaman geçerli
+                </div>
+              )}
+
+              {r.ruleType !== 'Always' && r.ruleType !== 'Department' && (
+                <input
+                  className="afd-props__input"
+                  style={{ marginTop: 6 }}
+                  value={r.ruleValue || ''}
+                  placeholder={rulePlaceholder(r.ruleType)}
+                  onChange={function (e) { handleRuleValueChange(realIdx, e.target.value) }}
+                />
+              )}
+
+              {r.ruleType === 'Department' && (
+                <div className="afd-props__chips" style={{ marginTop: 6 }}>
+                  {departments.length === 0 && (
+                    <span className="afd-props__hint-italic">
+                      Aktif departman tanımı yok.
+                    </span>
+                  )}
+                  {departments.map(function (d) {
+                    var ids = String(r.ruleValue || '')
+                      .split(',').map(function (x) { return x.trim() }).filter(Boolean)
+                    var on = ids.indexOf(String(d.id)) !== -1
+                    return (
+                      <label
+                        key={d.id}
+                        className={'afd-props__chip' + (on ? ' is-on' : '')}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={function (e) { handleDeptToggle(realIdx, d.id, e.target.checked) }}
+                        />
+                        <span>{d.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        <button
+          type="button"
+          className="afd-rule-add"
+          onClick={handleAddRule}
+        >
+          <Plus size={13} />
+          Koşul Ekle
+        </button>
+
+        <div className="afd-props__hint" style={{ marginTop: 14 }}>
+          <strong>Her Zaman:</strong> Koşulsuz uygula &nbsp;|&nbsp;
+          <strong>Min/Maks Tutar:</strong> ≥ / ≤ X TL &nbsp;|&nbsp;
+          <strong>Tutar Aralığı:</strong> X ≤ tutar ≤ Y &nbsp;|&nbsp;
+          <strong>VKN:</strong> Belirli gönderici &nbsp;|&nbsp;
+          <strong>Departman:</strong> Çoklu seçim (VEYA)
+        </div>
+      </div>
+    )
+  }
+
+  /* ── EDGE ── */
+  if (selected.kind === 'edge') {
+    var isTimeout = edgeKind === 'timeout'
+    // Timeout edge ise kaynak adimin SLA verisini buradan yonet (senkron — adim panelindeki
+    // SLA editor'u ile ayni veri).
+    var srcNode = null
+    if (isTimeout && selected.source && Array.isArray(nodes)) {
+      srcNode = nodes.find(function (n) { return n.id === selected.source }) || null
+    }
+    var srcData    = (srcNode && srcNode.data) || {}
+    var sHours     = srcData.slaHours == null ? 24 : Number(srcData.slaHours)
+    var sUnit      = srcData.slaTimeUnit || 'hours'
+    var sAction    = srcData.slaAction || 'escalate'
+    var sWarnHrs   = srcData.slaReminderHoursBefore == null ? '' : String(srcData.slaReminderHoursBefore)
+    var sMsg       = srcData.slaMessageTemplate || ''
+    var sReason    = srcData.slaRejectReason || ''
+    function patchSource(patch) {
+      if (!srcNode || typeof updateNodeData !== 'function') return
+      updateNodeData(srcNode.id, patch)
+    }
+
+    return (
+      <div className="afd-props">
+        <div className="afd-props__head">
+          <span className="afd-props__head-badge afd-props__head-badge--edge">Bağlantı</span>
+          <button className="afd-props__del" onClick={onDelete} title="Sil">
+            <Trash2 size={14} />
+          </button>
+        </div>
+
+        <label className="afd-props__label">Etiket</label>
+        <input
+          className="afd-props__input"
+          value={edgeLabel}
+          onChange={function (e) {
+            setEdgeLabel(e.target.value)
+            commitNode({ label: e.target.value })
+          }}
+          placeholder="Örn: Onay, Red, Evet, Hayır, Gecikme"
+        />
+
+        <label className="afd-props__label">Bağlantı Türü</label>
+        {isTimeout ? (
+          /* Timeout edge tipi sourceHandle'dan turetilir; elle degistirilmez — read-only rozet. */
+          <div style={{
+            padding: '6px 10px', borderRadius: 6,
+            background: 'rgba(245,158,11,.14)',
+            border: '1px solid rgba(245,158,11,.45)',
+            color: '#b45309', fontSize: '.78rem', fontWeight: 700,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            ⏱ Gecikme
+            <span style={{ fontWeight: 500, opacity: .85, fontSize: '.72rem' }}>
+              (sarı "Gecikme" handle bağlantısı — tür sabit)
+            </span>
+          </div>
+        ) : (
+          <select
+            className="afd-props__input"
+            value={edgeKind}
+            onChange={function (e) {
+              var v = e.target.value
+              setEdgeKind(v)
+              commitNode({ edgeKind: v })
+            }}
+          >
+            <option value="default">Varsayılan</option>
+            <option value="true">Evet / Onay</option>
+            <option value="false">Hayır / Red</option>
+          </select>
+        )}
+
+        {isTimeout && srcNode && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--afd-border, #cbd5e1)' }}>
+            <div style={{ fontSize: '.72rem', color: 'var(--afd-muted)', marginBottom: 6 }}>
+              Bu bağlantı tetiklendiğinde, kaynak adımın <strong>{srcData.stepName || 'Adım'}</strong> SLA verisi kullanılır.
+              Aynı veri adım panelinde de görünür — buradan veya oradan düzenleyebilirsin.
+            </div>
+
+            <label className="afd-props__label">Süre</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input type="number" min="1" className="afd-props__input" style={{ flex: '0 0 80px' }}
+                     value={sHours}
+                     onChange={function (e) {
+                       var v = parseInt(e.target.value, 10) || 0
+                       patchSource({ slaEnabled: true, slaHours: v })
+                     }} />
+              <select className="afd-props__input" style={{ flex: 1 }}
+                      value={sUnit}
+                      onChange={function (e) { patchSource({ slaEnabled: true, slaTimeUnit: e.target.value }) }}>
+                <option value="minutes">dakika</option>
+                <option value="hours">saat</option>
+                <option value="days">gün (24sa)</option>
+                <option value="businessDays">iş günü (Pzt-Cum)</option>
+              </select>
+            </div>
+
+            <label className="afd-props__label">Önceden uyarı (opsiyonel, saat)</label>
+            <input type="number" min="0" className="afd-props__input"
+                   value={sWarnHrs} placeholder="örn: 4 → süre dolmadan 4sa önce ön-uyarı"
+                   onChange={function (e) {
+                     var raw = e.target.value
+                     patchSource({ slaEnabled: true, slaAction: 'escalate',
+                                   slaReminderHoursBefore: raw === '' ? null : parseInt(raw, 10) || 0 })
+                   }} />
+            <label className="afd-props__label">Ön-uyarı mesajı (opsiyonel)</label>
+            <textarea className="afd-props__input afd-props__input--ta" rows={2} value={sMsg}
+                      onChange={function (e) { patchSource({ slaEnabled: true, slaAction: 'escalate',
+                                                              slaMessageTemplate: e.target.value }) }}
+                      placeholder="Belgeyi {documentNumber} onay için bekliyor — süre {dueDate}'da doluyor." />
+          </div>
+        )}
+
+        {!isTimeout && (
+          <>
+            <label className="afd-props__label">Koşul (opsiyonel)</label>
+            <textarea
+              className="afd-props__input afd-props__input--ta"
+              rows={2}
+              value={condition}
+              onChange={function (e) {
+                setCondition(e.target.value)
+                commitNode({ condition: e.target.value })
+              }}
+              placeholder="amount > 100000"
+            />
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return null
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * StepSlaEditor — Adım node properties paneline gömülü SLA + Gecikme Aksiyonu UI.
+ * Adımda max bekleme süresi tanımlanır; süre dolunca tetiklenecek aksiyon seçilir:
+ *   - reminder      : Hatırlatma gönder (kime: onayciya / belgeyi olusturana)
+ *   - escalate      : Eskale et — hedef 3. kol (sarı "Süre" handle) edge'inden çözülür
+ *   - autoApprove   : Otomatik onayla
+ *   - autoReject    : Otomatik reddet (gerekçe ile)
+ * Veri Step.NodeData JSON içine sla* prefix'le yazılır.
+ * Worker (CalibraHub.Worker.SlaCheckerService) periyodik tarar; eskale hedefi
+ * Edge tablosundan EdgeKind='timeout' kaydından alınır.
+ * ────────────────────────────────────────────────────────────────── */
+function StepSlaEditor({ data, nodeId, edges, nodes, users, departments, onChange }) {
+  var d = data || {}
+  var slaEnabled  = d.slaEnabled === true
+  var slaHours    = d.slaHours == null ? 24 : Number(d.slaHours)
+  var slaUnit     = d.slaTimeUnit || 'hours'  // hours | days | businessDays
+  var slaWarnHrs  = d.slaReminderHoursBefore == null ? '' : String(d.slaReminderHoursBefore)
+  var slaMsg      = d.slaMessageTemplate || ''
+
+  // 3. kol (timeout) bu node'dan çıkıyor mu? Hedef node'un adi?
+  var timeoutEdge = (edges || []).find(function (e) {
+    return e.source === nodeId && e.sourceHandle === 'timeout'
+  })
+  var timeoutTargetName = null
+  if (timeoutEdge) {
+    var tn = (nodes || []).find(function (n) { return n.id === timeoutEdge.target })
+    if (tn) {
+      timeoutTargetName = (tn.data && tn.data.stepName)
+        || (tn.type === 'notification' ? 'Bildirim'
+          : tn.type === 'decision'     ? 'Karar'
+          : tn.type === 'integration'  ? 'Entegrasyon'
+          : tn.type === 'parallel'     ? 'Paralel'
+          : tn.type === 'end'          ? 'Bitir' : 'Adım')
+    }
+  }
+
+  function commit(patch) { if (typeof onChange === 'function') onChange(patch) }
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--afe-border, #cbd5e1)' }}>
+      <label className="afd-props__label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>⏱ Gecikme (SLA)</span>
+        <label className="afe-switch" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <input type="checkbox" checked={slaEnabled}
+                 onChange={function (e) { commit({ slaEnabled: e.target.checked, slaAction: 'escalate' }) }} />
+          <span className="afe-switch__track"></span>
+        </label>
+      </label>
+
+      {slaEnabled && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+          <label className="afd-props__label">Süre</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input type="number" min="1" className="afd-props__input" style={{ flex: '0 0 80px' }}
+                   value={slaHours}
+                   onChange={function (e) { commit({ slaHours: parseInt(e.target.value, 10) || 0 }) }} />
+            <select className="afd-props__input" style={{ flex: 1 }}
+                    value={slaUnit}
+                    onChange={function (e) { commit({ slaTimeUnit: e.target.value }) }}>
+              <option value="minutes">dakika</option>
+              <option value="hours">saat</option>
+              <option value="days">gün (24sa)</option>
+              <option value="businessDays">iş günü (Pzt-Cum)</option>
+            </select>
+          </div>
+
+          <div style={{
+            padding: '8px 10px', borderRadius: 6,
+            background: timeoutEdge ? 'rgba(245,158,11,.12)' : 'rgba(239,68,68,.10)',
+            border: '1px solid ' + (timeoutEdge ? 'rgba(245,158,11,.45)' : 'rgba(239,68,68,.4)'),
+            fontSize: '.78rem', lineHeight: 1.5,
+          }}>
+            {timeoutEdge ? (
+              <>
+                <strong style={{ color: '#d97706' }}>Hedef bağlı:</strong>{' '}
+                <span>{timeoutTargetName || '(adsız node)'}</span>
+                <div style={{ marginTop: 4, opacity: .8 }}>
+                  Süre dolunca akış sarı "Gecikme" kolundan bu node'a yönlendirilir.
+                </div>
+              </>
+            ) : (
+              <>
+                <strong style={{ color: '#b91c1c' }}>Hedef seçilmedi.</strong>{' '}
+                Adım kartının altındaki <strong>sarı "Gecikme"</strong> handle'ından
+                bir node'a (Bildirim, Karar, Adım…) çizgi çekin.
+              </>
+            )}
+          </div>
+
+          <label className="afd-props__label">Önceden uyarı (opsiyonel, saat)</label>
+          <input type="number" min="0" className="afd-props__input"
+                 value={slaWarnHrs} placeholder="örn: 4 → süre dolmadan 4sa önce ön-uyarı"
+                 onChange={function (e) { commit({ slaReminderHoursBefore: e.target.value === '' ? null : parseInt(e.target.value, 10) || 0 }) }} />
+          <label className="afd-props__label">Ön-uyarı mesajı (opsiyonel)</label>
+          <textarea className="afd-props__input afd-props__input--ta" rows={2} value={slaMsg}
+                    onChange={function (e) { commit({ slaMessageTemplate: e.target.value }) }}
+                    placeholder="Belgeyi {documentNumber} onay için bekliyor — süre {dueDate}'da doluyor." />
+
+          <div className="afd-props__hint">
+            <strong>Nasıl çalışır:</strong> Adım aktif olduğu andan itibaren süre sayılmaya başlar.
+            Süre dolunca akış 3. kol (Gecikme) bağlantısındaki node'a yönlendirilir; o node Bildirim,
+            Karar veya başka bir Adım olabilir. "Süre dolunca ne olacak" sorusunun cevabı = bağladığın hedef.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -10,6 +10,10 @@ public sealed class Department
     public required string Name { get; set; }
     public int? ParentDepartmentId { get; set; }
     public bool IsActive { get; private set; } = true;
+    public int? CreatedById { get; set; }
+    public DateTime Created { get; set; }
+    public int? UpdatedById { get; set; }
+    public DateTime? Updated { get; set; }
 
     public void Deactivate() => IsActive = false;
     public void Activate()   => IsActive = true;

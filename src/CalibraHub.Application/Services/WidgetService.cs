@@ -3,6 +3,7 @@ using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Application.Services.Security;
 using CalibraHub.Domain.Entities;
 
 namespace CalibraHub.Application.Services;
@@ -22,10 +23,12 @@ namespace CalibraHub.Application.Services;
 public sealed class WidgetService : IWidgetService
 {
     private readonly IWidgetRepository _repository;
+    private readonly PermissionDefDiscoveryService _permDiscovery;
 
-    public WidgetService(IWidgetRepository repository)
+    public WidgetService(IWidgetRepository repository, PermissionDefDiscoveryService permDiscovery)
     {
-        _repository = repository;
+        _repository    = repository;
+        _permDiscovery = permDiscovery;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -72,7 +75,10 @@ public sealed class WidgetService : IWidgetService
                 ColorType: w.ColorType,
                 ColorValue: w.ColorValue,
                 ColSpan: w.ColSpan,
-                LabelStyle: w.LabelStyle ?? "standard"))
+                LabelStyle: w.LabelStyle ?? "standard",
+                IsSystemField: w.IsSystemField,
+                EntityColumn: w.EntityColumn,
+                IsPermissionControlled: w.IsPermissionControlled))
             .ToArray();
 
         return new WidgetFormSchemaDto(
@@ -248,7 +254,9 @@ public sealed class WidgetService : IWidgetService
                 ColorType: w.ColorType,
                 ColorValue: w.ColorValue,
                 ColSpan: w.ColSpan,
-                LabelStyle: w.LabelStyle ?? "standard"));
+                LabelStyle: w.LabelStyle ?? "standard",
+                IsSystemField: w.IsSystemField,
+                EntityColumn: w.EntityColumn));
         }
         return result;
     }
@@ -266,7 +274,8 @@ public sealed class WidgetService : IWidgetService
         var forms = await _repository.GetFormsAsync(ct);
         return forms
             .Select(f => new FormCatalogItemDto(
-                f.Id, f.FormCode, f.FormName, f.Module, f.SubModule, f.SortOrder))
+                f.Id, f.FormCode, f.FormName, f.Module, f.SubModule, f.SortOrder,
+                f.Icon, f.IconColor, f.IsWidgetForm))
             .ToArray();
     }
 
@@ -479,6 +488,22 @@ public sealed class WidgetService : IWidgetService
         else if (request.IsPlainField) normalizedLabelStyle = "inline";  // legacy back-compat
         else normalizedLabelStyle = "standard";
 
+        // Sprint 1 — Universal Form Engine. Mevcut sistem alani widget'lari icin
+        // IsSystemField/EntityColumn semasal kalmalidir; admin UI bunlari gondermez
+        // (read-only), unutursa overwrite olmasin diye DB'den kopyalanir.
+        bool isSystemField = request.IsSystemField;
+        string? entityColumn = string.IsNullOrWhiteSpace(request.EntityColumn) ? null : request.EntityColumn.Trim();
+        if (request.Id.HasValue && request.Id.Value > 0)
+        {
+            var existingById = await _repository.GetWidgetByIdAsync(request.Id.Value, ct);
+            if (existingById != null && existingById.IsSystemField)
+            {
+                // Sistem alani — bu iki alan asla request'ten overwrite edilmez.
+                isSystemField = true;
+                entityColumn  = existingById.EntityColumn;
+            }
+        }
+
         var now = DateTime.Now;
         var widget = new WidgetDefinition
         {
@@ -505,11 +530,30 @@ public sealed class WidgetService : IWidgetService
             // ColSpan — 1-24 arasi clamp; null/sifir gelirse varsayilan 12 (1/2 satir).
             ColSpan = (request.ColSpan is int cs && cs >= 1 && cs <= 24) ? cs : 12,
             LabelStyle = normalizedLabelStyle,
+            // Sprint 1 — Universal Form Engine. Sistem alanlari discovery tarafindan
+            // seed edilir; admin UI bunlari schema-readonly gorur (label/visibility
+            // degistirebilir ama EntityColumn'i degil). Mevcut sistem alaninda asla
+            // overwrite olmaz — yukarida varsa DB'den kopyalandi.
+            IsSystemField = isSystemField,
+            EntityColumn  = entityColumn,
+            // 2026-06-08 — Yetkilendirilebilir alan flag'i. Admin UI'da "Yetkilendirilebilir"
+            // switch'i bunu set eder; startup discovery FIELD:<WidgetCode> izni seed eder.
+            IsPermissionControlled = request.IsPermissionControlled,
             CreatedAt = now,
             UpdatedAt = now,
         };
 
         var newId = await _repository.UpsertWidgetAsync(widget, ct);
+
+        // Yetki senkronizasyonu — IsPermissionControlled değişince anında yansısın,
+        // bir sonraki uygulama başlangıcı beklenmez.
+        await _permDiscovery.SyncFieldPermissionAsync(
+            form.FormCode,
+            form.FormName ?? form.FormCode,
+            widgetCode,
+            widget.Label ?? widgetCode,
+            widget.IsPermissionControlled,
+            ct);
 
         // Faz H: Flattened View regenerate — try/catch, hata widget save'i etkilemez
         await RegenerateFlattenedViewSafeAsync(request.FormId, ct);
@@ -589,10 +633,25 @@ public sealed class WidgetService : IWidgetService
         return result;
     }
 
+    /// <summary>
+    /// LEGACY (deprecated) — IsPlainField bayragi LabelStyle='inline'a migrate edildi.
+    /// Eski clientlar bu metodu cagirmaya devam edebilir; biz LabelStyle uzerinden tek
+    /// otoriter kaynaktan calistirip IsPlainField'i da sync tutuyoruz. Sonraki sprint'te
+    /// metod silinecek (Sprint 3 bittikten sonra eski admin UI'sini temizleyince).
+    /// </summary>
     public async Task ToggleIsPlainFieldAsync(int widgetId, bool isPlainField, CancellationToken ct)
     {
         var widget = await _repository.GetWidgetByIdAsync(widgetId, ct)
             ?? throw new KeyNotFoundException($"Widget {widgetId} bulunamadi.");
+
+        // Tek otoriter alan: LabelStyle. IsPlainField=true → 'inline', false → 'standard'.
+        // Eger widget zaten 'modern' veya 'standard' degil farkli bir style'da idiyse
+        // korur (sadece inline <-> standard arasinda toggle yapar — kullanici niyetine sadik).
+        var nextLabelStyle = isPlainField
+            ? "inline"
+            : (string.Equals(widget.LabelStyle, "inline", StringComparison.OrdinalIgnoreCase)
+                ? "standard"      // inline -> standard'a don
+                : (widget.LabelStyle ?? "standard"));  // mevcut tutarini koru
 
         var updated = new Domain.Entities.WidgetDefinition
         {
@@ -610,13 +669,14 @@ public sealed class WidgetService : IWidgetService
             SortOrder      = widget.SortOrder,
             OptionsJson    = widget.OptionsJson,
             RulesJson      = widget.RulesJson,
-            IsPlainField   = isPlainField,
+            // IsPlainField artik turetilmis deger: LabelStyle == 'inline' ile senkron.
+            IsPlainField   = string.Equals(nextLabelStyle, "inline", StringComparison.OrdinalIgnoreCase),
             IsRequired     = widget.IsRequired,
             IsActive       = widget.IsActive,
             ColorType      = widget.ColorType,
             ColorValue     = widget.ColorValue,
             ColSpan        = widget.ColSpan,
-            LabelStyle     = widget.LabelStyle ?? "standard",
+            LabelStyle     = nextLabelStyle,
             CreatedAt      = widget.CreatedAt,
             UpdatedAt      = DateTime.Now,
         };

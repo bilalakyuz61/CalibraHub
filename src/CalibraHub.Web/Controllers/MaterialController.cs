@@ -95,7 +95,7 @@ public sealed class MaterialController : Controller
             unitId            = card.UnitId,
             trackCombinations = card.Combinations,
             taxRate           = card.TaxRate,
-            meta              = new { createdDate = card.CreateDate, modifiedDate = card.ModifyDate },
+            meta              = new { createdDate = card.Created, modifiedDate = card.Updated },
             combinations
         });
     }

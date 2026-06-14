@@ -2,28 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "CalibraHub Web",
-      "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "src/CalibraHub.Web"],
+      "name": "calibrahub",
+      "runtimeExecutable": "C:/Program Files/dotnet/dotnet",
+      "runtimeArgs": ["run", "--project", "src/CalibraHub.Web/CalibraHub.Web.csproj", "--launch-profile", "http"],
       "port": 61001
     },
     {
-      "name": "CalibraHub Worker",
-      "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "src/CalibraHub.Worker"],
-      "port": null
-    },
-    {
-      "name": "ClientApp (Vite)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "src/CalibraHub.Web/ClientApp"],
-      "port": 5173
-    },
-    {
-      "name": "CalibraHub Designer",
-      "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "src/CalibraHub.Designer"],
-      "port": 61002
+      "name": "landing",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "docs", "-p", "3333", "--no-clipboard"],
+      "port": 3333
     }
   ]
 }

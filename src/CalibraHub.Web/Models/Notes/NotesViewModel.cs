@@ -48,7 +48,7 @@ public sealed class NoteReminderItem
 public sealed class NoteShareItem
 {
     public Guid Id { get; init; }
-    public Guid SharedWithUserId { get; init; }
+    public int SharedWithUserId { get; init; }
     public required string SharedWithUserName { get; init; }
     public DateTime SharedAt { get; init; }
 }
@@ -70,6 +70,11 @@ public sealed class SaveNoteInput
     // Mod 2 (E2E) — tum not sifreli ise true, Content alani JSON-wrap'li ciphertext
     public bool? IsFullyEncrypted { get; set; }
     public string? EncryptionHint { get; set; }
+    public string? Tags { get; set; }
+    public string? LinkedEntityType { get; set; }
+    public int? LinkedEntityId { get; set; }
+    public string? LinkedEntityLabel { get; set; }
+    public int Visibility { get; set; }
 }
 
 public sealed class AddReminderInput
@@ -80,13 +85,13 @@ public sealed class AddReminderInput
     public string? RecurrenceData { get; set; }
     public ReminderDeliveryChannel DeliveryChannel { get; set; } = ReminderDeliveryChannel.InApp;
     /// <summary>Hedef kullanicilar — bos ise notun sahibine gider.</summary>
-    public List<Guid>? TargetUserIds { get; set; }
+    public List<int>? TargetUserIds { get; set; }
 }
 
 public sealed class AddShareInput
 {
     public Guid NoteId { get; set; }
-    public Guid SharedWithUserId { get; set; }
+    public int SharedWithUserId { get; set; }
 }
 
 public sealed class DeleteReminderJsonInput

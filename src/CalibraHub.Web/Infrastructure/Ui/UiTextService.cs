@@ -105,10 +105,10 @@ public sealed class UiTextService : IUiTextService
         }
     }
 
-    private Guid? ResolveUserId()
+    private int? ResolveUserId()
     {
         var rawUserId = _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(rawUserId, out var userId) ? userId : null;
+        return int.TryParse(rawUserId, out var userId) ? userId : null;
     }
 
     private static Dictionary<string, string> BuildCatalogFormTexts(string formKey, string languageCode)

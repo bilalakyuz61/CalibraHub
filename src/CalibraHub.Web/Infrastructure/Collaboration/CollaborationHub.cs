@@ -86,7 +86,7 @@ public sealed class CollaborationHub : Hub
     {
         var user = RequireUser();
         var messageText = request.Message?.Trim();
-        if (request.RecipientUserId == Guid.Empty || string.IsNullOrWhiteSpace(messageText))
+        if (request.RecipientUserId <= 0 || string.IsNullOrWhiteSpace(messageText))
         {
             throw new HubException("Mesaj gonderilemedi.");
         }
@@ -162,7 +162,7 @@ public sealed class CollaborationHub : Hub
     private bool TryResolveUser(out CollaborationUserDescriptor user)
     {
         var rawUserId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(rawUserId, out var userId))
+        if (!int.TryParse(rawUserId, out var userId))
         {
             user = default!;
             return false;

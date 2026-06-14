@@ -35,7 +35,7 @@ public sealed class SqlWorkOrderComponentRepository : IWorkOrderComponentReposit
             SELECT c.[Id], c.[WorkOrderId], c.[ItemId], i.[Code] AS ItemCode, i.[Name] AS ItemName,
                    c.[ConfigId], cfg.[RecordCode] AS ConfigCode,
                    c.[RequiredQuantity], c.[IssuedQuantity], c.[ScrapRate],
-                   c.[UnitId], u.[UnitCode] AS UnitCode,
+                   c.[UnitId], u.[Code] AS UnitCode,
                    c.[Notes], c.[Created], c.[Updated]
             FROM {_table} c
             LEFT JOIN [{_schema}].[Items] i ON i.[Id] = c.[ItemId]

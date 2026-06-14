@@ -1,0 +1,533 @@
+@{
+    ViewData["Title"] = "Onayda Bekleyenler";
+    var scopes = ViewBag.AvailableScopes as IReadOnlyList<string> ?? new[] { "mine" };
+    var defaultScope = (string)(ViewBag.DefaultScope ?? "mine");
+}
+
+@section Styles {
+<style>
+    .pa-wrap {
+        padding: 18px;
+        height: calc(100vh - var(--app-header-height, 64px) - var(--app-tabs-height, 48px));
+        display: flex; flex-direction: column; min-height: 0;
+        max-width: 100%;
+    }
+    .pa-header {
+        display: flex; align-items: center; gap: 14px; margin-bottom: 14px;
+        flex: 0 0 auto;
+    }
+    .pa-title { font-size: 20px; font-weight: 700; margin: 0; }
+    .pa-subtitle { font-size: 12px; color: #64748b; }
+    .pa-scope-picker {
+        margin-left: auto; display: flex; align-items: center; gap: 8px;
+    }
+    .pa-scope-picker label { font-size: 12px; color: #64748b; font-weight: 500; }
+    .pa-scope-picker select {
+        padding: 5px 28px 5px 10px; border-radius: 6px;
+        border: 1px solid rgba(148,163,184,.3);
+        background: var(--surface, #fff); font-size: 13px;
+        appearance: none;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><polyline points='1,1 5,5 9,1' fill='none' stroke='%2364748b' stroke-width='1.5'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+    }
+    body.app-theme-dark .pa-scope-picker select,
+    html.dark .pa-scope-picker select {
+        background-color: rgba(15,23,42,.5); color: #e2e8f0;
+        border-color: rgba(255,255,255,.1);
+    }
+
+    .pa-body { display: grid; grid-template-columns: 260px 1fr; gap: 14px; flex: 1 1 auto; min-height: 0; }
+
+    .pa-groups {
+        background: var(--surface, #fff);
+        border: 1px solid rgba(148,163,184,.18);
+        border-radius: 10px; padding: 8px;
+        overflow-y: auto;
+    }
+    body.app-theme-dark .pa-groups,
+    html.dark .pa-groups {
+        background: rgba(15,23,42,.4);
+        border-color: rgba(255,255,255,.08);
+    }
+    .pa-group {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; margin: 4px 0;
+        border-radius: 8px; cursor: pointer;
+        transition: background 0.15s;
+        font-size: 13px;
+    }
+    .pa-group:hover { background: rgba(99,102,241,.06); }
+    .pa-group.active {
+        background: linear-gradient(135deg, rgba(99,102,241,.14), rgba(139,92,246,.10));
+        border: 1px solid rgba(99,102,241,.3);
+    }
+    .pa-group-name { flex: 1 1 auto; font-weight: 500; color: #1e293b; }
+    body.app-theme-dark .pa-group-name,
+    html.dark .pa-group-name { color: #f1f5f9; }
+    .pa-group-count {
+        flex: 0 0 auto;
+        background: rgba(99,102,241,.18); color: #6366f1;
+        font-size: 11px; font-weight: 700;
+        padding: 2px 8px; border-radius: 10px; min-width: 24px; text-align: center;
+    }
+    .pa-group.empty { opacity: 0.5; padding: 14px; text-align: center; font-size: 12px; color: #94a3b8; }
+
+    .pa-list-wrap {
+        background: var(--surface, #fff);
+        border: 1px solid rgba(148,163,184,.18);
+        border-radius: 10px; overflow: hidden;
+        display: flex; flex-direction: column; min-height: 0;
+    }
+    body.app-theme-dark .pa-list-wrap,
+    html.dark .pa-list-wrap {
+        background: rgba(15,23,42,.4);
+        border-color: rgba(255,255,255,.08);
+    }
+    .pa-list-header {
+        padding: 10px 16px;
+        border-bottom: 1px solid rgba(148,163,184,.12);
+        display: flex; align-items: center; gap: 10px;
+        flex: 0 0 auto;
+    }
+    .pa-list-title { font-size: 14px; font-weight: 600; }
+    .pa-list-count { font-size: 11px; color: #94a3b8; }
+
+    .pa-list-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .pa-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+    .pa-table th {
+        position: sticky; top: 0;
+        background: rgba(241,245,249,1); color: #64748b;
+        font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+        padding: 10px 14px; text-align: left;
+        border-bottom: 1px solid rgba(148,163,184,.15);
+    }
+    body.app-theme-dark .pa-table th,
+    html.dark .pa-table th { background: rgba(30,41,59,1); }
+    .pa-table td {
+        padding: 10px 14px; border-bottom: 1px solid rgba(148,163,184,.08);
+    }
+    .pa-table tr { cursor: pointer; transition: background 0.12s; }
+    .pa-table tr:hover td { background: rgba(99,102,241,.05); }
+    body.app-theme-dark .pa-table tr:hover td,
+    html.dark .pa-table tr:hover td { background: rgba(99,102,241,.10); }
+
+    .pa-empty {
+        padding: 50px 20px; text-align: center; color: #94a3b8; font-size: 13px;
+    }
+    .pa-step-pill {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: rgba(99,102,241,.12); color: #6366f1;
+        font-size: 11px; font-weight: 600;
+        padding: 2px 8px; border-radius: 10px;
+    }
+    .pa-overdue { color: #ef4444; font-weight: 600; }
+
+    /* Modal */
+    .pa-modal-backdrop {
+        position: fixed; inset: 0; background: rgba(15,23,42,.55);
+        backdrop-filter: blur(3px);
+        display: none; align-items: center; justify-content: center;
+        z-index: 1050;
+    }
+    .pa-modal-backdrop.show { display: flex; }
+    .pa-modal {
+        background: #fff; border-radius: 12px;
+        width: min(720px, 92vw); max-height: 88vh;
+        display: flex; flex-direction: column;
+        box-shadow: 0 20px 60px rgba(15,23,42,.30);
+        animation: pa-modal-in 0.18s ease-out;
+    }
+    body.app-theme-dark .pa-modal,
+    html.dark .pa-modal { background: #1e293b; color: #e2e8f0; }
+    @@keyframes pa-modal-in {
+        from { opacity: 0; transform: translateY(20px) scale(.98); }
+        to   { opacity: 1; transform: translateY(0)     scale(1); }
+    }
+    .pa-modal-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid rgba(148,163,184,.18);
+        display: flex; align-items: flex-start; gap: 14px;
+    }
+    .pa-modal-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+    .pa-modal-sub { font-size: 12px; color: #64748b; }
+    .pa-modal-close {
+        margin-left: auto; background: transparent; border: 0; font-size: 22px;
+        color: #94a3b8; cursor: pointer; line-height: 1;
+    }
+    .pa-modal-body { padding: 18px 20px; overflow-y: auto; flex: 1 1 auto; }
+    .pa-modal-footer {
+        padding: 14px 20px; border-top: 1px solid rgba(148,163,184,.18);
+        display: flex; gap: 8px; justify-content: flex-end;
+        flex: 0 0 auto;
+    }
+    .pa-btn {
+        padding: 8px 16px; border-radius: 8px; border: 0;
+        font-size: 13px; font-weight: 600; cursor: pointer;
+        transition: opacity 0.15s, transform 0.12s;
+    }
+    .pa-btn:hover { transform: translateY(-1px); }
+    .pa-btn-primary { background: linear-gradient(135deg, #10b981, #059669); color: #fff; }
+    .pa-btn-danger  { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
+    .pa-btn-ghost   { background: rgba(148,163,184,.15); color: #64748b; }
+
+    .pa-detail-grid {
+        display: grid; grid-template-columns: 110px 1fr; gap: 8px 14px;
+        font-size: 13px; margin-bottom: 18px;
+    }
+    .pa-detail-grid dt { color: #94a3b8; font-weight: 500; }
+    .pa-detail-grid dd { margin: 0; font-weight: 500; }
+
+    .pa-steps {
+        list-style: none; padding: 0; margin: 0;
+    }
+    .pa-steps li {
+        position: relative; padding: 10px 14px 10px 32px; margin: 6px 0;
+        border-radius: 8px;
+        background: rgba(148,163,184,.06);
+    }
+    .pa-steps li::before {
+        content: ''; position: absolute; left: 10px; top: 14px;
+        width: 12px; height: 12px; border-radius: 50%;
+        background: #cbd5e1;
+    }
+    .pa-steps li.status-Approved::before { background: #10b981; }
+    .pa-steps li.status-Pending::before  { background: #f59e0b; }
+    .pa-steps li.status-Rejected::before { background: #ef4444; }
+    .pa-step-title { font-weight: 600; font-size: 13px; }
+    .pa-step-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+</style>
+}
+
+<div class="pa-wrap">
+    <div class="pa-header">
+        <div>
+            <h1 class="pa-title">Onayda Bekleyenler</h1>
+            <div class="pa-subtitle">Sizden onay bekleyen kayıtlar (sol panel: belge türü)</div>
+        </div>
+        <div class="pa-scope-picker">
+            <label for="paScope">Görünüm</label>
+            <select id="paScope">
+                @foreach (var s in scopes)
+                {
+                    var label = s switch
+                    {
+                        "mine" => "Sadece benim",
+                        "department" => "Departmanım",
+                        "all" => "Tümü",
+                        _ => s
+                    };
+                    if (string.Equals(s, defaultScope, StringComparison.OrdinalIgnoreCase))
+                    {
+                        <option value="@s" selected>@label</option>
+                    }
+                    else
+                    {
+                        <option value="@s">@label</option>
+                    }
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="pa-body">
+        <div class="pa-groups" id="paGroups">
+            <div class="pa-group empty">Yükleniyor…</div>
+        </div>
+        <div class="pa-list-wrap">
+            <div class="pa-list-header">
+                <div>
+                    <div class="pa-list-title" id="paListTitle">Tüm belge türleri</div>
+                    <div class="pa-list-count" id="paListCount"></div>
+                </div>
+            </div>
+            <div class="pa-list-scroll" id="paListScroll">
+                <div class="pa-empty">Sol panelden bir belge türü seçin…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="pa-modal-backdrop" id="paModalBackdrop">
+    <div class="pa-modal" role="dialog" aria-modal="true">
+        <div class="pa-modal-header">
+            <div>
+                <div class="pa-modal-title" id="paModalTitle">Belge Detayı</div>
+                <div class="pa-modal-sub" id="paModalSub"></div>
+            </div>
+            <button type="button" class="pa-modal-close" id="paModalClose" aria-label="Kapat">×</button>
+        </div>
+        <div class="pa-modal-body" id="paModalBody">
+            <div style="text-align:center;padding:30px;color:#94a3b8;">Yükleniyor…</div>
+        </div>
+        <div class="pa-modal-footer">
+            <button type="button" class="pa-btn pa-btn-danger"  id="paBtnReject">Reddet</button>
+            <button type="button" class="pa-btn pa-btn-primary" id="paBtnApprove">Onayla</button>
+            <button type="button" class="pa-btn pa-btn-ghost"   id="paBtnCancel">Kapat</button>
+        </div>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function() {
+    const scopeEl = document.getElementById('paScope');
+    const groupsEl = document.getElementById('paGroups');
+    const listScrollEl = document.getElementById('paListScroll');
+    const listTitleEl = document.getElementById('paListTitle');
+    const listCountEl = document.getElementById('paListCount');
+    const backdropEl = document.getElementById('paModalBackdrop');
+    const modalCloseEl = document.getElementById('paModalClose');
+    const modalCancelEl = document.getElementById('paBtnCancel');
+    const modalApproveEl = document.getElementById('paBtnApprove');
+    const modalRejectEl = document.getElementById('paBtnReject');
+    const modalBodyEl = document.getElementById('paModalBody');
+    const modalTitleEl = document.getElementById('paModalTitle');
+    const modalSubEl = document.getElementById('paModalSub');
+
+    let activeDocTypeId = null;  // null = tüm türler
+    let currentInstanceId = null;
+
+    function csrf() {
+        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '—';
+        return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    }
+    function fmtMoney(v, code) {
+        if (v == null) return '—';
+        const n = Number(v);
+        return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (code || '');
+    }
+
+    async function loadGroups() {
+        const scope = scopeEl.value;
+        groupsEl.innerHTML = '<div class="pa-group empty">Yükleniyor…</div>';
+        try {
+            const resp = await fetch('/PendingApproval/Groups?scope=' + encodeURIComponent(scope), { credentials: 'same-origin' });
+            const data = await resp.json();
+            if (!data.ok) throw new Error(data.error || 'Hata');
+            renderGroups(data.groups);
+        } catch (err) {
+            groupsEl.innerHTML = '<div class="pa-group empty">Hata: ' + escapeHtml(err.message) + '</div>';
+        }
+    }
+
+    function renderGroups(groups) {
+        if (!groups || groups.length === 0) {
+            groupsEl.innerHTML = '<div class="pa-group empty">Onayda bekleyen kayıt yok 🎉</div>';
+            listScrollEl.innerHTML = '<div class="pa-empty">Bu görünümde bekleyen kayıt bulunmuyor.</div>';
+            listTitleEl.textContent = '—';
+            listCountEl.textContent = '';
+            return;
+        }
+        const total = groups.reduce((s, g) => s + g.count, 0);
+        let html = '<div class="pa-group ' + (activeDocTypeId === null ? 'active' : '') + '" data-doctype="">' +
+                   '<span class="pa-group-name">Tüm türler</span>' +
+                   '<span class="pa-group-count">' + total + '</span>' +
+                   '</div>';
+        groups.forEach(g => {
+            const id = g.documentTypeId == null ? '' : g.documentTypeId;
+            const active = (g.documentTypeId === activeDocTypeId) ? 'active' : '';
+            html += '<div class="pa-group ' + active + '" data-doctype="' + id + '">' +
+                    '<span class="pa-group-name">' + escapeHtml(g.documentTypeName) + '</span>' +
+                    '<span class="pa-group-count">' + g.count + '</span>' +
+                    '</div>';
+        });
+        groupsEl.innerHTML = html;
+        groupsEl.querySelectorAll('.pa-group[data-doctype]').forEach(el => {
+            el.addEventListener('click', () => {
+                const raw = el.getAttribute('data-doctype');
+                activeDocTypeId = raw === '' ? null : Number(raw);
+                groupsEl.querySelectorAll('.pa-group').forEach(g => g.classList.remove('active'));
+                el.classList.add('active');
+                listTitleEl.textContent = el.querySelector('.pa-group-name').textContent;
+                loadList();
+            });
+        });
+        // İlk yüklemede otomatik tüm türleri göster
+        loadList();
+    }
+
+    async function loadList() {
+        const scope = scopeEl.value;
+        listScrollEl.innerHTML = '<div class="pa-empty">Yükleniyor…</div>';
+        try {
+            let url = '/PendingApproval/List?scope=' + encodeURIComponent(scope);
+            if (activeDocTypeId != null) url += '&documentTypeId=' + activeDocTypeId;
+            const resp = await fetch(url, { credentials: 'same-origin' });
+            const data = await resp.json();
+            if (!data.ok) throw new Error(data.error || 'Hata');
+            renderList(data.items);
+        } catch (err) {
+            listScrollEl.innerHTML = '<div class="pa-empty" style="color:#ef4444;">Hata: ' + escapeHtml(err.message) + '</div>';
+        }
+    }
+
+    function renderList(items) {
+        if (!items || items.length === 0) {
+            listScrollEl.innerHTML = '<div class="pa-empty">Bu türde bekleyen kayıt yok.</div>';
+            listCountEl.textContent = '';
+            return;
+        }
+        listCountEl.textContent = items.length + ' kayıt';
+        let html = '<table class="pa-table"><thead><tr>' +
+                   '<th>Belge No</th>' +
+                   '<th>Tür</th>' +
+                   '<th>Cari</th>' +
+                   '<th>Tutar</th>' +
+                   '<th>Adım</th>' +
+                   '<th>Bekliyor</th>' +
+                   '</tr></thead><tbody>';
+        const now = Date.now();
+        items.forEach(it => {
+            const overdue = it.dueDate && new Date(it.dueDate).getTime() < now;
+            html += '<tr data-instance-id="' + it.instanceId + '">' +
+                    '<td><strong>' + escapeHtml(it.documentNumber) + '</strong>' +
+                    '<div style="font-size:11px;color:#94a3b8;">' + escapeHtml(it.flowName) + '</div></td>' +
+                    '<td>' + escapeHtml(it.documentTypeName || 'Belirsiz') + '</td>' +
+                    '<td>' + escapeHtml(it.contactName || '—') + '</td>' +
+                    '<td>' + fmtMoney(it.grandTotal, it.currencyCode) + '</td>' +
+                    '<td><span class="pa-step-pill">' + it.stepOrder + ' / ' + it.totalSteps + '</span>' +
+                    '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + escapeHtml(it.stepName) + '</div></td>' +
+                    '<td class="' + (overdue ? 'pa-overdue' : '') + '">' + fmtDate(it.stepCreated) + '</td>' +
+                    '</tr>';
+        });
+        html += '</tbody></table>';
+        listScrollEl.innerHTML = html;
+        listScrollEl.querySelectorAll('tr[data-instance-id]').forEach(row => {
+            row.addEventListener('click', () => {
+                openDetail(Number(row.getAttribute('data-instance-id')));
+            });
+        });
+    }
+
+    async function openDetail(instanceId) {
+        currentInstanceId = instanceId;
+        backdropEl.classList.add('show');
+        modalBodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;">Yükleniyor…</div>';
+        modalTitleEl.textContent = 'Belge Detayı';
+        modalSubEl.textContent = '';
+        try {
+            const scope = scopeEl.value;
+            const resp = await fetch('/PendingApproval/Detail?instanceId=' + instanceId + '&scope=' + encodeURIComponent(scope), { credentials: 'same-origin' });
+            const data = await resp.json();
+            if (!data.ok) throw new Error(data.error || 'Hata');
+            renderDetail(data.detail);
+        } catch (err) {
+            modalBodyEl.innerHTML = '<div style="color:#ef4444;padding:20px;">Hata: ' + escapeHtml(err.message) + '</div>';
+        }
+    }
+
+    function renderDetail(d) {
+        const h = d.header;
+        modalTitleEl.textContent = 'Belge: ' + (h.documentNumber || '—');
+        modalSubEl.textContent = h.flowName + ' • Adım ' + h.stepOrder + ' / ' + h.totalSteps;
+
+        let html = '<dl class="pa-detail-grid">' +
+                   '<dt>Belge No</dt><dd>' + escapeHtml(h.documentNumber || '—') + '</dd>' +
+                   '<dt>Tür</dt><dd>' + escapeHtml(h.documentTypeName || 'Belirsiz') + '</dd>' +
+                   '<dt>Cari</dt><dd>' + escapeHtml(h.contactName || '—') + '</dd>' +
+                   '<dt>Tutar</dt><dd>' + fmtMoney(h.grandTotal, h.currencyCode) + '</dd>' +
+                   '<dt>Adım Adı</dt><dd>' + escapeHtml(h.stepName || '—') + '</dd>' +
+                   '<dt>Onaycı</dt><dd>' + escapeHtml(h.approverName || h.approverId || '—') + '</dd>' +
+                   '<dt>Bekliyor</dt><dd>' + fmtDate(h.stepCreated) + '</dd>' +
+                   '</dl>';
+
+        if (d.steps && d.steps.length > 0) {
+            html += '<div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Akış Geçmişi</div>';
+            html += '<ul class="pa-steps">';
+            d.steps.forEach(s => {
+                html += '<li class="status-' + escapeHtml(s.status) + '">' +
+                        '<div class="pa-step-title">' + s.stepOrder + '. ' + escapeHtml(s.stepName) + ' — ' + escapeHtml(s.status) + '</div>' +
+                        '<div class="pa-step-meta">' +
+                        (s.approverName ? escapeHtml(s.approverName) : '—') +
+                        (s.actionDate ? ' • ' + fmtDate(s.actionDate) : '') +
+                        (s.note ? ' • ' + escapeHtml(s.note) : '') +
+                        '</div></li>';
+            });
+            html += '</ul>';
+        }
+
+        modalBodyEl.innerHTML = html;
+    }
+
+    function closeModal() {
+        backdropEl.classList.remove('show');
+        currentInstanceId = null;
+    }
+
+    async function approveCurrent() {
+        if (!currentInstanceId) return;
+        const note = prompt('İsterseniz onay notu girin (opsiyonel):', '');
+        if (note === null) return; // cancel
+        modalApproveEl.disabled = true;
+        try {
+            const fd = new FormData();
+            fd.set('instanceId', currentInstanceId);
+            if (note) fd.set('note', note);
+            const resp = await fetch('/Approval/ApproveStep', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': csrf() },
+                body: fd,
+            });
+            const data = await resp.json();
+            if (!data.ok) throw new Error(data.error || 'Hata');
+            closeModal();
+            await loadGroups();  // sayım yenilensin
+        } catch (err) {
+            alert('Onaylama hatası: ' + err.message);
+        } finally {
+            modalApproveEl.disabled = false;
+        }
+    }
+
+    async function rejectCurrent() {
+        if (!currentInstanceId) return;
+        const note = prompt('Lütfen ret gerekçesini girin:', '');
+        if (!note || !note.trim()) return;
+        modalRejectEl.disabled = true;
+        try {
+            const fd = new FormData();
+            fd.set('instanceId', currentInstanceId);
+            fd.set('note', note);
+            const resp = await fetch('/Approval/RejectApproval', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': csrf() },
+                body: fd,
+            });
+            const data = await resp.json();
+            if (!data.ok) throw new Error(data.error || 'Hata');
+            closeModal();
+            await loadGroups();
+        } catch (err) {
+            alert('Reddetme hatası: ' + err.message);
+        } finally {
+            modalRejectEl.disabled = false;
+        }
+    }
+
+    scopeEl.addEventListener('change', () => { activeDocTypeId = null; loadGroups(); });
+    modalCloseEl.addEventListener('click', closeModal);
+    modalCancelEl.addEventListener('click', closeModal);
+    backdropEl.addEventListener('click', e => { if (e.target === backdropEl) closeModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && backdropEl.classList.contains('show')) closeModal(); });
+    modalApproveEl.addEventListener('click', approveCurrent);
+    modalRejectEl.addEventListener('click', rejectCurrent);
+
+    // İlk yüklemede grupları çek
+    loadGroups();
+})();
+</script>
+}

@@ -1,3 +1,4 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Models.Logistics;
@@ -24,6 +25,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("Logistics/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(FormCodes.MaterialGroups)]
 public sealed class MaterialGroupController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
@@ -37,7 +39,7 @@ public sealed class MaterialGroupController : Controller
     public async Task<IActionResult> MaterialGroups(CancellationToken ct)
     {
         var config = await BuildBoardConfigAsync(ct);
-        return View(new MaterialGroupsSmartBoardViewModel { BoardConfig = config });
+        return View("~/Views/Logistics/MaterialGroups.cshtml", new MaterialGroupsSmartBoardViewModel { BoardConfig = config });
     }
 
     private async Task<object> BuildBoardConfigAsync(CancellationToken ct)
@@ -76,7 +78,7 @@ public sealed class MaterialGroupController : Controller
             var all  = await _logisticsConfigurationService.GetMaterialGroupsAsync(null, ct);
             var item = all.FirstOrDefault(g => g.Id == id.Value);
             if (item is null) return NotFound();
-            return View(new MaterialGroupEditViewModel
+            return View("~/Views/Logistics/MaterialGroupEdit.cshtml", new MaterialGroupEditViewModel
             {
                 Id               = item.Id,
                 GroupCategory    = item.GroupCategory,
@@ -84,7 +86,7 @@ public sealed class MaterialGroupController : Controller
                 GroupDescription = item.GroupDescription,
             });
         }
-        return View(new MaterialGroupEditViewModel { GroupCategory = 1 });
+        return View("~/Views/Logistics/MaterialGroupEdit.cshtml", new MaterialGroupEditViewModel { GroupCategory = 1 });
     }
 
     [HttpPost]

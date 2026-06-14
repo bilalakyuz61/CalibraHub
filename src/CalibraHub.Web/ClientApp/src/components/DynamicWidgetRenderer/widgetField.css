@@ -22,47 +22,17 @@
 
 
 /* ═══════════════════════════════════════════════════
-   1) Token'lar — Dark (varsayilan) ve Light tema
+   1) Token'lar — Light varsayilan, Dark override
+   KURAL: html body = light default (tema sinifi olmayan
+   sayfalar dahil); body.app-theme-dark = dark override.
    ═══════════════════════════════════════════════════ */
 html body {
-  /* Boyut */
+  /* Boyut — tema-bagimsiz */
   --wf-input-h: 38px;
   --wf-radius: 10px;
   --wf-px: 12px;
 
-  /* Renk — input shell */
-  --wf-bg:           rgba(255,255,255,0.04);
-  --wf-bg-focus:     rgba(255,255,255,0.06);
-  --wf-border:       rgba(255,255,255,0.08);
-  --wf-border-hover: rgba(165,180,252,0.35);
-  --wf-border-focus: #a5b4fc;
-  --wf-text:         #f1f5f9;
-  --wf-placeholder:  rgba(255,255,255,0.4);
-  --wf-focus-ring:   0 0 0 3px rgba(99,102,241,0.25);
-
-  /* Layout */
-  --wf-row-gap: 14px;
-  --wf-col-gap: 14px;
-  --wf-inline-label-w: 160px;
-
-  /* Tipografi */
-  --wf-label-color:  rgba(255,255,255,0.78);
-  --wf-label-font:   13px;
-  --wf-label-weight: 600;
-
-  /* Hata */
-  --wf-error-color: #ef4444;
-  --wf-error-bg:    rgba(239,68,68,0.06);
-  --wf-error-ring:  0 0 0 3px rgba(239,68,68,0.18);
-
-  /* Modern label (floating) — index.css'ten tasindi */
-  --wf-modern-label-bg:    rgba(15, 23, 42, 0.98);
-  --wf-modern-label-color: rgba(165, 180, 252, 0.95);
-  --wf-modern-label-focus: #a5b4fc;
-}
-
-html:not(.dark) body,
-body.app-theme-light {
+  /* Renk — light (varsayilan) */
   --wf-bg:           #ffffff;
   --wf-bg-focus:     #ffffff;
   --wf-border:       #e2e8f0;
@@ -72,8 +42,54 @@ body.app-theme-light {
   --wf-placeholder:  #94a3b8;
   --wf-focus-ring:   0 0 0 3px rgba(99,102,241,0.18);
 
-  --wf-label-color: #334155;
+  /* Layout */
+  --wf-row-gap: 14px;
+  --wf-col-gap: 14px;
+  --wf-inline-label-w: 160px;
 
+  /* Tipografi */
+  --wf-label-color:  #334155;
+  --wf-label-font:   13px;
+  --wf-label-weight: 600;
+
+  /* Hata */
+  --wf-error-color: #ef4444;
+  --wf-error-bg:    rgba(239,68,68,0.06);
+  --wf-error-ring:  0 0 0 3px rgba(239,68,68,0.18);
+
+  /* Modern label (floating) */
+  --wf-modern-label-bg:    #ffffff;
+  --wf-modern-label-color: #475569;
+  --wf-modern-label-focus: #3730a3;
+}
+
+body.app-theme-dark {
+  /* Renk — dark override */
+  --wf-bg:           rgba(255,255,255,0.04);
+  --wf-bg-focus:     rgba(255,255,255,0.06);
+  --wf-border:       rgba(255,255,255,0.08);
+  --wf-border-hover: rgba(165,180,252,0.35);
+  --wf-border-focus: #a5b4fc;
+  --wf-text:         #f1f5f9;
+  --wf-placeholder:  rgba(255,255,255,0.4);
+  --wf-focus-ring:   0 0 0 3px rgba(99,102,241,0.25);
+  --wf-label-color:  rgba(255,255,255,0.78);
+  --wf-modern-label-bg:    rgba(15, 23, 42, 0.98);
+  --wf-modern-label-color: rgba(165, 180, 252, 0.95);
+  --wf-modern-label-focus: #a5b4fc;
+}
+
+body.app-theme-light {
+  /* Renk — light (html body varsayilani ile ayni; explicit selector) */
+  --wf-bg:           #ffffff;
+  --wf-bg-focus:     #ffffff;
+  --wf-border:       #e2e8f0;
+  --wf-border-hover: #c7d2fe;
+  --wf-border-focus: #6366f1;
+  --wf-text:         #0f172a;
+  --wf-placeholder:  #94a3b8;
+  --wf-focus-ring:   0 0 0 3px rgba(99,102,241,0.18);
+  --wf-label-color:  #334155;
   --wf-modern-label-bg:    #ffffff;
   --wf-modern-label-color: #475569;
   --wf-modern-label-focus: #3730a3;
@@ -819,3 +835,171 @@ body.app-theme-light .wf-rule-error,
 body.app-theme-light .mce-rule-error,
 body.app-theme-light .sqe-rule-error,
 body.app-theme-light .ca-rule-error { color: #dc2626; }
+
+/* ═══════════════════════════════════════════════════
+   Sidetabs layout (DynamicWidgetRenderer layout="sidetabs")
+   IntegrationsHub stilinde sol nav + sag content.
+   - Sol: widget grupları liste (sticky)
+   - Sağ: aktif grubun field'ları (wf-grid içinde)
+   - Aktif tab: indigo accent (sol kenarda border)
+   - Eksik zorunlu badge: kırmızı pill, sayı
+   ═══════════════════════════════════════════════════ */
+.dwr-sidetabs {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+  width: 100%;
+  min-height: 320px;
+  box-sizing: border-box;
+}
+
+.dwr-sidetabs__nav {
+  flex: 0 0 220px;
+  max-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(8, 11, 20, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  align-self: flex-start;
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
+
+.dwr-sidetabs__tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.78);
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  letter-spacing: 0.01em;
+}
+.dwr-sidetabs__tab:hover {
+  background: rgba(255, 255, 255, 0.045);
+  color: #f1f5f9;
+}
+.dwr-sidetabs__tab.is-active {
+  background: rgba(99, 102, 241, 0.18);
+  color: #c7d2fe;
+  border-left-color: #818cf8;
+  font-weight: 600;
+}
+.dwr-sidetabs__tab:focus-visible {
+  outline: 2px solid #a5b4fc;
+  outline-offset: -1px;
+}
+
+.dwr-sidetabs__tab-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dwr-sidetabs__badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(248, 113, 113, 0.85);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.dwr-sidetabs__content {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: auto;
+}
+
+.dwr-sidetabs__empty {
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* Light tema */
+body.app-theme-light .dwr-sidetabs__nav {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+body.app-theme-light .dwr-sidetabs__tab {
+  color: #475569;
+}
+body.app-theme-light .dwr-sidetabs__tab:hover {
+  background: rgba(99, 102, 241, 0.06);
+  color: #0f172a;
+}
+body.app-theme-light .dwr-sidetabs__tab.is-active {
+  background: rgba(99, 102, 241, 0.12);
+  color: #4338ca;
+  border-left-color: #6366f1;
+}
+body.app-theme-light .dwr-sidetabs__content {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+body.app-theme-light .dwr-sidetabs__empty {
+  color: #64748b;
+}
+body.app-theme-light .dwr-sidetabs__badge {
+  background: #ef4444;
+}
+
+/* Dar ekran — sol nav üstte yatay scroll */
+@media (max-width: 768px) {
+  .dwr-sidetabs {
+    flex-direction: column;
+  }
+  .dwr-sidetabs__nav {
+    flex: 0 0 auto;
+    max-width: 100%;
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: static;
+    max-height: none;
+    padding: 6px;
+  }
+  .dwr-sidetabs__tab {
+    flex: 0 0 auto;
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 6px;
+  }
+  .dwr-sidetabs__tab.is-active {
+    border-left-color: transparent;
+    border-bottom-color: #818cf8;
+  }
+  body.app-theme-light .dwr-sidetabs__tab.is-active {
+    border-bottom-color: #6366f1;
+  }
+}

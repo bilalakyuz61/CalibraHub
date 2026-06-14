@@ -1,0 +1,114 @@
+@{
+    ViewData["Title"] = "Sistem Yönetimi — Veri Tabanı";
+    ViewData["BodyClass"] = "page-system-mgmt";
+}
+
+@section Styles {
+<style>
+    .sm-panel {
+        background: var(--surface-1, #ffffff);
+        border: 1px solid rgba(148,163,184,.2);
+        border-radius: 14px; padding: 24px; max-width: 680px; margin: 24px;
+    }
+    body.app-theme-dark .sm-panel { background: #111827; border-color: rgba(148,163,184,.15); }
+    .sm-field { margin-bottom: 14px; }
+    .sm-field label { display: block; font-size: .76rem; font-weight: 600; color: #475569; margin-bottom: 4px; }
+    body.app-theme-dark .sm-field label { color: #94a3b8; }
+    .sm-input {
+        width: 100%; padding: 9px 12px;
+        border: 1px solid rgba(148,163,184,.4); border-radius: 8px;
+        font-size: .88rem; background: var(--surface-1, #fff); color: inherit; outline: none; box-sizing: border-box;
+    }
+    body.app-theme-dark .sm-input { background: #0f172a; border-color: rgba(148,163,184,.3); }
+    .sm-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+    .sm-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .sm-btn {
+        padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer;
+        background: #6366f1; color: #fff; font-size: .85rem; font-weight: 600;
+    }
+    .sm-btn:hover { background: #4f46e5; }
+    .sm-btn--sec {
+        background: rgba(148,163,184,.1); color: #475569; border: 1px solid rgba(148,163,184,.3);
+    }
+    .sm-btn--sec:hover { background: rgba(148,163,184,.2); }
+    body.app-theme-dark .sm-btn--sec { color: #cbd5e1; }
+    #dbMsg { min-height: 24px; font-size: .76rem; margin-top: 8px; }
+</style>
+}
+
+<partial name="_SistemAyarlariTabs" model='"db"' />
+
+<div class="sm-panel">
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:20px;">
+        <div style="width:38px;height:38px;border-radius:10px;background:rgba(99,102,241,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6"/></svg>
+        </div>
+        <div>
+            <div style="font-weight:700;font-size:.95rem;">SQL Server Bağlantısı</div>
+            <div style="font-size:.78rem;color:#64748b;margin-top:2px;">Sistem veri tabanı bağlantı bilgileri. Kayıt sonrası uygulamanın yeniden başlatılması gerekir.</div>
+        </div>
+    </div>
+
+    <div class="sm-field">
+        <label>Sunucu Adı</label>
+        <input id="dbServer" type="text" class="sm-input" placeholder="localhost veya 192.168.1.1\SQLEXPRESS" autocomplete="off" />
+    </div>
+    <div class="sm-field">
+        <label>Veri Tabanı Adı</label>
+        <input id="dbDatabase" type="text" class="sm-input" placeholder="CalibraHub" autocomplete="off" />
+    </div>
+    <div class="sm-row2">
+        <div class="sm-field">
+            <label>Kullanıcı Adı</label>
+            <input id="dbUser" type="text" class="sm-input" placeholder="sa" autocomplete="off" />
+        </div>
+        <div class="sm-field">
+            <label>Şifre</label>
+            <input id="dbPassword" type="password" class="sm-input" placeholder="Değiştirmek için girin" autocomplete="new-password" />
+        </div>
+    </div>
+    <div id="dbMsg"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        <button type="button" class="sm-btn sm-btn--sec" onclick="saTestDb()">Bağlantıyı Test Et</button>
+        <button type="button" class="sm-btn" onclick="saSaveDb()">Kaydet</button>
+    </div>
+</div>
+
+<form id="dbAfForm" style="display:none;">@Html.AntiForgeryToken()</form>
+
+@section Scripts {
+<script>
+(function () {
+    function getAf() { return (document.querySelector('#dbAfForm input[name="__RequestVerificationToken"]') || {}).value || ''; }
+    function setMsg(text, ok) {
+        var el = document.getElementById('dbMsg');
+        if (!text) { el.innerHTML = ''; return; }
+        var cls = ok === true ? 'color:#16a34a;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25)' :
+                  ok === false ? 'color:#dc2626;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25)' :
+                  'color:#4f46e5;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2)';
+        el.innerHTML = '<span style="display:inline-block;padding:5px 12px;border-radius:6px;font-size:.76rem;' + cls + '">' + text + '</span>';
+    }
+    function payload() {
+        return { server: document.getElementById('dbServer').value.trim(), database: document.getElementById('dbDatabase').value.trim(), user: document.getElementById('dbUser').value.trim(), password: document.getElementById('dbPassword').value };
+    }
+    window.saTestDb = function () {
+        setMsg('Test ediliyor…', null);
+        fetch('/Account/TestDbSettings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload()), credentials:'same-origin' })
+            .then(function(r){return r.json();}).then(function(d){setMsg(d.message||(d.success?'Bağlantı başarılı.':'Hata.'),d.success);}).catch(function(e){setMsg('Hata: '+e.message,false);});
+    };
+    window.saSaveDb = function () {
+        setMsg('Kaydediliyor…', null);
+        fetch('/Account/SaveDbSettings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload()), credentials:'same-origin' })
+            .then(function(r){return r.json();}).then(function(d){setMsg(d.message||(d.success?'Kaydedildi. Uygulamayı yeniden başlatın.':'Hata.'),d.success);}).catch(function(e){setMsg('Hata: '+e.message,false);});
+    };
+    // Mevcut ayarları yükle
+    setMsg('Mevcut ayarlar yükleniyor…', null);
+    fetch('/Account/GetDbSettings', { credentials:'same-origin' })
+        .then(function(r){return r.json();})
+        .then(function(d){
+            if(d.success){document.getElementById('dbServer').value=d.server||'';document.getElementById('dbDatabase').value=d.database||'';document.getElementById('dbUser').value=d.user||'';setMsg('',null);}
+            else{setMsg('Mevcut ayarlar okunamadı.',false);}
+        }).catch(function(){setMsg('Mevcut ayarlar okunamadı.',false);});
+})();
+</script>
+}

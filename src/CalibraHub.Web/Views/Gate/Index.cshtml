@@ -1,158 +1,221 @@
 @{
-    Layout = null;
-    ViewData["Title"] = "Sistem Ayarları — Kilit";
+    ViewData["Title"] = "Sistem Yönetimi — Kilit";
+    ViewData["BodyClass"] = "page-gate-lock";
 }
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@ViewData["Title"]</title>
-    <style>
-        * { box-sizing: border-box; }
-        body {
-            margin: 0; min-height: 100vh;
-            background: linear-gradient(135deg, #0f172a, #1e1b4b 100%);
-            color: #e2e8f0;
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            display: flex; align-items: center; justify-content: center;
-            padding: 20px;
-        }
-        .gate-card {
-            background: rgba(21,24,43,.85);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(99,102,241,.28);
-            border-radius: 18px;
-            padding: 32px;
-            max-width: 420px; width: 100%;
-            box-shadow: 0 25px 80px rgba(0,0,0,.5);
-        }
-        .gate-icon {
-            width: 64px; height: 64px;
-            margin: 0 auto 16px;
-            border-radius: 18px;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 12px 30px rgba(99,102,241,.45);
-        }
-        .gate-title { text-align: center; font-size: 1.35rem; font-weight: 700; margin: 0 0 4px; }
-        .gate-sub   { text-align: center; font-size: .82rem; color: rgba(255,255,255,.55); margin-bottom: 22px; }
 
-        .gate-field { margin-bottom: 14px; }
-        .gate-label { display: block; font-size: .76rem; font-weight: 600; color: rgba(255,255,255,.72); margin-bottom: 6px; }
-        .gate-input {
-            width: 100%; padding: 12px 14px;
-            background: #0f1120;
-            border: 1.5px solid #2a2f47;
-            border-radius: 10px;
-            color: #e2e8f0;
-            font-size: .95rem; font-family: ui-monospace, Consolas, monospace;
-            transition: border-color .15s, box-shadow .15s;
-        }
-        .gate-input:focus {
-            outline: none; border-color: #6366f1;
-            box-shadow: 0 0 0 3px rgba(99,102,241,.22);
-        }
-        .gate-submit {
-            width: 100%; padding: 13px;
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            border: none; border-radius: 10px;
-            color: #fff; font-size: .95rem; font-weight: 700;
-            cursor: pointer;
-            transition: filter .12s;
-            margin-top: 4px;
-        }
-        .gate-submit:hover { filter: brightness(1.1); }
-        .gate-submit[disabled] { opacity: .5; cursor: not-allowed; }
+@section Styles {
+<style>
+    .page-gate-lock .app-content-area,
+    .workspace-frame-body.page-gate-lock .app-content-area--workspace-frame {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+        padding: 32px 20px;
+    }
 
-        .gate-error {
-            background: rgba(239,68,68,.1);
-            border: 1px solid rgba(239,68,68,.3);
-            color: #fca5a5;
-            padding: 10px 14px; border-radius: 8px;
-            font-size: .82rem; margin-bottom: 14px;
-            text-align: center;
-        }
-        .gate-tip {
-            background: rgba(99,102,241,.08);
-            border: 1px solid rgba(99,102,241,.2);
-            border-radius: 8px;
-            padding: 10px 12px;
-            font-size: .74rem; color: rgba(255,255,255,.65);
-            margin-bottom: 18px; line-height: 1.5;
-        }
+    .gate-card {
+        background: var(--surface-1, #ffffff);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 18px;
+        padding: 36px 32px;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 8px 32px rgba(15, 23, 42, 0.10);
+    }
+    body.app-theme-dark .gate-card {
+        background: #111827;
+        border-color: rgba(99, 102, 241, 0.2);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
 
-        .gate-back {
-            display: block; text-align: center; margin-top: 22px;
-            color: rgba(255,255,255,.55); font-size: .78rem; text-decoration: none;
-        }
-        .gate-back:hover { color: #a5b4fc; }
+    .gate-icon {
+        width: 60px; height: 60px;
+        margin: 0 auto 18px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+    }
 
-        .gate-toggle-eye {
-            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-            background: none; border: none; color: rgba(255,255,255,.4);
-            cursor: pointer; padding: 4px;
-        }
-        .gate-toggle-eye:hover { color: #a5b4fc; }
-        .gate-input-wrap { position: relative; }
-    </style>
-</head>
-<body>
-    <div class="gate-card">
-        <div class="gate-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-        </div>
-        <h1 class="gate-title">Sistem Ayarları</h1>
-        <p class="gate-sub">Erişmek için yönetici şifrenizi girin</p>
+    .gate-title {
+        text-align: center;
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0 0 4px;
+        color: var(--text-1, #0f172a);
+    }
+    body.app-theme-dark .gate-title { color: #f1f5f9; }
 
-        @if (TempData["GateError"] is string errMsg)
-        {
-            <div class="gate-error">@errMsg</div>
-        }
+    .gate-sub {
+        text-align: center;
+        font-size: .82rem;
+        color: #64748b;
+        margin-bottom: 22px;
+    }
 
-        <div class="gate-tip">
-            Bu alan SQL ayarları, lisans yönetimi ve şifre değiştirme içerir. Sadece IT/yönetim ekibi erişebilir.
-        </div>
+    .gate-error {
+        background: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.28);
+        color: #dc2626;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: .82rem;
+        margin-bottom: 14px;
+        text-align: center;
+    }
+    body.app-theme-dark .gate-error { color: #fca5a5; background: rgba(239,68,68,.12); }
 
-        <form method="post" asp-action="Verify" asp-controller="Gate" id="gateForm" autocomplete="off">
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+    .gate-tip {
+        background: rgba(99, 102, 241, 0.06);
+        border: 1px solid rgba(99, 102, 241, 0.18);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: .74rem;
+        color: #64748b;
+        margin-bottom: 20px;
+        line-height: 1.55;
+    }
+    body.app-theme-dark .gate-tip { color: #94a3b8; background: rgba(99,102,241,.1); }
 
-            <div class="gate-field">
-                <label class="gate-label" for="gatePwd">Yönetici Şifresi</label>
-                <div class="gate-input-wrap">
-                    <input type="password" class="gate-input" id="gatePwd" name="password"
-                           autocomplete="current-password" autofocus required />
-                    <button type="button" class="gate-toggle-eye" id="togglePwd" aria-label="Şifreyi göster/gizle">
-                        <svg id="eyeOpen" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        <svg id="eyeClosed" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                    </button>
-                </div>
-            </div>
+    .gate-field { margin-bottom: 16px; }
+    .gate-label {
+        display: block;
+        font-size: .76rem;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 6px;
+    }
+    body.app-theme-dark .gate-label { color: #94a3b8; }
 
-            <button type="submit" class="gate-submit" id="gateSubmit">Kilidi Aç</button>
-        </form>
+    .gate-input-wrap { position: relative; }
+    .gate-input {
+        width: 100%;
+        padding: 11px 42px 11px 14px;
+        background: var(--surface-1, #fff);
+        border: 1.5px solid rgba(148, 163, 184, 0.4);
+        border-radius: 10px;
+        color: var(--text-1, #0f172a);
+        font-size: .95rem;
+        font-family: ui-monospace, Consolas, monospace;
+        transition: border-color .15s, box-shadow .15s;
+        box-sizing: border-box;
+        outline: none;
+    }
+    body.app-theme-dark .gate-input {
+        background: #0f172a;
+        border-color: rgba(148, 163, 184, 0.25);
+        color: #e2e8f0;
+    }
+    .gate-input:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
 
-        <a href="/Account/Login" class="gate-back">← Girişe Dön</a>
+    .gate-toggle-eye {
+        position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+        background: none; border: none; color: #94a3b8;
+        cursor: pointer; padding: 4px; display: flex; align-items: center;
+    }
+    .gate-toggle-eye:hover { color: #6366f1; }
+
+    .gate-submit {
+        width: 100%;
+        padding: 12px;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        border: none;
+        border-radius: 10px;
+        color: #fff;
+        font-size: .95rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: filter .12s;
+        margin-top: 4px;
+    }
+    .gate-submit:hover { filter: brightness(1.08); }
+    .gate-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+    .gate-back {
+        display: block;
+        text-align: center;
+        margin-top: 20px;
+        color: #64748b;
+        font-size: .78rem;
+        text-decoration: none;
+    }
+    .gate-back:hover { color: #6366f1; }
+</style>
+}
+
+<div class="gate-card">
+    <div class="gate-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+    </div>
+    <h1 class="gate-title">Sistem Yönetimi</h1>
+    <p class="gate-sub">Erişmek için yönetici şifrenizi girin</p>
+
+    @if (TempData["GateError"] is string errMsg)
+    {
+        <div class="gate-error">@errMsg</div>
+    }
+
+    <div class="gate-tip">
+        Bu alan şirket tanımları, lisans ve veri tabanı ayarlarını içerir. Sadece IT/yönetim ekibi erişebilir.
     </div>
 
-    <script>
-        (function () {
-            var pwd = document.getElementById('gatePwd');
-            var btn = document.getElementById('togglePwd');
-            var eyeOpen = document.getElementById('eyeOpen');
-            var eyeClosed = document.getElementById('eyeClosed');
-            btn.addEventListener('click', function() {
-                var isPwd = pwd.type === 'password';
-                pwd.type = isPwd ? 'text' : 'password';
-                eyeOpen.style.display    = isPwd ? 'none' : '';
-                eyeClosed.style.display  = isPwd ? '' : 'none';
-                pwd.focus();
-            });
-        })();
-    </script>
-</body>
-</html>
+    <form method="post" asp-action="Verify" asp-controller="Gate" autocomplete="off">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+
+        <div class="gate-field">
+            <label class="gate-label" for="gatePwd">Yönetici Şifresi</label>
+            <div class="gate-input-wrap">
+                <input type="password" class="gate-input" id="gatePwd" name="password"
+                       autocomplete="current-password" autofocus required />
+                <button type="button" class="gate-toggle-eye" id="togglePwd" aria-label="Şifreyi göster/gizle">
+                    <svg id="eyeOpen" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <svg id="eyeClosed" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                        <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <button type="submit" class="gate-submit">Kilidi Aç</button>
+    </form>
+
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <a href="/" class="gate-back">← Uygulamaya Dön</a>
+    }
+    else
+    {
+        <a href="/Account/Login" class="gate-back">← Girişe Dön</a>
+    }
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var pwd      = document.getElementById('gatePwd');
+    var btn      = document.getElementById('togglePwd');
+    var eyeOpen  = document.getElementById('eyeOpen');
+    var eyeClosed = document.getElementById('eyeClosed');
+    btn.addEventListener('click', function () {
+        var show = pwd.type === 'password';
+        pwd.type = show ? 'text' : 'password';
+        eyeOpen.style.display  = show ? 'none' : '';
+        eyeClosed.style.display = show ? '' : 'none';
+        pwd.focus();
+    });
+})();
+</script>
+}

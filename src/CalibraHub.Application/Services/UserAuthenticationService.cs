@@ -62,11 +62,12 @@ public sealed class UserAuthenticationService : IUserAuthenticationService
             user.Email,
             UserAuthorizationCatalog.GetRoleLabel(user.Role),
             company.Id,
-            company.Name);
+            company.Name,
+            user.DepartmentId);
     }
 
     public async Task ChangePasswordAsync(
-        Guid userId,
+        int userId,
         string currentPassword,
         string newPassword,
         CancellationToken cancellationToken)

@@ -1,0 +1,209 @@
+@{
+    ViewData["Title"] = "Toplu Zimmetleme";
+    ViewData["FormCode"] = "ASSETS";
+    ViewData["BodyClass"] = "page-asset-bulk";
+}
+
+@section Styles {
+<style>
+    .ab-root {
+        --ab-bg:#f1f5f9; --ab-surface:#ffffff; --ab-border:#e2e8f0;
+        --ab-text:#0f172a; --ab-muted:#64748b; --ab-accent:#6366f1;
+        display:flex; flex-direction:column; height:100dvh; overflow:hidden; background:var(--ab-surface); color:var(--ab-text);
+    }
+    body.page-asset-bulk, html { overflow:hidden; height:100%; }
+    body.app-theme-dark .ab-root { --ab-bg:#080c17; --ab-surface:#0d1323; --ab-border:rgba(255,255,255,.09); --ab-text:#e2e8f0; --ab-muted:#94a3b8; --ab-accent:#818cf8; }
+
+    .ab-header { display:flex; align-items:center; gap:10px; flex-shrink:0; padding:12px 22px; border-bottom:1px solid var(--ab-border); background:var(--ab-surface); }
+    .ab-header h1 { font-size:16px; font-weight:700; margin:0; }
+    .ab-spacer { flex:1; }
+    .ab-back { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:8px; border:1px solid var(--ab-border); background:none; color:var(--ab-muted); font-size:12.5px; cursor:pointer; text-decoration:none; }
+    .ab-back:hover { background:var(--ab-bg); color:var(--ab-text); }
+    .ab-btn { padding:9px 18px; border-radius:8px; font-size:13px; font-weight:600; border:1px solid transparent; cursor:pointer; transition:all .12s; }
+    .ab-btn--primary { background:var(--ab-accent); color:#fff; border-color:#4f46e5; }
+    .ab-btn--primary:hover { filter:brightness(1.1); }
+    .ab-btn--primary:disabled { opacity:.55; cursor:not-allowed; }
+
+    .ab-err { flex-shrink:0; margin:10px 22px 0; padding:8px 12px; border-radius:8px; font-size:13px; background:rgba(239,68,68,.08); color:#dc2626; border:1px solid rgba(239,68,68,.2); display:none; }
+    body.app-theme-dark .ab-err { color:#f87171; }
+
+    .ab-body { flex:1; min-height:0; display:flex; gap:0; }
+    .ab-form { width:340px; flex-shrink:0; border-right:1px solid var(--ab-border); padding:22px; overflow-y:auto; background:var(--ab-surface); }
+    .ab-form-title { font-size:13px; font-weight:700; color:var(--ab-text); margin:0 0 14px; }
+    .ab-field { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+    .ab-label { font-size:12px; font-weight:600; color:var(--ab-muted); }
+    .ab-input, .ab-select { padding:10px 12px; border-radius:8px; border:1px solid var(--ab-border); background:var(--ab-surface); color:var(--ab-text); font-size:14px; outline:none; font-family:inherit; }
+    .ab-input:focus, .ab-select:focus { border-color:var(--ab-accent); box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+    body.app-theme-dark .ab-select { color-scheme:dark; }
+    .ab-hint { font-size:12px; color:var(--ab-muted); margin:-4px 0 14px; }
+
+    .ab-list-wrap { flex:1; display:flex; flex-direction:column; min-width:0; background:var(--ab-bg); }
+    .ab-list-bar { flex-shrink:0; display:flex; align-items:center; gap:10px; padding:12px 18px; border-bottom:1px solid var(--ab-border); background:var(--ab-surface); }
+    body.app-theme-dark .ab-list-bar { background:#0d1323; }
+    .ab-list-bar input[type=text] { padding:8px 12px; border-radius:8px; border:1px solid var(--ab-border); font-size:13px; min-width:220px; background:var(--ab-surface); color:var(--ab-text); outline:none; }
+    .ab-selcount { margin-left:auto; font-size:12.5px; color:var(--ab-muted); }
+    .ab-scroll { flex:1; overflow:auto; padding:8px 12px 16px; }
+    .ab-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--ab-border); border-radius:10px; background:var(--ab-surface); margin-bottom:8px; cursor:pointer; }
+    .ab-row:hover { border-color:var(--ab-accent); }
+    .ab-row input[type=checkbox] { width:18px; height:18px; flex-shrink:0; accent-color:var(--ab-accent); cursor:pointer; }
+    .ab-row-main { flex:1; min-width:0; }
+    .ab-row-name { font-size:13.5px; font-weight:600; color:var(--ab-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ab-row-meta { font-size:11.5px; color:var(--ab-muted); margin-top:2px; }
+    .ab-chip { display:inline-block; padding:1px 8px; border-radius:999px; font-size:10.5px; font-weight:700; }
+    .ab-chip--busy { background:rgba(59,130,246,.12); color:#3b82f6; }
+    .ab-chip--free { background:rgba(16,185,129,.12); color:#10b981; }
+    .ab-empty { padding:30px; text-align:center; color:var(--ab-muted); font-size:13px; }
+    @@media (max-width:760px){ .ab-body { flex-direction:column; } .ab-form { width:auto; border-right:none; border-bottom:1px solid var(--ab-border); } }
+</style>
+}
+
+<div class="ab-root">
+  <div class="ab-header">
+    <a class="ab-back" href="#" onclick="abGoBack(false);return false;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg> Listeye Dön</a>
+    <h1>Toplu Zimmetleme</h1>
+    <span class="ab-spacer"></span>
+    <button class="ab-btn ab-btn--primary" id="ab-submit">Seçilenleri Zimmetle</button>
+  </div>
+
+  <div id="ab-err" class="ab-err"></div>
+
+  <div class="ab-body">
+    <div class="ab-form">
+      <div class="ab-form-title">Zimmet Hedefi</div>
+      <p class="ab-hint">Seçilen tüm varlıklar bu kişi/departmana zimmetlenir. En az biri zorunlu.</p>
+      <div class="ab-field">
+        <label class="ab-label" for="ab-personnel">Zimmetlenen Personel</label>
+        <select id="ab-personnel" class="ab-select"><option value="">— Personel seçiniz —</option></select>
+      </div>
+      <div class="ab-field">
+        <label class="ab-label" for="ab-department">Departman</label>
+        <select id="ab-department" class="ab-select"><option value="">— Departman seçiniz —</option></select>
+      </div>
+      <div class="ab-field">
+        <label class="ab-label" for="ab-location">Lokasyon</label>
+        <select id="ab-location" class="ab-select"><option value="">— Lokasyon seçiniz —</option></select>
+      </div>
+      <div class="ab-field">
+        <label class="ab-label" for="ab-date">Zimmet Tarihi *</label>
+        <input id="ab-date" class="ab-input" type="date" />
+      </div>
+      <div class="ab-field">
+        <label class="ab-label" for="ab-note">Not</label>
+        <input id="ab-note" class="ab-input" maxlength="500" placeholder="Açıklama (opsiyonel)" />
+      </div>
+    </div>
+
+    <div class="ab-list-wrap">
+      <div class="ab-list-bar">
+        <label style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--ab-muted);cursor:pointer;">
+          <input type="checkbox" id="ab-selall" style="width:17px;height:17px;accent-color:var(--ab-accent);" /> Tümünü seç
+        </label>
+        <input type="text" id="ab-search" placeholder="Ara… (ad)" />
+        <span class="ab-selcount" id="ab-selcount">0 seçili</span>
+      </div>
+      <div class="ab-scroll" id="ab-list"><div class="ab-empty">Yükleniyor…</div></div>
+    </div>
+  </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var candidates = [], search = '';
+    function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+    function setErr(m) { var el = document.getElementById('ab-err'); if (m) { el.textContent = m; el.style.display = ''; } else el.style.display = 'none'; }
+    function today() { var d = new Date(); return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2); }
+    document.getElementById('ab-date').value = today();
+
+    fetch('/Assets/AssetLookups', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : { personnel: [], departments: [], locations: [] }; })
+        .then(function (d) {
+            document.getElementById('ab-personnel').innerHTML = '<option value="">— Personel seçiniz —</option>' +
+                (d.personnel || []).map(function (p) { return '<option value="' + p.id + '">' + esc(p.label) + '</option>'; }).join('');
+            document.getElementById('ab-department').innerHTML = '<option value="">— Departman seçiniz —</option>' +
+                (d.departments || []).map(function (x) { return '<option value="' + x.id + '">' + esc(x.label) + '</option>'; }).join('');
+            document.getElementById('ab-location').innerHTML = '<option value="">— Lokasyon seçiniz —</option>' +
+                (d.locations || []).filter(function (x) { return x.isActive; }).map(function (x) { var l = (x.code || '') + (x.name ? ' - ' + x.name : ''); return '<option value="' + x.id + '">' + esc(l) + '</option>'; }).join('');
+        });
+
+    var listEl = document.getElementById('ab-list');
+    function selectedIds() { return Array.prototype.slice.call(listEl.querySelectorAll('input[type=checkbox]:checked')).map(function (c) { return parseInt(c.getAttribute('data-id')); }); }
+    function updateCount() {
+        var n = selectedIds().length;
+        document.getElementById('ab-selcount').textContent = n + ' seçili';
+    }
+    function render() {
+        var q = search.trim().toLowerCase();
+        var rows = candidates.filter(function (c) { return !q || (c.name || '').toLowerCase().indexOf(q) !== -1; });
+        if (!rows.length) { listEl.innerHTML = '<div class="ab-empty">Zimmetlenebilir varlık bulunamadı.</div>'; updateCount(); return; }
+        listEl.textContent = '';
+        rows.forEach(function (c) {
+            var row = document.createElement('label'); row.className = 'ab-row';
+            var cb = document.createElement('input'); cb.type = 'checkbox'; cb.setAttribute('data-id', c.id);
+            cb.addEventListener('change', updateCount);
+            var main = document.createElement('div'); main.className = 'ab-row-main';
+            var nm = document.createElement('div'); nm.className = 'ab-row-name'; nm.textContent = c.name;
+            var meta = document.createElement('div'); meta.className = 'ab-row-meta'; meta.textContent = c.kind;
+            main.appendChild(nm); main.appendChild(meta);
+            var chip = document.createElement('span');
+            if (c.currentAssignee) { chip.className = 'ab-chip ab-chip--busy'; chip.textContent = c.currentAssignee; }
+            else { chip.className = 'ab-chip ab-chip--free'; chip.textContent = 'Boşta'; }
+            row.appendChild(cb); row.appendChild(main); row.appendChild(chip);
+            listEl.appendChild(row);
+        });
+        updateCount();
+    }
+    document.getElementById('ab-search').addEventListener('input', function () { search = this.value; render(); document.getElementById('ab-selall').checked = false; });
+    document.getElementById('ab-selall').addEventListener('change', function () {
+        var on = this.checked;
+        Array.prototype.forEach.call(listEl.querySelectorAll('input[type=checkbox]'), function (c) { c.checked = on; });
+        updateCount();
+    });
+
+    fetch('/Assets/BulkAssignCandidatesJson', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (rows) { candidates = rows || []; render(); })
+        .catch(function () { listEl.innerHTML = '<div class="ab-empty">Liste yüklenemedi.</div>'; });
+
+    document.getElementById('ab-submit').addEventListener('click', function () {
+        var ids = selectedIds();
+        if (!ids.length) { setErr('En az bir varlık seçiniz.'); return; }
+        var pid = parseInt(document.getElementById('ab-personnel').value) || null;
+        var did = parseInt(document.getElementById('ab-department').value) || null;
+        if (!pid && !did) { setErr('Personel veya departman seçiniz.'); return; }
+        setErr('');
+        var btn = this; btn.disabled = true; btn.textContent = 'Zimmetleniyor…';
+        fetch('/Assets/BulkAssignJson', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+            body: JSON.stringify({
+                assetIds: ids, personnelId: pid, departmentId: did,
+                locationId: parseInt(document.getElementById('ab-location').value) || null,
+                assignDate: document.getElementById('ab-date').value || null,
+                note: document.getElementById('ab-note').value || null
+            })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            btn.disabled = false; btn.textContent = 'Seçilenleri Zimmetle';
+            if (d && d.success) { abGoBack(true); }
+            else { setErr((d && d.message) || ('Zimmet başarısız' + (d && d.errors && d.errors.length ? ': ' + d.errors.join(' | ') : '.'))); }
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = 'Seçilenleri Zimmetle'; setErr('Bağlantı hatası.'); });
+    });
+})();
+
+function abGoBack(refresh) {
+    try {
+        if (window.parent && window.parent !== window && window.parent.AssetContainer
+            && typeof window.parent.AssetContainer.closeEditor === 'function') {
+            window.parent.AssetContainer.closeEditor(!!refresh);
+            return;
+        }
+    } catch (e) { /* fallback */ }
+    window.location.href = '/Assets';
+}
+</script>
+}

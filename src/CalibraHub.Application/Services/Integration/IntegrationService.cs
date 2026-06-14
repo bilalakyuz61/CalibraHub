@@ -130,7 +130,8 @@ public sealed class IntegrationService : IIntegrationService
                 SourceSection: string.IsNullOrWhiteSpace(m.SourceSection) ? "Header" : m.SourceSection,
                 LookupFiltersJson: m.LookupFiltersJson,
                 LookupReturnColumn: m.LookupReturnColumn,
-                LookupParam:        m.LookupParam)).ToList(),
+                LookupParam:        m.LookupParam,
+                CascadeToIntegrationId: m.CascadeToIntegrationId)).ToList(),
             Triggers: integ.Triggers.Select(t => new IntegrationTriggerDto(
                 Id: t.Id,
                 TriggerType: t.TriggerType,
@@ -149,10 +150,12 @@ public sealed class IntegrationService : IIntegrationService
             PreProcedureName:        integ.PreProcedureName,
             PreProcedureParamsJson:  integ.PreProcedureParamsJson,
             PostProcedureName:       integ.PostProcedureName,
-            PostProcedureParamsJson: integ.PostProcedureParamsJson);
+            PostProcedureParamsJson: integ.PostProcedureParamsJson,
+            SourceFilterJson:        integ.SourceFilterJson,
+            AllowAsCascadeTarget:    integ.AllowAsCascadeTarget);
     }
 
-    public async Task<int> SaveAsync(SaveIntegrationRequest request, string? currentUserName, CancellationToken ct)
+    public async Task<int> SaveAsync(SaveIntegrationRequest request, int? currentUserId, CancellationToken ct)
     {
         ValidateRequest(request);
 
@@ -170,11 +173,13 @@ public sealed class IntegrationService : IIntegrationService
                 RetryCount = request.RetryCount,
                 IsActive = request.IsActive,
                 VersionNo = 1,
-                CreatedBy = currentUserName,
+                CreatedById = currentUserId,
                 PreProcedureName        = string.IsNullOrWhiteSpace(request.PreProcedureName) ? null : request.PreProcedureName.Trim(),
                 PreProcedureParamsJson  = string.IsNullOrWhiteSpace(request.PreProcedureParamsJson) ? null : request.PreProcedureParamsJson,
                 PostProcedureName       = string.IsNullOrWhiteSpace(request.PostProcedureName) ? null : request.PostProcedureName.Trim(),
                 PostProcedureParamsJson = string.IsNullOrWhiteSpace(request.PostProcedureParamsJson) ? null : request.PostProcedureParamsJson,
+                SourceFilterJson        = string.IsNullOrWhiteSpace(request.SourceFilterJson) ? null : request.SourceFilterJson,
+                AllowAsCascadeTarget    = request.AllowAsCascadeTarget,
             };
             integrationId = await _repo.AddAsync(entity, ct);
         }
@@ -192,12 +197,14 @@ public sealed class IntegrationService : IIntegrationService
             existing.RetryCount = request.RetryCount;
             existing.IsActive = request.IsActive;
             existing.VersionNo = existing.VersionNo + 1;
-            existing.UpdatedBy = currentUserName;
+            existing.UpdatedById = currentUserId;
             existing.Updated = DateTime.UtcNow;
             existing.PreProcedureName        = string.IsNullOrWhiteSpace(request.PreProcedureName) ? null : request.PreProcedureName.Trim();
             existing.PreProcedureParamsJson  = string.IsNullOrWhiteSpace(request.PreProcedureParamsJson) ? null : request.PreProcedureParamsJson;
             existing.PostProcedureName       = string.IsNullOrWhiteSpace(request.PostProcedureName) ? null : request.PostProcedureName.Trim();
             existing.PostProcedureParamsJson = string.IsNullOrWhiteSpace(request.PostProcedureParamsJson) ? null : request.PostProcedureParamsJson;
+            existing.SourceFilterJson        = string.IsNullOrWhiteSpace(request.SourceFilterJson) ? null : request.SourceFilterJson;
+            existing.AllowAsCascadeTarget    = request.AllowAsCascadeTarget;
             await _repo.UpdateAsync(existing, ct);
             integrationId = existing.Id;
         }
@@ -222,6 +229,7 @@ public sealed class IntegrationService : IIntegrationService
             LookupFiltersJson  = m.LookupFiltersJson,
             LookupReturnColumn = m.LookupReturnColumn,
             LookupParam        = m.LookupParam,
+            CascadeToIntegrationId = m.CascadeToIntegrationId,
         }).ToList();
         await _repo.ReplaceMappingsAsync(integrationId, mappings, ct);
 
@@ -259,7 +267,7 @@ public sealed class IntegrationService : IIntegrationService
         return integ.IsActive;
     }
 
-    public async Task<int> DuplicateAsync(int id, string? currentUserName, CancellationToken ct)
+    public async Task<int> DuplicateAsync(int id, int? currentUserId, CancellationToken ct)
     {
         var src = await _repo.GetByIdAsync(id, ct)
             ?? throw new ArgumentException($"Integration bulunamadi: {id}");
@@ -274,7 +282,7 @@ public sealed class IntegrationService : IIntegrationService
             RetryCount = src.RetryCount,
             IsActive = false,                   // pasif kopya — kullanici aktif et dedikten sonra calissin
             VersionNo = 1,
-            CreatedBy = currentUserName,
+            CreatedById = currentUserId,
         };
         var newId = await _repo.AddAsync(copy, ct);
 
@@ -296,6 +304,7 @@ public sealed class IntegrationService : IIntegrationService
             LookupFiltersJson  = m.LookupFiltersJson,
             LookupReturnColumn = m.LookupReturnColumn,
             LookupParam        = m.LookupParam,
+            CascadeToIntegrationId = m.CascadeToIntegrationId,
         }).ToList();
         await _repo.ReplaceMappingsAsync(newId, copiedMappings, ct);
 
@@ -366,6 +375,7 @@ public sealed class IntegrationService : IIntegrationService
                 LookupFiltersJson  = m.LookupFiltersJson,
                 LookupReturnColumn = m.LookupReturnColumn,
                 LookupParam        = m.LookupParam,
+                CascadeToIntegrationId = m.CascadeToIntegrationId,
             }).ToList(),
             Endpoint = endpoint,
         };
@@ -520,11 +530,38 @@ public sealed class IntegrationService : IIntegrationService
                 "ApiProfile bulunamadi (test sadece preview yapildi).", warnings);
         }
 
+        // 2026-05-25: Kullanici Step 4'te body'yi duzenlediyse onu kullan; aksi halde
+        // mapping ciktisini gonder.
+        var bodyToSend = body;
+        var bodyJsonForResponse = bodyJson;
+        if (!string.IsNullOrWhiteSpace(request.OverrideRequestBody))
+        {
+            try
+            {
+                var parsed = System.Text.Json.Nodes.JsonNode.Parse(request.OverrideRequestBody);
+                if (parsed is System.Text.Json.Nodes.JsonObject obj)
+                {
+                    bodyToSend = obj;
+                    bodyJsonForResponse = obj.ToJsonString();
+                }
+                else
+                {
+                    return new TestIntegrationResponse(false, bodyJson, null, null,
+                        "Düzenlenmiş body geçerli bir JSON object değil (root '{ }' olmalı).", warnings);
+                }
+            }
+            catch (Exception ex)
+            {
+                return new TestIntegrationResponse(false, bodyJson, null, null,
+                    "Düzenlenmiş body parse edilemedi: " + ex.Message, warnings);
+            }
+        }
+
         // Gercek HTTP cagrisi
-        var http = await _httpExecutor.SendAsync(endpoint, profile, body, ct);
+        var http = await _httpExecutor.SendAsync(endpoint, profile, bodyToSend, ct);
         return new TestIntegrationResponse(
             Success: http.Success,
-            RequestBody: bodyJson,
+            RequestBody: bodyJsonForResponse,
             HttpStatusCode: http.StatusCode,
             ResponseBody: http.ResponseBody,
             ErrorMessage: http.ErrorMessage,

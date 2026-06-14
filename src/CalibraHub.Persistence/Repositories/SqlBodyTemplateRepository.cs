@@ -54,7 +54,7 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
         cmd.CommandText = $"""
             SELECT [Id],[Category],[Name],[DocType],[ProviderHint],[UrlPattern],[HttpMethod],
                    [BodyJson],[Description],[Tags],[UsageCount],[IsBuiltIn],[IsActive],
-                   [CreatedBy],[Created],[UpdatedBy],[Updated]
+                   [CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_table}
             WHERE {where}
             ORDER BY [UsageCount] DESC, [Category] ASC, [Name] ASC;
@@ -75,7 +75,7 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
         cmd.CommandText = $"""
             SELECT [Id],[Category],[Name],[DocType],[ProviderHint],[UrlPattern],[HttpMethod],
                    [BodyJson],[Description],[Tags],[UsageCount],[IsBuiltIn],[IsActive],
-                   [CreatedBy],[Created],[UpdatedBy],[Updated]
+                   [CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_table}
             WHERE [Id] = @id;
             """;
@@ -101,10 +101,10 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
             INSERT INTO {_table}
                 ([Category],[Name],[DocType],[ProviderHint],[UrlPattern],[HttpMethod],
                  [BodyJson],[Description],[Tags],[UsageCount],[IsBuiltIn],[IsActive],
-                 [CreatedBy])
+                 [CreatedById])
             OUTPUT INSERTED.[Id]
             VALUES (@cat,@name,@doctype,@provider,@urlpattern,@httpmethod,
-                    @body,@desc,@tags,0,0,1,@createdBy);
+                    @body,@desc,@tags,0,0,1,@createdById);
             """;
         cmd.Parameters.Add(new SqlParameter("@cat", template.Category));
         cmd.Parameters.Add(new SqlParameter("@name", template.Name));
@@ -115,7 +115,7 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
         cmd.Parameters.Add(new SqlParameter("@body", template.BodyJson));
         cmd.Parameters.Add(new SqlParameter("@desc", (object?)template.Description ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@tags", (object?)template.Tags ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@createdBy", (object?)template.CreatedBy ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@createdById", (object?)template.CreatedById ?? DBNull.Value));
         var idObj = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(idObj);
     }
@@ -149,9 +149,9 @@ public sealed class SqlBodyTemplateRepository : IBodyTemplateRepository
         UsageCount   = r.GetInt32(10),
         IsBuiltIn    = r.GetBoolean(11),
         IsActive     = r.GetBoolean(12),
-        CreatedBy    = r.IsDBNull(13) ? null : r.GetString(13),
+        CreatedById  = r.IsDBNull(13) ? null : r.GetInt32(13),
         Created      = r.GetDateTime(14),
-        UpdatedBy    = r.IsDBNull(15) ? null : r.GetString(15),
+        UpdatedById  = r.IsDBNull(15) ? null : r.GetInt32(15),
         Updated      = r.IsDBNull(16) ? null : r.GetDateTime(16),
     };
 }

@@ -18,7 +18,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{schema}].[smtp_profiles]";
+        _tableName = $"[{schema}].[SmtpProfile]";
     }
 
     public async Task<IReadOnlyCollection<SmtpProfile>> GetAllAsync(CancellationToken cancellationToken)
@@ -28,9 +28,9 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [Created]
+            SELECT [Id], [CompanyId], [Name], [FromEmail], [FromDisplayName], [Host], [Port], [Username], [Password], [AuthMethod], [OAuth2ClientId], [OAuth2ClientSecret], [OAuth2RefreshToken], [UseSsl], [IsActive], [Created]
             FROM {_tableName}
-            ORDER BY [name];
+            ORDER BY [Name];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -47,9 +47,9 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [Created]
+            SELECT [Id], [CompanyId], [Name], [FromEmail], [FromDisplayName], [Host], [Port], [Username], [Password], [AuthMethod], [OAuth2ClientId], [OAuth2ClientSecret], [OAuth2RefreshToken], [UseSsl], [IsActive], [Created]
             FROM {_tableName}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
 
@@ -68,14 +68,14 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([id], [company_id], [name], [from_email], [from_display_name], [host], [port], [username], [password], [auth_method], [oauth2_client_id], [oauth2_client_secret], [oauth2_refresh_token], [use_ssl], [is_active], [Created], [Updated])
+                ([Id], [CompanyId], [Name], [FromEmail], [FromDisplayName], [Host], [Port], [Username], [Password], [AuthMethod], [OAuth2ClientId], [OAuth2ClientSecret], [OAuth2RefreshToken], [UseSsl], [IsActive], [Created], [Updated])
             VALUES
-                (@Id, @EntityCompanyId, @Name, @FromEmail, @FromDisplayName, @Host, @Port, @Username, @Password, @AuthMethod, @OAuth2ClientId, @OAuth2ClientSecret, @OAuth2RefreshToken, @UseSsl, @IsActive, @CreatedAt, @UpdatedAt);
+                (@Id, @EntityCompanyId, @Name, @FromEmail, @FromDisplayName, @Host, @Port, @Username, @Password, @AuthMethod, @OAuth2ClientId, @OAuth2ClientSecret, @OAuth2RefreshToken, @UseSsl, @IsActive, @Created, @Updated);
             """;
 
         AddCommonParameters(command, profile);
-        command.Parameters.Add(new SqlParameter("@CreatedAt", profile.CreatedAt));
-        command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@Created", profile.Created));
+        command.Parameters.Add(new SqlParameter("@Updated", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -86,26 +86,26 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_tableName}
-            SET [company_id] = @EntityCompanyId,
-                [name] = @Name,
-                [from_email] = @FromEmail,
-                [from_display_name] = @FromDisplayName,
-                [host] = @Host,
-                [port] = @Port,
-                [username] = @Username,
-                [password] = @Password,
-                [auth_method] = @AuthMethod,
-                [oauth2_client_id] = @OAuth2ClientId,
-                [oauth2_client_secret] = @OAuth2ClientSecret,
-                [oauth2_refresh_token] = @OAuth2RefreshToken,
-                [use_ssl] = @UseSsl,
-                [is_active] = @IsActive,
-                [Updated] = @UpdatedAt
-            WHERE [id] = @Id;
+            SET [CompanyId] = @EntityCompanyId,
+                [Name] = @Name,
+                [FromEmail] = @FromEmail,
+                [FromDisplayName] = @FromDisplayName,
+                [Host] = @Host,
+                [Port] = @Port,
+                [Username] = @Username,
+                [Password] = @Password,
+                [AuthMethod] = @AuthMethod,
+                [OAuth2ClientId] = @OAuth2ClientId,
+                [OAuth2ClientSecret] = @OAuth2ClientSecret,
+                [OAuth2RefreshToken] = @OAuth2RefreshToken,
+                [UseSsl] = @UseSsl,
+                [IsActive] = @IsActive,
+                [Updated] = @Updated
+            WHERE [Id] = @Id;
             """;
 
         AddCommonParameters(command, profile);
-        command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
+        command.Parameters.Add(new SqlParameter("@Updated", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -133,23 +133,23 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
     {
         var profile = new SmtpProfile
         {
-            Id = r.GetGuid(r.GetOrdinal("id")),
-            CompanyId = r.GetInt32(r.GetOrdinal("company_id")),
-            Name = r.GetString(r.GetOrdinal("name")),
-            FromEmail = r.GetString(r.GetOrdinal("from_email")),
-            FromDisplayName = r.IsDBNull(r.GetOrdinal("from_display_name")) ? string.Empty : r.GetString(r.GetOrdinal("from_display_name")),
-            Host = r.GetString(r.GetOrdinal("host")),
-            Username = r.GetString(r.GetOrdinal("username")),
-            Password = IntegratorSecretProtector.Unprotect(r.GetString(r.GetOrdinal("password"))),
-            AuthMethod = r.IsDBNull(r.GetOrdinal("auth_method")) ? "Normal" : r.GetString(r.GetOrdinal("auth_method")),
-            OAuth2ClientId = r.IsDBNull(r.GetOrdinal("oauth2_client_id")) ? null : r.GetString(r.GetOrdinal("oauth2_client_id")),
-            OAuth2ClientSecret = r.IsDBNull(r.GetOrdinal("oauth2_client_secret")) ? null : r.GetString(r.GetOrdinal("oauth2_client_secret")),
-            OAuth2RefreshToken = r.IsDBNull(r.GetOrdinal("oauth2_refresh_token")) ? null : r.GetString(r.GetOrdinal("oauth2_refresh_token")),
-            CreatedAt = r.GetDateTime(r.GetOrdinal("Created"))
+            Id = r.GetGuid(r.GetOrdinal("Id")),
+            CompanyId = r.GetInt32(r.GetOrdinal("CompanyId")),
+            Name = r.GetString(r.GetOrdinal("Name")),
+            FromEmail = r.GetString(r.GetOrdinal("FromEmail")),
+            FromDisplayName = r.IsDBNull(r.GetOrdinal("FromDisplayName")) ? string.Empty : r.GetString(r.GetOrdinal("FromDisplayName")),
+            Host = r.GetString(r.GetOrdinal("Host")),
+            Username = r.GetString(r.GetOrdinal("Username")),
+            Password = IntegratorSecretProtector.Unprotect(r.GetString(r.GetOrdinal("Password"))),
+            AuthMethod = r.IsDBNull(r.GetOrdinal("AuthMethod")) ? "Normal" : r.GetString(r.GetOrdinal("AuthMethod")),
+            OAuth2ClientId = r.IsDBNull(r.GetOrdinal("OAuth2ClientId")) ? null : r.GetString(r.GetOrdinal("OAuth2ClientId")),
+            OAuth2ClientSecret = r.IsDBNull(r.GetOrdinal("OAuth2ClientSecret")) ? null : r.GetString(r.GetOrdinal("OAuth2ClientSecret")),
+            OAuth2RefreshToken = r.IsDBNull(r.GetOrdinal("OAuth2RefreshToken")) ? null : r.GetString(r.GetOrdinal("OAuth2RefreshToken")),
+            Created = r.GetDateTime(r.GetOrdinal("Created"))
         };
 
-        profile.UpdateTransport(r.GetInt32(r.GetOrdinal("port")), r.GetBoolean(r.GetOrdinal("use_ssl")));
-        if (!r.GetBoolean(r.GetOrdinal("is_active")))
+        profile.UpdateTransport(r.GetInt32(r.GetOrdinal("Port")), r.GetBoolean(r.GetOrdinal("UseSsl")));
+        if (!r.GetBoolean(r.GetOrdinal("IsActive")))
         {
             profile.Deactivate();
         }

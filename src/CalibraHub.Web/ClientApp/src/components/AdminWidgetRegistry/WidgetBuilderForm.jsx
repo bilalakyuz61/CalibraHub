@@ -89,8 +89,8 @@ function humanizeFieldKey(raw) {
 
 function Row(props) {
   return (
-    <div className="flex items-center gap-2.5 min-h-[36px]">
-      <label className="w-[140px] flex-shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40 leading-tight">
+    <div className="flex items-center gap-2 min-h-[32px]">
+      <label className="w-[110px] flex-shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40 leading-tight">
         {props.label}
         {props.hint && (
           <span className="block text-slate-400 dark:text-white/45 font-normal normal-case text-[9px] mt-0.5">
@@ -382,6 +382,10 @@ export default function WidgetBuilderForm(props) {
   var [searchEnabled, setSearchEnabled] = useState(false)
   var [isActive, setIsActive]           = useState(true)
   var [isRequired, setIsRequired]       = useState(false)
+  // 2026-06-08 — Yetkilendirilebilir alan: true ise startup discovery FIELD:<WidgetCode> izni
+  // seed eder; Yetki Yönetimi'nde "Alan: <Label>" satırı görünür. İzni olmayan kullanıcı
+  // alanı hiç görmez (server-side filter).
+  var [isPermissionControlled, setIsPermissionControlled] = useState(false)
   var [errors, setErrors]               = useState({})
   // Shake animation — zorunlu alan bos biraktirildiginda Widget Ekle
   // tiklaninca kirmizi cerceveli titresim (metin yerine sadece gorsel).
@@ -472,6 +476,7 @@ export default function WidgetBuilderForm(props) {
       setLabelStyle(resolvedLs)
       setIsActive(editingField.isActive !== false)
       setIsRequired(editingField.isRequired === true)
+      setIsPermissionControlled(editingField.isPermissionControlled === true)
       // Lookup: guideCode metadata'da saklanir (options degil)
       // Grid: childFormCode metadata'da saklanir
       var existingOpts = []
@@ -536,6 +541,7 @@ export default function WidgetBuilderForm(props) {
       setGuideConfig(null)
       setIsActive(true)
       setIsRequired(false)
+      setIsPermissionControlled(false)
       setOptions([])
       setRuleVisibleIf('')
       setRuleDisabledIf('')
@@ -877,6 +883,9 @@ export default function WidgetBuilderForm(props) {
         // Backend yine de bu alani 'inline' iken true olarak yazip eski DB
         // okuyuculari ile senkron kalir; UI gondermez.
         isRequired: isRequired,
+        // 2026-06-08 — Yetkilendirilebilir alan flag'i. Backend WidgetService bunu
+        // domain'e (WidgetDefinition.IsPermissionControlled) bag layip discovery'ye taşıyor.
+        isPermissionControlled: isPermissionControlled,
         rules: rulesPayload,
         colorType: colorType,
         colorValue: colorValue.trim() || null,
@@ -894,7 +903,7 @@ export default function WidgetBuilderForm(props) {
 
   // Ortak CSS — input field (sabit yukseklik 36px tum alanlar icin).
   // type="number" inputlari icin webkit/firefox spinner butonlari gizlenir.
-  var inputBase = 'w-full h-9 px-3 rounded-lg text-xs transition-all ' +
+  var inputBase = 'w-full h-8 px-3 rounded-lg text-xs transition-all ' +
     'bg-white/60 dark:bg-white/[0.04] ' +
     'text-slate-800 dark:text-white/85 ' +
     'placeholder:text-slate-400 dark:placeholder:text-white/25 ' +
@@ -911,12 +920,12 @@ export default function WidgetBuilderForm(props) {
       ref={formRef}
       layout
       onSubmit={handleSubmit}
-      className="glass rounded-2xl p-4 flex flex-col gap-3 flex-shrink-0 h-fit shadow-[0_4px_24px_rgba(0,0,0,0.12)]"
+      className="glass rounded-2xl p-3 flex flex-col gap-2 flex-shrink-0 h-fit shadow-[0_4px_24px_rgba(0,0,0,0.12)]"
     >
       {/* Header */}
-      <div className="flex items-center gap-2.5 pb-2 border-b border-slate-200/40 dark:border-white/[0.06]">
+      <div className="flex items-center gap-2 pb-1.5 border-b border-slate-200/40 dark:border-white/[0.06]">
         <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center"
+          className="w-6 h-6 rounded-lg flex items-center justify-center"
           style={{
             background: isEdit ? 'rgba(245, 158, 11, 0.12)' : 'rgba(99, 102, 241, 0.12)',
             border: '1px solid ' + (isEdit ? 'rgba(245, 158, 11, 0.25)' : 'rgba(99, 102, 241, 0.25)'),
@@ -971,7 +980,7 @@ export default function WidgetBuilderForm(props) {
               // 36x18px solid yuzey (modern label "cut" efekti icin gerekli).
               // Etiket "Aa" ile temsil edilir, input ince yatay cubukla.
               var stageClass = 'rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60'
-              var stageStyle = { width: 36, height: 18, padding: 3, boxSizing: 'border-box' }
+              var stageStyle = { width: 36, height: 15, padding: 2, boxSizing: 'border-box' }
               var inputBoxClass = 'rounded-sm border border-slate-400 dark:border-slate-500'
 
               var preview = null
@@ -1019,7 +1028,7 @@ export default function WidgetBuilderForm(props) {
                   onClick={function() { setLabelStyle(opt.v) }}
                   title={opt.hint}
                   className={
-                    'flex-1 flex flex-col items-center gap-1 py-1.5 px-2 rounded-md text-[10px] font-semibold transition-all ' +
+                    'flex-1 flex flex-col items-center gap-0.5 py-1 px-2 rounded-md text-[10px] font-semibold transition-all ' +
                     (act
                       ? 'bg-white dark:bg-white/[0.08] shadow-sm text-indigo-600 dark:text-indigo-300'
                       : 'text-slate-500 dark:text-white/45 hover:text-slate-700 dark:hover:text-white/70')
@@ -1189,7 +1198,7 @@ export default function WidgetBuilderForm(props) {
                   data-shake-key="guideSettings"
                   onClick={function() { setGuideModalOpen(true) }}
                   className={
-                    'h-9 px-3 flex items-center gap-1.5 rounded-lg text-[11px] font-semibold transition-all flex-shrink-0 ' +
+                    'h-8 px-3 flex items-center gap-1.5 rounded-lg text-[11px] font-semibold transition-all flex-shrink-0 ' +
                     (isConfigured
                       ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/45 text-emerald-600 dark:text-emerald-300 cursor-pointer'
                       : 'bg-red-500/15 hover:bg-red-500/25 border border-red-400/55 text-red-600 dark:text-red-300 cursor-pointer')
@@ -1218,7 +1227,7 @@ export default function WidgetBuilderForm(props) {
           <div className="flex items-center gap-2" data-shake-key="options">
             <div
               className={
-                'flex-1 h-9 px-3 rounded-lg text-xs flex items-center truncate ' +
+                'flex-1 h-8 px-3 rounded-lg text-xs flex items-center truncate ' +
                 'bg-white/60 dark:bg-white/[0.04] ' +
                 (errors.options
                   ? 'border-2 border-red-500/80 text-slate-600 dark:text-white/60'
@@ -1236,7 +1245,7 @@ export default function WidgetBuilderForm(props) {
             <button
               type="button"
               onClick={function() { setOptionsModalOpen(true) }}
-              className="h-9 px-3 flex items-center gap-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 dark:bg-indigo-500/15 dark:hover:bg-indigo-500/25 border border-indigo-400/30 dark:border-indigo-400/35 text-[11px] font-semibold text-indigo-600 dark:text-indigo-300 transition-all flex-shrink-0"
+              className="h-8 px-3 flex items-center gap-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 dark:bg-indigo-500/15 dark:hover:bg-indigo-500/25 border border-indigo-400/30 dark:border-indigo-400/35 text-[11px] font-semibold text-indigo-600 dark:text-indigo-300 transition-all flex-shrink-0"
               title={
                 dataType === 'link' ? 'Hedef URL sablonunu duzenle' :
                 dataType === 'grid' ? 'Alt form sec' :
@@ -1346,7 +1355,7 @@ export default function WidgetBuilderForm(props) {
               onPointerUp={handleColSpanPointerEnd}
               onPointerCancel={handleColSpanPointerEnd}
               style={{ touchAction: 'none' }}
-              className="flex gap-[1px] h-6 rounded-md overflow-hidden cursor-ew-resize select-none focus:outline-none focus:ring-2 focus:ring-emerald-400/40 touch-none"
+              className="flex gap-[1px] h-5 rounded-md overflow-hidden cursor-ew-resize select-none focus:outline-none focus:ring-2 focus:ring-emerald-400/40 touch-none"
             >
               {Array.from({ length: 24 }).map(function(_, i) {
                 var val = i + 1
@@ -1443,11 +1452,11 @@ export default function WidgetBuilderForm(props) {
           Guide-list value yazmaz (salt okunur), formula/visibility/required-if/default
           kurallari anlamsiz — buton gizli. */}
       {dataType !== 'guide-list' && (
-        <div className="pt-2 border-t border-slate-200/40 dark:border-white/[0.06]">
+        <div className="pt-1.5 border-t border-slate-200/40 dark:border-white/[0.06]">
           <button
             type="button"
             onClick={function() { setRuleModalOpen(true) }}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left transition-all"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all"
             style={{
               background: 'rgba(245,158,11,0.07)',
               border: '1px solid rgba(245,158,11,0.2)',
@@ -1476,7 +1485,7 @@ export default function WidgetBuilderForm(props) {
       {dataType !== 'group' && dataType !== 'guide-list' && (function() {
         var hasRequiredRule = !!(ruleRequiredIf && ruleRequiredIf.trim())
         return (
-          <div className="flex items-center justify-between py-2 px-1">
+          <div className="flex items-center justify-between py-1.5 px-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40">
               Zorunlu Alan
               {hasRequiredRule && (
@@ -1507,8 +1516,33 @@ export default function WidgetBuilderForm(props) {
         )
       })()}
 
+      {/* Yetkilendirilebilir toggle — 2026-06-08 */}
+      <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40">
+          Yetkilendirilebilir
+          <span className="ml-2 normal-case font-normal" style={{ color: '#94a3b8', fontSize: '9px' }}>
+            · Yetki Yönetimi'nde görme izni
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={function() { setIsPermissionControlled(function(v) { return !v }) }}
+          title="Açık ise bu alan için Yetki Yönetimi'nde 'Alan: {Label}' satırı görünür; izni olmayan kullanıcı alanı hiç göremez."
+          className={
+            'relative w-10 h-5 rounded-full transition-colors ' +
+            (isPermissionControlled ? 'bg-indigo-500/70' : 'bg-slate-300 dark:bg-white/10')
+          }
+        >
+          <motion.div
+            className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
+            animate={{ left: isPermissionControlled ? 22 : 2 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+          />
+        </button>
+      </div>
+
       {/* Aktif toggle */}
-      <div className="flex items-center justify-between py-2 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
+      <div className="flex items-center justify-between py-1.5 px-1 border-t border-slate-200/40 dark:border-white/[0.06]">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40">
           Aktif
         </span>
@@ -1529,7 +1563,7 @@ export default function WidgetBuilderForm(props) {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 pt-1">
+      <div className="flex items-center gap-2 pt-0.5">
         {isEdit && (
           <button
             type="button"

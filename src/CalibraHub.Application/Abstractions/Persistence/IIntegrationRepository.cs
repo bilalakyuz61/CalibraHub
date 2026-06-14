@@ -34,6 +34,14 @@ public interface IIntegrationRepository
     Task UpdateAsync(Integration integration, CancellationToken ct);
     Task DeleteAsync(int id, CancellationToken ct);
 
+    /// <summary>
+    /// 2026-05-22 Cascade: Wizard Step 2 "Bağımlılık" dropdown'u için aktif + cascade'lenebilir
+    /// integration'ları listeler. Aggregate children DOLDURULMAZ (sadece Id+Name+SourceFormCode
+    /// yeterli). Filtre opsiyonel: formCode verilmişse sadece o forma ait olanlar.
+    /// </summary>
+    Task<IReadOnlyCollection<Integration>> ListCascadeTargetsAsync(
+        string? sourceFormCode, CancellationToken ct);
+
     // ── Mapping ───────────────────────────────────────────────────────────
     Task<IReadOnlyCollection<IntegrationMapping>> GetMappingsAsync(int integrationId, CancellationToken ct);
     Task ReplaceMappingsAsync(int integrationId, IReadOnlyCollection<IntegrationMapping> mappings, CancellationToken ct);

@@ -27,4 +27,25 @@ public sealed class FormDefinition
     public bool IsActive { get; init; } = true;
     public string? BaseTable { get; init; }
     public string? BaseRecordKey { get; init; }
+    // 2026-06-09 — UI ikon ve renk bilgisi (ModuleSelector için DB-driven entity türetme)
+    public string? Icon { get; init; }
+    public string? IconColor { get; init; }
+
+    // Faz 2 (2026-06-09) — DB-driven menu kolonları
+    public bool IsMenuItem { get; init; }
+    public string? MenuKey { get; init; }
+    public string? MenuLabel { get; init; }
+    public string? MenuLabelEn { get; init; }
+    public string? MenuGroupKey { get; init; }
+    public string? MenuGroupName { get; init; }
+    public string? MenuGroupIcon { get; init; }
+    public int? MenuGroupSortOrder { get; init; }
+    public int? MenuSortOrder { get; init; }
+    public string? MenuMatchPath { get; init; }
+    public bool AdminOnly { get; init; }
+
+    // 2026-06-09 — Alan Rehberi dropdown filtresi
+    // true  → Alan Rehberi'nde görünür (widget konfigürasyon hedefi: edit formu, kalem formu)
+    // false → gizli (container liste formu, _NEW navigasyon formu, ayarlar sayfası)
+    public bool IsWidgetForm { get; init; } = true;
 }

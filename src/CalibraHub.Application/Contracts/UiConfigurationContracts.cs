@@ -21,7 +21,7 @@ public sealed record UiLabelTranslationDto(
     string LabelText);
 
 public sealed record SaveUserInterfacePreferenceRequest(
-    Guid UserId,
+    int UserId,
     string LanguageCode,
     string ThemeCode);
 

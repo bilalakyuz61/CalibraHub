@@ -1,3 +1,4 @@
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Web.Models.Logistics;
@@ -24,6 +25,7 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("Logistics/[action]")]   // URL preservation: eski /Logistics/Machines aynen calisir
+[CalibraHub.Web.Authorization.PermissionScope(FormCodes.Machines)]
 public sealed class MachineController : Controller
 {
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
@@ -43,7 +45,8 @@ public sealed class MachineController : Controller
     public async Task<IActionResult> Machines(CancellationToken ct)
     {
         var config = await BuildBoardConfigAsync(ct);
-        return View(new MachinesSmartBoardViewModel { BoardConfig = config });
+        // Explicit view path — split sonrasi view'lar /Views/Logistics/ altinda kaldi (rapor §2.3 split-fixup).
+        return View("~/Views/Logistics/Machines.cshtml", new MachinesSmartBoardViewModel { BoardConfig = config });
     }
 
     private async Task<object> BuildBoardConfigAsync(CancellationToken ct)
@@ -69,7 +72,7 @@ public sealed class MachineController : Controller
                 });
             }
         }
-        var ordered      = machines.OrderBy(m => m.SortOrder).ThenBy(m => m.MachineName).ToList();
+        var ordered      = machines.OrderBy(m => m.SortOrder).ThenBy(m => m.Name).ToList();
         var recordIds    = ordered.Select(m => m.Id.ToString()).ToArray();
         var batchWidgets = masterWidgets.Count > 0 && recordIds.Length > 0
             ? await _widgetService.GetBatchRenderModelsAsync("MACHINES", recordIds, ct)
@@ -86,7 +89,7 @@ public sealed class MachineController : Controller
             .WithMasterWidgets(masterWidgets)
             .MapEntities(m =>
             {
-                var displayName = m.MachineName ?? m.MachineCode;
+                var displayName = m.Name ?? m.Code;
                 var description = m.LocationCode != null
                     ? m.LocationCode + (m.LocationName != null ? " — " + m.LocationName : "")
                     : string.Empty;
@@ -129,17 +132,17 @@ public sealed class MachineController : Controller
             var all  = await _logisticsConfigurationService.GetMachinesAsync(ct);
             var item = all.FirstOrDefault(m => m.Id == id.Value);
             if (item is null) return NotFound();
-            return View(new MachineEditViewModel
+            return View("~/Views/Logistics/MachineEdit.cshtml", new MachineEditViewModel
             {
                 Id          = item.Id,
                 LocationId  = item.LocationId,
-                MachineCode = item.MachineCode,
-                MachineName = item.MachineName,
+                MachineCode = item.Code,
+                MachineName = item.Name,
                 SortOrder   = item.SortOrder,
                 IsActive    = item.IsActive,
             });
         }
-        return View(new MachineEditViewModel { IsActive = true });
+        return View("~/Views/Logistics/MachineEdit.cshtml", new MachineEditViewModel { IsActive = true });
     }
 
     // ── JSON API ──────────────────────────────────────────────────────────
@@ -152,8 +155,8 @@ public sealed class MachineController : Controller
         {
             var q = search.Trim().ToLowerInvariant();
             rows = rows.Where(m =>
-                (m.MachineCode ?? "").ToLowerInvariant().Contains(q) ||
-                (m.MachineName ?? "").ToLowerInvariant().Contains(q) ||
+                (m.Code ?? "").ToLowerInvariant().Contains(q) ||
+                (m.Name ?? "").ToLowerInvariant().Contains(q) ||
                 (m.LocationCode ?? "").ToLowerInvariant().Contains(q) ||
                 (m.LocationName ?? "").ToLowerInvariant().Contains(q)).ToArray();
         }

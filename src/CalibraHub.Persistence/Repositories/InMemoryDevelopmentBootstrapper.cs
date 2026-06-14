@@ -9,7 +9,7 @@ public sealed class InMemoryDevelopmentBootstrapper
 {
     private const int DefaultCompanyId = 1;
     private const int DefaultDepartmentId = 1;
-    private static readonly Guid DefaultAdminUserId = Guid.Parse("0dbb6f1d-9a15-4f6f-b1f0-661bb6b43ec2");
+    private const int DefaultAdminUserId = 100;
     private const string DefaultPassword = "12345678";
 
     private readonly InMemoryDataStore _dataStore;

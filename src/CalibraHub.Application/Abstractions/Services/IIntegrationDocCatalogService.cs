@@ -18,20 +18,20 @@ public interface IIntegrationDocCatalogService
 
     // ── Provider ──────────────────────────────────────────────────────────
     Task<IReadOnlyList<IntegrationProviderAdminDto>> ListProvidersAsync(bool includeInactive, CancellationToken ct);
-    Task<int> SaveProviderAsync(SaveIntegrationProviderRequest req, string? actor, CancellationToken ct);
-    Task DeleteProviderAsync(int id, string? actor, CancellationToken ct);
+    Task<int> SaveProviderAsync(SaveIntegrationProviderRequest req, int? actor, CancellationToken ct);
+    Task DeleteProviderAsync(int id, int? actor, CancellationToken ct);
 
     // ── Enum Definition ───────────────────────────────────────────────────
     Task<IReadOnlyList<IntegrationEnumDefinitionAdminDto>> ListEnumsAsync(int? providerId, bool includeInactive, CancellationToken ct);
     Task<IntegrationEnumDefinitionAdminDto?> GetEnumAsync(int id, CancellationToken ct);
-    Task<int> SaveEnumAsync(SaveIntegrationEnumDefinitionRequest req, string? actor, CancellationToken ct);
-    Task DeleteEnumAsync(int id, string? actor, CancellationToken ct);
+    Task<int> SaveEnumAsync(SaveIntegrationEnumDefinitionRequest req, int? actor, CancellationToken ct);
+    Task DeleteEnumAsync(int id, int? actor, CancellationToken ct);
 
     // ── Field Doc ─────────────────────────────────────────────────────────
     Task<IReadOnlyList<IntegrationFieldDocAdminDto>> ListFieldDocsAsync(int? providerId, string? resource, bool includeInactive, CancellationToken ct);
     Task<IntegrationFieldDocAdminDto?> GetFieldDocAsync(int id, CancellationToken ct);
-    Task<int> SaveFieldDocAsync(SaveIntegrationFieldDocRequest req, string? actor, CancellationToken ct);
-    Task DeleteFieldDocAsync(int id, string? actor, CancellationToken ct);
+    Task<int> SaveFieldDocAsync(SaveIntegrationFieldDocRequest req, int? actor, CancellationToken ct);
+    Task DeleteFieldDocAsync(int id, int? actor, CancellationToken ct);
 
     /// <summary>Disaridan cache invalidate — seed sonrasi vs.</summary>
     void InvalidateCache();

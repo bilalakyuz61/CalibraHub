@@ -457,6 +457,23 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
   // [{id, label, description, returnColumns:[{column, label}]}]
   const [lookupFunctions, setLookupFunctions] = useState([])
 
+  // 2026-05-22 Cascade: "Bağımlılık" dropdown verisi — aktif + AllowAsCascadeTarget=true
+  // tüm integration'lar. Kendi kendine cascade etmeyi engellemek için excludeId ile
+  // mevcut wizard integration'ı (state.id) filtrelenir. Yüklemeyi bir kez yapıyoruz —
+  // wizard yaşam süresi boyunca cascade target listesi nadiren değişir.
+  const [cascadeTargets, setCascadeTargets] = useState([])
+  useEffect(() => {
+    const url = state.id && state.id > 0
+      ? `${apiBase}/cascade-targets?excludeId=${state.id}`
+      : `${apiBase}/cascade-targets`
+    fetch(url, { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d && d.success && Array.isArray(d.targets)) setCascadeTargets(d.targets)
+      })
+      .catch(() => {/* network — dropdown boş kalır, sorun değil */})
+  }, [apiBase, state.id])
+
   // Sample record (Step 4'te de kullanilan) — Ornek kolonu icin lazy fetch
   const [sampleRecord, setSampleRecord] = useState(null)   // { fieldValues: { code: value } }
   const [sampleLines, setSampleLines]   = useState([])     // [{ field: value }, ...]
@@ -681,6 +698,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
       sortOrder: state.mappings.length + 1,
       groupKey: groupName === ROOT_GROUP ? null : groupName,
       sourceSection: defaultSection,
+      cascadeToIntegrationId: null,         // 2026-05-22 Cascade: FK alanı için hedef integration
     }
     const newIdx = state.mappings.length
     update({ mappings: [...state.mappings, newRow] })
@@ -952,6 +970,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                           {/* Kaynak Tipi */}     <col style={{ width: '130px' }} />
                           {/* Section */}         {group.kind === 'array' && <col style={{ width: '90px' }} />}
                           {/* Source Field */}    <col style={{ width: 'auto' }} />
+                          {/* Bağımlılık */}      <col style={{ width: '150px' }} />
                           {/* Default */}         <col style={{ width: '105px' }} />
                           {/* Format */}          <col style={{ width: '100px' }} />
                           {/* * */}               <col style={{ width: '46px' }} />
@@ -968,6 +987,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                             <th style={cellHeader}>Kaynak</th>
                             {group.kind === 'array' && <th style={cellHeader}>Section</th>}
                             <th style={cellHeader}>Alan / Değer</th>
+                            <th style={cellHeader} title="FK alanları için cascade hedef entegrasyon (ERP'de yoksa önce bu çağrılır)">Bağımlılık</th>
                             <th style={cellHeader} title="Kaynak boş dönerse kullanılacak fallback değer">Default</th>
                             <th style={cellHeader} title="Tipe göre format dönüşümü (date pattern, sayı format, string upper/lower)">Format</th>
                             <th style={{ ...cellHeader, textAlign: 'center' }} title="Zorunlu alan">Zor.</th>
@@ -994,15 +1014,15 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                             }[currentSection] || { tag: 'H', color: 'indigo' })
 
                             const doc = fieldDocs[m.targetPath]
-                            const hasAllowedValues = doc?.allowedValues && doc.allowedValues.length > 0
+                            const hasDoc = !!(doc && (doc.description || doc.example || doc.notes || (doc.allowedValues && doc.allowedValues.length > 0)))
                             return (
                               <tr key={idx} style={{ background: 'var(--iw-surface)' }}>
                                 {/* Hedef Path — searchable combo (schema leaf'larindan).
-                                    Allowed values varsa basinda 'i' info badge: hover'da liste tooltip. */}
+                                    fieldDoc varsa basinda 'i' info badge: hover'da aciklama + olasi degerler. */}
                                 <td style={cellBody}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    {hasAllowedValues && (
-                                      <AllowedValuesBadge values={doc.allowedValues} description={doc.description} />
+                                    {hasDoc && (
+                                      <AllowedValuesBadge doc={doc} />
                                     )}
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <SearchableCombo
@@ -1244,6 +1264,41 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
                                            style={cellInput} />
                                   )}
                                 </td>
+                                {/* 2026-05-22 Cascade — bu mapping bir FK alanı ise hedef cascade integration'ı.
+                                    Aktif olan sourceType'lar:
+                                      FormField (0) → FK = sourceValue (örn. ContactId)
+                                      Lookup    (3) → FK = lookupSourceField (örn. ContactId)
+                                      Function  (4) → FK = lookupSourceField (örn. ItemId)
+                                    Diğer (Constant, Formula) için cascade anlamsız → disabled. */}
+                                <td style={cellBody}>
+                                  {(m.sourceType === 0 || m.sourceType === 3 || m.sourceType === 4) ? (
+                                    <select
+                                      value={m.cascadeToIntegrationId ?? ''}
+                                      onChange={e => updateRow(idx, {
+                                        cascadeToIntegrationId: e.target.value ? parseInt(e.target.value, 10) : null
+                                      })}
+                                      style={{
+                                        ...cellInput,
+                                        background: m.cascadeToIntegrationId ? 'var(--iw-emerald-bg)' : 'var(--iw-bg)',
+                                        color: m.cascadeToIntegrationId ? 'var(--iw-emerald-color)' : 'var(--iw-text)',
+                                        fontWeight: m.cascadeToIntegrationId ? 600 : 400,
+                                      }}
+                                      title="ERP'de bu FK'nin işaret ettiği kayıt yoksa önce burada seçilen entegrasyon tetiklenir.">
+                                      <option value="">— Cascade yok —</option>
+                                      {cascadeTargets.length === 0 && (
+                                        <option value="" disabled>(önce başka integration tanımlayın)</option>
+                                      )}
+                                      {cascadeTargets.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span style={{
+                                      fontSize: 10, color: 'var(--iw-muted)', fontStyle: 'italic',
+                                      padding: '4px 6px',
+                                    }}>(FK alanı değil)</span>
+                                  )}
+                                </td>
                                 {/* Default — kaynak null/bos donerse kullanilacak fallback deger */}
                                 <td style={cellBody}>
                                   <input value={m.defaultValue || ''}
@@ -1314,7 +1369,7 @@ export default function WizardStep3Mapping({ apiBase, state, update }) {
 // Sadece allowedValues olan hedef alanlar icin (enum tipi). Hover'da tum
 // degerlerin Turkce karsiligini liste halinde gosterir.
 // ────────────────────────────────────────────────────────────────────────────
-function AllowedValuesBadge({ values, description }) {
+function AllowedValuesBadge({ doc }) {
   const [open, setOpen] = useState(false)
   const [pinned, setPinned] = useState(false)
   const wrapRef = useRef(null)
@@ -1329,6 +1384,10 @@ function AllowedValuesBadge({ values, description }) {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [pinned])
   const show = open || pinned
+  const hasAllowed = Array.isArray(doc.allowedValues) && doc.allowedValues.length > 0
+  const titleText = hasAllowed
+    ? `${doc.allowedValues.length} olası değer — tıkla / üzerine gel`
+    : 'Alan açıklaması'
   return (
     <span ref={wrapRef}
           style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
@@ -1347,39 +1406,55 @@ function AllowedValuesBadge({ values, description }) {
                 : '0 1px 3px rgba(0,0,0,0.3)',
               lineHeight: 1,
             }}
-            title={`${values.length} olası değer — tıkla / üzerine gel`}>
+            title={titleText}>
         i
       </span>
       {show && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50,
-          minWidth: 220, maxWidth: 360, padding: '8px 10px', borderRadius: 8,
+          minWidth: 220, maxWidth: 360, padding: '10px 12px', borderRadius: 8,
           background: 'var(--iw-surface)',
           border: '1px solid var(--iw-indigo-color)',
           boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
           fontFamily: 'system-ui, -apple-system, sans-serif',
-          fontSize: 11, color: 'var(--iw-text)', lineHeight: 1.4,
+          fontSize: 12, color: 'var(--iw-text)', lineHeight: 1.5,
+          whiteSpace: 'normal',
         }}>
-          {description && (
-            <div style={{ marginBottom: 6, color: 'var(--iw-text)' }}>{description}</div>
+          {doc.description && (
+            <div style={{ marginBottom: 6 }}>{doc.description}</div>
           )}
-          <div style={{ color: 'var(--iw-muted)', fontSize: 10, marginBottom: 4 }}>
-            İzin verilen değerler ({values.length}):
-          </div>
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <tbody>
-              {values.map(av => (
-                <tr key={av.value}>
-                  <td style={{
-                    padding: '2px 8px 2px 0', color: 'var(--iw-indigo-color)',
-                    fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
-                    fontSize: 10, whiteSpace: 'nowrap', verticalAlign: 'top',
-                  }}>{av.value}</td>
-                  <td style={{ padding: '2px 0', color: 'var(--iw-text)', fontSize: 10 }}>{av.label}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {hasAllowed && (
+            <div style={{ marginTop: 8, borderTop: '1px dashed var(--iw-border)', paddingTop: 6 }}>
+              <div style={{ color: 'var(--iw-muted)', fontSize: 11, marginBottom: 4 }}>
+                İzin verilen değerler ({doc.allowedValues.length}):
+              </div>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+                <tbody>
+                  {doc.allowedValues.map(av => (
+                    <tr key={av.value}>
+                      <td style={{
+                        padding: '2px 8px 2px 0', color: 'var(--iw-indigo-color)',
+                        fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+                        whiteSpace: 'nowrap', verticalAlign: 'top',
+                      }}>{av.value}</td>
+                      <td style={{ padding: '2px 0', color: 'var(--iw-text)' }}>{av.label}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {doc.example && (
+            <div style={{ marginTop: 8, borderTop: '1px dashed var(--iw-border)', paddingTop: 6, fontSize: 11 }}>
+              <span style={{ color: 'var(--iw-muted)' }}>Örnek: </span>
+              <code style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: 'var(--iw-emerald-color)' }}>{doc.example}</code>
+            </div>
+          )}
+          {doc.notes && (
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--iw-muted)', fontStyle: 'italic' }}>
+              {doc.notes}
+            </div>
+          )}
         </div>
       )}
     </span>

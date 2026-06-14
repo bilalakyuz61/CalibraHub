@@ -1,6 +1,8 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Authorization;
 using CalibraHub.Web.Models.Admin;
 using CalibraHub.Web.Models.Shared;
 using Microsoft.AspNetCore.Authorization;
@@ -18,6 +20,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - POST /Admin/CompanySettings   → upsert Company + SMTP (form-post)
 /// </summary>
 [Authorize]
+[PermissionScope(FormCodes.CompanySettings)]
 public sealed class CompanySettingsController : Controller
 {
     private readonly IAdminReadService _adminReadService;
@@ -40,12 +43,10 @@ public sealed class CompanySettingsController : Controller
     [HttpGet("/Admin/CompanySettings")]
     public async Task<IActionResult> CompanySettings(
         [FromServices] IWhatsAppService whatsAppService,
-        [FromServices] IWhatsAppSafetyRulesRepository safetyRepo,
         CancellationToken cancellationToken)
     {
         ViewData["AdminMenu"] = "company-settings";
         ViewBag.WhatsAppConfig = await whatsAppService.GetConfigAsync(cancellationToken);
-        ViewBag.WhatsAppSafetyRules = await safetyRepo.GetAsync(cancellationToken);
         var companyId = GetCompanyId();
         var snapshot = await _adminReadService.GetSnapshotAsync(cancellationToken);
         var myCompany = snapshot.Companies.FirstOrDefault(x => x.Id == companyId);

@@ -4,6 +4,7 @@ using System.Text.Json;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Security;
+using CalibraHub.Application.WhatsApp;
 using CalibraHub.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -531,14 +532,8 @@ public sealed class WhatsAppService : IWhatsAppService
         }
     }
 
-    /// <summary>Telefonu Meta formatina cevir: sadece rakam, basta '+' yok, ulke kodu dahil. Orn: "+90 532 ..." → "90532...".</summary>
     private static string NormalizePhone(string input)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var c in input.Trim())
-            if (char.IsDigit(c)) sb.Append(c);
-        return sb.ToString();
-    }
+        => WaPhoneNormalizer.Normalize(input) ?? string.Empty;
 
     private static string Truncate(string s, int max)
         => s.Length <= max ? s : s.Substring(0, max) + "...";

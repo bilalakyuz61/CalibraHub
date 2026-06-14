@@ -14,11 +14,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowLeft, ArrowRight, Save, X, Loader2,
-  FileText, Globe, GitBranch, Eye, Zap, Check, ChevronDown,
+  FileText, Globe, GitBranch, Eye, Zap, Check, ChevronDown, Filter,
 } from 'lucide-react'
 import WizardStep1Form from './WizardStep1Form'
 import WizardStep2Endpoint from './WizardStep2Endpoint'
 import WizardStep3Mapping from './WizardStep3Mapping'
+import WizardStepFilters from './WizardStepFilters'
 import WizardStep4Preview from './WizardStep4Preview'
 import WizardStep5Trigger from './WizardStep5Trigger'
 
@@ -30,13 +31,29 @@ function toast(msg, kind) {
   if (window.CalibraHub?.toast) window.CalibraHub.toast(msg, kind || 'info')
 }
 
+/**
+ * Backend artik (2026-05-21) JsonStringEnumConverter ile enum'lari string olarak doner:
+ * "Manual" / "Cron" / "OnSave" / "Event". Frontend ise WizardStep5Trigger.toggleTrigger
+ * gibi yerlerde triggerType'i numeric (0/1/2/3) olarak kullaniyor. Load akisinda
+ * normalize ederiz; aksi halde "OnSave" === 2 karsilastirmasi false donerek toggle
+ * isaretsiz gorunur, ayni anda iki kayit olusur, vb.
+ */
+const TRIGGER_TYPE_NUM = { Manual: 0, Cron: 1, OnSave: 2, Event: 3 }
+function normalizeTriggerType(t) {
+  if (typeof t === 'number') return t
+  if (typeof t === 'string' && t in TRIGGER_TYPE_NUM) return TRIGGER_TYPE_NUM[t]
+  // Tanimsiz / beklenmeyen — 0 (Manual) varsayilan
+  return 0
+}
+
 const STEPS = [
   // Veri Kaynagi adimini kaldirdik — form secimi context bar'da kompakt combobox.
-  // Boylece 5 adim → 4 adim, kullanici daha hizli ilerler.
-  { num: 1, label: 'Hedef Sistem',  shortLabel: 'Hedef',    hint: 'Verileri hangi API endpoint\'ine göndereceğiz?', icon: Globe },
-  { num: 2, label: 'Alan Eşleme',   shortLabel: 'Eşleme',   hint: 'Form alanlarını hedef API alanlarına bağla.', icon: GitBranch },
-  { num: 3, label: 'Test',          shortLabel: 'Test',     hint: 'Gerçek bir kayıtla dry-run yap, çıktıyı gör.', icon: Eye },
-  { num: 4, label: 'Yayına Al',     shortLabel: 'Yayın',    hint: 'Adı, tetikleyiciyi ve sonrası prosedürü belirle.', icon: Zap },
+  // 2026-05-22: "Kısıt Kuralları" (Pre-flight Filter) eklenmesi ile 5 adım.
+  { num: 1, label: 'Hedef Sistem',    shortLabel: 'Hedef',    hint: 'Verileri hangi API endpoint\'ine göndereceğiz?', icon: Globe },
+  { num: 2, label: 'Alan Eşleme',     shortLabel: 'Eşleme',   hint: 'Form alanlarını hedef API alanlarına bağla.', icon: GitBranch },
+  { num: 3, label: 'Kısıt Kuralları', shortLabel: 'Kısıt',    hint: 'Hangi kayıtlar aktarılsın? Koşul yoksa tümü gönderilir.', icon: Filter },
+  { num: 4, label: 'Test',            shortLabel: 'Test',     hint: 'Gerçek bir kayıtla dry-run yap, çıktıyı gör.', icon: Eye },
+  { num: 5, label: 'Yayına Al',       shortLabel: 'Yayın',    hint: 'Adı, tetikleyiciyi ve sonrası prosedürü belirle.', icon: Zap },
 ]
 
 /** Boş wizard state — yeni integration */
@@ -59,6 +76,12 @@ const emptyState = () => ({
   // Save sirasinda bu flag TRUE ise targetEndpointId NULL olarak gonderilir; backend zaten
   // null endpoint ile sadece-prosedur olarak calistirir.
   procedureOnlyMode: false,
+  // 2026-05-22 Pre-flight Filter — kayit-basina aktarim kosulu JSON'u (Integration.SourceFilterJson).
+  // Bos/null ise filtre yok, tum kayitlar gecer. WizardStepFilters bu alani yazar/okur.
+  sourceFilterJson: null,
+  // 2026-05-22 Cascade target flag — bu integration baska entegrasyonlar tarafindan cascade
+  // hedefi olarak secilebilir mi? Default TRUE — herkes cascade'lenebilir; bilincli kapatma gerek.
+  allowAsCascadeTarget: true,
 })
 
 /**
@@ -127,9 +150,14 @@ export default function IntegrationWizard({ config }) {
               lookupFiltersJson: m.lookupFiltersJson || null,
               lookupReturnColumn: m.lookupReturnColumn || null,
               lookupParam: m.lookupParam || null,
+              cascadeToIntegrationId: m.cascadeToIntegrationId ?? null,   // 2026-05-22 Cascade
             })),
+            // 2026-05-21: Backend artik JsonStringEnumConverter ile string enum
+            // ("Manual","Cron","OnSave","Event") doner. Frontend tarafindaki tum
+            // karsilastirmalar numeric (0/1/2/3) — burada normalize ediyoruz ki
+            // toggle/edit ekraninda secili durum dogru gorunsun.
             triggers: (it.triggers || []).map(t => ({
-              triggerType: t.triggerType,
+              triggerType: normalizeTriggerType(t.triggerType),
               config: t.config,
               isActive: t.isActive,
             })),
@@ -139,6 +167,10 @@ export default function IntegrationWizard({ config }) {
             postProcedureParamsJson: it.postProcedureParamsJson || null,
             // Faz O — endpoint NULL gelmisse "Sadece Prosedur" modunda kaydedilmis demektir
             procedureOnlyMode:       !it.targetEndpointId,
+            // 2026-05-22 Pre-flight Filter — backend'den geri yüklenir (Integration.SourceFilterJson)
+            sourceFilterJson:        it.sourceFilterJson || null,
+            // 2026-05-22 Cascade — backend default true; null gelirse true varsay
+            allowAsCascadeTarget:    it.allowAsCascadeTarget ?? true,
           })
         } else {
           toast(d.error || 'Entegrasyon yüklenemedi', 'err')
@@ -170,8 +202,9 @@ export default function IntegrationWizard({ config }) {
     switch (step) {
       case 1: return isProcedureOnly || !!state.targetEndpointId  // Hedef Sistem
       case 2: return isProcedureOnly || state.mappings.length > 0 // Alan Eşleme
-      case 3: return true                                          // Test (önizleme zorunlu değil)
-      case 4: return !!state.name && (                             // Yayına Al
+      case 3: return true                                          // Kısıt Kuralları (opsiyonel — boş bırakılabilir)
+      case 4: return true                                          // Test (önizleme zorunlu değil)
+      case 5: return !!state.name && (                             // Yayına Al
         !isProcedureOnly
         || !!state.preProcedureName?.trim()
         || !!state.postProcedureName?.trim()
@@ -188,8 +221,9 @@ export default function IntegrationWizard({ config }) {
         : 'Hedef API endpoint\'i seçin veya "Sadece Prosedür" moduna geçin.'
       case 2: return (state.mappings.length > 0 || isProcedureOnly) ? null
         : 'En az bir alan eşlemesi ekleyin.'
-      case 3: return null
-      case 4:
+      case 3: return null   // Kısıt Kuralları — opsiyonel
+      case 4: return null   // Test — opsiyonel
+      case 5:
         if (!state.name?.trim()) return 'Entegrasyona bir ad verin.'
         if (isProcedureOnly && !state.preProcedureName?.trim() && !state.postProcedureName?.trim())
           return 'Sadece Prosedür modunda en az bir prosedür (Öncesi veya Sonrası) tanımlayın.'
@@ -288,6 +322,10 @@ export default function IntegrationWizard({ config }) {
           preProcedureParamsJson:  state.preProcedureParamsJson || null,
           postProcedureName:       state.postProcedureName || null,
           postProcedureParamsJson: state.postProcedureParamsJson || null,
+          // 2026-05-22 Pre-flight Filter — kaydet (NULL ise filtre yok = tüm kayıtlar geçer)
+          sourceFilterJson:        state.sourceFilterJson || null,
+          // 2026-05-22 Cascade — bu integration cascade hedefi olarak görünür mü
+          allowAsCascadeTarget:    state.allowAsCascadeTarget !== false,
         }),
       })
       const d = await r.json()
@@ -386,8 +424,9 @@ export default function IntegrationWizard({ config }) {
       <div className="iw-body">
         {step === 1 && <WizardStep2Endpoint apiBase={apiBase} state={state} update={update} />}
         {step === 2 && <WizardStep3Mapping  apiBase={apiBase} state={state} update={update} />}
-        {step === 3 && <WizardStep4Preview  apiBase={apiBase} state={state} />}
-        {step === 4 && <WizardStep5Trigger  state={state} update={update} apiBase={apiBase} />}
+        {step === 3 && <WizardStepFilters   apiBase={apiBase} state={state} update={update} />}
+        {step === 4 && <WizardStep4Preview  apiBase={apiBase} state={state} />}
+        {step === 5 && <WizardStep5Trigger  state={state} update={update} apiBase={apiBase} />}
       </div>
 
       {/* Footer — kompakt: solda Vazgec, ortada step yureyleri, sagda navigasyon */}
@@ -442,6 +481,7 @@ export default function IntegrationWizard({ config }) {
 const WIZ_FORM_META = {
   ITEMS:            { label: 'Malzeme Kartları',  icon: 'Box',           color: 'indigo' },
   CONTACTS:         { label: 'Cari Hesaplar',     icon: 'Building2',     color: 'cyan'   },
+  SALES_REPS:       { label: 'Satış Temsilcisi',  icon: 'Users',         color: 'cyan'   },
   SALES_QUOTE_EDIT: { label: 'Satış Teklifi',     icon: 'FileText',      color: 'violet' },
   SALES_ORDER_EDIT: { label: 'Satış Siparişi',    icon: 'ShoppingCart',  color: 'emerald'},
   PRODUCT_TREES:    { label: 'Ürün Ağacı',        icon: 'GitBranch',     color: 'emerald'},
@@ -467,7 +507,7 @@ const ICON_BG = {
   teal:    { bg: 'rgba(20,184,166,.12)',  border: 'rgba(20,184,166,.30)',  icon: '#14b8a6' },
 }
 
-function FormPicker({ forms, value, onChange }) {
+function FormPicker({ forms, value, onChange, locked = false, lockReason = null }) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
   // FormPickerMenu portal'da render edildigi icin wrapRef.contains() menu icini
@@ -488,24 +528,49 @@ function FormPicker({ forms, value, onChange }) {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  const meta = (code) => WIZ_FORM_META[code]
-                     || { label: code, icon: 'FileText', color: 'slate' }
+  // 2026-05-22: Label öncelik sırası — kürateli liste > entity adı > rol adı > kod.
+  // Forms tablosundaki formName "Liste" / "Üst Bilgi" gibi alt-form rolüdür; entity
+  // adı (Satış Siparişi, Cari Hesap…) subModule kolonunda. Bu yüzden subModule önce
+  // gelir, formName en son fallback. Hardcoded WIZ_FORM_META olan core formlar
+  // (CONTACTS, SALES_ORDER_EDIT vb.) zaten en doğru ad burada — onu koru.
+  const meta = (code) => {
+    const apiForm = forms.find(f => f.formCode === code)
+    const base = WIZ_FORM_META[code]
+    if (base) return base   // kürateli kayıt — direkt kullan (label + icon + color)
+    return {
+      label: apiForm?.subModule || apiForm?.formName || code,
+      icon:  'FileText',
+      color: 'slate',
+    }
+  }
   const selMeta = meta(value)
   const selPal  = ICON_BG[selMeta.color] || ICON_BG.slate
+
+  // 2026-05-22: Form değişikliği invasive (mapping, endpoint, filter, cascade hepsi
+  // invalidate olur). Lock edilince button click+dropdown devre dışı, küçük kilit ikonu
+  // ve tooltip ile sebep gösterilir. Lock şartı ContextBar tarafında hesaplanır.
+  const handleClick = () => {
+    if (locked) return   // sessizce ignore — cursor zaten "not-allowed" gösteriyor
+    setOpen(o => !o)
+  }
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', minWidth: 240 }}>
       <button type="button"
-              onClick={() => setOpen(o => !o)}
+              onClick={handleClick}
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                 padding: '5px 10px',
                 border: '1px solid ' + (value ? 'var(--iw-border)' : 'var(--iw-amber-color)'),
                 borderRadius: 6, fontSize: 12, fontWeight: 600,
-                background: 'var(--iw-surface)', color: 'var(--iw-text)',
-                cursor: 'pointer',
+                background: locked ? 'var(--iw-slate-bg)' : 'var(--iw-surface)',
+                color: 'var(--iw-text)',
+                cursor: locked ? 'not-allowed' : 'pointer',
+                opacity: locked ? 0.85 : 1,
               }}
-              title={value ? 'Kaynak form — değiştirmek için tıkla' : 'Önce bir form seç'}>
+              title={locked
+                ? (lockReason || 'Kaynak form kilitli — değiştirmek isterseniz wizard\'ı sıfırlayın.')
+                : (value ? 'Kaynak form — değiştirmek için tıkla' : 'Önce bir form seç')}>
         {value ? (
           <>
             <span style={{
@@ -523,11 +588,15 @@ function FormPicker({ forms, value, onChange }) {
             — Form seç —
           </span>
         )}
-        <ChevronDown size={12} style={{
-          color: 'var(--iw-muted)',
-          transform: open ? 'rotate(180deg)' : 'none',
-          transition: 'transform .15s',
-        }} />
+        {/* Locked durumda chevron kaldirilir — disabled goruntu yeterli (cursor: not-allowed
+            + dim background). Lock sebebi tooltip'te zaten gosteriliyor. */}
+        {!locked && (
+          <ChevronDown size={12} style={{
+            color: 'var(--iw-muted)',
+            transform: open ? 'rotate(180deg)' : 'none',
+            transition: 'transform .15s',
+          }} />
+        )}
       </button>
 
       {open && createPortal(
@@ -642,10 +711,41 @@ function ContextBar({ state, update, apiBase }) {
       fontSize: 12, color: 'var(--iw-muted)',
       whiteSpace: 'nowrap',
     }}>
-      {/* Form picker — Alan Rehberi (ModuleSelector) tarzı custom dropdown */}
+      {/* Form picker — Alan Rehberi (ModuleSelector) tarzı custom dropdown.
+          2026-05-22: Form değişikliği invasive (mapping/endpoint/filter/cascade
+          hepsi invalidate olur). Bu yüzden lock:
+            • Edit mode (state.id > 0)          → mevcut integration, dokunma
+            • Mapping eklenmişse                → değişirse mapping'ler ölü kalır
+            • Endpoint seçilmişse               → form değişirse endpoint uyumsuz
+            • Filter (Kısıt Kuralları) yazılmışsa → field'lar form'a özel
+          Tek serbest hâl: yepyeni wizard'ın ilk adımı. */}
       <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--iw-muted)' }}>Form:</span>
-      <FormPicker forms={forms} value={state.sourceFormCode}
-                  onChange={code => update({ sourceFormCode: code })} />
+      {(() => {
+        const isEdit = state.id > 0
+        const hasMappings = (state.mappings?.length || 0) > 0
+        const hasEndpoint = !!state.targetEndpointId
+        const hasFilter = !!state.sourceFilterJson
+        const locked = !!state.sourceFormCode && (isEdit || hasMappings || hasEndpoint || hasFilter)
+        const lockReason = isEdit
+          ? 'Mevcut entegrasyon — form değiştirilemez. Yeni form için yeni entegrasyon oluşturun.'
+          : hasMappings
+            ? `Form değişirse ${state.mappings.length} mapping geçersiz kalır. Önce mapping\'leri silin.`
+            : hasEndpoint
+              ? 'Form değişirse endpoint uyumsuz kalabilir. Önce endpoint seçimini kaldırın.'
+              : hasFilter
+                ? 'Form değişirse filtre kuralları geçersiz kalır. Önce Kısıt Kuralları\'nı temizleyin.'
+                : null
+        return (
+          <FormPicker forms={forms} value={state.sourceFormCode}
+                      onChange={code => update({ sourceFormCode: code })}
+                      locked={locked}
+                      lockReason={lockReason} />
+        )
+      })()}
+
+      {/* 2026-05-25: "2 Kademe · SALES_ORDER_LINES" chip kullanici talebiyle kaldirildi —
+          alan bilgisi kullanici icin teknik detay, gerek yok. Master-detail durumu zaten
+          Step 3'te source alanlarinda gorulur. */}
 
       {state.sourceFormCode && state.targetEndpointId && !state.procedureOnlyMode && (
         <ArrowRight size={12} style={{ color: 'var(--iw-muted)', flexShrink: 0 }} />

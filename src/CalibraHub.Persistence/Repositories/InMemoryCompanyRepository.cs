@@ -44,4 +44,10 @@ public sealed class InMemoryCompanyRepository : ICompanyRepository
         _dataStore.Companies[company.Id] = company;
         return Task.CompletedTask;
     }
+
+    public Task DeleteAsync(int id, CancellationToken cancellationToken)
+    {
+        _dataStore.Companies.TryRemove(id, out _);
+        return Task.CompletedTask;
+    }
 }

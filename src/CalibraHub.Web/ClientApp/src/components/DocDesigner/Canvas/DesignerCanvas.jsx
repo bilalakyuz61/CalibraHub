@@ -1,13 +1,14 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import BandContainer from './BandContainer'
 import { HRuler, VRuler, RULER_SIZE_PX } from './Ruler'
+import { BAND_ORDER } from '../designerReducer'
 
 export const MM_TO_PX = 96 / 25.4   // ≈ 3.7795
 export const mmToPx = mm => mm * MM_TO_PX
 export const pxToMm = px => px / MM_TO_PX
 
-const BAND_ORDER = ['PageHeader','DocumentHeader','TableHeader','Detail','SubDetailHeader','SubDetail','SubDetailFooter','TotalsBlock','SignatureBlock','PageFooter']
-const bandSort   = b => { const i = BAND_ORDER.indexOf(b.type); return i === -1 ? 99 : i }
+// Bant sirasi designerReducer'dan import edilir (single source of truth).
+const bandSort = b => { const i = BAND_ORDER.indexOf(b.type); return i === -1 ? 99 : i }
 
 const CANVAS_PAD_LEFT = 24   // narrow gutter (band labels now on top of each band)
 const CANVAS_PAD      = 40   // top / right / bottom

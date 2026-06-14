@@ -29,6 +29,7 @@ public sealed class AdminManagementService : IAdminManagementService
     private readonly IIntegratorImportLogRepository _integratorImportLogRepository;
     private readonly ICompanyConnectionRegistry _companyConnectionRegistry;
     private readonly IGrafanaProvisioningService _grafanaProvisioning;
+    private readonly IPermissionGrantRepository _permissionGrantRepository;
 
     public AdminManagementService(
         IIntegratorDocumentClient integratorDocumentClient,
@@ -41,7 +42,8 @@ public sealed class AdminManagementService : IAdminManagementService
         IPasswordHashService passwordHashService,
         IIntegratorImportLogRepository integratorImportLogRepository,
         ICompanyConnectionRegistry companyConnectionRegistry,
-        IGrafanaProvisioningService grafanaProvisioning)
+        IGrafanaProvisioningService grafanaProvisioning,
+        IPermissionGrantRepository permissionGrantRepository)
     {
         _integratorDocumentClient = integratorDocumentClient;
         _integratorSettingsRepository = integratorSettingsRepository;
@@ -54,6 +56,7 @@ public sealed class AdminManagementService : IAdminManagementService
         _integratorImportLogRepository = integratorImportLogRepository;
         _companyConnectionRegistry = companyConnectionRegistry;
         _grafanaProvisioning = grafanaProvisioning;
+        _permissionGrantRepository = permissionGrantRepository;
     }
 
     public async Task<int> SaveCompanyAsync(
@@ -431,7 +434,7 @@ public sealed class AdminManagementService : IAdminManagementService
             oAuth2RefreshToken: request.OAuth2RefreshToken,
             useSsl: request.UseSsl,
             isActive: request.IsActive,
-            createdAt: existingById?.CreatedAt ?? DateTime.Now);
+            createdAt: existingById?.Created ?? DateTime.Now);
 
         if (existingById is null)
         {
@@ -497,7 +500,7 @@ public sealed class AdminManagementService : IAdminManagementService
             username: username,
             password: password,
             isActive: request.IsActive,
-            createdAt: existingById?.CreatedAt ?? DateTime.Now);
+            created: existingById?.Created ?? DateTime.Now);
 
         if (existingById is null)
         {
@@ -740,6 +743,9 @@ public sealed class AdminManagementService : IAdminManagementService
         if (existing is null)
             throw new ArgumentException("Departman bulunamadi.");
 
+        // 2026-06-07: Orphan cleanup — UserPermission'da DepartmentId=id ile bağlı izinleri
+        // önce sil (DB-seviye FK yok, CascadeDelete uygulama tarafında manuel).
+        await _permissionGrantRepository.DeleteByDepartmentAsync(id, cancellationToken);
         await _departmentRepository.DeleteAsync(id, cancellationToken);
     }
 
@@ -1285,7 +1291,7 @@ public sealed class AdminManagementService : IAdminManagementService
             OAuth2ClientId = oAuth2ClientId,
             OAuth2ClientSecret = oAuth2ClientSecret,
             OAuth2RefreshToken = oAuth2RefreshToken,
-            CreatedAt = createdAt
+            Created = createdAt
         };
 
         profile.UpdateTransport(port, useSsl);
@@ -1347,7 +1353,7 @@ public sealed class AdminManagementService : IAdminManagementService
         string username,
         string password,
         bool isActive,
-        DateTime createdAt)
+        DateTime created)
     {
         var settings = new ErpConnectionSettings
         {
@@ -1359,7 +1365,7 @@ public sealed class AdminManagementService : IAdminManagementService
             Branch = branch,
             Username = username,
             Password = password,
-            CreatedAt = createdAt
+            Created = created
         };
 
         if (!isActive)

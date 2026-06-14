@@ -1,5 +1,8 @@
+using CalibraHub.Application.Constants;
+using System.Security.Claims;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Logistics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,19 +28,26 @@ namespace CalibraHub.Web.Controllers;
 /// </summary>
 [Authorize]
 [Route("Logistics/[action]")]
+[CalibraHub.Web.Authorization.PermissionScope(FormCodes.BomEdit)]
 public sealed class BomController : Controller
 {
     private const int BomPageSize = 50;
 
     private readonly ILogisticsConfigurationService _logisticsConfigurationService;
     private readonly IWidgetService _widgetService;
+    private readonly IPriceListService _priceListService;
+    private readonly ICurrencyService _currencyService;
 
     public BomController(
         ILogisticsConfigurationService logisticsConfigurationService,
-        IWidgetService widgetService)
+        IWidgetService widgetService,
+        IPriceListService priceListService,
+        ICurrencyService currencyService)
     {
         _logisticsConfigurationService = logisticsConfigurationService;
         _widgetService = widgetService;
+        _priceListService = priceListService;
+        _currencyService = currencyService;
     }
 
     // ── Board config + helpers ────────────────────────────────────────
@@ -73,26 +83,8 @@ public sealed class BomController : Controller
 
     private async Task<List<object>> BuildMasterWidgetsAsync(CancellationToken ct)
     {
-        var masterWidgets = new List<object>();
         var schema = await _widgetService.GetFormSchemaByCodeAsync("PRODUCT_TREES", ct);
-        if (schema != null)
-        {
-            foreach (var w in schema.Widgets.Where(w => w.IsActive
-                && !string.Equals(w.DataType, "group", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(w.DataType, "grid",  StringComparison.OrdinalIgnoreCase)))
-            {
-                masterWidgets.Add(new
-                {
-                    id           = w.WidgetCode,
-                    dbId         = w.Id,
-                    isPlainField = w.IsPlainField,
-                    type         = "data",
-                    dataType     = w.DataType.ToLowerInvariant(),
-                    label        = w.Label,
-                });
-            }
-        }
-        return masterWidgets;
+        return SmartBoardFilterHelpers.BuildAdminFormWidgets(schema);
     }
 
     private static List<object> BuildEntities(IEnumerable<BOMDto> boms) =>
@@ -193,7 +185,9 @@ public sealed class BomController : Controller
             VisibleColumns = [],
             BoardConfig = boardConfig,
         };
-        return View(viewModel);
+        // Explicit view path — split sonrasi view'lar /Views/Logistics/ altinda kaldi,
+        // default resolver /Views/Bom/ arar ve bulamaz (rapor §2.3 split-fixup).
+        return View("~/Views/Logistics/BOMs.cshtml", viewModel);
     }
 
     [HttpGet]
@@ -202,7 +196,7 @@ public sealed class BomController : Controller
         ViewData["BOMEditId"] = id ?? 0;
         ViewBag.Title = "Ürün Ağacı / Reçete Düzenle";
         ViewBag.BOMId = id is > 0 ? id.Value.ToString() : string.Empty;
-        return View();
+        return View("~/Views/Logistics/BOMEdit.cshtml");
     }
 
     [HttpGet]
@@ -234,7 +228,7 @@ public sealed class BomController : Controller
     {
         try
         {
-            await _logisticsConfigurationService.DeleteBOMAsync(id, ct);
+            await _logisticsConfigurationService.DeleteBOMAsync(id, CurrentUserId(), ct);
             return Json(new { success = true });
         }
         catch (ArgumentException ex)
@@ -249,15 +243,211 @@ public sealed class BomController : Controller
         if (request is null)
             return BadRequest(new { success = false, message = "Geçersiz istek." });
 
+        // FluentValidation auto-validation regular Controller'larda ModelState'i set
+        // eder ama [ApiController] olmadigi icin otomatik 400 dondurmez. Burada
+        // manuel kontrol — frontend'in bekledigi `{success, message}` formati korunur
+        // (rapor 2026-05-17 madde 3.11). Birden fazla validation hatasi varsa "•"
+        // satir basi ile birlestirilir.
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Distinct()
+                .ToArray();
+            var msg = errors.Length switch
+            {
+                0 => "Form bilgilerinde hata var.",
+                1 => errors[0],
+                _ => "Lutfen asagidaki hatalari duzeltin:\n• " + string.Join("\n• ", errors)
+            };
+            return BadRequest(new { success = false, message = msg });
+        }
+
         try
         {
-            var id = await _logisticsConfigurationService.SaveBOMAsync(request, ct);
+            var id = await _logisticsConfigurationService.SaveBOMAsync(request, CurrentUserId(), ct);
             return Ok(new { success = true, id });
         }
         catch (ArgumentException ex)
         {
             return BadRequest(new { success = false, message = ex.Message });
         }
+    }
+
+    private int? CurrentUserId()
+    {
+        var raw = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(raw, out var id) ? id : null;
+    }
+
+    /// <summary>
+    /// Multi-level BOM patlatma (rapor 2026-05-17 madde 3.3).
+    /// GET /Logistics/ExplodeBOM?itemId=5&amp;quantity=100&amp;configId=
+    /// Donus: BOMExplodeResultDto (parent display + duzlestirilmis bilesen listesi
+    /// + depth + truncated bayragi). Recete yoksa 404.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> ExplodeBOM(int itemId, decimal quantity, int? configId, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _logisticsConfigurationService.ExplodeBOMAsync(itemId, quantity, configId, ct);
+            if (result is null)
+                return NotFound(new { success = false, message = $"Mamul bulunamadi veya aktif degil: ItemId={itemId}" });
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Where-used (ters arama): bir bileseni dogrudan kullanan aktif BOM'lar.
+    /// GET /Logistics/WhereUsed?itemId=42
+    /// 1-seviye (transitive degil). Bos liste = bilesen hicbir recetede gecmiyor.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> WhereUsed(int itemId, CancellationToken ct)
+    {
+        try
+        {
+            var rows = await _logisticsConfigurationService.GetWhereUsedAsync(itemId, ct);
+            return Ok(rows);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Multi-level BOM standart maliyet hesabi (rapor 2026-05-17 madde 3.8).
+    /// ExplodeBOM + PriceListService bilesimi: agaci patlatir, leaf satirlari
+    /// secilen fiyat grubundan fiyatlandirir, toplam maliyet doner.
+    ///
+    /// LogisticsController.GetMaterialCost'tan farki: bu 1-seviye degil multi-level.
+    /// Ara mamuller satirlarda gorunur (depth + isLeaf=false) ama TotalCost'a
+    /// katkida bulunmaz — alt-recetesindeki leaf'ler zaten sayilmistir.
+    ///
+    /// GET /Logistics/CalculateBOMCost?itemId=5&amp;quantity=100&amp;priceGroupId=1
+    ///                                 &amp;currencyId=1&amp;priceType=m&amp;validOn=2026-05-18
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> CalculateBOMCost(
+        int itemId,
+        decimal quantity,
+        int priceGroupId,
+        int currencyId,
+        string? priceType = null,
+        int? configId = null,
+        string? validOn = null,
+        CancellationToken ct = default)
+    {
+        if (priceGroupId <= 0 || currencyId <= 0)
+            return BadRequest(new { success = false, message = "Fiyat grubu ve para birimi zorunlu." });
+
+        DateTime priceDate = DateTime.UtcNow.Date;
+        if (!string.IsNullOrWhiteSpace(validOn) && DateTime.TryParse(validOn,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeLocal, out var parsedDate))
+        {
+            priceDate = parsedDate.Date;
+        }
+
+        // 1) Multi-level patlatma
+        BOMExplodeResultDto? explosion;
+        try
+        {
+            explosion = await _logisticsConfigurationService.ExplodeBOMAsync(itemId, quantity, configId, ct);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        if (explosion is null)
+            return NotFound(new { success = false, message = $"Mamul bulunamadi veya aktif degil: ItemId={itemId}" });
+
+        // 2) Leaf satirlarini topla — sadece bunlar fiyatlandirilir
+        var leaves = explosion.Lines.Where(l => l.IsLeaf).ToList();
+        var keys = leaves
+            .Select(l => new PriceEntryKey(l.ItemId, l.ConfigId))
+            .ToList();
+
+        // 3) PriceListService toplu fiyat (PriceType: b=Buy / s=Sell / m=Maliyet; default m)
+        var pType = string.IsNullOrWhiteSpace(priceType) ? "m" : priceType.Trim();
+        var prices = keys.Count == 0
+            ? Array.Empty<ExistingPriceRow>()
+            : (await _priceListService.GetExistingPricesAsync(
+                new GetExistingPricesRequest(priceGroupId, currencyId, pType, priceDate, keys),
+                ct)).ToArray();
+        var priceByKey = prices.ToDictionary(p => (p.ItemId, p.ConfigId), p => p.Price);
+
+        // 4) Currency display
+        var currencies = await _currencyService.GetAllAsync(ct);
+        var currency = currencies.FirstOrDefault(c => c.Id == currencyId);
+
+        // 5) Cost line listesi — explosion'daki TUM satirlar (intermediate dahil),
+        //    ama LineCost yalnizca leaf icin > 0. Frontend UI'da intermediate'leri
+        //    "ara mamul" rozeti ile gosterip toplama katmadigini belirtir.
+        decimal totalCost = 0m;
+        int missingPriceCount = 0;
+        var costLines = explosion.Lines.Select(l =>
+        {
+            if (!l.IsLeaf)
+            {
+                return new BOMCostLineDto(
+                    ItemId:        l.ItemId,
+                    ItemCode:      l.ItemCode,
+                    ItemName:      l.ItemName,
+                    ConfigId:      l.ConfigId,
+                    ConfigCode:    l.ConfigCode,
+                    TotalQuantity: l.TotalQuantity,
+                    Depth:         l.Depth,
+                    IsLeaf:        false,
+                    UnitPrice:     0m,
+                    LineCost:      0m,
+                    HasPrice:      false);
+            }
+            var unitPrice = priceByKey.TryGetValue((l.ItemId, l.ConfigId), out var p) ? p : 0m;
+            var lineCost  = Math.Round(l.TotalQuantity * unitPrice, 2, MidpointRounding.AwayFromZero);
+            totalCost += lineCost;
+            var hasPrice = unitPrice > 0m;
+            if (!hasPrice) missingPriceCount++;
+            return new BOMCostLineDto(
+                ItemId:        l.ItemId,
+                ItemCode:      l.ItemCode,
+                ItemName:      l.ItemName,
+                ConfigId:      l.ConfigId,
+                ConfigCode:    l.ConfigCode,
+                TotalQuantity: l.TotalQuantity,
+                Depth:         l.Depth,
+                IsLeaf:        true,
+                UnitPrice:     unitPrice,
+                LineCost:      lineCost,
+                HasPrice:      hasPrice);
+        }).ToList();
+
+        return Ok(new BOMCostResultDto(
+            ParentItemId:      explosion.ParentItemId,
+            ParentItemCode:    explosion.ParentItemCode,
+            ParentItemName:    explosion.ParentItemName,
+            ConfigId:          explosion.ConfigId,
+            ConfigCode:        explosion.ConfigCode,
+            Quantity:          explosion.Quantity,
+            PriceGroupId:      priceGroupId,
+            CurrencyId:        currencyId,
+            CurrencyCode:      currency?.Code,
+            CurrencySymbol:    currency?.Symbol,
+            PriceType:         pType,
+            ValidOn:           priceDate,
+            TotalCost:         totalCost,
+            MissingPriceCount: missingPriceCount,
+            MaxDepth:          explosion.MaxDepth,
+            Truncated:         explosion.Truncated,
+            Lines:             costLines));
     }
 
     private static object BuildBomResponse(BOMWithNames tree) => new
@@ -274,6 +464,11 @@ public sealed class BomController : Controller
         imageMimeType = tree.ImageMimeType,
         imageFitMode  = tree.ImageFitMode ?? "square",
         imageRotation = tree.ImageRotation,
+        // 2026-05-20: header-level Routing FK (opsiyonel). Frontend BOMEdit
+        // sayfasinda Rota dropdown'i bu degerle one-doldurulur.
+        routingId     = tree.RoutingId,
+        routingCode   = tree.RoutingCode,
+        routingName   = tree.RoutingName,
         lines         = tree.Lines.Select(l => new
         {
             itemId                = l.ItemId,

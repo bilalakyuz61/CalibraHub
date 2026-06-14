@@ -22,19 +22,19 @@ public sealed class SmtpProfile : Entity
     public int Port { get; private set; } = 587;
     public bool UseSsl { get; private set; } = true;
     public bool IsActive { get; private set; } = true;
-    public DateTime CreatedAt { get; init; } = DateTime.Now;
-    public DateTime UpdatedAt { get; private set; } = DateTime.Now;
+    public DateTime Created { get; init; } = DateTime.Now;
+    public DateTime Updated { get; private set; } = DateTime.Now;
 
     public void UpdateTransport(int port, bool useSsl)
     {
         Port = port;
         UseSsl = useSsl;
-        UpdatedAt = DateTime.Now;
+        Updated = DateTime.Now;
     }
 
     public void Deactivate()
     {
         IsActive = false;
-        UpdatedAt = DateTime.Now;
+        Updated = DateTime.Now;
     }
 }

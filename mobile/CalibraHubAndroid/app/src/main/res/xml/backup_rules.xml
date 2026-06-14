@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- allowBackup=false zaten manifest'te ayarlı; dosya yine de Android 12+ için
+     boş bir rules dosyası bekleyebilir, hata vermesin diye yazıyoruz. -->
+<full-backup-content>
+    <!-- Hiçbir şey backup'a dahil değil -->
+</full-backup-content>

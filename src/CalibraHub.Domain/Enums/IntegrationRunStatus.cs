@@ -16,4 +16,11 @@ public enum IntegrationRunStatus
 
     /// <summary>Hata aldi, retry kuyrugunda. RetryAttempt > 0 ile birlikte gorulur.</summary>
     Retrying = 3,
+
+    /// <summary>
+    /// 2026-05-22: Cascade'i olan parent run icin "in progress" durum. Pre-insert
+    /// edilir (cascade children ParentRunId set etmek icin), tum cascade tamamlanip
+    /// HTTP gonderilince UPDATE ile Success/Failed'a tasinir.
+    /// </summary>
+    Pending = 4,
 }

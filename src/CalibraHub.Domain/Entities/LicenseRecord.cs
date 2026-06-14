@@ -29,6 +29,6 @@ public sealed class LicenseRecord
     public string? LastError { get; set; }
     public DateTime? LastValidatedAt { get; set; }
 
-    public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime Created { get; init; } = DateTime.UtcNow;
+    public DateTime Updated { get; set; } = DateTime.UtcNow;
 }

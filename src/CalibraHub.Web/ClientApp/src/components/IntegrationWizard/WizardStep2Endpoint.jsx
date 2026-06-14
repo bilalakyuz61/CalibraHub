@@ -272,7 +272,6 @@ function JsonTree({ json, fieldDocs }) {
 
 function JsonNode({ keyName, value, depth, isLast = true, parentIsArray = false, path = '', fieldDocs = {} }) {
   const [open, setOpen] = useState(true)   // default açık
-  const doc = path && fieldDocs ? fieldDocs[path] : null
 
   // Primitive (string/number/bool/null) → tek satır
   if (value === null || typeof value !== 'object') {
@@ -291,7 +290,6 @@ function JsonNode({ keyName, value, depth, isLast = true, parentIsArray = false,
         )}
         <PrimitiveValue v={value} />
         {!isLast && <span style={{ color: 'var(--iw-muted)' }}>,</span>}
-        {doc && <FieldDocChip doc={doc} />}
       </div>
     )
   }
@@ -370,86 +368,3 @@ function PrimitiveValue({ v }) {
   return <span>{String(v)}</span>
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// FieldDocChip — leaf yanına eklenen (i) ikonu. Hover/focus → tooltip popover
-// ile alan açıklaması + allowed values + örnek + not.
-// ────────────────────────────────────────────────────────────────────────────
-function FieldDocChip({ doc }) {
-  const [open, setOpen] = useState(false)
-  const [pinned, setPinned] = useState(false)   // click ile sabitle
-  const wrapRef = useRef(null)
-
-  // Click-outside ile pinned modu kapat
-  useEffect(() => {
-    if (!pinned) return
-    function onDoc(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setPinned(false); setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [pinned])
-
-  const show = open || pinned
-
-  return (
-    <span ref={wrapRef}
-          style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: 4 }}
-          onMouseEnter={() => setOpen(true)}
-          onMouseLeave={() => !pinned && setOpen(false)}>
-      <span onClick={(e) => { e.stopPropagation(); setPinned(p => !p); setOpen(true) }}
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 18, height: 18, borderRadius: '50%',
-              background: 'var(--iw-indigo-color)',
-              color: '#fff',
-              boxShadow: pinned ? '0 0 0 2px var(--iw-indigo-color), 0 0 0 4px rgba(99,102,241,0.25)' : '0 1px 2px rgba(0,0,0,0.3)',
-              cursor: 'pointer',
-            }}
-            title="Alan açıklaması">
-        <Info size={12} strokeWidth={2.4} />
-      </span>
-      {show && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 50,
-          width: 320, padding: '10px 12px', borderRadius: 8,
-          background: 'var(--iw-surface)',
-          border: '1px solid var(--iw-indigo-color)',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-          fontSize: 12, color: 'var(--iw-text)', lineHeight: 1.5,
-          whiteSpace: 'normal',
-        }}>
-          <div style={{ marginBottom: 6 }}>{doc.description}</div>
-          {Array.isArray(doc.allowedValues) && doc.allowedValues.length > 0 && (
-            <div style={{ marginTop: 8, borderTop: '1px dashed var(--iw-border)', paddingTop: 6 }}>
-              <div style={{ color: 'var(--iw-muted)', fontSize: 11, marginBottom: 4 }}>İzin verilen değerler:</div>
-              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
-                <tbody>
-                  {doc.allowedValues.map(av => (
-                    <tr key={av.value}>
-                      <td style={{ padding: '2px 6px 2px 0', color: 'var(--iw-indigo-color)', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', whiteSpace: 'nowrap' }}>{av.value}</td>
-                      <td style={{ padding: '2px 0', color: 'var(--iw-text)' }}>{av.label}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {doc.example && (
-            <div style={{ marginTop: 8, borderTop: '1px dashed var(--iw-border)', paddingTop: 6, fontSize: 11 }}>
-              <span style={{ color: 'var(--iw-muted)' }}>Örnek: </span>
-              <code style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', color: 'var(--iw-emerald-color)' }}>{doc.example}</code>
-            </div>
-          )}
-          {doc.notes && (
-            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--iw-muted)', fontStyle: 'italic' }}>
-              {doc.notes}
-            </div>
-          )}
-        </div>
-      )}
-    </span>
-  )
-}

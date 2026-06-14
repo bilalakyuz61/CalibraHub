@@ -17,6 +17,7 @@ const BAND_TINT = {
   TotalsBlock:       'rgba(236,72,153,0.12)',
   SignatureBlock:    'rgba(59,130,246,0.11)',
   PageFooter:        'rgba(107,114,128,0.12)',
+  mail_body:         'rgba(99,102,241,0.18)',
 }
 const BAND_BORDER = {
   PageHeader:        'rgba(99,102,241,0.55)',
@@ -29,6 +30,7 @@ const BAND_BORDER = {
   TotalsBlock:       'rgba(236,72,153,0.55)',
   SignatureBlock:    'rgba(59,130,246,0.50)',
   PageFooter:        'rgba(107,114,128,0.55)',
+  mail_body:         'rgba(99,102,241,0.65)',
 }
 const BAND_SOLID = {
   PageHeader:        '#6366f1',
@@ -41,6 +43,7 @@ const BAND_SOLID = {
   TotalsBlock:       '#ec4899',
   SignatureBlock:    '#3b82f6',
   PageFooter:        '#6b7280',
+  mail_body:         '#6366f1',
 }
 const BAND_LABELS = {
   PageHeader:        'Sayfa Başlığı',
@@ -53,6 +56,7 @@ const BAND_LABELS = {
   TotalsBlock:       'Toplam Bloku',
   SignatureBlock:    'İmza Bloku',
   PageFooter:        'Sayfa Altı',
+  mail_body:         'Mail Gövdesi (gönderim sırasında doldurulacak)',
 }
 
 export default function BandContainer({ band, innerW, zoom, selectedElementId, selectedElementIds, selectedBandId, dispatch, crossBandXTargets = [] }) {
@@ -84,8 +88,9 @@ export default function BandContainer({ band, innerW, zoom, selectedElementId, s
 
   const handleDrop = e => {
     e.preventDefault()
-    const kind    = e.dataTransfer.getData('element-kind')
-    const rawBind = e.dataTransfer.getData('element-binding')
+    const kind       = e.dataTransfer.getData('element-kind')
+    const rawBind    = e.dataTransfer.getData('element-binding')
+    const rawSnippet = e.dataTransfer.getData('element-snippet')
     if (!kind) return
     const rect     = e.currentTarget.getBoundingClientRect()
     const stageTop = e.currentTarget.querySelector('canvas')?.getBoundingClientRect().top ?? rect.top
@@ -93,6 +98,18 @@ export default function BandContainer({ band, innerW, zoom, selectedElementId, s
     const yPx = (e.clientY - stageTop)  / zoom
     const binding = rawBind ? JSON.parse(rawBind) : null
     const el = makeDefaultElement(kind, pxToMm(xPx), pxToMm(yPx), binding)
+
+    // Hazir snippet payload'i: text + style override + boyut override.
+    // ElementPalette "Hazir Sablonlar" section'undan gelir (Sayin, Tarih, vb.).
+    if (rawSnippet) {
+      try {
+        const snip = JSON.parse(rawSnippet)
+        if (snip.text != null) el.text = snip.text
+        if (snip.style && typeof snip.style === 'object') el.style = { ...el.style, ...snip.style }
+        if (snip.w) el.w = snip.w
+        if (snip.h) el.h = snip.h
+      } catch { /* malformed snippet payload — Label default'la birak */ }
+    }
     dispatch({ type: 'ADD_ELEMENT', bandId: band.id, element: el })
   }
 
@@ -143,8 +160,21 @@ export default function BandContainer({ band, innerW, zoom, selectedElementId, s
           outlineOffset: -1,
           boxSizing: 'border-box',
           lineHeight: 0,
+          position: 'relative',
         }}
       >
+        {/* mail_body bandi placeholder — element olmaz, runtime mail govdesi ile doldurulur */}
+        {band.type === 'mail_body' && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, color: '#6366f1', fontStyle: 'italic',
+            pointerEvents: 'none', letterSpacing: 0.3, textAlign: 'center', padding: '0 20px',
+            lineHeight: 1.5,
+          }}>
+            ✉ Mail gövdesi (gönderim sırasında doldurulacak)
+          </div>
+        )}
         <Stage
           width={innerW * zoom}
           height={bandCssH}

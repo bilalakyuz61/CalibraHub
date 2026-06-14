@@ -18,11 +18,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, XCircle, Loader2, Search, X, Trash2, Plus } from 'lucide-react'
-import ModuleSelector from './ModuleSelector'
+import { resolveIcon, resolveColor } from '../CalibraSmartBoard/DynamicWidgetFactory'
 import WidgetBuilderForm from './WidgetBuilderForm'
 import WidgetRegistryList from './WidgetRegistryList'
 import AdminMiniModal from './AdminMiniModal'
 import GroupModal from './GroupModal'
+import { buildEntitiesFromForms, findEntityByFormCodeInForms, getDefaultFormCode } from './entityRegistry'
 import {
   listForms as listFormsApi,
   getSchema as getSchemaApi,
@@ -48,6 +49,11 @@ export default function AdminWidgetRegistryPanel(props) {
   var [forms, setForms]                 = useState([])      // whitelist form katalogu
   var [currentFormId, setCurrentFormId] = useState(null)
   var [currentFormCode, setCurrentFormCode] = useState(initialFormCode)
+  // Aktif entity — variant secimi (Ust Bilgi / Kalem Bilgisi) icin. formCode'a
+  // bagli olarak findEntityByFormCodeInForms ile turetilir (forms state'ten, DB-driven).
+  // Variant'siz entity'lerde sadece dropdown gosterimi icin kullanilir; segmented control gizlenir.
+  // İlk yükleme sırasında forms henüz boş, boot() sonrası set edilir.
+  var [currentEntity, setCurrentEntity] = useState(null)
   var [widgets, setWidgets]             = useState([])      // tum widget'lar (group + field karma)
   var [parentFormWidgets, setParentFormWidgets] = useState([])  // ust form widget'lari (rule/formul icin)
   // Form sabit alanlari — INFORMATION_SCHEMA'dan kesfedilen DB tablo kolonlari.
@@ -62,6 +68,22 @@ export default function AdminWidgetRegistryPanel(props) {
   var [searchQuery, setSearchQuery]     = useState('')
   var [pendingDelete, setPendingDelete] = useState(null)   // { id, label } — silme onay modalı
   var [groupModalOpen, setGroupModalOpen] = useState(false)
+
+  // Sol sidebar arama
+  var [sidebarSearch, setSidebarSearch] = useState('')
+
+  // Tema tespiti — sidebar + sağ panel header renk hesaplamaları için
+  var [isLight, setIsLight] = useState(function() {
+    if (typeof document === 'undefined') return false
+    return document.body.classList.contains('app-theme-light')
+  })
+  useEffect(function() {
+    var themeObs = new MutationObserver(function() {
+      setIsLight(document.body.classList.contains('app-theme-light'))
+    })
+    themeObs.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    return function() { themeObs.disconnect() }
+  }, [])
 
   function showToast(type, message) {
     setToast({ type: type, message: message })
@@ -84,7 +106,7 @@ export default function AdminWidgetRegistryPanel(props) {
           setLoadingSchema(false)
           return
         }
-        await loadSchemaFor(startForm.formCode, cancelled)
+        await loadSchemaFor(startForm.formCode, cancelled, formList)
       } catch (e) {
         if (!cancelled) {
           showToast('error', 'Formlar yuklenemedi: ' + e.message)
@@ -97,7 +119,12 @@ export default function AdminWidgetRegistryPanel(props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function loadSchemaFor(formCode, cancelledFlag) {
+  // formList: forms state'i — entity lookup için geçirilir. Belirtilmezse
+  // forms state'ini doğrudan okuyamayız (closure stale olabilir), bu yüzden
+  // boot() ilk çağrıda formList'i argüman olarak geçer; sonraki çağrılarda
+  // (kullanıcı form değiştirince) forms state günceli olduğu için 2. parametre
+  // olarak yeniden geçilir.
+  async function loadSchemaFor(formCode, cancelledFlag, formList) {
     setLoadingSchema(true)
     try {
       var schema = await getSchemaApi(formCode)
@@ -105,9 +132,10 @@ export default function AdminWidgetRegistryPanel(props) {
       setCurrentFormId(schema.formId)
       // Kullanicinin sectigi formCode'u state'e yazariz; schema response'undan
       // gelen alan farkli case/null olursa form beklenmedik sekilde degismesin.
-      // Boylece widget kaydi sonrasinda kullanici ayni ekranda kalir (kayit
-      // yapilinca ITEMS'a donme hatasini engeller).
-      setCurrentFormCode(formCode || schema.formCode)
+      var effectiveFormCode = formCode || schema.formCode
+      setCurrentFormCode(effectiveFormCode)
+      // DB-driven entity lookup: formList argümanı varsa kullan, yoksa forms state günceli
+      setCurrentEntity(findEntityByFormCodeInForms(formList || forms, effectiveFormCode))
       setWidgets(Array.isArray(schema.widgets) ? schema.widgets : [])
       setEditingField(null)
 
@@ -190,9 +218,9 @@ export default function AdminWidgetRegistryPanel(props) {
   /* ── Form (modul) degistirme — page reload YOK ── */
   var handleFormChange = useCallback(function(newFormCode) {
     if (!newFormCode || newFormCode === currentFormCode) return
-    loadSchemaFor(newFormCode, false)
+    loadSchemaFor(newFormCode, false, forms)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFormCode])
+  }, [currentFormCode, forms])
 
   /* ── Submit (create / update widget) ────────── */
   var handleSubmit = useCallback(async function(payload) {
@@ -221,6 +249,7 @@ export default function AdminWidgetRegistryPanel(props) {
         isActive: payload.isActive !== false,
         isPlainField: payload.isPlainField || false,
         isRequired: payload.isRequired === true,
+        isPermissionControlled: payload.isPermissionControlled === true,
         rules: payload.rules || null,     // Faz G — kural & formul JSON objesi
         // Form uzerinde kaplayacagi 24-col grid span degeri (1-24). Runtime
         // renderer CSS grid-column span'ine cevirir.
@@ -290,6 +319,7 @@ export default function AdminWidgetRegistryPanel(props) {
         isActive: nextActive,
         isPlainField: widget.isPlainField === true,
         isRequired: widget.isRequired === true,
+        isPermissionControlled: widget.isPermissionControlled === true,
         rules: widget.rules || null,     // Faz G — mevcut kurallari koru (toggle sadece aktif/pasif)
       })
       if (!result.success) {
@@ -403,6 +433,7 @@ export default function AdminWidgetRegistryPanel(props) {
         isActive: widget.isActive !== false,
         isPlainField: nextPlain,
         isRequired: widget.isRequired === true,
+        isPermissionControlled: widget.isPermissionControlled === true,
         rules: widget.rules || null,
       })
       if (!result.success) {
@@ -480,6 +511,7 @@ export default function AdminWidgetRegistryPanel(props) {
         rules: raw.rules || null,
         isPlainField: !!raw.isPlainField,
         isRequired: !!raw.isRequired,
+        isPermissionControlled: !!raw.isPermissionControlled,
         minLength: raw.minLength != null ? raw.minLength : null,
         expectedLength: raw.expectedLength != null ? raw.expectedLength : null,
         minValue: raw.minValue != null ? raw.minValue : null,
@@ -567,102 +599,351 @@ export default function AdminWidgetRegistryPanel(props) {
     .filter(function(w) { return String(w.dataType || '').toLowerCase() !== 'group' })
 
   // ── Forms → ModuleSelector props
+  // 2026-06-02: subModule alanini da gecirelim — ModuleSelector "SubModule —
+  // FormName" composite label uretir, boylece dropdown'da "Düzenleme" / "Liste"
+  // gibi anlamsiz tek-kelime etiketler yerine "İhtiyaç Kaydı — Üst Bilgi"
+  // gibi okunaklı baslıklar gosterilir. Ayrıca "_NEW" variant'ları (sadece
+  // yaratim ekrani; widget tanimi yoktur) ModuleSelector tarafinda filtrelenir.
   var moduleSelectorOptions = forms.map(function(f) {
     return {
       value: f.formCode,
       label: f.formName,
+      subModule: f.subModule || null,
+      module: f.module || null,
+      icon: f.icon || null,
+      color: f.iconColor || null,
       selected: f.formCode === currentFormCode,
     }
   })
 
+  // ── Sol sidebar için entity gruplama ──────────────────────────────────────
+  // ModuleSelector ile aynı mantık — forms state'ten entity listesi türet,
+  // ardından module alanına göre bölümlere ayır.
+  var sidebarFormLike = moduleSelectorOptions.map(function(opt) {
+    return {
+      formCode: opt.value,
+      formName: opt.label,
+      subModule: opt.subModule || null,
+      module: opt.module || null,
+      icon: opt.icon || null,
+      iconColor: opt.color || null,
+    }
+  })
+  var sidebarEntities = buildEntitiesFromForms(sidebarFormLike)
+  var sidebarEntityModuleMap = {}
+  sidebarFormLike.forEach(function(f) {
+    var subModKey = f.subModule ? String(f.subModule).trim() : f.formCode
+    if (!sidebarEntityModuleMap[subModKey]) sidebarEntityModuleMap[subModKey] = f.module || 'Diğer'
+    if (f.formCode && !sidebarEntityModuleMap[f.formCode]) sidebarEntityModuleMap[f.formCode] = f.module || 'Diğer'
+  })
+  var sidebarModuleOrder = []
+  var sidebarModuleGroups = {}
+  sidebarEntities.forEach(function(entity) {
+    var mod = sidebarEntityModuleMap[entity.key] || 'Diğer'
+    if (!sidebarModuleGroups[mod]) { sidebarModuleGroups[mod] = []; sidebarModuleOrder.push(mod) }
+    sidebarModuleGroups[mod].push(entity)
+  })
+  var sidebarSections = sidebarModuleOrder.map(function(m) { return { moduleName: m, entities: sidebarModuleGroups[m] } })
+
+  // Sidebar arama filtresi — boşsa tüm bölümler, doluysa label'a göre filtrele
+  var filteredSidebarSections = sidebarSearch.trim()
+    ? sidebarSections.map(function(section) {
+        var q = sidebarSearch.trim().toLowerCase()
+        var filtered = section.entities.filter(function(entity) {
+          return entity.label.toLowerCase().indexOf(q) !== -1
+        })
+        return filtered.length > 0 ? { moduleName: section.moduleName, entities: filtered } : null
+      }).filter(Boolean)
+    : sidebarSections
+  // ─────────────────────────────────────────────────────────────────────────
+
   return (
-    <div className="h-full flex flex-col bg-[#f8fafc] dark:bg-[#0a0d17] overflow-hidden rounded-[inherit]">
+    <div
+      className="h-full flex flex-row bg-[#f8fafc] dark:bg-[#0a0d17] overflow-hidden rounded-[inherit]"
+      style={{ colorScheme: isLight ? 'light' : 'dark' }}
+    >
 
-      {/* ── Modul Selector (whitelist formlari) ──────────────────── */}
-      <ModuleSelector
-        options={moduleSelectorOptions}
-        selectedCode={currentFormCode}
-        onChange={handleFormChange}
-        trailing={
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 flex-1 px-3 py-2 rounded-xl bg-white/60 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08]">
-              <Search size={14} className="text-slate-400 dark:text-white/30 flex-shrink-0" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={function(e) { setSearchQuery(e.target.value) }}
-                placeholder="Widget ara…"
-                className="flex-1 bg-transparent text-xs text-slate-800 dark:text-white/85 placeholder:text-slate-400 dark:placeholder:text-white/25 focus:outline-none"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={function() { setSearchQuery('') }}
-                  className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:text-white/45 dark:hover:text-white/70 transition-colors"
-                  title="Aramayı temizle"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={function() { setGroupModalOpen(true) }}
-              disabled={!currentFormId}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 dark:bg-indigo-500/15 dark:hover:bg-indigo-500/25 border border-indigo-400/30 dark:border-indigo-400/35 text-[11px] font-semibold text-indigo-600 dark:text-indigo-300 transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Yeni grup tanımla"
-            >
-              <Plus size={13} strokeWidth={2.4} />
-              Yeni Grup
-            </button>
+      {/* ── Sol Sidebar — form listesi, modül bazlı gruplu ──────────────── */}
+      <div
+        style={{
+          width: '210px',
+          flexShrink: 0,
+          borderRight: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.06)',
+          overflowY: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          background: isLight ? 'rgba(241,245,249,0.85)' : 'rgba(255,255,255,0.015)',
+        }}
+      >
+        {/* Sidebar arama kutusu — sabit, scroll dışı */}
+        <div style={{
+          padding: '8px 10px',
+          borderBottom: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.06)',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 8px',
+            borderRadius: '7px',
+            background: isLight ? '#ffffff' : 'rgba(255,255,255,0.06)',
+            border: isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.10)',
+          }}>
+            <Search size={11} strokeWidth={2} style={{ color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
+            <input
+              type="text"
+              value={sidebarSearch}
+              onChange={function(e) { setSidebarSearch(e.target.value) }}
+              placeholder="Form ara…"
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                fontSize: '11.5px',
+                color: isLight ? '#334155' : 'rgba(255,255,255,0.85)',
+                minWidth: 0,
+              }}
+            />
+            {sidebarSearch && (
+              <button
+                type="button"
+                onClick={function() { setSidebarSearch('') }}
+                style={{
+                  display: 'flex', alignItems: 'center',
+                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                  color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.3)', flexShrink: 0,
+                }}
+              >
+                <X size={11} />
+              </button>
+            )}
           </div>
-        }
-      />
+        </div>
 
-      {/* ── Body (2 kolon layout) ───────────── */}
-      <div className="flex-1 overflow-hidden min-h-0 px-5 py-4">
-        {loadingSchema ? (
-          <div className="h-full flex flex-col items-center justify-center gap-3">
-            <Loader2 size={28} className="text-indigo-500 animate-spin" />
-            <span className="text-[11px] text-slate-500 dark:text-white/40">Yukleniyor...</span>
-          </div>
-        ) : (
-          <div className="h-full grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-4 min-h-0">
-            {/* Sol kolon: Form */}
-            <div className="overflow-y-auto min-h-0 pr-1">
-              <WidgetBuilderForm
-                editingField={editingField}
-                onSubmit={handleSubmit}
-                onCancel={handleCancelEdit}
-                saving={savingGlobal}
-                groups={derivedGroups}
-                existingFields={derivedFields}
-                parentFormWidgets={parentFormWidgets}
-                formStaticFields={formStaticFields}
-                activeLayer={null}
-                activeLayerLabel={null}
-              />
-            </div>
-
-            {/* Sag kolon: Liste */}
-            <div className="h-full min-h-0">
-              <WidgetRegistryList
-                fields={derivedFields}
-                groups={derivedGroups}
-                onEdit={handleEdit}
-                onToggle={handleToggle}
-                onDelete={handleDelete}
-                onPlainFieldToggle={handlePlainFieldToggle}
-                onListableToggle={handleListableToggle}
-                onReorder={handleReorder}
-                onGroupReorder={handleGroupReorder}
-                editingId={editingId}
-                savingId={savingId}
-                searchQuery={searchQuery}
-              />
-            </div>
+        {/* Kaydırılabilir form listesi */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {filteredSidebarSections.length === 0 && (
+          <div style={{
+            padding: '20px 12px',
+            fontSize: '11px',
+            color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.3)',
+            textAlign: 'center',
+          }}>
+            Sonuç yok
           </div>
         )}
+
+        {filteredSidebarSections.map(function(section, si) {
+          return (
+            <div key={section.moduleName}>
+              {/* Modül başlığı */}
+              <div style={{
+                padding: si === 0 ? '10px 12px 4px' : '8px 12px 4px',
+                fontSize: '10px',
+                fontWeight: 600,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: isLight ? '#94a3b8' : 'rgba(255,255,255,0.28)',
+                borderTop: si > 0 ? (isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.06)') : 'none',
+              }}>
+                {section.moduleName}
+              </div>
+              {/* Modül altındaki entity'ler */}
+              {section.entities.map(function(entity) {
+                var palette = resolveColor(entity.color || 'slate')
+                var EntityIcon = resolveIcon(entity.icon || 'Layers')
+                var isSel = !!(currentEntity && entity.key === currentEntity.key)
+                return (
+                  <button
+                    key={entity.key}
+                    type="button"
+                    onClick={function() {
+                      var fc = getDefaultFormCode(entity)
+                      if (fc) handleFormChange(fc)
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 10px 5px 0',
+                      paddingLeft: 0,
+                      textAlign: 'left',
+                      background: isSel ? (isLight ? '#e0e7ff' : 'rgba(99,102,241,0.14)') : 'transparent',
+                      color: isSel ? (isLight ? '#3730a3' : '#a5b4fc') : (isLight ? '#475569' : 'rgba(255,255,255,0.65)'),
+                      borderLeft: isSel ? '2px solid #6366f1' : '2px solid transparent',
+                      borderRight: 'none',
+                      borderTop: 'none',
+                      borderBottom: 'none',
+                      cursor: 'pointer',
+                      transition: 'background 0.12s, color 0.12s',
+                    }}
+                    onMouseEnter={function(e) {
+                      if (!isSel) e.currentTarget.style.background = isLight ? '#e8edf4' : 'rgba(255,255,255,0.04)'
+                    }}
+                    onMouseLeave={function(e) {
+                      if (!isSel) e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    <div style={{
+                      width: '20px', height: '20px',
+                      marginLeft: '10px',
+                      borderRadius: '5px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                      background: palette.bg,
+                      border: '1px solid ' + palette.border,
+                    }}>
+                      <EntityIcon size={10} style={{ color: palette.icon }} strokeWidth={1.8} />
+                    </div>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: isSel ? 600 : 400,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flex: 1,
+                      lineHeight: 1.3,
+                    }}>
+                      {entity.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })}
+          <div style={{ height: '8px' }} />
+        </div>{/* /kaydırılabilir liste */}
+      </div>
+
+      {/* ── Sağ Panel ─────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0">
+
+        {/* ── Sağ panel header: entity adı + variant toggle + arama + yeni grup ── */}
+        <div
+          className="px-4 py-2 flex-shrink-0 flex flex-wrap items-center gap-2"
+          style={{ borderBottom: isLight ? '1px solid rgba(226,232,240,0.7)' : '1px solid rgba(255,255,255,0.06)' }}
+        >
+          {/* Entity ikon + adı */}
+          {currentEntity && (function() {
+            var palette = resolveColor(currentEntity.color || 'slate')
+            var HeaderIcon = resolveIcon(currentEntity.icon || 'Layers')
+            return (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <div style={{
+                  width: '24px', height: '24px',
+                  borderRadius: '6px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: palette.bg,
+                  border: '1px solid ' + palette.border,
+                }}>
+                  <HeaderIcon size={12} style={{ color: palette.icon }} strokeWidth={1.8} />
+                </div>
+                <span className="text-[13px] font-semibold text-slate-800 dark:text-white/90">
+                  {currentEntity.label}
+                </span>
+              </div>
+            )
+          })()}
+
+          {/* Variant toggle — sadece variant'li entity'de görünür */}
+          {currentEntity && Array.isArray(currentEntity.variants) && currentEntity.variants.length > 1 && (
+            <EntityVariantToggle
+              variants={currentEntity.variants}
+              activeFormCode={currentFormCode}
+              onPick={function(fc) {
+                if (fc && fc !== currentFormCode) loadSchemaFor(fc, false)
+              }}
+            />
+          )}
+
+          <div className="flex-1" />
+
+          {/* Arama */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/60 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08]">
+            <Search size={14} className="text-slate-400 dark:text-white/30 flex-shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={function(e) { setSearchQuery(e.target.value) }}
+              placeholder="Widget ara…"
+              style={{ width: '130px' }}
+              className="bg-transparent text-xs text-slate-800 dark:text-white/85 placeholder:text-slate-400 dark:placeholder:text-white/25 focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={function() { setSearchQuery('') }}
+                className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:text-white/45 dark:hover:text-white/70 transition-colors"
+                title="Aramayı temizle"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Yeni Grup */}
+          <button
+            type="button"
+            onClick={function() { setGroupModalOpen(true) }}
+            disabled={!currentFormId}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 dark:bg-indigo-500/15 dark:hover:bg-indigo-500/25 border border-indigo-400/30 dark:border-indigo-400/35 text-[11px] font-semibold text-indigo-600 dark:text-indigo-300 transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Yeni grup tanımla"
+          >
+            <Plus size={13} strokeWidth={2.4} />
+            Yeni Grup
+          </button>
+        </div>
+
+        {/* ── Gövde (WidgetBuilderForm + WidgetRegistryList) ──────────── */}
+        <div className="flex-1 overflow-hidden min-h-0 px-4 py-4">
+          {loadingSchema ? (
+            <div className="h-full flex flex-col items-center justify-center gap-3">
+              <Loader2 size={28} className="text-indigo-500 animate-spin" />
+              <span className="text-[11px] text-slate-500 dark:text-white/40">Yükleniyor...</span>
+            </div>
+          ) : (
+            <div className="h-full grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4 min-h-0">
+              {/* Sol kolon: Form */}
+              <div className="overflow-y-auto min-h-0 pr-1">
+                <WidgetBuilderForm
+                  editingField={editingField}
+                  onSubmit={handleSubmit}
+                  onCancel={handleCancelEdit}
+                  saving={savingGlobal}
+                  groups={derivedGroups}
+                  existingFields={derivedFields}
+                  parentFormWidgets={parentFormWidgets}
+                  formStaticFields={formStaticFields}
+                  activeLayer={null}
+                  activeLayerLabel={null}
+                />
+              </div>
+
+              {/* Sağ kolon: Liste */}
+              <div className="h-full min-h-0">
+                <WidgetRegistryList
+                  fields={derivedFields}
+                  groups={derivedGroups}
+                  onEdit={handleEdit}
+                  onToggle={handleToggle}
+                  onDelete={handleDelete}
+                  onPlainFieldToggle={handlePlainFieldToggle}
+                  onListableToggle={handleListableToggle}
+                  onReorder={handleReorder}
+                  onGroupReorder={handleGroupReorder}
+                  editingId={editingId}
+                  savingId={savingId}
+                  searchQuery={searchQuery}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* ── Yeni Grup Modalı ──────────────── */}
@@ -744,3 +1025,67 @@ export default function AdminWidgetRegistryPanel(props) {
     </div>
   )
 }
+
+// ───────────────────────────────────────────────
+// EntityVariantToggle — pill-style segmented control
+// "Üst Bilgi / Kalem Bilgisi" gibi entity variant'lari arasinda gecis.
+// Light/dark tema duyarli (body.app-theme-light kontrolu).
+// ───────────────────────────────────────────────
+function EntityVariantToggle(props) {
+  var variants = Array.isArray(props.variants) ? props.variants : []
+  var activeFormCode = props.activeFormCode
+  var onPick = props.onPick
+  var [isLight, setIsLight] = useState(function() {
+    if (typeof document === 'undefined') return false
+    return document.body.classList.contains('app-theme-light')
+  })
+  useEffect(function() {
+    var obs = new MutationObserver(function() {
+      setIsLight(document.body.classList.contains('app-theme-light'))
+    })
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    return function() { obs.disconnect() }
+  }, [])
+
+  if (variants.length === 0) return null
+
+  var trackBg = isLight ? '#f1f5f9' : 'rgba(255,255,255,0.05)'
+  var trackBorder = isLight ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.08)'
+  var activeBg = isLight ? '#ffffff' : 'rgba(99,102,241,0.18)'
+  var activeBorder = isLight ? '1px solid #c7d2fe' : '1px solid rgba(99,102,241,0.45)'
+  var activeColor = isLight ? '#4f46e5' : '#c7d2fe'
+  var inactiveColor = isLight ? '#64748b' : 'rgba(255,255,255,0.55)'
+  var activeShadow = isLight ? '0 1px 2px rgba(15,23,42,0.06)' : '0 0 0 1px rgba(99,102,241,0.20)'
+
+  return (
+    <div
+      className="inline-flex items-center gap-1 p-1 rounded-full"
+      style={{ background: trackBg, border: trackBorder }}
+      role="tablist"
+    >
+      {variants.map(function(v) {
+        var isActive = String(v.formCode).toUpperCase() === String(activeFormCode || '').toUpperCase()
+        return (
+          <button
+            key={v.key || v.formCode}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={function() { if (onPick && !isActive) onPick(v.formCode) }}
+            className="px-3.5 py-1 rounded-full text-[12px] font-semibold transition-all"
+            style={{
+              background: isActive ? activeBg : 'transparent',
+              border: isActive ? activeBorder : '1px solid transparent',
+              color: isActive ? activeColor : inactiveColor,
+              boxShadow: isActive ? activeShadow : 'none',
+              cursor: isActive ? 'default' : 'pointer',
+            }}
+          >
+            {v.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+

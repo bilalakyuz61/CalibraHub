@@ -2,6 +2,7 @@
     ViewData["Title"] = "Şirket Parametreleri";
     ViewData["BodyClass"] = "page-admin-parameters";
     var isEDocApproval = (ViewData["IsEDocumentApprovalEnabled"] is bool b) && b;
+    var shopFloorMaxPinAttempts = ViewData["ShopFloorMaxPinAttempts"] as int? ?? 5;
 }
 
 @section Styles {
@@ -274,6 +275,7 @@ body.app-theme-dark .ap-wrapper {
             <h3>Form / Modül</h3>
             <button type="button" class="ap-tab is-active" data-pane="general"   data-label="Genel">Genel</button>
             <button type="button" class="ap-tab"           data-pane="approval"  data-label="Onay İşlemleri">Onay İşlemleri</button>
+            <button type="button" class="ap-tab"           data-pane="production" data-label="Üretim">Üretim</button>
             <button type="button" class="ap-tab"           data-pane="workorder" data-label="İş Emri">İş Emri</button>
             <button type="button" class="ap-tab"           data-pane="salesquote" data-label="Satış Teklifi">Satış Teklifi</button>
         </aside>
@@ -310,14 +312,82 @@ body.app-theme-dark .ap-wrapper {
             @* ── Onay İşlemleri ─────────────────────────── *@
             <section class="ap-pane" id="ap-pane-approval">
                 <h2>Onay İşlemleri</h2>
-                <div class="ap-hint">Onay akışı (e-Fatura, e-Arşiv, e-İrsaliye) parametreleri.</div>
+                <div class="ap-hint">Elektronik belge onay akışı parametreleri. Akış şablonlarını yönetmek için
+                    <a href="/ApprovalFlow" style="color:var(--ap-accent);">Onay Akış Tanımları</a> sayfasını kullanın.</div>
 
-                <div class="ap-empty">
-                    <div class="ap-empty-icon">⚙</div>
-                    <div class="ap-empty-title">Henüz parametre tanımlanmadı</div>
-                    <div class="ap-empty-desc">
-                        Onay süreçleri için ihtiyaç duyduğunuz davranış (otomatik onay eşiği,<br/>
-                        onaycı seviyeleri, bildirim ayarları vb.) burada gömülü olarak yer alacak.
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Alış Faturası Onay Akışı</div>
+                        <div class="ap-row-desc">
+                            Açıkken sisteme giren e-Faturalar, tutar ve içerik koşullarına göre
+                            tanımlı onay akışına yönlendirilir. Onaylanmadan ERP'ye işlenmez.
+                            Kapalıyken belgeler doğrudan işlenmiş sayılır.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-invoice-approval"
+                                   @(ViewData["IsInvoiceApprovalEnabled"] is true ? "checked" : null) />
+                            <span class="ap-switch-track @(ViewData["IsInvoiceApprovalEnabled"] is true ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(ViewData["IsInvoiceApprovalEnabled"] is true ? "is-active" : "")"
+                                  id="ap-invoice-approval-label">
+                                @(ViewData["IsInvoiceApprovalEnabled"] is true ? "Aktif" : "Pasif")
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">e-İrsaliye Onay Akışı</div>
+                        <div class="ap-row-desc">
+                            Gelen e-İrsaliyeler için onay süreci zorunlu hale gelir.
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <label class="ap-switch">
+                            <input type="checkbox" id="ap-dispatch-approval"
+                                   @(ViewData["IsDispatchApprovalEnabled"] is true ? "checked" : null) />
+                            <span class="ap-switch-track @(ViewData["IsDispatchApprovalEnabled"] is true ? "is-on" : "")">
+                                <span class="ap-switch-thumb"></span>
+                            </span>
+                            <span class="ap-switch-label @(ViewData["IsDispatchApprovalEnabled"] is true ? "is-active" : "")"
+                                  id="ap-dispatch-approval-label">
+                                @(ViewData["IsDispatchApprovalEnabled"] is true ? "Aktif" : "Pasif")
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div style="margin-top:20px; padding:14px 16px; border-radius:10px; background:var(--ap-surface2); border:1px solid var(--ap-border-light); font-size:.82rem; color:var(--ap-text-muted);">
+                    <strong>Akış şablonu tanımlamak için:</strong>
+                    <a href="/ApprovalFlow" class="btn btn-sm btn-outline-primary ms-2">Onay Akış Tanımları →</a>
+                </div>
+            </section>
+
+            @* ── Üretim ─────────────────────────────────── *@
+            <section class="ap-pane" id="ap-pane-production">
+                <h2>Üretim</h2>
+                <div class="ap-hint">Üretim paneli (ShopFloor) güvenlik ve davranış parametreleri.</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Hatalı PIN Girme Limiti</div>
+                        <div class="ap-row-desc">
+                            Üretim panelinde bir sicil için art arda bu sayı kadar hatalı PIN
+                            girildiğinde sicil <strong>otomatik bloklanır</strong> (Personel kaydı pasife alınır).
+                            Tekrar açmak için yönetici Personel ekranından "Aktif" durumuna almalıdır.
+                            <br/><em>0 yazılırsa kilitleme devre dışı kalır.</em>
+                        </div>
+                    </div>
+                    <div class="ap-row-control">
+                        <input type="number" id="ap-shopfloor-max-pin" min="0" max="50" step="1"
+                               value="@shopFloorMaxPinAttempts"
+                               style="width:84px; padding:6px 10px; border-radius:8px;
+                                      border:1px solid var(--ap-border); background:var(--ap-input-bg);
+                                      color:var(--ap-text); font-size:13px; font-weight:600; text-align:center;" />
                     </div>
                 </div>
             </section>
@@ -371,9 +441,7 @@ body.app-theme-dark .ap-wrapper {
 
     // ── Tab gecisi + Kaydet butonunun aktif/pasif durumu ────
     function syncSaveButton() {
-        // Su an sadece "general" tab'inda kaydedilebilir parametre var.
-        // Diger tab'lar bos -> Kaydet pasif.
-        var hasParams = (activePane === 'general');
+        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -414,16 +482,20 @@ body.app-theme-dark .ap-wrapper {
         setTimeout(function () { actionBar.classList.remove('is-save-flash'); }, 1850);
     }
 
-    // ── E-Belge Onay switch'i — visual sync ────────────────
-    var edocCheckbox = document.getElementById('ap-edoc-approval');
-    edocCheckbox.addEventListener('change', function () {
-        var on = edocCheckbox.checked;
-        edocCheckbox.closest('.ap-switch')
-            .querySelector('.ap-switch-track').classList.toggle('is-on', on);
-        var lbl = document.getElementById('ap-edoc-approval-label');
-        lbl.textContent = on ? 'Aktif' : 'Pasif';
-        lbl.classList.toggle('is-active', on);
-    });
+    // ── Switch visual sync helper ────────────────────────
+    function wireSwitch(checkboxId, labelId) {
+        var cb = document.getElementById(checkboxId);
+        if (!cb) return;
+        cb.addEventListener('change', function () {
+            var on = cb.checked;
+            cb.closest('.ap-switch').querySelector('.ap-switch-track').classList.toggle('is-on', on);
+            var lbl = document.getElementById(labelId);
+            if (lbl) { lbl.textContent = on ? 'Aktif' : 'Pasif'; lbl.classList.toggle('is-active', on); }
+        });
+    }
+    wireSwitch('ap-edoc-approval', 'ap-edoc-approval-label');
+    wireSwitch('ap-invoice-approval', 'ap-invoice-approval-label');
+    wireSwitch('ap-dispatch-approval', 'ap-dispatch-approval-label');
 
     // ── Aksiyon seridi Kaydet handler ──────────────────────
     saveBtn.addEventListener('click', async function () {
@@ -432,6 +504,7 @@ body.app-theme-dark .ap-wrapper {
         try {
             var ok = false;
             if (activePane === 'general') {
+                var edocCheckbox = document.getElementById('ap-edoc-approval');
                 var r = await fetch('/Admin/SaveGeneralParametersJson', {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -442,6 +515,39 @@ body.app-theme-dark .ap-wrapper {
                 ok = !!data.ok;
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(data.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'production') {
+                var pinEl = document.getElementById('ap-shopfloor-max-pin');
+                var raw = pinEl ? parseInt(pinEl.value, 10) : NaN;
+                if (isNaN(raw) || raw < 0 || raw > 50) {
+                    flash('Hatalı PIN limiti 0 ile 50 arasında olmalı.', false);
+                    return;
+                }
+                var rp = await fetch('/Admin/SaveProductionParametersJson', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ shopFloorMaxPinAttempts: raw })
+                });
+                var datap = await rp.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!datap.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(datap.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'approval') {
+                var invCb  = document.getElementById('ap-invoice-approval');
+                var disCb  = document.getElementById('ap-dispatch-approval');
+                var r2 = await fetch('/Admin/SaveApprovalParametersJson', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({
+                        isInvoiceApprovalEnabled:  invCb ? invCb.checked  : false,
+                        isDispatchApprovalEnabled: disCb ? disCb.checked  : false,
+                    })
+                });
+                var data2 = await r2.json().catch(function () { return { ok: false, error: 'Yanit JSON degil' }; });
+                ok = !!data2.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash(data2.error || 'Kaydetme basarisiz.', false);
             }
             // Yeni sekmeler eklendiginde buraya else if blogu ile bagla
             if (ok) flashSuccess();

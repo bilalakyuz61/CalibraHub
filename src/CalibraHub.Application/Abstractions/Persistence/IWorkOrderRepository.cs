@@ -16,12 +16,12 @@ public interface IWorkOrderRepository
 
     Task<int> CreateAsync(WorkOrder entity, CancellationToken ct);
 
-    Task UpdateAsync(int id, UpdateWorkOrderRequest req, Guid? updatedBy, CancellationToken ct);
+    Task UpdateAsync(int id, UpdateWorkOrderRequest req, int? updatedBy, CancellationToken ct);
 
-    Task ChangeStatusAsync(int id, WorkOrderStatus newStatus, Guid? userId, CancellationToken ct);
+    Task ChangeStatusAsync(int id, WorkOrderStatus newStatus, int? userId, CancellationToken ct);
 
     /// <summary>Released sonrasi revize: yeni emir kopyalanir (RevisionNo+1, RevisedFromId=eski), eski Cancelled.</summary>
-    Task<int> CreateRevisionAsync(int existingId, Guid? userId, CancellationToken ct);
+    Task<int> CreateRevisionAsync(int existingId, int? userId, CancellationToken ct);
 
     Task<IReadOnlyCollection<WorkOrderSourceDto>> GetSourcesAsync(int workOrderId, CancellationToken ct);
 

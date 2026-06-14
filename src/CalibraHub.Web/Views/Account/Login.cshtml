@@ -109,37 +109,56 @@
     (function () {
         var TK = 'calibra_theme';
         var body = document.body;
-        var btn = document.getElementById('btnThemeToggle');
-        // Kullanici tercihi varsa uygula
+        var btn  = document.getElementById('btnThemeToggle');
+        var themeInput = document.getElementById('loginThemeInput');
+        var form = document.getElementById('loginForm');
+
+        // localStorage tercihini hem UI'a hem hidden input'a uygula
+        function applyTheme(t) {
+            body.classList.remove('app-theme-light', 'app-theme-dark');
+            body.classList.add('app-theme-' + t);
+            if (themeInput) themeInput.value = t;
+            try { localStorage.setItem(TK, t); } catch (e) {}
+        }
+
         var saved = null;
         try { saved = localStorage.getItem(TK); } catch (e) {}
-        if (saved === 'dark' || saved === 'light') {
-            body.classList.remove('app-theme-light', 'app-theme-dark');
-            body.classList.add('app-theme-' + saved);
-        }
+        if (saved === 'dark' || saved === 'light') { applyTheme(saved); }
+        else if (themeInput) { themeInput.value = body.classList.contains('app-theme-dark') ? 'dark' : 'light'; }
+
         function currentTheme() {
             return body.classList.contains('app-theme-dark') ? 'dark' : 'light';
         }
         btn.addEventListener('click', function () {
-            var next = currentTheme() === 'dark' ? 'light' : 'dark';
-            body.classList.remove('app-theme-light', 'app-theme-dark');
-            body.classList.add('app-theme-' + next);
-            try { localStorage.setItem(TK, next); } catch (e) {}
+            applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
         });
+        // Form submit öncesi hidden input'un güncel olduğundan emin ol
+        if (form) {
+            form.addEventListener('submit', function () {
+                if (themeInput) themeInput.value = currentTheme();
+            });
+        }
     })();
 </script>
 <div class="login-shell">
     <section class="login-hero" aria-hidden="true">
-        <img src="~/Document/2026-02-21_13-51-14.jpg" alt="Calibra Login" />
+        <!-- 2026-06-04: Yeni CalibraHub Software brand resmi. Sağ alt köşedeki sparkle
+             filigranını gizlemek için: resmi içeren wrap'i overflow:hidden + border-radius
+             yapıyoruz; img object-fit:cover + object-position üst-sol ile filigran
+             ekranın dışına itiliyor (sağdan/alttan ~%5 kırpılır). -->
+        <div class="login-hero-frame">
+            <img src="~/Document/CalibraHubLoginLogo.png" alt="CalibraHub Software" />
+        </div>
     </section>
 
     <section class="login-panel">
         <div class="login-card">
             <h1>CalibraHub</h1>
 
-            <form asp-action="Login" method="post" autocomplete="off">
+            <form asp-action="Login" method="post" autocomplete="off" id="loginForm">
                 @Html.AntiForgeryToken()
                 <input asp-for="ReturnUrl" type="hidden" />
+                <input type="hidden" name="ThemeCode" id="loginThemeInput" value="" />
 
                 <div class="form-floating login-field mb-3">
                     @* a11y (rapor §6.6): autofocus + required + aria-required + class="cb-field-error" *@
@@ -185,13 +204,6 @@
                 </div>
             }
 
-            <!-- Sistem Ayarlari — TOTP gate arkasinda (DB + lisans) -->
-            <div class="text-center mt-3 pt-3 border-top">
-                <a href="/Gate" style="color: inherit; opacity: .55; font-size: .75rem; text-decoration: none; display: inline-flex; align-items: center; gap: 5px;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                    Sistem Ayarları
-                </a>
-            </div>
 
         </div>
     </section>

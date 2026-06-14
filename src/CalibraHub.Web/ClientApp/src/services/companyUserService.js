@@ -61,12 +61,16 @@ export async function saveUserJson(payload) {
   return data || { success: true }
 }
 
-export async function deactivateUserJson(id) {
+/**
+ * Kullanıcıyı pasife alır. email parametresiyle çağrılırsa (multi-company)
+ * o e-postaya ait tüm profiller pasife alınır.
+ */
+export async function deactivateUserJson(email) {
   var resp = await fetch(BASE + '/DeactivateUserJson', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ id: id })
+    body: JSON.stringify({ id: 0, email: email })
   })
   var data = null
   try { data = await resp.json() } catch (e) { /* not json */ }

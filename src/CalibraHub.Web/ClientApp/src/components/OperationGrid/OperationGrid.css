@@ -298,3 +298,62 @@
 .og-del-modal__label { font-size: 12px; color: #64748b; margin-top: 2px; }
 .og-del-modal__body  { font-size: 13px; color: #94a3b8; margin-bottom: 20px; line-height: 1.5; }
 .og-del-modal__foot  { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ══════════════════════════════════════════════════════════
+   Light mode overrides — tum renk degerleri burada ezilir,
+   usteki tum bloklar koyu tema (dark default) olarak kalir.
+   ══════════════════════════════════════════════════════════ */
+body.app-theme-light .og-root {
+  background: #f8fafc;
+  color: #0f172a;
+}
+body.app-theme-light .og-header {
+  border-bottom-color: #e2e8f0;
+}
+body.app-theme-light .og-header__title  { color: #0f172a; }
+body.app-theme-light .og-header__sub    { color: #64748b; }
+body.app-theme-light .og-header__search {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+body.app-theme-light .og-header__search input { color: #0f172a; }
+body.app-theme-light .og-header__search input::placeholder { color: #94a3b8; }
+body.app-theme-light .og-header__search svg { color: #94a3b8; }
+body.app-theme-light .og-btn--ghost {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+body.app-theme-light .og-btn--ghost:hover { background: #e2e8f0; }
+body.app-theme-light .og-form-row         { border-bottom-color: #f1f5f9; }
+body.app-theme-light .og-fi {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+body.app-theme-light .og-fi option   { background: #ffffff; }
+body.app-theme-light .og-fi--check   { color: #475569; }
+body.app-theme-light .og-row {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+body.app-theme-light .og-row:hover     { background: #f8fafc; }
+body.app-theme-light .og-row__name    { color: #0f172a; }
+body.app-theme-light .og-row__desc    { color: #64748b; }
+body.app-theme-light .og-tile {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+body.app-theme-light .og-tile__label  { color: #94a3b8; }
+body.app-theme-light .og-tile__value  { color: #475569; }
+body.app-theme-light .og-tile__unit   { color: #94a3b8; }
+body.app-theme-light .og-act          { color: #94a3b8; }
+body.app-theme-light .og-empty        { color: #94a3b8; }
+body.app-theme-light .og-del-modal {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+}
+body.app-theme-light .og-del-modal__title { color: #0f172a; }
+body.app-theme-light .og-del-modal__label { color: #64748b; }
+body.app-theme-light .og-del-modal__body  { color: #475569; }

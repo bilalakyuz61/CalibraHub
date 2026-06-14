@@ -19,7 +19,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{schema}].[integrator_settings]";
+        _tableName = $"[{schema}].[IntegratorSetting]";
     }
 
     public async Task<IReadOnlyCollection<IntegratorSettings>> GetAllAsync(CancellationToken cancellationToken)
@@ -29,9 +29,9 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [Created], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
+            SELECT [Id], [CompanyId], [Provider], [Name], [BaseUrl], [CompanyTaxNumber], [Username], [Secret], [PollingIntervalSeconds], [MaxRecordsPerPull], [LogRetentionDays], [IncludeReceivedDocumentsInPull], [MarkDownloadedDocumentsAsReceived], [IncludeIssuedEInvoiceInPull], [IncludeIssuedEArchiveInPull], [IncludeIssuedEDispatchInPull], [IsActive], [Created], [AppStr], [Source], [AppVersion], [ScheduleEnabled], [TimeoutSeconds], [LookbackDays]
             FROM {_tableName}
-            ORDER BY [name];
+            ORDER BY [Name];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -50,10 +50,10 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [Created], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
+            SELECT [Id], [CompanyId], [Provider], [Name], [BaseUrl], [CompanyTaxNumber], [Username], [Secret], [PollingIntervalSeconds], [MaxRecordsPerPull], [LogRetentionDays], [IncludeReceivedDocumentsInPull], [MarkDownloadedDocumentsAsReceived], [IncludeIssuedEInvoiceInPull], [IncludeIssuedEArchiveInPull], [IncludeIssuedEDispatchInPull], [IsActive], [Created], [AppStr], [Source], [AppVersion], [ScheduleEnabled], [TimeoutSeconds], [LookbackDays]
             FROM {_tableName}
-            WHERE [is_active] = 1
-            ORDER BY [name];
+            WHERE [IsActive] = 1
+            ORDER BY [Name];
             """;
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -70,9 +70,9 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [Created], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
+            SELECT [Id], [CompanyId], [Provider], [Name], [BaseUrl], [CompanyTaxNumber], [Username], [Secret], [PollingIntervalSeconds], [MaxRecordsPerPull], [LogRetentionDays], [IncludeReceivedDocumentsInPull], [MarkDownloadedDocumentsAsReceived], [IncludeIssuedEInvoiceInPull], [IncludeIssuedEArchiveInPull], [IncludeIssuedEDispatchInPull], [IsActive], [Created], [AppStr], [Source], [AppVersion], [ScheduleEnabled], [TimeoutSeconds], [LookbackDays]
             FROM {_tableName}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
         command.Parameters.Add(new SqlParameter("@Id", id));
 
@@ -90,9 +90,9 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT [id], [company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [Created], [app_str], [source], [app_version], [schedule_enabled], [timeout_seconds], [lookback_days]
+            SELECT [Id], [CompanyId], [Provider], [Name], [BaseUrl], [CompanyTaxNumber], [Username], [Secret], [PollingIntervalSeconds], [MaxRecordsPerPull], [LogRetentionDays], [IncludeReceivedDocumentsInPull], [MarkDownloadedDocumentsAsReceived], [IncludeIssuedEInvoiceInPull], [IncludeIssuedEArchiveInPull], [IncludeIssuedEDispatchInPull], [IsActive], [Created], [AppStr], [Source], [AppVersion], [ScheduleEnabled], [TimeoutSeconds], [LookbackDays]
             FROM {_tableName}
-            WHERE [company_id] = @CompanyId;
+            WHERE [CompanyId] = @CompanyId;
             """;
         command.Parameters.Add(new SqlParameter("@CompanyId", companyId));
 
@@ -111,7 +111,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([company_id], [provider], [name], [base_url], [company_tax_number], [username], [secret], [polling_interval_seconds], [max_records_per_pull], [log_retention_days], [include_received_documents_in_pull], [mark_downloaded_documents_as_received], [include_issued_einvoice_in_pull], [include_issued_earchive_in_pull], [include_issued_edispatch_in_pull], [is_active], [schedule_enabled], [Created], [Updated], [app_str], [source], [app_version], [timeout_seconds], [lookback_days])
+                ([CompanyId], [Provider], [Name], [BaseUrl], [CompanyTaxNumber], [Username], [Secret], [PollingIntervalSeconds], [MaxRecordsPerPull], [LogRetentionDays], [IncludeReceivedDocumentsInPull], [MarkDownloadedDocumentsAsReceived], [IncludeIssuedEInvoiceInPull], [IncludeIssuedEArchiveInPull], [IncludeIssuedEDispatchInPull], [IsActive], [ScheduleEnabled], [Created], [Updated], [AppStr], [Source], [AppVersion], [TimeoutSeconds], [LookbackDays])
             VALUES
                 (@EntityCompanyId, @Provider, @Name, @BaseUrl, @CompanyTaxNumber, @Username, @Secret, @PollingIntervalSeconds, @MaxRecordsPerPull, @LogRetentionDays, @IncludeReceivedDocumentsInPull, @MarkDownloadedDocumentsAsReceived, @IncludeIssuedEInvoiceInPull, @IncludeIssuedEArchiveInPull, @IncludeIssuedEDispatchInPull, @IsActive, @ScheduleEnabled, @CreatedAt, @UpdatedAt, @AppStr, @Source, @AppVersion, @TimeoutSeconds, @LookbackDays);
             SELECT SCOPE_IDENTITY();
@@ -131,30 +131,30 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             UPDATE {_tableName}
-            SET [company_id] = @EntityCompanyId,
-                [provider] = @Provider,
-                [name] = @Name,
-                [base_url] = @BaseUrl,
-                [company_tax_number] = @CompanyTaxNumber,
-                [username] = @Username,
-                [secret] = CASE WHEN LEN(@Secret) > 0 THEN @Secret ELSE [secret] END,
-                [polling_interval_seconds] = @PollingIntervalSeconds,
-                [max_records_per_pull] = @MaxRecordsPerPull,
-                [log_retention_days] = @LogRetentionDays,
-                [include_received_documents_in_pull] = @IncludeReceivedDocumentsInPull,
-                [mark_downloaded_documents_as_received] = @MarkDownloadedDocumentsAsReceived,
-                [include_issued_einvoice_in_pull] = @IncludeIssuedEInvoiceInPull,
-                [include_issued_earchive_in_pull] = @IncludeIssuedEArchiveInPull,
-                [include_issued_edispatch_in_pull] = @IncludeIssuedEDispatchInPull,
-                [is_active] = @IsActive,
-                [schedule_enabled] = @ScheduleEnabled,
+            SET [CompanyId] = @EntityCompanyId,
+                [Provider] = @Provider,
+                [Name] = @Name,
+                [BaseUrl] = @BaseUrl,
+                [CompanyTaxNumber] = @CompanyTaxNumber,
+                [Username] = @Username,
+                [Secret] = CASE WHEN LEN(@Secret) > 0 THEN @Secret ELSE [Secret] END,
+                [PollingIntervalSeconds] = @PollingIntervalSeconds,
+                [MaxRecordsPerPull] = @MaxRecordsPerPull,
+                [LogRetentionDays] = @LogRetentionDays,
+                [IncludeReceivedDocumentsInPull] = @IncludeReceivedDocumentsInPull,
+                [MarkDownloadedDocumentsAsReceived] = @MarkDownloadedDocumentsAsReceived,
+                [IncludeIssuedEInvoiceInPull] = @IncludeIssuedEInvoiceInPull,
+                [IncludeIssuedEArchiveInPull] = @IncludeIssuedEArchiveInPull,
+                [IncludeIssuedEDispatchInPull] = @IncludeIssuedEDispatchInPull,
+                [IsActive] = @IsActive,
+                [ScheduleEnabled] = @ScheduleEnabled,
                 [Updated] = @UpdatedAt,
-                [app_str] = @AppStr,
-                [source] = @Source,
-                [app_version] = @AppVersion,
-                [timeout_seconds] = @TimeoutSeconds,
-                [lookback_days] = @LookbackDays
-            WHERE [id] = @Id;
+                [AppStr] = @AppStr,
+                [Source] = @Source,
+                [AppVersion] = @AppVersion,
+                [TimeoutSeconds] = @TimeoutSeconds,
+                [LookbackDays] = @LookbackDays
+            WHERE [Id] = @Id;
             """;
 
         AddCommonParameters(command, settings);
@@ -170,7 +170,7 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             DELETE FROM {_tableName}
-            WHERE [id] = @Id;
+            WHERE [Id] = @Id;
             """;
 
         command.Parameters.Add(new SqlParameter("@Id", id));
@@ -246,9 +246,9 @@ public sealed class SqlIntegratorSettingsRepository : IIntegratorSettingsReposit
         {
             settings.Deactivate();
         }
-        settings.ConfigureScheduleEnabled(reader.GetBoolean(reader.GetOrdinal("schedule_enabled")));
-        settings.UpdateTimeoutSeconds(reader.GetInt32(reader.GetOrdinal("timeout_seconds")));
-        settings.UpdateLookbackDays(reader.GetInt32(reader.GetOrdinal("lookback_days")));
+        settings.ConfigureScheduleEnabled(reader.GetBoolean(reader.GetOrdinal("ScheduleEnabled")));
+        settings.UpdateTimeoutSeconds(reader.GetInt32(reader.GetOrdinal("TimeoutSeconds")));
+        settings.UpdateLookbackDays(reader.GetInt32(reader.GetOrdinal("LookbackDays")));
 
         return settings;
     }

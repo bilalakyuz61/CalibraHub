@@ -1,4 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Persistence.Database;
@@ -17,6 +19,7 @@ public sealed class SqlPriceListRepository : IPriceListRepository
 {
     private readonly SqlServerConnectionFactory _cf;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IDataVisibilityFilter _dvFilter;
     private readonly string _schema;
     private readonly string _tblGroups;
     private readonly string _tblEntries;
@@ -24,10 +27,12 @@ public sealed class SqlPriceListRepository : IPriceListRepository
     public SqlPriceListRepository(
         SqlServerConnectionFactory cf,
         CalibraDatabaseOptions options,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        IDataVisibilityFilter dvFilter)
     {
         _cf = cf;
         _httpContextAccessor = httpContextAccessor;
+        _dvFilter = dvFilter;
         _schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _tblGroups  = $"[{_schema}].[PriceGroup]";
         _tblEntries = $"[{_schema}].[PriceList]";
@@ -56,13 +61,17 @@ public sealed class SqlPriceListRepository : IPriceListRepository
         var list = new List<PriceGroup>();
         await using var conn = await _cf.OpenConnectionAsync(ct);
         await using var cmd  = conn.CreateCommand();
+        // Satır görünürlük kuralları (row-level security) — tek tablo, alias 'pg'.
+        var dv = await _dvFilter.BuildAsync(FormCodes.PriceList, "pg", "id", ct);
         cmd.CommandText = $"""
             SELECT {GroupCols}
-            FROM {_tblGroups}
+            FROM {_tblGroups} pg
             WHERE [CompanyId]=@CompanyId
+            {dv.Sql}
             ORDER BY [Code];
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
+        foreach (var prm in dv.Parameters) cmd.Parameters.Add(new SqlParameter(prm.Name, prm.Value));
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct)) list.Add(MapGroup(r));
         return list;

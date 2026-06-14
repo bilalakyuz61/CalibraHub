@@ -59,7 +59,7 @@ public sealed record IntegrationEnumDefinitionAdminDto(
     string? SourceInfo,
     bool    IsActive,
     IReadOnlyList<IntegrationEnumValueDto> Values,
-    IReadOnlyList<string> UsedInFieldPaths);  // YENI — tek-ekran model: enum hangi alanlarda kullanildigini kendi tasir
+    IReadOnlyList<IntegrationEnumFieldUsageDto> UsedInFields);  // YENI (2026-05-20): her usage endpointId + path tasir
 
 public sealed record IntegrationEnumValueDto(
     int     Id,
@@ -68,6 +68,15 @@ public sealed record IntegrationEnumValueDto(
     string? TechnicalCode,
     string? Description,
     int     SortOrder);
+
+/// <summary>
+/// Bir enum'un hangi endpoint'in hangi field path'inde kullanildigi.
+/// EndpointId null ise "tum endpointler icin gecerli" (sadece path bazli match).
+/// Backward compat: eski UsedInFieldPaths (string[]) formati EndpointId=null ile yorumlanir.
+/// </summary>
+public sealed record IntegrationEnumFieldUsageDto(
+    int?    EndpointId,
+    string  Path);
 
 public sealed record SaveIntegrationEnumDefinitionRequest(
     int?    Id,
@@ -78,7 +87,7 @@ public sealed record SaveIntegrationEnumDefinitionRequest(
     string? SourceInfo,
     bool    IsActive,
     IReadOnlyList<SaveIntegrationEnumValueRequest> Values,
-    IReadOnlyList<string>? UsedInFieldPaths = null);  // YENI: hangi field path'lerde kullaniliyor
+    IReadOnlyList<IntegrationEnumFieldUsageDto>? UsedInFields = null);  // YENI (2026-05-20)
 
 public sealed record SaveIntegrationEnumValueRequest(
     string  Value,

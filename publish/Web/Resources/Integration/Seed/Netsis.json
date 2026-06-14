@@ -1,0 +1,2841 @@
+﻿{
+    "enums":  [
+                  {
+                      "label":  "TVTTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TVTTipi",
+                      "values":  [
+                                     {
+                                         "label":  "vtMSSQL",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "vtMSSQL",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "vtReserved",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "vtReserved",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "vtOracle",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "vtOracle",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "vtAS400",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "vtAS400",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TOkumaTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TOkumaTipi",
+                      "values":  [
+                                     {
+                                         "label":  "otIlk",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "otIlk",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "otSonraki",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "otSonraki",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "otOnceki",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "otOnceki",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "otSon",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "otSon",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "otAc",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "otAc",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TTransactionTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TTransactionTipi",
+                      "values":  [
+                                     {
+                                         "label":  "ttBaslat",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ttBaslat",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "ttBitir",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ttBitir",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "ttGeriAl",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "ttGeriAl",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Belge Tipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFaturaTip",
+                      "values":  [
+                                     {
+                                         "label":  "Satış Faturası (ftSFat)",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ftSFat",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "Alış Faturası (ftAFat)",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ftAFat",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "Satış İrsaliyesi (ftSIrs)",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "ftSIrs",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "Alış İrsaliyesi (ftAIrs)",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "ftAIrs",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "Depo Fişi (ftDepo)",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "ftDepo",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "Lokal Depo Fişi (ftLokalDepo)",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "ftLokalDepo",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "Verilen Sipariş - Alış (ftASip)",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "ftASip",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "Müşteri Siparişi - Satış (ftSSip)",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "ftSSip",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "Ambar Girişi (ftAmbarG)",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "ftAmbarG",
+                                         "value":  "8"
+                                     },
+                                     {
+                                         "label":  "Ambar Çıkışı (ftAmbarC)",
+                                         "sortOrder":  100,
+                                         "technicalCode":  "ftAmbarC",
+                                         "value":  "9"
+                                     },
+                                     {
+                                         "label":  "Sürekli Satış İrsaliyesi (ftSSIrs)",
+                                         "sortOrder":  110,
+                                         "technicalCode":  "ftSSIrs",
+                                         "value":  "10"
+                                     },
+                                     {
+                                         "label":  "Sürekli Alış İrsaliyesi (ftSAIrs)",
+                                         "sortOrder":  120,
+                                         "technicalCode":  "ftSAIrs",
+                                         "value":  "11"
+                                     },
+                                     {
+                                         "label":  "Alış Talebi (ftAlTalep)",
+                                         "sortOrder":  130,
+                                         "technicalCode":  "ftAlTalep",
+                                         "value":  "12"
+                                     },
+                                     {
+                                         "label":  "Alış Teklifi (ftAlTeklif)",
+                                         "sortOrder":  140,
+                                         "technicalCode":  "ftAlTeklif",
+                                         "value":  "13"
+                                     },
+                                     {
+                                         "label":  "Satış Talebi (ftSatTalep)",
+                                         "sortOrder":  150,
+                                         "technicalCode":  "ftSatTalep",
+                                         "value":  "14"
+                                     },
+                                     {
+                                         "label":  "Satış Teklifi (ftSatTeklif)",
+                                         "sortOrder":  160,
+                                         "technicalCode":  "ftSatTeklif",
+                                         "value":  "15"
+                                     },
+                                     {
+                                         "label":  "Sürekli Promosyon Satış İrsaliyesi (ftSPSIrs)",
+                                         "sortOrder":  170,
+                                         "technicalCode":  "ftSPSIrs",
+                                         "value":  "16"
+                                     },
+                                     {
+                                         "label":  "Sürekli Promosyon Alış İrsaliyesi (ftSPAIrs)",
+                                         "sortOrder":  180,
+                                         "technicalCode":  "ftSPAIrs",
+                                         "value":  "17"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Belge Durumu",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFaturaTipi",
+                      "values":  [
+                                     {
+                                         "label":  "Boş (ft_Bos)",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ft_Bos",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "Kapalı (ft_Kapali)",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ft_Kapali",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "Açık (ft_Acik)",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "ft_Acik",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "Muhtelif (ft_Muhtelif)",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "ft_Muhtelif",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "İade (ft_Iade)",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "ft_Iade",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "Z İade (ft_ZIade)",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "ft_ZIade",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "İhracat (ft_Ihracat)",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "ft_Ihracat",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "Yurt İçi (ft_YurtIci)",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "ft_YurtIci",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "Yurt Dışı (ft_YurtDisi)",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "ft_YurtDisi",
+                                         "value":  "8"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TSifrelemeTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TSifrelemeTipi",
+                      "values":  [
+                                     {
+                                         "label":  "tsSifrele",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "tsSifrele",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "tsSifreCoz",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "tsSifreCoz",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TCekSenType",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TCekSenType",
+                      "values":  [
+                                     {
+                                         "label":  "csMCEK",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "csMCEK",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "csMSEN",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "csMSEN",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "csBCEK",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "csBCEK",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "csBSEN",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "csBSEN",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TCekSenetEvrakKaydetmeTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TCekSenetEvrakKaydetmeTipi",
+                      "values":  [
+                                     {
+                                         "label":  "ektCekSenAlma",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ektCekSenAlma",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "ektCekSenVerme",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ektCekSenVerme",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "ektCekSenTahsil",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "ektCekSenTahsil",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "ektCekSenTeminat",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "ektCekSenTeminat",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "ektParcaliTahsilat",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "ektParcaliTahsilat",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNDSTip",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNDSTip",
+                      "values":  [
+                                     {
+                                         "label":  "ndsNone",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ndsNone",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "ndsMiktar",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ndsMiktar",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "ndsOran",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "ndsOran",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "ndsTutar",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "ndsTutar",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "ndsDovtutar",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "ndsDovtutar",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "ndsFirmaDovTut",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "ndsFirmaDovTut",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "ndsFiyat",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "ndsFiyat",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "ndsKur",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "ndsKur",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "ndsDovFiyat",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "ndsDovFiyat",
+                                         "value":  "8"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TKisitKapsami",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TKisitKapsami",
+                      "values":  [
+                                     {
+                                         "label":  "kkTumKullanicilar",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "kkTumKullanicilar",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "kkGrup",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "kkGrup",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "kkKullanici",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "kkKullanici",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TMaliyetTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TMaliyetTipi",
+                      "values":  [
+                                     {
+                                         "label":  "mtStokMaliyet",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "mtStokMaliyet",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "mtMaliyetMuhasebesi",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "mtMaliyetMuhasebesi",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "mtAmbFisMuhasebelestir",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "mtAmbFisMuhasebelestir",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "mtDepTransMuhasebelestir",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "mtDepTransMuhasebelestir",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "mtDagitimFisiOlusturma",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "mtDagitimFisiOlusturma",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "mtStokDovEnfCevir",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "mtStokDovEnfCevir",
+                                         "value":  "5"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TTurKisit",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TTurKisit",
+                      "values":  [
+                                     {
+                                         "label":  "tkHamAmbTicMal",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "tkHamAmbTicMal",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "tkMamYarMamYarUr",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "tkMamYarMamYarUr",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "tkHepsi",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "tkHepsi",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "THesTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "THesTipi",
+                      "values":  [
+                                     {
+                                         "label":  "hsAlHes",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "hsAlHes",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "hsSatHes",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "hsSatHes",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "hsSatDiger1",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "hsSatDiger1",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "hsSatDiger2",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "hsSatDiger2",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "hsSatDiger3",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "hsSatDiger3",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TMuhasebelesTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TMuhasebelesTipi",
+                      "values":  [
+                                     {
+                                         "label":  "mhDetayli",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "mhDetayli",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "mhKumule",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "mhKumule",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TKasaIslem",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TKasaIslem",
+                      "values":  [
+                                     {
+                                         "label":  "tkCariOdeme",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "tkCariOdeme",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "tkFaturaKayit",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "tkFaturaKayit",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "tkMuhtelif",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "tkMuhtelif",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "tkKasaTransfer",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "tkKasaTransfer",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "tkKasaIptal",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "tkKasaIptal",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "tkBankaHareket",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "tkBankaHareket",
+                                         "value":  "5"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TDekOpr",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDekOpr",
+                      "values":  [
+                                     {
+                                         "label":  "doEkle",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "doEkle",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "doDuzelt",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "doDuzelt",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "doSil",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "doSil",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TDekCSTip",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDekCSTip",
+                      "values":  [
+                                     {
+                                         "label":  "csCek",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "csCek",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "csSenet",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "csSenet",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TDagFisTip",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDagFisTip",
+                      "values":  [
+                                     {
+                                         "label":  "dftOransal",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "dftOransal",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "dftMiktarsal",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "dftMiktarsal",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNetProductVersion",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNetProductVersion",
+                      "values":  [
+                                     {
+                                         "label":  "npEntegre",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "npEntegre",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "npFusionSt",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "npFusionSt",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "npFusion",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "npFusion",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "npNetLite",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "npNetLite",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNetKurulumTip",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNetKurulumTip",
+                      "values":  [
+                                     {
+                                         "label":  "nktTekKurulum",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "nktTekKurulum",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "nktCokKurulum",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "nktCokKurulum",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Ambar Hareket Türü",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TAmbarHarTur",
+                      "values":  [
+                                     {
+                                         "label":  "Devir (htDevir)",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "htDevir",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "Depolar Arası (htDepolar)",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "htDepolar",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "Üretim (htUretim)",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "htUretim",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "Muhtelif (htMuhtelif)",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "htMuhtelif",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "Konsinye (htKonsinye)",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "htKonsinye",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Çıkış Yeri",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TCikisYeri",
+                      "values":  [
+                                     {
+                                         "label":  "Masraf Merkezi (cyMasrafMer)",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "cyMasrafMer",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "Stok Kodu (cyStokKod)",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "cyStokKod",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "Ana Mal Grup (cyAnaMalGrp)",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "cyAnaMalGrp",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "Mal Grup (cyMalGrp)",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "cyMalGrp",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "Serbest (cySerbest)",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "cySerbest",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TUretSonDepo",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TUretSonDepo",
+                      "values":  [
+                                     {
+                                         "label":  "usdAktif",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "usdAktif",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "usdTum",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "usdTum",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TFatKalemIskTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFatKalemIskTipi",
+                      "values":  [
+                                     {
+                                         "label":  "fkitOran",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "fkitOran",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "fkitTutar",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "fkitTutar",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TFatKosIlaveSekli",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFatKosIlaveSekli",
+                      "values":  [
+                                     {
+                                         "label":  "fkisSifirDahil",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "fkisSifirDahil",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "fkisSifirHaric",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "fkisSifirHaric",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "fkisEksiSifirla",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "fkisEksiSifirla",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "fkisNormalTopla",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "fkisNormalTopla",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TFatIskToplamSekli",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFatIskToplamSekli",
+                      "values":  [
+                                     {
+                                         "label":  "fitsKademeli",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "fitsKademeli",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "fitsNormal",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "fitsNormal",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNXNDSOndalikTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNXNDSOndalikTipi",
+                      "values":  [
+                                     {
+                                         "label":  "notTamGoster",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "notTamGoster",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "notSifirlariGosterme",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "notSifirlariGosterme",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNXLoginResult",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNXLoginResult",
+                      "values":  [
+                                     {
+                                         "label":  "lrOK",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "lrOK",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "lrDBFailed",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "lrDBFailed",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "lrInvalidUser",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "lrInvalidUser",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "lrInvalidPassword",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "lrInvalidPassword",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "lrLoginExpire",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "lrLoginExpire",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "lrBlocked",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "lrBlocked",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "lrBlocking",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "lrBlocking",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "lrChangePassword",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "lrChangePassword",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "lrNullPassword",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "lrNullPassword",
+                                         "value":  "8"
+                                     },
+                                     {
+                                         "label":  "lrBlockedOfChange",
+                                         "sortOrder":  100,
+                                         "technicalCode":  "lrBlockedOfChange",
+                                         "value":  "9"
+                                     },
+                                     {
+                                         "label":  "lrInvalidPINCode",
+                                         "sortOrder":  110,
+                                         "technicalCode":  "lrInvalidPINCode",
+                                         "value":  "10"
+                                     },
+                                     {
+                                         "label":  "lrPINCodeRequired",
+                                         "sortOrder":  120,
+                                         "technicalCode":  "lrPINCodeRequired",
+                                         "value":  "11"
+                                     },
+                                     {
+                                         "label":  "lrLocalUserNotMappedtoSso",
+                                         "sortOrder":  130,
+                                         "technicalCode":  "lrLocalUserNotMappedtoSso",
+                                         "value":  "12"
+                                     },
+                                     {
+                                         "label":  "lrSsoError",
+                                         "sortOrder":  140,
+                                         "technicalCode":  "lrSsoError",
+                                         "value":  "13"
+                                     },
+                                     {
+                                         "label":  "lrSsoBranchAccessFailed",
+                                         "sortOrder":  150,
+                                         "technicalCode":  "lrSsoBranchAccessFailed",
+                                         "value":  "14"
+                                     },
+                                     {
+                                         "label":  "lrSsoAppAccessError",
+                                         "sortOrder":  160,
+                                         "technicalCode":  "lrSsoAppAccessError",
+                                         "value":  "15"
+                                     },
+                                     {
+                                         "label":  "lrSsoDisabledUser",
+                                         "sortOrder":  170,
+                                         "technicalCode":  "lrSsoDisabledUser",
+                                         "value":  "16"
+                                     },
+                                     {
+                                         "label":  "lrSsoRemoteSessionViolation",
+                                         "sortOrder":  180,
+                                         "technicalCode":  "lrSsoRemoteSessionViolation",
+                                         "value":  "17"
+                                     },
+                                     {
+                                         "label":  "lrSsoLoggedinFromDifferentUid",
+                                         "sortOrder":  190,
+                                         "technicalCode":  "lrSsoLoggedinFromDifferentUid",
+                                         "value":  "18"
+                                     },
+                                     {
+                                         "label":  "lrSsoMaxUserCountExceeded",
+                                         "sortOrder":  200,
+                                         "technicalCode":  "lrSsoMaxUserCountExceeded",
+                                         "value":  "19"
+                                     },
+                                     {
+                                         "label":  "lrPasswordCannotBeEmpty",
+                                         "sortOrder":  210,
+                                         "technicalCode":  "lrPasswordCannotBeEmpty",
+                                         "value":  "20"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNXHakTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNXHakTipi",
+                      "values":  [
+                                     {
+                                         "label":  "htKayit",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "htKayit",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "htDuzelt",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "htDuzelt",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "htIptal",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "htIptal",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "htIzle",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "htIzle",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "htHakVarMi",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "htHakVarMi",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "htHepsi",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "htHepsi",
+                                         "value":  "5"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TSifreDegisimSonuc",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TSifreDegisimSonuc",
+                      "values":  [
+                                     {
+                                         "label":  "sdOK",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "sdOK",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "sdEskiSifre",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "sdEskiSifre",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "sdBirOncekiSifre",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "sdBirOncekiSifre",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "sdMinUzunluk",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "sdMinUzunluk",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "sdYanlisOnaySifre",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "sdYanlisOnaySifre",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "sdYanlisEskiSifre",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "sdYanlisEskiSifre",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "sdBoslukVar",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "sdBoslukVar",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "sdIsimVar",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "sdIsimVar",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "sdSoyadVar",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "sdSoyadVar",
+                                         "value":  "8"
+                                     },
+                                     {
+                                         "label":  "sdKullaniciAdiVar",
+                                         "sortOrder":  100,
+                                         "technicalCode":  "sdKullaniciAdiVar",
+                                         "value":  "9"
+                                     },
+                                     {
+                                         "label":  "sdTekrarlayan",
+                                         "sortOrder":  110,
+                                         "technicalCode":  "sdTekrarlayan",
+                                         "value":  "10"
+                                     },
+                                     {
+                                         "label":  "sdBaslangicIsaret",
+                                         "sortOrder":  120,
+                                         "technicalCode":  "sdBaslangicIsaret",
+                                         "value":  "11"
+                                     },
+                                     {
+                                         "label":  "sdTekrarlayanKul",
+                                         "sortOrder":  130,
+                                         "technicalCode":  "sdTekrarlayanKul",
+                                         "value":  "12"
+                                     },
+                                     {
+                                         "label":  "sdRakamHarfYok",
+                                         "sortOrder":  140,
+                                         "technicalCode":  "sdRakamHarfYok",
+                                         "value":  "13"
+                                     },
+                                     {
+                                         "label":  "sdOzelKarakterYok",
+                                         "sortOrder":  150,
+                                         "technicalCode":  "sdOzelKarakterYok",
+                                         "value":  "14"
+                                     },
+                                     {
+                                         "label":  "sdBuyukKucukHarfYok",
+                                         "sortOrder":  160,
+                                         "technicalCode":  "sdBuyukKucukHarfYok",
+                                         "value":  "15"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNetsisAnaSurum",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNetsisAnaSurum",
+                      "values":  [
+                                     {
+                                         "label":  "nasFusion",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "nasFusion",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "nasFusionSt",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "nasFusionSt",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "nasEntegre",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "nasEntegre",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "nasNetLite",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "nasNetLite",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNetsisAltSurum",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNetsisAltSurum",
+                      "values":  [
+                                     {
+                                         "label":  "naltNone",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "naltNone",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "naltNetsisII",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "naltNetsisII",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "naltNetsisIII",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "naltNetsisIII",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "naltMuhPak",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "naltMuhPak",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "naltGenMuh",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "naltGenMuh",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TFiyatListesi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFiyatListesi",
+                      "values":  [
+                                     {
+                                         "label":  "flAlis",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "flAlis",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "flSatis",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "flSatis",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "flYok",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "flYok",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TUpdateKodu",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TUpdateKodu",
+                      "values":  [
+                                     {
+                                         "label":  "ukHepsi",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ukHepsi",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "ukDegisenler",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ukDegisenler",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TAlternatifPolitikalar",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TAlternatifPolitikalar",
+                      "values":  [
+                                     {
+                                         "label":  "apHicbiri",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "apHicbiri",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "apOranlar",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "apOranlar",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "apOncelikler",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "apOncelikler",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "aponcelikSirasiStokBakiyesi",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "aponcelikSirasiStokBakiyesi",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "apOncelikSirasiYuzdeYuz",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "apOncelikSirasiYuzdeYuz",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TAltPolitikaMrp",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TAltPolitikaMrp",
+                      "values":  [
+                                     {
+                                         "label":  "apmHicbiri",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "apmHicbiri",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "apmOranlar",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "apmOranlar",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "İş Akış Durumu",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TIsAkisDurum",
+                      "values":  [
+                                     {
+                                         "label":  "wfdBeklemede",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "wfdBeklemede",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "wfdOnaylanmis",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "wfdOnaylanmis",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "wfdRed",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "wfdRed",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "wfdGecikmis",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "wfdGecikmis",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "wfdSilindi",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "wfdSilindi",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "wfdNone",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "wfdNone",
+                                         "value":  "5"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TIsAkisDBOpType",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TIsAkisDBOpType",
+                      "values":  [
+                                     {
+                                         "label":  "wfopInsert",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "wfopInsert",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "wfopUpdate",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "wfopUpdate",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "wfopNone",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "wfopNone",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TIsAkisIslemType",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TIsAkisIslemType",
+                      "values":  [
+                                     {
+                                         "label":  "wfproInsert",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "wfproInsert",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "wfproOnay",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "wfproOnay",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "wfproRed",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "wfproRed",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "wfproNone",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "wfproNone",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNXCRMCustomFields",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNXCRMCustomFields",
+                      "values":  [
+                                     {
+                                         "label":  "ccfChar",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ccfChar",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "ccfString",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ccfString",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "ccfInteger",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "ccfInteger",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "ccfFloat",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "ccfFloat",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "ccfByte",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "ccfByte",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "ccfDate",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "ccfDate",
+                                         "value":  "5"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNXCRMCustomControl",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNXCRMCustomControl",
+                      "values":  [
+                                     {
+                                         "label":  "cccCombo",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "cccCombo",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "cccEdit",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "cccEdit",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "cccCheckBox",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "cccCheckBox",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "cccRadio",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "cccRadio",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "cccMemo",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "cccMemo",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TNXCRMAnketControlType",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TNXCRMAnketControlType",
+                      "values":  [
+                                     {
+                                         "label":  "actMemo",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "actMemo",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "actRadio",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "actRadio",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "actChBox",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "actChBox",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "actNone",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "actNone",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Tutar Değişikliğinde Sabit",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFatUstDegissin",
+                      "values":  [
+                                     {
+                                         "label":  "Döviz Fiyatı sabit (fudDovizFiyati)",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "fudDovizFiyati",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "Kur sabit (fudKur)",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "fudKur",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "Fiyat sabit (fudFiyat)",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "fudFiyat",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Fatura Kırılımı",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFaturaKirilim",
+                      "values":  [
+                                     {
+                                         "label":  "fkIrsNo",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "fkIrsNo",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "fkCarikod",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "fkCarikod",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "fkTesCariKod",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "fkTesCariKod",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "fkKosulKod",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "fkKosulKod",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Döviz Kuru Tipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDovizKuru",
+                      "values":  [
+                                     {
+                                         "label":  "Alış (dkAlis)",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "dkAlis",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "Satış (dkSatis)",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "dkSatis",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "Effektif Alış (dkEffAlis)",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "dkEffAlis",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "Effektif Satış (dkEffSatis)",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "dkEffSatis",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TKasaBasimTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TKasaBasimTipi",
+                      "values":  [
+                                     {
+                                         "label":  "kbMCek",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "kbMCek",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "kbMSen",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "kbMSen",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "kbBCek",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "kbBCek",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "kbBSen",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "kbBSen",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "kbDiger",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "kbDiger",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TMrpPlanlamaTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TMrpPlanlamaTipi",
+                      "values":  [
+                                     {
+                                         "label":  "mptGunluk",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "mptGunluk",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "mptBazTarihi",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "mptBazTarihi",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TMrpUrunTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TMrpUrunTipi",
+                      "values":  [
+                                     {
+                                         "label":  "mutTumMamuller",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "mutTumMamuller",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "mutSiparisBakiye",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "mutSiparisBakiye",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "mutTumMamulSipBakiye",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "mutTumMamulSipBakiye",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "mutAUP",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "mutAUP",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TMrpRevizyonTutSaha",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TMrpRevizyonTutSaha",
+                      "values":  [
+                                     {
+                                         "label":  "mrtsHicbiri",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "mrtsHicbiri",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "mrtsEkAlan1",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "mrtsEkAlan1",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "mrtsEkAlan2",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "mrtsEkAlan2",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik1",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "mrtsSatirAcik1",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik2",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "mrtsSatirAcik2",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik3",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "mrtsSatirAcik3",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik4",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "mrtsSatirAcik4",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik5",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "mrtsSatirAcik5",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik6",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "mrtsSatirAcik6",
+                                         "value":  "8"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik7",
+                                         "sortOrder":  100,
+                                         "technicalCode":  "mrtsSatirAcik7",
+                                         "value":  "9"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik8",
+                                         "sortOrder":  110,
+                                         "technicalCode":  "mrtsSatirAcik8",
+                                         "value":  "10"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik9",
+                                         "sortOrder":  120,
+                                         "technicalCode":  "mrtsSatirAcik9",
+                                         "value":  "11"
+                                     },
+                                     {
+                                         "label":  "mrtsSatirAcik10",
+                                         "sortOrder":  130,
+                                         "technicalCode":  "mrtsSatirAcik10",
+                                         "value":  "12"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TMrpSiparis",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TMrpSiparis",
+                      "values":  [
+                                     {
+                                         "label":  "msPlanlanan",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "msPlanlanan",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "msKesinlesen",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "msKesinlesen",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "msHepsi",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "msHepsi",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TPosTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TPosTipi",
+                      "values":  [
+                                     {
+                                         "label":  "ptIBMGenius",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ptIBMGenius",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "ptIBMSPS",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ptIBMSPS",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "ptInterpos",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "ptInterpos",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "ptIBMPos",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "ptIBMPos",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "ptNCR7400",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "ptNCR7400",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "ptSiemensMarket",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "ptSiemensMarket",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "ptSiemensTera",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "ptSiemensTera",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "ptEscortPos",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "ptEscortPos",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "ptBBCPos",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "ptBBCPos",
+                                         "value":  "8"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TDepoBelgeTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDepoBelgeTipi",
+                      "values":  [
+                                     {
+                                         "label":  "dbtSatisFatura",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "dbtSatisFatura",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "dbtAlisFaturasi",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "dbtAlisFaturasi",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "dbtSatisIrsaliyesi",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "dbtSatisIrsaliyesi",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "dbtAlisIrsaliyesi",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "dbtAlisIrsaliyesi",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "dbtAmbarGirisFisi",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "dbtAmbarGirisFisi",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "dbtAmbarCikisFisi",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "dbtAmbarCikisFisi",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "dbtDepolarArasiTransfer",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "dbtDepolarArasiTransfer",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "dbtUretim",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "dbtUretim",
+                                         "value":  "7"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TDepoIslemTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDepoIslemTipi",
+                      "values":  [
+                                     {
+                                         "label":  "ditYerlestirme",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ditYerlestirme",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "ditToplama",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ditToplama",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TDepoHareketTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDepoHareketTipi",
+                      "values":  [
+                                     {
+                                         "label":  "dhtNormal",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "dhtNormal",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "dhtDuzeltme",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "dhtDuzeltme",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TOperatorType",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TOperatorType",
+                      "values":  [
+                                     {
+                                         "label":  "otEquals",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "otEquals",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "otLess",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "otLess",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "otLessEqual",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "otLessEqual",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "otGreater",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "otGreater",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "otGreaterEqual",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "otGreaterEqual",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "otLike",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "otLike",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "otBetween",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "otBetween",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "otIn",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "otIn",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "otNotEquals",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "otNotEquals",
+                                         "value":  "8"
+                                     },
+                                     {
+                                         "label":  "otNone",
+                                         "sortOrder":  100,
+                                         "technicalCode":  "otNone",
+                                         "value":  "9"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TEkModul",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TEkModul",
+                      "values":  [
+                                     {
+                                         "label":  "emENetsis",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "emENetsis",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "emKasa",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "emKasa",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "emKasaEsPos",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "emKasaEsPos",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "emIBMPosLimited",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "emIBMPosLimited",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "emNCRPosLimited",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "emNCRPosLimited",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "emNetleServis",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "emNetleServis",
+                                         "value":  "5"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Cari Risk Tipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TCariRiskTipi",
+                      "values":  [
+                                     {
+                                         "label":  "crtBorcToplam",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "crtBorcToplam",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "crtAlacakToplam",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "crtAlacakToplam",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "crtBorcBakiye",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "crtBorcBakiye",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "crtTeminat",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "crtTeminat",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "crtSenetAsil",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "crtSenetAsil",
+                                         "value":  "4"
+                                     },
+                                     {
+                                         "label":  "crtSenetCiro",
+                                         "sortOrder":  60,
+                                         "technicalCode":  "crtSenetCiro",
+                                         "value":  "5"
+                                     },
+                                     {
+                                         "label":  "crtCekAsil",
+                                         "sortOrder":  70,
+                                         "technicalCode":  "crtCekAsil",
+                                         "value":  "6"
+                                     },
+                                     {
+                                         "label":  "crtCekCiro",
+                                         "sortOrder":  80,
+                                         "technicalCode":  "crtCekCiro",
+                                         "value":  "7"
+                                     },
+                                     {
+                                         "label":  "crtSiparis",
+                                         "sortOrder":  90,
+                                         "technicalCode":  "crtSiparis",
+                                         "value":  "8"
+                                     },
+                                     {
+                                         "label":  "crtSevk",
+                                         "sortOrder":  100,
+                                         "technicalCode":  "crtSevk",
+                                         "value":  "9"
+                                     },
+                                     {
+                                         "label":  "crtYukleme",
+                                         "sortOrder":  110,
+                                         "technicalCode":  "crtYukleme",
+                                         "value":  "10"
+                                     },
+                                     {
+                                         "label":  "crtIrsaliye",
+                                         "sortOrder":  120,
+                                         "technicalCode":  "crtIrsaliye",
+                                         "value":  "11"
+                                     },
+                                     {
+                                         "label":  "crtToplam",
+                                         "sortOrder":  130,
+                                         "technicalCode":  "crtToplam",
+                                         "value":  "12"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TDekontTip",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDekontTip",
+                      "values":  [
+                                     {
+                                         "label":  "dekCari",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "dekCari",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "dekStok",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "dekStok",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "dekMuhasebe",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "dekMuhasebe",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "dekBanka",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "dekBanka",
+                                         "value":  "3"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TAcikReceteBilesenSirasi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TAcikReceteBilesenSirasi",
+                      "values":  [
+                                     {
+                                         "label":  "arbsKodSirasi",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "arbsKodSirasi",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "arbsGirisSirasi",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "arbsGirisSirasi",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TOlcuBr",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TOlcuBr",
+                      "values":  [
+                                     {
+                                         "label":  "Olcu_Br1",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "Olcu_Br1",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "Olcu_Br2",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "Olcu_Br2",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "Olcu_Br3",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "Olcu_Br3",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TSubIsEmriStateType",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TSubIsEmriStateType",
+                      "values":  [
+                                     {
+                                         "label":  "sistBitti",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "sistBitti",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "sistBasladiBitmedi",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "sistBasladiBitmedi",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "sistBaslamadi",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "sistBaslamadi",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TFisAnaDetayType",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFisAnaDetayType",
+                      "values":  [
+                                     {
+                                         "label":  "fdtBorc",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "fdtBorc",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "fdtAlacak",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "fdtAlacak",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TFisType",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TFisType",
+                      "values":  [
+                                     {
+                                         "label":  "ftMahsup",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ftMahsup",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "ftTahsil",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "ftTahsil",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "ftTediye",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "ftTediye",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "ftAcilisFisi",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "ftAcilisFisi",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "ftKapanisFisi",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "ftKapanisFisi",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "Giriş/Çıkış",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TGirisCikis",
+                      "values":  [
+                                     {
+                                         "label":  "Giriş (gcGiris)",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "gcGiris",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "Çıkış (gcCikis)",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "gcCikis",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TBelgeTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TBelgeTipi",
+                      "values":  [
+                                     {
+                                         "label":  "btHicBiri",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "btHicBiri",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "btIsEmri",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "btIsEmri",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "btSiparis",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "btSiparis",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TDepoOnceligi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TDepoOnceligi",
+                      "values":  [
+                                     {
+                                         "label":  "doHicBiri",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "doHicBiri",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "doStokDepo",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "doStokDepo",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "doIsEmriDepo",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "doIsEmriDepo",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TBakiyeDepo",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TBakiyeDepo",
+                      "values":  [
+                                     {
+                                         "label":  "bdVerilenDepo",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "bdVerilenDepo",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "bdTumDepolar",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "bdTumDepolar",
+                                         "value":  "1"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TGruplamaSecenekTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TGruplamaSecenekTipi",
+                      "values":  [
+                                     {
+                                         "label":  "gsHicbiri",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "gsHicbiri",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "gsGunluk",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "gsGunluk",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "gsHaftalik",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "gsHaftalik",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "gsAylik",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "gsAylik",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "gsDetayli",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "gsDetayli",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TGrupDetaySureTipi",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TGrupDetaySureTipi",
+                      "values":  [
+                                     {
+                                         "label":  "gdGun",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "gdGun",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "gdHafta",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "gdHafta",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "gdAy",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "gdAy",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TSaticiKoduBosIhtiyaclar",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TSaticiKoduBosIhtiyaclar",
+                      "values":  [
+                                     {
+                                         "label":  "biGetirilmesin",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "biGetirilmesin",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "biGetirilsin",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "biGetirilsin",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "biBosOlanGetirilsin",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "biBosOlanGetirilsin",
+                                         "value":  "2"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TEBelgeTip",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TEBelgeTip",
+                      "values":  [
+                                     {
+                                         "label":  "ebtArsiv",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "ebtArsiv",
+                                         "value":  "0"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TUskDurumu",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TUskDurumu",
+                      "values":  [
+                                     {
+                                         "label":  "uskYeni",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "uskYeni",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "uskBasladi",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "uskBasladi",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "uskDurduruldu",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "uskDurduruldu",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "uskTamamlandi",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "uskTamamlandi",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "uskIptalEdildi",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "uskIptalEdildi",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  },
+                  {
+                      "label":  "TRezervasyonDurumu",
+                      "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6 IL extract",
+                      "code":  "TRezervasyonDurumu",
+                      "values":  [
+                                     {
+                                         "label":  "rdYeni",
+                                         "sortOrder":  10,
+                                         "technicalCode":  "rdYeni",
+                                         "value":  "0"
+                                     },
+                                     {
+                                         "label":  "rdMamulAmbarinaRezerve",
+                                         "sortOrder":  20,
+                                         "technicalCode":  "rdMamulAmbarinaRezerve",
+                                         "value":  "1"
+                                     },
+                                     {
+                                         "label":  "rdMalzemeAmbarinaRezerve",
+                                         "sortOrder":  30,
+                                         "technicalCode":  "rdMalzemeAmbarinaRezerve",
+                                         "value":  "2"
+                                     },
+                                     {
+                                         "label":  "rdUretimHattinaRezerve",
+                                         "sortOrder":  40,
+                                         "technicalCode":  "rdUretimHattinaRezerve",
+                                         "value":  "3"
+                                     },
+                                     {
+                                         "label":  "rdYayimlandi",
+                                         "sortOrder":  50,
+                                         "technicalCode":  "rdYayimlandi",
+                                         "value":  "4"
+                                     }
+                                 ]
+                  }
+              ],
+    "provider":  {
+                     "label":  "Netsis",
+                     "code":  "Netsis",
+                     "sortOrder":  10,
+                     "description":  "Netsis NetOpenX REST API entegrasyon provider",
+                     "sourceInfo":  "Interop.NetOpenX50.dll v8.0.6",
+                     "iconColor":  "indigo"
+                 },
+    "fieldDocs":  [
+                      {
+                          "fieldPath":  "Seri",
+                          "label":  "Seri",
+                          "enumCode":  null,
+                          "description":  "Belge serisi (ön ek). Çoğunlukla boş bırakılır; Netsis serili numara şablonu varsa kullanılır.",
+                          "example":  "\"\"",
+                          "resource":  "ItemSlips",
+                          "notes":  "Boş gönderilirse Netsis\u0027in default seri ayarı uygulanır."
+                      },
+                      {
+                          "fieldPath":  "FatUst.Tip",
+                          "label":  "Belge Tipi",
+                          "enumCode":  "TFaturaTip",
+                          "description":  "Fişin hangi cins olduğunu belirtir (TFaturaTip).",
+                          "example":  "7",
+                          "resource":  "ItemSlips",
+                          "notes":  "Cari kart tipiyle (alıcı/satıcı) tutarlı seçin — tutarsızlık API\u0027de 400 hatası verir."
+                      },
+                      {
+                          "fieldPath":  "FatUst.TIPI",
+                          "label":  "Belge Durumu",
+                          "enumCode":  "TFaturaTipi",
+                          "description":  "Açık/kapalı/iade/ihracat ayrımı (TFaturaTipi).",
+                          "example":  "2",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.AMBHARTUR",
+                          "label":  "Ambar Hareket Türü",
+                          "enumCode":  "TAmbarHarTur",
+                          "description":  "Hareket türü (TAmbarHarTur).",
+                          "example":  "1",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.CikisYeri",
+                          "label":  "Çıkış Yeri",
+                          "enumCode":  "TCikisYeri",
+                          "description":  "Çıkış yeri kırılımı (TCikisYeri).",
+                          "example":  "0",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.Degissin",
+                          "label":  "Tutar Değişikliği",
+                          "enumCode":  "TFatUstDegissin",
+                          "description":  "Belge tutarı değişikliği esnasında neyin sabit kalacağı (TFatUstDegissin).",
+                          "example":  "0",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.Sube_Kodu",
+                          "label":  "Şube Kodu",
+                          "enumCode":  null,
+                          "description":  "Çok şubeli kurulumlarda zorunlu, tek şube için genellikle 0.",
+                          "example":  "0",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.CariKod",
+                          "label":  "Cari Kod",
+                          "enumCode":  null,
+                          "description":  "Cari kart kodu (Müşteri veya Satıcı). Netsis\u0027te tanımlı ARP kodu olmalı.",
+                          "example":  "\"120.01.0001\"",
+                          "resource":  "ItemSlips",
+                          "notes":  "CalibraHub\u0027da Contact.Code → Netsis CariKod eşlemesi kullanın."
+                      },
+                      {
+                          "fieldPath":  "FatUst.FATIRS_NO",
+                          "label":  "Fiş/Fatura Numarası",
+                          "enumCode":  null,
+                          "description":  "Fiş/fatura/irsaliye numarası.",
+                          "example":  "\"\"",
+                          "resource":  "ItemSlips",
+                          "notes":  "Boş gönderilirse Netsis aktif seri için otomatik numara üretir."
+                      },
+                      {
+                          "fieldPath":  "FatUst.Tarih",
+                          "label":  "Belge Tarihi",
+                          "enumCode":  null,
+                          "description":  "Belge tarihi (ISO 8601 formatı önerilir).",
+                          "example":  "\"2026-05-16T00:00:00\"",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.VadeTarihi",
+                          "label":  "Vade Tarihi",
+                          "enumCode":  null,
+                          "description":  "Ödeme/tahsilat planlaması için.",
+                          "example":  "\"2026-06-15T00:00:00\"",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.KOD1",
+                          "label":  "Yedek Kod 1",
+                          "enumCode":  null,
+                          "description":  "Yedek/özel kod alanı 1 (proje, departman, kampanya kodu vb.).",
+                          "example":  "\"\"",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.KOD2",
+                          "label":  "Yedek Kod 2",
+                          "enumCode":  null,
+                          "description":  "Yedek/özel kod alanı 2.",
+                          "example":  "\"\"",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.Aciklama",
+                          "label":  "Açıklama",
+                          "enumCode":  null,
+                          "description":  "Belge başlık açıklaması (kalemlerin üstünde).",
+                          "example":  "\"İstanbul deposundan sevk\"",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "FatUst.BRUTTUTAR",
+                          "label":  "Brüt Tutar",
+                          "enumCode":  null,
+                          "description":  "İskonto ve KDV hariç brüt tutar (TL).",
+                          "example":  "0",
+                          "resource":  "ItemSlips",
+                          "notes":  "Genellikle Netsis kalemlerden otomatik hesaplar."
+                      },
+                      {
+                          "fieldPath":  "FatUst.KDV",
+                          "label":  "Toplam KDV",
+                          "enumCode":  null,
+                          "description":  "Toplam KDV tutarı (TL).",
+                          "example":  "0",
+                          "resource":  "ItemSlips",
+                          "notes":  "Netsis kalem KDV oranlarından otomatik hesaplar."
+                      },
+                      {
+                          "fieldPath":  "FatUst.GENELTOPLAM",
+                          "label":  "Genel Toplam",
+                          "enumCode":  null,
+                          "description":  "Genel toplam (KDV dahil, TL).",
+                          "example":  "0",
+                          "resource":  "ItemSlips",
+                          "notes":  "Netsis kalemlerden otomatik hesaplar."
+                      },
+                      {
+                          "fieldPath":  "Kalems[].StokKodu",
+                          "label":  "Stok Kodu",
+                          "enumCode":  null,
+                          "description":  "Stok kartı kodu - Netsis Items tablosunda tanımlı olmalı.",
+                          "example":  "\"STK.0001\"",
+                          "resource":  "ItemSlips",
+                          "notes":  "CalibraHub Item.Code → Netsis StokKodu eşlemesi."
+                      },
+                      {
+                          "fieldPath":  "Kalems[].STra_GCMIK",
+                          "label":  "Giriş/Çıkış Miktarı",
+                          "enumCode":  null,
+                          "description":  "Kalemin asıl miktar alanı.",
+                          "example":  "5",
+                          "resource":  "ItemSlips",
+                          "notes":  "Stok birimi StokKodu\u0027nun tanımına göre yorumlanır."
+                      },
+                      {
+                          "fieldPath":  "Kalems[].STra_GC",
+                          "label":  "Giriş/Çıkış",
+                          "enumCode":  null,
+                          "description":  "Kalem giriş/çıkış yönü.",
+                          "example":  "\"C\"",
+                          "resource":  "ItemSlips",
+                          "notes":  "Satış/Verilen sipariş = C, Alış/Alınan irsaliye = G."
+                      },
+                      {
+                          "fieldPath":  "Kalems[].STra_NF",
+                          "label":  "Net Birim Fiyat",
+                          "enumCode":  null,
+                          "description":  "İskonto sonrası, KDV hariç birim fiyat (TL).",
+                          "example":  "100.00",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "Kalems[].STra_BF",
+                          "label":  "Brüt Birim Fiyat",
+                          "enumCode":  null,
+                          "description":  "İskonto öncesi, KDV hariç birim fiyat (TL).",
+                          "example":  "120.00",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "Kalems[].STra_ACIKLAMA",
+                          "label":  "Kalem Açıklama",
+                          "enumCode":  null,
+                          "description":  "Kalem açıklaması (serbest metin).",
+                          "example":  "\"Mavi renk, 50cm\"",
+                          "resource":  "ItemSlips",
+                          "notes":  null
+                      },
+                      {
+                          "fieldPath":  "Kalems[].DepoKodu",
+                          "label":  "Depo Kodu",
+                          "enumCode":  null,
+                          "description":  "Kalemin hangi depodan çıkacağı/gireceği.",
+                          "example":  "1",
+                          "resource":  "ItemSlips",
+                          "notes":  "CalibraHub Warehouse.Code üzerinden eşleyin."
+                      }
+                  ]
+}

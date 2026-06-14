@@ -67,7 +67,7 @@ public sealed class DocumentController : Controller
 
             // DesignSelectionContext — kullanici/cari/grup bilgileriyle kural eslemesi
             var userIdRaw = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var userId = Guid.TryParse(userIdRaw, out var u) ? (Guid?)u : null;
+            var userId = int.TryParse(userIdRaw, out var u) ? (int?)u : null;
 
             int? contactGroupId = null;
             if (document.ContactId is int cid && cid > 0)

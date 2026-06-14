@@ -11,7 +11,7 @@ public sealed class DesignSelectionContext
 
     public int?  CustomerId     { get; init; }
     public int?  ContactGroupId { get; init; }
-    public Guid? UserId         { get; init; }
+    public int?  UserId         { get; init; }
     public int?  BranchId       { get; init; }
     public int?  WarehouseId    { get; init; }
 

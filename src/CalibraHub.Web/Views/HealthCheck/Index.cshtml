@@ -1,0 +1,431 @@
+@{
+    ViewData["Title"] = "Sistem Sağlık Kontrolü";
+}
+
+@section Styles {
+<style>
+    .hc-wrap {
+        padding: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+        height: calc(100vh - var(--app-header-height, 64px) - var(--app-tabs-height, 48px));
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    .hc-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex: 0 0 auto; }
+    .hc-results-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        border-radius: 10px;
+        border: 1px solid rgba(148,163,184,.2);
+        background: var(--surface, #fff);
+    }
+    body.app-theme-dark .hc-results-scroll,
+    html.dark .hc-results-scroll {
+        background: rgba(15,23,42,.4);
+        border-color: rgba(255,255,255,.08);
+    }
+    .hc-btn {
+        padding: 9px 18px; border-radius: 8px; border: none;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: #fff; font-weight: 600; font-size: 13px; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 8px;
+        transition: transform .12s, opacity .12s;
+    }
+    .hc-btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .hc-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .hc-summary { display: flex; gap: 16px; flex-wrap: wrap; }
+    .hc-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+        background: rgba(148,163,184,.15);
+    }
+    .hc-pill.ok { background: rgba(16,185,129,.18); color: #10b981; }
+    .hc-pill.error { background: rgba(239,68,68,.18); color: #ef4444; }
+    .hc-pill.warn { background: rgba(245,158,11,.18); color: #f59e0b; }
+    .hc-pill.redirect { background: rgba(59,130,246,.18); color: #3b82f6; }
+
+    .hc-table {
+        width: 100%; border-collapse: separate; border-spacing: 0;
+        background: transparent;
+        font-size: 12.5px;
+    }
+    .hc-table th {
+        text-align: left; padding: 10px 14px;
+        background: rgba(241,245,249,1);
+        font-weight: 600; font-size: 11px; color: #64748b;
+        text-transform: uppercase; letter-spacing: .04em;
+        border-bottom: 1px solid rgba(148,163,184,.15);
+        position: sticky; top: 0; z-index: 2;
+    }
+    body.app-theme-dark .hc-table th,
+    html.dark .hc-table th { background: rgba(30,41,59,1); }
+    .hc-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid rgba(148,163,184,.08);
+        vertical-align: top;
+    }
+    .hc-table tr:last-child td { border-bottom: none; }
+    .hc-table tr.row-error { background: rgba(239,68,68,.06); }
+    .hc-table tr.row-exception { background: rgba(239,68,68,.10); }
+    .hc-table tr.row-warn { background: rgba(245,158,11,.05); }
+
+    body.app-theme-dark .hc-table,
+    html.dark .hc-table { color: #e2e8f0; }
+    body.app-theme-dark .hc-table td,
+    html.dark .hc-table td { border-bottom-color: rgba(255,255,255,.05); }
+
+    .hc-status {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 9px; border-radius: 6px;
+        font-weight: 700; font-size: 11px; text-transform: uppercase;
+        letter-spacing: .04em; min-width: 60px; justify-content: center;
+    }
+    .hc-status.ok { background: rgba(16,185,129,.18); color: #10b981; }
+    .hc-status.error, .hc-status.exception { background: rgba(239,68,68,.18); color: #ef4444; }
+    .hc-status.warn { background: rgba(245,158,11,.18); color: #f59e0b; }
+    .hc-status.redirect { background: rgba(59,130,246,.18); color: #3b82f6; }
+    .hc-status.pending { background: rgba(148,163,184,.2); color: #94a3b8; }
+
+    .hc-path { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #64748b; }
+    body.app-theme-dark .hc-path, html.dark .hc-path { color: #94a3b8; }
+    .hc-parent { font-size: 11px; color: #94a3b8; }
+    .hc-error-snippet {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px;
+        background: rgba(239,68,68,.10);
+        padding: 6px 10px; border-radius: 5px;
+        color: #ef4444;
+        margin-top: 4px;
+        max-width: 600px;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .hc-duration { color: #94a3b8; font-size: 11px; text-align: right; }
+
+    .hc-spinner {
+        width: 14px; height: 14px;
+        border: 2px solid currentColor;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: hc-spin 0.7s linear infinite;
+    }
+    @@keyframes hc-spin { to { transform: rotate(360deg); } }
+
+    /* Canli ilerleme overlay (tablo uzerine binmez — tablo alaninin icinde flex column) */
+    .hc-progress-card {
+        background: linear-gradient(135deg, rgba(99,102,241,.06), rgba(139,92,246,.04));
+        border: 1px solid rgba(99,102,241,.18);
+        border-radius: 12px;
+        padding: 18px 22px;
+        margin-bottom: 14px;
+        display: flex; align-items: center; gap: 18px;
+        flex: 0 0 auto;
+    }
+    body.app-theme-dark .hc-progress-card,
+    html.dark .hc-progress-card {
+        background: linear-gradient(135deg, rgba(99,102,241,.14), rgba(139,92,246,.10));
+        border-color: rgba(99,102,241,.32);
+    }
+    .hc-spinner-lg {
+        flex: 0 0 auto;
+        width: 36px; height: 36px;
+        border: 3px solid rgba(99,102,241,.20);
+        border-top-color: #6366f1;
+        border-radius: 50%;
+        animation: hc-spin 0.8s linear infinite;
+    }
+    .hc-progress-body { flex: 1 1 auto; min-width: 0; }
+    .hc-progress-title { font-size: 12px; font-weight: 600; color: #6366f1; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .hc-progress-current {
+        font-size: 15px; font-weight: 600; color: #1e293b;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    body.app-theme-dark .hc-progress-current,
+    html.dark .hc-progress-current { color: #f1f5f9; }
+    .hc-progress-parent { font-size: 11px; color: #94a3b8; margin-bottom: 2px; }
+    .hc-progress-path {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px; color: #64748b; margin-top: 3px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .hc-progress-counter {
+        flex: 0 0 auto;
+        font-size: 13px; font-weight: 700; color: #6366f1;
+        background: rgba(99,102,241,.10);
+        padding: 6px 14px; border-radius: 20px;
+        min-width: 70px; text-align: center;
+    }
+    .hc-progress-bar {
+        margin-top: 10px;
+        height: 4px; border-radius: 2px;
+        background: rgba(148,163,184,.18);
+        overflow: hidden;
+    }
+    .hc-progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1, #8b5cf6);
+        transition: width 0.25s ease;
+    }
+</style>
+}
+
+<div class="hc-wrap">
+    <h1 style="font-size: 22px; font-weight: 700; margin: 0 0 6px;">Sistem Sağlık Kontrolü</h1>
+    <p style="font-size: 13px; color: #64748b; margin: 0 0 20px;">
+        Tüm menü ekranlarına otomatik HTTP isteği gönderilir. 200 OK alamayan sayfalar listelenir.
+    </p>
+
+    <div class="hc-toolbar">
+        <button id="hcRunBtn" class="hc-btn" type="button">
+            <span id="hcRunIcon">▶</span>
+            <span id="hcRunLabel">Tüm Kontrolleri Çalıştır</span>
+        </button>
+        <div id="hcSummary" class="hc-summary"></div>
+    </div>
+
+    <div id="hcResults" style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;"></div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function() {
+    const btn = document.getElementById('hcRunBtn');
+    const icon = document.getElementById('hcRunIcon');
+    const label = document.getElementById('hcRunLabel');
+    const summaryEl = document.getElementById('hcSummary');
+    const resultsEl = document.getElementById('hcResults');
+
+    function getCsrf() {
+        const el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    function escapeHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function renderSummary(s) {
+        summaryEl.innerHTML =
+            '<span class="hc-pill ok">✓ ' + s.ok + ' OK</span>' +
+            (s.redirect > 0 ? '<span class="hc-pill redirect">↻ ' + s.redirect + ' Redirect</span>' : '') +
+            (s.warn > 0 ? '<span class="hc-pill warn">⚠ ' + s.warn + ' Uyarı</span>' : '') +
+            (s.error > 0 ? '<span class="hc-pill error">✗ ' + s.error + ' Hata</span>' : '') +
+            (s.exception > 0 ? '<span class="hc-pill error">⚡ ' + s.exception + ' Exception</span>' : '') +
+            '<span class="hc-pill">⏱ ' + s.durationMs + 'ms</span>' +
+            '<span class="hc-pill">' + s.total + ' toplam</span>';
+    }
+
+    function renderResults(results) {
+        // Önce hatalılar, sonra warn, sonra OK
+        const order = { exception: 0, error: 1, warn: 2, redirect: 3, ok: 4 };
+        results.sort((a, b) => (order[a.status] ?? 5) - (order[b.status] ?? 5));
+
+        let html = '<div class="hc-results-scroll"><table class="hc-table"><thead><tr>';
+        html += '<th style="width:80px;">Durum</th>';
+        html += '<th>Ekran</th>';
+        html += '<th>URL</th>';
+        html += '<th style="width:80px;">HTTP</th>';
+        html += '<th style="width:90px;">Şema</th>';
+        html += '<th style="width:80px;">Süre</th>';
+        html += '</tr></thead><tbody>';
+
+        results.forEach(r => {
+            const schemaProbe = r.schemaProbe;
+            const isError = (r.status === 'error' || r.status === 'exception')
+                         || (schemaProbe && (schemaProbe.status === 'error' || schemaProbe.status === 'exception'));
+            const rowClass = isError ? 'row-error' : (r.status === 'warn' ? 'row-warn' : '');
+            const statusLabel = ({
+                ok: 'OK', error: 'HATA', exception: 'CRASH',
+                warn: 'UYARI', redirect: 'REDIR', pending: '...'
+            })[r.status] || r.status.toUpperCase();
+
+            // Şema kolonu: probe varsa OK/HATA, yoksa "—"
+            let schemaCell = '<td style="color:#94a3b8;">—</td>';
+            if (schemaProbe) {
+                if (schemaProbe.status === 'ok') {
+                    schemaCell = '<td><span class="hc-status ok" title="Tablo: ' + escapeHtml(schemaProbe.table) + '">ŞEMA OK</span></td>';
+                } else {
+                    const lbl = schemaProbe.status === 'exception' ? 'CRASH' : 'HATA';
+                    const errMsg = schemaProbe.errorMessage
+                        ? '#' + (schemaProbe.errorNumber || '?') + ' ' + schemaProbe.errorMessage
+                        : 'Bilinmeyen hata';
+                    schemaCell = '<td><span class="hc-status ' + schemaProbe.status + '" title="' + escapeHtml(errMsg) + '">' + lbl + '</span></td>';
+                }
+            }
+
+            html += '<tr class="' + rowClass + '">';
+            html += '<td><span class="hc-status ' + r.status + '">' + statusLabel + '</span></td>';
+            html += '<td><div style="font-weight:600;">' + escapeHtml(r.label) + '</div>' +
+                    (r.parentLabel ? '<div class="hc-parent">' + escapeHtml(r.parentLabel) + '</div>' : '') +
+                    (r.errorSnippet ? '<div class="hc-error-snippet">' + escapeHtml(r.errorSnippet) + '</div>' : '') +
+                    (schemaProbe && schemaProbe.errorMessage
+                        ? '<div class="hc-error-snippet">[ŞEMA #' + (schemaProbe.errorNumber || '?') + '] ' + escapeHtml(schemaProbe.errorMessage) + '</div>'
+                        : '') +
+                    '</td>';
+            html += '<td class="hc-path">' + escapeHtml(r.path) + '</td>';
+            html += '<td>' + (r.statusCode || '-') + '</td>';
+            html += schemaCell;
+            html += '<td class="hc-duration">' + r.durationMs + 'ms</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        resultsEl.innerHTML = html;
+    }
+
+    // Canli ilerleme paneli markup'i
+    function progressCardHtml(index, total, label, parentLabel, path) {
+        const pct = total > 0 ? Math.round((index - 1) / total * 100) : 0;
+        return ''
+          + '<div class="hc-progress-card" id="hcProgressCard">'
+          +   '<div class="hc-spinner-lg" aria-hidden="true"></div>'
+          +   '<div class="hc-progress-body">'
+          +     '<div class="hc-progress-title">Şu an kontrol ediliyor</div>'
+          +     (parentLabel ? '<div class="hc-progress-parent">' + escapeHtml(parentLabel) + '</div>' : '')
+          +     '<div class="hc-progress-current">' + escapeHtml(label || '...') + '</div>'
+          +     '<div class="hc-progress-path">' + escapeHtml(path || '') + '</div>'
+          +     '<div class="hc-progress-bar"><div class="hc-progress-bar-fill" id="hcProgressFill" style="width:' + pct + '%"></div></div>'
+          +   '</div>'
+          +   '<div class="hc-progress-counter">' + index + ' / ' + total + '</div>'
+          + '</div>';
+    }
+
+    function updateProgressCard(index, total, label, parentLabel, path) {
+        const card = document.getElementById('hcProgressCard');
+        if (!card) {
+            // Henuz yok — bastan olustur
+            const wrap = document.createElement('div');
+            wrap.innerHTML = progressCardHtml(index, total, label, parentLabel, path);
+            resultsEl.insertBefore(wrap.firstChild, resultsEl.firstChild);
+            return;
+        }
+        // Var olani in-place guncelle (DOM'u her seferinde yeniden yaratma yok)
+        card.querySelector('.hc-progress-current').textContent = label || '...';
+        card.querySelector('.hc-progress-path').textContent = path || '';
+        const parentEl = card.querySelector('.hc-progress-parent');
+        if (parentLabel) {
+            if (parentEl) {
+                parentEl.textContent = parentLabel;
+            } else {
+                const newParent = document.createElement('div');
+                newParent.className = 'hc-progress-parent';
+                newParent.textContent = parentLabel;
+                card.querySelector('.hc-progress-current').insertAdjacentElement('beforebegin', newParent);
+            }
+        } else if (parentEl) {
+            parentEl.remove();
+        }
+        card.querySelector('.hc-progress-counter').textContent = index + ' / ' + total;
+        const pct = total > 0 ? Math.round((index - 1) / total * 100) : 0;
+        const fill = document.getElementById('hcProgressFill');
+        if (fill) fill.style.width = pct + '%';
+    }
+
+    function removeProgressCard() {
+        const card = document.getElementById('hcProgressCard');
+        if (card) card.remove();
+    }
+
+    // Stream sirasinda butonun da kucuk spinner gostersin
+    function setButtonRunning(running) {
+        btn.disabled = running;
+        if (running) {
+            icon.innerHTML = '<span class="hc-spinner"></span>';
+            label.textContent = 'Çalıştırılıyor...';
+        } else {
+            icon.textContent = '▶';
+            label.textContent = 'Tekrar Çalıştır';
+        }
+    }
+
+    async function runStream() {
+        setButtonRunning(true);
+        summaryEl.innerHTML = '';
+        resultsEl.innerHTML = '';
+
+        const results = [];
+
+        try {
+            const resp = await fetch('/Admin/HealthCheck/Stream', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': getCsrf() },
+            });
+
+            if (!resp.ok || !resp.body) {
+                throw new Error('HTTP ' + resp.status);
+            }
+
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                let nl;
+                while ((nl = buffer.indexOf('\n')) >= 0) {
+                    const line = buffer.slice(0, nl).trim();
+                    buffer = buffer.slice(nl + 1);
+                    if (!line) continue;
+                    let frame;
+                    try { frame = JSON.parse(line); }
+                    catch { continue; }
+                    handleFrame(frame, results);
+                }
+            }
+        } catch (err) {
+            removeProgressCard();
+            resultsEl.innerHTML = '<div style="padding:20px;color:#ef4444;">İstek hatası: ' + escapeHtml(err.message) + '</div>';
+        } finally {
+            setButtonRunning(false);
+        }
+    }
+
+    function handleFrame(frame, results) {
+        switch (frame.type) {
+            case 'start':
+                updateProgressCard(0, frame.total, 'Başlatılıyor...', null, '');
+                break;
+            case 'checking':
+                updateProgressCard(frame.index, frame.total, frame.label, frame.parentLabel, frame.path);
+                // Live ozet — kac tamamlandi
+                summaryEl.innerHTML =
+                    '<span class="hc-pill">' + (frame.index - 1) + ' / ' + frame.total + ' tamamlandı</span>';
+                break;
+            case 'result':
+                results.push(frame.result);
+                // Hatali sonuc geldiyse anlik olarak ozet pill'lerini guncelle (kullaniciya canli geri bildirim)
+                refreshLiveSummary(results, frame.total);
+                break;
+            case 'done':
+                removeProgressCard();
+                renderSummary(frame.summary);
+                renderResults(results);
+                break;
+        }
+    }
+
+    function refreshLiveSummary(results, total) {
+        const counts = { ok: 0, redirect: 0, warn: 0, error: 0, exception: 0 };
+        results.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+        summaryEl.innerHTML =
+            '<span class="hc-pill ok">✓ ' + counts.ok + '</span>' +
+            (counts.redirect > 0 ? '<span class="hc-pill redirect">↻ ' + counts.redirect + '</span>' : '') +
+            (counts.warn > 0 ? '<span class="hc-pill warn">⚠ ' + counts.warn + '</span>' : '') +
+            (counts.error > 0 ? '<span class="hc-pill error">✗ ' + counts.error + '</span>' : '') +
+            (counts.exception > 0 ? '<span class="hc-pill error">⚡ ' + counts.exception + '</span>' : '') +
+            '<span class="hc-pill">' + results.length + ' / ' + total + '</span>';
+    }
+
+    btn.addEventListener('click', runStream);
+})();
+</script>
+}

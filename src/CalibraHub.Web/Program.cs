@@ -1,6 +1,7 @@
 using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.Services;
 using CalibraHub.Application.Services.Integration;
 using CalibraHub.Infrastructure.Integrations;
@@ -112,9 +113,20 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWaIn
 builder.Services.AddScoped<CalibraHub.Application.Services.Messaging.WhatsAppSafetyChecker>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWhatsAppService,
                            CalibraHub.Application.Services.Messaging.WhatsAppService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWaContactRepository,
+                           CalibraHub.Persistence.Repositories.SqlWaContactRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWaGroupRepository,
+                           CalibraHub.Persistence.Repositories.SqlWaGroupRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWaContactResolver,
+                           CalibraHub.Application.Services.Messaging.WaContactResolver>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IWhatsAppRealTimeNotifier,
+                              CalibraHub.Web.Infrastructure.WhatsApp.SignalRWhatsAppNotifier>();
 builder.Services.AddHostedService<CalibraHub.Application.Services.Messaging.WhatsAppInboxPollingService>();
+builder.Services.AddHostedService<CalibraHub.Application.Workflow.WorkflowTimeoutEscalationJob>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IMachineIdProvider,
                               CalibraHub.Infrastructure.Security.WindowsMachineIdProvider>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.INoteOcrService,
+                              CalibraHub.Infrastructure.Security.WindowsNoteOcrService>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILicenseRepository,
                            CalibraHub.Persistence.Repositories.SqlLicenseRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ILicenseService,
@@ -142,6 +154,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ISchedul
                            CalibraHub.Application.Services.Scheduling.IntegrationTaskExecutor>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IEmailSender,
                            CalibraHub.Infrastructure.Notifications.SmtpEmailSender>();
+// Mail sablonu HTML render — DocLayout (OutputFormat='email') -> HTML mail govdesi.
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IMailTemplateRenderer,
+                              CalibraHub.Application.Services.Email.MailTemplateRenderer>();
 builder.Services.AddScoped<CalibraHub.Application.Services.Scheduling.IScheduledTaskDispatcher,
                            CalibraHub.Application.Services.Scheduling.ScheduledTaskDispatcher>();
 builder.Services.AddScoped<IReportDataRepository, SqlReportDataRepository>();
@@ -150,8 +165,42 @@ builder.Services.AddScoped<IAdminReadService, AdminReadService>();
 builder.Services.AddScoped<IAdminManagementService, AdminManagementService>();
 builder.Services.AddScoped<IUiConfigurationService, UiConfigurationService>();
 builder.Services.AddScoped<ILogisticsConfigurationService, LogisticsConfigurationService>();
+// Varlık Yönetimi (Asset Management)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAssetService,
+                           CalibraHub.Application.Services.AssetService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAssetRepository,
+                           CalibraHub.Persistence.Repositories.SqlAssetRepository>();
 builder.Services.AddScoped<IFinanceService, FinanceService>();
 builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
+builder.Services.AddSingleton<CalibraHub.Application.Services.OrgChartDomainService>();
+builder.Services.AddSingleton<CalibraHub.Application.Services.ShopFloorLockoutTracker>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprovalFlowService,
+                           CalibraHub.Application.Services.ApprovalFlowService>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Approval.IApprovalNotificationDispatcher,
+                           CalibraHub.Application.Services.Approval.ApprovalNotificationDispatcher>();
+// Faz 4 — Runtime executor + Decision evaluator + Document context provider
+builder.Services.AddScoped<CalibraHub.Application.Services.Approval.IApprovalDocumentContextProvider,
+                           CalibraHub.Application.Services.Approval.ApprovalDocumentContextProvider>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Approval.IDecisionEvaluator,
+                           CalibraHub.Application.Services.Approval.DecisionEvaluator>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Approval.IApprovalFlowExecutor,
+                           CalibraHub.Application.Services.Approval.ApprovalFlowExecutor>();
+// Entity-agnostic plugin registry — her IApprovalEntityType implementasyonu DI'a kayıt
+// edilir, ApprovalEntityTypeRegistry IEnumerable<IApprovalEntityType> üzerinden toplar.
+// Belgeler (9 tip: 1 wildcard "Document" + 8 spesifik): DocumentEntityTypes.AddDocumentEntityTypes()
+// — paylaşılan field/parameter setiyle GenericDocumentApprovalEntityType instance'ları.
+CalibraHub.Application.Approval.EntityTypes.DocumentEntityTypes.AddDocumentEntityTypes(builder.Services);
+builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityType,
+                           CalibraHub.Application.Approval.EntityTypes.WorkOrderApprovalEntityType>();
+builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityType,
+                           CalibraHub.Application.Approval.EntityTypes.ItemApprovalEntityType>();
+builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityType,
+                           CalibraHub.Application.Approval.EntityTypes.ContactApprovalEntityType>();
+builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityType,
+                           CalibraHub.Application.Approval.EntityTypes.ProductionRecordApprovalEntityType>();
+// Document tipi IApprovalDocumentContextProvider'a bağımlı (Scoped); registry de Scoped olur.
+builder.Services.AddScoped<CalibraHub.Application.Approval.IApprovalEntityTypeRegistry,
+                           CalibraHub.Application.Approval.ApprovalEntityTypeRegistry>();
 builder.Services.AddScoped<IUserAuthenticationService, UserAuthenticationService>();
 builder.Services.AddScoped<IPasswordHashService, Pbkdf2PasswordHashService>();
 builder.Services.AddScoped<IUiTextService, UiTextService>();
@@ -167,6 +216,14 @@ builder.Services.AddHttpClient("integrator-reachability", c => c.Timeout = TimeS
 // SOAP cagri timeout'u 5dk — Reachability postboxservice.svc icin (rapor §2.10 fix).
 builder.Services.AddHttpClient(ReachabilityIntegratorDocumentClient.HttpClientName,
     c => c.Timeout = TimeSpan.FromSeconds(300));
+
+// 2026-05-23 Yapay Zeka — Anthropic + Gemini için named HTTP clients (timeout 120sn
+// stream cevaplari uzun olabilir). OpenAI ve Azure OpenAI kendi SDK'larında HttpClient
+// yonetir, ayrica named client gerekmez.
+builder.Services.AddHttpClient("ai-anthropic", c => c.Timeout = TimeSpan.FromSeconds(120));
+builder.Services.AddHttpClient("ai-gemini",    c => c.Timeout = TimeSpan.FromSeconds(120));
+// 2026-05-23 Ollama (lokal LLM) — 8B model ilk token icin 20+ sn surebilir, uzun timeout.
+builder.Services.AddHttpClient("ai-ollama",    c => c.Timeout = TimeSpan.FromMinutes(5));
 
 if (useMockIntegratorClient)
 {
@@ -188,6 +245,9 @@ builder.Services.AddScoped<ILogisticsConfigurationRepository, SqlLogisticsConfig
 builder.Services.AddScoped<IFinanceRepository, SqlFinanceRepository>();
 builder.Services.AddScoped<IAddressRepository, SqlAddressRepository>();
 builder.Services.AddScoped<IContactItemRepository, SqlContactItemRepository>();
+builder.Services.AddScoped<IContactPersonRepository, SqlContactPersonRepository>();
+builder.Services.AddScoped<IContactPersonTitleRepository, SqlContactPersonTitleRepository>();
+builder.Services.AddScoped<IMailSendBatchRepository, SqlMailSendBatchRepository>();
 builder.Services.AddScoped<IDbSchemaRepository, SqlDbSchemaRepository>();
 builder.Services.AddScoped<IDbSchemaService, DbSchemaService>();
 builder.Services.AddScoped<ICardGroupRepository, SqlCardGroupRepository>();
@@ -198,6 +258,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IDocumentRepository, SqlDocumentRepository>();
 builder.Services.AddScoped<IDocumentSourceRepository, SqlDocumentSourceRepository>();
+builder.Services.AddScoped<IArgeProjectRepository, SqlArgeProjectRepository>();
 builder.Services.AddScoped<IUserSettingRepository, SqlUserSettingRepository>();
 builder.Services.AddScoped<ISalesRepresentativeRepository, SqlSalesRepresentativeRepository>();
 builder.Services.AddScoped<ISalesRepresentativeService, SalesRepresentativeService>();
@@ -214,7 +275,61 @@ builder.Services.AddScoped<IIntegrationQueueService, SqlIntegrationQueueService>
 builder.Services.AddScoped<IIntegrationDocCatalogRepository, SqlIntegrationDocCatalogRepository>();
 builder.Services.AddScoped<IIntegrationDocCatalogService, IntegrationDocCatalogService>();
 builder.Services.AddHostedService<CalibraHub.Web.Services.IntegrationDocCatalogSeedService>();
+
+// 2026-05-23 Yapay Zeka — repository + service registration.
+// IAiClientFactory scoped (per-request) cunku IHttpClientFactory'den hot client cekiyor +
+// IAiProviderRepository scoped (per-company DB).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAiProviderRepository,
+                           CalibraHub.Persistence.Repositories.SqlAiProviderRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAiUserKeyRepository,
+                           CalibraHub.Persistence.Repositories.SqlAiUserKeyRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAiClientFactory,
+                           CalibraHub.Application.Services.Ai.AiClientFactory>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAiProviderService,
+                           CalibraHub.Application.Services.Ai.AiProviderService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAiUserKeyService,
+                           CalibraHub.Application.Services.Ai.AiUserKeyService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IAiChatService,
+                           CalibraHub.Application.Services.Ai.AiChatService>();
+
+// 2026-06-06 Yetkilendirme (F1) — PermissionDef + UserPermission repository + service.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionDefRepository,
+                           CalibraHub.Persistence.Repositories.SqlPermissionDefRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionGrantRepository,
+                           CalibraHub.Persistence.Repositories.SqlPermissionGrantRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IPermissionService,
+                           CalibraHub.Application.Services.Security.PermissionService>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Security.PermissionDefDiscoveryService>();
+// 2026-06-12 Satır bazlı veri görünürlük kuralları (row-level security) repository (per-company DB).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDataVisibilityRuleRepository,
+                           CalibraHub.Persistence.Repositories.SqlDataVisibilityRuleRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IDataVisibilityFilter,
+                           CalibraHub.Persistence.Security.SqlDataVisibilityFilter>();
+// Faz 0: FormCode sabitleri ile DB tutarlılık denetimi — startup'ta WARNING log üretir, hard-fail yok.
+builder.Services.AddScoped<FormCodeValidator>();
+// Faz 2 (2026-06-09): DB-driven menu servisi
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IMenuService,
+                           CalibraHub.Application.Services.MenuService>();
+// 2026-05-24 Calibo tool registry — read-only + write tool method'lari icin scoped service.
+builder.Services.AddScoped<CalibraHub.Application.Services.Ai.Tools.CalibroTools>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Ai.Tools.CalibroContactTools>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Ai.Tools.CalibroItemTools>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Ai.Tools.CalibroDocumentTools>();
+// 2026-05-24: Audit log — Calibo write tool denetim kaydi
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAiToolInvocationRepository,
+                           CalibraHub.Persistence.Repositories.SqlAiToolInvocationRepository>();
+// 2026-05-24: Calibo dokuman okuyucu — xlsx/pdf/docx text extraction
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IDocumentTextExtractor,
+                              CalibraHub.Infrastructure.DocumentExtraction.DocumentTextExtractor>();
+// In-memory pending action cache (write tool onay flow'u icin)
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<CalibraHub.Application.Services.Ai.Tools.AiPendingActionStore>();
+// Web tarafindan HttpContext'ten user context dolduran scoped impl
+builder.Services.AddScoped<CalibraHub.Application.Services.Ai.Tools.ICalibroUserContext,
+                           CalibraHub.Web.Services.HttpCalibroUserContext>();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IDocumentNumberService, SqlDocumentNumberService>();
+builder.Services.AddScoped<IArgeProjectService, ArgeProjectService>();
 builder.Services.AddScoped<IDocumentNumberRuleRepository, SqlDocumentNumberRuleRepository>();
 builder.Services.AddScoped<IFormMetadataService, FormMetadataService>();
 builder.Services.AddScoped<IMappingEngine, MappingEngine>();
@@ -227,12 +342,24 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IIntegra
 // listesinden secim yapiyor (/Integrations/api/db-functions endpoint).
 builder.Services.AddScoped<IIntegrationAuthHandler, IntegrationAuthHandler>();
 builder.Services.AddSingleton<IEndpointCatalogService, CalibraHub.Web.Services.EndpointCatalogService>();
+// 2026-05-26: HealthCheck schema probe (INSERT...ROLLBACK testi). Scope: per-request (tenant-aware connection).
+builder.Services.AddScoped<CalibraHub.Web.Services.SchemaProbeService>();
+// 2026-05-26: Onayda Bekleyenler ekrani
+builder.Services.AddScoped<CalibraHub.Application.Services.IPendingApprovalAuthority,
+    CalibraHub.Web.Services.HttpPendingApprovalAuthority>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IPendingApprovalService,
+    CalibraHub.Application.Services.PendingApprovalService>();
 // Eager warm-up: Lazy yerine startup'ta parse — CSV bulunamiyorsa veya parse hatasi
 // varsa erken yakala (lazy ise ilk istegi atan kullaniciya geri donus)
 builder.Services.AddScoped<IHttpExecutor, HttpExecutor>();
 builder.Services.AddScoped<IBodySchemaResolver, BodySchemaResolver>();
 builder.Services.AddScoped<IIntegrationRunner, IntegrationRunner>();
 builder.Services.AddScoped<IIntegrationService, IntegrationService>();
+// 2026-05-21 Faz 1: Entegrasyon JSON bundle ile dışa/içe aktarma
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IIntegrationBundleService,
+                           CalibraHub.Application.Services.Integration.IntegrationBundleService>();
+// 2026-05-22 Pre-flight Filter Engine — Queue + Runner + Manual button shared helper
+builder.Services.AddSingleton<CalibraHub.Application.Services.Integration.IntegrationFilterEngine>();
 // OnSave dispatcher — Save sonrasi otomatik trigger'lari arka planda fire eder.
 // Singleton: scope'u kendi acar (IServiceScopeFactory uzerinden), HTTP context bittikten sonra calisir.
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.Services.IIntegrationOnSaveDispatcher,
@@ -259,6 +386,14 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IStoc
 
 // Sabit alan ayarlari (FldSet — rehber eslestirme)
 builder.Services.AddScoped<IFieldSettingRepository, SqlFieldSettingRepository>();
+
+// Onay akışı Karar (Decision) node SQL kütüphanesi — admin CRUD + designer validate/test.
+// Service Persistence katmanında çünkü SqlServerConnectionFactory'ye ihtiyaç var
+// (Application onu referans vermez — DocumentNumberService/PostProcedureExecutor ile aynı pattern).
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IApprovalSqlQueryRepository,
+                           CalibraHub.Persistence.Repositories.SqlApprovalSqlQueryRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprovalSqlQueryService,
+                           CalibraHub.Persistence.Repositories.ApprovalSqlQueryService>();
 
 // Faz 0: Sirket Parametreleri + Numerator (sayac altyapisi)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ICompanyParameterRepository,
@@ -298,6 +433,28 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWork
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWorkOrderOperationService,
     CalibraHub.Application.Services.WorkOrderOperationService>();
 
+// 2026-05-20 — Faz 1 MVP: Saha aktivite log (Hazirlik/Uretim/MalzemeBekle/Ariza/...)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderOperationActivityRepository,
+    CalibraHub.Persistence.Repositories.SqlWorkOrderOperationActivityRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWorkOrderOperationActivityService,
+    CalibraHub.Application.Services.WorkOrderOperationActivityService>();
+
+// 2026-05-21 — Faz 2: Aktivite sebep sozlugu (Ariza icin 'Sensor', Malzeme Bekle icin 'Tedarikci gec' vs.)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IActivityReasonRepository,
+    CalibraHub.Persistence.Repositories.SqlActivityReasonRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IActivityReasonService,
+    CalibraHub.Application.Services.ActivityReasonService>();
+
+// 2026-05-21 — Faz 3: Vardiya tanimi + atama (haftalik tekrar pattern)
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IShiftRepository,
+    CalibraHub.Persistence.Repositories.SqlShiftRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IShiftService,
+    CalibraHub.Application.Services.ShiftService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IShiftAssignmentRepository,
+    CalibraHub.Persistence.Repositories.SqlShiftAssignmentRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IShiftAssignmentService,
+    CalibraHub.Application.Services.ShiftAssignmentService>();
+
 // Is Emri Bilesenleri (Faz 2 — BOM patlatma ciktisi)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkOrderComponentRepository,
     CalibraHub.Persistence.Repositories.SqlWorkOrderComponentRepository>();
@@ -314,6 +471,11 @@ builder.Services.AddScoped<IRptDefinitionRepository, SqlRptDefinitionRepository>
 builder.Services.AddScoped<IRptRunLogRepository, SqlRptRunLogRepository>();
 builder.Services.AddScoped<IReportQueryExecutor, SqlReportQueryExecutor>();
 builder.Services.AddScoped<IReportEngineService, ReportEngineService>();
+// Rapor Panoları per-dashboard erişim altyapısı
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IReportDashboardRepository,
+                           CalibraHub.Persistence.Repositories.SqlReportDashboardRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IReportDashboardService,
+                           CalibraHub.Application.Services.ReportDashboardService>();
 
 // Document Designer (Belge Tasarımcısı)
 builder.Services.AddScoped<IDocLayoutRepository, SqlDocLayoutRepository>();
@@ -345,6 +507,16 @@ builder.Services.AddScoped<IPrintDispatcher, PrintDispatcher>();
 // EAV widget sistemi
 builder.Services.AddScoped<IWidgetRepository, SqlWidgetRepository>();
 builder.Services.AddScoped<IWidgetService, WidgetService>();
+
+// 2026-06-10 — Metadata-Driven Engine ARCHITECTURE REMOVED.
+// Karar: küçük ekip (1-3 kişi) + canlı kopya yok + "hızlı ayağa kaldırma + stabilite"
+// öncelikleri ile engine vizyonu rafa kaldırıldı. Customer özelleştirme ihtiyaçları
+// mevcut WidgetMas EAV sistemi ile karşılanır. Detaylı kararlar için bkz. CLAUDE.md.
+
+// Sprint 1 — Universal Form Engine: Domain entity property'lerini WidgetMas'a
+// IsSystemField=true ile seed eden discovery servisi. Startup'ta sistem DB'sinde
+// calistirilir (Item → ITEMS POC). Idempotent.
+builder.Services.AddScoped<ISystemFieldDiscoveryService, SystemFieldDiscoveryService>();
 // Faz D Adim 1 — Legacy → Yeni EAV migration servisi (tek seferlik endpoint)
 // Persistence katmaninda raw SQL kullandigi icin orada yasar.
 builder.Services.AddScoped<ILegacyMigrationService, CalibraHub.Persistence.LegacyMigrationService>();
@@ -373,6 +545,26 @@ if (useInMemoryPersistence)
     builder.Services.AddScoped<INoteRepository, SqlNoteRepository>();
     builder.Services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
     builder.Services.AddScoped<IOrgChartRepository, SqlOrgChartRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IApprovalFlowRepository,
+                               CalibraHub.Persistence.Repositories.SqlApprovalFlowRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IApprovalInstanceRepository,
+                               CalibraHub.Persistence.Repositories.SqlApprovalInstanceRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkflowDefinitionRepository,
+                               CalibraHub.Persistence.Repositories.SqlWorkflowDefinitionRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Services.WorkflowDefinitionService>();
+    builder.Services.AddScoped<CalibraHub.Application.Services.WorkflowTemplateService>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkflowInstanceRepository,
+                               CalibraHub.Persistence.Repositories.SqlWorkflowInstanceRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.IDocumentContextBuilder,
+                               CalibraHub.Application.Workflow.DocumentContextBuilder>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.IActorResolver,
+                               CalibraHub.Application.Workflow.ActorResolver>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.OrgChartNCalcFunctions>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.WorkflowEngine>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IBpmFormRepository,
+                               CalibraHub.Persistence.Repositories.SqlBpmFormRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Services.BpmFormService>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.BpmFormContextBuilder>();
 }
 else
 {
@@ -386,10 +578,30 @@ else
     builder.Services.AddScoped<IUiLabelTranslationRepository, SqlUiLabelTranslationRepository>();
     builder.Services.AddScoped<IScreenLayoutRepository, SqlScreenLayoutRepository>();
     builder.Services.AddScoped<IIncomingDocumentRepository, SqlIncomingDocumentRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IApprovalFlowRepository,
+                               CalibraHub.Persistence.Repositories.SqlApprovalFlowRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IApprovalInstanceRepository,
+                               CalibraHub.Persistence.Repositories.SqlApprovalInstanceRepository>();
     builder.Services.AddScoped<IIntegratorImportLogRepository, SqlPltSystemLogRepository>();
     builder.Services.AddScoped<INoteRepository, SqlNoteRepository>();
     builder.Services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
     builder.Services.AddScoped<IOrgChartRepository, SqlOrgChartRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkflowDefinitionRepository,
+                               CalibraHub.Persistence.Repositories.SqlWorkflowDefinitionRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Services.WorkflowDefinitionService>();
+    builder.Services.AddScoped<CalibraHub.Application.Services.WorkflowTemplateService>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkflowInstanceRepository,
+                               CalibraHub.Persistence.Repositories.SqlWorkflowInstanceRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.IDocumentContextBuilder,
+                               CalibraHub.Application.Workflow.DocumentContextBuilder>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.IActorResolver,
+                               CalibraHub.Application.Workflow.ActorResolver>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.OrgChartNCalcFunctions>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.WorkflowEngine>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IBpmFormRepository,
+                               CalibraHub.Persistence.Repositories.SqlBpmFormRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Services.BpmFormService>();
+    builder.Services.AddScoped<CalibraHub.Application.Workflow.BpmFormContextBuilder>();
     builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IAttachmentRepository,
                                CalibraHub.Persistence.Repositories.SqlAttachmentRepository>();
 }
@@ -452,10 +664,21 @@ if (grafanaEnabled)
     builder.Services.AddReverseProxy().LoadFromMemory(grafanaRoutes, grafanaClusters);
 }
 // ──────────────────────────────────────────────────────────────────────────
-var mvcBuilder = builder.Services.AddControllersWithViews();
+var mvcBuilder = builder.Services.AddControllersWithViews(opts =>
+{
+    // 2026-06-07 — Global izin kontrolü. Controller veya action [PermissionScope("...")]
+    // attribute taşıyorsa filter çalışır; yoksa atlar (geriye dönük güvenli — opt-in).
+    opts.Filters.Add<CalibraHub.Web.Authorization.PermissionEnforcementFilter>();
+});
 mvcBuilder.AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    // Enum'lari string olarak hem deserialize hem serialize et — frontend bunlari
+    // "AnyUser", "Department" gibi string degerlerle gonderiyor; numerik enum
+    // deserialization (STJ default) bu durumda tum payload'u null'a bind ediyor.
+    options.JsonSerializerOptions.Converters.Add(
+        new System.Text.Json.Serialization.JsonStringEnumConverter(
+            namingPolicy: null, allowIntegerValues: true));
 });
 
 // ── FluentValidation (rapor §2.5) ────────────────────────────────────────
@@ -573,6 +796,47 @@ using (var scope = app.Services.CreateScope())
         {
             app.Logger.LogWarning(ex, "[Guide Discovery] Startup tarama basarisiz — rehberler manuel eklenebilir");
         }
+
+        // Sprint 1 — Universal Form Engine: Item entity → ITEMS form sistem alan'lari seed.
+        // Idempotent; mevcut IsSystemField satirlari atlanir. Hata olursa server engellenmez.
+        try
+        {
+            var sysFieldDiscovery = scope.ServiceProvider.GetRequiredService<ISystemFieldDiscoveryService>();
+            var seeded = await sysFieldDiscovery.DiscoverAndSeedAsync(CancellationToken.None);
+            if (seeded > 0)
+                app.Logger.LogInformation("[SysField Discovery] {Count} sistem alani widget olarak seed edildi", seeded);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "[SysField Discovery] Startup discovery basarisiz — Item.* alanlari widget olarak gorulmeyecek");
+        }
+
+        // 2026-06-06 — Yetkilendirme F2: dbo.Forms'taki her form için 6 standart action
+        // PermissionDef tablosuna upsert. Idempotent — yeni form eklenirse otomatik catalog'a girer.
+        try
+        {
+            var permDiscovery = scope.ServiceProvider
+                .GetRequiredService<CalibraHub.Application.Services.Security.PermissionDefDiscoveryService>();
+            var seededDefs = await permDiscovery.DiscoverAndSeedAsync(CancellationToken.None);
+            if (seededDefs > 0)
+                app.Logger.LogInformation("[Perm Discovery] {Count} izin tanımı seed edildi", seededDefs);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "[Perm Discovery] Startup seed basarisiz — yetki kontrolleri default deny ile çalışır");
+        }
+
+        // Faz 0: FormCode sabitleri ↔ dbo.Forms tutarlılık denetimi.
+        // WARNING log üretir — hard-fail yok, production'ı engellemez.
+        try
+        {
+            var formCodeValidator = scope.ServiceProvider.GetRequiredService<FormCodeValidator>();
+            await formCodeValidator.ValidateAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "[FormCodeValidator] Startup doğrulaması başarısız — atlandı");
+        }
     }
 
     // Seed per-company connection registry from DB
@@ -609,6 +873,19 @@ using (var scope = app.Services.CreateScope())
         foreach (var c in allCompanies)
         {
             if (string.IsNullOrWhiteSpace(c.DatabaseConnectionString)) continue;
+
+            // Notes tablosu kolon migrasyonu — linked_entity_*, visibility vb.
+            try
+            {
+                await dbInitForCompanies.EnsureNotesSchemaForConnectionAsync(
+                    c.DatabaseConnectionString, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex,
+                    "[Notes Schema] Sirket {CompanyId} icin notes kolon migrasyonu basarisiz", c.Id);
+            }
+
             try
             {
                 await dbInitForCompanies.EnsureGuideSchemaForConnectionAsync(
@@ -682,6 +959,7 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapHub<CollaborationHub>("/hubs/collaboration");
+app.MapHub<CalibraHub.Web.Hubs.WhatsAppHub>("/hubs/whatsapp");
 
 // Grafana reverse proxy — yalnizca Grafana:Enabled=true ise haritalanir.
 // Pipeline: cookie auth challenge (RequireAuthorization), header injection

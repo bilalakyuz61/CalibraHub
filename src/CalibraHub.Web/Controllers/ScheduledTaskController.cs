@@ -1,4 +1,7 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Constants;
+using CalibraHub.Web.Authorization;
+using CalibraHub.Web.Helpers;
 using CalibraHub.Web.Models.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +26,7 @@ namespace CalibraHub.Web.Controllers;
 ///   - GET  /Admin/ScheduledTasks/{id}/History             → son N calistirma JSON
 /// </summary>
 [Authorize]
+[PermissionScope(FormCodes.Scheduler)]
 public sealed class ScheduledTaskController : Controller
 {
     private readonly IScheduledTaskRepository _scheduledTaskRepo;
@@ -223,8 +227,15 @@ public sealed class ScheduledTaskController : Controller
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
-    private static object BuildScheduledTasksBoardConfig(IReadOnlyCollection<CalibraHub.Domain.Entities.ScheduledTask> tasks) =>
-        new
+    private static object BuildScheduledTasksBoardConfig(IReadOnlyCollection<CalibraHub.Domain.Entities.ScheduledTask> tasks)
+    {
+        var masterWidgets = new List<object>
+        {
+            SmartBoardFilterHelpers.MakeStdWidget("schedule", "Zamanlama",    "text"),
+            SmartBoardFilterHelpers.MakeStdWidget("lastRun",  "Son Çalışma",  "text"),
+            SmartBoardFilterHelpers.MakeStdWidget("nextRun",  "Sonraki",      "text"),
+        };
+        return new
         {
             boardKey   = "scheduled-tasks",
             title      = "Zamanlanmış Görevler",
@@ -233,6 +244,7 @@ public sealed class ScheduledTaskController : Controller
             {
                 new { id = "new", label = "Yeni Görev", icon = "Plus", variant = "primary", url = "/Admin/ScheduledTaskEdit" },
             },
+            masterWidgets,
             entities = tasks.Select(t =>
             {
                 var isBuiltin    = t.TaskType == CalibraHub.Domain.Enums.ScheduledTaskType.Builtin;
@@ -268,6 +280,7 @@ public sealed class ScheduledTaskController : Controller
                 };
             }).ToArray(),
         };
+    }
 
     private static string GetScheduledTaskTypeLabel(CalibraHub.Domain.Enums.ScheduledTaskType type) => type switch
     {

@@ -1,0 +1,30 @@
+@*
+    Shared partial — DBInfo tablosu (toolbar (i) butonu tooltip içeriği için)
+
+    Kullanım (Razor):
+        @{
+            var dbInfo = new Dictionary<string, string> {
+                ["Machine"]      = "Makine ana tanımları (kod, ad, lokasyon, kapasite).",
+                ["MachineGroup"] = "Makine grubu eşleştirmesi.",
+            };
+            ViewData["DbInfo"] = (await Html.PartialAsync("_DbInfoTable", dbInfo)).ToString();
+        }
+
+    Tema:
+      - Sınıflar (.cb-dbinfo-table, .cb-dbinfo-name, .cb-dbinfo-desc) site.css içindedir.
+      - Light/dark tema otomatik (body.app-theme-dark seçicisi ile).
+      - Inline style YASAK — yeni eklemelerde mutlaka bu partial kullan.
+*@
+@model Dictionary<string, string>
+@if (Model is not null && Model.Count > 0)
+{
+    <table class="cb-dbinfo-table">
+        @foreach (var kv in Model)
+        {
+            <tr>
+                <td class="cb-dbinfo-name">@kv.Key</td>
+                <td class="cb-dbinfo-desc">@kv.Value</td>
+            </tr>
+        }
+    </table>
+}

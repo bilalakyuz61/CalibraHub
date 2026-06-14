@@ -1,0 +1,998 @@
+@model CalibraHub.Web.Models.Assets.AssetEditViewModel
+@{
+    var isNew = Model.Id == null;
+    var isMachine = Model.IsMachineBacked;
+    ViewData["Title"] = isNew ? "Yeni Varlık" : $"Varlık: {Model.AssetName}";
+    ViewData["FormCode"] = "ASSETS";
+    ViewData["BodyClass"] = "page-asset-edit";
+
+    string D(DateTime? d) => d?.ToString("yyyy-MM-dd") ?? "";
+}
+
+@section Styles {
+<style>
+    .ae-root {
+        --ae-bg:#f1f5f9; --ae-surface:#ffffff; --ae-border:#e2e8f0;
+        --ae-text:#0f172a; --ae-muted:#64748b; --ae-accent:#6366f1;
+        display:flex; flex-direction:column; height:100dvh; background:var(--ae-surface); color:var(--ae-text);
+        overflow:hidden;
+    }
+    body.page-asset-edit, html { overflow:hidden; height:100%; }
+    body.app-theme-dark .ae-root {
+        --ae-bg:#080c17; --ae-surface:#0d1323; --ae-border:rgba(255,255,255,.09);
+        --ae-text:#e2e8f0; --ae-muted:#94a3b8; --ae-accent:#818cf8;
+    }
+
+    /* ── Header (sabit üst bar) ── */
+    .ae-header {
+        display:flex; align-items:center; gap:10px; flex-shrink:0;
+        padding:12px 22px; border-bottom:1px solid var(--ae-border); background:var(--ae-surface);
+    }
+    .ae-header h1 { font-size:16px; font-weight:700; margin:0; }
+    .ae-spacer { flex:1; }
+    .ae-back {
+        display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:8px;
+        border:1px solid var(--ae-border); background:none; color:var(--ae-muted);
+        font-size:12.5px; cursor:pointer; text-decoration:none; transition:background .12s;
+    }
+    .ae-back:hover { background:var(--ae-bg); color:var(--ae-text); }
+    .ae-btn { padding:8px 18px; border-radius:8px; font-size:13px; font-weight:600; border:1px solid transparent; cursor:pointer; transition:all .12s; }
+    .ae-btn--primary { background:var(--ae-accent); color:#fff; border-color:#4f46e5; }
+    .ae-btn--primary:hover { filter:brightness(1.1); }
+    .ae-btn--primary:disabled { opacity:.55; cursor:not-allowed; }
+    .ae-btn--ghost { background:none; border-color:var(--ae-border); color:var(--ae-text); }
+    .ae-btn--ghost:hover { background:var(--ae-bg); }
+    .ae-btn--danger { background:none; border-color:#fecaca; color:#dc2626; }
+    body.app-theme-dark .ae-btn--danger { border-color:rgba(239,68,68,.35); color:#f87171; }
+    .ae-btn--danger:hover { background:rgba(239,68,68,.08); }
+
+    .ae-err { flex-shrink:0; margin:10px 22px 0; padding:8px 12px; border-radius:8px; font-size:13px; background:rgba(239,68,68,.08); color:#dc2626; border:1px solid rgba(239,68,68,.2); }
+    body.app-theme-dark .ae-err { color:#f87171; }
+
+    /* ── Gövde: sol tablar + sağ panel ── */
+    .ae-body { flex:1; display:flex; min-height:0; }
+    .ae-tabs {
+        width:230px; flex-shrink:0; border-right:1px solid var(--ae-border);
+        display:flex; flex-direction:column; padding:14px 0; gap:2px; overflow-y:auto; background:var(--ae-surface);
+    }
+    .ae-tab {
+        display:flex; align-items:center; gap:10px; padding:11px 18px; font-size:13px; font-weight:500;
+        cursor:pointer; transition:all .12s; color:var(--ae-muted); border:none; background:none; text-align:left;
+        border-left:3px solid transparent; white-space:nowrap;
+    }
+    .ae-tab svg { flex-shrink:0; opacity:.85; }
+    .ae-tab:hover { background:var(--ae-bg); color:var(--ae-text); }
+    .ae-tab.active { color:var(--ae-accent); border-left-color:var(--ae-accent); background:rgba(99,102,241,.07); font-weight:600; }
+
+    .ae-panels { flex:1; overflow-y:auto; padding:26px 30px; background:var(--ae-bg); }
+    .ae-panel { display:none; max-width:880px; animation:aeFade .18s ease-out both; }
+    .ae-panel.active { display:block; }
+    @@keyframes aeFade { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+    .ae-panel-title { font-size:15px; font-weight:700; margin:0 0 4px; color:var(--ae-text); }
+    .ae-panel-sub { font-size:12.5px; color:var(--ae-muted); margin:0 0 20px; }
+
+    /* ── Form alanları ── */
+    .ae-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .ae-grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+    @@media (max-width:720px){ .ae-grid2,.ae-grid3 { grid-template-columns:1fr; } .ae-tabs { width:170px; } }
+    .ae-field { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+    .ae-label { font-size:12px; font-weight:600; color:var(--ae-muted); }
+    .ae-input, .ae-select, .ae-textarea {
+        padding:10px 12px; border-radius:8px; border:1px solid var(--ae-border);
+        background:var(--ae-surface); color:var(--ae-text); font-size:14px; outline:none;
+        transition:border-color .15s, box-shadow .15s; font-family:inherit;
+    }
+    .ae-input:focus,.ae-select:focus,.ae-textarea:focus { border-color:var(--ae-accent); box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+    .ae-input.is-invalid,.ae-select.is-invalid { border-color:#ef4444 !important; box-shadow:0 0 0 3px rgba(239,68,68,.12) !important; }
+    .ae-input[readonly] { background:var(--ae-bg); opacity:.8; }
+    .ae-textarea { resize:vertical; min-height:84px; }
+    body.app-theme-dark .ae-select { color-scheme:dark; }
+    body.app-theme-dark .ae-select > * { background-color:#0d1323; color:#e2e8f0; }
+
+    .ae-switch-row { display:flex; align-items:center; gap:10px; }
+    .ae-switch { position:relative; width:42px; height:24px; display:inline-block; flex-shrink:0; }
+    .ae-switch input { opacity:0; width:0; height:0; position:absolute; }
+    .ae-switch-track { position:absolute; inset:0; border-radius:24px; cursor:pointer; background:#cbd5e1; transition:background .2s; }
+    .ae-switch input:checked + .ae-switch-track { background:#10b981; }
+    body.app-theme-dark .ae-switch-track { background:rgba(255,255,255,.14); }
+    body.app-theme-dark .ae-switch input:checked + .ae-switch-track { background:#059669; }
+    .ae-switch-track::before { content:''; position:absolute; height:18px; width:18px; left:3px; top:3px; border-radius:50%; background:#fff; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+    .ae-switch input:checked + .ae-switch-track::before { transform:translateX(18px); }
+    .ae-switch-label { font-size:13px; font-weight:600; color:var(--ae-muted); }
+
+    .ae-input--ro { background:rgba(148,163,184,.12); color:var(--ae-muted); cursor:not-allowed; }
+    body.app-theme-dark .ae-input--ro { background:rgba(255,255,255,.05); }
+    .ae-readonly-tag { display:inline-block; margin-left:6px; font-size:10px; font-weight:600; letter-spacing:.02em; text-transform:uppercase; color:var(--ae-muted); background:rgba(148,163,184,.18); border-radius:6px; padding:1px 6px; vertical-align:middle; }
+    .ae-fields--off { opacity:.45; pointer-events:none; }
+
+    /* Sol-alt köşe hata toast'ı */
+    .ae-toast-wrap { position:fixed; left:18px; bottom:18px; z-index:99999; display:flex; flex-direction:column; gap:10px; align-items:flex-start; pointer-events:none; }
+    .ae-toast { pointer-events:auto; min-width:240px; max-width:380px; padding:11px 14px; border-radius:10px; font-size:13px; font-weight:500; line-height:1.35; display:flex; align-items:flex-start; gap:9px; box-shadow:0 10px 30px rgba(0,0,0,.18); border:1px solid var(--ae-border); background:var(--ae-surface); color:var(--ae-text); animation:aeToastIn .22s cubic-bezier(.2,.8,.2,1) both; }
+    .ae-toast svg { flex-shrink:0; margin-top:1px; }
+    .ae-toast--err { border-color:rgba(239,68,68,.42); background:rgba(239,68,68,.1); color:#b91c1c; }
+    body.app-theme-dark .ae-toast--err { color:#fca5a5; background:rgba(239,68,68,.16); }
+    .ae-toast--out { animation:aeToastOut .2s ease-in forwards; }
+    @@keyframes aeToastIn { from { opacity:0; transform:translateX(-14px); } to { opacity:1; transform:translateX(0); } }
+    @@keyframes aeToastOut { to { opacity:0; transform:translateX(-14px); } }
+
+    /* Görsel & Evraklar */
+    .ae-media-cover { display:flex; gap:18px; align-items:stretch; margin-bottom:24px; }
+    .ae-cover-box { width:190px; height:150px; flex-shrink:0; border:1px solid var(--ae-border); border-radius:12px; overflow:hidden; background:var(--ae-bg); display:flex; align-items:center; justify-content:center; }
+    .ae-cover-box img { width:100%; height:100%; object-fit:cover; display:block; }
+    .ae-cover-empty { display:flex; flex-direction:column; align-items:center; gap:8px; color:var(--ae-muted); font-size:12px; }
+    .ae-cover-side { display:flex; flex-direction:column; gap:4px; }
+    .ae-cover-title { font-size:14px; font-weight:700; color:var(--ae-text); }
+    .ae-cover-hint { font-size:12px; color:var(--ae-muted); margin-bottom:10px; }
+    .ae-cover-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .ae-cover-actions .ae-btn { padding:7px 13px; font-size:12.5px; }
+
+    .ae-docs-head { font-size:13px; font-weight:700; color:var(--ae-text); margin:0 0 10px; }
+    .ae-docs-add { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; margin-bottom:14px; align-items:center; }
+    .ae-docs-add .ae-input { font-size:13px; }
+    @@media (max-width:680px){ .ae-docs-add { grid-template-columns:1fr; } .ae-media-cover { flex-direction:column; } }
+    .ae-docs-list { display:flex; flex-direction:column; gap:8px; }
+    .ae-docs-empty { padding:16px; text-align:center; color:var(--ae-muted); font-size:12.5px; border:1px dashed var(--ae-border); border-radius:8px; }
+    .ae-doc-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--ae-border); border-radius:10px; background:var(--ae-surface); }
+    .ae-doc-thumb { width:38px; height:38px; flex-shrink:0; border-radius:8px; background:rgba(99,102,241,.1); color:var(--ae-accent); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+    .ae-doc-thumb img { width:100%; height:100%; object-fit:cover; }
+    .ae-doc-info { flex:1; min-width:0; }
+    .ae-doc-name { font-size:13px; font-weight:600; color:var(--ae-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ae-doc-meta { font-size:11.5px; color:var(--ae-muted); margin-top:2px; }
+    .ae-doc-actions { display:flex; gap:6px; flex-shrink:0; }
+    .ae-doc-link { background:none; border:1px solid var(--ae-border); color:var(--ae-text); border-radius:7px; padding:5px 10px; font-size:12px; cursor:pointer; }
+    .ae-doc-link:hover { background:var(--ae-bg); }
+    .ae-doc-link--danger { color:#dc2626; border-color:#fecaca; }
+    body.app-theme-dark .ae-doc-link--danger { color:#f87171; border-color:rgba(239,68,68,.35); }
+
+    .ae-note { font-size:12px; color:var(--ae-muted); margin-bottom:14px; padding:10px 12px; border-radius:8px; background:rgba(139,92,246,.08); border:1px solid rgba(139,92,246,.2); }
+    .ae-note a { color:var(--ae-accent); }
+
+    /* ── Geçmiş tablosu ── */
+    .ae-hist { width:100%; border-collapse:collapse; font-size:12.5px; }
+    .ae-hist th { text-align:left; padding:8px; color:var(--ae-muted); font-weight:600; border-bottom:1px solid var(--ae-border); white-space:nowrap; }
+    .ae-hist td { padding:8px; border-bottom:1px solid var(--ae-border); vertical-align:top; }
+    .ae-hist tr:hover td { background:rgba(99,102,241,.04); }
+    .ae-chip { display:inline-block; padding:1px 8px; border-radius:999px; font-size:10.5px; font-weight:700; background:rgba(99,102,241,.12); color:var(--ae-accent); }
+    .ae-row-del { color:#dc2626; cursor:pointer; background:none; border:none; font-size:13px; }
+    .ae-hist-empty { padding:18px; text-align:center; color:var(--ae-muted); font-size:12.5px; }
+    .ae-hist-add { margin-top:16px; padding:16px; border:1px dashed var(--ae-border); border-radius:10px; background:var(--ae-surface); }
+    .ae-hist-add-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ae-muted); margin-bottom:12px; }
+
+    /* ── Silme modalı ── */
+    .ae-modal-backdrop { position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.48); backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; }
+    .ae-modal { background:var(--ae-surface); border:1px solid var(--ae-border); border-radius:14px; padding:24px; width:380px; max-width:90vw; display:flex; flex-direction:column; gap:14px; box-shadow:0 24px 64px rgba(0,0,0,.35); }
+    .ae-modal-icon { display:flex; justify-content:center; color:#ef4444; }
+    .ae-modal-title { font-size:16px; font-weight:600; text-align:center; color:var(--ae-text); }
+    .ae-modal-msg { font-size:13px; color:var(--ae-muted); text-align:center; line-height:1.55; }
+    .ae-modal-actions { display:flex; gap:8px; justify-content:center; margin-top:4px; }
+    .ae-modal-cancel { padding:8px 22px; border-radius:8px; font-size:13px; border:1px solid var(--ae-border); background:var(--ae-surface); color:var(--ae-text); cursor:pointer; }
+    .ae-modal-del { padding:8px 22px; border-radius:8px; font-size:13px; border:none; background:#ef4444; color:#fff; cursor:pointer; }
+    .ae-modal-del:disabled { opacity:.5; cursor:not-allowed; }
+
+    #aeDynamicWidgets { display:flex; flex-direction:column; gap:6px; }
+</style>
+}
+
+<div class="ae-root">
+  <!-- Üst bar -->
+  <div class="ae-header">
+    <a class="ae-back" href="#" onclick="aeGoBack(false);return false;" title="Listeye Dön">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      Listeye Dön
+    </a>
+    <h1>@(isNew ? "Yeni Varlık" : "Varlığı Düzenle")</h1>
+    <span class="ae-spacer"></span>
+    <button class="ae-btn ae-btn--primary" id="ae-save">Kaydet</button>
+    <button type="button" class="ae-btn ae-btn--ghost" onclick="aeGoBack(false)">İptal</button>
+    @if (!isNew)
+    {
+      <button class="ae-btn ae-btn--danger" id="ae-delete">Sil</button>
+    }
+  </div>
+
+  <div id="ae-err" style="display:none;" class="ae-err"></div>
+
+  <input type="hidden" id="ae-id" value="@(Model.Id?.ToString() ?? "")" />
+  <input type="hidden" id="ae-machineId" value="@(Model.MachineId?.ToString() ?? "")" />
+
+  <!-- Gövde: sol tablar + sağ panel -->
+  <div class="ae-body">
+    <div class="ae-tabs" role="tablist">
+      <button class="ae-tab active" data-tab="general" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        Genel
+      </button>
+      <button class="ae-tab" data-tab="status" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Durum &amp; Tarihler
+      </button>
+      <button class="ae-tab" data-tab="maint" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Bakım &amp; Kalibrasyon
+      </button>
+      <button class="ae-tab" data-tab="it" id="ae-tab-it" type="button" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        BT / Ağ
+      </button>
+      @if (!isNew)
+      {
+        <button class="ae-tab" data-tab="media" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Görsel &amp; Evraklar
+        </button>
+        <button class="ae-tab" data-tab="history" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><polyline points="12 7 12 12 15 15"/></svg>
+          Geçmiş
+        </button>
+        <button class="ae-tab" data-tab="extra" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Ek Alanlar
+        </button>
+      }
+    </div>
+
+    <div class="ae-panels">
+
+      <!-- GENEL -->
+      <div class="ae-panel active" id="panel-general">
+        <h2 class="ae-panel-title">Genel Bilgiler</h2>
+        <p class="ae-panel-sub">Varlığın temel tanım bilgileri.</p>
+        @if (isMachine)
+        {
+          <div class="ae-note">
+            Bu varlık bir <strong>makine</strong> kaydına bağlıdır (@Model.MachineName). Makine adı/konumu Makine modülünde yönetilir —
+            <a href="/Logistics/MachineEdit?id=@Model.MachineId">makineyi düzenle</a>.
+          </div>
+        }
+        <div class="ae-grid2">
+          <div class="ae-field">
+            <label class="ae-label" for="ae-name">Varlık Adı *</label>
+            <input id="ae-name" class="ae-input" maxlength="200" value="@(Model.AssetName ?? "")" placeholder="Örn: Mitutoyo Kumpas 0-150" @(isMachine ? "readonly" : "") />
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-kind">Tür</label>
+            <select id="ae-kind" class="ae-select" @(isMachine ? "disabled" : "")>
+              <option value="0">Ekipman</option>
+              <option value="2">Ölçüm Cihazı</option>
+              <option value="3">Araç</option>
+              <option value="4">El Aleti</option>
+              <option value="5">Aparat / Kalıp</option>
+              <option value="1">Makine</option>
+              <optgroup label="BT / Donanım">
+                <option value="10">Bilgisayar</option>
+                <option value="11">Sunucu</option>
+                <option value="12">Cep Telefonu</option>
+                <option value="13">Tablet</option>
+                <option value="14">Ağ Cihazı</option>
+                <option value="15">Yazıcı</option>
+              </optgroup>
+              <option value="9">Diğer</option>
+            </select>
+          </div>
+        </div>
+        <div class="ae-grid2">
+          <div class="ae-field">
+            <label class="ae-label" for="ae-serial">Seri No</label>
+            <input id="ae-serial" class="ae-input" maxlength="100" value="@(Model.SerialNo ?? "")" />
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-sort">Sıralama</label>
+            <input id="ae-sort" class="ae-input" type="number" min="0" value="@Model.SortOrder" />
+          </div>
+        </div>
+        <div class="ae-field" id="ae-plate-field" style="display:none;">
+          <label class="ae-label" for="ae-plate">Plaka</label>
+          <input id="ae-plate" class="ae-input" maxlength="20" placeholder="örn. 34 ABC 123" value="@(Model.PlateNo ?? "")" />
+        </div>
+        <div class="ae-field">
+          <label class="ae-label" for="ae-desc">Açıklama</label>
+          <textarea id="ae-desc" class="ae-textarea" rows="3" maxlength="1000">@(Model.Description ?? "")</textarea>
+        </div>
+        <div class="ae-grid2">
+          <div class="ae-field">
+            <label class="ae-label">Aktif</label>
+            <div class="ae-switch-row">
+              <label class="ae-switch">
+                <input type="checkbox" id="ae-active" @(Model.IsActive ? "checked" : "") />
+                <span class="ae-switch-track"></span>
+              </label>
+              <span class="ae-switch-label" id="ae-active-label">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+            </div>
+          </div>
+          <div class="ae-field">
+            <label class="ae-label">Zimmetlenebilir</label>
+            <div class="ae-switch-row">
+              <label class="ae-switch">
+                <input type="checkbox" id="ae-assignable" @(Model.IsAssignable ? "checked" : "") />
+                <span class="ae-switch-track"></span>
+              </label>
+              <span class="ae-switch-label" id="ae-assignable-label">@(Model.IsAssignable ? "Zimmetlenebilir" : "Zimmetlenemez")</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DURUM & TARİHLER -->
+      <div class="ae-panel" id="panel-status">
+        <h2 class="ae-panel-title">Durum &amp; Tarihler</h2>
+        <p class="ae-panel-sub">Yaşam döngüsü durumu ve edinim/garanti tarihleri.</p>
+        <div class="ae-grid3">
+          <div class="ae-field">
+            <label class="ae-label" for="ae-status">Durum</label>
+            <select id="ae-status" class="ae-select">
+              <option value="0">Aktif</option>
+              <option value="1">Bakımda</option>
+              <option value="2">Hurda</option>
+              <option value="3">Elden Çıkarıldı</option>
+            </select>
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-acq">Alım Tarihi</label>
+            <input id="ae-acq" class="ae-input" type="date" value="@D(Model.AcquisitionDate)" />
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-warranty">Garanti Bitiş</label>
+            <input id="ae-warranty" class="ae-input" type="date" value="@D(Model.WarrantyExpiryDate)" />
+          </div>
+        </div>
+      </div>
+
+      <!-- BAKIM & KALİBRASYON -->
+      <div class="ae-panel" id="panel-maint">
+        <h2 class="ae-panel-title">Bakım &amp; Kalibrasyon</h2>
+        <p class="ae-panel-sub">Son bakım/kalibrasyon tarihleri ilgili <strong>hareketlerden</strong> otomatik gelir; buradan değiştirilemez. Periyot girilirse, hareket eklendiğinde sonraki tarih otomatik hesaplanır.</p>
+
+        <!-- Bakım -->
+        <div class="ae-field">
+          <label class="ae-label">Bakım</label>
+          <div class="ae-switch-row">
+            <label class="ae-switch">
+              <input type="checkbox" id="ae-isMaintained" @(Model.IsMaintained ? "checked" : "") />
+              <span class="ae-switch-track"></span>
+            </label>
+            <span class="ae-switch-label" id="ae-isMaintained-label">@(Model.IsMaintained ? "Bakım yapılır" : "Bakım yapılmaz")</span>
+          </div>
+        </div>
+        <div class="ae-grid3" id="ae-maint-fields">
+          <div class="ae-field">
+            <label class="ae-label" for="ae-maintPeriod">Bakım Periyodu</label>
+            <div style="display:flex; gap:8px;">
+              <input id="ae-maintPeriod" class="ae-input" type="number" min="0" style="flex:1; min-width:0;" value="@(Model.MaintenancePeriodDays?.ToString() ?? "")" />
+              <select id="ae-maintUnit" class="ae-select" style="width:92px; flex-shrink:0;">
+                <option value="0">Gün</option><option value="1">Ay</option><option value="2">Yıl</option>
+              </select>
+            </div>
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-maintLast">Son Bakım <span class="ae-readonly-tag">hareketten</span></label>
+            <input id="ae-maintLast" class="ae-input ae-input--ro" type="date" value="@D(Model.LastMaintenanceDate)" readonly disabled />
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-maintNext">Sonraki Bakım <span class="ae-readonly-tag">otomatik</span></label>
+            <input id="ae-maintNext" class="ae-input ae-input--ro" type="date" value="@D(Model.NextMaintenanceDate)" readonly disabled />
+          </div>
+        </div>
+
+        <!-- Kalibrasyon -->
+        <div class="ae-field" style="margin-top:14px;">
+          <label class="ae-label">Kalibrasyon</label>
+          <div class="ae-switch-row">
+            <label class="ae-switch">
+              <input type="checkbox" id="ae-isCalibrated" @(Model.IsCalibrated ? "checked" : "") />
+              <span class="ae-switch-track"></span>
+            </label>
+            <span class="ae-switch-label" id="ae-isCalibrated-label">@(Model.IsCalibrated ? "Kalibre edilir" : "Kalibre edilmez")</span>
+          </div>
+        </div>
+        <div class="ae-grid3" id="ae-calib-fields">
+          <div class="ae-field">
+            <label class="ae-label" for="ae-calibPeriod">Kalibrasyon Periyodu</label>
+            <div style="display:flex; gap:8px;">
+              <input id="ae-calibPeriod" class="ae-input" type="number" min="0" style="flex:1; min-width:0;" value="@(Model.CalibrationPeriodDays?.ToString() ?? "")" />
+              <select id="ae-calibUnit" class="ae-select" style="width:92px; flex-shrink:0;">
+                <option value="0">Gün</option><option value="1">Ay</option><option value="2">Yıl</option>
+              </select>
+            </div>
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-calibLast">Son Kalibrasyon <span class="ae-readonly-tag">hareketten</span></label>
+            <input id="ae-calibLast" class="ae-input ae-input--ro" type="date" value="@D(Model.LastCalibrationDate)" readonly disabled />
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-calibNext">Sonraki Kalibrasyon <span class="ae-readonly-tag">otomatik</span></label>
+            <input id="ae-calibNext" class="ae-input ae-input--ro" type="date" value="@D(Model.NextCalibrationDate)" readonly disabled />
+          </div>
+        </div>
+      </div>
+
+      <!-- BT / AĞ -->
+      <div class="ae-panel" id="panel-it">
+        <h2 class="ae-panel-title">BT / Ağ Bilgisi</h2>
+        <p class="ae-panel-sub">Bilgisayar, sunucu, telefon gibi donanım varlıkları için ağ ve sistem bilgisi. Cihazın kullanıcısı <strong>Zimmetleme</strong> üzerinden tutulur.</p>
+        <div class="ae-grid2">
+          <div class="ae-field">
+            <label class="ae-label" for="ae-ip">IP Adresi</label>
+            <input id="ae-ip" class="ae-input" maxlength="45" placeholder="örn. 192.168.1.50" value="@(Model.IpAddress ?? "")" />
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-hostname">Hostname / Cihaz Adı</label>
+            <input id="ae-hostname" class="ae-input" maxlength="100" placeholder="örn. PC-MUHASEBE-01" value="@(Model.Hostname ?? "")" />
+          </div>
+        </div>
+        <div class="ae-grid2">
+          <div class="ae-field">
+            <label class="ae-label" for="ae-os">İşletim Sistemi</label>
+            <input id="ae-os" class="ae-input" maxlength="120" placeholder="örn. Windows 11 Pro" value="@(Model.OperatingSystem ?? "")" />
+          </div>
+          <div class="ae-field">
+            <label class="ae-label" for="ae-mac">MAC Adresi</label>
+            <input id="ae-mac" class="ae-input" maxlength="50" placeholder="örn. 00:1A:2B:3C:4D:5E" value="@(Model.MacAddress ?? "")" />
+          </div>
+        </div>
+        <div class="ae-field">
+          <label class="ae-label" for="ae-netdomain">Domain / Çalışma Grubu</label>
+          <input id="ae-netdomain" class="ae-input" maxlength="120" placeholder="örn. CALIBRA.LOCAL veya WORKGROUP" value="@(Model.NetworkDomain ?? "")" />
+        </div>
+      </div>
+
+      @if (!isNew)
+      {
+        <!-- GÖRSEL & EVRAKLAR -->
+        <div class="ae-panel" id="panel-media">
+          <h2 class="ae-panel-title">Görsel &amp; Evraklar</h2>
+          <p class="ae-panel-sub">Varlığı görsel olarak tanımlamak için bir kapak görseli ekleyin; ayrıca fatura, garanti, teknik döküman gibi evrakları açıklamasıyla yükleyin.</p>
+
+          <div class="ae-media-cover">
+            <div class="ae-cover-box" id="ae-cover-box">
+              <img id="ae-cover-img" alt="Kapak görseli" style="display:none;" />
+              <div class="ae-cover-empty" id="ae-cover-empty">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <span>Görsel yok</span>
+              </div>
+            </div>
+            <div class="ae-cover-side">
+              <div class="ae-cover-title">Kapak Görseli</div>
+              <div class="ae-cover-hint">JPG / PNG · varlığı kartta ve burada tanımlar.</div>
+              <div class="ae-cover-actions">
+                <button type="button" class="ae-btn ae-btn--ghost" id="ae-cover-pick">Görsel Yükle / Değiştir</button>
+                <button type="button" class="ae-btn ae-btn--danger" id="ae-cover-remove" style="display:none;">Kaldır</button>
+              </div>
+              <input type="file" id="ae-cover-file" accept="image/*" style="display:none;" />
+            </div>
+          </div>
+
+          <div class="ae-docs">
+            <div class="ae-docs-head">Evraklar</div>
+            <div class="ae-docs-add">
+              <input type="file" id="ae-doc-file" class="ae-input" />
+              <input type="text" id="ae-doc-desc" class="ae-input" maxlength="200" placeholder="Açıklama (örn. Garanti belgesi)" />
+              <button type="button" class="ae-btn ae-btn--primary" id="ae-doc-add">Ekle</button>
+            </div>
+            <div id="ae-docs-list" class="ae-docs-list"><div class="ae-docs-empty">Yükleniyor…</div></div>
+          </div>
+        </div>
+
+        <!-- GEÇMİŞ -->
+        <div class="ae-panel" id="panel-history">
+          <h2 class="ae-panel-title">Bakım / Kalibrasyon Geçmişi</h2>
+          <p class="ae-panel-sub">Bu varlığa ait bakım, kalibrasyon, onarım ve hareket kayıtları.</p>
+          <table class="ae-hist" id="ae-hist-table" style="display:none;">
+            <thead>
+              <tr><th>Tür</th><th>Tarih</th><th>Yapan</th><th>Sonuç</th><th>Sonraki</th><th>Not</th><th></th></tr>
+            </thead>
+            <tbody id="ae-hist-body"></tbody>
+          </table>
+          <div class="ae-hist-empty" id="ae-hist-empty">Henüz kayıt yok.</div>
+
+          <div class="ae-hist-add">
+            <div class="ae-hist-add-title">Yeni Kayıt</div>
+            <div class="ae-grid3">
+              <div class="ae-field">
+                <label class="ae-label" for="ev-type">Olay Türü</label>
+                <select id="ev-type" class="ae-select">
+                  <option value="0">Bakım</option>
+                  <option value="1">Kalibrasyon</option>
+                  <option value="2">Onarım</option>
+                  <option value="3">Muayene / Kontrol</option>
+                  <option value="4">Hareket / Zimmet</option>
+                  <option value="9">Diğer</option>
+                </select>
+              </div>
+              <div class="ae-field">
+                <label class="ae-label" for="ev-date">Tarih</label>
+                <input id="ev-date" class="ae-input" type="date" />
+              </div>
+              <div class="ae-field">
+                <label class="ae-label" for="ev-result">Sonuç</label>
+                <select id="ev-result" class="ae-select">
+                  <option value="0">—</option>
+                  <option value="1">Başarılı</option>
+                  <option value="2">Başarısız</option>
+                  <option value="3">Şartlı</option>
+                </select>
+              </div>
+            </div>
+            <div class="ae-grid3">
+              <div class="ae-field">
+                <label class="ae-label" for="ev-personnel">Yapan (personel)</label>
+                <select id="ev-personnel" class="ae-select"><option value="">—</option></select>
+              </div>
+              <div class="ae-field">
+                <label class="ae-label" for="ev-byText">Yapan (dış firma)</label>
+                <input id="ev-byText" class="ae-input" maxlength="200" placeholder="Servis/firma" />
+              </div>
+              <div class="ae-field">
+                <label class="ae-label" for="ev-cost">Maliyet</label>
+                <input id="ev-cost" class="ae-input" type="number" step="0.01" min="0" placeholder="0,00" />
+              </div>
+            </div>
+            <div class="ae-grid3">
+              <div class="ae-field">
+                <label class="ae-label" for="ev-next">Sonraki Tarih</label>
+                <input id="ev-next" class="ae-input" type="date" />
+              </div>
+              <div class="ae-field" style="grid-column:span 2;">
+                <label class="ae-label" for="ev-doc">Belge / Sertifika URL</label>
+                <input id="ev-doc" class="ae-input" maxlength="500" placeholder="https://…" />
+              </div>
+            </div>
+            <div class="ae-field">
+              <label class="ae-label" for="ev-notes">Not</label>
+              <input id="ev-notes" class="ae-input" maxlength="500" placeholder="Açıklama (opsiyonel)" />
+            </div>
+            <button class="ae-btn ae-btn--primary" id="ev-add" type="button" style="padding:8px 16px;">Kayıt Ekle</button>
+          </div>
+        </div>
+
+        <!-- EK ALANLAR -->
+        <div class="ae-panel" id="panel-extra">
+          <h2 class="ae-panel-title">Ek Alanlar</h2>
+          <p class="ae-panel-sub">Admin → Alan ve Widget Tanımlamaları → ASSETS altında tanımlı özel alanlar.</p>
+          <div id="aeDynamicWidgetsCard">
+            <div id="aeDynamicWidgets" data-form-code="ASSETS" data-record-id="@(Model.Id?.ToString() ?? "")"></div>
+          </div>
+        </div>
+      }
+
+    </div>
+  </div>
+</div>
+
+@if (!isNew)
+{
+  <div id="ae-modal" class="ae-modal-backdrop" style="display:none;" onclick="aeCloseModal()">
+    <div class="ae-modal" onclick="event.stopPropagation()">
+      <div class="ae-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="ae-modal-title" id="ae-modal-title">Sil</div>
+      <div class="ae-modal-msg" id="ae-modal-msg"></div>
+      <div class="ae-modal-actions">
+        <button class="ae-modal-cancel" onclick="aeCloseModal()">Vazgeç</button>
+        <button class="ae-modal-del" id="ae-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var idVal = document.getElementById('ae-id').value || '';
+    var assetId = idVal ? parseInt(idVal) : 0;
+    var initLoc = @(Model.LocationId?.ToString() ?? "0");
+    var initDept = @(Model.DepartmentId?.ToString() ?? "0");
+    var initKind = @(((int)Model.Kind).ToString());
+    var initStatus = @(((int)Model.Status).ToString());
+
+    function csrf() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function setErr(msg) { var el = document.getElementById('ae-err'); if (msg) { el.textContent = msg; el.style.display = ''; } else el.style.display = 'none'; }
+    // Sol-alt köşe toast (format/kayıt hataları) — kendi kendine yeten, tema uyumlu
+    function aeToast(msg, type) {
+        var wrap = document.getElementById('ae-toast-wrap');
+        if (!wrap) { wrap = document.createElement('div'); wrap.id = 'ae-toast-wrap'; wrap.className = 'ae-toast-wrap'; document.body.appendChild(wrap); }
+        var t = document.createElement('div');
+        t.className = 'ae-toast ae-toast--' + (type || 'err');
+        t.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+        var sp = document.createElement('span'); sp.textContent = msg || ''; t.appendChild(sp);
+        wrap.appendChild(t);
+        setTimeout(function () { t.classList.add('ae-toast--out'); setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 220); }, 4200);
+    }
+    function shake(id) { var el = document.getElementById(id); if (!el) return; el.classList.remove('is-invalid'); void el.offsetWidth; el.classList.add('is-invalid'); setTimeout(function () { el.classList.remove('is-invalid'); }, 1200); }
+    function intOrNull(id) { var v = parseInt(document.getElementById(id).value); return isNaN(v) ? null : v; }
+    function numOrNull(id) { var v = parseFloat(document.getElementById(id).value); return isNaN(v) ? null : v; }
+    function dateOrNull(id) { var v = document.getElementById(id).value; return v ? v : null; }
+
+    // ── Tab geçişi (genel → ilgili panel) ──
+    var TAB_LABEL = { general:'Genel', status:'Durum & Tarihler', maint:'Bakım & Kalibrasyon', it:'BT / Ağ', media:'Görsel & Evraklar', history:'Geçmiş', extra:'Ek Alanlar' };
+    document.querySelectorAll('.ae-tab').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.ae-tab').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('.ae-panel').forEach(function (p) { p.classList.remove('active'); });
+            btn.classList.add('active');
+            var panel = document.getElementById('panel-' + btn.dataset.tab);
+            if (panel) panel.classList.add('active');
+        });
+    });
+
+    // preset Tür/Durum
+    var kindEl = document.getElementById('ae-kind');
+    kindEl.value = String(initKind);
+    document.getElementById('ae-status').value = String(initStatus);
+    // preset periyot birimleri (Gün/Ay/Yıl)
+    document.getElementById('ae-maintUnit').value = String(@((int)Model.MaintenancePeriodUnit));
+    document.getElementById('ae-calibUnit').value = String(@((int)Model.CalibrationPeriodUnit));
+
+    // Türe bağlı koşullu alanlar: BT/Ağ sekmesi (donanım türleri) + Plaka (Araç)
+    var IT_KINDS = [10, 11, 12, 13, 14, 15];
+    function syncKindFields() {
+        var k = parseInt(kindEl.value);
+        var isIt = IT_KINDS.indexOf(k) >= 0;
+        var tab = document.getElementById('ae-tab-it');
+        tab.style.display = isIt ? '' : 'none';
+        if (!isIt && tab.classList.contains('active')) {
+            document.querySelector('.ae-tab[data-tab="general"]').click();
+        }
+        // Plaka yalnız Araç (Kind=3) türünde
+        document.getElementById('ae-plate-field').style.display = (k === 3) ? '' : 'none';
+    }
+    kindEl.addEventListener('change', syncKindFields);
+    syncKindFields();
+
+    var activeEl = document.getElementById('ae-active');
+    var activeLabel = document.getElementById('ae-active-label');
+    activeEl.addEventListener('change', function () { activeLabel.textContent = activeEl.checked ? 'Aktif' : 'Pasif'; });
+
+    var assignEl = document.getElementById('ae-assignable');
+    var assignLabel = document.getElementById('ae-assignable-label');
+    assignEl.addEventListener('change', function () { assignLabel.textContent = assignEl.checked ? 'Zimmetlenebilir' : 'Zimmetlenemez'; });
+
+    // Bakım / Kalibrasyon parametrik switch'leri — kapalıyken periyot alanını soluklaştır
+    function wireFlag(switchId, labelId, fieldsId, onText, offText) {
+        var sw = document.getElementById(switchId);
+        var lbl = document.getElementById(labelId);
+        var fields = document.getElementById(fieldsId);
+        if (!sw) return;
+        function sync() {
+            lbl.textContent = sw.checked ? onText : offText;
+            if (fields) fields.classList.toggle('ae-fields--off', !sw.checked);
+        }
+        sw.addEventListener('change', sync);
+        sync();
+    }
+    wireFlag('ae-isMaintained', 'ae-isMaintained-label', 'ae-maint-fields', 'Bakım yapılır', 'Bakım yapılmaz');
+    wireFlag('ae-isCalibrated', 'ae-isCalibrated-label', 'ae-calib-fields', 'Kalibre edilir', 'Kalibre edilmez');
+
+    // ── Lookups ──
+    function buildLocationOptions(locs) {
+        var active = (locs || []).filter(function (l) { return l.isActive; });
+        var byParent = {};
+        active.forEach(function (l) { var p = l.parentId == null ? 0 : l.parentId; (byParent[p] = byParent[p] || []).push(l); });
+        Object.keys(byParent).forEach(function (k) {
+            byParent[k].sort(function (a, b) {
+                if ((a.sortOrder || 0) !== (b.sortOrder || 0)) return (a.sortOrder || 0) - (b.sortOrder || 0);
+                return (a.code || '').localeCompare(b.code || '');
+            });
+        });
+        var BAR = "│  ", TEE = "├─ ", ELL = "└─ ", SPC = "   ";
+        var out = [];
+        function walk(pid, depth, anc) {
+            var sib = byParent[pid] || [];
+            sib.forEach(function (n, idx) {
+                var last = idx === sib.length - 1, prefix = '';
+                for (var i = 0; i < depth - 1; i++) prefix += anc[i] ? BAR : SPC;
+                if (depth > 0) prefix += last ? ELL : TEE;
+                out.push({ id: n.id, label: prefix + (n.code || '') + (n.name ? ' - ' + n.name : '') });
+                walk(n.id, depth + 1, anc.concat(!last));
+            });
+        }
+        walk(0, 0, []);
+        return out;
+    }
+    function fillSelect(id, items, initVal, placeholder) {
+        var sel = document.getElementById(id); if (!sel) return;
+        var html = '<option value="">' + (placeholder || '—') + '</option>';
+        items.forEach(function (it) { html += '<option value="' + it.id + '">' + it.label + '</option>'; });
+        sel.innerHTML = html;
+        if (initVal) sel.value = String(initVal);
+    }
+    fetch('/Assets/AssetLookups', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : { locations: [], departments: [], personnel: [] }; })
+        .then(function (d) {
+            fillSelect('ev-personnel', (d.personnel || []).map(function (x) { return { id: x.id, label: x.label }; }), 0, '—');
+        });
+
+    // ── Save ──
+    var saveBtn = document.getElementById('ae-save');
+    saveBtn.addEventListener('click', function () {
+        var name = (document.getElementById('ae-name').value || '').trim();
+        if (!name) { document.querySelector('.ae-tab[data-tab="general"]').click(); shake('ae-name'); return; }
+
+        // ── Format doğrulama (sunucu da doğrular; burada anlık geri bildirim — sol-alt toast) ──
+        var ipv = (document.getElementById('ae-ip').value || '').trim();
+        if (ipv && !/^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(ipv)
+                && !(ipv.indexOf(':') >= 0 && /^[0-9A-Fa-f:.]+$/.test(ipv))) {
+            document.getElementById('ae-tab-it').click(); shake('ae-ip'); aeToast('Geçersiz IP adresi. Örnek: 192.168.1.50', 'err'); return;
+        }
+        var macv = (document.getElementById('ae-mac').value || '').trim();
+        if (macv && !/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/.test(macv)) {
+            document.getElementById('ae-tab-it').click(); shake('ae-mac'); aeToast('Geçersiz MAC adresi. Örnek: 00:1A:2B:3C:4D:5E', 'err'); return;
+        }
+        var platev = (document.getElementById('ae-plate').value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        if (platev && !/^(0[1-9]|[1-7][0-9]|8[01]) ?[A-Z]{1,3} ?[0-9]{2,5}$/.test(platev)) {
+            document.querySelector('.ae-tab[data-tab="general"]').click(); shake('ae-plate'); aeToast('Geçersiz plaka. Örnek: 34 ABC 123', 'err'); return;
+        }
+        setErr('');
+
+        var payload = {
+            id: assetId || null,
+            assetName: name,
+            description: document.getElementById('ae-desc').value || null,
+            kind: parseInt(document.getElementById('ae-kind').value) || 0,
+            machineId: (document.getElementById('ae-machineId').value || '') ? parseInt(document.getElementById('ae-machineId').value) : null,
+            serialNo: document.getElementById('ae-serial').value || null,
+            acquisitionDate: dateOrNull('ae-acq'),
+            warrantyExpiryDate: dateOrNull('ae-warranty'),
+            ipAddress: (document.getElementById('ae-ip').value || '').trim() || null,
+            hostname: (document.getElementById('ae-hostname').value || '').trim() || null,
+            operatingSystem: (document.getElementById('ae-os').value || '').trim() || null,
+            macAddress: (document.getElementById('ae-mac').value || '').trim() || null,
+            networkDomain: (document.getElementById('ae-netdomain').value || '').trim() || null,
+            plateNo: (document.getElementById('ae-plate').value || '').trim() || null,
+            isMaintained: document.getElementById('ae-isMaintained').checked,
+            maintenancePeriodDays: intOrNull('ae-maintPeriod'),
+            maintenancePeriodUnit: parseInt(document.getElementById('ae-maintUnit').value) || 0,
+            isCalibrated: document.getElementById('ae-isCalibrated').checked,
+            calibrationPeriodDays: intOrNull('ae-calibPeriod'),
+            calibrationPeriodUnit: parseInt(document.getElementById('ae-calibUnit').value) || 0,
+            status: parseInt(document.getElementById('ae-status').value) || 0,
+            sortOrder: parseInt(document.getElementById('ae-sort').value) || 0,
+            isActive: document.getElementById('ae-active').checked,
+            isAssignable: document.getElementById('ae-assignable').checked
+        };
+        saveBtn.disabled = true; setErr('');
+        fetch('/Assets/SaveAssetJson', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+            body: JSON.stringify(payload)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d && d.success) {
+                var newId = (d && d.id) || assetId;
+                var dyn = window._aeDynRenderer;
+                var p = Promise.resolve();
+                if (dyn && typeof dyn.save === 'function' && newId > 0) { try { p = Promise.resolve(dyn.save({ recordId: String(newId) })).catch(function(){}); } catch (e) {} }
+                p.then(function () { aeGoBack(true); });
+            } else { aeToast((d && d.message) || 'Kayıt başarısız.', 'err'); saveBtn.disabled = false; }
+        })
+        .catch(function () { aeToast('Bağlantı hatası.', 'err'); saveBtn.disabled = false; });
+    });
+
+    // ── Delete asset ──
+    var deleteBtn = document.getElementById('ae-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            aeOpenModal('Varlığı Sil', '<strong>' + (document.getElementById('ae-name').value || '') + '</strong> kaydını silmek istediğinize emin misiniz? Geçmiş kayıtları da silinir.', function () {
+                var btn = document.getElementById('ae-modal-del'); btn.disabled = true; btn.textContent = 'Siliniyor…';
+                fetch('/Assets/DeleteAssetJson?id=' + assetId, { method: 'POST', headers: { 'RequestVerificationToken': csrf() } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) { if (d && d.success) aeGoBack(true); else { aeCloseModal(); setErr((d && d.message) || 'Silinemedi.'); } })
+                    .catch(function () { aeCloseModal(); setErr('Bağlantı hatası.'); });
+            });
+        });
+    }
+
+    // ── Geçmiş ──
+    // API enum'ları string (JsonStringEnumConverter) ya da sayısal dönebilir — ikisini de karşıla.
+    var EV_TYPE = { Maintenance:'Bakım', Calibration:'Kalibrasyon', Repair:'Onarım', Inspection:'Muayene', Transfer:'Hareket', StatusChange:'Durum', Other:'Diğer', 0:'Bakım',1:'Kalibrasyon',2:'Onarım',3:'Muayene',4:'Hareket',5:'Durum',9:'Diğer' };
+    var EV_RESULT = { None:'', Passed:'Başarılı', Failed:'Başarısız', Conditional:'Şartlı', 0:'',1:'Başarılı',2:'Başarısız',3:'Şartlı' };
+    function fmtDate(s) { if (!s) return ''; var d = new Date(s); return isNaN(d) ? '' : ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear(); }
+    function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+    function loadEvents() {
+        if (!assetId) return;
+        fetch('/Assets/AssetEvents?assetId=' + assetId, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (rows) {
+                var body = document.getElementById('ae-hist-body'); if (!body) return;
+                var table = document.getElementById('ae-hist-table'); var empty = document.getElementById('ae-hist-empty');
+                if (!rows || !rows.length) { table.style.display = 'none'; empty.style.display = ''; return; }
+                table.style.display = ''; empty.style.display = 'none';
+                body.innerHTML = rows.map(function (e) {
+                    var who = e.performedByName || e.performedByText || '';
+                    return '<tr>'
+                        + '<td><span class="ae-chip">' + (EV_TYPE[e.eventType] || '') + '</span></td>'
+                        + '<td>' + fmtDate(e.eventDate) + '</td>'
+                        + '<td>' + esc(who) + '</td>'
+                        + '<td>' + (EV_RESULT[e.result] || '') + '</td>'
+                        + '<td>' + fmtDate(e.nextDueDate) + '</td>'
+                        + '<td>' + esc(e.notes || '') + '</td>'
+                        + '<td><button class="ae-row-del" data-ev="' + e.id + '" title="Sil">✕</button></td>'
+                        + '</tr>';
+                }).join('');
+                Array.prototype.forEach.call(body.querySelectorAll('.ae-row-del'), function (b) {
+                    b.addEventListener('click', function () {
+                        var evId = b.getAttribute('data-ev');
+                        aeOpenModal('Kaydı Sil', 'Bu geçmiş kaydını silmek istediğinize emin misiniz?', function () {
+                            var del = document.getElementById('ae-modal-del'); del.disabled = true; del.textContent = 'Siliniyor…';
+                            fetch('/Assets/DeleteAssetEventJson?id=' + evId, { method: 'POST', headers: { 'RequestVerificationToken': csrf() } })
+                                .then(function (r) { return r.json(); })
+                                .then(function () { aeCloseModal(); loadEvents(); })
+                                .catch(function () { aeCloseModal(); });
+                        });
+                    });
+                });
+            });
+    }
+    var evAdd = document.getElementById('ev-add');
+    if (evAdd) {
+        evAdd.addEventListener('click', function () {
+            var payload = {
+                assetId: assetId,
+                eventType: parseInt(document.getElementById('ev-type').value) || 0,
+                eventDate: dateOrNull('ev-date'),
+                performedByPersonnelId: intOrNull('ev-personnel'),
+                performedByText: document.getElementById('ev-byText').value || null,
+                cost: numOrNull('ev-cost'),
+                result: parseInt(document.getElementById('ev-result').value) || 0,
+                notes: document.getElementById('ev-notes').value || null,
+                nextDueDate: dateOrNull('ev-next'),
+                documentUrl: document.getElementById('ev-doc').value || null
+            };
+            evAdd.disabled = true;
+            fetch('/Assets/SaveAssetEventJson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                body: JSON.stringify(payload)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                evAdd.disabled = false;
+                if (d && d.success) {
+                    ['ev-byText','ev-notes','ev-cost','ev-doc'].forEach(function(i){ var el=document.getElementById(i); if(el) el.value=''; });
+                    loadEvents();
+                } else { setErr((d && d.message) || 'Kayıt eklenemedi.'); }
+            })
+            .catch(function () { evAdd.disabled = false; setErr('Bağlantı hatası.'); });
+        });
+    }
+    if (assetId) loadEvents();
+
+    // ── Görsel & Evraklar ──
+    if (assetId) (function initMedia() {
+        function bust() { return '&t=' + (new Date().getTime()); }
+        var coverImg = document.getElementById('ae-cover-img');
+        var coverEmpty = document.getElementById('ae-cover-empty');
+        var coverRemove = document.getElementById('ae-cover-remove');
+        var coverFile = document.getElementById('ae-cover-file');
+        coverImg.onload = function () { coverImg.style.display = ''; coverEmpty.style.display = 'none'; coverRemove.style.display = ''; };
+        coverImg.onerror = function () { coverImg.style.display = 'none'; coverEmpty.style.display = ''; coverRemove.style.display = 'none'; };
+        function showCover() { coverImg.src = '/Assets/AssetImage?id=' + assetId + bust(); }
+        showCover();
+
+        document.getElementById('ae-cover-pick').addEventListener('click', function () { coverFile.click(); });
+        coverFile.addEventListener('change', function () {
+            if (!coverFile.files || !coverFile.files[0]) return;
+            var fd = new FormData(); fd.append('assetId', assetId); fd.append('file', coverFile.files[0]);
+            fetch('/Assets/UploadAssetImage', { method: 'POST', headers: { 'RequestVerificationToken': csrf() }, body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) { if (d && d.success) showCover(); else aeToast((d && d.message) || 'Görsel yüklenemedi.', 'err'); })
+                .catch(function () { aeToast('Bağlantı hatası.', 'err'); });
+            coverFile.value = '';
+        });
+        coverRemove.addEventListener('click', function () {
+            aeOpenModal('Görseli Kaldır', 'Kapak görselini kaldırmak istediğinize emin misiniz?', function () {
+                aeCloseModal();
+                fetch('/Assets/DeleteAssetImageJson?assetId=' + assetId, { method: 'POST', headers: { 'RequestVerificationToken': csrf() } })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) { if (d && d.success) { coverImg.style.display = 'none'; coverEmpty.style.display = ''; coverRemove.style.display = 'none'; coverImg.removeAttribute('src'); } });
+            });
+        });
+
+        // Evraklar
+        var listEl = document.getElementById('ae-docs-list');
+        var FILE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+        function fmtSize(n) { if (n == null) return ''; if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(1) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
+        function loadDocs() {
+            fetch('/Assets/AssetAttachments?id=' + assetId, { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : []; })
+                .then(function (rows) { renderDocs(rows || []); })
+                .catch(function () { listEl.innerHTML = '<div class="ae-docs-empty">Yüklenemedi.</div>'; });
+        }
+        function renderDocs(rows) {
+            listEl.textContent = '';
+            if (!rows.length) { var e = document.createElement('div'); e.className = 'ae-docs-empty'; e.textContent = 'Henüz evrak eklenmemiş.'; listEl.appendChild(e); return; }
+            rows.forEach(function (a) {
+                var row = document.createElement('div'); row.className = 'ae-doc-row';
+                var thumb = document.createElement('div'); thumb.className = 'ae-doc-thumb';
+                if (a.isImage) { var im = document.createElement('img'); im.src = '/Assets/AssetAttachmentDownload?id=' + a.id; thumb.appendChild(im); }
+                else { thumb.innerHTML = FILE_SVG; }
+                var info = document.createElement('div'); info.className = 'ae-doc-info';
+                var nm = document.createElement('div'); nm.className = 'ae-doc-name'; nm.textContent = a.fileName || 'dosya';
+                var meta = document.createElement('div'); meta.className = 'ae-doc-meta'; meta.textContent = (a.description ? a.description + ' · ' : '') + fmtSize(a.fileSize);
+                info.appendChild(nm); info.appendChild(meta);
+                var acts = document.createElement('div'); acts.className = 'ae-doc-actions';
+                var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'ae-doc-link'; dl.textContent = 'İndir';
+                dl.addEventListener('click', function () { window.open('/Assets/AssetAttachmentDownload?id=' + a.id, '_blank'); });
+                var del = document.createElement('button'); del.type = 'button'; del.className = 'ae-doc-link ae-doc-link--danger'; del.textContent = 'Sil';
+                del.addEventListener('click', function () {
+                    aeOpenModal('Evrakı Sil', 'Bu evrakı silmek istediğinize emin misiniz?', function () {
+                        aeCloseModal();
+                        fetch('/Assets/DeleteAssetAttachmentJson?id=' + a.id, { method: 'POST', headers: { 'RequestVerificationToken': csrf() } })
+                            .then(function (r) { return r.json(); }).then(function (d) { if (d && d.success) loadDocs(); });
+                    });
+                });
+                acts.appendChild(dl); acts.appendChild(del);
+                row.appendChild(thumb); row.appendChild(info); row.appendChild(acts);
+                listEl.appendChild(row);
+            });
+        }
+        var docAdd = document.getElementById('ae-doc-add');
+        docAdd.addEventListener('click', function () {
+            var f = document.getElementById('ae-doc-file');
+            if (!f.files || !f.files[0]) { aeToast('Önce bir dosya seçiniz.', 'err'); return; }
+            var fd = new FormData(); fd.append('assetId', assetId); fd.append('file', f.files[0]); fd.append('description', document.getElementById('ae-doc-desc').value || '');
+            docAdd.disabled = true;
+            fetch('/Assets/UploadAssetAttachment', { method: 'POST', headers: { 'RequestVerificationToken': csrf() }, body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (d) { docAdd.disabled = false; if (d && d.success) { f.value = ''; document.getElementById('ae-doc-desc').value = ''; loadDocs(); } else aeToast((d && d.message) || 'Yüklenemedi.', 'err'); })
+                .catch(function () { docAdd.disabled = false; aeToast('Bağlantı hatası.', 'err'); });
+        });
+        loadDocs();
+    })();
+})();
+
+// ── Konteyner içindeysek (iframe) formu kapat + board'u yenile; değilsek /Assets'e dön ──
+function aeGoBack(refresh) {
+    try {
+        if (window.parent && window.parent !== window && window.parent.AssetContainer
+            && typeof window.parent.AssetContainer.closeEditor === 'function') {
+            window.parent.AssetContainer.closeEditor(!!refresh);
+            return;
+        }
+    } catch (e) { /* cross-origin fallback */ }
+    window.location.href = '/Assets';
+}
+
+// ── Silme modalı helper ──
+var _aeModalCb = null;
+function aeOpenModal(title, msg, cb) {
+    var m = document.getElementById('ae-modal'); if (!m) return;
+    document.getElementById('ae-modal-title').textContent = title;
+    document.getElementById('ae-modal-msg').innerHTML = msg;
+    var del = document.getElementById('ae-modal-del'); del.disabled = false; del.textContent = 'Sil';
+    _aeModalCb = cb; m.style.display = 'flex'; del.focus();
+}
+function aeCloseModal() { var m = document.getElementById('ae-modal'); if (m) m.style.display = 'none'; _aeModalCb = null; }
+(function () {
+    var del = document.getElementById('ae-modal-del');
+    if (del) del.addEventListener('click', function () { if (typeof _aeModalCb === 'function') _aeModalCb(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') aeCloseModal(); });
+})();
+
+// ── Dinamik widget renderer (Admin → Widget Tanımları → ASSETS) ──
+(function initAeDynRenderer() {
+    var el = document.getElementById('aeDynamicWidgets');
+    if (!el || !el.getAttribute('data-record-id')) return;
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+        try {
+            window._aeDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode: 'ASSETS', recordId: el.getAttribute('data-record-id') || '', classPrefix: 'ae', containerId: 'aeDynamicWidgetsCard'
+            });
+        } catch (e) { console.warn('[AE] widget renderer:', e); }
+    }
+    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) doMount();
+    else {
+        var jsUrl = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        if (!document.querySelector('script[data-ae-bundle]')) {
+            var s = document.createElement('script'); s.src = jsUrl; s.setAttribute('data-ae-bundle', '1');
+            s.onload = function () { setTimeout(doMount, 0); };
+            document.head.appendChild(s);
+        }
+    }
+})();
+</script>
+}

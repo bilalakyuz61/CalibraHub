@@ -19,11 +19,11 @@ public interface IDocumentService
     /// Kaynak teklifin durumu Converted'a geciler, document_source koprusu kayit eklenir.
     /// </summary>
     Task<CreateOrdersFromQuotesResult> CreateOrdersFromQuotesAsync(
-        CreateOrdersFromQuotesRequest req, string? createdBy, CancellationToken ct);
+        CreateOrdersFromQuotesRequest req, int? createdById, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentListItemDto>> GetMovementsByContactAsync(int contactId, int? documentTypeId, DateTime? fromDate, DateTime? toDate, CancellationToken ct);
     Task<DocumentDto?> GetQuoteByIdAsync(int id, CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDto>> GetQuoteLinesAsync(int documentId, CancellationToken ct);
-    Task<(bool Success, string? Error, DocumentDto? Quote)> SaveQuoteAsync(SaveDocumentRequest request, string? createdBy, CancellationToken ct);
+    Task<(bool Success, string? Error, DocumentDto? Quote)> SaveQuoteAsync(SaveDocumentRequest request, int? createdById, CancellationToken ct);
     Task DeleteQuoteAsync(int id, CancellationToken ct);
     Task<(bool Success, string? Error)> ChangeStatusAsync(int id, string newStatus, CancellationToken ct);
     Task<string> GetNextDocumentNumberAsync(CancellationToken ct);

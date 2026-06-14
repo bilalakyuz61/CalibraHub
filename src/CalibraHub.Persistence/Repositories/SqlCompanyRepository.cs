@@ -29,7 +29,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.CommandText = $"""
             SELECT [id], [name], [title], [address], [city], [district], [postal_code],
                    [tax_office], [tax_number],
-                   [is_e_document_approval_enabled], [is_active], [connection_string]
+                   [is_e_document_approval_enabled], [IsActive], [connection_string]
             FROM {_tableName}
             ORDER BY [name];
             """;
@@ -50,7 +50,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.CommandText = $"""
             SELECT [id], [name], [title], [address], [city], [district], [postal_code],
                    [tax_office], [tax_number],
-                   [is_e_document_approval_enabled], [is_active], [connection_string]
+                   [is_e_document_approval_enabled], [IsActive], [connection_string]
             FROM {_tableName}
             WHERE [id] = @Id;
             """;
@@ -72,7 +72,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             INSERT INTO {_tableName}
                 ([name], [title], [address], [city], [district], [postal_code],
                  [tax_office], [tax_number],
-                 [is_e_document_approval_enabled], [is_active], [connection_string],
+                 [is_e_document_approval_enabled], [IsActive], [connection_string],
                  [Created], [Updated])
             OUTPUT INSERTED.[id]
             VALUES
@@ -104,7 +104,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
                 [tax_office] = @TaxOffice,
                 [tax_number] = @TaxNumber,
                 [is_e_document_approval_enabled] = @IsEDocumentApprovalEnabled,
-                [is_active] = @IsActive,
+                [IsActive] = @IsActive,
                 [connection_string] = @ConnectionString,
                 [Updated] = @UpdatedAt
             WHERE [id] = @Id;
@@ -131,6 +131,15 @@ public sealed class SqlCompanyRepository : ICompanyRepository
         command.Parameters.Add(new SqlParameter("@ConnectionString", (object?)company.DatabaseConnectionString ?? DBNull.Value));
     }
 
+    public async Task DeleteAsync(int id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenSystemConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"DELETE FROM {_tableName} WHERE [id] = @Id;";
+        command.Parameters.Add(new SqlParameter("@Id", id));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private static Company MapCompany(SqlDataReader r)
     {
         var company = new Company
@@ -148,7 +157,7 @@ public sealed class SqlCompanyRepository : ICompanyRepository
             DatabaseConnectionString = r.IsDBNull(r.GetOrdinal("connection_string")) ? null : r.GetString(r.GetOrdinal("connection_string"))
         };
 
-        if (!r.GetBoolean(r.GetOrdinal("is_active")))
+        if (!r.GetBoolean(r.GetOrdinal("IsActive")))
             company.Deactivate();
 
         return company;

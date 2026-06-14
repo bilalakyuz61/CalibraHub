@@ -46,7 +46,7 @@ public sealed class ProductFeatureController : Controller
     public IActionResult ProductFeatureEdit(int? id)
     {
         ViewData["ProductFeatureEditId"] = id ?? 0;
-        return View(new ProductFeatureEditViewModel { FeatureId = id });
+        return View("~/Views/Logistics/ProductFeatureEdit.cshtml", new ProductFeatureEditViewModel { FeatureId = id });
     }
 
     /// <summary>Feature detay fetch - edit sayfasi load'da cagirir.</summary>

@@ -1,4 +1,6 @@
 using CalibraHub.Application.Abstractions.Persistence;
+using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Domain.Entities;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
@@ -11,15 +13,18 @@ public sealed class SqlFinanceRepository : IFinanceRepository
 {
     private readonly SqlServerConnectionFactory _connectionFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IDataVisibilityFilter _dvFilter;
     private readonly string _tableName;
 
     public SqlFinanceRepository(
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions options,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        IDataVisibilityFilter dvFilter)
     {
         _connectionFactory = connectionFactory;
         _httpContextAccessor = httpContextAccessor;
+        _dvFilter = dvFilter;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
         _tableName = $"[{schema}].[Contact]";
     }
@@ -44,6 +49,9 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var cmd = connection.CreateCommand();
 
         var where = BuildWhereClause(accountType, search);
+        // Satır görünürlük kuralları (row-level security) — cari grubu vb. alan-değer kısıtları.
+        var dv = await _dvFilter.BuildAsync(FormCodes.Contacts, string.Empty, "Id", cancellationToken);
+        where += dv.Sql;
 
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
@@ -54,6 +62,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
             """;
 
         AddFilterParams(cmd, accountType, search);
+        foreach (var p in dv.Parameters) cmd.Parameters.AddWithValue(p.Name, p.Value);
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -71,6 +80,9 @@ public sealed class SqlFinanceRepository : IFinanceRepository
         await using var cmd = connection.CreateCommand();
 
         var where = BuildWhereClause(accountType, search);
+        // Satır görünürlük kuralları (row-level security).
+        var dv = await _dvFilter.BuildAsync(FormCodes.Contacts, string.Empty, "Id", cancellationToken);
+        where += dv.Sql;
 
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
@@ -83,6 +95,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
             """;
 
         AddFilterParams(cmd, accountType, search);
+        foreach (var p in dv.Parameters) cmd.Parameters.AddWithValue(p.Name, p.Value);
         cmd.Parameters.Add(new SqlParameter("@Offset", offset));
         cmd.Parameters.Add(new SqlParameter("@PageSize", pageSize));
 
@@ -100,6 +113,7 @@ public sealed class SqlFinanceRepository : IFinanceRepository
             await using var countCmd = connection.CreateCommand();
             countCmd.CommandText = $"SELECT COUNT(*) FROM {_tableName} {where};";
             AddFilterParams(countCmd, accountType, search);
+            foreach (var p in dv.Parameters) countCmd.Parameters.AddWithValue(p.Name, p.Value);
             totalCount = (int)(await countCmd.ExecuteScalarAsync(cancellationToken))!;
         }
 
@@ -137,6 +151,25 @@ public sealed class SqlFinanceRepository : IFinanceRepository
             """;
         cmd.Parameters.Add(new SqlParameter("@CompanyId", GetCurrentCompanyId()));
         cmd.Parameters.Add(new SqlParameter("@Id", id));
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? MapRow(reader) : null;
+    }
+
+    public async Task<Contact?> GetContactByCodeAsync(string code, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        // AccountCode case-insensitive collation (varsayilan SQL Server _CI_AS) — UPPER hizli match icin.
+        // CompanyId scope: ayni kod farkli sirkete ait olabilir mi? AccountCode global UNIQUE
+        // (CodeExistsAsync da global kontrol yapiyor) — biz de scope koymadan ariyoruz.
+        cmd.CommandText = $"""
+            SELECT TOP 1 [Id],[CompanyId],[AccountType],[AccountCode],[AccountTitle],
+                   [TaxNumber],[IdentityNumber],[TaxOffice],[Phone],[Mobile],[Email],[Website],[Address],[PostalCode],[City],[District],[Neighborhood],[CountryCode],[ContactPerson],[IsActive],[PriceGroupId],[SalesRepresentativeId],[WaPhone],[WaName],[CreatedAt],[ContactGroupId]
+            FROM {_tableName}
+            WHERE [AccountCode] = @Code;
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Code", code.Trim()));
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? MapRow(reader) : null;
     }

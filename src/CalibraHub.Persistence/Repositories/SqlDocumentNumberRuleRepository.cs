@@ -36,7 +36,7 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
                    [ContactId],[ContactGroupId],[UserId],[BranchId],[FromDate],[ToDate],
                    [Prefix],[YearFormat],[MonthFormat],[CounterLength],[CounterStart],
                    [ResetPeriod],[TotalLength],[Weight],[IsActive],
-                   [CreatedBy],[Created],[UpdatedBy],[Updated]
+                   [CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_table}
             ORDER BY [Weight] DESC, [Name];
             """;
@@ -54,7 +54,7 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
                    [ContactId],[ContactGroupId],[UserId],[BranchId],[FromDate],[ToDate],
                    [Prefix],[YearFormat],[MonthFormat],[CounterLength],[CounterStart],
                    [ResetPeriod],[TotalLength],[Weight],[IsActive],
-                   [CreatedBy],[Created],[UpdatedBy],[Updated]
+                   [CreatedById],[Created],[UpdatedById],[Updated]
             FROM {_table} WHERE [Id] = @Id;
             """;
         cmd.Parameters.Add(new SqlParameter("@Id", id));
@@ -80,7 +80,7 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
                   [CounterLength]=@CounterLength,[CounterStart]=@CounterStart,
                   [ResetPeriod]=@ResetPeriod,[TotalLength]=@TotalLength,
                   [Weight]=@Weight,[IsActive]=@IsActive,
-                  [UpdatedBy]=@UpdatedBy,[Updated]=SYSUTCDATETIME()
+                  [UpdatedById]=@UpdatedById,[Updated]=SYSUTCDATETIME()
                 WHERE [Id]=@Id;
                 SELECT @Id;
                 """;
@@ -93,13 +93,13 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
                   ([Name],[DocumentTypeId],
                    [ContactId],[ContactGroupId],[UserId],[BranchId],[FromDate],[ToDate],
                    [Prefix],[YearFormat],[MonthFormat],[CounterLength],[CounterStart],
-                   [ResetPeriod],[TotalLength],[Weight],[IsActive],[CreatedBy])
+                   [ResetPeriod],[TotalLength],[Weight],[IsActive],[CreatedById])
                 OUTPUT INSERTED.[Id]
                 VALUES
                   (@Name,@DocumentTypeId,
                    @ContactId,@ContactGroupId,@UserId,@BranchId,@FromDate,@ToDate,
                    @Prefix,@YearFormat,@MonthFormat,@CounterLength,@CounterStart,
-                   @ResetPeriod,@TotalLength,@Weight,@IsActive,@CreatedBy);
+                   @ResetPeriod,@TotalLength,@Weight,@IsActive,@CreatedById);
                 """;
         }
         AddParams(cmd, rule);
@@ -186,8 +186,8 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
         cmd.Parameters.Add(new SqlParameter("@TotalLength",    (object?)r.TotalLength    ?? DBNull.Value));
         cmd.Parameters.Add(new SqlParameter("@Weight",         r.Weight));
         cmd.Parameters.Add(new SqlParameter("@IsActive",       r.IsActive));
-        cmd.Parameters.Add(new SqlParameter("@CreatedBy",      (object?)r.CreatedBy      ?? DBNull.Value));
-        cmd.Parameters.Add(new SqlParameter("@UpdatedBy",      (object?)r.UpdatedBy      ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@CreatedById",     (object?)r.CreatedById    ?? DBNull.Value));
+        cmd.Parameters.Add(new SqlParameter("@UpdatedById",    (object?)r.UpdatedById    ?? DBNull.Value));
     }
 
     private static DocumentNumberRule Map(SqlDataReader r) => new()
@@ -210,9 +210,9 @@ public sealed class SqlDocumentNumberRuleRepository : IDocumentNumberRuleReposit
         TotalLength     = r.IsDBNull(15) ? null : r.GetInt32(15),
         Weight          = r.GetInt32(16),
         IsActive        = r.GetBoolean(17),
-        CreatedBy       = r.IsDBNull(18) ? null : r.GetString(18),
+        CreatedById     = r.IsDBNull(18) ? null : r.GetInt32(18),
         Created         = r.GetDateTime(19),
-        UpdatedBy       = r.IsDBNull(20) ? null : r.GetString(20),
+        UpdatedById     = r.IsDBNull(20) ? null : r.GetInt32(20),
         Updated         = r.IsDBNull(21) ? null : r.GetDateTime(21),
     };
 }

@@ -17,7 +17,7 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
         _table = $"[{schema}].[user_settings]";
     }
 
-    public async Task<string?> GetAsync(Guid userId, string settingKey, CancellationToken cancellationToken)
+    public async Task<string?> GetAsync(int userId, string settingKey, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -28,7 +28,7 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
         return result is DBNull or null ? null : result.ToString();
     }
 
-    public async Task SetAsync(Guid userId, string settingKey, string? value, CancellationToken cancellationToken)
+    public async Task SetAsync(int userId, string settingKey, string? value, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -39,8 +39,8 @@ public sealed class SqlUserSettingRepository : IUserSettingRepository
             WHEN MATCHED THEN
                 UPDATE SET [setting_value] = @Value, [Updated] = GETDATE()
             WHEN NOT MATCHED THEN
-                INSERT ([id], [user_id], [setting_key], [setting_value], [Updated])
-                VALUES (NEWID(), @UserId, @Key, @Value, GETDATE());
+                INSERT ([user_id], [setting_key], [setting_value], [Updated])
+                VALUES (@UserId, @Key, @Value, GETDATE());
             """;
         command.Parameters.Add(new SqlParameter("@UserId", userId));
         command.Parameters.Add(new SqlParameter("@Key", settingKey));

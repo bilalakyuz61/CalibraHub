@@ -29,6 +29,12 @@ public sealed class SqlWidgetRepository : IWidgetRepository
     private readonly string _widgetMasTable;
     private readonly string _widgetTraTable;
 
+    // 2026-06-08 — IsPermissionControlled kolonu DB'de var mı? İlk çağrıda kontrol edilir,
+    // sonrasında cache'lenir. Yoksa SELECT/INSERT/UPDATE'lerde bu kolon atlanır — bu sayede
+    // ALTER TABLE çalıştırılmadan da uygulama hata vermez (graceful degradation).
+    private static bool? _hasPermCtlColumn;
+    private static readonly object _hasPermCtlLock = new();
+
     public SqlWidgetRepository(
         SqlServerConnectionFactory connectionFactory,
         CalibraDatabaseOptions options,
@@ -40,6 +46,21 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         _formsTable     = $"[{schema}].[Forms]";
         _widgetMasTable = $"[{schema}].[WidgetMas]";
         _widgetTraTable = $"[{schema}].[WidgetTra]";
+    }
+
+    /// <summary>
+    /// 2026-06-08 — IsPermissionControlled kolonu DB'de var mı? Process-lifetime cache.
+    /// Hot path'i kirletmesin diye sadece bir kere sorgulanır; sonuç bool? olarak saklanır.
+    /// </summary>
+    private async Task<bool> HasPermControlColumnAsync(SqlConnection conn, CancellationToken ct)
+    {
+        if (_hasPermCtlColumn.HasValue) return _hasPermCtlColumn.Value;
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT CASE WHEN COL_LENGTH(N'{_widgetMasTable}', N'IsPermissionControlled') IS NULL THEN 0 ELSE 1 END;";
+        var result = await cmd.ExecuteScalarAsync(ct);
+        var exists = result != null && Convert.ToInt32(result) == 1;
+        lock (_hasPermCtlLock) { _hasPermCtlColumn = exists; }
+        return exists;
     }
 
     /// <summary>
@@ -68,7 +89,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id],[FormCode],[FormName],[Module],[SubModule],[SortOrder],[IsActive],[BaseTable],[BaseRecordKey]
+            SELECT [Id],[FormCode],[FormName],[Module],[SubModule],[SortOrder],[IsActive],[BaseTable],[BaseRecordKey],[Icon],[IconColor],[IsMenuItem],[MenuKey],[MenuLabel],[MenuLabelEn],[MenuGroupKey],[MenuGroupName],[MenuGroupIcon],[MenuGroupSortOrder],[MenuSortOrder],[MenuMatchPath],[AdminOnly],[IsWidgetForm]
             FROM {_formsTable}
             WHERE [IsActive] = 1
             ORDER BY [SortOrder], [FormName];
@@ -84,7 +105,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT TOP (1) [Id],[FormCode],[FormName],[Module],[SubModule],[SortOrder],[IsActive],[BaseTable],[BaseRecordKey]
+            SELECT TOP (1) [Id],[FormCode],[FormName],[Module],[SubModule],[SortOrder],[IsActive],[BaseTable],[BaseRecordKey],[Icon],[IconColor],[IsMenuItem],[MenuKey],[MenuLabel],[MenuLabelEn],[MenuGroupKey],[MenuGroupName],[MenuGroupIcon],[MenuGroupSortOrder],[MenuSortOrder],[MenuMatchPath],[AdminOnly]
             FROM {_formsTable}
             WHERE [Id] = @Id;
             """;
@@ -101,7 +122,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
-            SELECT TOP (1) [Id],[FormCode],[FormName],[Module],[SubModule],[SortOrder],[IsActive],[BaseTable],[BaseRecordKey]
+            SELECT TOP (1) [Id],[FormCode],[FormName],[Module],[SubModule],[SortOrder],[IsActive],[BaseTable],[BaseRecordKey],[Icon],[IconColor],[IsMenuItem],[MenuKey],[MenuLabel],[MenuLabelEn],[MenuGroupKey],[MenuGroupName],[MenuGroupIcon],[MenuGroupSortOrder],[MenuSortOrder],[MenuMatchPath],[AdminOnly]
             FROM {_formsTable}
             WHERE [FormCode] = @Code;
             """;
@@ -121,11 +142,13 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         var companyId = GetCurrentCompanyId();
         var list = new List<WidgetDefinition>();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var hasPerm = await HasPermControlColumnAsync(conn, ct);
+        var permCol = hasPerm ? ",[IsPermissionControlled]" : string.Empty;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT [Id],[CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],
                    [MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],[SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],
-                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[CreatedAt],[UpdatedAt]
+                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn]{permCol},[CreatedAt],[UpdatedAt]
             FROM {_widgetMasTable}
             WHERE [FormId] = @FormId
               AND (@IncludeInactive = 1 OR [IsActive] = 1)
@@ -145,11 +168,13 @@ public sealed class SqlWidgetRepository : IWidgetRepository
     {
         var companyId = GetCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var hasPerm = await HasPermControlColumnAsync(conn, ct);
+        var permCol = hasPerm ? ",[IsPermissionControlled]" : string.Empty;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $"""
             SELECT TOP (1) [Id],[CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],
                    [MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],[SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],
-                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[CreatedAt],[UpdatedAt]
+                   [ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn]{permCol},[CreatedAt],[UpdatedAt]
             FROM {_widgetMasTable}
             WHERE [Id] = @Id
               AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);
@@ -166,6 +191,10 @@ public sealed class SqlWidgetRepository : IWidgetRepository
     {
         var companyId = GetCurrentCompanyId();
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        var hasPerm = await HasPermControlColumnAsync(conn, ct);
+        var permSetClause = hasPerm ? ",\n                    [IsPermissionControlled] = @IsPermissionControlled" : string.Empty;
+        var permInsCol    = hasPerm ? ",[IsPermissionControlled]" : string.Empty;
+        var permInsVal    = hasPerm ? ", @IsPermissionControlled" : string.Empty;
 
         if (widget.Id > 0)
         {
@@ -193,11 +222,13 @@ public sealed class SqlWidgetRepository : IWidgetRepository
                     [ColorValue]   = @ColorValue,
                     [ColSpan]      = @ColSpan,
                     [LabelStyle]   = @LabelStyle,
+                    [IsSystemField] = @IsSystemField,
+                    [EntityColumn]  = @EntityColumn{permSetClause},
                     [UpdatedAt]    = @UpdatedAt
                 WHERE [Id] = @Id
                   AND (@CompanyId = 0 OR [CompanyId] = @CompanyId);
                 """;
-            BindWidgetParams(upd, widget);
+            BindWidgetParams(upd, widget, hasPerm);
             upd.Parameters.Add(new SqlParameter("@Id", widget.Id));
             upd.Parameters.Add(new SqlParameter("@CompanyId", companyId));
             await upd.ExecuteNonQueryAsync(ct);
@@ -209,13 +240,13 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         ins.CommandText = $"""
             INSERT INTO {_widgetMasTable}
                 ([CompanyId],[FormId],[ParentId],[WidgetCode],[Label],[DataType],[MaxLength],[MinLength],[ExpectedLength],[MinValue],[MaxValue],
-                 [SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],[ColorType],[ColorValue],[ColSpan],[LabelStyle],[CreatedAt],[UpdatedAt])
+                 [SortOrder],[OptionsJSON],[RulesJSON],[IsPlainField],[IsRequired],[IsActive],[ColorType],[ColorValue],[ColSpan],[LabelStyle],[IsSystemField],[EntityColumn]{permInsCol},[CreatedAt],[UpdatedAt])
             OUTPUT INSERTED.[Id]
             VALUES
                 (@CompanyId, @FormId, @ParentId, @WidgetCode, @Label, @DataType, @MaxLength, @MinLength, @ExpectedLength, @MinValue, @MaxValue,
-                 @SortOrder, @OptionsJson, @RulesJson, @IsPlainField, @IsRequired, @IsActive, @ColorType, @ColorValue, @ColSpan, @LabelStyle, @CreatedAt, @UpdatedAt);
+                 @SortOrder, @OptionsJson, @RulesJson, @IsPlainField, @IsRequired, @IsActive, @ColorType, @ColorValue, @ColSpan, @LabelStyle, @IsSystemField, @EntityColumn{permInsVal}, @CreatedAt, @UpdatedAt);
             """;
-        BindWidgetParams(ins, widget);
+        BindWidgetParams(ins, widget, hasPerm);
         ins.Parameters.Add(new SqlParameter("@CompanyId", companyId));
         ins.Parameters.Add(new SqlParameter("@CreatedAt", widget.CreatedAt));
         var newId = await ins.ExecuteScalarAsync(ct);
@@ -509,35 +540,69 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
         BaseTable = r.IsDBNull(r.GetOrdinal("BaseTable")) ? null : r.GetString(r.GetOrdinal("BaseTable")),
         BaseRecordKey = r.IsDBNull(r.GetOrdinal("BaseRecordKey")) ? null : r.GetString(r.GetOrdinal("BaseRecordKey")),
+        Icon = HasColumn(r, "Icon") && !r.IsDBNull(r.GetOrdinal("Icon")) ? r.GetString(r.GetOrdinal("Icon")) : null,
+        IconColor = HasColumn(r, "IconColor") && !r.IsDBNull(r.GetOrdinal("IconColor")) ? r.GetString(r.GetOrdinal("IconColor")) : null,
+        IsMenuItem = HasColumn(r, "IsMenuItem") && !r.IsDBNull(r.GetOrdinal("IsMenuItem")) && r.GetBoolean(r.GetOrdinal("IsMenuItem")),
+        MenuKey = HasColumn(r, "MenuKey") && !r.IsDBNull(r.GetOrdinal("MenuKey")) ? r.GetString(r.GetOrdinal("MenuKey")) : null,
+        MenuLabel = HasColumn(r, "MenuLabel") && !r.IsDBNull(r.GetOrdinal("MenuLabel")) ? r.GetString(r.GetOrdinal("MenuLabel")) : null,
+        MenuLabelEn = HasColumn(r, "MenuLabelEn") && !r.IsDBNull(r.GetOrdinal("MenuLabelEn")) ? r.GetString(r.GetOrdinal("MenuLabelEn")) : null,
+        MenuGroupKey = HasColumn(r, "MenuGroupKey") && !r.IsDBNull(r.GetOrdinal("MenuGroupKey")) ? r.GetString(r.GetOrdinal("MenuGroupKey")) : null,
+        MenuGroupName = HasColumn(r, "MenuGroupName") && !r.IsDBNull(r.GetOrdinal("MenuGroupName")) ? r.GetString(r.GetOrdinal("MenuGroupName")) : null,
+        MenuGroupIcon = HasColumn(r, "MenuGroupIcon") && !r.IsDBNull(r.GetOrdinal("MenuGroupIcon")) ? r.GetString(r.GetOrdinal("MenuGroupIcon")) : null,
+        MenuGroupSortOrder = HasColumn(r, "MenuGroupSortOrder") && !r.IsDBNull(r.GetOrdinal("MenuGroupSortOrder")) ? r.GetInt32(r.GetOrdinal("MenuGroupSortOrder")) : null,
+        MenuSortOrder = HasColumn(r, "MenuSortOrder") && !r.IsDBNull(r.GetOrdinal("MenuSortOrder")) ? r.GetInt32(r.GetOrdinal("MenuSortOrder")) : null,
+        MenuMatchPath = HasColumn(r, "MenuMatchPath") && !r.IsDBNull(r.GetOrdinal("MenuMatchPath")) ? r.GetString(r.GetOrdinal("MenuMatchPath")) : null,
+        AdminOnly = HasColumn(r, "AdminOnly") && !r.IsDBNull(r.GetOrdinal("AdminOnly")) && r.GetBoolean(r.GetOrdinal("AdminOnly")),
+        IsWidgetForm = !HasColumn(r, "IsWidgetForm") || r.IsDBNull(r.GetOrdinal("IsWidgetForm")) || r.GetBoolean(r.GetOrdinal("IsWidgetForm")),
     };
 
-    private static WidgetDefinition MapWidget(SqlDataReader r) => new()
+    private static WidgetDefinition MapWidget(SqlDataReader r)
     {
-        Id = r.GetInt32(r.GetOrdinal("Id")),
-        CompanyId = r.IsDBNull(r.GetOrdinal("CompanyId")) ? 0 : r.GetInt32(r.GetOrdinal("CompanyId")),
-        FormId = r.GetInt32(r.GetOrdinal("FormId")),
-        ParentId = r.IsDBNull(r.GetOrdinal("ParentId")) ? null : r.GetInt32(r.GetOrdinal("ParentId")),
-        WidgetCode = r.GetString(r.GetOrdinal("WidgetCode")),
-        Label = r.GetString(r.GetOrdinal("Label")),
-        DataType = r.GetString(r.GetOrdinal("DataType")),
-        MaxLength      = r.IsDBNull(r.GetOrdinal("MaxLength"))      ? null : r.GetInt32(r.GetOrdinal("MaxLength")),
-        MinLength      = r.IsDBNull(r.GetOrdinal("MinLength"))      ? null : r.GetInt32(r.GetOrdinal("MinLength")),
-        ExpectedLength = r.IsDBNull(r.GetOrdinal("ExpectedLength")) ? null : r.GetInt32(r.GetOrdinal("ExpectedLength")),
-        MinValue       = r.IsDBNull(r.GetOrdinal("MinValue"))       ? null : r.GetDecimal(r.GetOrdinal("MinValue")),
-        MaxValue       = r.IsDBNull(r.GetOrdinal("MaxValue"))       ? null : r.GetDecimal(r.GetOrdinal("MaxValue")),
-        SortOrder = r.GetInt32(r.GetOrdinal("SortOrder")),
-        OptionsJson = r.IsDBNull(r.GetOrdinal("OptionsJSON")) ? null : r.GetString(r.GetOrdinal("OptionsJSON")),
-        RulesJson = r.IsDBNull(r.GetOrdinal("RulesJSON")) ? null : r.GetString(r.GetOrdinal("RulesJSON")),
-        IsPlainField = !r.IsDBNull(r.GetOrdinal("IsPlainField")) && r.GetBoolean(r.GetOrdinal("IsPlainField")),
-        IsRequired = !r.IsDBNull(r.GetOrdinal("IsRequired")) && r.GetBoolean(r.GetOrdinal("IsRequired")),
-        IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
-        ColorType  = r.IsDBNull(r.GetOrdinal("ColorType"))  ? 0    : r.GetInt32(r.GetOrdinal("ColorType")),
-        ColorValue = r.IsDBNull(r.GetOrdinal("ColorValue")) ? null : r.GetString(r.GetOrdinal("ColorValue")),
-        ColSpan    = r.IsDBNull(r.GetOrdinal("ColSpan"))    ? 6    : r.GetInt32(r.GetOrdinal("ColSpan")),
-        LabelStyle = r.IsDBNull(r.GetOrdinal("LabelStyle")) ? "standard" : r.GetString(r.GetOrdinal("LabelStyle")),
-        CreatedAt = r.GetDateTime(r.GetOrdinal("CreatedAt")),
-        UpdatedAt = r.GetDateTime(r.GetOrdinal("UpdatedAt")),
-    };
+        // IsSystemField + EntityColumn — yeni Sprint 1 kolonlari; eski DB'lerde
+        // olmayabilir (migration sirasinda eklenir). HasColumn ile guvenli oku.
+        bool hasSysField = HasColumn(r, "IsSystemField");
+        bool hasEntCol   = HasColumn(r, "EntityColumn");
+        bool hasPermCtl  = HasColumn(r, "IsPermissionControlled");
+        return new()
+        {
+            Id = r.GetInt32(r.GetOrdinal("Id")),
+            CompanyId = r.IsDBNull(r.GetOrdinal("CompanyId")) ? 0 : r.GetInt32(r.GetOrdinal("CompanyId")),
+            FormId = r.GetInt32(r.GetOrdinal("FormId")),
+            ParentId = r.IsDBNull(r.GetOrdinal("ParentId")) ? null : r.GetInt32(r.GetOrdinal("ParentId")),
+            WidgetCode = r.GetString(r.GetOrdinal("WidgetCode")),
+            Label = r.GetString(r.GetOrdinal("Label")),
+            DataType = r.GetString(r.GetOrdinal("DataType")),
+            MaxLength      = r.IsDBNull(r.GetOrdinal("MaxLength"))      ? null : r.GetInt32(r.GetOrdinal("MaxLength")),
+            MinLength      = r.IsDBNull(r.GetOrdinal("MinLength"))      ? null : r.GetInt32(r.GetOrdinal("MinLength")),
+            ExpectedLength = r.IsDBNull(r.GetOrdinal("ExpectedLength")) ? null : r.GetInt32(r.GetOrdinal("ExpectedLength")),
+            MinValue       = r.IsDBNull(r.GetOrdinal("MinValue"))       ? null : r.GetDecimal(r.GetOrdinal("MinValue")),
+            MaxValue       = r.IsDBNull(r.GetOrdinal("MaxValue"))       ? null : r.GetDecimal(r.GetOrdinal("MaxValue")),
+            SortOrder = r.GetInt32(r.GetOrdinal("SortOrder")),
+            OptionsJson = r.IsDBNull(r.GetOrdinal("OptionsJSON")) ? null : r.GetString(r.GetOrdinal("OptionsJSON")),
+            RulesJson = r.IsDBNull(r.GetOrdinal("RulesJSON")) ? null : r.GetString(r.GetOrdinal("RulesJSON")),
+            IsPlainField = !r.IsDBNull(r.GetOrdinal("IsPlainField")) && r.GetBoolean(r.GetOrdinal("IsPlainField")),
+            IsRequired = !r.IsDBNull(r.GetOrdinal("IsRequired")) && r.GetBoolean(r.GetOrdinal("IsRequired")),
+            IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
+            ColorType  = r.IsDBNull(r.GetOrdinal("ColorType"))  ? 0    : r.GetInt32(r.GetOrdinal("ColorType")),
+            ColorValue = r.IsDBNull(r.GetOrdinal("ColorValue")) ? null : r.GetString(r.GetOrdinal("ColorValue")),
+            ColSpan    = r.IsDBNull(r.GetOrdinal("ColSpan"))    ? 6    : r.GetInt32(r.GetOrdinal("ColSpan")),
+            LabelStyle = r.IsDBNull(r.GetOrdinal("LabelStyle")) ? "standard" : r.GetString(r.GetOrdinal("LabelStyle")),
+            IsSystemField = hasSysField && !r.IsDBNull(r.GetOrdinal("IsSystemField")) && r.GetBoolean(r.GetOrdinal("IsSystemField")),
+            EntityColumn  = (hasEntCol && !r.IsDBNull(r.GetOrdinal("EntityColumn"))) ? r.GetString(r.GetOrdinal("EntityColumn")) : null,
+            IsPermissionControlled = hasPermCtl && !r.IsDBNull(r.GetOrdinal("IsPermissionControlled")) && r.GetBoolean(r.GetOrdinal("IsPermissionControlled")),
+            CreatedAt = r.GetDateTime(r.GetOrdinal("CreatedAt")),
+            UpdatedAt = r.GetDateTime(r.GetOrdinal("UpdatedAt")),
+        };
+    }
+
+    /// <summary>Reader'da kolonu var mi? (yeni eklenen optional kolonlar icin guvenli check)</summary>
+    private static bool HasColumn(SqlDataReader r, string name)
+    {
+        for (int i = 0; i < r.FieldCount; i++)
+            if (string.Equals(r.GetName(i), name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
 
     private static WidgetValue MapValue(SqlDataReader r) => new()
     {
@@ -550,7 +615,7 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         UpdatedAt = r.GetDateTime(r.GetOrdinal("UpdatedAt")),
     };
 
-    private static void BindWidgetParams(SqlCommand cmd, WidgetDefinition w)
+    private static void BindWidgetParams(SqlCommand cmd, WidgetDefinition w, bool includePermControlled = true)
     {
         cmd.Parameters.Add(new SqlParameter("@FormId", w.FormId));
         cmd.Parameters.Add(new SqlParameter("@ParentId", (object?)w.ParentId ?? DBNull.Value));
@@ -573,9 +638,17 @@ public sealed class SqlWidgetRepository : IWidgetRepository
         // ColSpan — 1-24 arasi clamp; disinda bir deger gelirse varsayilan 12.
         var safeCol = (w.ColSpan >= 1 && w.ColSpan <= 24) ? w.ColSpan : 12;
         cmd.Parameters.Add(new SqlParameter("@ColSpan", safeCol));
-        // LabelStyle — whitelist: sadece "standard" veya "modern"; digerleri standart kabul.
-        var safeStyle = (w.LabelStyle == "modern") ? "modern" : "standard";
+        // LabelStyle — whitelist: "standard", "modern" veya "inline". Diger degerler standart kabul.
+        // Not: "inline" eski IsPlainField=true davranisinin yerine gecer (Sprint 0A migration).
+        var safeStyle = (w.LabelStyle == "modern" || w.LabelStyle == "inline") ? w.LabelStyle : "standard";
         cmd.Parameters.Add(new SqlParameter("@LabelStyle", safeStyle));
+        // Sprint 1 — Universal Form Engine. EntityColumn null olabilir.
+        cmd.Parameters.Add(new SqlParameter("@IsSystemField", w.IsSystemField));
+        cmd.Parameters.Add(new SqlParameter("@EntityColumn", (object?)w.EntityColumn ?? DBNull.Value));
+        // 2026-06-08 — Yetkilendirilebilir alan flag'i. Sadece DB'de IsPermissionControlled
+        // kolonu varsa bağlanır (graceful: ALTER TABLE çalıştırılmadığında SQL atılmaz).
+        if (includePermControlled)
+            cmd.Parameters.Add(new SqlParameter("@IsPermissionControlled", w.IsPermissionControlled));
         cmd.Parameters.Add(new SqlParameter("@UpdatedAt", w.UpdatedAt));
     }
 

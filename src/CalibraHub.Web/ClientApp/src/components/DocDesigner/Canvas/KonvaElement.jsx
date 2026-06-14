@@ -98,13 +98,15 @@ export default function KonvaElement({
     : el.kind === 'PageNumber'  ? '[#]'
     : el.kind === 'DateTimeNow' ? '[Tarih]'
     : el.kind === 'Image'       ? (el.imageSrc ? '' : '[ 🖼 ]')
-    : el.kind === 'Barcode'     ? '' // own rendering
-    : el.kind === 'QrCode'      ? '' // own rendering
+    : el.kind === 'Barcode'     ? '' // own rendering (bar lines veya QR matrisi)
     : el.kind === 'Shape'       ? ''
     : el.kind
 
-  // Sahte barkod çizgileri için sabit deterministik desen
-  const barcodeLines = el.kind === 'Barcode'
+  // Tek bayrak: Barcode elementi QR tipinde mi? QR ayri kind degil, barcodeType.
+  const isQr = el.kind === 'Barcode' && el.barcodeType === 'QR'
+
+  // Sahte barkod çizgileri için sabit deterministik desen (QR HARIC)
+  const barcodeLines = (el.kind === 'Barcode' && !isQr)
     ? (() => {
         const lines = []
         let i = 0
@@ -122,8 +124,8 @@ export default function KonvaElement({
       })()
     : null
 
-  // Sahte QR matrisi
-  const qrCells = el.kind === 'QrCode'
+  // Sahte QR matrisi — Barcode + barcodeType='QR'
+  const qrCells = isQr
     ? (() => {
         const N = 11
         const cellSize = Math.min(w, h) / (N + 2)
@@ -223,7 +225,8 @@ export default function KonvaElement({
         }}
         onDblClick={e => {
           e.cancelBubble = true
-          if (['Label','BoundField','AmountInWords'].includes(el.kind)) {
+          // Barkod da veri secimi gerektiren bir element — cift tikla editor acilir.
+          if (['Label','BoundField','AmountInWords','Barcode'].includes(el.kind)) {
             dispatch({ type: 'OPEN_ELEMENT_EDITOR', elementId: el.id })
           }
         }}
@@ -258,8 +261,8 @@ export default function KonvaElement({
         {bB && <Line points={[0, h, w, h]} stroke="#333" strokeWidth={1} strokeScaleEnabled={false} />}
         {bL && <Line points={[0, 0, 0, h]} stroke="#333" strokeWidth={1} strokeScaleEnabled={false} />}
 
-        {/* Sahte barkod görseli */}
-        {el.kind === 'Barcode' && (
+        {/* Barkod gorseli — duz bar (QR HARIC tum tipler) */}
+        {el.kind === 'Barcode' && !isQr && (
           <>
             <Rect width={w} height={h} fill="#ffffff" />
             {barcodeLines?.map((ln, i) => (
@@ -280,8 +283,8 @@ export default function KonvaElement({
           </>
         )}
 
-        {/* Sahte QR görseli */}
-        {el.kind === 'QrCode' && (
+        {/* QR gorseli — Barcode + barcodeType='QR' */}
+        {isQr && (
           <>
             <Rect width={w} height={h} fill="#ffffff" />
             {qrCells?.map((c, i) => (

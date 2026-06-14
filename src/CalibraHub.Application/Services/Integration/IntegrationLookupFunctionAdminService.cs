@@ -48,7 +48,7 @@ public sealed class IntegrationLookupFunctionAdminService : IIntegrationLookupFu
     }
 
     public async Task<(bool Success, string? Error, int? Id)> CreateAsync(
-        SaveIntegrationLookupFunctionRequest req, string? user, CancellationToken ct)
+        SaveIntegrationLookupFunctionRequest req, int? userId, CancellationToken ct)
     {
         var (ok, err) = Validate(req);
         if (!ok) return (false, err, null);
@@ -57,13 +57,13 @@ public sealed class IntegrationLookupFunctionAdminService : IIntegrationLookupFu
             return (false, $"'{req.Code}' kodu zaten kullaniliyor.", null);
 
         var entity = MapToEntity(req, isNew: true);
-        var id = await _repo.InsertAsync(entity, user, ct);
+        var id = await _repo.InsertAsync(entity, userId, ct);
         InvalidateCache();
         return (true, null, id);
     }
 
     public async Task<(bool Success, string? Error)> UpdateAsync(
-        SaveIntegrationLookupFunctionRequest req, string? user, CancellationToken ct)
+        SaveIntegrationLookupFunctionRequest req, int? userId, CancellationToken ct)
     {
         if (!req.Id.HasValue || req.Id.Value <= 0) return (false, "Id eksik.");
         var (ok, err) = Validate(req);
@@ -77,16 +77,16 @@ public sealed class IntegrationLookupFunctionAdminService : IIntegrationLookupFu
 
         var entity = MapToEntity(req, isNew: false);
         entity.Id = req.Id.Value;
-        await _repo.UpdateAsync(entity, user, ct);
+        await _repo.UpdateAsync(entity, userId, ct);
         InvalidateCache();
         return (true, null);
     }
 
-    public async Task<(bool Success, string? Error)> DeleteAsync(int id, string? user, CancellationToken ct)
+    public async Task<(bool Success, string? Error)> DeleteAsync(int id, int? userId, CancellationToken ct)
     {
         var existing = await _repo.GetByIdAsync(id, ct);
         if (existing is null) return (false, "Kayit bulunamadi.");
-        await _repo.SoftDeleteAsync(id, user, ct);
+        await _repo.SoftDeleteAsync(id, userId, ct);
         InvalidateCache();
         return (true, null);
     }

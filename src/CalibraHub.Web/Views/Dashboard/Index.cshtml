@@ -1,5 +1,5 @@
 @{
-    ViewData["Title"] = "Panolar";
+    ViewData["Title"] = "Rapor Panoları";
     ViewData["BodyClass"] = "page-dashboard-list";
     var grafanaPath = (ViewData["GrafanaPublicPath"] as string ?? "/grafana").TrimEnd('/') + "/";
     var isDesigner = ViewData["GrafanaIsDesigner"] is bool b && b;
@@ -8,7 +8,7 @@
 <div class="dashboard-md-host">
     <aside class="dashboard-md-side">
         <div class="dashboard-md-side-header">
-            <h1>Panolar</h1>
+            <h1>Rapor Panoları</h1>
             <p class="dashboard-md-subtitle" id="dashboard-md-subtitle">Yukleniyor...</p>
             <div class="dashboard-md-search">
                 <input type="search" id="dashboard-md-search-input" placeholder="Pano ara..." autocomplete="off" />
@@ -281,7 +281,7 @@
 
             var a = document.createElement('a');
             a.href = '/Dashboard/Grafana';
-            a.textContent = 'Grafana arayuzunu ac >';
+            a.textContent = 'Tasarım arayüzünü aç >';
             wrap.appendChild(a);
 
             listEl.appendChild(wrap);

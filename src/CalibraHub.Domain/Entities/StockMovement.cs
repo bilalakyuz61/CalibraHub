@@ -20,6 +20,6 @@ public sealed class StockMovement
     public DateTime MovementDate { get; init; }
     public string? BatchNo { get; init; }
     public string? LotNo { get; init; }
-    public int? CreatedBy { get; init; }
+    public int? CreatedById { get; init; }
     public DateTime? Created { get; init; }
 }

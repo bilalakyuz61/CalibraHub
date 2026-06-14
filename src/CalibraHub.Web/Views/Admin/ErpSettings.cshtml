@@ -29,6 +29,11 @@
     .erp-test-msg { padding: 4px 8px; border-radius: 5px; font-size: 0.7rem; margin-top: 6px; }
     .erp-test-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
     .erp-test-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    /* Dark tema overrides */
+    body.app-theme-dark .erp-grid tbody tr.is-sel { background: rgba(99,102,241,.15) !important; }
+    body.app-theme-dark .erp-empty { color: var(--app-text-muted, #94a3b8); }
+    body.app-theme-dark .erp-msg.ok,  body.app-theme-dark .erp-test-msg.ok  { background: rgba(16,185,129,.12); color: #34d399; border-color: rgba(16,185,129,.25); }
+    body.app-theme-dark .erp-msg.err, body.app-theme-dark .erp-test-msg.err { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.25); }
 </style>
 }
 

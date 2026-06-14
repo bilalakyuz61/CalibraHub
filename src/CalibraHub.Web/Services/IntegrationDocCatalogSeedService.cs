@@ -72,7 +72,7 @@ public sealed class IntegrationDocCatalogSeedService : IHostedService
                         SortOrder = doc.Provider.SortOrder,
                         IsActive = true,
                     };
-                    provider.Id = await repo.UpsertProviderAsync(provider, "system-seed", ct);
+                    provider.Id = await repo.UpsertProviderAsync(provider, null, ct); // system-seed: no user context
                     providersAdded++;
                 }
                 else provider = existingProvider;
@@ -103,7 +103,7 @@ public sealed class IntegrationDocCatalogSeedService : IHostedService
                                 SortOrder = v.SortOrder > 0 ? v.SortOrder : (i + 1) * 10,
                             }).ToList(),
                     };
-                    var newId = await repo.UpsertEnumAsync(entity, "system-seed", ct);
+                    var newId = await repo.UpsertEnumAsync(entity, null, ct); // system-seed: no user context
                     enumIdMap[e.Code] = newId;
                     enumsAdded++;
                     valuesAdded += entity.Values.Count;
@@ -137,7 +137,7 @@ public sealed class IntegrationDocCatalogSeedService : IHostedService
                         SortOrder = f.SortOrder,
                         IsActive = true,
                     };
-                    await repo.UpsertFieldDocAsync(entity, "system-seed", ct);
+                    await repo.UpsertFieldDocAsync(entity, null, ct); // system-seed: no user context
                     fieldDocsAdded++;
                 }
             }
@@ -147,8 +147,24 @@ public sealed class IntegrationDocCatalogSeedService : IHostedService
             }
         }
 
+        // 2026-05-21: Tüm provider seed'leri yüklendikten sonra, her enum'un
+        // UsedInFieldPaths kolonu BOŞ ise kendisini referans veren FieldDoc'lardan
+        // otomatik doldurulur. Admin EnumEdit ekranında "Hangi Alanlarda Kullanılıyor"
+        // bölümü hazır olarak gelir. Admin daha sonra elle ekleme/silme yapabilir
+        // (NOT NULL olan kayıtlar tekrar override edilmez).
+        int usageBackfilled = 0;
+        try
+        {
+            usageBackfilled = await repo.BackfillEnumUsageFromFieldDocsAsync(null, ct); // system-seed: no user context
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "[DocCatalogSeed] UsedInFieldPaths backfill başarısız (enum sayfası boş gelir).");
+        }
+
         Console.WriteLine($"[DB INIT] IntegrationDocCatalogSeed tamamlandi. " +
-            $"+{providersAdded} provider, +{enumsAdded} enum (+{valuesAdded} deger), +{fieldDocsAdded} field-doc.");
+            $"+{providersAdded} provider, +{enumsAdded} enum (+{valuesAdded} deger), +{fieldDocsAdded} field-doc, " +
+            $"+{usageBackfilled} enum-usage backfill.");
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;

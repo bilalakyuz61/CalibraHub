@@ -88,11 +88,12 @@ public sealed class GuideService : IGuideService
     }
 
     public async Task<IReadOnlyCollection<string>?> GetDistinctValuesAsync(
-        string guideCode, string column, string? search, CancellationToken ct)
+        string guideCode, string column, string? search, CancellationToken ct,
+        IReadOnlyCollection<GuideConstraintDto>? constraints = null)
     {
         var guide = await _repository.GetByCodeAsync(Normalize(guideCode), ct);
         if (guide == null) return null;
-        return await _repository.GetDistinctValuesAsync(guide, column, search, ct);
+        return await _repository.GetDistinctValuesAsync(guide, column, search, ct, constraints);
     }
 
     public Task<int> SetDefaultFilterAsync(string guideCode, string? filterJson, CancellationToken ct)

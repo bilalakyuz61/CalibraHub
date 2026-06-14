@@ -8,208 +8,538 @@
 
 @section Styles {
 <style>
+/* ── Layout wrapper resetleri — full viewport, ortalama yok ── */
+body.page-sre .app-content-area,
+body.page-sre .workspace-panel-stack,
+body.page-sre .workspace-panel,
+body.page-sre .workspace-panel--native {
+    width: 100% !important; max-width: none !important;
+    height: 100% !important; min-height: 0 !important;
+    padding: 0 !important; margin: 0 !important;
+    display: flex !important; flex-direction: column !important;
+}
+body.page-sre .integrator-dashboard {
+    flex: 1 1 auto !important;
+    height: 100% !important; min-height: 0 !important;
+    padding: 0 !important; max-width: none !important; width: 100% !important;
+    margin: 0 !important;
+    background: transparent !important; box-shadow: none !important;
+    border: none !important; border-radius: 0 !important;
+}
+body.page-sre .integrator-dashboard__content {
+    display: flex !important; flex-direction: column !important;
+    width: 100% !important; max-width: none !important;
+    min-height: 0 !important; padding: 0 !important;
+    margin: 0 !important; overflow: hidden !important;
+    height: 100% !important; flex: 1 1 auto !important;
+}
+
+/* ── Tema degiskenleri (acik) ── */
 .sre-root {
-    --sre-bg:      #f1f5f9; --sre-surface: #ffffff; --sre-border: #e2e8f0;
-    --sre-text:    #0f172a; --sre-muted:   #64748b; --sre-accent: #6366f1;
-    display: flex; align-items: flex-start; justify-content: center;
-    min-height: 100%; padding: 32px 16px; background: var(--sre-bg);
+    --sre-bg:           #f8fafc;
+    --sre-surface:      #ffffff;
+    --sre-surface2:     #f1f5f9;
+    --sre-border:       #e2e8f0;
+    --sre-border-light: #f1f5f9;
+    --sre-text:         #1e293b;
+    --sre-text-muted:   #64748b;
+    --sre-input-bg:     #f8fafc;
+    --sre-accent:       var(--theme-accent, #2563eb);
+    --sre-accent-soft:  var(--theme-accent-soft, rgba(37,99,235,.12));
+    --sre-actionbar-bg: rgba(248,250,252,0.92);
+    --sre-toast-ok-bg:  #d1fae5;
+    --sre-toast-ok-tx:  #065f46;
+    --sre-toast-er-bg:  #fee2e2;
+    --sre-toast-er-tx:  #991b1b;
 }
+/* ── Tema degiskenleri (koyu) ── */
 body.app-theme-dark .sre-root {
-    --sre-bg: #080c17; --sre-surface: #0d1323;
-    --sre-border: rgba(255,255,255,.09); --sre-text: #e2e8f0; --sre-muted: #94a3b8;
+    --sre-bg:           #080c17;
+    --sre-surface:      #0d1323;
+    --sre-surface2:     #111827;
+    --sre-border:       rgba(255,255,255,.09);
+    --sre-border-light: rgba(255,255,255,.04);
+    --sre-text:         #e2e8f0;
+    --sre-text-muted:   #94a3b8;
+    --sre-input-bg:     rgba(255,255,255,.07);
+    --sre-accent:       var(--theme-accent, #6366f1);
+    --sre-accent-soft:  var(--theme-accent-soft, rgba(99,102,241,.18));
+    --sre-actionbar-bg: rgba(15,15,26,0.85);
+    --sre-toast-ok-bg:  rgba(34,197,94,.18);
+    --sre-toast-ok-tx:  #4ade80;
+    --sre-toast-er-bg:  rgba(239,68,68,.18);
+    --sre-toast-er-tx:  #f87171;
 }
-.sre-card {
-    width: 100%; max-width: 560px; background: var(--sre-surface);
-    border: 1px solid var(--sre-border); border-radius: 14px;
-    box-shadow: 0 4px 24px rgba(0,0,0,.08); overflow: hidden;
+
+/* ── Wrapper (action bar + body) ───────────────────────── */
+.sre-root {
+    display:flex; flex-direction:column;
+    height:100%; min-height:0;
+    background: var(--sre-bg); color: var(--sre-text);
 }
-.sre-header {
-    display: flex; align-items: center; gap: 10px;
-    padding: 18px 24px; border-bottom: 1px solid var(--sre-border);
+
+/* ── Aksiyon seridi (sticky top) ─────────────────────────── */
+.sre-action-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px; flex-shrink: 0;
+    background: var(--sre-actionbar-bg);
+    border-bottom: 1px solid var(--sre-border);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    position: relative; overflow: hidden;
 }
-.sre-header h1 { font-size: 16px; font-weight: 700; margin: 0; color: var(--sre-text); flex: 1; }
-.sre-back {
-    display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
-    border-radius: 8px; border: 1px solid var(--sre-border); background: none;
-    color: var(--sre-muted); font-size: 13px; cursor: pointer;
-    text-decoration: none; transition: background .12s; flex-shrink: 0;
+.sre-action-bar .sre-meta {
+    margin-right: auto; font-size: .9rem; font-weight: 700;
+    color: var(--sre-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 360px;
 }
-.sre-back:hover { background: var(--sre-bg); color: var(--sre-text); }
 .sre-btn {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 18px; border-radius: 8px; border: 1px solid transparent;
-    font-size: 13px; font-weight: 600; cursor: pointer; transition: all .12s; flex-shrink: 0;
+    padding: 7px 14px; border-radius: 8px;
+    border: 1px solid var(--sre-border);
+    background: var(--sre-surface); color: var(--sre-text);
+    font-size: .78rem; font-weight: 600; cursor: pointer;
+    transition: all .12s ease;
+    text-decoration: none;
 }
-.sre-btn--primary { background: #6366f1; border-color: #4f46e5; color: #fff; }
-.sre-btn--primary:hover { background: #4f46e5; }
-.sre-btn--danger { background: transparent; border-color: rgba(239,68,68,.35); color: #ef4444; }
-.sre-btn--danger:hover { background: rgba(239,68,68,.08); }
-.sre-body { padding: 24px; }
-.sre-rows { display: flex; flex-direction: column; }
+.sre-btn:hover:not(:disabled) {
+    background: var(--sre-surface2);
+    border-color: var(--sre-accent);
+}
+.sre-btn:disabled { opacity: .5; cursor: not-allowed; }
+.sre-btn--primary {
+    background: var(--sre-accent); color: #fff;
+    border-color: var(--sre-accent);
+}
+.sre-btn--primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+    border-color: var(--sre-accent);
+}
+.sre-btn--danger {
+    background: transparent; border-color: rgba(239,68,68,.35);
+    color: #ef4444;
+}
+.sre-btn--danger:hover:not(:disabled) {
+    background: rgba(239,68,68,.08);
+    border-color: rgba(239,68,68,.55);
+}
+
+/* ── KITT (yesil tarayici) — kaydet sirasinda aksiyon seridi alti ── */
+.sre-action-bar::before {
+    content: ''; position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px; pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg,
+        rgba(0, 60, 20, 0) 0%,
+        rgba(10, 120, 40, .55) 50%,
+        rgba(0, 60, 20, 0) 100%);
+}
+.sre-action-bar::after {
+    content: ''; position: absolute;
+    left: 0; bottom: -1px;
+    width: 18%; height: 4px;
+    pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(34, 197, 94, .35) 18%,
+        rgba(74, 255, 140, 1) 50%,
+        rgba(34, 197, 94, .35) 82%,
+        transparent 100%);
+    box-shadow:
+        0 0 10px 2px rgba(34, 197, 94, .95),
+        0 0 22px 6px rgba(34, 197, 94, .55),
+        0 0 40px 12px rgba(34, 197, 94, .22);
+    border-radius: 50%;
+}
+.sre-action-bar.is-save-flash::before { animation: sreKittBg   1800ms ease-out forwards; }
+.sre-action-bar.is-save-flash::after  { animation: sreKittScan 1800ms cubic-bezier(.45,.05,.55,.95) forwards; }
+@@keyframes sreKittBg {
+    0%, 100% { opacity: 0; }
+    10%, 90% { opacity: 1; }
+}
+@@keyframes sreKittScan {
+    0%   { opacity: 0; left: 0; }
+    8%   { opacity: 1; }
+    48%  { opacity: 1; left: 82%; }
+    52%  { opacity: 1; left: 82%; }
+    92%  { opacity: 1; left: 0; }
+    100% { opacity: 0; left: 0; }
+}
+
+/* ── Aktif switch (action bar icinde) ── */
+.sre-active-wrap {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 8px; border-radius: 8px;
+    background: var(--sre-surface);
+    border: 1px solid var(--sre-border);
+    font-size: .76rem; color: var(--sre-text-muted);
+}
+.sre-active-wrap .form-check { margin: 0; padding-left: 2.2em; }
+.sre-active-wrap .form-check-input { cursor: pointer; }
+
+/* ── Body (tabs + content) ─────────────────────────────── */
+.sre-body {
+    display: flex; flex: 1 1 auto; min-height: 0;
+}
+
+/* ── Sol sekme listesi ── */
+.sre-tabs {
+    width: 220px; flex-shrink: 0;
+    border-right: 1px solid var(--sre-border);
+    background: var(--sre-surface2);
+    padding: 12px 0; overflow-y: auto;
+    display:flex; flex-direction:column; min-height:0;
+}
+.sre-tabs h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--sre-text-muted);
+    padding: 6px 14px 8px; margin: 0;
+}
+.sre-tab {
+    display: block; width: 100%;
+    padding: 9px 14px;
+    background: none; border: none; cursor: pointer;
+    text-align: left; font-size: 13px;
+    color: var(--sre-text);
+    border-left: 3px solid transparent;
+    transition: background .12s, color .12s;
+    font-family: inherit;
+}
+.sre-tab:hover { background: var(--sre-accent-soft); }
+.sre-tab.is-active {
+    background: var(--sre-accent-soft);
+    border-left-color: var(--sre-accent);
+    font-weight: 600;
+}
+
+/* ── Sag icerik ── */
+.sre-panels {
+    flex: 1 1 auto; min-width: 0;
+    padding: 18px 24px; overflow-y: auto;
+    background: var(--sre-bg);
+}
+.sre-panel { display: none; }
+.sre-panel.is-active { display: block; }
+.sre-panel h2 {
+    margin: 0 0 4px; font-size: 17px; color: var(--sre-text); font-weight: 700;
+}
+.sre-panel .sre-hint {
+    color: var(--sre-text-muted); font-size: 12px; margin-bottom: 18px;
+}
+
+/* ── Form satiri ── */
 .sre-row {
-    display: flex; align-items: center; gap: 16px;
-    padding: 10px 0; border-bottom: 1px solid var(--sre-border);
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--sre-border-light);
 }
 .sre-row:last-child { border-bottom: none; }
-.sre-row > label:first-child {
-    width: 120px; min-width: 120px; flex-shrink: 0;
-    font-size: 13px; font-weight: 600; color: var(--sre-muted);
-}
-.sre-required::after { content: ' *'; color: #ef4444; }
+.sre-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sre-row-title { font-size: 13px; font-weight: 600; color: var(--sre-text); }
+.sre-row-title.required::after { content: ' *'; color: #ef4444; }
+.sre-row-desc  { font-size: 11.5px; color: var(--sre-text-muted); line-height: 1.4; }
+.sre-row-control { flex-shrink: 0; padding-top: 2px; min-width: 280px; }
 .sre-input {
+    width: 100%;
     padding: 8px 12px; border-radius: 8px;
-    background: var(--sre-bg); border: 1px solid var(--sre-border);
+    background: var(--sre-input-bg);
+    border: 1px solid var(--sre-border);
     color: var(--sre-text); font-size: 14px;
     transition: border-color .15s; outline: none;
+    font-family: inherit;
 }
 .sre-input:focus {
     border-color: var(--sre-accent);
-    box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+    box-shadow: 0 0 0 3px var(--sre-accent-soft);
 }
 .sre-input.is-invalid {
     border-color: #ef4444 !important;
     box-shadow: 0 0 0 3px rgba(239,68,68,.15) !important;
-    animation: sreShake 0.4s ease both;
+    animation: sreShake .55s cubic-bezier(.36,.07,.19,.97) both;
 }
 @@keyframes sreShake {
-    10%, 90% { transform: translateX(-2px); }
-    20%, 80% { transform: translateX(3px); }
+    10%, 90% { transform: translateX(-1px); }
+    20%, 80% { transform: translateX(2px); }
     30%, 50%, 70% { transform: translateX(-3px); }
     40%, 60% { transform: translateX(3px); }
 }
-.sre-msg { margin-top: 14px; padding: 8px 14px; border-radius: 8px; font-size: 13px; }
-.sre-msg.ok  { background: rgba(16,185,129,.1); color: #059669; border: 1px solid rgba(16,185,129,.25); }
-.sre-msg.err { background: rgba(239,68,68,.1);  color: #dc2626; border: 1px solid rgba(239,68,68,.25); }
-body.app-theme-dark .sre-msg.ok  { color: #34d399; }
-body.app-theme-dark .sre-msg.err { color: #f87171; }
-/* Confirm modal */
-.sre-modal-backdrop {
-    position: fixed; inset: 0; z-index: 9990;
-    background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
-    display: flex; align-items: center; justify-content: center;
+
+/* ── Toast ── */
+#sre-flash {
+    position: fixed; top: 16px; right: 16px; z-index: 9999;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    display: none; max-width: 360px;
 }
-.sre-modal {
-    background: var(--sre-surface); border: 1px solid var(--sre-border);
-    border-radius: 14px; padding: 28px 32px; max-width: 420px; width: 90%;
-    box-shadow: 0 20px 60px rgba(0,0,0,.3); text-align: center;
-}
-.sre-modal-icon { margin-bottom: 12px; display: flex; justify-content: center; }
-.sre-modal h2 { font-size: 18px; font-weight: 700; color: var(--sre-text); margin: 0 0 8px; }
-.sre-modal p { font-size: 14px; color: var(--sre-muted); margin: 0 0 20px; }
-.sre-modal-btns { display: flex; gap: 10px; justify-content: center; }
+#sre-flash.ok  { background: var(--sre-toast-ok-bg); color: var(--sre-toast-ok-tx); }
+#sre-flash.err { background: var(--sre-toast-er-bg); color: var(--sre-toast-er-tx); }
 </style>
 }
 
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
 <div class="sre-root">
-    <div class="sre-card">
-        <div class="sre-header">
-            <a href="/GeneralDefinitions/SalesRepresentatives" class="sre-back">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-                Geri
-            </a>
-            <h1>@(isNew ? "Yeni Satış Temsilcisi" : Model.RepName)</h1>
-            @if (!isNew)
-            {
-                <button type="button" class="sre-btn sre-btn--danger" onclick="sreDelete()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    Sil
-                </button>
-            }
-            <button type="button" class="sre-btn sre-btn--primary" onclick="sreSave()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                Kaydet
+
+    @* ── Aksiyon Seridi ─────────────────────────────────────── *@
+    <div class="sre-action-bar" id="sre-action-bar">
+        <a href="/GeneralDefinitions/SalesRepresentatives" class="sre-btn" title="Listeye dön">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            Geri
+        </a>
+        <span class="sre-meta" id="sre-meta">@(isNew ? "Yeni Satış Temsilcisi" : Model.RepName)</span>
+
+        <label class="sre-active-wrap" title="Aktif/Pasif">
+            <div class="form-check form-switch">
+                <input id="sreIsActive" class="form-check-input" type="checkbox" role="switch" @(Model.IsActive ? "checked" : "") />
+            </div>
+            <span id="sreIsActiveLabel">@(Model.IsActive ? "Aktif" : "Pasif")</span>
+        </label>
+
+        @if (!isNew)
+        {
+            <button type="button" class="sre-btn sre-btn--danger" id="sre-del-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+                Sil
             </button>
-        </div>
-        <div class="sre-body">
-            <input type="hidden" id="sreId" value="@Model.Id" />
-            <div class="sre-rows">
+        }
+        <button type="button" class="sre-btn sre-btn--primary" id="sre-save-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Kaydet
+        </button>
+    </div>
+
+    @* ── Body (tabs + content) ─────────────────────────────── *@
+    <div class="sre-body">
+        <aside class="sre-tabs">
+            <h3>Sekmeler</h3>
+            <button type="button" class="sre-tab is-active" data-pane="general" data-label="Genel">Genel</button>
+            <button type="button" class="sre-tab"            data-pane="extra"   data-label="Ek Alanlar">Ek Alanlar</button>
+        </aside>
+
+        <main class="sre-panels">
+            @* ── Genel ─────────────────────────── *@
+            <section class="sre-panel is-active" id="sre-pane-general">
+                <h2>Genel</h2>
+                <div class="sre-hint">Satış temsilcisi temel bilgileri. Sicil/kod alanı yoktur — isim üzerinden benzersizlik kontrolü yapılır.</div>
+
+                <input type="hidden" id="sreId" value="@Model.Id" />
+
                 <div class="sre-row">
-                    <label for="sreName" class="sre-required">Ad</label>
-                    <input id="sreName" class="sre-input" value="@Model.RepName" maxlength="200" style="flex:1 1 auto;min-width:0;" />
-                </div>
-                <div class="sre-row">
-                    <label>Durum</label>
-                    <div class="form-check form-switch" style="margin:0;">
-                        <input id="sreIsActive" class="form-check-input" type="checkbox" role="switch" @(Model.IsActive ? "checked" : "") />
+                    <div class="sre-row-main">
+                        <div class="sre-row-title required">Ad Soyad</div>
+                        <div class="sre-row-desc">Müşteriye / belgelere yansıyan satış temsilcisinin tam adı.</div>
+                    </div>
+                    <div class="sre-row-control">
+                        <input id="sreName" class="sre-input" value="@Model.RepName" maxlength="200" placeholder="örn. Ayşe Demir" />
                     </div>
                 </div>
-            </div>
-            <div id="sreMsg"></div>
-        </div>
+            </section>
+
+            @* ── Ek Alanlar (dinamik widget'lar) ─────────────────────── *@
+            <section class="sre-panel" id="sre-pane-extra">
+                <h2>Ek Alanlar</h2>
+                <div class="sre-hint">
+                    Admin → Widget Tanımları → <code>SALES_REPS</code> form'unda tanımlı dinamik alanlar.
+                    Yeni alan ihtiyacında alan rehberinden ekle, burada otomatik görünür.
+                </div>
+
+                <div id="sreDynamicWidgets"
+                     data-form-code="SALES_REPS"
+                     data-record-id="@(Model.Id?.ToString() ?? "")">
+                </div>
+            </section>
+        </main>
     </div>
 </div>
+</section>
+
+<div id="sre-flash"></div>
+@Html.AntiForgeryToken()
 
 @section Scripts {
 <script>
 (function () {
-    window.sreSave = function() {
+    'use strict';
+
+    var activePane = 'general';
+    var saveBtn   = document.getElementById('sre-save-btn');
+    var delBtn    = document.getElementById('sre-del-btn');
+    var metaLabel = document.getElementById('sre-meta');
+    var actionBar = document.getElementById('sre-action-bar');
+
+    // ── Tab gecisi ───────────────────────────────────────────
+    var tabs  = document.querySelectorAll('.sre-tab');
+    var panes = document.querySelectorAll('.sre-panel');
+    tabs.forEach(function (t) {
+        t.addEventListener('click', function () {
+            activePane = t.dataset.pane;
+            tabs.forEach(function (x) { x.classList.toggle('is-active', x === t); });
+            panes.forEach(function (p) {
+                p.classList.toggle('is-active', p.id === 'sre-pane-' + activePane);
+            });
+        });
+    });
+
+    // ── Aktif switch label senkron ──────────────────────────
+    var actEl = document.getElementById('sreIsActive');
+    var actLbl = document.getElementById('sreIsActiveLabel');
+    if (actEl) {
+        actEl.addEventListener('change', function () {
+            actLbl.textContent = actEl.checked ? 'Aktif' : 'Pasif';
+        });
+    }
+
+    // ── Flash + helpers ─────────────────────────────────────
+    function flash(msg, ok) {
+        var el = document.getElementById('sre-flash');
+        el.textContent = msg;
+        el.className = ok ? 'ok' : 'err';
+        el.style.display = 'block';
+        clearTimeout(window.__sreFlashTm);
+        window.__sreFlashTm = setTimeout(function () { el.style.display = 'none'; }, 3000);
+    }
+    function flashSuccess() {
+        actionBar.classList.remove('is-save-flash');
+        void actionBar.offsetWidth;
+        actionBar.classList.add('is-save-flash');
+        setTimeout(function () { actionBar.classList.remove('is-save-flash'); }, 1850);
+    }
+    function shakeInvalid(el) {
+        el.classList.remove('is-invalid');
+        void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
+    }
+
+    document.getElementById('sreName').addEventListener('input', function (e) {
+        e.target.classList.remove('is-invalid');
+        metaLabel.textContent = e.target.value.trim() || 'Yeni Satış Temsilcisi';
+    });
+
+    // ── Kaydet ──────────────────────────────────────────────
+    saveBtn.addEventListener('click', async function () {
         var nameEl = document.getElementById('sreName');
         var name = nameEl.value.trim();
-        if (!name) { shakeInvalid(nameEl); return; }
+        if (!name) {
+            // Genel tab'ında değilse oraya geç
+            if (activePane !== 'general') {
+                document.querySelector('.sre-tab[data-pane="general"]').click();
+            }
+            shakeInvalid(nameEl);
+            nameEl.focus();
+            flash('Ad alanı zorunludur.', false);
+            return;
+        }
+
         var idVal = document.getElementById('sreId').value;
         var payload = {
             id: idVal ? parseInt(idVal) : null,
             repName: name,
             isActive: document.getElementById('sreIsActive').checked
         };
-        fetch('/GeneralDefinitions/SaveSalesRepJson', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (d.success) {
-                window.location.href = '/GeneralDefinitions/SalesRepresentatives';
-            } else {
-                sreMsg(d.message || 'Kaydetme başarısız.', false);
-            }
-        })
-        .catch(function() { sreMsg('Sunucu hatası.', false); });
-    };
 
-    window.sreDelete = function() {
-        var id = parseInt(document.getElementById('sreId').value);
-        if (!id) return;
-        var repName = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.RepName));
-        showConfirm(repName).then(function(ok) {
-            if (!ok) return;
-            fetch('/GeneralDefinitions/DeleteSalesRepJson?id=' + id, { method: 'POST' })
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                if (d.success) {
-                    window.location.href = '/GeneralDefinitions/SalesRepresentatives';
-                } else {
-                    sreMsg(d.message || 'Silinemedi.', false);
-                }
+        saveBtn.disabled = true;
+        try {
+            var r = await fetch('/GeneralDefinitions/SaveSalesRepJson', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
-        });
-    };
-
-    // Rapor §2.1 — inline showConfirm kaldirildi, global helper kullaniliyor (wwwroot/js/confirm-modal.js)
-
-    function escHtml(s) {
-        if (!s) return '';
-        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    function shakeInvalid(el) {
-        el.classList.remove('is-invalid');
-        void el.offsetWidth;
-        el.classList.add('is-invalid');
-        setTimeout(function() { el.classList.remove('is-invalid'); }, 1200);
-    }
-
-    ['sreName'].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) el.addEventListener('input', function() { el.classList.remove('is-invalid'); });
+            var d = await r.json();
+            if (!d.success) {
+                flash(d.message || 'Kaydetme başarısız.', false);
+                return;
+            }
+            var newId = (d && d.id) || (idVal ? parseInt(idVal) : 0);
+            var dyn = window._sreDynRenderer;
+            if (dyn && typeof dyn.save === 'function' && newId > 0) {
+                try { await Promise.resolve(dyn.save({ recordId: String(newId) })); }
+                catch (e) { console.warn('[SRE] widget save:', e); }
+            }
+            flash('Kaydedildi.', true);
+            flashSuccess();
+            setTimeout(function () {
+                window.location.href = '/GeneralDefinitions/SalesRepresentatives';
+            }, 700);
+        } catch (e) {
+            flash('Sunucu hatası: ' + e.message, false);
+        } finally {
+            saveBtn.disabled = false;
+        }
     });
 
-    function sreMsg(msg, ok) {
-        var el = document.getElementById('sreMsg');
-        if (!msg) { el.innerHTML = ''; return; }
-        el.innerHTML = '<div class="sre-msg ' + (ok ? 'ok' : 'err') + '">' + escHtml(msg) + '</div>';
-        if (ok) setTimeout(function() { el.innerHTML = ''; }, 3000);
+    // ── Sil (custom modal — showConfirm helper) ─────────────
+    if (delBtn) {
+        delBtn.addEventListener('click', function () {
+            var id = parseInt(document.getElementById('sreId').value);
+            if (!id) return;
+            var repName = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.RepName ?? ""));
+            if (typeof window.showConfirm !== 'function') {
+                flash('Onay diyaloğu yüklenemedi.', false); return;
+            }
+            window.showConfirm(repName).then(function (ok) {
+                if (!ok) return;
+                fetch('/GeneralDefinitions/DeleteSalesRepJson?id=' + id, { method: 'POST' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (d.success) {
+                            window.location.href = '/GeneralDefinitions/SalesRepresentatives';
+                        } else {
+                            flash(d.message || 'Silinemedi.', false);
+                        }
+                    })
+                    .catch(function (e) { flash('Sunucu hatası: ' + e.message, false); });
+            });
+        });
+    }
+})();
+
+// ── Ek Alanlar — Dinamik Widget Renderer (Admin → Widget Tanımları → SALES_REPS) ──
+(function initSreDynRenderer() {
+    var el = document.getElementById('sreDynamicWidgets');
+    if (!el) return;
+
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) {
+            console.warn('[SRE] mountDynamicWidgetRenderer bulunamadi');
+            return;
+        }
+        try {
+            window._sreDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode:    el.getAttribute('data-form-code') || 'SALES_REPS',
+                recordId:    el.getAttribute('data-record-id') || '',
+                classPrefix: 'sre',
+                containerId: 'sre-pane-extra'
+            });
+        } catch (e) { console.warn('[SRE] mountDynamicWidgetRenderer hatasi:', e); }
+    }
+
+    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+        doMount();
+    } else {
+        var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+        var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        if (!document.querySelector('link[data-sre-bundle]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = cssUrl;
+            link.setAttribute('data-sre-bundle', '1');
+            document.head.appendChild(link);
+        }
+        if (!document.querySelector('script[data-sre-bundle]')) {
+            var script = document.createElement('script');
+            script.src = jsUrl;
+            script.setAttribute('data-sre-bundle', '1');
+            script.onload  = function () { setTimeout(doMount, 0); };
+            script.onerror = function () { console.error('[SRE] Bundle yuklenemedi'); };
+            document.head.appendChild(script);
+        }
     }
 })();
 </script>

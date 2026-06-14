@@ -1,0 +1,293 @@
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["BodyClass"] = "page-sql-query-library";
+    var boardConfigJson = ViewData["BoardConfigJson"] as string ?? "{}";
+    var token = Antiforgery.GetAndStoreTokens(Context).RequestToken ?? "";
+}
+
+@section Styles {
+<style>
+.sqe-wrap { padding: 16px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+.sqe-board { flex: 1; min-height: 0; }
+/* Modal */
+.sqe-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15,23,42,.55);
+    backdrop-filter: blur(2px); z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+}
+.sqe-modal {
+    background: var(--surface, #fff); color: var(--text, #0f172a);
+    border-radius: 12px; padding: 22px; width: min(720px, 92vw);
+    max-height: 92vh; overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+body.app-theme-dark .sqe-modal { background: #0d1323; color: #e2e8f0; border: 1px solid rgba(255,255,255,.08); }
+.sqe-modal h3 { margin: 0 0 14px; font-size: 1rem; font-weight: 700; }
+.sqe-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.sqe-field { flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px; }
+.sqe-label { font-size: .76rem; font-weight: 600; color: var(--muted, #64748b); }
+.sqe-input, .sqe-select, .sqe-textarea {
+    padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 7px;
+    font-size: .85rem; background: var(--surface, #fff); color: inherit; font-family: inherit;
+}
+.sqe-textarea { font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; min-height: 140px; }
+body.app-theme-dark .sqe-input,
+body.app-theme-dark .sqe-select,
+body.app-theme-dark .sqe-textarea { background: #0f172a; border-color: rgba(255,255,255,.1); }
+.sqe-params { border: 1px dashed #cbd5e1; border-radius: 8px; padding: 8px; }
+.sqe-param-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.sqe-param-row input, .sqe-param-row select { flex: 1; font-size: .8rem; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 5px; background: var(--surface, #fff); color: inherit; }
+body.app-theme-dark .sqe-param-row input, body.app-theme-dark .sqe-param-row select { background: #0f172a; border-color: rgba(255,255,255,.1); }
+.sqe-btn {
+    padding: 7px 14px; border-radius: 7px; border: 1px solid #cbd5e1;
+    background: #f1f5f9; color: #0f172a; font-size: .82rem; font-weight: 600; cursor: pointer;
+}
+.sqe-btn:hover { background: #e2e8f0; }
+.sqe-btn--primary { background: #6366f1; color: #fff; border-color: #4f46e5; }
+.sqe-btn--primary:hover { background: #4f46e5; }
+.sqe-btn--ok { background: #10b981; color: #fff; border-color: #059669; }
+.sqe-btn--danger { background: #ef4444; color: #fff; border-color: #dc2626; }
+.sqe-btn--ghost { background: transparent; }
+body.app-theme-dark .sqe-btn { background: rgba(255,255,255,.05); color: #e2e8f0; border-color: rgba(255,255,255,.1); }
+body.app-theme-dark .sqe-btn:hover { background: rgba(255,255,255,.1); }
+.sqe-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.sqe-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    padding: 10px 18px; border-radius: 8px; font-size: .85rem; font-weight: 600;
+    z-index: 10000; opacity: 0; transition: opacity .25s;
+}
+.sqe-toast.show { opacity: 1; }
+.sqe-toast--ok { background: #d1fae5; color: #065f46; }
+.sqe-toast--err { background: #fee2e2; color: #991b1b; }
+.sqe-result-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px; border-radius: 7px; font-family: monospace; font-size: .82rem; margin-top: 6px; }
+body.app-theme-dark .sqe-result-box { background: #0f172a; border-color: rgba(255,255,255,.1); }
+</style>
+}
+
+<div class="sqe-wrap">
+    <div id="sqe-board-root" class="sqe-board"></div>
+</div>
+
+<!-- Edit modal placeholder — JS dinamik açar -->
+<div id="sqe-modal-holder"></div>
+<div id="sqe-toast" class="sqe-toast"></div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+(function () {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var TOKEN = '@token';
+
+    // ─── SmartBoard mount ──────────────────────────────────────────
+    function loadCss(href) {
+        if (document.querySelector('link[href="' + href + '"]')) return;
+        var l = document.createElement('link');
+        l.rel = 'stylesheet'; l.href = href + '?v=' + Date.now();
+        document.head.appendChild(l);
+    }
+    function loadScript(src, cb) {
+        var s = document.createElement('script');
+        s.src = src + '?v=' + Date.now(); s.onload = cb;
+        document.head.appendChild(s);
+    }
+    function mount() {
+        var el = document.getElementById('sqe-board-root');
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            setTimeout(mount, 100);
+            return;
+        }
+        window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+    }
+    loadCss('/react/calibrahub-widgets.css');
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) mount();
+    else loadScript('/react/calibrahub-widgets.js', mount);
+
+    // ─── Toast ─────────────────────────────────────────────────────
+    function toast(msg, ok) {
+        var t = document.getElementById('sqe-toast');
+        t.textContent = msg;
+        t.className = 'sqe-toast ' + (ok ? 'sqe-toast--ok' : 'sqe-toast--err') + ' show';
+        setTimeout(function () { t.classList.remove('show'); }, 3000);
+    }
+
+    // ─── Edit modal ────────────────────────────────────────────────
+    var holder = document.getElementById('sqe-modal-holder');
+    var EMPTY = { id: 0, name: '', description: '', sqlText: 'SELECT 1', parameters: [], resultType: 'scalar', isActive: true };
+
+    function openModal(query) {
+        var q = Object.assign({}, EMPTY, query || {});
+        // parameters JSON → array
+        var paramsArr = [];
+        if (q.parameters) {
+            try { paramsArr = typeof q.parameters === 'string' ? JSON.parse(q.parameters) : q.parameters; }
+            catch (_) { paramsArr = []; }
+        }
+        if (!Array.isArray(paramsArr)) paramsArr = [];
+
+        function paramRow(p, i) {
+            return '<div class="sqe-param-row" data-idx="' + i + '">'
+                + '<input class="p-name" placeholder="parametre adı (örn: documentId)" value="' + (p.name || '') + '"/>'
+                + '<select class="p-type"><option value="int"' + (p.type === 'int' ? ' selected' : '') + '>int</option>'
+                + '<option value="decimal"' + (p.type === 'decimal' ? ' selected' : '') + '>decimal</option>'
+                + '<option value="string"' + (p.type === 'string' ? ' selected' : '') + '>string</option>'
+                + '<option value="date"' + (p.type === 'date' ? ' selected' : '') + '>date</option></select>'
+                + '<input class="p-desc" placeholder="açıklama" value="' + (p.description || '') + '"/>'
+                + '<button class="sqe-btn sqe-btn--ghost p-del">✕</button></div>';
+        }
+
+        holder.innerHTML = ''
+            + '<div class="sqe-modal-backdrop" id="sqe-bd">'
+            + '<div class="sqe-modal" onclick="event.stopPropagation()">'
+            + '<h3>' + (q.id > 0 ? 'Sorgu Düzenle' : 'Yeni SQL Sorgusu') + '</h3>'
+            + '<div class="sqe-row">'
+            + '<div class="sqe-field"><label class="sqe-label">Ad *</label><input id="m-name" class="sqe-input" value="' + (q.name || '') + '"/></div>'
+            + '<div class="sqe-field" style="flex:0 0 140px;"><label class="sqe-label">Sonuç Türü</label>'
+            + '<select id="m-rtype" class="sqe-select"><option value="scalar"' + (q.resultType === 'scalar' ? ' selected' : '') + '>Tek Değer (scalar)</option>'
+            + '<option value="boolean"' + (q.resultType === 'boolean' ? ' selected' : '') + '>Doğru/Yanlış</option>'
+            + '<option value="count"' + (q.resultType === 'count' ? ' selected' : '') + '>Sayı (count)</option></select></div>'
+            + '<div class="sqe-field" style="flex:0 0 100px;"><label class="sqe-label">Aktif</label>'
+            + '<label style="margin-top:8px;"><input id="m-active" type="checkbox"' + (q.isActive ? ' checked' : '') + '/> Aktif</label></div>'
+            + '</div>'
+            + '<div class="sqe-field"><label class="sqe-label">Açıklama</label><input id="m-desc" class="sqe-input" value="' + (q.description || '') + '"/></div>'
+            + '<div class="sqe-field" style="margin-top:8px;"><label class="sqe-label">SQL (SELECT only)</label>'
+            + '<textarea id="m-sql" class="sqe-textarea">' + (q.sqlText || '') + '</textarea></div>'
+            + '<div class="sqe-field" style="margin-top:8px;"><label class="sqe-label">Parametreler</label>'
+            + '<div id="m-params" class="sqe-params">' + paramsArr.map(paramRow).join('') + '</div>'
+            + '<button id="m-pAdd" class="sqe-btn" style="margin-top:6px;">+ Parametre Ekle</button></div>'
+            + '<div id="m-result"></div>'
+            + '<div class="sqe-actions">'
+            + '<button id="m-validate" class="sqe-btn">🔍 Doğrula</button>'
+            + '<button id="m-test" class="sqe-btn sqe-btn--ok">▶ Test Et</button>'
+            + '<span style="flex:1"></span>'
+            + '<button id="m-cancel" class="sqe-btn">Vazgeç</button>'
+            + '<button id="m-save" class="sqe-btn sqe-btn--primary">Kaydet</button>'
+            + '</div></div></div>';
+
+        function getCurrentParams() {
+            return Array.prototype.slice.call(document.querySelectorAll('.sqe-param-row')).map(function (row) {
+                return {
+                    name: row.querySelector('.p-name').value.trim(),
+                    type: row.querySelector('.p-type').value,
+                    description: row.querySelector('.p-desc').value.trim(),
+                };
+            }).filter(function (p) { return p.name; });
+        }
+
+        function bindParamDel() {
+            document.querySelectorAll('.p-del').forEach(function (b) {
+                b.onclick = function () { b.closest('.sqe-param-row').remove(); };
+            });
+        }
+        bindParamDel();
+
+        document.getElementById('m-pAdd').onclick = function () {
+            var c = document.getElementById('m-params');
+            var d = document.createElement('div');
+            d.innerHTML = paramRow({}, c.children.length);
+            c.appendChild(d.firstChild);
+            bindParamDel();
+        };
+
+        document.getElementById('m-cancel').onclick = function () { holder.innerHTML = ''; };
+        document.getElementById('sqe-bd').onclick = function (e) { if (e.target.id === 'sqe-bd') holder.innerHTML = ''; };
+
+        document.getElementById('m-validate').onclick = function () {
+            var sql = document.getElementById('m-sql').value;
+            fetch('/Admin/SqlQueryLibrary/Validate', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': TOKEN },
+                body: JSON.stringify(sql),
+            }).then(function (r) { return r.json(); }).then(function (res) {
+                toast(res.ok ? '✓ SQL geçerli' : '✗ ' + (res.error || 'Hata'), res.ok);
+            }).catch(function (e) { toast('Bağlantı hatası: ' + e.message, false); });
+        };
+
+        document.getElementById('m-test').onclick = function () {
+            var sql = document.getElementById('m-sql').value;
+            var params = {};
+            getCurrentParams().forEach(function (p) {
+                var v = prompt('Parametre değeri: @@' + p.name + ' (' + p.type + ')');
+                if (v != null) {
+                    if (p.type === 'int') params[p.name] = parseInt(v, 10);
+                    else if (p.type === 'decimal') params[p.name] = parseFloat(v);
+                    else params[p.name] = v;
+                }
+            });
+            document.getElementById('m-result').innerHTML = '<div class="sqe-result-box">Çalışıyor…</div>';
+            fetch('/Admin/SqlQueryLibrary/TestExecute', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': TOKEN },
+                body: JSON.stringify({ sqlText: sql, queryId: null, parameters: params }),
+            }).then(function (r) { return r.json(); }).then(function (res) {
+                document.getElementById('m-result').innerHTML = '<div class="sqe-result-box">' +
+                    (res.ok ? '✓ Sonuç: <strong>' + JSON.stringify(res.value) + '</strong> (' + res.elapsedMs + ' ms)'
+                            : '✗ ' + (res.error || 'Hata')) + '</div>';
+            });
+        };
+
+        document.getElementById('m-save').onclick = function () {
+            var payload = {
+                id: q.id || 0,
+                name: document.getElementById('m-name').value.trim(),
+                description: document.getElementById('m-desc').value.trim() || null,
+                sqlText: document.getElementById('m-sql').value,
+                parametersJson: JSON.stringify(getCurrentParams()),
+                resultType: document.getElementById('m-rtype').value,
+                isActive: document.getElementById('m-active').checked,
+            };
+            if (!payload.name) { toast('Ad zorunlu', false); return; }
+            if (!payload.sqlText) { toast('SQL zorunlu', false); return; }
+            fetch('/Admin/SqlQueryLibrary/Save', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': TOKEN },
+                body: JSON.stringify(payload),
+            }).then(function (r) { return r.json(); }).then(function (res) {
+                if (res.ok) {
+                    toast('Kaydedildi', true);
+                    holder.innerHTML = '';
+                    setTimeout(function () { window.location.reload(); }, 400);
+                } else toast('Hata: ' + (res.error || 'Bilinmeyen'), false);
+            });
+        };
+    }
+
+    // BoardConfig'in primaryAction.url'leri /Admin/SqlQueryLibrary?id=... formatında — bunları intercept et
+    window.addEventListener('click', function (e) {
+        var a = e.target.closest('a[href^="/Admin/SqlQueryLibrary?id="]');
+        if (!a) return;
+        e.preventDefault();
+        var url = new URL(a.href, window.location.origin);
+        var id = parseInt(url.searchParams.get('id') || '0', 10);
+        if (id === 0) { openModal(null); return; }
+        // mevcut sorguyu config'ten bul
+        var match = (BOARD_CONFIG.entities || []).find(function (en) { return en.id === id; });
+        if (match) {
+            // detay tüm field'ları SmartBoard widget içinde olabilir — basit yaklaşım: server'dan tek tek çek
+            fetch('/Admin/SqlQueryLibrary/Config', { credentials: 'same-origin' })
+              .then(function(r){return r.json();})
+              .then(function(cfg){
+                var found = (cfg.entities || []).find(function(en){return en.id === id});
+                openModal(found ? found._raw || found : null);
+              });
+        } else openModal(null);
+    }, true);
+
+    // URL'de ?id=N geldiyse otomatik modal aç (server-side controller yönlendirmesi)
+    var initialId = new URLSearchParams(window.location.search).get('id');
+    if (initialId !== null) {
+        var idNum = parseInt(initialId, 10);
+        if (idNum === 0) openModal(null);
+        else {
+            fetch('/Admin/SqlQueryLibrary/Config', { credentials: 'same-origin' })
+              .then(function(r){return r.json();})
+              .then(function(cfg){
+                var f = (cfg.entities || []).find(function(en){return en.id === idNum});
+                openModal(f && f._raw ? f._raw : f);
+              });
+        }
+    }
+})();
+</script>
+}

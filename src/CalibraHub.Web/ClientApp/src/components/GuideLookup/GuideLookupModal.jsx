@@ -144,6 +144,20 @@ export default function GuideLookupModal(props) {
     return function () { clearTimeout(h) }
   }, [popoverSearch])
 
+  // ── Distinct popover icin constraint — listede gosterilen WHERE'in aynisi ──
+  // Static (FldSet filterJson) + runtime (Tip 2 cascading token'lar) + diger
+  // kolon distinctSel'leri DAHIL EDILIR; ama AKTIF kolonun kendi secimi DAHIL
+  // EDILMEZ — yoksa popover icindeki kontroller kendi sectiklerini filtrelerdi.
+  // (Excel-tarzi cross-column awareness.)
+  var distinctConstraint = useMemo(function () {
+    if (!openCol) return null
+    var others = {}
+    Object.keys(distinctSel).forEach(function (col) {
+      if (col !== openCol) others[col] = distinctSel[col]
+    })
+    return mergeConstraints(staticConstraint, runtimeConstraint, others)
+  }, [openCol, staticConstraint, runtimeConstraint, distinctSel])
+
   // ── Distinct degerleri fetch et — popover acilinca + debounced search degisince ──
   // Onceki "modal acilinca tum distinct kolonlari onden cek" yaklasiminin yerine
   // "yalnizca acik popover icin gerektikce cek" yaklasimi: lazy + sunucu-tarafi
@@ -152,7 +166,7 @@ export default function GuideLookupModal(props) {
     if (!open || !guideCode || !openCol) return
     var alive = true
     setDistinctLoading(true)
-    guideDistinct(guideCode, openCol, popoverSearchDebounced || undefined)
+    guideDistinct(guideCode, openCol, popoverSearchDebounced || undefined, distinctConstraint || undefined)
       .then(function (arr) {
         if (!alive) return
         var values = Array.isArray(arr) ? arr : []
@@ -165,7 +179,7 @@ export default function GuideLookupModal(props) {
       .catch(function () { /* sessizce gec */ })
       .finally(function () { if (alive) setDistinctLoading(false) })
     return function () { alive = false }
-  }, [open, guideCode, openCol, popoverSearchDebounced])
+  }, [open, guideCode, openCol, popoverSearchDebounced, distinctConstraint])
 
   // ── Birlestirilmis constraint ──
   var mergedConstraint = useMemo(function () {

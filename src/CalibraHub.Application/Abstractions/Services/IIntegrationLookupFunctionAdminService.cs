@@ -11,9 +11,9 @@ public interface IIntegrationLookupFunctionAdminService
 {
     Task<IReadOnlyCollection<IntegrationLookupFunctionAdminDto>> GetAllAsync(bool includeInactive, CancellationToken ct);
     Task<IntegrationLookupFunctionAdminDto?> GetByIdAsync(int id, CancellationToken ct);
-    Task<(bool Success, string? Error, int? Id)> CreateAsync(SaveIntegrationLookupFunctionRequest req, string? user, CancellationToken ct);
-    Task<(bool Success, string? Error)> UpdateAsync(SaveIntegrationLookupFunctionRequest req, string? user, CancellationToken ct);
-    Task<(bool Success, string? Error)> DeleteAsync(int id, string? user, CancellationToken ct);
+    Task<(bool Success, string? Error, int? Id)> CreateAsync(SaveIntegrationLookupFunctionRequest req, int? userId, CancellationToken ct);
+    Task<(bool Success, string? Error)> UpdateAsync(SaveIntegrationLookupFunctionRequest req, int? userId, CancellationToken ct);
+    Task<(bool Success, string? Error)> DeleteAsync(int id, int? userId, CancellationToken ct);
 
     /// <summary>
     /// Per-company DB'de tanimli SQL fonksiyonlarini listeler (sys.objects type IN ('FN','IF','TF')).

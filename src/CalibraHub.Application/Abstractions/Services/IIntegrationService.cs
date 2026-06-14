@@ -21,7 +21,7 @@ public interface IIntegrationService
     Task<IntegrationDetailDto?> GetDetailAsync(int id, CancellationToken ct);
 
     /// <summary>Yeni veya mevcut entegrasyonu kaydet. Mappings + Triggers replace edilir.</summary>
-    Task<int> SaveAsync(SaveIntegrationRequest request, string? currentUserName, CancellationToken ct);
+    Task<int> SaveAsync(SaveIntegrationRequest request, int? currentUserId, CancellationToken ct);
 
     Task DeleteAsync(int id, CancellationToken ct);
 
@@ -29,7 +29,7 @@ public interface IIntegrationService
     Task<bool> ToggleActiveAsync(int id, CancellationToken ct);
 
     /// <summary>Mevcut entegrasyonun kopyasını oluştur (ad sonuna " (Kopya)" eklenir).</summary>
-    Task<int> DuplicateAsync(int id, string? currentUserName, CancellationToken ct);
+    Task<int> DuplicateAsync(int id, int? currentUserId, CancellationToken ct);
 
     /// <summary>Wizard Step 4 dry-run: mapping uygula + opsiyonel real send.</summary>
     Task<TestIntegrationResponse> TestAsync(TestIntegrationRequest request, string? currentUserName, CancellationToken ct);

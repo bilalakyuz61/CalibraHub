@@ -1,5 +1,274 @@
 html {
   font-size: 13px;
+  /* Sayfa-arasi navigasyon flash'i engelle (rapor §6.8 FOUC fix):
+     Browser default beyaz arka plani yerine projenin koyu temasiyla uyumlu
+     bir base verir. Light tema body class'i geldikten sonra ezilebilir. */
+  background-color: #0c0f1a;
+  color-scheme: dark light;
+}
+html.light, html:has(body.app-theme-light) {
+  background-color: #f8fafc;
+}
+
+/* ── Button design tokens (rapor §6.5) ───────────────────────────────────
+   3 farkli buton naming (ca-btn--*, smartcard-kitt__btn--*, btn-primary) tek
+   token set uzerinde birlestiriliyor. Mevcut class'lar ALIAS olarak kullanir;
+   yeni kod .cb-btn .cb-btn--primary kullanir.
+
+   Token'lar tema bazli override edilir (dark/midnight/light).
+*/
+:root {
+  --cb-btn-radius:        8px;
+  --cb-btn-padding-y:     8px;
+  --cb-btn-padding-x:     16px;
+  --cb-btn-font-size:     13px;
+  --cb-btn-font-weight:   600;
+  --cb-btn-border:        1px solid transparent;
+  --cb-btn-transition:    background .15s, color .15s, border-color .15s, box-shadow .15s;
+
+  --cb-btn-primary-bg:      #6366f1;
+  --cb-btn-primary-fg:      #ffffff;
+  --cb-btn-primary-border:  #4f46e5;
+  --cb-btn-primary-hover:   #4f46e5;
+
+  --cb-btn-secondary-bg:     transparent;
+  --cb-btn-secondary-fg:     #475569;
+  --cb-btn-secondary-border: #cbd5e1;
+  --cb-btn-secondary-hover:  rgba(99, 102, 241, 0.08);
+
+  --cb-btn-danger-bg:      transparent;
+  --cb-btn-danger-fg:      #ef4444;
+  --cb-btn-danger-border:  rgba(239, 68, 68, 0.35);
+  --cb-btn-danger-hover:   rgba(239, 68, 68, 0.10);
+
+  --cb-btn-ghost-bg:      transparent;
+  --cb-btn-ghost-fg:      #64748b;
+  --cb-btn-ghost-border:  transparent;
+  --cb-btn-ghost-hover:   rgba(99, 102, 241, 0.08);
+}
+body.app-theme-dark, body.app-theme-midnight {
+  --cb-btn-secondary-fg:     #cbd5e1;
+  --cb-btn-secondary-border: rgba(255, 255, 255, 0.15);
+  --cb-btn-secondary-hover:  rgba(255, 255, 255, 0.08);
+  --cb-btn-ghost-fg:         #94a3b8;
+}
+
+/* Unified button base + variant'lar */
+.cb-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: var(--cb-btn-padding-y) var(--cb-btn-padding-x);
+  border-radius: var(--cb-btn-radius);
+  font-size: var(--cb-btn-font-size);
+  font-weight: var(--cb-btn-font-weight);
+  border: var(--cb-btn-border);
+  cursor: pointer;
+  transition: var(--cb-btn-transition);
+  text-decoration: none;
+  user-select: none;
+}
+.cb-btn:disabled, .cb-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+.cb-btn--primary {
+  background: var(--cb-btn-primary-bg);
+  color: var(--cb-btn-primary-fg);
+  border-color: var(--cb-btn-primary-border);
+}
+.cb-btn--primary:hover:not(:disabled) { background: var(--cb-btn-primary-hover); color: var(--cb-btn-primary-fg); }
+
+.cb-btn--secondary {
+  background: var(--cb-btn-secondary-bg);
+  color: var(--cb-btn-secondary-fg);
+  border-color: var(--cb-btn-secondary-border);
+}
+.cb-btn--secondary:hover:not(:disabled) { background: var(--cb-btn-secondary-hover); }
+
+.cb-btn--danger {
+  background: var(--cb-btn-danger-bg);
+  color: var(--cb-btn-danger-fg);
+  border-color: var(--cb-btn-danger-border);
+}
+.cb-btn--danger:hover:not(:disabled) { background: var(--cb-btn-danger-hover); }
+
+.cb-btn--ghost {
+  background: var(--cb-btn-ghost-bg);
+  color: var(--cb-btn-ghost-fg);
+  border-color: var(--cb-btn-ghost-border);
+}
+.cb-btn--ghost:hover:not(:disabled) { background: var(--cb-btn-ghost-hover); }
+
+.cb-btn--sm { padding: 4px 10px; font-size: 11.5px; }
+.cb-btn--lg { padding: 10px 22px; font-size: 14px; }
+
+/* ── Skeleton loading (rapor §6.8) ───────────────────────────────────────
+   Buyuk gridler (CalibraLineItemsGrid) ve liste sayfalarinda spinner yerine
+   shimmer-animasyonlu satir iskeleti.
+
+   Kullanim:
+     <div class="cb-skeleton cb-skeleton-row" style="width:80%;"></div>
+     <div class="cb-skeleton cb-skeleton-rect" style="height:80px;"></div>
+*/
+.cb-skeleton {
+  display: inline-block;
+  background: linear-gradient(90deg,
+    rgba(148, 163, 184, 0.10) 0%,
+    rgba(148, 163, 184, 0.18) 50%,
+    rgba(148, 163, 184, 0.10) 100%);
+  background-size: 200% 100%;
+  animation: cb-skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+.cb-skeleton-row {
+  width: 100%; height: 14px; margin: 6px 0;
+}
+.cb-skeleton-rect {
+  width: 100%; height: 60px; border-radius: 8px;
+}
+.cb-skeleton-circle {
+  width: 36px; height: 36px; border-radius: 50%;
+}
+body.app-theme-dark .cb-skeleton, body.app-theme-midnight .cb-skeleton {
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.05) 100%);
+  background-size: 200% 100%;
+}
+@keyframes cb-skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Validation gorsel sistemi (rapor §6.1) ──────────────────────────────
+   Form input/select/textarea hatali ise kullaniciya gorsel feedback:
+   kirmizi border + hafif kirmizi background + ekran okuyucu icin aria-invalid.
+
+   Kullanim (Razor):
+       <input asp-for="Email" class="form-control" />
+       <span asp-validation-for="Email" class="cb-field-error"></span>
+   ASP.NET Core ModelState invalid ise input'a otomatik "input-validation-error"
+   class'i ekler — biz buna .is-invalid alias'i veriyoruz + kendi gorsel kuralimiz.
+
+   Manuel JS:
+       inputEl.classList.add('is-invalid');
+       inputEl.setAttribute('aria-invalid', 'true');
+*/
+.is-invalid,
+.input-validation-error {
+  border-color: #ef4444 !important;
+  background-color: rgba(239, 68, 68, 0.04) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.10) !important;
+}
+.is-invalid:focus,
+.input-validation-error:focus {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18) !important;
+}
+.cb-field-error,
+.field-validation-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #dc2626;
+  font-weight: 500;
+}
+body.app-theme-dark .cb-field-error,
+body.app-theme-dark .field-validation-error,
+body.app-theme-midnight .cb-field-error,
+body.app-theme-midnight .field-validation-error {
+  color: #fca5a5;
+}
+.cb-validation-summary,
+.validation-summary-errors {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  color: #dc2626;
+}
+body.app-theme-dark .cb-validation-summary,
+body.app-theme-dark .validation-summary-errors,
+body.app-theme-midnight .cb-validation-summary,
+body.app-theme-midnight .validation-summary-errors {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+}
+.cb-validation-summary ul,
+.validation-summary-errors ul {
+  margin: 4px 0 0 18px;
+  padding: 0;
+  font-size: 13px;
+}
+/* Required indicator — required attribute olan input label'ında asterisk */
+.cb-field-required::after {
+  content: ' *';
+  color: #ef4444;
+  font-weight: 700;
+}
+
+/* ── Global utility: Sticky form toolbar ─────────────────────────────────
+   Page-level scroll'lu formlarda (workspace-frame-body pattern'i kullanmayan
+   admin formlari) Save/Iptal butonlarinin scroll edince kaybolmamasi icin
+   opt-in utility class. CLAUDE.md rapor §6.2 cozumu.
+
+   Kullanim (Razor):
+       <div class="cb-sticky-toolbar cb-sticky-toolbar--top">
+         <button class="btn-primary">Kaydet</button>
+         <button class="btn-secondary">Vazgec</button>
+       </div>
+   veya bottom:
+       <div class="cb-sticky-toolbar cb-sticky-toolbar--bottom">...</div>
+*/
+.cb-sticky-toolbar {
+  display: flex; gap: 8px; align-items: center;
+  padding: 10px 16px;
+  background: rgba(248, 250, 252, 0.92);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  z-index: 50;
+}
+.cb-sticky-toolbar--top {
+  position: sticky; top: 0;
+  border-bottom: 1px solid var(--app-border, #e2e8f0);
+  margin: 0 0 12px;
+}
+.cb-sticky-toolbar--bottom {
+  position: sticky; bottom: 0;
+  border-top: 1px solid var(--app-border, #e2e8f0);
+  margin: 12px 0 0;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+}
+body.app-theme-dark .cb-sticky-toolbar,
+body.app-theme-midnight .cb-sticky-toolbar {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+body.app-theme-dark .cb-sticky-toolbar--bottom,
+body.app-theme-midnight .cb-sticky-toolbar--bottom {
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.4);
+}
+
+/* ── A11y: global :focus-visible kurali ───────────────────────────────────
+   149 yerde "outline: none" reset'i var (mouse kullaniciya temiz gorunum saglar).
+   Buna karsilik klavye kullanicilari (Tab tusu) icin :focus-visible kurali
+   her elementte gorunur bir fokus halkasi saglar. WCAG 2.1 a11y gerekligi.
+   Mouse tiklayinca :focus-visible degil :focus tetiklenir — outline gorunmez kalir. */
+*:focus-visible {
+  outline: 2px solid var(--focus-color, #6366f1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* Bazi form elementlerinde outline-offset zaten kotu calisir (border'a yapisik) — onlara box-shadow ile fokus halkasi */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--focus-color, #6366f1);
+  outline-offset: 2px;
+}
+/* Dark/midnight tema icin daha parlak fokus rengi */
+body.app-theme-dark,
+body.app-theme-midnight {
+  --focus-color: #a78bfa;
 }
 
 /* ── Global: etiketler ve menü öğeleri seçilemez ── */
@@ -191,7 +460,7 @@ body.app-theme-dark .workspace-frame-body {
 }
 
 .layout-body.has-side-rail.app-side-collapsed {
-  padding-left: var(--sidebar-collapsed-width);
+  padding-left: 0;
 }
 
 .main-nav {
@@ -216,6 +485,16 @@ body.app-theme-dark .workspace-frame-body {
   align-items: center;
   gap: 8px;
   font-weight: 600;
+}
+
+.app-side-collapsed .brand-logo {
+  outline: 1.5px solid rgba(99, 102, 241, 0.35);
+  border-radius: 6px;
+  padding: 2px 8px;
+  transition: outline-color 0.15s;
+}
+.app-side-collapsed .brand-logo:hover {
+  outline-color: rgba(99, 102, 241, 0.7);
 }
 
 .brand-logo img {
@@ -2747,6 +3026,19 @@ html:has(body.setup-page) {
   color: transparent !important;
 }
 
+/* Giris Yap butonu — input alanlariyla ayni yukseklik (54px) ve radius (10px).
+   Bootstrap default .btn yuksekligi ~38px idi; floating-label input ile uyumsuzdu. */
+.login-card .btn-primary,
+.login-card button[type="submit"] {
+  height: 54px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 /* ─── Dark tema — login floating-label overrides (yuksek specificity) ─── */
 body.app-theme-dark .login-card .login-field > .form-control,
 body.app-theme-dark .login-card .login-field > .form-select {
@@ -2849,13 +3141,21 @@ body.app-theme-dark .login-card .login-field > .form-select option {
   padding-top: 8px;
 }
 
+.login-card .btn.btn-primary {
+  height: 54px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 .auth-panel {
   max-width: 560px;
 }
 
 .app-side-collapsed .app-sidebar,
 .app-side-collapsed .admin-sidebar {
-  width: var(--sidebar-collapsed-width);
+  width: 0;
 }
 
 .app-side-collapsed .side-nav,
@@ -5313,7 +5613,7 @@ body,
 }
 
 .app-side-collapsed .dashboard-shell {
-  grid-template-columns: var(--sidebar-collapsed-width) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .side-nav,
@@ -6775,6 +7075,47 @@ body.app-theme-midnight .entity-form-toolbar {
   border: 0;
   background: transparent;
   flex: 1 1 320px;
+}
+
+/* Floating varyant: hidden marker form senaryosu icin (banner host bulunamadiginda).
+   Aksiyon seridi altinda kompakt bir chip olarak gozukur — sayfa ustunde buyuk
+   yer kaplamaz. */
+.collaboration-lock-banner--floating {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 9500;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px 12px;
+  background: rgba(15, 23, 42, 0.92);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  gap: 10px;
+}
+.collaboration-lock-banner--floating .collaboration-lock-banner__body {
+  justify-items: end;
+  gap: 4px;
+}
+.collaboration-lock-banner--floating .collaboration-lock-banner__message {
+  font-size: 0.78rem;
+  color: rgba(241, 245, 249, 0.88);
+}
+.collaboration-lock-banner--floating .collaboration-lock-banner__status {
+  font-size: 0.66rem;
+  padding: 0 7px;
+  min-height: 18px;
+}
+.collaboration-lock-banner--floating .btn-outline-primary {
+  font-size: 0.74rem;
+  padding: 3px 10px;
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(129, 140, 248, 0.55);
+  color: #c7d2fe;
+}
+.collaboration-lock-banner--floating .btn-outline-primary:hover {
+  background: rgba(99, 102, 241, 0.28);
+  color: #fff;
 }
 
 .collaboration-lock-banner.is-owned {
@@ -9382,6 +9723,13 @@ body.app-theme-dark .form-select:focus {
 body.app-theme-dark .form-select option {
   background: #0d1323;
   color:      #cbd5e1;
+}
+/* 2026-05-22 Global fix — native <select>'lar (Bootstrap form-select disinda elle yazilmis
+   formlar) dark mode'da option text'i okunamiyordu (default beyaz arkaplan + acik renk text).
+   Tum select'ler icin geneli kapsayan kural. Ozel sayfa override edebilir (specificity dusuk). */
+body.app-theme-dark select option {
+  background: #1e293b;
+  color:      #e2e8f0;
 }
 
 /* Date input — takvim popup'ı da koyu */

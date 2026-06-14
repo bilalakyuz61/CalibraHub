@@ -28,6 +28,12 @@
     .admusr-perms { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
     .admusr-perm-item { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #374151; }
     .admusr-section-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #64748b; padding: 8px 0 4px; margin-top: 4px; border-top: 1px solid #f1f5f9; }
+    /* Dark tema overrides */
+    body.app-theme-dark .admusr-empty { color: var(--app-text-muted, #94a3b8); }
+    body.app-theme-dark .admusr-perm-item { color: var(--app-text-muted, #94a3b8); }
+    body.app-theme-dark .admusr-section-title { color: var(--app-text-muted, #94a3b8); border-top-color: var(--app-border, rgba(255,255,255,.05)); }
+    body.app-theme-dark .admusr-msg.ok  { background: rgba(16,185,129,.12); color: #34d399; border-color: rgba(16,185,129,.25); }
+    body.app-theme-dark .admusr-msg.err { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.25); }
 </style>
 }
 

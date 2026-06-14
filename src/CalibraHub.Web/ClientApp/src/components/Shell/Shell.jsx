@@ -23,10 +23,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as notifApi from '../../services/notificationsService'
+// 2026-05-23 — Yapay zeka asistanı (sağ alt floating widget). Top-level Shell altında
+// global mount edilir → workspace tab iframe'lerinin DIŞINDA, her sayfada görünür.
+import AiFloatingButton from '../AiAssistant/AiFloatingButton'
 import {
   // Shell internals
   Sparkles, ChevronLeft, ChevronRight, CircleDot, Bell, BellRing, Moon, Sun, Search,
-  Layers, MessageSquare, Languages, UserCircle, LogOut,
+  Layers, MessageSquare, Languages, UserCircle, LogOut, Bot, Menu,
   X, LayoutGrid, Building2, Check,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
@@ -37,12 +40,73 @@ import {
   BookOpen, Clock
 } from 'lucide-react'
 
+/* ══════════════════════════════════════════════════════════════
+   Shell çeviri tablosu — TR / EN metin çiftleri.
+   tShell(key, lang) ile kullanılır; lang değeri 'TR' veya 'EN'. */
+var SHELL_I18N = {
+  // Sidebar
+  menu_show:               { TR: 'Menüyü göster',                    EN: 'Show menu' },
+  menu_hide:               { TR: 'Menüyü gizle',                     EN: 'Hide menu' },
+  search_placeholder:      { TR: 'Menüde ara...',                    EN: 'Search menu...' },
+  search_clear:            { TR: 'Aramayı temizle',                  EN: 'Clear search' },
+  no_match:                { TR: 'Eşleşme bulunamadı',               EN: 'No matches found' },
+  // EmptyState
+  no_tabs_title:           { TR: 'Hiçbir sekme açık değil',          EN: 'No tabs open' },
+  no_tabs_sub:             { TR: 'Sol menüden bir sayfa açın',       EN: 'Open a page from the left menu' },
+  // Notifications (Header)
+  notifications:           { TR: 'Bildirimler',                      EN: 'Notifications' },
+  unread_notif:            { TR: 'okunmamış bildirim',               EN: 'unread notification(s)' },
+  notif_new:               { TR: 'yeni',                             EN: 'new' },
+  mark_all_read:           { TR: 'Tümünü okundu say',                EN: 'Mark all as read' },
+  no_notifications:        { TR: 'Bildirim yok.',                    EN: 'No notifications.' },
+  open_pages:              { TR: 'Açık Sayfalar',                    EN: 'Open Pages' },
+  // OpenTabsPopover
+  pages_open_suffix:       { TR: 'sayfa açık',                       EN: 'pages open' },
+  close_all_title:         { TR: 'Tüm sekmeleri kapat',              EN: 'Close all tabs' },
+  close_all_btn:           { TR: 'Tümünü Kapat',                     EN: 'Close All' },
+  no_pages:                { TR: 'Hiçbir sayfa açık değil.',         EN: 'No pages open.' },
+  unsaved_prefix:          { TR: 'Kaydedilmemiş değişiklik: ',       EN: 'Unsaved changes: ' },
+  close_tab:               { TR: 'Sekmeyi kapat',                    EN: 'Close tab' },
+  // CloseConfirmModal
+  close_all_confirm_title: { TR: 'Tüm Sayfaları Kapat?',            EN: 'Close All Pages?' },
+  close_all_dirty_msg:     { TR: ' sayfada kaydedilmemiş değişiklik var. Tüm sekmeleri kapatmak istiyor musunuz?', EN: ' page(s) have unsaved changes. Close all tabs?' },
+  close_all_clean_msg:     { TR: 'Tüm sekmeleri kapatmak istiyor musunuz?', EN: 'Close all tabs?' },
+  single_close_dirty:      { TR: 'Bu sayfada kaydedilmemiş değişiklik var. Kapatmak istiyor musunuz?', EN: 'This page has unsaved changes. Close anyway?' },
+  single_close_title:      { TR: 'Sayfayı Kapat?',                  EN: 'Close Page?' },
+  countdown:               { TR: 'saniye içinde iptal edilmezse otomatik kapatılır.', EN: "second(s) — will close automatically if not cancelled." },
+  cancel:                  { TR: 'İptal',                            EN: 'Cancel' },
+  close:                   { TR: 'Kapat',                            EN: 'Close' },
+  // ProfilePopover
+  messages:                { TR: 'Mesajlar',                         EN: 'Messages' },
+  language:                { TR: 'Dil',                              EN: 'Language' },
+  theme:                   { TR: 'Tema',                             EN: 'Theme' },
+  theme_dark:              { TR: 'Koyu',                             EN: 'Dark' },
+  theme_light:             { TR: 'Açık',                             EN: 'Light' },
+  profile_info:            { TR: 'Profil Bilgileri',                 EN: 'Profile' },
+  sign_out:                { TR: 'Çıkış Yap',                       EN: 'Sign Out' },
+  ai_assistant:            { TR: 'Calibo',                           EN: 'Calibo' },
+  // Connection overlay
+  conn_lost:               { TR: 'Bağlantı Kesildi',                EN: 'Connection Lost' },
+  conn_restored:           { TR: 'Bağlantı Geri Geldi!',            EN: 'Connection Restored!' },
+  conn_restored_msg:       { TR: '✓ Sunucu tekrar erişilebilir. Sayfalar yükleniyor...', EN: '✓ Server is reachable again. Pages loading...' },
+  conn_lost_msg:           { TR: 'Sunucu ile iletişim kurulamıyor. Bu genellikle kısa süreli bir kesintidir; sunucu hazır olduğunda otomatik bağlanacağız.', EN: "Unable to reach the server. This is usually a brief interruption; we'll reconnect automatically when the server is ready." },
+  retrying:                { TR: 'Yeniden deneniyor...',             EN: 'Retrying...' },
+  try_now:                 { TR: 'Şimdi Dene',                       EN: 'Try Now' },
+  refresh_page:            { TR: 'Sayfayı Yenile',                  EN: 'Refresh Page' },
+}
+
+function tShell(key, lang) {
+  var entry = SHELL_I18N[key]
+  if (!entry) return key
+  return entry[lang] || entry.TR || key
+}
+
 /* Menu icon name → React bileseni haritasi. Tree-shaking icin named import
    + sabit lookup objesi. Bilinmeyen adda CircleDot fallback. */
 var ICON_MAP = {
   // Shell internals (fallback icin de cagrilabilir)
   Sparkles: Sparkles, ChevronRight: ChevronRight, CircleDot: CircleDot,
-  Bell: Bell, Moon: Moon, Sun: Sun,
+  Bell: Bell, Moon: Moon, Sun: Sun, Menu: Menu,
   Layers: Layers, MessageSquare: MessageSquare, Languages: Languages,
   UserCircle: UserCircle, LogOut: LogOut, X: X, LayoutGrid: LayoutGrid,
   Building2: Building2,
@@ -126,10 +190,45 @@ export default function Shell(props) {
   var config = props.config || {}
   var user = config.user || { name: '—', email: '', initials: '?', userKey: 'anon' }
   var system = config.system || { company: '', year: '', status: 'Hazir' }
-  var menu = Array.isArray(config.menu) ? config.menu : []
   var initialUrl = config.initialUrl || '/'
   var savePrefsUrl = config.savePreferencesUrl || '/Account/SaveInterfacePreferences'
   var antiforgery = config.antiforgeryToken || ''
+
+  /* ── Menü state — sayfa yüklemesinde config'den gelir, focus'ta sunucudan tazelenir ── */
+  var [menu, setMenu] = useState(function() {
+    return Array.isArray(config.menu) ? config.menu : []
+  })
+  var lastMenuFetchRef = useRef(0)
+
+  /* Menüyü sunucudan çek, değiştiyse state güncelle */
+  var refreshMenu = useCallback(function() {
+    var now = Date.now()
+    // En fazla 30sn'de bir istek at (gereksiz yükü önle)
+    if (now - lastMenuFetchRef.current < 30000) return
+    lastMenuFetchRef.current = now
+    fetch('/Account/GetMenuItems', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null })
+      .then(function(data) {
+        if (data && Array.isArray(data.menu)) {
+          setMenu(data.menu)
+        }
+      })
+      .catch(function() { /* sessiz hata — ağ sorunu, ignore */ })
+  }, [])
+
+  /* Sekme öne gelince veya pencere focus kazanınca menüyü tazele */
+  useEffect(function() {
+    function onVisible() {
+      if (!document.hidden) refreshMenu()
+    }
+    function onFocus() { refreshMenu() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onFocus)
+    return function() {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [refreshMenu])
 
   /* ── Tema / dil ────────────────────────────── */
   var [isDark, setIsDark] = useState(function() {
@@ -158,6 +257,7 @@ export default function Shell(props) {
     var html = document.documentElement
     if (isDark) html.classList.add('dark')
     else html.classList.remove('dark')
+    html.style.colorScheme = isDark ? 'dark' : 'light'
     var body = document.body
     body.classList.toggle('app-theme-dark', isDark)
     body.classList.toggle('app-theme-light', !isDark)
@@ -173,6 +273,7 @@ export default function Shell(props) {
         if (fh) {
           if (isDark) fh.classList.add('dark')
           else fh.classList.remove('dark')
+          fh.style.colorScheme = isDark ? 'dark' : 'light'
         }
       } catch (e) { /* cross-origin — sessiz gec */ }
     }
@@ -212,13 +313,26 @@ export default function Shell(props) {
   /* ── Sidebar acik/kapali (kullanici tercihi, localStorage'a yazilir) ── */
   var [sidebarOpen, setSidebarOpen] = useState(function() {
     try {
+      if (typeof window !== 'undefined' && window.innerWidth < 768) return false
       var v = localStorage.getItem('calibra.sidebarOpen')
       return v === null ? true : v === '1'
     } catch (e) { return true }
   })
+  var [isMobile, setIsMobile] = useState(function() {
+    return typeof window !== 'undefined' && window.innerWidth < 768
+  })
   useEffect(function() {
     try { localStorage.setItem('calibra.sidebarOpen', sidebarOpen ? '1' : '0') } catch (e) { /* ignore */ }
   }, [sidebarOpen])
+  useEffect(function() {
+    function onResize() {
+      var mobile = window.innerWidth < 768
+      setIsMobile(mobile)
+      if (mobile) setSidebarOpen(false)
+    }
+    window.addEventListener('resize', onResize, { passive: true })
+    return function() { window.removeEventListener('resize', onResize) }
+  }, [])
   function toggleSidebar() { setSidebarOpen(function(v) { return !v }) }
 
   /* ── Sidebar tamamen gizle — hangi tab'larin sidebar istegi var ── */
@@ -226,75 +340,16 @@ export default function Shell(props) {
   var forceSidebarHidden = sidebarHideTabKeys.has(activeTabKey)
 
 
-  /* ── Baglanti durumu izleme ──────────────────────────────────────
-     Sunucu duser (ornek dotnet restart) tarayici iframe icinde
-     "localhost baglanmayi reddetti" hatasi gosterir — tema-uyumsuz.
-     Asagidaki polling ile biz de tespit eder, ustune tema-uyumlu bir
-     "baglanti koptu" overlay'i cikaririz. Server geri gelince
-     otomatik dismiss + aktif tab'i reload eder. */
-  var [connectionLost, setConnectionLost] = useState(false)
-  var [reconnecting, setReconnecting] = useState(false)
-  var connectionLostRef = useRef(false)
-  useEffect(function () {
-    connectionLostRef.current = connectionLost
-  }, [connectionLost])
-
-  useEffect(function () {
-    var cancelled = false
-    var controller
-
-    var consecutiveFailures = 0  // 2+ ardisik fail bekle, kisa hiccup'larda offline deklare etme
-    async function ping() {
-      if (cancelled) return
-      try {
-        controller = new AbortController()
-        var timer = setTimeout(function () { controller.abort() }, 8000) // 8sn timeout — yavas server'a tolerans
-        // Lightweight: HEAD istegi ile sadece baglanti kontrolu — body indirmez.
-        // Any status (200/302/401) OK — sunucu cevap veriyorsa baglanti var.
-        await fetch('/Home/Index', {
-          method: 'HEAD',
-          signal: controller.signal,
-          credentials: 'same-origin',
-          cache: 'no-store',
-        })
-        clearTimeout(timer)
-        consecutiveFailures = 0
-        if (cancelled) return
-        if (connectionLostRef.current) {
-          // Reconnect — sadece overlay'i kapat, iframe reload YOK (kullanici state'i kaybolmasin)
-          setReconnecting(true)
-          setTimeout(function () {
-            if (cancelled) return
-            setConnectionLost(false)
-            setReconnecting(false)
-          }, 400)
-        }
-      } catch (e) {
-        if (cancelled) return
-        consecutiveFailures += 1
-        // 2+ ardisik fail bekle — yalnizca tek seferlik yavas yanit/timeout offline saymasin
-        if (consecutiveFailures >= 2 && !connectionLostRef.current) setConnectionLost(true)
-      }
-    }
-
-    // Ilk kontrol hemen, sonra her 5 saniyede bir
-    ping()
-    var intervalId = setInterval(ping, 5000)
-
-    // Ayrica offline/online browser event'leri
-    function onOffline() { setConnectionLost(true) }
-    function onOnline()  { ping() }
-    window.addEventListener('offline', onOffline)
-    window.addEventListener('online', onOnline)
-
-    return function () {
-      cancelled = true
-      clearInterval(intervalId)
-      if (controller) controller.abort()
-      window.removeEventListener('offline', onOffline)
-      window.removeEventListener('online', onOnline)
-    }
-  }, [])
+  /* ── Baglanti durumu izleme — KALDIRILDI (2026-06-08) ─────────────
+     Service worker (/sw.js) + /offline.html artık bağlantı koptuğunda
+     tek ekran sunuyor: tarayıcı SW intercept'iyle navigation isteklerini
+     offline.html'e yönlendiriyor; o sayfa da polling ile sunucu ayağa
+     kalkınca otomatik geri dönüyor. İn-app overlay artık gereksiz ve
+     kullanıcıyı iki farklı ekranla karşılaştırıyordu. State'ler aşağıda
+     constant olarak bırakıldı (downstream JSX referansları için).      */
+  var connectionLost = false
+  var reconnecting = false
+  var manualRetryRef = useRef(function () {})
 
   /* ── Sidebar expand state ──────────────────── */
   var parentMap = useRef(buildParentMap(menu))
@@ -514,6 +569,23 @@ export default function Shell(props) {
     }
   }, [])
 
+  // 2026-05-24 — Calibo (AI asistan) navigate event'i: Faz B navigate tool sonucu
+  // frontend'e [[CALIBO_NAVIGATE]] marker'i ile gelir → AiFloatingButton bu event'i
+  // dispatch eder → burada yakalanip yeni/mevcut workspace tab acilir.
+  useEffect(function () {
+    function onOpenTab(e) {
+      if (!e || !e.detail || !e.detail.url) return
+      if (openWorkspaceTabRef.current) {
+        openWorkspaceTabRef.current({
+          url: e.detail.url,
+          title: e.detail.label || 'Calibo',
+        })
+      }
+    }
+    window.addEventListener('calibra:open-tab', onOpenTab)
+    return function () { window.removeEventListener('calibra:open-tab', onOpenTab) }
+  }, [])
+
   /* ── Tab close ──────────────────────────────── */
   // Ortak kapatma onay modali: kind === 'single' | 'all'
   var [closeConfirm, setCloseConfirm] = useState(null)
@@ -556,9 +628,9 @@ export default function Shell(props) {
       setCloseConfirm({
         kind: 'single',
         key: key,
-        title: 'Sayfayi Kapat?',
-        message: (t && t.title ? '"' + t.title + '" sayfasinda ' : 'Bu sayfada ') +
-                 'kaydedilmemis degisiklik var. Yine de kapatilsin mi?'
+        title: tShell('single_close_title', lang),
+        message: (t && t.title ? '"' + t.title + '" ' : '') +
+                 tShell('single_close_dirty', lang)
       })
       return
     }
@@ -569,10 +641,10 @@ export default function Shell(props) {
     var dirtyCount = Object.keys(dirtyTabs).length
     setCloseConfirm({
       kind: 'all',
-      title: 'Tum Sayfalari Kapat?',
+      title: tShell('close_all_confirm_title', lang),
       message: dirtyCount > 0
-        ? dirtyCount + ' sayfada kaydedilmemis degisiklik var. Tum sekmeleri kapatmak istiyor musunuz?'
-        : 'Tum sekmeleri kapatmak istiyor musunuz?'
+        ? dirtyCount + tShell('close_all_dirty_msg', lang)
+        : tShell('close_all_clean_msg', lang)
     })
   }
 
@@ -654,11 +726,11 @@ export default function Shell(props) {
     savePreferences({ theme: next ? 'dark' : 'light' })
   }
 
-  function handleChangeLang(l) {
+  async function handleChangeLang(l) {
     setLang(l)
-    savePreferences({ languageCode: l === 'TR' ? 'tr-TR' : 'en-US' })
-    // Dil degisince server localization icin full reload
-    setTimeout(function() { window.location.reload() }, 300)
+    await savePreferences({ languageCode: l === 'TR' ? 'tr-TR' : 'en-US' })
+    // Dil degisince server localization icin full reload (kayit beklendikten sonra)
+    window.location.reload()
   }
 
   var rootBgClass = isDark ? 'bg-[#0a0d17] text-white' : 'bg-slate-100 text-slate-900'
@@ -679,10 +751,25 @@ export default function Shell(props) {
         }}
       />
 
+      {/* Mobil sidebar backdrop — sidebar acikken arka plana tiklaninca kapar */}
+      {isMobile && sidebarOpen && !forceSidebarHidden && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 49,
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(2px)',
+            WebkitBackdropFilter: 'blur(2px)',
+          }}
+          onClick={function() { setSidebarOpen(false) }}
+        />
+      )}
+
       {/* Sol: Sidebar — her zaman gorunur. Collapse sirasinda sadece search+nav
-          gizlenir; brand (CalibraHub Premium ERP) ve footer (v1.0.0) sabit kalir. */}
+          gizlenir; brand (CalibraHub Premium ERP) ve footer (v1.0.0) sabit kalir.
+          Mobilde: position:absolute ile icerik uzerine katmanlanir (flex alanini iskal etmez). */}
       <Sidebar
         isDark={isDark}
+        lang={lang}
         menu={menu}
         activeKey={activeMenuKey}
         expandedNodes={expandedNodes}
@@ -692,6 +779,7 @@ export default function Shell(props) {
         onCollapse={toggleSidebar}
         collapsed={!sidebarOpen}
         hidden={forceSidebarHidden}
+        isMobile={isMobile}
       />
 
       {/* Sag: Ana alan */}
@@ -699,6 +787,7 @@ export default function Shell(props) {
 
         <Header
           isDark={isDark}
+          lang={lang}
           user={user}
           tabsCount={tabs.length}
           sidebarOpen={sidebarOpen && !forceSidebarHidden}
@@ -721,6 +810,9 @@ export default function Shell(props) {
                 lang={lang}
                 onLangChange={handleChangeLang}
                 onThemeToggle={handleToggleTheme}
+                onOpenWorkspaceTab={function(arg) {
+                  if (openWorkspaceTabRef.current) openWorkspaceTabRef.current(arg)
+                }}
                 onClose={function() { setProfileOpen(false) }}
               />
             </>
@@ -733,6 +825,7 @@ export default function Shell(props) {
               />
               <OpenTabsPopover
                 isDark={isDark}
+                lang={lang}
                 tabs={tabs}
                 activeTabKey={activeTabKey}
                 dirtyTabs={dirtyTabs}
@@ -751,6 +844,7 @@ export default function Shell(props) {
 
         <TabBar
           isDark={isDark}
+          lang={lang}
           tabs={tabs}
           activeKey={activeTabKey}
           dirtyTabs={dirtyTabs}
@@ -764,7 +858,7 @@ export default function Shell(props) {
           style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
         >
           {tabs.length === 0 ? (
-            <EmptyState isDark={isDark} />
+            <EmptyState isDark={isDark} lang={lang} />
           ) : (
             tabs.map(function(t) {
               return (
@@ -853,25 +947,52 @@ export default function Shell(props) {
                 </motion.div>
 
                 <h3 className={'text-lg font-bold ' + (isDark ? 'text-white' : 'text-slate-900')}>
-                  {reconnecting ? 'Bağlantı Geri Geldi!' : 'Bağlantı Kesildi'}
+                  {reconnecting ? tShell('conn_restored', lang) : tShell('conn_lost', lang)}
                 </h3>
 
                 {reconnecting ? (
                   <p className={'text-sm ' + (isDark ? 'text-emerald-300' : 'text-emerald-700')}>
-                    ✓ Sunucu tekrar erişilebilir. Sayfalar yükleniyor...
+                    {tShell('conn_restored_msg', lang)}
                   </p>
                 ) : (
                   <>
                     <p className={'text-sm ' + (isDark ? 'text-white/70' : 'text-slate-600')}>
-                      Sunucu ile iletişim kurulamıyor. Bu genellikle kısa süreli bir kesintidir;
-                      sunucu hazır olduğunda otomatik bağlanacağız.
+                      {tShell('conn_lost_msg', lang)}
                     </p>
                     <div className={'flex items-center gap-2 mt-2 text-xs ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
                       <span className="relative flex h-2.5 w-2.5">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                       </span>
-                      <span>Yeniden deneniyor...</span>
+                      <span>{tShell('retrying', lang)}</span>
+                    </div>
+                    {/* Manuel kontrol butonlari — polling beklenmeden hemen test eder.
+                        Stuck-state durumlarinda kullaniciyi serbest birakir. */}
+                    <div className="flex items-center gap-2 mt-4">
+                      <button
+                        type="button"
+                        onClick={function () { if (manualRetryRef.current) manualRetryRef.current() }}
+                        className={
+                          'px-4 py-2 rounded-lg text-xs font-semibold transition-colors ' +
+                          (isDark
+                            ? 'bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border border-indigo-400/30'
+                            : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200')
+                        }
+                      >
+                        {tShell('try_now', lang)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={function () { try { window.location.reload() } catch (_) {} }}
+                        className={
+                          'px-4 py-2 rounded-lg text-xs font-semibold transition-colors ' +
+                          (isDark
+                            ? 'bg-white/5 text-white/70 hover:bg-white/10 border border-white/10'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300')
+                        }
+                      >
+                        {tShell('refresh_page', lang)}
+                      </button>
                     </div>
                   </>
                 )}
@@ -894,6 +1015,7 @@ export default function Shell(props) {
         {closeConfirm && (
           <CloseConfirmModal
             isDark={isDark}
+            lang={lang}
             title={closeConfirm.title}
             message={closeConfirm.message}
             onAccept={handleCloseConfirmAccept}
@@ -901,6 +1023,10 @@ export default function Shell(props) {
           />
         )}
       </AnimatePresence>
+
+      {/* 2026-05-23 — Yapay Zeka Asistanı (sağ alt floating widget). Top-level mount —
+          workspace tab iframe'lerinin DIŞINDA, her tab altında görünür kalır. */}
+      <AiFloatingButton />
     </div>
   )
 }
@@ -981,7 +1107,7 @@ function CloseConfirmModal(props) {
             {props.message}
           </p>
           <p className={'text-[11.5px] font-medium mt-1 ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
-            <strong>{seconds}</strong> saniye icinde iptal edilmezse otomatik kapatilir.
+            <strong>{seconds}</strong> {props.lang === 'EN' ? 'second(s) — will close automatically if not cancelled.' : 'saniye içinde iptal edilmezse otomatik kapatılır.'}
           </p>
 
           {/* Geri sayim cubugu */}
@@ -1008,7 +1134,7 @@ function CloseConfirmModal(props) {
                   : 'bg-slate-100 text-slate-800 border border-slate-200 hover:bg-slate-200')
               }
             >
-              Iptal
+              {tShell('cancel', props.lang)}
             </button>
             <button
               type="button"
@@ -1016,7 +1142,7 @@ function CloseConfirmModal(props) {
               className="flex-1 px-4 py-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 shadow-md shadow-rose-500/30 transition-all flex items-center justify-center gap-1.5"
             >
               <X size={14} strokeWidth={2.6} />
-              Kapat
+              {tShell('close', props.lang)}
             </button>
           </div>
         </div>
@@ -1069,6 +1195,7 @@ function filterMenuTree(menu, term) {
 
 function Sidebar(props) {
   var isDark = props.isDark
+  var lang = props.lang || 'TR'
   var collapsed = !!props.collapsed
   var hidden = !!props.hidden
   var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
@@ -1082,19 +1209,24 @@ function Sidebar(props) {
     ? Object.assign({}, props.expandedNodes, filtered.expandKeys)
     : props.expandedNodes
 
+  var isMobile = !!props.isMobile
+
   return (
     <aside
       className={
-        'relative z-10 flex flex-col flex-shrink-0 border-r backdrop-blur-xl transition-colors duration-500 ' +
+        (isMobile
+          ? 'absolute z-[50] flex flex-col flex-shrink-0 border-r backdrop-blur-xl transition-colors duration-500 '
+          : 'relative z-10 flex flex-col flex-shrink-0 border-r backdrop-blur-xl transition-colors duration-500 ') +
         borderColor + ' ' + bgColor
       }
       style={{
         userSelect: 'none',
         WebkitUserSelect: 'none',
         overflow: 'hidden',
-        width: hidden ? 0 : (collapsed ? 64 : 260),
+        width: hidden ? 0 : (isMobile ? (collapsed ? 0 : 260) : (collapsed ? 64 : 260)),
         transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
-        borderRightWidth: hidden ? 0 : undefined,
+        borderRightWidth: hidden || (isMobile && collapsed) ? 0 : undefined,
+        ...(isMobile ? { top: 0, bottom: 0, left: 0, height: '100%' } : {}),
       }}
     >
       {/* Brand — collapsed iken sadece logo + toggle (dikey), aksi halde
@@ -1131,8 +1263,8 @@ function Sidebar(props) {
               'p-1.5 rounded-lg transition-colors flex-shrink-0 ' +
               (isDark ? 'hover:bg-white/10 text-white/55 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
             }
-            title={collapsed ? 'Menuyu goster' : 'Menuyu gizle'}
-            aria-label={collapsed ? 'Menuyu goster' : 'Menuyu gizle'}
+            title={collapsed ? tShell('menu_show', lang) : tShell('menu_hide', lang)}
+            aria-label={collapsed ? tShell('menu_show', lang) : tShell('menu_hide', lang)}
           >
             {collapsed
               ? <ChevronRight size={14} strokeWidth={2} />
@@ -1153,7 +1285,7 @@ function Sidebar(props) {
               type="text"
               value={searchTerm}
               onChange={function(e) { setSearchTerm(e.target.value) }}
-              placeholder="Menude ara..."
+              placeholder={tShell('search_placeholder', lang)}
               style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
               className={
                 'w-full pl-9 pr-8 py-1.5 rounded-lg text-[12px] transition-all focus:outline-none ' +
@@ -1170,7 +1302,7 @@ function Sidebar(props) {
                   'absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded flex items-center justify-center transition-colors ' +
                   (isDark ? 'text-white/40 hover:text-white/80 hover:bg-white/10' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200')
                 }
-                title="Aramayi temizle"
+                title={tShell('search_clear', lang)}
               >
                 <X size={10} strokeWidth={2.4} />
               </button>
@@ -1199,7 +1331,7 @@ function Sidebar(props) {
           ) : (
             <div className={'text-center py-6 text-[11px] ' + (isDark ? 'text-white/45' : 'text-slate-400')}>
               <Search size={16} className="mx-auto mb-1.5 opacity-60" strokeWidth={1.5} />
-              <p>Eslesme bulunamadi</p>
+              <p>{tShell('no_match', lang)}</p>
             </div>
           )}
         </nav>
@@ -1325,6 +1457,7 @@ function SidebarNode(props) {
    ══════════════════════════════════════════════════════════════ */
 function Header(props) {
   var isDark = props.isDark
+  var lang = props.lang || 'TR'
   var user = props.user
   var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
   var bgColor = isDark ? 'bg-[#0a0d17]/70' : 'bg-white/70'
@@ -1398,8 +1531,19 @@ function Header(props) {
         borderColor + ' ' + bgColor
       }
     >
-      {/* Sidebar toggle butonu kaldirildi — sidebar'in kendi header'inda
-          (Brand kismi yaninda) zaten ChevronLeft/Right toggle butonu var. */}
+      {/* Mobil hamburger menü — 768px altında görünür, sidebar açar/kapar */}
+      {!props.hideSidebarToggle && props.onToggleSidebar && (
+        <button
+          onClick={props.onToggleSidebar}
+          className={
+            'md:hidden p-2 rounded-xl transition-colors flex-shrink-0 ' +
+            (isDark ? 'hover:bg-white/5 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
+          }
+          aria-label={props.sidebarOpen ? 'Menüyü kapat' : 'Menüyü aç'}
+        >
+          <Menu size={16} strokeWidth={2} />
+        </button>
+      )}
 
       {/* Spacer — Bell + Profil saga yaslanir */}
       <div className="flex-1" />
@@ -1412,7 +1556,7 @@ function Header(props) {
               'relative p-2 rounded-xl transition-colors ' +
               (isDark ? 'hover:bg-white/5 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
             }
-            title={notifUnread > 0 ? (notifUnread + ' okunmamis bildirim') : 'Bildirimler'}
+            title={notifUnread > 0 ? (notifUnread + ' ' + tShell('unread_notif', lang)) : tShell('notifications', lang)}
           >
             {notifUnread > 0 ? <BellRing size={15} strokeWidth={1.8} /> : <Bell size={15} strokeWidth={1.8} />}
             {notifUnread > 0 && (
@@ -1437,18 +1581,18 @@ function Header(props) {
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.15 }}
                 className={
-                  'absolute right-0 mt-2 w-[360px] max-h-[480px] rounded-xl border overflow-hidden z-50 flex flex-col ' +
+                  'absolute right-0 mt-2 max-h-[480px] rounded-xl border overflow-hidden z-50 flex flex-col ' +
                   (isDark ? 'bg-[#15182b] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-800')
                 }
-                style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
+                style={{ width: 'min(360px, calc(100vw - 32px))', boxShadow: '0 12px 40px rgba(0,0,0,0.35)' }}
               >
                 <div className={'flex items-center justify-between px-4 py-3 border-b ' + (isDark ? 'border-white/10' : 'border-slate-100')}>
                   <div className="flex items-center gap-2">
                     <Bell size={14} />
-                    <span className="text-sm font-semibold">Bildirimler</span>
+                    <span className="text-sm font-semibold">{tShell('notifications', lang)}</span>
                     {notifUnread > 0 && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-500">
-                        {notifUnread} yeni
+                        {notifUnread} {tShell('notif_new', lang)}
                       </span>
                     )}
                   </div>
@@ -1459,14 +1603,14 @@ function Header(props) {
                         (isDark ? 'hover:bg-white/10 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')}
                     >
                       <Check size={11} />
-                      Tumunu okundu say
+                      {tShell('mark_all_read', lang)}
                     </button>
                   )}
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {notifItems.length === 0 && (
                     <div className={'px-4 py-10 text-center text-[12px] italic ' + (isDark ? 'text-white/40' : 'text-slate-400')}>
-                      Bildirim yok.
+                      {tShell('no_notifications', lang)}
                     </div>
                   )}
                   {notifItems.map(function (n) {
@@ -1513,7 +1657,7 @@ function Header(props) {
             'relative p-2 rounded-xl transition-colors ' +
             (isDark ? 'hover:bg-white/5 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
           }
-          title="Acik Sayfalar"
+          title={tShell('open_pages', lang)}
         >
           <Layers size={15} strokeWidth={1.8} />
           {props.tabsCount > 0 && (
@@ -1586,8 +1730,9 @@ function ProfilePopover(props) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.96 }}
       transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-      className="absolute right-5 top-16 z-40 w-80 rounded-2xl overflow-hidden"
+      className="absolute right-2 top-16 z-40 rounded-2xl overflow-hidden"
       style={{
+        width: 'min(320px, calc(100vw - 16px))',
         background: glassBg,
         backdropFilter: 'blur(28px) saturate(140%)',
         WebkitBackdropFilter: 'blur(28px) saturate(140%)',
@@ -1620,7 +1765,32 @@ function ProfilePopover(props) {
       <div className={isDark ? 'h-px bg-white/10' : 'h-px bg-slate-200'} />
 
       <div className="py-2 px-2">
-        <PopoverRow isDark={isDark} icon={MessageSquare} label="Mesajlar" badge="" />
+        {/* 2026-05-24: Yapay Zeka Asistanı — global custom event ile AI panel'i acar.
+            AiFloatingButton component'i bu event'i dinler. Panel sagdan slide-in olur. */}
+        <button
+          type="button"
+          onClick={function() {
+            try { window.dispatchEvent(new CustomEvent('calibra:open-ai')) } catch (_) {}
+            if (props.onClose) props.onClose()
+          }}
+          className={
+            'w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left ' +
+            (isDark ? 'hover:bg-white/[0.05]' : 'hover:bg-slate-100')
+          }
+        >
+          <Bot size={15} strokeWidth={1.8} className={isDark ? 'text-indigo-300' : 'text-indigo-500'} />
+          <span className={'flex-1 text-[13px] font-medium ' + (isDark ? 'text-white/85' : 'text-slate-700')}>
+            Calibo
+          </span>
+          <span className={
+            'text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ' +
+            (isDark ? 'bg-indigo-500/20 text-indigo-300' : 'bg-indigo-100 text-indigo-600')
+          }>
+            AI
+          </span>
+        </button>
+
+        <PopoverRow isDark={isDark} icon={MessageSquare} label={tShell('messages', props.lang || 'TR')} badge="" />
 
         {/* Language switch */}
         <div className={
@@ -1629,7 +1799,7 @@ function ProfilePopover(props) {
         }>
           <Languages size={15} strokeWidth={1.8} className={isDark ? 'text-white/50' : 'text-slate-500'} />
           <span className={'flex-1 text-[13px] font-medium ' + (isDark ? 'text-white/80' : 'text-slate-700')}>
-            Dil
+            {tShell('language', props.lang || 'TR')}
           </span>
           <div className={'flex items-center gap-0.5 p-1 rounded-lg ' + (isDark ? 'bg-white/[0.06]' : 'bg-slate-200/80')}>
             {['TR', 'EN'].map(function(l) {
@@ -1667,17 +1837,23 @@ function ProfilePopover(props) {
             ? <Sun  size={16} strokeWidth={2} className="text-amber-400" />
             : <Moon size={16} strokeWidth={2} className="text-slate-700" />}
           <span className={'flex-1 text-[13px] font-medium ' + (isDark ? 'text-white/85' : 'text-slate-700')}>
-            Tema
+            {tShell('theme', props.lang || 'TR')}
           </span>
           <span className={
             'text-[11px] font-semibold uppercase tracking-wider ' +
             (isDark ? 'text-white/45' : 'text-slate-500')
           }>
-            {isDark ? 'Koyu' : 'Açık'}
+            {isDark ? tShell('theme_dark', props.lang || 'TR') : tShell('theme_light', props.lang || 'TR')}
           </span>
         </button>
 
-        <PopoverRow isDark={isDark} icon={UserCircle} label="Profil Bilgileri" />
+        <PopoverRow isDark={isDark} icon={UserCircle} label={tShell('profile_info', props.lang || 'TR')}
+                    onClick={function() {
+                      if (props.onOpenWorkspaceTab) {
+                        props.onOpenWorkspaceTab({ url: '/Account/Profile', title: tShell('profile_info', props.lang || 'TR') })
+                      }
+                      if (props.onClose) props.onClose()
+                    }} />
       </div>
 
       <div className={isDark ? 'h-px bg-white/10' : 'h-px bg-slate-200'} />
@@ -1694,7 +1870,7 @@ function ProfilePopover(props) {
           }
         >
           <LogOut size={15} strokeWidth={2} />
-          <span>Cikis Yap</span>
+          <span>{tShell('sign_out', props.lang || 'TR')}</span>
         </a>
       </div>
     </motion.div>
@@ -1703,6 +1879,7 @@ function ProfilePopover(props) {
 
 function OpenTabsPopover(props) {
   var isDark = props.isDark
+  var lang = props.lang || 'TR'
   var tabs = props.tabs || []
   var ref = useRef(null)
 
@@ -1753,44 +1930,47 @@ function OpenTabsPopover(props) {
         </div>
         <div className="flex-1 min-w-0">
           <h3 className={'text-sm font-bold ' + (isDark ? 'text-white' : 'text-slate-900')}>
-            Acik Sayfalar
+            {tShell('open_pages', lang)}
           </h3>
           <p className={'text-[11px] ' + (isDark ? 'text-white/45' : 'text-slate-500')}>
-            {tabs.length} sayfa acik
+            {tabs.length} {tShell('pages_open_suffix', lang)}
           </p>
         </div>
       </div>
 
       <div className={isDark ? 'h-px bg-white/10' : 'h-px bg-slate-200'} />
 
-      <div className="py-2 px-2 max-h-[420px] overflow-y-auto smartcard-widgets-scroll">
-        {tabs.length === 0 && (
-          <div className={'px-3 py-6 text-center text-[12px] italic ' + (isDark ? 'text-white/35' : 'text-slate-400')}>
-            Hicbir sayfa acik degil.
-          </div>
-        )}
-        {/* Tumunu Kapat — sayfa listesinin en ustunde, ayri bir "sayfa" gorunumunde.
-            Diger liste elemanlarinin row stiliyle hizali ama kirmizi/danger tema. */}
-        {tabs.length > 0 && (
+      {/* Tumunu Kapat — STATIK: scroll alaninin DISINDA, asagi kaydirinca kaybolmaz.
+          Liste arttiginda hep gorunur kalir; danger/rose tema ile listeden ayrisir. */}
+      {tabs.length > 0 && (
+        <div className="px-2 pt-2 pb-1">
           <motion.div
             whileHover={{ x: 1 }}
             whileTap={{ scale: 0.985 }}
             onClick={function() { if (props.onCloseAll) props.onCloseAll() }}
             className={
-              'group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all mb-1 ' +
+              'group flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-all ' +
               (isDark
                 ? 'bg-rose-500/10 hover:bg-rose-500/20 border border-rose-400/25 hover:border-rose-400/50 text-rose-200 hover:text-white'
                 : 'bg-rose-50 hover:bg-rose-100 border border-rose-200 hover:border-rose-400 text-rose-700 hover:text-rose-800')
             }
-            title="Tum sekmeleri kapat"
+            title={tShell('close_all_title', lang)}
           >
             <span className="flex-1 text-[12.5px] font-semibold">
-              Tümünü Kapat
+              {tShell('close_all_btn', lang)}
             </span>
             <span className={'text-[10.5px] font-mono tabular-nums ' + (isDark ? 'text-rose-200/70' : 'text-rose-500')}>
               {tabs.length}
             </span>
           </motion.div>
+        </div>
+      )}
+
+      <div className="pb-2 px-2 max-h-[420px] overflow-y-auto smartcard-widgets-scroll">
+        {tabs.length === 0 && (
+          <div className={'px-3 py-6 text-center text-[12px] italic ' + (isDark ? 'text-white/35' : 'text-slate-400')}>
+            {tShell('no_pages', lang)}
+          </div>
         )}
         {tabs.map(function(t) {
           var isActive = t.key === props.activeTabKey
@@ -1811,7 +1991,7 @@ function OpenTabsPopover(props) {
                   ? (isDark ? 'bg-indigo-500/15 text-white' : 'bg-indigo-50 text-indigo-900')
                   : (isDark ? 'hover:bg-white/[0.04] text-white/70' : 'hover:bg-slate-100 text-slate-600'))
               }
-              title={isDirty ? 'Kaydedilmemis degisiklik: ' + t.title : t.title}
+              title={isDirty ? tShell('unsaved_prefix', lang) + t.title : t.title}
             >
               <span
                 className={'w-1.5 h-1.5 rounded-full flex-shrink-0 ' + (isDirty ? 'calibra-dirty-dot' : '')}
@@ -1832,8 +2012,8 @@ function OpenTabsPopover(props) {
                     ? 'bg-rose-500/15 hover:bg-rose-500/30 border border-rose-400/30 text-rose-300 hover:text-rose-100'
                     : 'bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-500 hover:text-rose-700')
                 }
-                title="Sekmeyi kapat"
-                aria-label="Sekmeyi kapat"
+                title={tShell('close_tab', lang)}
+                aria-label={tShell('close_tab', lang)}
               >
                 <X size={13} strokeWidth={3} />
               </button>
@@ -1848,13 +2028,11 @@ function OpenTabsPopover(props) {
 function PopoverRow(props) {
   var Icon = props.icon
   var isDark = props.isDark
-  return (
-    <button
-      className={
-        'w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors ' +
-        (isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-100')
-      }
-    >
+  var className =
+    'w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors no-underline ' +
+    (isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-100')
+  var content = (
+    <>
       <Icon size={15} strokeWidth={1.8} className={isDark ? 'text-white/50' : 'text-slate-500'} />
       <span className={'flex-1 text-left text-[13px] font-medium ' + (isDark ? 'text-white/80' : 'text-slate-700')}>
         {props.label}
@@ -1871,6 +2049,15 @@ function PopoverRow(props) {
           {props.badge}
         </span>
       )}
+    </>
+  )
+  // href verilirse anchor (tarayicida tam sayfa navigasyon); yoksa eski button davranisi.
+  if (props.href) {
+    return <a href={props.href} className={className}>{content}</a>
+  }
+  return (
+    <button type="button" onClick={props.onClick} className={className}>
+      {content}
     </button>
   )
 }
@@ -1880,6 +2067,7 @@ function PopoverRow(props) {
    ══════════════════════════════════════════════════════════════ */
 function TabBar(props) {
   var isDark = props.isDark
+  var lang = props.lang || 'TR'
   var borderColor = isDark ? 'border-white/[0.06]' : 'border-slate-200/80'
   var scrollRef = useRef(null)
   var [canLeft, setCanLeft] = useState(false)
@@ -1985,7 +2173,7 @@ function TabBar(props) {
                 ? (isDark ? 'text-white bg-white/[0.06]' : 'text-slate-900 bg-slate-100')
                 : (isDark ? 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'))
             }
-            title={(props.dirtyTabs && props.dirtyTabs[t.key]) ? 'Kaydedilmemis degisiklik: ' + t.title : t.title}
+            title={(props.dirtyTabs && props.dirtyTabs[t.key]) ? tShell('unsaved_prefix', lang) + t.title : t.title}
           >
             {props.dirtyTabs && props.dirtyTabs[t.key] && (
               <span
@@ -2028,12 +2216,13 @@ function TabBar(props) {
 
 function EmptyState(props) {
   var isDark = props.isDark
+  var lang = props.lang || 'TR'
   return (
     <div className={'h-full flex items-center justify-center ' + (isDark ? 'text-white/50' : 'text-slate-400')}>
       <div className="text-center">
         <LayoutGrid size={48} className="mx-auto mb-3 opacity-40" strokeWidth={1.2} />
-        <p className="text-sm">Hicbir sekme acik degil</p>
-        <p className="text-[11px] mt-1">Sol menuden bir sayfa acin</p>
+        <p className="text-sm">{tShell('no_tabs_title', lang)}</p>
+        <p className="text-[11px] mt-1">{tShell('no_tabs_sub', lang)}</p>
       </div>
     </div>
   )

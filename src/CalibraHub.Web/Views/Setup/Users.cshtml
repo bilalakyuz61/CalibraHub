@@ -24,6 +24,11 @@
     .usr-msg.ok { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
     .usr-msg.err { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
     .usr-note { font-size: 0.72rem; color: #64748b; margin-top: 8px; padding: 6px 8px; background: #f8fafc; border-radius: 4px; border-left: 3px solid #2563eb; }
+    /* Dark tema overrides */
+    body.app-theme-dark .usr-note { background: rgba(37,99,235,.08); color: var(--app-text-muted, #94a3b8); border-left-color: #3b82f6; }
+    body.app-theme-dark .usr-empty { color: var(--app-text-muted, #94a3b8); }
+    body.app-theme-dark .usr-msg.ok  { background: rgba(16,185,129,.12); color: #34d399; border-color: rgba(16,185,129,.25); }
+    body.app-theme-dark .usr-msg.err { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.25); }
 </style>
 }
 

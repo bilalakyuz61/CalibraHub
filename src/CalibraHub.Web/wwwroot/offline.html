@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>CalibraHub — Yeniden Bağlanılıyor</title>
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+        /* CalibraHub temalı offline sayfası — sistem teması (prefers-color-scheme) takip eder */
+        :root {
+            color-scheme: light dark;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text: #0f172a;
+            --muted: #64748b;
+            --border: #e2e8f0;
+            --accent: #6366f1;
+            --accent-soft: rgba(99,102,241,0.12);
+            --danger: #ef4444;
+            --shadow: 0 24px 60px rgba(15,23,42,0.10), 0 0 0 1px rgba(15,23,42,0.04);
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0a0d17;
+                --surface: #111827;
+                --text: #f1f5f9;
+                --muted: #94a3b8;
+                --border: rgba(255,255,255,0.06);
+                --shadow: 0 24px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+            }
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0; min-height: 100vh; min-height: 100dvh;
+            background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 14px; line-height: 1.55;
+            -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+        }
+        body {
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+        }
+        .card {
+            width: 100%; max-width: 460px;
+            background: var(--surface); border-radius: 18px;
+            box-shadow: var(--shadow);
+            padding: 36px 32px 28px;
+            text-align: center;
+        }
+        .logo {
+            width: 56px; height: 56px; margin: 0 auto 18px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 22px; color: #fff;
+            box-shadow: 0 10px 24px rgba(99,102,241,0.30);
+        }
+
+       /* Uyuyan uydu — 3B render hissi veren SVG + animasyonlar */
+        .satellite {
+            width: 180px; height: 160px; margin: -8px auto 8px;
+            display: block;
+            filter: drop-shadow(0 16px 24px rgba(0,0,0,0.32));
+            cursor: pointer; user-select: none;
+        }
+        .sat-body { transform-origin: 110px 100px; animation: satBreathe 4s ease-in-out infinite; }
+        @keyframes satBreathe {
+            0%, 100% { transform: translateY(0) rotate(-3deg); }
+            50%      { transform: translateY(-3px) rotate(3deg); }
+        }
+
+        /* Peek — kullanıcı uyduya tıklayınca uykucu "biraz daha uyumak istiyorum"
+           tepkisi: tıklanan tarafın aksine yüzünü çevirir, gözlerini hafif aralayıp
+           tekrar kapatır. Breathing animasyonu peek süresince devre dışı. */
+        .satellite.is-peeking .sat-body {
+            animation: satPeekRight 1.6s cubic-bezier(.4,.0,.2,1) forwards;
+        }
+        .satellite.is-peeking.peek-left .sat-body {
+            animation: satPeekLeft 1.6s cubic-bezier(.4,.0,.2,1) forwards;
+        }
+        @keyframes satPeekRight {
+            0%   { transform: translateY(0) rotate(0deg); }
+            18%  { transform: translateY(-2px) rotate(11deg); }
+            55%  { transform: translateY(-2px) rotate(8deg); }
+            100% { transform: translateY(0) rotate(-3deg); }
+        }
+        @keyframes satPeekLeft {
+            0%   { transform: translateY(0) rotate(0deg); }
+            18%  { transform: translateY(-2px) rotate(-11deg); }
+            55%  { transform: translateY(-2px) rotate(-8deg); }
+            100% { transform: translateY(0) rotate(-3deg); }
+        }
+        /* Gözler — kapalı default, peek sırasında hafif açık */
+        .sat-eye-open { opacity: 0; transition: opacity .18s ease-out; }
+        .satellite.is-peeking .sat-eye-closed { opacity: 0; transition: opacity .14s ease-in; }
+        .satellite.is-peeking .sat-eye-open   { opacity: 1; }
+        /* Peek bitiminin son ~20%'unde gözler tekrar kapansın */
+        .satellite.is-peeking.peek-closing .sat-eye-closed { opacity: 1; transition: opacity .22s ease-out; }
+        .satellite.is-peeking.peek-closing .sat-eye-open   { opacity: 0; transition: opacity .22s ease-in; }
+
+        /* Click → ağız suyu silme: gözler aç → drool fade out → drool fade in → gözler kapa */
+        .sat-drool { transition: opacity .35s ease-out; }
+        .satellite.is-wiping .sat-drool { opacity: 0; }
+
+        /* Yan antenler — fly hunt sırasında sineği kovala. Default hafif yukarı eğik. */
+        .sat-antenna-l, .sat-antenna-r {
+            transform-origin: 70px 46px;    /* gövdeye bağlı uç (sol için x=74) */
+            transition: transform .22s ease-out;
+        }
+        .sat-antenna-r { transform-origin: 150px 46px; }
+
+        /* Mouseover üzerinde 1.5 sn beklendikten sonra fly-hunt class'ı eklenir.
+           Antenler hızlı sağa-sola sallanır (sinek kovalama) — gözler hâlâ kapalı. */
+        .satellite.is-flyhunt .sat-antenna-l {
+            animation: antennaSwatL 0.32s ease-in-out infinite;
+        }
+        .satellite.is-flyhunt .sat-antenna-r {
+            animation: antennaSwatR 0.32s ease-in-out infinite;
+            animation-delay: 0.16s;
+        }
+        @keyframes antennaSwatL {
+            0%   { transform: rotate(0deg); }
+            40%  { transform: rotate(-32deg); }
+            60%  { transform: rotate(-32deg); }
+            100% { transform: rotate(8deg); }
+        }
+        @keyframes antennaSwatR {
+            0%   { transform: rotate(0deg); }
+            40%  { transform: rotate(32deg); }
+            60%  { transform: rotate(32deg); }
+            100% { transform: rotate(-8deg); }
+        }
+        .sat-zz {
+            font-family: "Comic Sans MS", "Segoe UI", sans-serif;
+            font-weight: 700; fill: var(--accent); opacity: 0;
+            transform-origin: center;
+        }
+        .sat-zz--1 { animation: zzFloat 3.6s ease-in-out infinite; }
+        .sat-zz--2 { animation: zzFloat 3.6s ease-in-out 1.2s infinite; }
+        .sat-zz--3 { animation: zzFloat 3.6s ease-in-out 2.4s infinite; }
+        @keyframes zzFloat {
+            0%   { opacity: 0; transform: translate(0, 0) scale(0.6); }
+            20%  { opacity: 1; }
+            70%  { opacity: 1; }
+            100% { opacity: 0; transform: translate(10px, -22px) scale(1.2); }
+        }
+        .sat-antenna-light {
+            fill: #ef4444; transform-origin: 100px 22px;
+            animation: antBlink 1.6s ease-in-out infinite;
+        }
+        @keyframes antBlink {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.3; }
+        }
+
+        /* Loading spinner — içinde geri sayım sayısı */
+        .reconnect {
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 0 18px; min-height: 56px;
+        }
+        .reconnect__spinner {
+            position: relative;
+            width: 56px; height: 56px;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        /* Dönen border halkası — sadece çerçeve döner, içerik döz */
+        .reconnect__spinner::before {
+            content: ''; position: absolute; inset: 0;
+            border-radius: 50%;
+            border: 3px solid rgba(99,102,241,0.18);
+            border-top-color: var(--accent);
+            animation: spinnerRot 1s linear infinite;
+        }
+        @keyframes spinnerRot { to { transform: rotate(360deg); } }
+        /* Sayı tam merkeze — döner border'ın içinde sabit durur */
+        .reconnect__countdown {
+            position: relative; z-index: 1;
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            font-size: 20px; font-weight: 700; color: var(--accent);
+            line-height: 1;
+        }
+        h1 {
+            margin: 0 0 6px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em;
+        }
+        .subtitle {
+            margin: 0 0 22px; font-size: 13px; color: var(--muted);
+        }
+        .pulse {
+            display: inline-flex; align-items: center; gap: 10px;
+            padding: 8px 14px; border-radius: 999px;
+            background: var(--accent-soft); color: var(--accent);
+            font-size: 12px; font-weight: 600; margin-bottom: 22px;
+        }
+        .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+        .progress {
+            height: 4px; border-radius: 2px; overflow: hidden;
+            background: var(--accent-soft); margin: 0 0 22px;
+        }
+        .progress__bar {
+            height: 100%; width: 30%; border-radius: 2px;
+            background: var(--accent);
+            animation: slide 1.6s ease-in-out infinite;
+        }
+        @keyframes slide {
+            0%   { margin-left: -30%; width: 30%; }
+            50%  { margin-left: 35%;  width: 30%; }
+            100% { margin-left: 100%; width: 30%; }
+        }
+        /* Sabit yer tutar — hata mesajı çıkıp kaybolurken kart boyutu değişmesin */
+        .status {
+            margin: 0 0 22px; font-size: 12px; color: var(--muted);
+            min-height: 18px; line-height: 18px;
+            opacity: 0; transition: opacity .22s ease-out;
+            pointer-events: none;
+        }
+        .status.err { color: var(--danger); opacity: 1; }
+        .status.ok  { color: #10b981;       opacity: 1; }
+        .actions {
+            display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 9px 18px; border-radius: 10px; border: 1px solid var(--border);
+            background: transparent; color: var(--text);
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: background .12s, border-color .12s;
+        }
+        .btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+        .btn--primary {
+            background: var(--accent); color: #fff; border-color: var(--accent);
+        }
+        .btn--primary:hover { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+        .footer {
+            margin-top: 24px; padding-top: 18px;
+            border-top: 1px solid var(--border);
+            font-size: 11px; color: var(--muted);
+        }
+        .footer code {
+            font-family: ui-monospace, Menlo, Consolas, monospace;
+            background: var(--accent-soft); padding: 1px 5px; border-radius: 4px;
+            font-size: 10px; color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <main class="card" role="status" aria-live="polite">
+        <!-- Uyuyan uydu — 3B render benzeri SVG -->
+        <svg class="satellite" viewBox="0 0 220 190" xmlns="http://www.w3.org/2000/svg" aria-label="Uyuyan uydu">
+            <defs>
+                <!-- Beyaz mat gövde gradient'i -->
+                <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"  stop-color="#ffffff"/>
+                    <stop offset="100%" stop-color="#cbd5e1"/>
+                </linearGradient>
+                <!-- Lacivert solar panel -->
+                <linearGradient id="panelGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"  stop-color="#334155"/>
+                    <stop offset="100%" stop-color="#1e293b"/>
+                </linearGradient>
+                <!-- Anten ışık halesi -->
+                <radialGradient id="lightGlow">
+                    <stop offset="0%"  stop-color="#ef4444" stop-opacity="0.5"/>
+                    <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+                </radialGradient>
+            </defs>
+
+            <g class="sat-body">
+                <!-- Üst anten -->
+                <line x1="110" y1="40" x2="110" y2="22" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"/>
+                <!-- Kırmızı ışık + halo -->
+                <circle cx="110" cy="22" r="10" fill="url(#lightGlow)"/>
+                <circle class="sat-antenna-light" cx="110" cy="22" r="3.5"/>
+
+                <!-- Sol solar panel kolu -->
+                <rect x="50" y="79" width="14" height="4" rx="1" fill="#94a3b8"/>
+                <!-- Sol solar panel -->
+                <rect x="14" y="62" width="42" height="38" rx="3" fill="url(#panelGrad)" stroke="#475569" stroke-width="1"/>
+                <line x1="28" y1="62" x2="28" y2="100" stroke="#64748b" stroke-width="0.8"/>
+                <line x1="42" y1="62" x2="42" y2="100" stroke="#64748b" stroke-width="0.8"/>
+                <line x1="14" y1="75" x2="56" y2="75" stroke="#64748b" stroke-width="0.8"/>
+                <line x1="14" y1="87" x2="56" y2="87" stroke="#64748b" stroke-width="0.8"/>
+
+                <!-- Sağ solar panel kolu -->
+                <rect x="156" y="79" width="14" height="4" rx="1" fill="#94a3b8"/>
+                <!-- Sağ solar panel -->
+                <rect x="164" y="62" width="42" height="38" rx="3" fill="url(#panelGrad)" stroke="#475569" stroke-width="1"/>
+                <line x1="178" y1="62" x2="178" y2="100" stroke="#64748b" stroke-width="0.8"/>
+                <line x1="192" y1="62" x2="192" y2="100" stroke="#64748b" stroke-width="0.8"/>
+                <line x1="164" y1="75" x2="206" y2="75" stroke="#64748b" stroke-width="0.8"/>
+                <line x1="164" y1="87" x2="206" y2="87" stroke="#64748b" stroke-width="0.8"/>
+
+                <!-- Gövde -->
+                <rect x="70" y="40" width="80" height="80" rx="12" fill="url(#bodyGrad)" stroke="#94a3b8" stroke-width="1"/>
+                <!-- Sol cıvatalar -->
+                <circle cx="78" cy="48" r="2" fill="#94a3b8"/>
+                <circle cx="78" cy="112" r="2" fill="#94a3b8"/>
+                <circle cx="142" cy="48" r="2" fill="#94a3b8"/>
+                <circle cx="142" cy="112" r="2" fill="#94a3b8"/>
+
+                <!-- Yüz ekranı (hafif çerçeve) -->
+                <rect x="82" y="56" width="56" height="46" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="0.8"/>
+
+                <!-- Uyuyan kapalı gözler (default görünür) -->
+                <g class="sat-eye-closed">
+                    <path d="M92 75 Q99 70 106 75" stroke="#475569" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                    <path d="M114 75 Q121 70 128 75" stroke="#475569" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                </g>
+                <!-- Hafif aralık gözler — peek sırasında görünür (uykudan zar zor uyanmış izlenimi) -->
+                <g class="sat-eye-open">
+                    <!-- Üst-alt göz kapakları arasından yarım pupil -->
+                    <ellipse cx="99" cy="74" rx="3" ry="2.2" fill="#475569"/>
+                    <ellipse cx="121" cy="74" rx="3" ry="2.2" fill="#475569"/>
+                    <!-- Üst göz kapağı çizgisi (yarım açık etkisi) -->
+                    <path d="M93 72 Q99 70 105 72" stroke="#475569" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+                    <path d="M115 72 Q121 70 127 72" stroke="#475569" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+                </g>
+
+                <!-- Açık ağız (üzgün/uykulu) -->
+                <ellipse cx="110" cy="92" rx="5" ry="4" fill="#334155"/>
+                <!-- Ağız suyu izi — statik. Click sırasında is-wiping ile fade out / fade in. -->
+                <g class="sat-drool">
+                    <path d="M114 94 Q117 99 116 104" stroke="#7dd3fc" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.85"/>
+                    <circle cx="116" cy="106" r="1.8" fill="#7dd3fc" opacity="0.9"/>
+                </g>
+
+                <!-- Yan antenler — sineği kovalamak için kullanılır.
+                     Sol anten: gövdenin sol-üst köşesinden dışa doğru uzanır.
+                     Sağ anten: gövdenin sağ-üst köşesinden dışa doğru uzanır.
+                     transform-origin gövdeye bağlı uca konumlandırıldı ki açıdan eğilebilsin. -->
+                <g class="sat-antenna-l">
+                    <line x1="74" y1="46" x2="60" y2="30" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"/>
+                    <circle cx="60" cy="30" r="2.6" fill="#94a3b8"/>
+                </g>
+                <g class="sat-antenna-r">
+                    <line x1="146" y1="46" x2="160" y2="30" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"/>
+                    <circle cx="160" cy="30" r="2.6" fill="#94a3b8"/>
+                </g>
+            </g>
+
+            <!-- Z Z Z -->
+            <text class="sat-zz sat-zz--1" x="142" y="50" font-size="18">z</text>
+            <text class="sat-zz sat-zz--2" x="156" y="38" font-size="14">z</text>
+            <text class="sat-zz sat-zz--3" x="168" y="28" font-size="11">z</text>
+        </svg>
+
+        <h1>Sunucuya bağlanılamıyor</h1>
+        <p class="subtitle">Hizmetimiz kısa bir uyku molasında. Bağlantı kurulur kurulmaz sayfanız otomatik olarak açılacaktır.</p>
+
+        <div class="pulse"><span class="dot" aria-hidden="true"></span><span id="pulseLabel">Sunucuya bağlanılıyor…</span></div>
+
+        <div class="progress" aria-hidden="true"><div class="progress__bar"></div></div>
+
+        <!-- Loading spinner + içinde geri sayım -->
+        <div class="reconnect" id="reconnectBox" aria-hidden="true">
+            <span class="reconnect__spinner" aria-hidden="true">
+                <span class="reconnect__countdown" id="countdown">10</span>
+            </span>
+        </div>
+        <p class="status" id="status">&nbsp;</p>
+
+        <div class="actions">
+            <button type="button" class="btn btn--primary" onclick="checkNow()">Şimdi Tekrar Dene</button>
+        </div>
+    </main>
+
+    <script>
+    (function () {
+        // Bu sayfa service-worker tarafından servis edilir; orijinal navigation target'ı:
+        //   1) URL query param '?to=...' (SW yazar)
+        //   2) sessionStorage 'calibra:offlineTarget' (fallback)
+        //   3) location.pathname (deep open)
+        var target = (function () {
+            try {
+                var params = new URLSearchParams(location.search);
+                var t1 = params.get('to');
+                if (t1) {
+                    try { sessionStorage.setItem('calibra:offlineTarget', t1); } catch (_) {}
+                    return t1;
+                }
+                var t2 = sessionStorage.getItem('calibra:offlineTarget');
+                if (t2) return t2;
+            } catch (_) {}
+            return location.pathname + location.search;
+        })();
+
+        var countdownSec = 10;
+        var PROBE_INTERVAL = 10; // saniye — sonraki kontrol için reset değeri
+        var cdEl = document.getElementById('countdown');
+        var statusEl = document.getElementById('status');
+        var pulseLabel = document.getElementById('pulseLabel');
+        var checking = false;
+        var timerId = null;
+
+        function setCountdown(n) { countdownSec = n; if (cdEl) cdEl.textContent = n; }
+
+        async function probe() {
+            if (checking) return;
+            checking = true;
+            pulseLabel.textContent = 'Sunucuya bağlanılıyor…';
+            try {
+                // Probe için cache bypass — sunucu canlı mı diye kesin yanıt iste
+                var r = await fetch('/?_probe=' + Date.now(), {
+                    method: 'GET', credentials: 'same-origin', cache: 'no-store',
+                    headers: { 'Accept': 'text/html', 'X-Offline-Probe': '1' }
+                });
+                // Bağlanabildi (200/302/4xx hepsi geçerli — server up demek)
+                if (r.status >= 200 && r.status < 600) {
+                    statusEl.classList.remove('err');         // hata mesajı varsa fade-out
+                    pulseLabel.textContent = 'Bağlandı! Yeniden yönlendiriliyor…';
+                    try { sessionStorage.removeItem('calibra:offlineTarget'); } catch (_) {}
+                    setTimeout(function () { location.replace(target || '/'); }, 400);
+                    return;
+                }
+            } catch (e) {
+                // Hata durumunda status'a sevimli mesaj — kart boyutu sabit kalır
+                // (opacity ile gösteriliyor, hidden değişmiyor → layout shift yok)
+                statusEl.classList.add('err');
+                statusEl.textContent = 'Henüz cevap yok, biraz sonra tekrar deneyeceğiz…';
+                pulseLabel.textContent = 'Bağlantı kontrol ediliyor';
+            }
+            checking = false;
+        }
+
+        // ── Uydu etkileşimleri ────────────────────────────────────────
+        var satEl = document.querySelector('.satellite');
+        if (satEl) {
+            // Mouseover üzerinde 1.5 saniye beklenince "sinek kovalama" modu
+            // başlar — antenler hızlı sallanır, gözler hâlâ kapalı (uyumaya devam).
+            // Mouse uzaklaşınca veya tıklanınca mode kapanır.
+            var flyHuntTimer = null;
+            satEl.addEventListener('mouseenter', function () {
+                if (satEl.classList.contains('is-peeking')) return;
+                clearTimeout(flyHuntTimer);
+                flyHuntTimer = setTimeout(function () {
+                    satEl.classList.add('is-flyhunt');
+                }, 1500);
+            });
+            satEl.addEventListener('mouseleave', function () {
+                clearTimeout(flyHuntTimer);
+                satEl.classList.remove('is-flyhunt');
+            });
+
+            // Tıklanınca: gözler aç → ağız suyu silinir → gözler kapanır
+            satEl.addEventListener('click', function (e) {
+                if (satEl.classList.contains('is-peeking')) return; // çift tıklama kilitle
+                // Sinek kovalama modunu da sonlandır (kullanıcı zaten uyduya el sürdü)
+                clearTimeout(flyHuntTimer);
+                satEl.classList.remove('is-flyhunt');
+
+                // Tıklanan tarafa göre yön — yüz aksine çevrilir
+                var rect = satEl.getBoundingClientRect();
+                var clickedOnLeft = (e.clientX - rect.left) < rect.width / 2;
+                if (clickedOnLeft) {
+                    satEl.classList.remove('peek-left');  // sol tıklandı → sağa eğil
+                } else {
+                    satEl.classList.add('peek-left');     // sağ tıklandı → sola eğil
+                }
+                satEl.classList.add('is-peeking');
+                // Gözler tam açıldıktan sonra ağız suyunu sil (fade out)
+                setTimeout(function () { satEl.classList.add('is-wiping'); }, 400);
+                // Animasyonun son ~%25'lik kısmında gözler kapansın
+                setTimeout(function () { satEl.classList.add('peek-closing'); }, 1200);
+                // Animasyon bitince tüm class'ları temizle — drool da geri görünür
+                setTimeout(function () {
+                    satEl.classList.remove('is-peeking', 'peek-left', 'peek-closing', 'is-wiping');
+                }, 1650);
+            });
+        }
+
+        async function tick() {
+            if (countdownSec <= 1) {
+                setCountdown(PROBE_INTERVAL); // sonraki tur için reset
+                await probe();
+            } else {
+                setCountdown(countdownSec - 1);
+            }
+        }
+
+        function start() {
+            if (timerId) return;
+            timerId = setInterval(tick, 1000);
+            // İlk probe'ı hemen yap
+            probe();
+        }
+
+        window.checkNow = function () {
+            setCountdown(PROBE_INTERVAL);
+            probe();
+        };
+
+        start();
+    })();
+    </script>
+</body>
+</html>

@@ -150,7 +150,7 @@ public sealed class ReportingApiController : ControllerBase
 
     private ReportCallerContext BuildCaller()
     {
-        var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : Guid.Empty;
+        var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : 0;
         var companyId = int.TryParse(User.FindFirstValue("company_id"), out var cid) ? cid : 0;
 
         var roles = new List<UserRole>();

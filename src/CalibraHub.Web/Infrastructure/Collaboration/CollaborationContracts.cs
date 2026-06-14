@@ -9,7 +9,7 @@ public static class CollaborationRuntimeDefaults
 
 public static class CollaborationGroupNames
 {
-    public static string ForUser(Guid userId) => $"collab:user:{userId:D}";
+    public static string ForUser(int userId) => $"collab:user:{userId}";
 
     public static string ForRecord(string recordType, string recordId) =>
         $"collab:record:{Normalize(recordType)}:{Normalize(recordId)}";
@@ -28,14 +28,14 @@ public static class CollaborationGroupNames
 
 public sealed record CollaborationRecordReference(string RecordType, string RecordId);
 
-public sealed record CollaborationUserDescriptor(Guid UserId, string DisplayName);
+public sealed record CollaborationUserDescriptor(int UserId, string DisplayName);
 
-public sealed record CollaborationPresenceUser(Guid UserId, string DisplayName, int ConnectionCount);
+public sealed record CollaborationPresenceUser(int UserId, string DisplayName, int ConnectionCount);
 
 public sealed record CollaborationLockSnapshot(
     string RecordType,
     string RecordId,
-    Guid OwnerUserId,
+    int OwnerUserId,
     string OwnerDisplayName,
     string? RecordTitle,
     string? PageUrl,
@@ -64,7 +64,7 @@ public sealed record CollaborationHeartbeatRequest(
     IReadOnlyCollection<CollaborationRecordReference>? Records);
 
 public sealed record CollaborationDirectMessageRequest(
-    Guid RecipientUserId,
+    int RecipientUserId,
     string Message,
     string? RecordType,
     string? RecordId,
@@ -72,9 +72,9 @@ public sealed record CollaborationDirectMessageRequest(
 
 public sealed record CollaborationDirectMessage(
     Guid MessageId,
-    Guid SenderUserId,
+    int SenderUserId,
     string SenderDisplayName,
-    Guid RecipientUserId,
+    int RecipientUserId,
     string Message,
     DateTime SentAt,
     string? RecordType,

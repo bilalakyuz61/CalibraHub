@@ -63,11 +63,43 @@ public sealed class WidgetDefinition
     /// </summary>
     public int ColSpan { get; init; } = 12;
     /// <summary>
-    /// Etiket gorunum stili: "standard" (label input ustunde) veya
-    /// "modern" (floating/outlined — label input cercevesi uzerinde).
-    /// Varsayilan "standard". Enum yerine string — genisletilebilir.
+    /// Etiket gorunum stili: "standard" (label input ustunde), "modern" (floating)
+    /// veya "inline" (label gizli/sol-yaslanmis — eski IsPlainField davranisi).
+    /// Otoriter alan: bu artik tek dogruluk kaynagidir; IsPlainField senkronize edilir.
     /// </summary>
     public string LabelStyle { get; init; } = "standard";
+
+    /// <summary>
+    /// "Standart alan" mi? (Universal Form Engine — Sprint 1).
+    /// <para>
+    /// true  → Bu widget Domain entity'sinin bir public property'sine baglidir
+    ///         (orn. Item.Code). Save sirasinda deger WidgetValue/WidgetTra'ya degil,
+    ///         entity tablosunun kendi kolonuna yazilir. <see cref="EntityColumn"/>
+    ///         hangi property'ye baglandigini belirtir.
+    /// </para>
+    /// <para>
+    /// false → Klasik custom widget. Deger EAV pattern'i ile WidgetTra'ya yazilir.
+    /// </para>
+    /// Discovery ile otomatik seed edilen "standart alan" satirlari true; admin'in
+    /// UI'dan ekledigi ozel alanlar false.
+    /// </summary>
+    public bool IsSystemField { get; init; } = false;
+
+    /// <summary>
+    /// Bagli oldugu Domain entity property adi (case-sensitive, Pascal). Sadece
+    /// IsSystemField=true ise dolu olur. Orn. "Code", "Name", "TaxNumber".
+    /// </summary>
+    public string? EntityColumn { get; init; }
+
+    /// <summary>
+    /// 2026-06-08 — Yetkilendirilebilir alan mı? <c>true</c> ise startup discovery sırasında
+    /// <c>PermissionDef</c>'e <c>FIELD:&lt;WidgetCode&gt;</c> action koduyla bir izin satırı
+    /// upsert edilir. Yetki Yönetimi ekranında ilgili formun altında "Görüntüle" yetkisi olarak
+    /// listelenir; kullanıcıya veya departmana özel olarak verilip alınabilir.
+    /// Form render zamanında widget bu izne göre filtrelenir (yetkisiz alanlar hiç dönmez).
+    /// </summary>
+    public bool IsPermissionControlled { get; init; } = false;
+
     public DateTime CreatedAt { get; init; } = DateTime.Now;
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

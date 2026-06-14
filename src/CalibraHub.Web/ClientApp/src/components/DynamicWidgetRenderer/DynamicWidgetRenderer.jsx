@@ -82,6 +82,11 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   var classPrefix = props.classPrefix || 'mce'
   var containerId = props.containerId
   var onMounted   = props.onMounted
+  // Faz I — layout modu: 'stacked' (varsayilan, mevcut davranis) veya 'sidetabs'
+  // (sol nav + sag content, sadece secili grubun field'lari render edilir).
+  var layoutMode  = props.layout === 'sidetabs' ? 'sidetabs' : 'stacked'
+  // Sidetabs aktif grup state'i — ilk groupKey'e set edilir (load sonrasi).
+  var [activeGroupKey, setActiveGroupKey] = useState(null)
   // Faz E — grid row modal embed senaryosu: mevcut satir degerleri onceden
   // doldurulmus olarak renderer'a verilir, server'a save yapilmaz, ref.getValues()
   // ile parent (GridFieldInput) degerleri cekip kendi grid state'ine pop eder.
@@ -632,6 +637,67 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
     childrenByParent[k].sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0) })
   })
 
+  // ── Sidetabs layout için tab listesi (group + ungrouped sahte tab) ──
+  // ungrouped → en başta "Genel" virtual tab; gerçek group'lar sortOrder'a göre.
+  // Sadece icinde gorunur (visibility ile filtrelenmis) child'i olan tab'lar listelenir.
+  var sideTabs = []
+  if (childrenByParent['__ungrouped'] && childrenByParent['__ungrouped'].length > 0) {
+    var visibleUngrouped = childrenByParent['__ungrouped'].filter(function (w) {
+      return !visibility || visibility[w.widgetId] !== false
+    })
+    if (visibleUngrouped.length > 0) {
+      sideTabs.push({ key: '__ungrouped', label: 'Genel', children: childrenByParent['__ungrouped'] })
+    }
+  }
+  groupWidgets.forEach(function (g) {
+    var childs = childrenByParent[g.id] || []
+    if (childs.length === 0) return
+    var visChilds = childs.filter(function (w) {
+      return !visibility || visibility[w.widgetId] !== false
+    })
+    if (visChilds.length === 0) return
+    sideTabs.push({ key: String(g.id), label: g.label, children: childs })
+  })
+
+  // İlk render'da activeGroupKey null ise ilk tab'a düş.
+  useEffect(function () {
+    if (layoutMode !== 'sidetabs') return
+    if (activeGroupKey != null) return
+    if (sideTabs.length > 0) setActiveGroupKey(sideTabs[0].key)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutMode, sideTabs.length, activeGroupKey])
+
+  // saveAttemptErrors değişince → ilk hatalı tab'a otomatik geç + ilk hatalı alana scroll.
+  useEffect(function () {
+    if (layoutMode !== 'sidetabs') return
+    if (!saveAttemptErrors || saveAttemptErrors.length === 0) return
+    var firstErrId = saveAttemptErrors[0]
+    var errWidget = widgets.find(function (w) { return w.widgetId === firstErrId })
+    if (!errWidget) return
+    var errKey = errWidget.parentId != null ? String(errWidget.parentId) : '__ungrouped'
+    if (errKey !== activeGroupKey) setActiveGroupKey(errKey)
+    // Bir frame sonra DOM'da hatalı alan render olmuş olur → scroll.
+    setTimeout(function () {
+      var el = document.getElementById('dyn_' + firstErrId)
+      if (el && el.scrollIntoView) {
+        try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }) } catch (e) { /* ignore */ }
+        if (el.focus) { try { el.focus({ preventScroll: true }) } catch (e) { /* ignore */ } }
+      }
+    }, 80)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveAttemptErrors, layoutMode])
+
+  // Her tab için eksik zorunlu alan sayısı — badge için.
+  function countMissingRequiredInTab(tab) {
+    var n = 0
+    var errSet = {}
+    ;(saveAttemptErrors || []).forEach(function (id) { errSet[id] = true })
+    tab.children.forEach(function (w) {
+      if (errSet[w.widgetId]) n++
+    })
+    return n
+  }
+
 
   // ── Loading / empty / error states ──
   if (loading) {
@@ -665,6 +731,70 @@ var DynamicWidgetRenderer = forwardRef(function DynamicWidgetRenderer(props, ref
   if (!hasWidgets) {
     // Parent container useEffect ile display:none yapar — burada null dondur
     return null
+  }
+
+  // ── Sidetabs layout: sol nav (grup adlari) + sag content (aktif grup field'lari) ──
+  if (layoutMode === 'sidetabs') {
+    var activeTab = sideTabs.find(function (t) { return t.key === activeGroupKey }) || sideTabs[0] || null
+    return (
+      <div className={classPrefix + '-dyn-root dwr-sidetabs'} data-widget-renderer>
+        <aside className="dwr-sidetabs__nav" role="tablist" aria-orientation="vertical">
+          {sideTabs.map(function (tab) {
+            var isActive = activeTab && activeTab.key === tab.key
+            var missing = countMissingRequiredInTab(tab)
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive ? 'true' : 'false'}
+                className={'dwr-sidetabs__tab' + (isActive ? ' is-active' : '')}
+                onClick={function () { setActiveGroupKey(tab.key) }}
+              >
+                <span className="dwr-sidetabs__tab-label">{tab.label}</span>
+                {missing > 0 && (
+                  <span className="dwr-sidetabs__badge" title={missing + ' eksik zorunlu alan'}>{missing}</span>
+                )}
+              </button>
+            )
+          })}
+        </aside>
+        <section className="dwr-sidetabs__content" role="tabpanel">
+          {activeTab ? (
+            <div className="wf-grid">
+              {activeTab.children.map(function (w) {
+                return renderField(w, values[w.widgetId], handleChange, classPrefix, displays, setDisplays, grids, setGrids, visibility, disabledMap, ruleErrors, saveAttemptErrors, values)
+              })}
+            </div>
+          ) : (
+            <div className="dwr-sidetabs__empty">Görüntülenecek alan yok.</div>
+          )}
+        </section>
+
+        {/* Toast'lar sidetabs modunda da aynı şekilde */}
+        {requiredToasts.length > 0 && (
+          <div className="wf-toast-host" role="status" aria-live="polite">
+            {requiredToasts.map(function(t) {
+              return (
+                <div key={t.id} className="wf-toast">
+                  <span className="wf-toast-icon" aria-hidden="true">!</span>
+                  <div className="wf-toast-body">
+                    <div className="wf-toast-title">{t.title}</div>
+                    {t.detail && <div className="wf-toast-detail">{t.detail}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    className="wf-toast-close"
+                    onClick={function() { dismissToast(t.id) }}
+                    aria-label="Kapat"
+                  >×</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (

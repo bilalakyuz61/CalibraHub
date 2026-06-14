@@ -1,0 +1,648 @@
+@using CalibraHub.Domain.Enums
+@model CalibraHub.Application.Contracts.ArgeProjectDetail?
+@{
+    var isNew = Model is null;
+    ViewData["Title"] = isNew ? "Yeni AR-GE Projesi" : $"AR-GE Projesi: {Model!.Name}";
+    ViewData["FormCode"] = "ARGE_PROJECT_EDIT";
+    ViewData["BodyClass"] = "page-arge-edit workspace-frame-body";
+
+    var statusEnum = isNew ? ArgeProjectStatus.Planning : (ArgeProjectStatus)Model!.Status;
+    var statusLabel = statusEnum switch
+    {
+        ArgeProjectStatus.Planning                => "Planlama",
+        ArgeProjectStatus.Development              => "Geliştirme",
+        ArgeProjectStatus.Prototyping              => "Prototip",
+        ArgeProjectStatus.Testing                  => "Test",
+        ArgeProjectStatus.DesignReview             => "Tasarım Onayında",
+        ArgeProjectStatus.Approved                 => "Onaylandı",
+        ArgeProjectStatus.TransferredToProduction  => "Üretime Aktarıldı",
+        ArgeProjectStatus.Rejected                 => "Reddedildi",
+        ArgeProjectStatus.Cancelled                => "İptal",
+        _                                          => statusEnum.ToString(),
+    };
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+}
+
+<div class="ux-edit-shell">
+  <header class="ux-edit-bar">
+    <div class="ux-edit-bar__left">
+      <a class="ux-edit-bar__back" href="/Arge/Projects">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Listeye Dön
+      </a>
+      <h1 class="ux-edit-bar__title">@(isNew ? "Yeni AR-GE Projesi" : Model!.Name)</h1>
+      @if (!isNew)
+      {
+        <span class="ux-edit-bar__status">@statusLabel</span>
+        <span style="font-family:monospace;font-size:0.78rem;color:var(--app-text-muted,#94a3b8);">@Model!.DocumentNumber</span>
+      }
+    </div>
+    <div class="ux-edit-bar__right">
+      <a class="ux-edit-bar__btn" href="/Arge/Projects">İptal</a>
+      <button class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="ap-save">Kaydet</button>
+      @if (!isNew)
+      {
+        <button class="ux-edit-bar__btn ux-edit-bar__btn--danger" id="ap-delete">Sil</button>
+      }
+    </div>
+  </header>
+
+  <div class="ux-edit-body">
+    <aside class="ux-edit-nav" id="apNav">
+      <button type="button" class="ux-edit-nav__tab is-active" data-tab="general">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <span>Genel Bilgiler</span>
+      </button>
+      @if (!isNew)
+      {
+      <button type="button" class="ux-edit-nav__tab" data-tab="lifecycle">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>Durum</span>
+      </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="prototypes">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span>Prototipler</span>
+      </button>
+      }
+      <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="apNavWidgets" style="display:none;">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        <span>Ek Alanlar</span>
+      </button>
+    </aside>
+
+    <section class="ux-edit-content">
+      <div class="ux-edit-pane is-active" data-tab="general">
+        <h2>Genel Bilgiler</h2>
+        <div class="ux-edit-hint">AR-GE projesinin temel bilgileri. Yaşam döngüsü geçişleri "Durum" sekmesinden yapılır.</div>
+
+        <input type="hidden" id="ap-id" value="@(Model?.DocumentId.ToString() ?? "")" />
+        <input type="hidden" id="ap-status" value="@((byte)statusEnum)" />
+
+        <div class="ux-field ux-field--wide">
+          <label for="ap-name">Proje Adı *</label>
+          <input id="ap-name" type="text" maxlength="200"
+                 value="@(Model?.Name ?? "")" placeholder="örn. Yeni nesil hidrolik pompa" />
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="ap-type">Proje Türü *</label>
+            <select id="ap-type" data-current="@(Model?.ProjectType ?? 0)">
+              <option value="0">AR-GE — Araştırma-Geliştirme</option>
+              <option value="1">ÜR-GE — Ürün Geliştirme</option>
+            </select>
+          </div>
+          <div class="ux-field"></div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="ap-target">Hedef Bitiş Tarihi</label>
+            <input id="ap-target" type="date" value="@(Model?.TargetDate?.ToString("yyyy-MM-dd"))" />
+          </div>
+          <div class="ux-field">
+            <label for="ap-progress">İlerleme (%)</label>
+            <input id="ap-progress" type="number" min="0" max="100" step="1"
+                   value="@((Model?.ProgressPercent ?? 0m).ToString("0.##", inv))" />
+          </div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="ap-owner">Sorumlu Personel</label>
+            <select id="ap-owner" data-owner="@(Model?.OwnerPersonnelId)">
+              <option value="">— Sorumlu seçiniz —</option>
+            </select>
+          </div>
+          <div class="ux-field"></div>
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="ap-desc">Açıklama</label>
+          <textarea id="ap-desc" maxlength="1000" placeholder="Proje kapsamı / açıklama…">@(Model?.Description ?? "")</textarea>
+        </div>
+
+        <div id="ap-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      @if (!isNew)
+      {
+      <div class="ux-edit-pane" data-tab="lifecycle">
+        <h2>Durum & Yaşam Döngüsü</h2>
+        <div class="ux-edit-hint">Projeyi yaşam döngüsünde ilerletin. Yalnızca geçerli geçişler gösterilir (Planlama → Geliştirme → Prototip → Test → Tasarım Onayı → Onaylandı → Üretime Aktarıldı).</div>
+        <div class="ux-field">
+          <label>Mevcut Durum</label>
+          <div><span class="ux-edit-bar__status" id="ap-cur-status">@statusLabel</span></div>
+        </div>
+        <div class="ux-field">
+          <label>İleri Adım</label>
+          <div id="ap-lc-actions" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        </div>
+        <div id="ap-lc-err" style="display:none;" class="ux-err"></div>
+      </div>
+      }
+
+      @if (!isNew)
+      {
+      <div class="ux-edit-pane" data-tab="prototypes">
+        <h2>Prototipler</h2>
+        <div class="ux-edit-hint">Prototip/versiyon kayıtları. Her prototip bir stok kartına bağlanıp <strong>reçete</strong> (ürün ağacı) + <strong>rota</strong> tanımlanabilir. <strong>Klon kaynağı</strong> (★) seçilen prototipin reçete+rotası, proje üretime aktarılırken seri ürün kartına otomatik kopyalanır.</div>
+
+        <div style="margin-bottom:12px;">
+          <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="proto-new-btn">+ Yeni Prototip</button>
+        </div>
+
+        <div id="proto-form" style="display:none;border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:14px;margin-bottom:16px;background:var(--app-surface-2,rgba(99,102,241,0.04));">
+          <input type="hidden" id="proto-edit-id" value="" />
+          <div class="ux-row2">
+            <div class="ux-field">
+              <label for="proto-name">Prototip Adı *</label>
+              <input id="proto-name" type="text" maxlength="200" placeholder="örn. Pompa gövdesi MVP" />
+            </div>
+            <div class="ux-field">
+              <label for="proto-ver">Versiyon</label>
+              <input id="proto-ver" type="text" maxlength="50" placeholder="v0.1" />
+            </div>
+          </div>
+          <div class="ux-field ux-field--wide">
+            <label for="proto-desc">Açıklama</label>
+            <textarea id="proto-desc" maxlength="1000" placeholder="Prototip notu…"></textarea>
+          </div>
+          <div id="proto-form-err" style="display:none;" class="ux-err"></div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="proto-save">Kaydet</button>
+            <button type="button" class="ux-edit-bar__btn" id="proto-cancel">Vazgeç</button>
+          </div>
+        </div>
+
+        <div id="proto-status" style="display:none;" class="ux-edit-hint"></div>
+        <div id="proto-list"><div style="color:var(--app-text-muted,#94a3b8);font-size:13px;">Yükleniyor…</div></div>
+      </div>
+      }
+
+      <div class="ux-edit-pane" data-tab="widgets">
+        <h2>Ek Alanlar</h2>
+        <div class="ux-edit-hint">Admin → Widget Tanımları → ARGE_PROJECT_EDIT'te tanımlanan ek alanlar.</div>
+        <div class="ux-dyn-widgets">
+          <div id="apDynamicWidgets"
+               data-form-code="ARGE_PROJECT_EDIT"
+               data-record-id="@(Model?.DocumentId.ToString() ?? "")">
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+@if (!isNew)
+{
+  <div id="ap-modal" class="ux-modal-backdrop" style="display:none;" onclick="apCloseModal()">
+    <div class="ux-modal" onclick="event.stopPropagation()">
+      <div class="ux-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="ux-modal-title">AR-GE Projesini Sil</div>
+      <div class="ux-modal-msg" id="ap-modal-msg"></div>
+      <div class="ux-modal-actions">
+        <button class="ux-modal-cancel" onclick="apCloseModal()">Vazgeç</button>
+        <button class="ux-modal-del" id="ap-modal-del">Sil</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="proto-del-modal" class="ux-modal-backdrop" style="display:none;" onclick="protoCloseDelModal()">
+    <div class="ux-modal" onclick="event.stopPropagation()">
+      <div class="ux-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+      </div>
+      <div class="ux-modal-title">Prototipi Sil</div>
+      <div class="ux-modal-msg" id="proto-del-msg"></div>
+      <div class="ux-modal-actions">
+        <button class="ux-modal-cancel" onclick="protoCloseDelModal()">Vazgeç</button>
+        <button class="ux-modal-del" id="proto-del-confirm">Sil</button>
+      </div>
+    </div>
+  </div>
+}
+
+<style>
+  .proto-card{border:1px solid var(--app-border,#e2e8f0);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--app-surface,#fff);}
+  .proto-card__head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+  .proto-card__meta{font-size:12px;color:var(--app-text-muted,#94a3b8);margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .proto-card__meta code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .proto-card__acts{display:flex;gap:6px;flex-wrap:wrap;}
+  .proto-chip{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;}
+  .proto-chip--ver{background:rgba(99,102,241,.14);color:#6366f1;}
+  .proto-chip--src{background:rgba(245,158,11,.16);color:#d97706;}
+  .proto-chip--on{background:rgba(16,185,129,.15);color:#10b981;}
+  .proto-chip--off{background:rgba(148,163,184,.15);color:var(--app-text-muted,#94a3b8);}
+  .proto-act{font-size:12px;padding:5px 10px;border-radius:7px;border:1px solid var(--app-border,#e2e8f0);background:var(--app-surface,#fff);color:var(--app-text,#0f172a);cursor:pointer;}
+  .proto-act:hover{background:var(--app-surface-2,rgba(99,102,241,.06));}
+  .proto-act.is-on{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.4);color:#d97706;}
+  .proto-act--del{color:var(--danger,#ef4444);border-color:rgba(239,68,68,.35);}
+  .proto-act--del:hover{background:rgba(239,68,68,.1);}
+</style>
+
+@Html.AntiForgeryToken()
+
+<script>
+(function () {
+    var idVal = (document.getElementById('ap-id')?.value || '').trim();
+    var typeEl = document.getElementById('ap-type');
+    if (typeEl && typeEl.getAttribute('data-current')) typeEl.value = typeEl.getAttribute('data-current');
+
+    function csrf() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+    function setErr(msg) {
+        var el = document.getElementById('ap-err');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; activateTab('general'); }
+        else el.style.display = 'none';
+    }
+    function shake(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('is-invalid'); void el.offsetWidth;
+        el.classList.add('is-invalid');
+        setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
+    }
+
+    function activateTab(key) {
+        document.querySelectorAll('#apNav .ux-edit-nav__tab').forEach(function (b) {
+            b.classList.toggle('is-active', b.dataset.tab === key);
+        });
+        document.querySelectorAll('.ux-edit-pane').forEach(function (p) {
+            p.classList.toggle('is-active', p.dataset.tab === key);
+        });
+    }
+    document.querySelectorAll('#apNav .ux-edit-nav__tab').forEach(function (b) {
+        b.addEventListener('click', function () { if (!b.disabled) activateTab(b.dataset.tab); });
+    });
+
+    // ── Sorumlu personel listesi (dropdown) ──
+    (function () {
+        var sel = document.getElementById('ap-owner');
+        if (!sel) return;
+        var current = sel.getAttribute('data-owner') || '';
+        fetch('/Arge/PersonnelLookup', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                (list || []).forEach(function (p) {
+                    var o = document.createElement('option');
+                    o.value = p.id; o.textContent = p.name;
+                    if (String(p.id) === String(current)) o.selected = true;
+                    sel.appendChild(o);
+                });
+            })
+            .catch(function () { });
+    })();
+
+    var saveBtn = document.getElementById('ap-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            var name = (document.getElementById('ap-name').value || '').trim();
+            if (!name) { activateTab('general'); shake('ap-name'); return; }
+            var tgt = (document.getElementById('ap-target').value || '').trim();
+            var payload = {
+                id:               idVal ? parseInt(idVal) : 0,
+                name:             name,
+                projectType:      parseInt(document.getElementById('ap-type').value) || 0,
+                ownerPersonnelId: parseInt(document.getElementById('ap-owner').value) || null,
+                targetDate:       tgt ? tgt : null,
+                progressPercent:  parseFloat(document.getElementById('ap-progress').value) || 0,
+                description:      (document.getElementById('ap-desc').value || '').trim() || null
+            };
+            saveBtn.disabled = true;
+            setErr('');
+            fetch('/Arge/SaveProject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf() },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.ok) {
+                    if (!idVal && d.id) { location.href = '/Arge/ProjectEdit?id=' + d.id; }
+                    else { location.href = '/Arge/Projects'; }
+                } else {
+                    setErr((d && d.error) || 'Kayıt başarısız.');
+                    saveBtn.disabled = false;
+                }
+            })
+            .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
+        });
+    }
+
+    var deleteBtn = document.getElementById('ap-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function () {
+            var name = (document.getElementById('ap-name').value || '').trim();
+            var msgEl = document.getElementById('ap-modal-msg');
+            if (msgEl) msgEl.innerHTML = '<strong>' + name + '</strong> projesini silmek istediğinize emin misiniz?';
+            document.getElementById('ap-modal').style.display = 'flex';
+            document.getElementById('ap-modal-del').focus();
+        });
+        var modalDel = document.getElementById('ap-modal-del');
+        if (modalDel) {
+            modalDel.addEventListener('click', function () {
+                modalDel.disabled = true; modalDel.textContent = 'Siliniyor…';
+                fetch('/Arge/DeleteProjectJson?id=' + idVal, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': csrf() },
+                    credentials: 'same-origin'
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.ok) { location.href = '/Arge/Projects'; }
+                    else { apCloseModal(); setErr((d && d.error) || 'Silinemedi.'); }
+                })
+                .catch(function () { apCloseModal(); setErr('Bağlantı hatası.'); });
+            });
+        }
+    }
+
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') apCloseModal(); });
+})();
+
+function apCloseModal() {
+    var m = document.getElementById('ap-modal');
+    if (m) m.style.display = 'none';
+    var btn = document.getElementById('ap-modal-del');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
+}
+
+// ── Yaşam döngüsü (durum geçişleri) ──
+(function () {
+    var statusEl = document.getElementById('ap-status');
+    var box = document.getElementById('ap-lc-actions');
+    if (!statusEl || !box) return;
+    var cur = parseInt(statusEl.value, 10);
+    var LABELS = { 0:'Planlama', 1:'Geliştirme', 2:'Prototip', 3:'Test', 4:'Tasarım Onayında', 5:'Onaylandı', 6:'Üretime Aktarıldı', 7:'Reddedildi', 8:'İptal' };
+    var NEXT = { 0:[1,8], 1:[2,8], 2:[3,1,8], 3:[4,2,8], 4:[5,7,8], 5:[6], 6:[], 7:[1], 8:[] };
+    function csrf2() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function lcErr(m) { var e = document.getElementById('ap-lc-err'); if (m) { e.textContent = m; e.style.display = ''; } else e.style.display = 'none'; }
+    var targets = NEXT[cur] || [];
+    if (!targets.length) {
+        box.innerHTML = '<span style="color:var(--app-text-muted,#94a3b8);font-size:13px;">Bu durum terminal — ileri geçiş yok.</span>';
+    } else {
+        targets.forEach(function (t) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            var cls = 'ux-edit-bar__btn';
+            if (t === 5) cls += ' ux-edit-bar__btn--primary';
+            else if (t === 7 || t === 8) cls += ' ux-edit-bar__btn--danger';
+            b.className = cls;
+            b.textContent = '→ ' + LABELS[t];
+            b.addEventListener('click', function () { go(t); });
+            box.appendChild(b);
+        });
+    }
+    function go(target) {
+        box.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+        lcErr('');
+        var pid = parseInt(document.getElementById('ap-id').value) || 0;
+        // Onaylı → Üretime Aktarıldı: köprü — onaylı projeden seri ürün kartı (Item) üretir
+        if (cur === 5 && target === 6) {
+            fetch('/Arge/ConvertToProduction?id=' + pid, {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': csrf2() },
+                credentials: 'same-origin'
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.ok) {
+                    document.getElementById('ap-cur-status').textContent = 'Üretime Aktarıldı';
+                    var noteHtml = d.note ? ('<br/><span style="color:var(--app-text-muted,#94a3b8);">' + d.note + '</span>') : '';
+                    box.innerHTML = '<span style="color:#10b981;font-size:13px;">✓ Üretime aktarıldı — seri ürün kartı oluşturuldu: <strong>' + (d.itemCode || '') + '</strong>.' + noteHtml + '</span>';
+                } else {
+                    box.querySelectorAll('button').forEach(function (x) { x.disabled = false; });
+                    lcErr((d && d.error) || 'Üretime aktarılamadı.');
+                }
+            })
+            .catch(function () { box.querySelectorAll('button').forEach(function (x) { x.disabled = false; }); lcErr('Bağlantı hatası.'); });
+            return;
+        }
+        fetch('/Arge/ChangeProjectStatus', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrf2() },
+            credentials: 'same-origin',
+            body: JSON.stringify({ documentId: pid, status: target })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (d && d.ok) { location.href = '/Arge/ProjectEdit?id=' + pid; }
+            else { box.querySelectorAll('button').forEach(function (x) { x.disabled = false; }); lcErr((d && d.error) || 'Durum değiştirilemedi.'); }
+        })
+        .catch(function () { box.querySelectorAll('button').forEach(function (x) { x.disabled = false; }); lcErr('Bağlantı hatası.'); });
+    }
+})();
+
+// ── DynamicWidgetRenderer mount (Ek Alanlar) ──
+(function () {
+    var el = document.getElementById('apDynamicWidgets');
+    if (!el) return;
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+        try {
+            window._apDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode:    el.getAttribute('data-form-code') || 'ARGE_PROJECT_EDIT',
+                recordId:    el.getAttribute('data-record-id') || '',
+                classPrefix: 'ap',
+                layout:      'stacked',
+                onMounted:   function (handle) {
+                    var attempts = 0;
+                    var iv = setInterval(function () {
+                        attempts++;
+                        try {
+                            if (handle && typeof handle.getHasWidgets === 'function' && handle.getHasWidgets()) {
+                                var nav = document.getElementById('apNavWidgets');
+                                if (nav) nav.style.display = '';
+                                clearInterval(iv);
+                                return;
+                            }
+                        } catch (_) { }
+                        if (attempts > 25) clearInterval(iv);
+                    }, 200);
+                }
+            });
+        } catch (e) { console.warn('[AP] mountDynamicWidgetRenderer hatasi:', e); }
+    }
+    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+        doMount();
+    } else {
+        var cssUrl = '/react/calibrahub-widgets.css';
+        var jsUrl  = '/react/calibrahub-widgets.js';
+        if (!document.querySelector('link[data-ap-bundle]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = cssUrl;
+            link.setAttribute('data-ap-bundle', '1');
+            document.head.appendChild(link);
+        }
+        if (!document.querySelector('script[data-ap-bundle]')) {
+            var script = document.createElement('script');
+            script.src = jsUrl;
+            script.setAttribute('data-ap-bundle', '1');
+            script.onload  = function () { setTimeout(doMount, 0); };
+            script.onerror = function () { console.error('[AP] Bundle yuklenemedi'); };
+            document.head.appendChild(script);
+        }
+    }
+})();
+
+function protoCloseDelModal() {
+    var m = document.getElementById('proto-del-modal');
+    if (m) m.style.display = 'none';
+    var b = document.getElementById('proto-del-confirm');
+    if (b) { b.disabled = false; b.textContent = 'Sil'; }
+}
+
+// ── Prototip yönetimi ("Prototipler" sekmesi) ──
+(function () {
+    var pidEl = document.getElementById('ap-id');
+    var pid = pidEl ? (parseInt((pidEl.value || '').trim(), 10) || 0) : 0;
+    var listEl = document.getElementById('proto-list');
+    if (!pid || !listEl) return;
+    var map = {};
+
+    function csrfP() { var el = document.querySelector('input[name="__RequestVerificationToken"]'); return el ? el.value : ''; }
+    function esc(s) { return (s == null ? '' : String(s)).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function statusMsg(msg) {
+        var el = document.getElementById('proto-status');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.style.display = ''; } else el.style.display = 'none';
+    }
+
+    var formEl = document.getElementById('proto-form');
+    function openForm(p) {
+        document.getElementById('proto-edit-id').value = p ? p.id : '';
+        document.getElementById('proto-name').value = p ? (p.name || '') : '';
+        document.getElementById('proto-ver').value = p ? (p.versionLabel || '') : '';
+        document.getElementById('proto-desc').value = p ? (p.description || '') : '';
+        document.getElementById('proto-form-err').style.display = 'none';
+        formEl.style.display = '';
+        document.getElementById('proto-name').focus();
+    }
+    function closeForm() { formEl.style.display = 'none'; }
+
+    var newBtn = document.getElementById('proto-new-btn');
+    if (newBtn) newBtn.addEventListener('click', function () { openForm(null); });
+    var cancelBtn = document.getElementById('proto-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeForm);
+
+    var saveBtn = document.getElementById('proto-save');
+    if (saveBtn) saveBtn.addEventListener('click', function () {
+        var name = (document.getElementById('proto-name').value || '').trim();
+        var errEl = document.getElementById('proto-form-err');
+        if (!name) { errEl.textContent = 'Prototip adı zorunludur.'; errEl.style.display = ''; return; }
+        var payload = {
+            id: parseInt(document.getElementById('proto-edit-id').value) || 0,
+            projectId: pid,
+            name: name,
+            versionLabel: (document.getElementById('proto-ver').value || '').trim() || null,
+            description: (document.getElementById('proto-desc').value || '').trim() || null
+        };
+        saveBtn.disabled = true;
+        fetch('/Arge/SavePrototype', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfP() }, credentials: 'same-origin', body: JSON.stringify(payload) })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { saveBtn.disabled = false; if (d && d.ok) { closeForm(); load(); } else { errEl.textContent = (d && d.error) || 'Kayıt başarısız.'; errEl.style.display = ''; } })
+            .catch(function () { saveBtn.disabled = false; errEl.textContent = 'Bağlantı hatası.'; errEl.style.display = ''; });
+    });
+
+    var delId = 0;
+    function askDelete(p) {
+        delId = p.id;
+        var msg = document.getElementById('proto-del-msg');
+        if (msg) msg.innerHTML = '<strong>' + esc(p.name) + '</strong> prototipini silmek istediğinize emin misiniz?';
+        var m = document.getElementById('proto-del-modal');
+        if (m) m.style.display = 'flex';
+        var c = document.getElementById('proto-del-confirm');
+        if (c) c.focus();
+    }
+    var delConfirm = document.getElementById('proto-del-confirm');
+    if (delConfirm) delConfirm.addEventListener('click', function () {
+        delConfirm.disabled = true; delConfirm.textContent = 'Siliniyor…';
+        fetch('/Arge/DeletePrototypeJson?id=' + delId, { method: 'POST', headers: { 'RequestVerificationToken': csrfP() }, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { protoCloseDelModal(); if (d && d.ok) load(); })
+            .catch(function () { protoCloseDelModal(); });
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') protoCloseDelModal(); });
+
+    listEl.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('button[data-act]') : null;
+        if (!btn) return;
+        var id = parseInt(btn.getAttribute('data-id'), 10);
+        var act = btn.getAttribute('data-act');
+        var p = map[id];
+        if (act === 'edit') { if (p) openForm(p); return; }
+        if (act === 'del') { if (p) askDelete(p); return; }
+        if (act === 'approve') {
+            var on = btn.getAttribute('data-on') === '1';
+            btn.disabled = true;
+            fetch('/Arge/SetPrototypeApproved', { method: 'POST', headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': csrfP() }, credentials: 'same-origin', body: JSON.stringify({ prototypeId: id, approved: !on }) })
+                .then(function (r) { return r.json(); })
+                .then(function (d) { if (d && d.ok) load(); else btn.disabled = false; })
+                .catch(function () { btn.disabled = false; });
+            return;
+        }
+        if (act === 'bom' || act === 'routing') {
+            btn.disabled = true; btn.textContent = 'Hazırlanıyor…'; statusMsg('');
+            fetch('/Arge/EnsurePrototypeItem?id=' + id, { method: 'POST', headers: { 'RequestVerificationToken': csrfP() }, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d && d.ok) {
+                        if (act === 'bom') window.location.href = '/Logistics/BOMs?mat=' + encodeURIComponent(d.itemCode || '');
+                        else {
+                            statusMsg('Stok kartı hazır: ' + (d.itemCode || ('#' + d.itemId)) + '. Açılan rota ekranında bu mamulü seçip operasyon/süre tanımlayın.');
+                            window.location.href = '/Production/Routings';
+                        }
+                    } else {
+                        btn.disabled = false; btn.textContent = (act === 'bom' ? 'Reçete tanımla' : 'Rota tanımla');
+                        statusMsg((d && d.error) || 'Stok kartı oluşturulamadı.');
+                    }
+                })
+                .catch(function () { btn.disabled = false; statusMsg('Bağlantı hatası.'); });
+            return;
+        }
+    });
+
+    function chip(cls, text) { return '<span class="proto-chip ' + cls + '">' + text + '</span>'; }
+    function render(list) {
+        map = {};
+        if (!list || !list.length) {
+            listEl.innerHTML = '<div style="color:var(--app-text-muted,#94a3b8);font-size:13px;padding:8px 0;">Henüz prototip yok. "+ Yeni Prototip" ile ekleyin.</div>';
+            return;
+        }
+        listEl.innerHTML = list.map(function (p) {
+            map[p.id] = p;
+            var ver = p.versionLabel ? chip('proto-chip--ver', esc(p.versionLabel)) : '';
+            var src = p.isApproved ? chip('proto-chip--src', '★ Klon kaynağı') : '';
+            var item = p.itemId ? ('<code>' + esc(p.itemCode || ('#' + p.itemId)) + '</code>') : '<span style="color:var(--app-text-muted,#94a3b8);">stok kartı yok</span>';
+            var bom = chip(p.hasBom ? 'proto-chip--on' : 'proto-chip--off', (p.hasBom ? '✓' : '—') + ' Reçete');
+            var rt = chip(p.hasRouting ? 'proto-chip--on' : 'proto-chip--off', (p.hasRouting ? '✓' : '—') + ' Rota');
+            return '<div class="proto-card">' +
+                '<div class="proto-card__head"><strong>' + esc(p.name) + '</strong>' + ver + src + '</div>' +
+                '<div class="proto-card__meta">Stok kartı: ' + item + ' &nbsp;·&nbsp; ' + bom + ' ' + rt + '</div>' +
+                '<div class="proto-card__acts">' +
+                    '<button type="button" class="proto-act" data-act="bom" data-id="' + p.id + '">Reçete tanımla</button>' +
+                    '<button type="button" class="proto-act" data-act="routing" data-id="' + p.id + '">Rota tanımla</button>' +
+                    '<button type="button" class="proto-act' + (p.isApproved ? ' is-on' : '') + '" data-act="approve" data-id="' + p.id + '" data-on="' + (p.isApproved ? '1' : '0') + '">' + (p.isApproved ? '✓ Klon kaynağı' : 'Klon kaynağı yap') + '</button>' +
+                    '<button type="button" class="proto-act" data-act="edit" data-id="' + p.id + '">Düzenle</button>' +
+                    '<button type="button" class="proto-act proto-act--del" data-act="del" data-id="' + p.id + '">Sil</button>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+    function load() {
+        listEl.innerHTML = '<div style="color:var(--app-text-muted,#94a3b8);font-size:13px;">Yükleniyor…</div>';
+        fetch('/Arge/Prototypes?projectId=' + pid, { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(render)
+            .catch(function () { listEl.innerHTML = '<div class="ux-err">Prototipler yüklenemedi.</div>'; });
+    }
+    load();
+})();
+</script>

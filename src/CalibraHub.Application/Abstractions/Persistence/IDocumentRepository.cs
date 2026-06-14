@@ -33,6 +33,12 @@ public interface IDocumentRepository
     Task SaveLineDetailsAsync(int documentLineId, IReadOnlyCollection<DocumentLineDetail> details, CancellationToken ct);
 
     /// <summary>
+    /// İhtiyaç Kaydı satırının karşılama miktarlarını günceller ve FulfillmentStatus'ı yeniden hesaplar.
+    /// fulfilledFromStock / fulfilledByPurchase kümülatif DELTA değil, yeni toplam değerdir.
+    /// </summary>
+    Task UpdateLineFulfillmentAsync(int lineId, decimal fulfilledFromStock, decimal fulfilledByPurchase, CancellationToken ct);
+
+    /// <summary>
     /// Bir satiri revize et — atomik olarak:
     ///   1) Eski satirin notes = @description (revize gerekcesi / eski halin anlatimi)
     ///   2) Yeni satir: eski satirin birebir kopyasi + revised_from_id = parentLineId

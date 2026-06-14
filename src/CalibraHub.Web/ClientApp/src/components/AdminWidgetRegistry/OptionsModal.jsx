@@ -25,6 +25,24 @@ import { createPortal } from 'react-dom'
 import { List, Plus, X, Check, ExternalLink, Search, Table, ChevronDown } from 'lucide-react'
 import AdminMiniModal from './AdminMiniModal'
 
+// 2026-06-04: Tema-duyarli renkler — TemplatesDropdown ve diger inline color'lar
+// body.app-theme-light class'i ile light tema'da okunabilir hale gelir.
+// Pattern aynisi GuideCustomizationModal / RuleBuilderModal'da kullanildi.
+function useThemeIsLight() {
+  var [light, setLight] = useState(function () {
+    if (typeof document === 'undefined') return false
+    return document.body.classList.contains('app-theme-light')
+  })
+  useEffect(function () {
+    var obs = new MutationObserver(function () {
+      setLight(document.body.classList.contains('app-theme-light'))
+    })
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    return function () { obs.disconnect() }
+  }, [])
+  return light
+}
+
 /**
  * ERP standart bag sablonlari — admin hizli secim icin. {value} placeholder'i
  * runtime'da kullanicinin girdigi deger ile yer degistirilir.
@@ -67,6 +85,7 @@ function GlassSelect(props) {
   var [open, setOpen]   = useState(false)
   var [panelPos, setPanelPos] = useState({ top: 0, left: 0, width: 0 })
   var triggerRef = useRef(null)
+  var isLight = useThemeIsLight()
 
   // Panel konumunu trigger butonundan hesapla (fixed positioning icin)
   function calcPos() {
@@ -100,6 +119,22 @@ function GlassSelect(props) {
 
   var selected = options.find(function (o) { return o.value === value })
 
+  // Tema-duyarli renkler — bir kez hesapla, asagidaki tum inline'larda kullan
+  var t = {
+    bg:        isLight ? '#ffffff' : 'rgba(8, 11, 20, 0.97)',
+    border:    isLight ? '1px solid #e2e8f0' : '1px solid rgba(255, 255, 255, 0.12)',
+    shadow:    isLight ? '0 12px 40px rgba(15,23,42,0.18)' : '0 12px 40px rgba(0, 0, 0, 0.5)',
+    blur:      isLight ? undefined : 'blur(24px)',
+    emptyText: isLight ? '#94a3b8' : 'rgba(255,255,255,0.4)',
+    clearText: isLight ? '#94a3b8' : 'rgba(255,255,255,0.4)',
+    selBg:     isLight ? '#eef2ff' : 'rgba(255,255,255,0.08)',
+    hoverBg:   isLight ? '#f1f5f9' : 'rgba(255,255,255,0.04)',
+    selText:   isLight ? '#1e293b' : '#fff',
+    text:      isLight ? '#334155' : 'rgba(255,255,255,0.85)',
+    hint:      isLight ? '#94a3b8' : 'rgba(255,255,255,0.35)',
+    check:     isLight ? '#4f46e5' : '#818cf8',
+  }
+
   var panel = open ? createPortal(
     <div
       style={{
@@ -110,17 +145,17 @@ function GlassSelect(props) {
         zIndex: 99999,
         borderRadius: 12,
         overflow: 'hidden',
-        background: 'rgba(8, 11, 20, 0.97)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.5)',
+        background: t.bg,
+        backdropFilter: t.blur,
+        WebkitBackdropFilter: t.blur,
+        border: t.border,
+        boxShadow: t.shadow,
         maxHeight: 260,
         overflowY: 'auto',
       }}
     >
       {options.length === 0 ? (
-        <div style={{ padding: '12px', textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+        <div style={{ padding: '12px', textAlign: 'center', fontSize: 11, color: t.emptyText }}>
           {emptyText}
         </div>
       ) : (
@@ -131,7 +166,7 @@ function GlassSelect(props) {
             style={{
               width: '100%', display: 'flex', alignItems: 'center',
               padding: '8px 12px', background: 'transparent', border: 'none',
-              cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.4)',
+              cursor: 'pointer', fontSize: 11, color: t.clearText,
               textAlign: 'left',
             }}
           >
@@ -146,23 +181,23 @@ function GlassSelect(props) {
                 onMouseDown={function (e) { e.preventDefault(); if (onChange) onChange(o.value); setOpen(false) }}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '10px 12px', background: isSel ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  padding: '10px 12px', background: isSel ? t.selBg : 'transparent',
                   border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 12,
-                  color: isSel ? '#fff' : 'rgba(255,255,255,0.85)',
+                  color: isSel ? t.selText : t.text,
                   transition: 'background 0.12s',
                 }}
-                onMouseEnter={function (e) { if (!isSel) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                onMouseEnter={function (e) { if (!isSel) e.currentTarget.style.background = t.hoverBg }}
                 onMouseLeave={function (e) { if (!isSel) e.currentTarget.style.background = 'transparent' }}
               >
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {o.label}
                 </span>
                 {o.hint && (
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 10, color: t.hint, fontFamily: 'monospace' }}>
                     {o.hint}
                   </span>
                 )}
-                {isSel && <Check size={13} style={{ color: '#818cf8', flexShrink: 0 }} />}
+                {isSel && <Check size={13} style={{ color: t.check, flexShrink: 0 }} />}
               </button>
             )
           })}

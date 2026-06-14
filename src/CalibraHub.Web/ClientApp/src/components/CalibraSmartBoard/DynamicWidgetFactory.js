@@ -60,6 +60,8 @@ import {
   Table,
   // Genel
   Plus, Minus,
+  // AR-GE
+  FlaskConical,
 } from 'lucide-react'
 
 /* ── Icon registry ─────────────────────────────── */
@@ -89,6 +91,7 @@ var iconMap = {
   Table: Table,
   // Genel
   Plus: Plus, Minus: Minus,
+  FlaskConical: FlaskConical,
 }
 
 /* ── Color palette (DARK tema — orijinal, light pastel text) ────

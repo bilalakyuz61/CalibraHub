@@ -73,13 +73,57 @@ public sealed class GateController : Controller
 
     // ── Dashboard (gate sonrasi — 3 sekme: Lisans, DB, Sifre Degistir) ──────
 
+    // Iframe tab'ları eski inline HTML/JS'i cache'lemesin — her açılışta taze içerik.
+    private void NoCache()
+    {
+        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+    }
+
     [HttpGet]
     [GateProtected]
     public async Task<IActionResult> Dashboard(CancellationToken ct)
     {
+        NoCache();
         var license = await _licenseService.GetCurrentAsync(ct);
         ViewBag.License             = license;
         ViewBag.MachineId           = _machineIdProvider.GetMachineId();
+        ViewBag.PasswordLastChanged = await _passwordService.GetLastChangedAtAsync(ct);
+        return View();
+    }
+
+    [HttpGet]
+    [GateProtected]
+    public async Task<IActionResult> License(CancellationToken ct)
+    {
+        NoCache();
+        var license = await _licenseService.GetCurrentAsync(ct);
+        ViewBag.License   = license;
+        ViewBag.MachineId = _machineIdProvider.GetMachineId();
+        return View();
+    }
+
+    [HttpGet]
+    [GateProtected]
+    public IActionResult UserMapping()
+    {
+        NoCache();
+        return View();
+    }
+
+    [HttpGet]
+    [GateProtected]
+    public IActionResult DbSettings()
+    {
+        NoCache();
+        return View();
+    }
+
+    [HttpGet]
+    [GateProtected]
+    public async Task<IActionResult> PasswordPage(CancellationToken ct)
+    {
+        NoCache();
         ViewBag.PasswordLastChanged = await _passwordService.GetLastChangedAtAsync(ct);
         return View();
     }

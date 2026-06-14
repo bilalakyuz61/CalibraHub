@@ -428,7 +428,8 @@ public sealed class SqlGuideRepository : IGuideRepository
     // ══════════════════════════════════════════════════════════
 
     public async Task<IReadOnlyCollection<string>> GetDistinctValuesAsync(
-        GuideDefinition guide, string column, string? search, CancellationToken ct)
+        GuideDefinition guide, string column, string? search, CancellationToken ct,
+        IReadOnlyCollection<GuideConstraintDto>? constraints = null)
     {
         // 1) Kolon allowlist: GridColumnsJson icinde olmali
         var gridColumns = (JsonSerializer.Deserialize<string[]>(guide.GridColumnsJson) ?? Array.Empty<string>())
@@ -460,16 +461,28 @@ public sealed class SqlGuideRepository : IGuideRepository
         var normalizedExpr = "LTRIM(RTRIM(REPLACE(CAST([" + safeColumn + "] AS NVARCHAR(400)), NCHAR(160), N' '))) COLLATE Turkish_CI_AI";
 
         var hasSearch = !string.IsNullOrWhiteSpace(search);
-        var likeFilter = hasSearch
-            ? "  AND " + normalizedExpr + " LIKE @Search ESCAPE '^'"
-            : string.Empty;
+
+        // 3) Constraint WHERE building — SearchAsync ile birebir mantik.
+        //    guide.DefaultFilterJson her zaman AND ile prepend edilir; ardindan
+        //    caller'in constraint'leri eklenir (rawSql/eq/in/...). Distinct popover
+        //    listede gosterilen satirlardan turetilir → "view'a verilen filtrelere
+        //    gore dolar" (rapor: kullanici geri bildirimi 2026-05-18).
+        var (constraintClause, constraintParams) =
+            BuildConstraintWhereFragment(guide, constraints);
+
+        var whereParts = new List<string>
+        {
+            $"[{safeColumn}] IS NOT NULL",
+            $"LTRIM(RTRIM(CAST([{safeColumn}] AS NVARCHAR(400)))) <> ''",
+        };
+        if (hasSearch) whereParts.Add(normalizedExpr + " LIKE @Search ESCAPE '^'");
+        if (!string.IsNullOrEmpty(constraintClause)) whereParts.Add(constraintClause);
+        var whereClause = "WHERE " + string.Join(" AND ", whereParts);
 
         var sql = $@"
             SELECT DISTINCT TOP(200) {normalizedExpr} AS V
             FROM {view}
-            WHERE [{safeColumn}] IS NOT NULL
-              AND LTRIM(RTRIM(CAST([{safeColumn}] AS NVARCHAR(400)))) <> ''
-            {likeFilter}
+            {whereClause}
             ORDER BY V;";
 
         // conn step 1b'de acildi
@@ -486,6 +499,10 @@ public sealed class SqlGuideRepository : IGuideRepository
                 .Replace("[", "^[");
             cmd.Parameters.AddWithValue("@Search", "%" + escaped + "%");
         }
+        foreach (var (paramName, paramValue) in constraintParams)
+        {
+            cmd.Parameters.AddWithValue(paramName, paramValue);
+        }
 
         var values = new List<string>();
         await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken: ct))
@@ -500,6 +517,104 @@ public sealed class SqlGuideRepository : IGuideRepository
             }
         }
         return values.AsReadOnly();
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // Constraint helper — SearchAsync + GetDistinctValuesAsync paylasir
+    // ══════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// SearchAsync icindeki constraint→WHERE fragment olusturma mantiginin
+    /// extracted hali (GetDistinctValuesAsync ile paylasilir). guide.DefaultFilterJson
+    /// her cagrida AND ile prepend edilir; ardindan caller'in constraint listesi gelir.
+    /// Donus: (WHERE fragment, parametre listesi). Fragment bos olabilir (constraint
+    /// hic yoksa). Parametre adlari @cp0, @cp1, ... uretilir.
+    ///
+    /// NOT: SearchAsync su anda kendi inline implementasyonunu kullaniyor; bu
+    /// helper ileride SearchAsync refactor edildiginde de kullanilabilir
+    /// (sadece test maliyeti var, fonksiyonel duplikasyon birebir esit kaldi).
+    /// </summary>
+    private static (string Clause, List<(string ParamName, object Value)> Params)
+        BuildConstraintWhereFragment(GuideDefinition guide, IReadOnlyCollection<GuideConstraintDto>? constraints)
+    {
+        var effective = new List<GuideConstraintDto>();
+        if (!string.IsNullOrWhiteSpace(guide.DefaultFilterJson))
+        {
+            effective.Add(new GuideConstraintDto(
+                Field: null, Operator: null, Value: null,
+                Logic: "and",
+                RawSql: guide.DefaultFilterJson.Trim()));
+        }
+        if (constraints is { Count: > 0 }) effective.AddRange(constraints);
+
+        var sqlParts = new List<(string Sql, string Logic)>();
+        var paramList = new List<(string ParamName, object Value)>();
+        var pIdx = 0;
+
+        foreach (var c in effective)
+        {
+            var rawLogic = (c.Logic ?? "and").Trim().ToLowerInvariant();
+            if (rawLogic != "or") rawLogic = "and";
+
+            if (!string.IsNullOrWhiteSpace(c.RawSql))
+            {
+                sqlParts.Add(($"({c.RawSql!.Trim()})", rawLogic));
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(c.Field) || string.IsNullOrWhiteSpace(c.Value)) continue;
+
+            var safeField = ValidateIdentifier(c.Field.Trim(), "ConstraintField");
+            string? fragment = null;
+            var op = (c.Operator ?? "eq").Trim().ToLowerInvariant();
+            switch (op)
+            {
+                case "eq":
+                    fragment = $"[{safeField}] = @cp{pIdx}";
+                    paramList.Add(($"@cp{pIdx}", c.Value.Trim())); pIdx++; break;
+                case "neq":
+                    fragment = $"[{safeField}] <> @cp{pIdx}";
+                    paramList.Add(($"@cp{pIdx}", c.Value.Trim())); pIdx++; break;
+                case "gt":
+                    fragment = $"[{safeField}] > @cp{pIdx}";
+                    paramList.Add(($"@cp{pIdx}", c.Value.Trim())); pIdx++; break;
+                case "lt":
+                    fragment = $"[{safeField}] < @cp{pIdx}";
+                    paramList.Add(($"@cp{pIdx}", c.Value.Trim())); pIdx++; break;
+                case "like":
+                    var likeVal = c.Value.Trim()
+                        .Replace("^", "^^").Replace("%", "^%").Replace("_", "^_").Replace("[", "^[");
+                    fragment = $"[{safeField}] COLLATE Turkish_CI_AI LIKE @cp{pIdx} ESCAPE '^'";
+                    paramList.Add(($"@cp{pIdx}", "%" + likeVal + "%")); pIdx++; break;
+                case "in":
+                    var inVals = c.Value.Split(',')
+                        .Select(v => v.Trim())
+                        .Where(v => v.Length > 0)
+                        .ToArray();
+                    if (inVals.Length > 0)
+                    {
+                        var inParams = new List<string>();
+                        foreach (var iv in inVals)
+                        {
+                            inParams.Add($"@cp{pIdx}");
+                            paramList.Add(($"@cp{pIdx}", iv));
+                            pIdx++;
+                        }
+                        fragment = $"[{safeField}] IN ({string.Join(",", inParams)})";
+                    }
+                    break;
+            }
+            if (fragment != null) sqlParts.Add((fragment, rawLogic));
+        }
+
+        if (sqlParts.Count == 0) return (string.Empty, paramList);
+
+        var clause = sqlParts[0].Sql;
+        for (int i = 1; i < sqlParts.Count; i++)
+        {
+            var joiner = sqlParts[i].Logic == "or" ? " OR " : " AND ";
+            clause += joiner + sqlParts[i].Sql;
+        }
+        return ("(" + clause + ")", paramList);
     }
 
     // ══════════════════════════════════════════════════════════

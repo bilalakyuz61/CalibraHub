@@ -90,7 +90,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
 
     private sealed class LegacyGroup
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public string ScreenCode { get; set; } = "";
         public string GroupKey { get; set; } = "";
         public string GroupLabel { get; set; } = "";
@@ -99,9 +99,9 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
 
     private sealed class LegacyField
     {
-        public Guid Id { get; set; }
+        public int Id { get; set; }
         public string ScreenCode { get; set; } = "";
-        public Guid? GroupId { get; set; }
+        public int? GroupId { get; set; }
         public string FieldKey { get; set; } = "";
         public string FieldLabel { get; set; } = "";
         public string DataType { get; set; } = "STRING";
@@ -110,7 +110,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
 
     private sealed class LegacyOption
     {
-        public Guid FieldDefinitionId { get; set; }
+        public int FieldDefinitionId { get; set; }
         public string OptionLabel { get; set; } = "";
         public int SortOrder { get; set; }
     }
@@ -119,7 +119,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
     {
         public string ScreenCode { get; set; } = "";
         public Guid EntityId { get; set; }
-        public Guid? FieldDefinitionId { get; set; }
+        public int? FieldDefinitionId { get; set; }
         public string FieldKey { get; set; } = "";
         public string? TextValue { get; set; }
         public decimal? NumericValue { get; set; }
@@ -164,7 +164,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         }
 
         // ── 3. Gruplari yaz ──────────────────────────
-        var legacyGroupIdToNewId = new Dictionary<Guid, int>();
+        var legacyGroupIdToNewId = new Dictionary<int, int>();
         foreach (var lg in legacyGroups)
         {
             var formCode = MapFormCode(lg.ScreenCode);
@@ -214,8 +214,8 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         }
 
         // ── 4. Fieldlari yaz ─────────────────────────
-        var legacyFieldIdToNewId = new Dictionary<Guid, int>();
-        var legacyFieldIdToFormCode = new Dictionary<Guid, string>();
+        var legacyFieldIdToNewId = new Dictionary<int, int>();
+        var legacyFieldIdToFormCode = new Dictionary<int, string>();
         foreach (var lf in legacyFields)
         {
             var formCode = MapFormCode(lf.ScreenCode);
@@ -475,15 +475,15 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         var list = new List<LegacyGroup>();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [id], [screen_code], [group_key], [group_label], [display_order]
+            SELECT [id], [ScreenCode], [GroupKey], [GroupLabel], [DisplayOrder]
             FROM [{_schema}].[FieldGroup]
-            WHERE [is_active] = 1;";
+            WHERE [IsActive] = 1;";
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
             list.Add(new LegacyGroup
             {
-                Id = r.GetGuid(0),
+                Id = r.GetInt32(0),
                 ScreenCode = r.IsDBNull(1) ? "" : r.GetString(1),
                 GroupKey = r.IsDBNull(2) ? "" : r.GetString(2),
                 GroupLabel = r.IsDBNull(3) ? "" : r.GetString(3),
@@ -498,17 +498,17 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         var list = new List<LegacyField>();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [id], [screen_code], [group_id], [field_key], [field_label], [data_type], [display_order]
+            SELECT [id], [ScreenCode], [GroupId], [FieldKey], [FieldLabel], [DataType], [DisplayOrder]
             FROM [{_schema}].[Field]
-            WHERE [is_active] = 1;";
+            WHERE [IsActive] = 1;";
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
             list.Add(new LegacyField
             {
-                Id = r.GetGuid(0),
+                Id = r.GetInt32(0),
                 ScreenCode = r.IsDBNull(1) ? "" : r.GetString(1),
-                GroupId = r.IsDBNull(2) ? (Guid?)null : r.GetGuid(2),
+                GroupId = r.IsDBNull(2) ? (int?)null : r.GetInt32(2),
                 FieldKey = r.IsDBNull(3) ? "" : r.GetString(3),
                 FieldLabel = r.IsDBNull(4) ? "" : r.GetString(4),
                 DataType = r.IsDBNull(5) ? "STRING" : r.GetString(5),
@@ -518,9 +518,10 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         return list;
     }
 
-    private async Task<Dictionary<Guid, List<LegacyOption>>> LoadLegacyOptionsAsync(SqlConnection conn, CancellationToken ct)
+    private async Task<Dictionary<int, List<LegacyOption>>> LoadLegacyOptionsAsync(SqlConnection conn, CancellationToken ct)
     {
-        var dict = new Dictionary<Guid, List<LegacyOption>>();
+        var dict = new Dictionary<int, List<LegacyOption>>();
+        if (!await TableExistsAsync(conn, "material_card_field_options", ct)) return dict;
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
             SELECT [field_definition_id], [option_label], [sort_order]
@@ -530,7 +531,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
-            var fieldId = r.GetGuid(0);
+            var fieldId = r.GetInt32(0);
             if (!dict.TryGetValue(fieldId, out var list))
             {
                 list = new List<LegacyOption>();
@@ -563,7 +564,7 @@ public sealed class LegacyMigrationService : ILegacyMigrationService
             {
                 ScreenCode = r.IsDBNull(0) ? "" : r.GetString(0),
                 EntityId = r.GetGuid(1),
-                FieldDefinitionId = r.IsDBNull(2) ? (Guid?)null : r.GetGuid(2),
+                FieldDefinitionId = r.IsDBNull(2) ? (int?)null : r.GetInt32(2),
                 FieldKey = r.IsDBNull(3) ? "" : r.GetString(3),
                 TextValue = r.IsDBNull(4) ? null : r.GetString(4),
                 NumericValue = r.IsDBNull(5) ? (decimal?)null : r.GetDecimal(5),

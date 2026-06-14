@@ -19,4 +19,20 @@ public interface IPersonnelRepository
     /// İkisinden biri verilmelidir; ikisi de boşsa NULL döner. Sadece IsActive + IsProductionOperator true olanlar.
     /// </summary>
     Task<PersonnelDto?> GetByPinOrCardAsync(string? pinCode, string? cardNo, CancellationToken ct);
+
+    /// <summary>
+    /// 2026-05-22: Sicil + PIN ikilisi ile auth — daha güvenli (brute-force azaltır).
+    /// personnelCode set ise PIN kontrolü Code'a göre filtrelenir. Card yolu Code'suz da çalışır
+    /// (NFC kart fiziksel sahiplik kanıtı).
+    /// </summary>
+    Task<PersonnelDto?> GetByPinOrCardAsync(string? personnelCode, string? pinCode, string? cardNo, CancellationToken ct);
+
+    /// <summary>
+    /// ShopFloor lockout için: aktif veya pasif farketmez, üretim operatörü sicilinin Id + IsActive bilgisini döner.
+    /// Null = bu Code'da operatör yok.
+    /// </summary>
+    Task<(int Id, bool IsActive)?> GetIdAndActiveByCodeAsync(string code, CancellationToken ct);
+
+    /// <summary>ShopFloor lockout için: sicili pasife alır (IsActive = 0). Audit alanları dokunulmaz.</summary>
+    Task DeactivateAsync(int id, CancellationToken ct);
 }

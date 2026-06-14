@@ -47,21 +47,42 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
             ORDER BY w.[Priority] DESC, w.[OrderDate], wo.[Sequence]");
         // Yukarıdaki INNER JOIN cümlesini SELECT'e dahil etmek için BuildSelect manuel format.
         // Pratik: cümleyi yeniden yaz (direkt schema'yı substitute).
+        // 2026-05-20: ReadListAsync 26 sütun (index 0-25) okuyor; bu inline SQL eskiden 22
+        // sütun döndürüyordu → IndexOutOfRangeException ("Index was outside the bounds of
+        // the array"). BuildSelect ile aynı sütun listesini (mamul + plan miktar context'i
+        // dahil) verecek sekilde 4 ek sütun eklendi: WoNumber, ItemCode, ItemName,
+        // WoPlannedQty (saha tablet UX'i için iş emri başlığı + ürün adı + plan miktar).
         cmd.CommandText = $@"
             SELECT wo.[Id], wo.[WorkOrderId], wo.[Sequence], wo.[OperationId],
                    op.[Code] AS OpCode, op.[Name] AS OpName,
-                   wo.[MachineId], m.[MachineCode], m.[MachineName],
+                   wo.[MachineId], m.[Code], m.[Name],
                    wo.[PlannedDuration], wo.[DurationUnit], wo.[ActualDuration],
                    wo.[ProducedQuantity], wo.[ScrapQuantity], wo.[Status],
                    wo.[StartedByPersonnelId],   sp.[FullName] AS StartedByName,   wo.[StartedAt],
                    wo.[CompletedByPersonnelId], cp.[FullName] AS CompletedByName, wo.[CompletedAt],
-                   wo.[Notes]
+                   wo.[Notes],
+                   w.[OrderNumber] AS WoNumber,
+                   i.[Code]        AS ItemCode,
+                   i.[Name]        AS ItemName,
+                   w.[PlannedQuantity] AS WoPlannedQty,
+                   -- 2026-05-22 Upstream cap (BuildSelect ile aynı mantık).
+                   CASE WHEN EXISTS (
+                           SELECT 1 FROM {_table} prev
+                           WHERE prev.[WorkOrderId] = wo.[WorkOrderId]
+                             AND prev.[Sequence]    < wo.[Sequence])
+                        THEN (SELECT ISNULL(SUM(prev.[ProducedQuantity] - ISNULL(prev.[ScrapQuantity], 0)), 0)
+                              FROM {_table} prev
+                              WHERE prev.[WorkOrderId] = wo.[WorkOrderId]
+                                AND prev.[Sequence]    < wo.[Sequence])
+                        ELSE w.[PlannedQuantity]
+                   END AS UpstreamCap
             FROM {_table} wo
             INNER JOIN [{_schema}].[WorkOrder] w  ON w.[Id]  = wo.[WorkOrderId]
             LEFT  JOIN [{_schema}].[Operation] op ON op.[Id] = wo.[OperationId]
             LEFT  JOIN [{_schema}].[Machine]   m  ON m.[Id]  = wo.[MachineId]
             LEFT  JOIN [{_schema}].[Personnel] sp ON sp.[Id] = wo.[StartedByPersonnelId]
             LEFT  JOIN [{_schema}].[Personnel] cp ON cp.[Id] = wo.[CompletedByPersonnelId]
+            LEFT  JOIN [{_schema}].[Items]     i  ON i.[Id]  = w.[ItemId]
             WHERE wo.[MachineId] = @MachineId
               AND wo.[Status] IN (0, 1)
               AND w.[Status] IN (1, 2)
@@ -234,7 +255,7 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
     private string BuildSelect(string filter) => $@"
         SELECT wo.[Id], wo.[WorkOrderId], wo.[Sequence], wo.[OperationId],
                op.[Code] AS OpCode, op.[Name] AS OpName,
-               wo.[MachineId], m.[MachineCode], m.[MachineName],
+               wo.[MachineId], m.[Code], m.[Name],
                wo.[PlannedDuration], wo.[DurationUnit], wo.[ActualDuration],
                wo.[ProducedQuantity], wo.[ScrapQuantity], wo.[Status],
                wo.[StartedByPersonnelId],   sp.[FullName] AS StartedByName,   wo.[StartedAt],
@@ -243,7 +264,20 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                -- Faz 3 ShopFloor UX: mamul + planlanan miktar bağlamı
                w.[OrderNumber] AS WoNumber,
                i.[Code] AS ItemCode, i.[Name] AS ItemName,
-               w.[PlannedQuantity] AS WoPlannedQty
+               w.[PlannedQuantity] AS WoPlannedQty,
+               -- 2026-05-22: Upstream cap — bu op'tan önceki tüm op'ların net üretimi
+               -- (Produced - Scrap toplamı). İlk op'ta upstream yok → WO planlanan miktar.
+               -- Downstream op'lar bu değeri aşamaz (StartAsync + Partial/Complete validation).
+               CASE WHEN EXISTS (
+                       SELECT 1 FROM {_table} prev
+                       WHERE prev.[WorkOrderId] = wo.[WorkOrderId]
+                         AND prev.[Sequence]    < wo.[Sequence])
+                    THEN (SELECT ISNULL(SUM(prev.[ProducedQuantity] - ISNULL(prev.[ScrapQuantity], 0)), 0)
+                          FROM {_table} prev
+                          WHERE prev.[WorkOrderId] = wo.[WorkOrderId]
+                            AND prev.[Sequence]    < wo.[Sequence])
+                    ELSE w.[PlannedQuantity]
+               END AS UpstreamCap
         FROM {_table} wo
         LEFT JOIN [{_schema}].[Operation] op ON op.[Id] = wo.[OperationId]
         LEFT JOIN [{_schema}].[Machine]   m  ON m.[Id]  = wo.[MachineId]
@@ -267,8 +301,8 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 OperationCode: r.IsDBNull(4) ? null : r.GetString(4),
                 OperationName: r.IsDBNull(5) ? null : r.GetString(5),
                 MachineId: r.IsDBNull(6) ? null : r.GetInt32(6),
-                MachineCode: r.IsDBNull(7) ? null : r.GetString(7),
-                MachineName: r.IsDBNull(8) ? null : r.GetString(8),
+                Code: r.IsDBNull(7) ? null : r.GetString(7),
+                Name: r.IsDBNull(8) ? null : r.GetString(8),
                 PlannedDuration: r.IsDBNull(9) ? null : r.GetDecimal(9),
                 DurationUnit: (DurationUnit)r.GetByte(10),
                 ActualDuration: r.IsDBNull(11) ? null : r.GetDecimal(11),
@@ -285,7 +319,8 @@ public sealed class SqlWorkOrderOperationRepository : IWorkOrderOperationReposit
                 WorkOrderNumber: r.IsDBNull(22) ? null : r.GetString(22),
                 ItemCode: r.IsDBNull(23) ? null : r.GetString(23),
                 ItemName: r.IsDBNull(24) ? null : r.GetString(24),
-                WorkOrderPlannedQuantity: r.IsDBNull(25) ? 0m : r.GetDecimal(25)));
+                WorkOrderPlannedQuantity: r.IsDBNull(25) ? 0m : r.GetDecimal(25),
+                UpstreamCap: r.IsDBNull(26) ? 0m : r.GetDecimal(26)));
         }
         return list;
     }

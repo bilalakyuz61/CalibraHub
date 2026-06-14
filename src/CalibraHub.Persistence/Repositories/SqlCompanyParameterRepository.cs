@@ -29,7 +29,7 @@ public sealed class SqlCompanyParameterRepository : ICompanyParameterRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[CompanyId],[FormCode],[ParamKey],[ParamValue],[DataType],[UpdatedAt],[UpdatedBy]
+            SELECT [Id],[CompanyId],[FormCode],[ParamKey],[ParamValue],[DataType],[Updated],[UpdatedById]
             FROM {_table}
             WHERE [CompanyId] = @CompanyId
             ORDER BY [FormCode], [ParamKey];";
@@ -43,7 +43,7 @@ public sealed class SqlCompanyParameterRepository : ICompanyParameterRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT [Id],[CompanyId],[FormCode],[ParamKey],[ParamValue],[DataType],[UpdatedAt],[UpdatedBy]
+            SELECT [Id],[CompanyId],[FormCode],[ParamKey],[ParamValue],[DataType],[Updated],[UpdatedById]
             FROM {_table}
             WHERE [CompanyId] = @CompanyId AND [FormCode] = @FormCode
             ORDER BY [ParamKey];";
@@ -58,7 +58,7 @@ public sealed class SqlCompanyParameterRepository : ICompanyParameterRepository
         await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = $@"
-            SELECT TOP 1 [Id],[CompanyId],[FormCode],[ParamKey],[ParamValue],[DataType],[UpdatedAt],[UpdatedBy]
+            SELECT TOP 1 [Id],[CompanyId],[FormCode],[ParamKey],[ParamValue],[DataType],[Updated],[UpdatedById]
             FROM {_table}
             WHERE [CompanyId] = @CompanyId AND [FormCode] = @FormCode AND [ParamKey] = @ParamKey;";
         cmd.Parameters.AddWithValue("@CompanyId", companyId);
@@ -82,10 +82,10 @@ public sealed class SqlCompanyParameterRepository : ICompanyParameterRepository
             WHEN MATCHED THEN UPDATE SET
                 [ParamValue] = @ParamValue,
                 [DataType]   = @DataType,
-                [UpdatedAt]  = SYSUTCDATETIME(),
-                [UpdatedBy]  = @UpdatedBy
+                [Updated]    = SYSUTCDATETIME(),
+                [UpdatedById] = @UpdatedBy
             WHEN NOT MATCHED THEN INSERT
-                ([CompanyId],[FormCode],[ParamKey],[ParamValue],[DataType],[UpdatedAt],[UpdatedBy])
+                ([CompanyId],[FormCode],[ParamKey],[ParamValue],[DataType],[Updated],[UpdatedById])
                 VALUES (@CompanyId,@FormCode,@ParamKey,@ParamValue,@DataType,SYSUTCDATETIME(),@UpdatedBy);
 
             SELECT [Id] FROM {_table}

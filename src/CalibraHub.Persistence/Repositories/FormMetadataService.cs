@@ -350,30 +350,63 @@ public sealed class FormMetadataService : IFormMetadataService
 
         // recordId NULL ise en son kaydi (ORDER BY base PK DESC TOP 1) cek
         var keyEsc = form.BaseRecordKey.Replace("]", "]]");
-        await using var cmd = conn.CreateCommand();
-        if (recordId is null)
-        {
-            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] ORDER BY [{keyEsc}] DESC;";
-        }
-        else
-        {
-            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] WHERE CAST([{keyEsc}] AS NVARCHAR(100)) = @Rid;";
-            cmd.Parameters.Add(new SqlParameter("@Rid", recordId));
-        }
 
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        if (!await reader.ReadAsync(ct)) return null;
-
-        var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < reader.FieldCount; i++)
+        // İki adımlı arama: form'un BaseRecordKey'i kullanici-dostu bir kolon olabilir
+        // (orn. SALES_ORDER_EDIT → "DocumentNumber" = "TKL202600000013"), ama widget
+        // engine ve UI entegrasyon trigger'i integer Id ile cagirir (orn. "13").
+        // İkisinin de calismasi icin once BaseRecordKey ile dene; hit yoksa ve view'da
+        // standart "Id" kolonu varsa fallback olarak Id ile dene.
+        var dict = await TryFetchRowAsync(conn, viewName, keyEsc, recordId, ct);
+        if (dict is null
+            && recordId is not null
+            && !string.Equals(form.BaseRecordKey, "Id", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(recordId, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _))
         {
-            var name = reader.GetName(i);
-            dict[name] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            // View'da "Id" kolonu var mi? (base.* projeksiyonu Document/DocumentLine vs.
+            // tablolarinin "Id" PK'sini her zaman ihrac eder)
+            dict = await TryFetchRowAsync(conn, viewName, "Id", recordId, ct);
         }
+        if (dict is null) return null;
 
         // RecordId'yi base record key kolonundan oku
         var resolvedId = dict.TryGetValue(form.BaseRecordKey, out var rid) ? rid?.ToString() ?? "" : (recordId ?? "");
 
         return new IntegrationSampleRecordDto(resolvedId, dict);
+    }
+
+    private async Task<Dictionary<string, object?>?> TryFetchRowAsync(
+        Microsoft.Data.SqlClient.SqlConnection conn,
+        string viewName,
+        string keyColumnEsc,
+        string? recordId,
+        CancellationToken ct)
+    {
+        await using var cmd = conn.CreateCommand();
+        if (recordId is null)
+        {
+            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] ORDER BY [{keyColumnEsc}] DESC;";
+        }
+        else
+        {
+            cmd.CommandText = $"SELECT TOP 1 * FROM [{_schema}].[{viewName}] WHERE CAST([{keyColumnEsc}] AS NVARCHAR(100)) = @Rid;";
+            cmd.Parameters.Add(new SqlParameter("@Rid", recordId));
+        }
+        try
+        {
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return null;
+            var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                var name = reader.GetName(i);
+                dict[name] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+            }
+            return dict;
+        }
+        catch (Microsoft.Data.SqlClient.SqlException)
+        {
+            // Kolon yoksa "Invalid column name" hatasi gelir — sessizce null don.
+            return null;
+        }
     }
 }

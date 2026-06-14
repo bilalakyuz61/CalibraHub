@@ -3,279 +3,179 @@
     var isNew = Model is null;
     ViewData["Title"] = isNew ? "Yeni Personel" : $"Personel: {Model!.FullName}";
     ViewData["FormCode"] = "PERSONNEL_EDIT";
-    ViewData["BodyClass"] = "page-personnel-edit";
+    ViewData["BodyClass"] = "page-personnel-edit workspace-frame-body";
 }
 
-@section Styles {
-<style>
-    .pe-root {
-        --pe-bg:      #f1f5f9;
-        --pe-surface: #ffffff;
-        --pe-border:  #e2e8f0;
-        --pe-text:    #0f172a;
-        --pe-muted:   #64748b;
-        --pe-accent:  #6366f1;
-        display: flex; align-items: flex-start; justify-content: center;
-        min-height: 100%; padding: 32px 16px;
-        background: var(--pe-bg);
-    }
-    body.app-theme-dark .pe-root {
-        --pe-bg:      #080c17;
-        --pe-surface: #0d1323;
-        --pe-border:  rgba(255,255,255,.09);
-        --pe-text:    #e2e8f0;
-        --pe-muted:   #94a3b8;
-    }
-    .pe-card {
-        width: 100%; max-width: 640px;
-        background: var(--pe-surface); border: 1px solid var(--pe-border);
-        border-radius: 14px; padding: 28px 28px 24px;
-        box-shadow: 0 4px 24px rgba(0,0,0,.08);
-    }
-    .pe-header {
-        display: flex; align-items: center; gap: 10px;
-        margin-bottom: 24px; padding-bottom: 16px;
-        border-bottom: 1px solid var(--pe-border);
-    }
-    .pe-header h1 { font-size: 17px; font-weight: 700; margin: 0; color: var(--pe-text); }
-    .pe-back {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 6px 12px; border-radius: 8px;
-        border: 1px solid var(--pe-border); background: none;
-        color: var(--pe-muted); font-size: 13px; cursor: pointer;
-        text-decoration: none; transition: background .12s;
-    }
-    .pe-back:hover { background: var(--pe-bg); color: var(--pe-text); }
-    .pe-spacer { flex: 1; }
-
-    .pe-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
-    .pe-label { font-size: 12px; font-weight: 600; color: var(--pe-muted); }
-    .pe-input, .pe-select, .pe-textarea {
-        padding: 9px 12px; border-radius: 8px;
-        border: 1px solid var(--pe-border);
-        background: var(--pe-bg); color: var(--pe-text);
-        font-size: 14px; outline: none;
-        font-family: inherit;
-        transition: border-color .15s, box-shadow .15s;
-    }
-    .pe-textarea { resize: vertical; min-height: 70px; }
-    .pe-input:focus, .pe-select:focus, .pe-textarea:focus {
-        border-color: var(--pe-accent);
-        box-shadow: 0 0 0 3px rgba(99,102,241,.12);
-    }
-    .pe-input.is-invalid, .pe-select.is-invalid {
-        border-color: #ef4444 !important;
-        box-shadow: 0 0 0 3px rgba(239,68,68,.12) !important;
-    }
-    body.app-theme-dark .pe-select { color-scheme: dark; }
-
-    .pe-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-    .pe-switch-row { display: flex; align-items: center; gap: 10px; }
-    .pe-switch { position: relative; width: 42px; height: 24px; display: inline-block; flex-shrink: 0; }
-    .pe-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-    .pe-switch-track {
-        position: absolute; inset: 0; border-radius: 24px; cursor: pointer;
-        background: #e2e8f0; transition: background .2s;
-    }
-    .pe-switch input:checked + .pe-switch-track { background: #10b981; }
-    body.app-theme-dark .pe-switch-track { background: rgba(255,255,255,.12); }
-    body.app-theme-dark .pe-switch input:checked + .pe-switch-track { background: #059669; }
-    .pe-switch-track::before {
-        content: ''; position: absolute; height: 18px; width: 18px;
-        left: 3px; top: 3px; border-radius: 50%;
-        background: #fff; transition: transform .2s;
-        box-shadow: 0 1px 3px rgba(0,0,0,.25);
-    }
-    .pe-switch input:checked + .pe-switch-track::before { transform: translateX(18px); }
-    .pe-switch-label { font-size: 13px; font-weight: 600; color: var(--pe-muted); }
-
-    .pe-actions {
-        display: flex; gap: 8px; margin-top: 24px;
-        padding-top: 16px; border-top: 1px solid var(--pe-border);
-    }
-    .pe-btn {
-        padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
-        border: 1px solid transparent; cursor: pointer; transition: all .12s;
-        text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
-    }
-    .pe-btn--primary { background: var(--pe-accent); color: #fff; border-color: #4f46e5; }
-    .pe-btn--primary:hover { filter: brightness(1.1); }
-    .pe-btn--primary:disabled { opacity: .55; cursor: not-allowed; }
-    .pe-btn--ghost { background: none; border-color: var(--pe-border); color: var(--pe-text); }
-    .pe-btn--ghost:hover { background: var(--pe-bg); }
-    .pe-btn--danger { background: none; border-color: #fecaca; color: #dc2626; margin-left: auto; }
-    body.app-theme-dark .pe-btn--danger { border-color: rgba(239,68,68,.35); color: #f87171; }
-    .pe-btn--danger:hover { background: rgba(239,68,68,.08); }
-    .pe-btn--danger:disabled { opacity: .4; cursor: not-allowed; }
-
-    .pe-err {
-        margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
-        background: rgba(239,68,68,.08); color: #dc2626; border: 1px solid rgba(239,68,68,.2);
-    }
-    body.app-theme-dark .pe-err { color: #f87171; }
-
-    /* Delete modal */
-    .pe-modal-backdrop {
-        position: fixed; inset: 0; z-index: 9999;
-        background: rgba(0,0,0,.48); backdrop-filter: blur(3px);
-        display: flex; align-items: center; justify-content: center;
-    }
-    .pe-modal {
-        background: var(--pe-surface); border: 1px solid var(--pe-border);
-        border-radius: 14px; padding: 24px; width: 360px; max-width: 90vw;
-        display: flex; flex-direction: column; gap: 14px;
-        box-shadow: 0 24px 64px rgba(0,0,0,.35);
-    }
-    .pe-modal-icon { display: flex; justify-content: center; color: #ef4444; }
-    .pe-modal-title { font-size: 16px; font-weight: 600; text-align: center; color: var(--pe-text); }
-    .pe-modal-msg { font-size: 13px; color: var(--pe-muted); text-align: center; line-height: 1.55; }
-    .pe-modal-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
-    .pe-modal-cancel {
-        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
-        border: 1px solid var(--pe-border); background: var(--pe-surface);
-        color: var(--pe-text); cursor: pointer; transition: background .12s;
-    }
-    .pe-modal-cancel:hover { background: var(--pe-bg); }
-    .pe-modal-del {
-        padding: 8px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
-        border: none; background: #ef4444; color: #fff; cursor: pointer; transition: filter .12s;
-    }
-    .pe-modal-del:hover:not(:disabled) { filter: brightness(1.1); }
-    .pe-modal-del:disabled { opacity: .5; cursor: not-allowed; }
-</style>
-}
+<partial name="_ProductionDefsTabs" model='"personnel"' />
 
 @{
     var _colId = !isNew ? Model!.Id.ToString() : $"new-{Guid.NewGuid():N}";
     var _colTitle = isNew ? "Yeni Personel" : $"Personel: {Model!.FullName}";
 }
+
+@* PJAX wrapper — production-defs-pjax.js bu div'i swap eder; üst tab bar dışarıda kalır. *@
+<div id="pdt-tab-content" data-pdt-key="personnel" data-pdt-body-class="page-personnel-edit">
+
 <form class="integrator-form" style="display:none" aria-hidden="true"
       data-collaboration-record-type="PERSONNEL_EDIT"
       data-collaboration-record-id="@_colId"
       data-collaboration-record-title="@_colTitle"></form>
 
-<div class="pe-root">
-  <div class="pe-card">
-    <div class="pe-header">
-      <a class="pe-back" href="/Production/Personnel">
+<div class="ux-edit-shell">
+  <header class="ux-edit-bar">
+    <div class="ux-edit-bar__left">
+      <a class="ux-edit-bar__back" href="/Production/Personnel">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         Listeye Dön
       </a>
-      <span class="pe-spacer"></span>
-      <h1>@(isNew ? "Yeni Personel" : "Personeli Düzenle")</h1>
-    </div>
-
-    <input type="hidden" id="pe-id" value="@(Model?.Id.ToString() ?? "")" />
-
-    <div class="pe-field">
-      <label class="pe-label" for="pe-name">Ad Soyad *</label>
-      <input id="pe-name" class="pe-input" maxlength="150"
-             value="@(Model?.FullName ?? "")" placeholder="Örn: Ahmet Yılmaz" />
-    </div>
-
-    <div class="pe-row2">
-      <div class="pe-field">
-        <label class="pe-label" for="pe-title">Ünvan</label>
-        <input id="pe-title" class="pe-input" maxlength="100"
-               value="@(Model?.Title ?? "")" placeholder="Örn: Operatör" />
-      </div>
-      <div class="pe-field">
-        <label class="pe-label" for="pe-dept">Departman</label>
-        <select id="pe-dept" class="pe-input" data-current="@(Model?.Department ?? "")">
-          <option value="">— Departman seçiniz —</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="pe-row2">
-      <div class="pe-field">
-        <label class="pe-label" for="pe-phone">Telefon</label>
-        <input id="pe-phone" class="pe-input" maxlength="40"
-               value="@(Model?.Phone ?? "")" placeholder="Örn: 0532 ..." />
-      </div>
-      <div class="pe-field">
-        <label class="pe-label" for="pe-email">E-posta</label>
-        <input id="pe-email" class="pe-input" type="email" maxlength="150"
-               value="@(Model?.Email ?? "")" placeholder="ornek@firma.com" />
-      </div>
-    </div>
-
-    <div class="pe-row2">
-      <div class="pe-field">
-        <label class="pe-label" for="pe-pin">PIN Kodu</label>
-        <input id="pe-pin" class="pe-input" maxlength="20"
-               value="@(Model?.PinCode ?? "")" placeholder="Vardiya/terminal girişi" />
-      </div>
-      <div class="pe-field">
-        <label class="pe-label" for="pe-card">Kart No</label>
-        <input id="pe-card" class="pe-input" maxlength="50"
-               value="@(Model?.CardNo ?? "")" placeholder="RFID / barkod" />
-      </div>
-    </div>
-
-    <div class="pe-field">
-      <label class="pe-label" for="pe-notes">Notlar</label>
-      <textarea id="pe-notes" class="pe-textarea" maxlength="2000"
-                placeholder="Vardiya bilgileri, ekstra notlar...">@(Model?.Notes ?? "")</textarea>
-    </div>
-
-    <div class="pe-row2">
-      <div class="pe-field">
-        <label class="pe-label">Üretim Operatörü</label>
-        <div class="pe-switch-row">
-          <label class="pe-switch">
-            <input type="checkbox" id="pe-operator" @(Model?.IsProductionOperator == true ? "checked" : "") />
-            <span class="pe-switch-track"></span>
-          </label>
-          <span class="pe-switch-label" id="pe-operator-label">@(Model?.IsProductionOperator == true ? "Evet" : "Hayır")</span>
-        </div>
-      </div>
-      <div class="pe-field">
-        <label class="pe-label">Durum</label>
-        <div class="pe-switch-row">
-          <label class="pe-switch">
-            <input type="checkbox" id="pe-active" @(Model is null || Model.IsActive ? "checked" : "") />
-            <span class="pe-switch-track"></span>
-          </label>
-          <span class="pe-switch-label" id="pe-active-label">@(Model is null || Model.IsActive ? "Aktif" : "Pasif")</span>
-        </div>
-      </div>
-    </div>
-
-    <div id="pe-err" style="display:none;" class="pe-err"></div>
-
-    <!-- Dinamik widget alanları (Admin → Widget Tanımları → PERSONNEL_EDIT) -->
-    <div id="peDynamicWidgetsCard" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--pe-border);">
-      <div id="peDynamicWidgets"
-           data-form-code="PERSONNEL_EDIT"
-           data-record-id="@(Model?.Id.ToString() ?? "")">
-      </div>
-    </div>
-
-    <div class="pe-actions">
-      <button class="pe-btn pe-btn--primary" id="pe-save">Kaydet</button>
-      <a class="pe-btn pe-btn--ghost" href="/Production/Personnel">İptal</a>
+      <h1 class="ux-edit-bar__title">@(isNew ? "Yeni Personel" : (Model!.FullName ?? "Personeli Düzenle"))</h1>
       @if (!isNew)
       {
-        <button class="pe-btn pe-btn--danger" id="pe-delete">Sil</button>
+        var pillCls = Model!.IsActive ? "ux-edit-bar__status" : "ux-edit-bar__status ux-edit-bar__status--off";
+        <span class="@pillCls">@(Model.IsActive ? "Aktif" : "Pasif")</span>
       }
     </div>
+    <div class="ux-edit-bar__right">
+      <a class="ux-edit-bar__btn" id="pe-cancel" href="/Production/Personnel">İptal</a>
+      <button class="ux-edit-bar__btn ux-edit-bar__btn--primary" id="pe-save">Kaydet</button>
+      @if (!isNew)
+      {
+        <button class="ux-edit-bar__btn ux-edit-bar__btn--danger" id="pe-delete">Sil</button>
+      }
+    </div>
+  </header>
+
+  <div class="ux-edit-body">
+    <aside class="ux-edit-nav" id="peNav">
+      <button type="button" class="ux-edit-nav__tab is-active" data-tab="general">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg>
+        <span>Genel Bilgiler</span>
+      </button>
+      <button type="button" class="ux-edit-nav__tab" data-tab="widgets" id="peNavWidgets" style="display:none;">
+        <svg class="ux-edit-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10-10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zm0 10a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        <span>Ek Alanlar</span>
+      </button>
+    </aside>
+
+    <section class="ux-edit-content">
+      <div class="ux-edit-pane is-active" data-tab="general">
+        <h2>Genel Bilgiler</h2>
+        <div class="ux-edit-hint">Personel kimlik, iletişim ve sistem bilgileri.</div>
+
+        <input type="hidden" id="pe-id" value="@(Model?.Id.ToString() ?? "")" />
+
+        <div class="ux-field ux-field--wide">
+          <label for="pe-name">Ad Soyad *</label>
+          <input id="pe-name" type="text" maxlength="150"
+                 value="@(Model?.FullName ?? "")" placeholder="Örn: Ahmet Yılmaz" />
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="pe-title">Ünvan</label>
+            <input id="pe-title" type="text" maxlength="100"
+                   value="@(Model?.Title ?? "")" placeholder="Örn: Operatör" />
+          </div>
+          <div class="ux-field">
+            <label for="pe-dept">Departman</label>
+            <select id="pe-dept" data-current="@(Model?.Department ?? "")">
+              <option value="">— Departman seçiniz —</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="pe-phone">Telefon</label>
+            <input id="pe-phone" type="text" maxlength="40"
+                   value="@(Model?.Phone ?? "")" placeholder="Örn: 0532 ..." />
+          </div>
+          <div class="ux-field">
+            <label for="pe-email">E-posta</label>
+            <input id="pe-email" type="email" maxlength="150"
+                   value="@(Model?.Email ?? "")" placeholder="ornek@firma.com" />
+          </div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label for="pe-pin">PIN Kodu</label>
+            <input id="pe-pin" type="text" maxlength="20"
+                   value="@(Model?.PinCode ?? "")" placeholder="Vardiya/terminal girişi" />
+          </div>
+          <div class="ux-field">
+            <label for="pe-card">Kart No</label>
+            <input id="pe-card" type="text" maxlength="50"
+                   value="@(Model?.CardNo ?? "")" placeholder="RFID / barkod" />
+          </div>
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="pe-user">Sistem Kullanıcısı</label>
+          <select id="pe-user" data-current="@(Model?.UserId?.ToString() ?? "")">
+            <option value="">— Sistem girişi yok —</option>
+          </select>
+          <span class="ux-hint">Bu personelin web/masaüstü giriş hesabı varsa eşleştirin. Boş bırakılırsa yalnızca terminalde PIN/kart ile çalışır.</span>
+        </div>
+
+        <div class="ux-field ux-field--wide">
+          <label for="pe-notes">Notlar</label>
+          <textarea id="pe-notes" maxlength="2000"
+                    placeholder="Vardiya bilgileri, ekstra notlar...">@(Model?.Notes ?? "")</textarea>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
+            <label>Üretim Operatörü</label>
+            <div class="ux-switch-row">
+              <label class="ux-switch">
+                <input type="checkbox" id="pe-operator" @(Model?.IsProductionOperator == true ? "checked" : "") />
+                <span class="ux-switch-track"></span>
+              </label>
+              <span class="ux-switch-label" id="pe-operator-label">@(Model?.IsProductionOperator == true ? "Evet" : "Hayır")</span>
+            </div>
+          </div>
+          <div class="ux-field">
+            <label>Durum</label>
+            <div class="ux-switch-row">
+              <label class="ux-switch">
+                <input type="checkbox" id="pe-active" @(Model is null || Model.IsActive ? "checked" : "") />
+                <span class="ux-switch-track"></span>
+              </label>
+              <span class="ux-switch-label" id="pe-active-label">@(Model is null || Model.IsActive ? "Aktif" : "Pasif")</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="pe-err" style="display:none;" class="ux-err"></div>
+      </div>
+
+      <div class="ux-edit-pane" data-tab="widgets">
+        <h2>Ek Alanlar</h2>
+        <div class="ux-edit-hint">Admin → Widget Tanımları → PERSONNEL_EDIT'te tanımlanan ek alanlar.</div>
+        <div class="ux-dyn-widgets">
+          <div id="peDynamicWidgets"
+               data-form-code="PERSONNEL_EDIT"
+               data-record-id="@(Model?.Id.ToString() ?? "")">
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
 </div>
 
 @if (!isNew)
 {
-  <div id="pe-modal" class="pe-modal-backdrop" style="display:none;" onclick="peCloseModal()">
-    <div class="pe-modal" onclick="event.stopPropagation()">
-      <div class="pe-modal-icon">
+  <div id="pe-modal" class="ux-modal-backdrop" style="display:none;" onclick="peCloseModal()">
+    <div class="ux-modal" onclick="event.stopPropagation()">
+      <div class="ux-modal-icon">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       </div>
-      <div class="pe-modal-title">Personeli Sil</div>
-      <div class="pe-modal-msg" id="pe-modal-msg"></div>
-      <div class="pe-modal-actions">
-        <button class="pe-modal-cancel" onclick="peCloseModal()">Vazgeç</button>
-        <button class="pe-modal-del" id="pe-modal-del">Sil</button>
+      <div class="ux-modal-title">Personeli Sil</div>
+      <div class="ux-modal-msg" id="pe-modal-msg"></div>
+      <div class="ux-modal-actions">
+        <button class="ux-modal-cancel" onclick="peCloseModal()">Vazgeç</button>
+        <button class="ux-modal-del" id="pe-modal-del">Sil</button>
       </div>
     </div>
   </div>
@@ -283,7 +183,6 @@
 
 @Html.AntiForgeryToken()
 
-@section Scripts {
 <script>
 (function () {
     var idVal = document.getElementById('pe-id')?.value || '';
@@ -295,7 +194,7 @@
     function setErr(msg) {
         var el = document.getElementById('pe-err');
         if (!el) return;
-        if (msg) { el.textContent = msg; el.style.display = ''; }
+        if (msg) { el.textContent = msg; el.style.display = ''; activateTab('general'); }
         else el.style.display = 'none';
     }
     function shake(id) {
@@ -306,7 +205,23 @@
         setTimeout(function () { el.classList.remove('is-invalid'); }, 1200);
     }
 
-    // ── Toggle label sync ─────────────────────────────────────
+    // ── Tab switching ──
+    function activateTab(key) {
+        document.querySelectorAll('#peNav .ux-edit-nav__tab').forEach(function (b) {
+            b.classList.toggle('is-active', b.dataset.tab === key);
+        });
+        document.querySelectorAll('.ux-edit-pane').forEach(function (p) {
+            p.classList.toggle('is-active', p.dataset.tab === key);
+        });
+    }
+    document.querySelectorAll('#peNav .ux-edit-nav__tab').forEach(function (b) {
+        b.addEventListener('click', function () {
+            if (b.disabled) return;
+            activateTab(b.dataset.tab);
+        });
+    });
+
+    // ── Toggle label sync ──
     function bindLabel(inputId, labelId, onText, offText) {
         var inp = document.getElementById(inputId);
         var lab = document.getElementById(labelId);
@@ -318,10 +233,7 @@
     bindLabel('pe-active',   'pe-active-label',   'Aktif', 'Pasif');
     bindLabel('pe-operator', 'pe-operator-label', 'Evet',  'Hayır');
 
-    // ── Departman dropdown — Admin/GetDepartmentsLookup ──────────
-    // Sadece AKTIF + sirkete tanimli departmanlar listelenir. Mevcut personel
-    // free-text degeri (data-current) listede yoksa secim bos kalir
-    // (kullanici listeden secmek zorunda — pasif/silinmis kayit korunmaz).
+    // ── Departman dropdown ──
     (function loadDepartments() {
         var sel = document.getElementById('pe-dept');
         if (!sel) return;
@@ -336,7 +248,7 @@
                 });
                 sel.innerHTML = opts.join('');
             })
-            .catch(function () { /* sessiz: select bos kalir, save sirasinda sorun yok */ });
+            .catch(function () { /* sessiz */ });
 
         function escapeHtml(s) {
             return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -346,12 +258,34 @@
         }
     })();
 
-    // ── Save ──────────────────────────────────────────────────
+    // ── Sistem Kullanıcısı dropdown ──
+    (function loadUsers() {
+        var sel = document.getElementById('pe-user');
+        if (!sel) return;
+        var current = sel.getAttribute('data-current') || '';
+        fetch('/CompanyUser/UsersLookup', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                var opts = ['<option value="">— Sistem girişi yok —</option>'];
+                (list || []).forEach(function (u) {
+                    var s = (current && String(u.id) === String(current)) ? ' selected' : '';
+                    var label = u.name + (u.email ? ' (' + u.email + ')' : '');
+                    opts.push('<option value="' + u.id + '"' + s + '>' + escUser(label) + '</option>');
+                });
+                sel.innerHTML = opts.join('');
+            })
+            .catch(function () { /* sessiz */ });
+        function escUser(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+    })();
+
+    // ── Save ──
     var saveBtn = document.getElementById('pe-save');
     if (saveBtn) {
         saveBtn.addEventListener('click', function () {
             var name = (document.getElementById('pe-name').value || '').trim();
-            if (!name) { shake('pe-name'); return; }
+            if (!name) { activateTab('general'); shake('pe-name'); return; }
 
             var payload = {
                 id:                   idVal ? parseInt(idVal) : 0,
@@ -363,7 +297,7 @@
                 cardNo:               document.getElementById('pe-card').value.trim() || null,
                 isProductionOperator: document.getElementById('pe-operator').checked,
                 isActive:             document.getElementById('pe-active').checked,
-                userId:               null,
+                userId:               (function () { var v = document.getElementById('pe-user').value; return v ? parseInt(v, 10) : null; })(),
                 phone:                document.getElementById('pe-phone').value.trim() || null,
                 email:                document.getElementById('pe-email').value.trim() || null,
                 notes:                document.getElementById('pe-notes').value.trim() || null
@@ -388,7 +322,7 @@
         });
     }
 
-    // ── Delete modal ──────────────────────────────────────────
+    // ── Delete modal ──
     var deleteBtn = document.getElementById('pe-delete');
     if (deleteBtn) {
         deleteBtn.addEventListener('click', function () {
@@ -433,5 +367,59 @@ function peCloseModal() {
     var btn = document.getElementById('pe-modal-del');
     if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
 }
+
+// ── DynamicWidgetRenderer mount (stacked layout) ──
+(function () {
+    var el = document.getElementById('peDynamicWidgets');
+    if (!el) return;
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDynamicWidgetRenderer) return;
+        try {
+            window._peDynRenderer = window.CalibraHub.mountDynamicWidgetRenderer(el, {
+                formCode:    el.getAttribute('data-form-code') || 'PERSONNEL_EDIT',
+                recordId:    el.getAttribute('data-record-id') || '',
+                classPrefix: 'pe',
+                layout:      'stacked',
+                onMounted:   function (handle) {
+                    var attempts = 0;
+                    var iv = setInterval(function () {
+                        attempts++;
+                        try {
+                            if (handle && typeof handle.getHasWidgets === 'function' && handle.getHasWidgets()) {
+                                var nav = document.getElementById('peNavWidgets');
+                                if (nav) nav.style.display = '';
+                                clearInterval(iv);
+                                return;
+                            }
+                        } catch (_) {}
+                        if (attempts > 25) clearInterval(iv);
+                    }, 200);
+                }
+            });
+        } catch (e) { console.warn('[PE] mountDynamicWidgetRenderer hatasi:', e); }
+    }
+    if (window.CalibraHub && window.CalibraHub.mountDynamicWidgetRenderer) {
+        doMount();
+    } else {
+        var cssUrl = '/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)';
+        var jsUrl  = '/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)';
+        if (!document.querySelector('link[data-pe-bundle]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = cssUrl;
+            link.setAttribute('data-pe-bundle', '1');
+            document.head.appendChild(link);
+        }
+        if (!document.querySelector('script[data-pe-bundle]')) {
+            var script = document.createElement('script');
+            script.src = jsUrl;
+            script.setAttribute('data-pe-bundle', '1');
+            script.onload  = function () { setTimeout(doMount, 0); };
+            script.onerror = function () { console.error('[PE] Bundle yuklenemedi'); };
+            document.head.appendChild(script);
+        }
+    }
+})();
 </script>
-}
+
+</div>
+@* /pdt-tab-content *@

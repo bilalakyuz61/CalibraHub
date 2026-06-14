@@ -20,7 +20,8 @@ public static class UserAuthorizationCatalog
                 UserPermission.ViewDashboards,
                 UserPermission.DesignDashboards,
                 UserPermission.ManageWorkOrders,
-                UserPermission.ReleaseWorkOrders
+                UserPermission.ReleaseWorkOrders,
+                UserPermission.ManageArgeProjects
             },
             [UserRole.Approver] = new[]
             {
@@ -58,14 +59,32 @@ public static class UserAuthorizationCatalog
     public static bool IsPermissionAllowed(UserRole role, UserPermission permission) =>
         GetAllowedPermissions(role).Contains(permission);
 
-    // ClaimTypes.Role hem enum adi ("SystemAdmin") hem de Turkce label
-    // ("Sistem Yoneticisi") seklinde gelebilir. Iki formati da kabul eder.
+    // Eski kod Türkçe karakter içeren label kullanıyordu; cookie'ler hâlâ eski değeri
+    // taşıyabilir. LegacyRoleLabels her iki versiyonu da (ö/o, ı/i vb.) kabul eder.
+    private static readonly IReadOnlyDictionary<string, UserRole> LegacyRoleLabels =
+        new Dictionary<string, UserRole>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Türkçe karakterli eski label'lar
+            ["Sistem Yöneticisi"]   = UserRole.SystemAdmin,
+            ["Departman Yöneticisi"] = UserRole.DepartmentManager,
+            ["Onaylayıcı"]          = UserRole.Approver,
+            ["Operatör"]            = UserRole.Operator,
+            ["Denetçi"]             = UserRole.Auditor,
+            // SetupController UI label'ları ("SistemAdmin" / "Admin")
+            ["SistemAdmin"]         = UserRole.SystemAdmin,
+            ["Admin"]               = UserRole.DepartmentManager,
+        };
+
+    // ClaimTypes.Role enum adı ("SystemAdmin"), güncel label ("Sistem Yoneticisi")
+    // veya eski Türkçe label ("Sistem Yöneticisi") olabilir — hepsini kabul eder.
     public static bool TryParseRole(string? value, out UserRole role)
     {
         role = default;
         if (string.IsNullOrWhiteSpace(value)) return false;
 
         if (Enum.TryParse(value, ignoreCase: true, out role)) return true;
+
+        if (LegacyRoleLabels.TryGetValue(value, out role)) return true;
 
         foreach (var candidate in Roles)
         {
@@ -110,6 +129,7 @@ public static class UserAuthorizationCatalog
             UserPermission.ReleaseWorkOrders => "Is Emri Salma (Release)",
             UserPermission.ReportProduction => "Uretim Hareketi Bildirme",
             UserPermission.OperateMachine => "Makine Operatorlugu (Shop-Floor)",
+            UserPermission.ManageArgeProjects => "AR-GE Proje Yonetimi",
             _ => permission.ToString()
         };
 }

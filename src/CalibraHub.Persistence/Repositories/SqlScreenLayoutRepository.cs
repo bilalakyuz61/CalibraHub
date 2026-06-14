@@ -17,7 +17,7 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
     {
         _connectionFactory = connectionFactory;
         var schema = string.IsNullOrWhiteSpace(options.Schema) ? "dbo" : options.Schema.Trim();
-        _tableName = $"[{schema}].[screen_layout_definitions]";
+        _tableName = $"[{schema}].[ScreenLayoutDefinition]";
     }
 
     public async Task<ScreenLayoutDefinition?> GetByScreenCodeAsync(string screenCode, CancellationToken cancellationToken)
@@ -25,9 +25,9 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT TOP (1) [id], [screen_code], [layout_json], [Created], [Updated]
+            SELECT TOP (1) [Id], [ScreenCode], [LayoutJson], [Created], [Updated]
             FROM {_tableName}
-            WHERE [screen_code] = @ScreenCode;
+            WHERE [ScreenCode] = @ScreenCode;
             """;
         command.Parameters.Add(new SqlParameter("@ScreenCode", screenCode));
 
@@ -42,7 +42,7 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
             Id = reader.GetGuid(0),
             ScreenCode = reader.GetString(1),
             LayoutJson = reader.GetString(2),
-            CreatedAt = reader.GetFieldValue<DateTime>(3)
+            Created = reader.GetFieldValue<DateTime>(3)
         };
     }
 
@@ -51,18 +51,18 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            IF EXISTS (SELECT 1 FROM {_tableName} WHERE [screen_code] = @ScreenCode)
+            IF EXISTS (SELECT 1 FROM {_tableName} WHERE [ScreenCode] = @ScreenCode)
             BEGIN
                 UPDATE {_tableName}
                 SET
-                    [layout_json] = @LayoutJson,
+                    [LayoutJson] = @LayoutJson,
                     [Updated] = @UpdatedAt
-                WHERE [screen_code] = @ScreenCode;
+                WHERE [ScreenCode] = @ScreenCode;
             END
             ELSE
             BEGIN
                 INSERT INTO {_tableName}
-                    ([id], [screen_code], [layout_json], [Created], [Updated])
+                    ([Id], [ScreenCode], [LayoutJson], [Created], [Updated])
                 VALUES
                     (@Id, @ScreenCode, @LayoutJson, @CreatedAt, @UpdatedAt);
             END;
@@ -71,7 +71,7 @@ public sealed class SqlScreenLayoutRepository : IScreenLayoutRepository
         command.Parameters.Add(new SqlParameter("@Id", definition.Id));
         command.Parameters.Add(new SqlParameter("@ScreenCode", definition.ScreenCode));
         command.Parameters.Add(new SqlParameter("@LayoutJson", definition.LayoutJson));
-        command.Parameters.Add(new SqlParameter("@CreatedAt", definition.CreatedAt));
+        command.Parameters.Add(new SqlParameter("@CreatedAt", definition.Created));
         command.Parameters.Add(new SqlParameter("@UpdatedAt", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);

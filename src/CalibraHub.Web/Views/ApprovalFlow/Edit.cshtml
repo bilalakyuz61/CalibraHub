@@ -1,0 +1,592 @@
+@using CalibraHub.Application.Contracts
+@using CalibraHub.Domain.Enums
+@using System.Text.Json
+@model CalibraHub.Application.Contracts.ApprovalFlowDto?
+@{
+    ViewData["Title"] = Model is null ? "Yeni Onay Akışı" : $"Akış Düzenle — {Model.Name}";
+    ViewData["BodyClass"] = "page-approval-flow-edit";
+    var isNew = Model is null;
+    var flowId = Model?.Id ?? 0;
+    var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var initData = JsonSerializer.Serialize(new {
+        id          = flowId,
+        name        = Model?.Name ?? "",
+        description = Model?.Description ?? "",
+        documentKind= Model?.DocumentKind ?? "Document",
+        priority    = Model?.Priority ?? 0,
+        isActive    = Model?.IsActive ?? true,
+        rules       = (Model?.Rules ?? Array.Empty<ApprovalFlowRuleDto>()).Select(r => new {
+            id        = r.Id,
+            ruleType  = r.RuleType.ToString(),
+            ruleValue = r.RuleValue,
+            isActive  = r.IsActive,
+        }),
+        steps       = (Model?.Steps ?? Array.Empty<ApprovalFlowStepDto>()).Select(s => new {
+            id            = s.Id,
+            stepOrder     = s.StepOrder,
+            stepName      = s.StepName,
+            approverType  = s.ApproverType.ToString(),
+            approverId    = s.ApproverId,
+            approverLabel = s.ApproverLabel,
+            isActive      = s.IsActive,
+        }),
+        variables   = (Model?.Variables ?? Array.Empty<ApprovalFlowVariableDto>()).Select(v => new {
+            id           = v.Id,
+            name         = v.Name,
+            typeCode     = v.TypeCode,
+            defaultValue = v.DefaultValue,
+            description  = v.Description,
+            sortOrder    = v.SortOrder,
+        }),
+    }, jsonOpts);
+    var usersJson = JsonSerializer.Serialize(ViewData["Users"] ?? Array.Empty<object>(), jsonOpts);
+    var departmentsJson = JsonSerializer.Serialize(ViewData["Departments"] ?? Array.Empty<object>(), jsonOpts);
+    var initialNodesEdgesJson = JsonSerializer.Serialize(
+        ViewData["InitialNodesEdges"] ?? new { nodes = Array.Empty<object>(), edges = Array.Empty<object>() },
+        jsonOpts);
+}
+
+@section Styles {
+<style>
+/* ── wrapper ───────────────────────────────────────────────── */
+.afe-wrapper {
+    --afe-bg:        #f8fafc;
+    --afe-surface:   #ffffff;
+    --afe-border:    #e2e8f0;
+    --afe-text:      #1e293b;
+    --afe-muted:     #64748b;
+    --afe-accent:    #6366f1;
+    --afe-accent-s:  rgba(99,102,241,.12);
+    --afe-danger:    #ef4444;
+    --afe-ok:        #10b981;
+    display: flex; flex-direction: column;
+    height: 100%; min-height: 0;
+    background: var(--afe-bg); color: var(--afe-text);
+}
+body.app-theme-dark .afe-wrapper {
+    --afe-bg:        #080c17;
+    --afe-surface:   #0d1323;
+    --afe-border:    rgba(255,255,255,.09);
+    --afe-text:      #e2e8f0;
+    --afe-muted:     #94a3b8;
+    --afe-accent:    #818cf8;
+    --afe-accent-s:  rgba(129,140,248,.15);
+}
+
+/* ── Sticky header bar ─────────────────────────────────────── */
+.afe-headerbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; flex-shrink: 0;
+    background: var(--afe-surface);
+    border-bottom: 1px solid var(--afe-border);
+    flex-wrap: wrap;
+}
+.afe-headerbar .afe-hb-input,
+.afe-headerbar .afe-hb-select {
+    padding: 7px 11px; border: 1px solid var(--afe-border);
+    border-radius: 7px; font-size: .85rem;
+    background: var(--afe-bg); color: var(--afe-text);
+    transition: border-color .15s, box-shadow .15s;
+    font-family: inherit;
+}
+.afe-headerbar .afe-hb-input:focus,
+.afe-headerbar .afe-hb-select:focus {
+    outline: none; border-color: var(--afe-accent);
+    box-shadow: 0 0 0 3px var(--afe-accent-s);
+}
+.afe-hb-name      { width: 240px; font-weight: 600; }
+.afe-hb-kind      { width: 220px; }
+.afe-hb-prio      { width: 72px; text-align: center; }
+
+/* ── Center confirm modal (silme onay standardı muadili) ────
+   .afe-wrapper'in DIŞINDA mount edildiği için kendi self-contained
+   teması var (--afe-* değişkenlerine dayanmaz). */
+.afe-confirm-backdrop {
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(2, 6, 23, .72); backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: none; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .15s;
+}
+.afe-confirm-backdrop.show { display: flex; opacity: 1; }
+.afe-confirm-card {
+    background: #ffffff; color: #1e293b;
+    border: 1px solid #e2e8f0; border-radius: 14px;
+    box-shadow: 0 32px 96px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.04);
+    width: min(440px, calc(100vw - 32px));
+    padding: 24px 24px 20px;
+    transform: scale(.96); transition: transform .15s;
+}
+body.app-theme-dark .afe-confirm-card {
+    background: #0f172a; color: #e2e8f0;
+    border-color: rgba(255,255,255,.1);
+    box-shadow: 0 32px 96px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.04);
+}
+.afe-confirm-backdrop.show .afe-confirm-card { transform: scale(1); }
+.afe-confirm-icon {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(245, 158, 11, .14); color: #f59e0b;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 14px;
+}
+.afe-confirm-title {
+    text-align: center; font-size: 1.08rem; font-weight: 600;
+    margin: 0 0 8px;
+}
+.afe-confirm-msg {
+    text-align: center; font-size: .88rem; color: #64748b;
+    line-height: 1.55; margin: 0 0 20px;
+}
+body.app-theme-dark .afe-confirm-msg { color: #94a3b8; }
+.afe-confirm-actions {
+    display: flex; gap: 10px; justify-content: flex-end;
+}
+.afe-confirm-actions button {
+    padding: 8px 20px; border-radius: 8px; font-size: .85rem;
+    font-weight: 600; cursor: pointer; transition: all .15s;
+    font-family: inherit;
+}
+.afe-confirm-btn-cancel {
+    background: transparent; color: #1e293b;
+    border: 1px solid #e2e8f0;
+}
+.afe-confirm-btn-cancel:hover { background: #f1f5f9; }
+body.app-theme-dark .afe-confirm-btn-cancel {
+    color: #e2e8f0; border-color: rgba(255,255,255,.12);
+}
+body.app-theme-dark .afe-confirm-btn-cancel:hover { background: rgba(255,255,255,.04); }
+.afe-confirm-btn-ok {
+    background: #6366f1; color: #fff; border: 1px solid #6366f1;
+}
+.afe-confirm-btn-ok:hover { background: #4f46e5; border-color: #4f46e5; }
+body.app-theme-dark .afe-confirm-btn-ok {
+    background: #818cf8; border-color: #818cf8;
+}
+body.app-theme-dark .afe-confirm-btn-ok:hover { background: #6366f1; border-color: #6366f1; }
+
+/* switch */
+.afe-switch { display: inline-flex; align-items: center; gap: 7px; font-size: .82rem; cursor: pointer; }
+.afe-switch input[type=checkbox] { display: none; }
+.afe-switch__track {
+    width: 36px; height: 20px; border-radius: 10px;
+    background: var(--afe-border); transition: background .2s;
+    position: relative; flex-shrink: 0;
+}
+.afe-switch input:checked + .afe-switch__track { background: var(--afe-accent); }
+.afe-switch__track::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 14px; height: 14px; border-radius: 50%; background: #fff;
+    transition: left .2s;
+}
+.afe-switch input:checked + .afe-switch__track::after { left: 19px; }
+
+/* ── Body (full height designer) ───────────────────────────── */
+.afe-body-designer {
+    flex: 1 1 auto; min-height: 0;
+    padding: 12px 16px;
+    display: flex; flex-direction: column;
+}
+#approval-flow-designer-root {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* ── toast ─── */
+.afe-toast {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    padding: 12px 24px; border-radius: 10px; font-size: .875rem; font-weight: 600;
+    z-index: 9999; box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    opacity: 0; transition: opacity .25s;
+}
+.afe-toast.show { opacity: 1; }
+.afe-toast--ok  { background: #d1fae5; color: #065f46; }
+.afe-toast--err { background: #fee2e2; color: #991b1b; }
+body.app-theme-dark .afe-toast--ok  { background: rgba(34,197,94,.2);  color: #4ade80; }
+body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f87171; }
+</style>
+}
+
+<div class="afe-wrapper">
+
+    <!-- Sticky header bar -->
+    <div class="afe-headerbar">
+        <a href="/ApprovalFlow" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            Listeye Dön
+        </a>
+        <input type="text" id="fName" class="afe-hb-input afe-hb-name" placeholder="Akış Adı *" />
+        <select id="fKind" class="afe-hb-select afe-hb-kind" title="Entity Tipi">
+            @* Dinamik seçenekler script tarafından doldurulur (ENTITY_TYPES). *@
+        </select>
+        <input type="number" id="fPriority" class="afe-hb-input afe-hb-prio" placeholder="Öncelik" value="0" min="0" max="999" title="Öncelik (düşük sayı önce çalışır)" />
+        <label class="afe-switch">
+            <input type="checkbox" id="fActive" checked />
+            <span class="afe-switch__track"></span>
+            <span>Aktif</span>
+        </label>
+        <div style="flex:1"></div>
+        <button id="btnSave" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            Kaydet
+        </button>
+    </div>
+
+    <!-- Body: tam ekran designer -->
+    <div class="afe-body-designer">
+        <div id="approval-flow-designer-root"></div>
+    </div>
+
+</div>
+
+<div class="afe-toast" id="toast"></div>
+
+<!-- Center confirm modal (entity tipi değişimi gibi onay-gerektiren akışlar için) -->
+<div class="afe-confirm-backdrop" id="afeConfirmBackdrop" role="dialog" aria-modal="true" aria-labelledby="afeConfirmTitle">
+    <div class="afe-confirm-card">
+        <div class="afe-confirm-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+        </div>
+        <h3 class="afe-confirm-title" id="afeConfirmTitle">Entity Tipi Değişiyor</h3>
+        <p class="afe-confirm-msg" id="afeConfirmMsg"></p>
+        <div class="afe-confirm-actions">
+            <button type="button" class="afe-confirm-btn-cancel" id="afeConfirmCancel">Vazgeç</button>
+            <button type="button" class="afe-confirm-btn-ok" id="afeConfirmOk">Devam Et</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<link rel="stylesheet" href="~/react/calibrahub-widgets.css" asp-append-version="true" />
+<script src="~/react/calibrahub-widgets.js" asp-append-version="true"></script>
+<script>
+(function () {
+    // ── başlangıç verisi ──────────────────────────────────────────────────────
+    var INIT = @Html.Raw(initData);
+    var USERS = @Html.Raw(usersJson);
+    var DEPARTMENTS = @Html.Raw(departmentsJson);
+    var CARI_GROUPS = @Html.Raw(JsonSerializer.Serialize(ViewData["CariGroups"] ?? Array.Empty<object>(), jsonOpts));
+    var MATERIAL_GROUPS = @Html.Raw(JsonSerializer.Serialize(ViewData["MaterialGroups"] ?? new Dictionary<string,object>(), jsonOpts));
+    var SQL_QUERIES = @Html.Raw(JsonSerializer.Serialize(ViewData["SqlQueries"] ?? Array.Empty<object>(), jsonOpts));
+    var INTEGRATIONS = @Html.Raw(JsonSerializer.Serialize(ViewData["Integrations"] ?? Array.Empty<object>(), jsonOpts));
+    // Entity-agnostic plugin: backend registry'den entity tipleri kataloğu.
+    var ENTITY_TYPES = @Html.Raw(JsonSerializer.Serialize(ViewData["EntityTypes"] ?? Array.Empty<object>(), jsonOpts));
+    if (!Array.isArray(ENTITY_TYPES)) ENTITY_TYPES = [];
+    var INITIAL_NODES_EDGES = (function () {
+        try { return @Html.Raw(initialNodesEdgesJson); }
+        catch (e) { return { nodes: [], edges: [] }; }
+    })();
+    if (!INITIAL_NODES_EDGES || typeof INITIAL_NODES_EDGES !== 'object') {
+        INITIAL_NODES_EDGES = { nodes: [], edges: [] };
+    }
+
+    // ── DOM bağlantıları ──────────────────────────────────────────────────────
+    var fName     = document.getElementById('fName');
+    var fKind     = document.getElementById('fKind');
+    var fPriority = document.getElementById('fPriority');
+    var fActive   = document.getElementById('fActive');
+
+    // ── Center confirm modal helper (Promise tabanlı) ──────────────────────────
+    function afeConfirm(message, opts) {
+        opts = opts || {};
+        return new Promise(function (resolve) {
+            var back = document.getElementById('afeConfirmBackdrop');
+            var msgEl = document.getElementById('afeConfirmMsg');
+            var titleEl = document.getElementById('afeConfirmTitle');
+            var okBtn = document.getElementById('afeConfirmOk');
+            var cancelBtn = document.getElementById('afeConfirmCancel');
+            msgEl.textContent = message || '';
+            if (opts.title) titleEl.textContent = opts.title;
+            if (opts.okLabel) okBtn.textContent = opts.okLabel;
+            back.classList.add('show');
+            setTimeout(function () { okBtn.focus(); }, 30);
+
+            function cleanup(result) {
+                back.classList.remove('show');
+                okBtn.removeEventListener('click', onOk);
+                cancelBtn.removeEventListener('click', onCancel);
+                back.removeEventListener('click', onBackdrop);
+                document.removeEventListener('keydown', onKey);
+                resolve(result);
+            }
+            function onOk() { cleanup(true); }
+            function onCancel() { cleanup(false); }
+            function onBackdrop(e) { if (e.target === back) cleanup(false); }
+            function onKey(e) {
+                if (e.key === 'Escape') cleanup(false);
+                else if (e.key === 'Enter') cleanup(true);
+            }
+            okBtn.addEventListener('click', onOk);
+            cancelBtn.addEventListener('click', onCancel);
+            back.addEventListener('click', onBackdrop);
+            document.addEventListener('keydown', onKey);
+        });
+    }
+
+    // ── başlangıç değerleri ───────────────────────────────────────────────────
+    // Entity tipi select'i dinamik doldur (ENTITY_TYPES backend'den geldi).
+    // Boş fallback: hep "Document" var sayalım — backend tarafı zaten Document'i kayıt eder.
+    fKind.innerHTML = '';
+    if (ENTITY_TYPES.length === 0) {
+        var opt0 = document.createElement('option');
+        opt0.value = 'Document'; opt0.textContent = 'Tüm Belgeler';
+        fKind.appendChild(opt0);
+    } else {
+        // optgroup ile grupla: groupCategory'ye göre (Belgeler / Üretim / Tanımlar / Diğer)
+        // Grup sırası: ilk karşılaşma sırasında deterministik kalsın.
+        var groups = {};
+        var groupOrder = [];
+        ENTITY_TYPES.forEach(function (et) {
+            var g = et.groupCategory || 'Diğer';
+            if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
+            groups[g].push(et);
+        });
+        groupOrder.forEach(function (g) {
+            var og = document.createElement('optgroup');
+            og.label = g;
+            groups[g].forEach(function (et) {
+                var opt = document.createElement('option');
+                opt.value = et.code; opt.textContent = et.label || et.code;
+                og.appendChild(opt);
+            });
+            fKind.appendChild(og);
+        });
+    }
+
+    fName.value     = INIT.name || '';
+    var initKind    = INIT.documentKind || '';
+    // Geriye uyumluluk: "All" enum değeri yeni sistemde "Document" (wildcard) ile eş anlamlı.
+    if (initKind === 'All') initKind = 'Document';
+
+    // "Document" wildcard yeni akışlarda kullanılmaz (kullanıcı belge bazlı spesifik akış
+    // tasarlar, "tüm belgeler" gerekirse Kopyala ile çoğaltır). Ama mevcut bir akışın
+    // değeri Document ise kayıt değerinin korunması için option olarak ekleriz (en üste,
+    // legacy uyarısıyla). Kullanıcı dilerse spesifik bir belge türüne taşır.
+    if (initKind === 'Document') {
+        var legacyOpt = document.createElement('option');
+        legacyOpt.value = 'Document';
+        legacyOpt.textContent = '⚠ Tüm Belgeler (eski tip)';
+        fKind.insertBefore(legacyOpt, fKind.firstChild);
+    }
+
+    fKind.value = initKind;
+    if (!fKind.value && fKind.options.length > 0) fKind.value = fKind.options[0].value;
+    fPriority.value = INIT.priority != null ? INIT.priority : 0;
+    fActive.checked = INIT.isActive !== false;
+
+    // Entity tipi değişti mi? — Save sonrası designer'ı yeni field setiyle yeniden
+    // mount edebilmek için sayfayı reload ederiz. (Reload-before-save eski davranıştı
+    // ama controller URL param'i ignore ediyordu → kayıt görünmüyor sanılıyordu.)
+    var entityChanged = false;
+    fKind.addEventListener('change', function () {
+        var newCode = fKind.value;
+        if (!newCode || newCode === initKind) return;
+        var msg = 'Entity tipini değiştirmek karar koşullarındaki alanları sıfırlayabilir. ' +
+                  'Devam etmek istiyor musunuz? (Kaydet butonuna basana kadar değişiklik DB\'ye yazılmaz.)';
+        afeConfirm(msg, { title: 'Entity Tipi Değiştiriliyor', okLabel: 'Devam Et' }).then(function (ok) {
+            if (!ok) { fKind.value = initKind; return; }
+            entityChanged = true;
+            showToast('Yeni entity tipi seçildi — kaydedildikten sonra alanlar yenilenecek.', true);
+        });
+    });
+
+    // ── Designer payload cache (rules artık designer'dan gelir) ───────────────
+    var designerPayload = null;
+
+    // ── React Flow designer mount ─────────────────────────────────────────────
+    function mountDesignerWhenReady() {
+        var root = document.getElementById('approval-flow-designer-root');
+        if (!root) return;
+        if (window.CalibraHub && typeof window.CalibraHub.mountApprovalFlowDesigner === 'function') {
+            window.CalibraHub.mountApprovalFlowDesigner(root, {
+                apiBase:      '/ApprovalFlow',
+                flowId:       INIT.id || 0,
+                initialNodes: Array.isArray(INITIAL_NODES_EDGES.nodes) ? INITIAL_NODES_EDGES.nodes : [],
+                initialEdges: Array.isArray(INITIAL_NODES_EDGES.edges) ? INITIAL_NODES_EDGES.edges : [],
+                initialRules: Array.isArray(INIT.rules) ? INIT.rules : [],
+                initialVariables: Array.isArray(INIT.variables) ? INIT.variables : [],
+                users:        USERS,
+                departments:  DEPARTMENTS,
+                cariGroups:   CARI_GROUPS,
+                materialGroups: MATERIAL_GROUPS,
+                sqlQueries:   SQL_QUERIES,
+                integrations: INTEGRATIONS,
+                entityTypes:  ENTITY_TYPES,
+                currentEntityType: fKind.value || 'Document',
+                canUseAdhoc:  true,
+                onSave: function (payload) {
+                    designerPayload = payload;
+                    window._afDesignerPayload = payload;
+                }
+            });
+        } else {
+            setTimeout(mountDesignerWhenReady, 80);
+        }
+    }
+    mountDesignerWhenReady();
+
+    // ── Kaydet ────────────────────────────────────────────────────────────────
+    function showToast(msg, ok) {
+        var t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'afe-toast ' + (ok ? 'afe-toast--ok' : 'afe-toast--err') + ' show';
+        setTimeout(function() { t.classList.remove('show'); }, 3000);
+    }
+
+    async function doSave() {
+        var name = fName.value.trim();
+        if (!name) { showToast('Akış adı zorunludur.', false); fName.focus(); return; }
+
+        // Designer payload — rules + nodes + edges hepsi designer'dan gelir.
+        var dp = window._afDesignerPayload || designerPayload || null;
+        if (!dp && typeof window._afDesignerGetPayload === 'function') {
+            try { dp = window._afDesignerGetPayload(); } catch (e) { dp = null; }
+        }
+        var dpNodes = (dp && Array.isArray(dp.nodes)) ? dp.nodes : [];
+        var dpEdges = (dp && Array.isArray(dp.edges)) ? dp.edges : [];
+        var dpRules = (dp && Array.isArray(dp.rules)) ? dp.rules : (INIT.rules || []);
+
+        // En az bir adım (step tipi) düğümü zorunlu
+        var stepNodes = dpNodes.filter(function (n) { return n.nodeType === 'step'; });
+        if (stepNodes.length === 0) {
+            showToast('En az bir onay adımı (step düğümü) tanımlanmalıdır.', false);
+            return;
+        }
+
+        // SLA + 3. kol (timeout) tutarlılık kontrolü:
+        //   - Step'in slaAction='escalate' ise timeout edge zorunlu
+        //   - Timeout edge varsa slaEnabled + slaHours > 0 zorunlu
+        for (var si = 0; si < stepNodes.length; si++) {
+            var sn = stepNodes[si];
+            var nd = null;
+            try { nd = sn.nodeDataJson ? JSON.parse(sn.nodeDataJson) : null; } catch (e) { nd = null; }
+            nd = nd || {};
+            var hasTimeoutEdge = dpEdges.some(function (e) {
+                return e.sourceClientId === sn.clientId && e.edgeKind === 'timeout';
+            });
+            if (nd.slaAction === 'escalate' && !hasTimeoutEdge) {
+                showToast('"' + (sn.stepName || 'Adım') + '" eskale için 3. kol (sarı "Gecikme" handle) bağlanmamış.', false);
+                return;
+            }
+            if (hasTimeoutEdge) {
+                if (nd.slaEnabled !== true) {
+                    showToast('"' + (sn.stepName || 'Adım') + '" için 3. kol bağlı ama SLA kapalı — SLA\'yı aktif edin.', false);
+                    return;
+                }
+                var sh = parseInt(nd.slaHours, 10);
+                if (!sh || sh <= 0) {
+                    showToast('"' + (sn.stepName || 'Adım') + '" için süre değeri girilmemiş.', false);
+                    return;
+                }
+            }
+        }
+
+        function extractDbId(clientId) {
+            if (typeof clientId !== 'string') return 0;
+            var m = clientId.match(/^step_(\d+)$/);
+            return m ? parseInt(m[1], 10) : 0;
+        }
+        var stepsPayload = dpNodes.map(function (n, i) {
+            var label = n.stepName
+                || (n.nodeType === 'start'    ? 'Başla'
+                  : n.nodeType === 'end'      ? 'Bitir'
+                  : n.nodeType === 'decision' ? 'Karar'
+                  : 'Adım ' + (i + 1));
+            return {
+                id:            extractDbId(n.clientId),
+                stepOrder:     i + 1,
+                stepName:      label,
+                approverType:  n.approverType || 'AnyUser',
+                approverId:    n.approverId || null,
+                approverLabel: n.approverLabel || null,
+                isActive:      true,
+                nodeType:      n.nodeType || 'step',
+                posX:          Math.round(n.posX || 0),
+                posY:          Math.round(n.posY || 0),
+                nodeData:      n.nodeDataJson || null,
+            };
+        });
+
+        var edgesPayload = dpEdges.map(function (e, i) {
+            var srcIdx = dpNodes.findIndex(function (x) { return x.clientId === e.sourceClientId; });
+            var tgtIdx = dpNodes.findIndex(function (x) { return x.clientId === e.targetClientId; });
+            if (srcIdx < 0 || tgtIdx < 0) return null;
+            return {
+                id:                 0,
+                sourceStepClientId: srcIdx,
+                targetStepClientId: tgtIdx,
+                label:              e.label || null,
+                edgeKind:           e.edgeKind || 'default',
+                condition:          e.condition || null,
+                sortOrder:          (typeof e.sortOrder === 'number' ? e.sortOrder : i),
+            };
+        }).filter(Boolean);
+
+        var payload = {
+            id:           INIT.id,
+            name:         name,
+            description:  INIT.description || null,
+            documentKind: fKind.value,
+            priority:     parseInt(fPriority.value) || 0,
+            isActive:     fActive.checked,
+            rules: dpRules.map(function(r) {
+                return {
+                    id: r.id || 0,
+                    ruleType: r.ruleType,
+                    ruleValue: r.ruleValue || null,
+                    isActive: r.isActive !== false,
+                };
+            }),
+            steps: stepsPayload,
+            edges: edgesPayload,
+            variables: (dp && Array.isArray(dp.variables) ? dp.variables : (INIT.variables || [])).map(function (v, vi) {
+                return {
+                    id:           v.id || 0,
+                    name:         (v.name || '').trim(),
+                    typeCode:     v.typeCode || 'int',
+                    defaultValue: v.defaultValue || null,
+                    description:  v.description || null,
+                    sortOrder:    (typeof v.sortOrder === 'number' ? v.sortOrder : vi),
+                };
+            }).filter(function (v) { return v.name; }),
+        };
+
+        var btn = document.getElementById('btnSave');
+        btn.disabled = true;
+
+        try {
+            var token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            var res = await fetch('/ApprovalFlow/Save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                body: JSON.stringify(payload),
+            });
+            var data = await res.json();
+            if (data.ok) {
+                showToast('Kaydedildi.', true);
+                INIT.id = data.id;
+                // Yeni kayıt VEYA entity tipi değişti → sayfayı reload et ki designer
+                // yeni entity'nin field setiyle taze mount olsun.
+                if (payload.id === 0) {
+                    setTimeout(function() { window.location.href = '/ApprovalFlow/Edit?id=' + data.id; }, 800);
+                } else if (entityChanged) {
+                    setTimeout(function() { window.location.reload(); }, 800);
+                }
+            } else {
+                showToast('Hata: ' + (data.error || 'Bilinmeyen hata'), false);
+            }
+        } catch(e) {
+            showToast('Bağlantı hatası: ' + e.message, false);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.getElementById('btnSave').addEventListener('click', doSave);
+})();
+</script>
+@Html.AntiForgeryToken()
+}

@@ -36,3 +36,37 @@ body.app-theme-dark .doc-designer-root {
   --dd-accent-soft: rgba(129,140,248,0.12);
   --dd-section-bg:  #1c2336;
 }
+
+/* Properties panel'deki <select> elementleri — native browser dropdown'lari
+   varsayilan sistem temasinda cizdigi icin dark mode'da panel'in icine kontrast
+   bozuyor. Bu class panel/property select'lerini panel arka plani+text rengiyle
+   hizalar. Sadece kapali (collapsed) goruntu icin gecerli; acilan menu hala
+   native cizilir (Chromium 2024+ icin color-scheme: dark de menuyu uyumlu hale
+   getirir). */
+.doc-designer-root .dd-select {
+  background: var(--dd-surface);
+  color: var(--dd-text);
+  border: 1px solid var(--dd-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--dd-text-muted) 50%),
+                    linear-gradient(135deg, var(--dd-text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 22px;
+}
+.doc-designer-root .dd-select:focus {
+  outline: none;
+  border-color: var(--dd-accent);
+  box-shadow: 0 0 0 2px var(--dd-accent-soft);
+}
+.doc-designer-root .dd-select option {
+  background: var(--dd-surface);
+  color: var(--dd-text);
+}
+body.app-theme-dark .doc-designer-root .dd-select {
+  color-scheme: dark;
+}

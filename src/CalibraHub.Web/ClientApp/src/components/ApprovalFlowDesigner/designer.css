@@ -1,0 +1,717 @@
+/* ════════════════════════════════════════════════════════════
+   ApprovalFlowDesigner — React Flow tabanlı görsel akış tasarımcısı.
+   afe-* tema değişkenleri Edit.cshtml içinde tanımlı; burada onları okuyoruz.
+   ════════════════════════════════════════════════════════════ */
+
+.afd-root {
+    --afd-bg:      var(--afe-bg, #f8fafc);
+    --afd-surface: var(--afe-surface, #ffffff);
+    --afd-border:  var(--afe-border, #e2e8f0);
+    --afd-text:    var(--afe-text, #1e293b);
+    --afd-muted:   var(--afe-muted, #64748b);
+    --afd-accent:  var(--afe-accent, #6366f1);
+    --afd-accent-s:var(--afe-accent-s, rgba(99,102,241,.12));
+    --afd-ok:      #10b981;
+    --afd-danger:  #ef4444;
+    --afd-warn:    #f59e0b;
+    --afd-info:    #3b82f6;
+
+    display: flex; gap: 10px;
+    width: 100%; height: 100%;
+    min-height: 520px;
+    background: var(--afd-bg);
+    color: var(--afd-text);
+    font-family: inherit;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+body.app-theme-dark .afd-root {
+    --afd-bg:      #080c17;
+    --afd-surface: #0d1323;
+    --afd-border:  rgba(255,255,255,.09);
+    --afd-text:    #e2e8f0;
+    --afd-muted:   #94a3b8;
+    --afd-accent:  #818cf8;
+    --afd-accent-s:rgba(129,140,248,.15);
+}
+
+/* ── PALETTE (sol kolon) ─────────────────────────────────── */
+.afd-palette {
+    width: 170px; flex-shrink: 0;
+    padding: 14px 12px;
+    background: var(--afd-surface);
+    border: 1px solid var(--afd-border);
+    border-radius: 10px;
+    display: flex; flex-direction: column; gap: 8px;
+    overflow-y: auto;
+}
+.afd-palette__title {
+    font-size: .72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--afd-muted);
+}
+.afd-palette__hint {
+    font-size: .68rem; color: var(--afd-muted); font-style: italic;
+    margin-bottom: 6px;
+}
+.afd-palette__item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px;
+    border: 1px solid var(--afd-border);
+    border-radius: 8px;
+    background: var(--afd-bg);
+    font-size: .82rem; font-weight: 600;
+    color: var(--afd-text); cursor: grab;
+    user-select: none;
+    transition: all .12s;
+}
+.afd-palette__item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0,0,0,.06);
+    border-color: var(--afd-accent);
+}
+.afd-palette__item:active { cursor: grabbing; }
+.afd-palette__item--start        { border-left: 3px solid var(--afd-ok); }
+.afd-palette__item--step         { border-left: 3px solid var(--afd-accent); }
+.afd-palette__item--decision     { border-left: 3px solid var(--afd-warn); }
+.afd-palette__item--parallel     { border-left: 3px solid #8b5cf6; }
+.afd-palette__item--notification { border-left: 3px solid #06b6d4; }
+.afd-palette__item--end          { border-left: 3px solid var(--afd-danger); }
+
+/* ── CANVAS (orta) ────────────────────────────────────────── */
+.afd-canvas {
+    flex: 1; min-width: 0;
+    background: var(--afd-surface);
+    border: 1px solid var(--afd-border);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+.afd-canvas .react-flow__renderer { background: var(--afd-bg); }
+.afd-canvas .react-flow__background { background-color: var(--afd-bg); }
+body.app-theme-dark .afd-canvas .react-flow__background pattern circle {
+    fill: rgba(255,255,255,.10);
+}
+
+/* ── React Flow edge labels — varsayılan beyaz bg + siyah text dark temada
+   görünmüyor. Tema-aware override yapıyoruz. ── */
+.afd-canvas .react-flow__edge-text {
+    fill: #1e293b; font-weight: 600; font-size: 11px;
+}
+.afd-canvas .react-flow__edge-textbg {
+    fill: #ffffff;
+    stroke: #e2e8f0; stroke-width: 1;
+    rx: 4; ry: 4;
+}
+body.app-theme-dark .afd-canvas .react-flow__edge-text {
+    fill: #f1f5f9;
+}
+body.app-theme-dark .afd-canvas .react-flow__edge-textbg {
+    fill: #1e293b;
+    stroke: rgba(255,255,255,.18); stroke-width: 1;
+}
+
+/* React Flow MiniMap dark temada ile uyumlu */
+body.app-theme-dark .afd-canvas .react-flow__minimap {
+    background: #0d1323;
+    border: 1px solid rgba(255,255,255,.09);
+}
+body.app-theme-dark .afd-canvas .react-flow__minimap-mask {
+    fill: rgba(15,23,42,.65);
+}
+
+/* React Flow Controls (zoom in/out/fit) — dark tema buton kontrastı */
+body.app-theme-dark .afd-canvas .react-flow__controls-button {
+    background: #1e293b;
+    border-bottom: 1px solid rgba(255,255,255,.09);
+    color: #e2e8f0; fill: #e2e8f0;
+}
+body.app-theme-dark .afd-canvas .react-flow__controls-button:hover {
+    background: #334155;
+}
+body.app-theme-dark .afd-canvas .react-flow__controls-button svg {
+    fill: #e2e8f0;
+}
+
+/* Attribution (sağ alt "React Flow" link) — dark tema */
+body.app-theme-dark .afd-canvas .react-flow__attribution {
+    background: rgba(13,19,35,.7);
+    color: #94a3b8;
+}
+body.app-theme-dark .afd-canvas .react-flow__attribution a { color: #94a3b8; }
+.afd-canvas .react-flow__controls,
+.afd-canvas .react-flow__minimap {
+    background: var(--afd-surface);
+    border: 1px solid var(--afd-border);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.afd-canvas .react-flow__controls-button {
+    background: var(--afd-surface);
+    color: var(--afd-text);
+    border-bottom: 1px solid var(--afd-border);
+}
+.afd-canvas .react-flow__controls-button:hover {
+    background: var(--afd-accent-s);
+    color: var(--afd-accent);
+}
+.afd-canvas .react-flow__edge-text { font-size: .72rem; font-weight: 600; }
+.afd-canvas .react-flow__edge-textbg { fill: var(--afd-surface); }
+.afd-canvas .react-flow__attribution { display: none; }
+
+/* ── PROPERTIES (sağ) ─────────────────────────────────────── */
+.afd-props {
+    width: 400px; flex-shrink: 0;
+    padding: 14px 14px;
+    background: var(--afd-surface);
+    border: 1px solid var(--afd-border);
+    border-radius: 10px;
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+}
+.afd-props__empty {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    color: var(--afd-muted); font-size: .82rem;
+    text-align: center; padding: 40px 10px;
+}
+.afd-props__empty-emoji { font-size: 2rem; opacity: .25; }
+.afd-props__head {
+    display: flex; align-items: center; gap: 8px;
+    padding-bottom: 10px; margin-bottom: 12px;
+    border-bottom: 1px solid var(--afd-border);
+}
+.afd-props__head-badge {
+    flex: 1;
+    font-size: .72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; padding: 4px 8px; border-radius: 6px;
+}
+.afd-props__head-badge--start    { background: rgba(16,185,129,.12); color: #047857; }
+.afd-props__head-badge--step     { background: var(--afd-accent-s); color: var(--afd-accent); }
+.afd-props__head-badge--decision { background: rgba(245,158,11,.14); color: #b45309; }
+.afd-props__head-badge--end      { background: rgba(239,68,68,.12); color: #b91c1c; }
+.afd-props__head-badge--edge     { background: rgba(59,130,246,.12); color: #1d4ed8; }
+body.app-theme-dark .afd-props__head-badge--start    { background: rgba(16,185,129,.2); color: #34d399; }
+body.app-theme-dark .afd-props__head-badge--decision { background: rgba(245,158,11,.2); color: #fbbf24; }
+body.app-theme-dark .afd-props__head-badge--end      { background: rgba(239,68,68,.2); color: #fca5a5; }
+body.app-theme-dark .afd-props__head-badge--edge     { background: rgba(59,130,246,.2); color: #93c5fd; }
+
+.afd-props__del {
+    background: transparent; border: 1px solid var(--afd-border);
+    width: 28px; height: 28px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--afd-muted); cursor: pointer; transition: all .12s;
+}
+.afd-props__del:hover {
+    color: var(--afd-danger); border-color: var(--afd-danger);
+    background: rgba(239,68,68,.08);
+}
+.afd-props__label {
+    font-size: .72rem; font-weight: 600; color: var(--afd-muted);
+    margin: 10px 0 5px;
+}
+.afd-props__input {
+    padding: 7px 10px; border: 1px solid var(--afd-border);
+    border-radius: 7px; font-size: .82rem;
+    background: var(--afd-bg); color: var(--afd-text);
+    width: 100%;
+    transition: border-color .15s, box-shadow .15s;
+    font-family: inherit;
+}
+.afd-props__input--ta { resize: vertical; min-height: 60px; font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; }
+.afd-props__input:focus {
+    outline: none; border-color: var(--afd-accent);
+    box-shadow: 0 0 0 3px var(--afd-accent-s);
+}
+.afd-props__hint {
+    margin-top: 12px; padding: 10px 12px;
+    background: var(--afd-bg);
+    border: 1px dashed var(--afd-border);
+    border-radius: 8px;
+    font-size: .74rem; line-height: 1.55; color: var(--afd-muted);
+}
+.afd-props__hint ul { margin: 6px 0 0 0; padding-left: 18px; }
+.afd-props__hint code {
+    background: rgba(99,102,241,.10); color: var(--afd-accent);
+    padding: 1px 5px; border-radius: 4px; font-size: .72rem;
+}
+.afd-props__hint-italic {
+    font-style: italic; color: var(--afd-muted); font-size: .76rem;
+}
+.afd-props__chips {
+    display: flex; flex-wrap: wrap; gap: 5px; padding-top: 4px;
+}
+.afd-props__chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--afd-border); background: var(--afd-bg);
+    font-size: .76rem; cursor: pointer; user-select: none;
+    transition: all .12s;
+}
+.afd-props__chip input[type=checkbox] {
+    width: 12px; height: 12px; accent-color: var(--afd-accent);
+    cursor: pointer; margin: 0;
+}
+.afd-props__chip.is-on {
+    background: var(--afd-accent-s);
+    border-color: var(--afd-accent);
+    color: var(--afd-accent); font-weight: 600;
+}
+
+/* ── Start node — Tetikleme Koşulları rule rows ─────────────── */
+.afd-rule-row {
+    border: 1px solid var(--afd-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    background: var(--afd-bg);
+}
+.afd-rule-row__top {
+    display: flex; align-items: center; gap: 6px;
+}
+.afd-rule-row__type {
+    flex: 1; min-width: 0;
+}
+.afd-rule-add {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 4px; padding: 7px 14px;
+    border: 1px dashed var(--afd-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--afd-accent);
+    font-size: .8rem; font-weight: 600;
+    cursor: pointer;
+    transition: all .12s;
+    width: 100%;
+    justify-content: center;
+}
+.afd-rule-add:hover {
+    background: var(--afd-accent-s);
+    border-color: var(--afd-accent);
+    border-style: solid;
+}
+
+/* ════════════════════════════════════════════════════════════
+   Custom Nodes
+   ════════════════════════════════════════════════════════════ */
+.afd-node {
+    background: var(--afd-surface);
+    border: 2px solid var(--afd-border);
+    color: var(--afd-text);
+    font-family: inherit; font-size: .8rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,.06);
+    transition: border-color .15s, box-shadow .15s, transform .12s;
+    position: relative;
+}
+.afd-node.is-selected {
+    border-color: var(--afd-accent);
+    box-shadow: 0 0 0 3px var(--afd-accent-s);
+}
+.afd-node__head {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    font-weight: 700; font-size: .8rem;
+}
+.afd-node__title {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 140px;
+}
+.afd-node__meta {
+    padding: 0 10px 6px;
+    font-size: .68rem; color: var(--afd-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 160px;
+}
+.afd-node__cond {
+    padding: 0 10px 6px;
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: .68rem; color: var(--afd-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 160px;
+}
+.afd-node__cond em { color: var(--afd-muted); font-style: italic; }
+.afd-node__feet {
+    display: flex; justify-content: space-between;
+    padding: 0 10px 4px;
+    font-size: .62rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.afd-foot--ok { color: var(--afd-ok); }
+.afd-foot--no { color: var(--afd-danger); }
+.afd-foot--tm { color: #d97706; }
+.afd-node__feet--3 { gap: 6px; }
+/* Dark tema — foot label parlaklığı arttır (daha okunaklı) */
+body.app-theme-dark .afd-foot--ok { color: #34d399; }
+body.app-theme-dark .afd-foot--no { color: #fca5a5; }
+body.app-theme-dark .afd-foot--tm { color: #fbbf24; }
+
+/* Edge seçili durum — tıklanan edge belirgin görünsün (kalınlık + halo + label vurgu). */
+.react-flow__edge.selected .react-flow__edge-path {
+    stroke-width: 3.5px !important;
+}
+.react-flow__edge.selected.afd-edge--true    .react-flow__edge-path { filter: drop-shadow(0 0 3px rgba(16,185,129,.85)); }
+.react-flow__edge.selected.afd-edge--false   .react-flow__edge-path { filter: drop-shadow(0 0 3px rgba(239,68,68,.85)); }
+.react-flow__edge.selected.afd-edge--timeout .react-flow__edge-path { filter: drop-shadow(0 0 3px rgba(245,158,11,.95)); }
+.react-flow__edge.selected.afd-edge--default .react-flow__edge-path { filter: drop-shadow(0 0 3px rgba(99,102,241,.75)); }
+.react-flow__edge.selected .react-flow__edge-text { font-weight: 700; }
+.react-flow__edge.selected .react-flow__edge-textbg { fill: var(--afd-accent-s); }
+
+/* Handle'a yapışık taşınabilir etiket — DraggableHandle label prop.
+   Node sınırının dışında kalabildiği için chip stili (bg + border) okunabilirlik sağlar. */
+.afd-handle-label {
+    font-size: .62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--afd-muted);
+    user-select: none;
+    background: var(--afd-surface);
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--afd-border);
+    line-height: 1.4;
+    z-index: 10;
+}
+/* Dark tema — node meta + cond text parlaklığı (varsayılan --afd-muted
+   bazı koyu surface'larda zayıf kalıyordu). */
+body.app-theme-dark .afd-node__meta { color: #cbd5e1; }
+body.app-theme-dark .afd-node__cond { color: #f1f5f9; }
+body.app-theme-dark .afd-node__cond em { color: #94a3b8; }
+
+/* ── StartNode ── */
+.afd-node--start {
+    border-radius: 999px;
+    padding: 8px 16px 8px 14px;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(16,185,129,.12);
+    border-color: var(--afd-ok);
+    color: #047857; font-weight: 700;
+    min-width: 80px; justify-content: center;
+}
+.afd-node--start.is-selected { box-shadow: 0 0 0 3px rgba(16,185,129,.25); }
+body.app-theme-dark .afd-node--start { background: rgba(16,185,129,.2); color: #34d399; }
+
+/* ── EndNode ── */
+.afd-node--end {
+    border-radius: 999px;
+    padding: 8px 16px 8px 14px;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(239,68,68,.10);
+    border-color: var(--afd-danger);
+    color: #b91c1c; font-weight: 700;
+    min-width: 80px; justify-content: center;
+}
+.afd-node--end.is-selected { box-shadow: 0 0 0 3px rgba(239,68,68,.25); }
+body.app-theme-dark .afd-node--end { background: rgba(239,68,68,.2); color: #fca5a5; }
+
+/* ── StepNode ── */
+.afd-node--step {
+    border-radius: 10px;
+    min-width: 180px;
+    background: var(--afd-surface);
+    border-color: var(--afd-accent);
+}
+.afd-node--step .afd-node__head {
+    color: var(--afd-accent);
+    background: var(--afd-accent-s);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+
+/* ── DecisionNode ── */
+.afd-node--decision {
+    border-radius: 10px;
+    min-width: 180px;
+    background: var(--afd-surface);
+    border-color: var(--afd-warn);
+}
+.afd-node--decision .afd-node__head {
+    color: #b45309;
+    background: rgba(245,158,11,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--decision .afd-node__head { color: #fbbf24; background: rgba(245,158,11,.18); }
+
+/* ── ParallelNode (purple/violet) ── */
+.afd-node--parallel {
+    border-radius: 10px;
+    min-width: 180px;
+    background: var(--afd-surface);
+    border-color: #8b5cf6;
+}
+.afd-node--parallel .afd-node__head {
+    color: #6d28d9;
+    background: rgba(139,92,246,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--parallel .afd-node__head { color: #c4b5fd; background: rgba(139,92,246,.22); }
+
+/* ── NotificationNode (cyan) ── */
+.afd-node--notification {
+    border-radius: 10px;
+    min-width: 180px;
+    background: var(--afd-surface);
+    border-color: #06b6d4;
+}
+.afd-node--notification .afd-node__head {
+    color: #0e7490;
+    background: rgba(6,182,212,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--notification .afd-node__head { color: #67e8f9; background: rgba(6,182,212,.20); }
+
+/* ── Integration node — violet/amber gradient, "trigger" hissi ── */
+.afd-node--integration {
+    border-radius: 10px;
+    min-width: 200px;
+    background: var(--afd-surface);
+    border-color: #8b5cf6;
+}
+.afd-node--integration .afd-node__head {
+    color: #6d28d9;
+    background: rgba(139,92,246,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--integration .afd-node__head { color: #c4b5fd; background: rgba(139,92,246,.20); }
+
+/* ── SetVariable node — slate/indigo, "atama" hissi ── */
+.afd-node--setvar {
+    border-radius: 10px;
+    min-width: 200px;
+    background: var(--afd-surface);
+    border-color: #64748b;
+}
+.afd-node--setvar .afd-node__head {
+    color: #475569;
+    background: rgba(100,116,139,.12);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom: 1px solid var(--afd-border);
+}
+body.app-theme-dark .afd-node--setvar .afd-node__head { color: #cbd5e1; background: rgba(100,116,139,.22); }
+
+/* Palette item rengi */
+.afd-palette__item--integration { border-left: 3px solid #8b5cf6; }
+
+/* ── Handles ──
+   Sabit görsel handle 14px — büyütme/scale YAPMAYIZ çünkü React Flow handle'ları
+   inline `transform: translate(-50%, ...)` ile konumlandırıyor; scale o translate'i
+   ezip handle'ı kaydırıyor. Hover etkisini sadece box-shadow halo + parlaklık ile
+   veriyoruz — handle yerinde durur, sadece çevresindeki ışık halkası büyür.
+   Tıklama hit-area'sı ::after pseudo-element ile 28×28 px görünmez daire (kolay yakalama).
+*/
+.afd-node .react-flow__handle {
+    width: 14px; height: 14px;
+    background: var(--afd-accent);
+    border: 2px solid var(--afd-surface);
+    box-shadow: 0 0 0 2px rgba(99,102,241,.18);
+    transition: box-shadow .14s ease, background .14s ease, border-color .14s ease;
+    cursor: crosshair;
+    z-index: 5;
+}
+/* Genişletilmiş hit area — görünmez ama mouse-event'i yakalar (28x28 px).
+   Pozisyon parent handle'a göre — kendi transform'u handle'ın konumunu etkilemez. */
+.afd-node .react-flow__handle::after {
+    content: ''; position: absolute;
+    top: 50%; left: 50%;
+    width: 28px; height: 28px;
+    margin: -14px 0 0 -14px;        /* translate yerine margin trick — scale ile çatışmaz */
+    border-radius: 50%;
+    background: transparent;
+    pointer-events: auto;
+}
+.afd-node .react-flow__handle:hover {
+    background: #6366f1;
+    box-shadow:
+        0 0 0 6px rgba(99,102,241,.30),
+        0 0 14px 2px rgba(99,102,241,.55);
+}
+.afd-node .react-flow__handle.connectingfrom,
+.afd-node .react-flow__handle.connectingto {
+    background: #6366f1;
+    box-shadow:
+        0 0 0 8px rgba(99,102,241,.38),
+        0 0 18px 4px rgba(99,102,241,.7);
+}
+
+/* Renkli handle'lar (approve/reject) — hover & active için aynı halo, scale yok */
+.afd-handle--approve {
+    background: var(--afd-ok) !important;
+    box-shadow: 0 0 0 2px rgba(16,185,129,.22) !important;
+}
+.afd-handle--approve:hover {
+    box-shadow:
+        0 0 0 6px rgba(16,185,129,.32),
+        0 0 14px 2px rgba(16,185,129,.55) !important;
+}
+.afd-handle--reject {
+    background: var(--afd-danger) !important;
+    box-shadow: 0 0 0 2px rgba(239,68,68,.22) !important;
+}
+.afd-handle--reject:hover {
+    box-shadow:
+        0 0 0 6px rgba(239,68,68,.32),
+        0 0 14px 2px rgba(239,68,68,.55) !important;
+}
+.afd-handle--timeout {
+    background: #f59e0b !important;
+    box-shadow: 0 0 0 2px rgba(245,158,11,.22) !important;
+}
+.afd-handle--timeout:hover {
+    box-shadow:
+        0 0 0 6px rgba(245,158,11,.32),
+        0 0 14px 2px rgba(245,158,11,.55) !important;
+}
+
+/* Node hover edildiğinde tüm handle'lar halo alır (kullanıcı bağlanılacak yerleri
+   aramaz, node'a yaklaşmak yeter). Pozisyon değişmez. */
+.afd-node:hover .react-flow__handle {
+    box-shadow: 0 0 0 5px rgba(99,102,241,.22);
+}
+.afd-node:hover .afd-handle--approve { box-shadow: 0 0 0 5px rgba(16,185,129,.28) !important; }
+.afd-node:hover .afd-handle--reject  { box-shadow: 0 0 0 5px rgba(239,68,68,.28) !important; }
+.afd-node:hover .afd-handle--timeout { box-shadow: 0 0 0 5px rgba(245,158,11,.28) !important; }
+
+/* Dark tema — handle border'ı dark surface ile uyumlu */
+body.app-theme-dark .afd-node .react-flow__handle {
+    border-color: #0d1323;
+}
+
+/* Bağlantı sürüklenen edge çizgisi — daha kalın + parlak */
+.react-flow__connection-path {
+    stroke: var(--afd-accent);
+    stroke-width: 2.5;
+    stroke-dasharray: 5 3;
+}
+
+/* ── Empty hint overlay ── */
+.afd-empty-hint {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    font-size: .85rem; color: var(--afd-muted);
+    background: linear-gradient(0deg, transparent, transparent);
+}
+.afd-empty-hint > div {
+    padding: 14px 22px;
+    background: var(--afd-surface);
+    border: 1px dashed var(--afd-border);
+    border-radius: 10px;
+    pointer-events: auto;
+    text-align: center;
+}
+
+/* ── VariablesPanel (degisken tanim modal) ─────────────────────────── */
+.afd-vars-backdrop {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15, 23, 42, .42); backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+}
+.afd-vars-card {
+    width: min(820px, 94vw); max-height: 86vh;
+    background: var(--afd-surface);
+    color: var(--afd-text);
+    border-radius: 12px;
+    box-shadow: 0 24px 48px rgba(0,0,0,.28);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    font-size: 13px;
+}
+.afd-vars-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--afd-border);
+    background: var(--afd-bg);
+}
+.afd-vars-title { font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; }
+.afd-vars-close {
+    background: none; border: none; font-size: 22px; line-height: 1;
+    color: var(--afd-muted); cursor: pointer; padding: 0 6px;
+}
+.afd-vars-close:hover { color: var(--afd-danger); }
+.afd-vars-hint {
+    padding: 10px 16px; font-size: 11.5px; line-height: 1.55;
+    color: var(--afd-muted); background: var(--afd-bg);
+    border-bottom: 1px solid var(--afd-border);
+}
+.afd-vars-hint code {
+    background: var(--afd-surface); padding: 1px 5px; border-radius: 4px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
+}
+.afd-vars-err {
+    margin: 10px 16px 0; padding: 8px 10px;
+    background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.4);
+    color: #991b1b; border-radius: 6px; font-size: 12px;
+}
+body.app-theme-dark .afd-vars-err { color: #fca5a5; }
+.afd-vars-table-wrap { overflow: auto; padding: 12px 16px; flex: 1 1 auto; }
+.afd-vars-table { width: 100%; border-collapse: collapse; }
+.afd-vars-table th {
+    text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    color: var(--afd-muted); padding: 4px 6px; border-bottom: 1px solid var(--afd-border);
+    letter-spacing: .03em;
+}
+.afd-vars-table td { padding: 4px 6px; vertical-align: middle; }
+.afd-vars-input {
+    width: 100%; padding: 6px 8px; font-size: 12px;
+    background: var(--afd-bg); color: var(--afd-text);
+    border: 1px solid var(--afd-border); border-radius: 6px;
+    font-family: inherit;
+}
+.afd-vars-input:focus { outline: none; border-color: var(--afd-accent); }
+.afd-vars-input.is-shake {
+    animation: afdVarsShake .55s cubic-bezier(.36,.07,.19,.97) both;
+    border-color: #ef4444 !important;
+    background: rgba(239,68,68,.10) !important;
+}
+@keyframes afdVarsShake {
+    10%, 90% { transform: translateX(-1px); }
+    20%, 80% { transform: translateX(2px); }
+    30%, 50%, 70% { transform: translateX(-3px); }
+    40%, 60% { transform: translateX(3px); }
+}
+.afd-vars-del {
+    background: none; border: 1px solid transparent; border-radius: 6px;
+    color: var(--afd-muted); width: 26px; height: 26px;
+    font-size: 16px; cursor: pointer; line-height: 1;
+}
+.afd-vars-del:hover { background: rgba(239,68,68,.12); color: var(--afd-danger); border-color: rgba(239,68,68,.35); }
+.afd-vars-empty {
+    text-align: center; color: var(--afd-muted); font-style: italic; padding: 18px 0;
+}
+.afd-vars-foot {
+    display: flex; justify-content: space-between; gap: 8px;
+    padding: 10px 16px; border-top: 1px solid var(--afd-border);
+    background: var(--afd-bg);
+}
+.afd-vars-add, .afd-vars-ok {
+    padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--afd-border); background: var(--afd-surface);
+    color: var(--afd-text);
+}
+.afd-vars-add:hover { border-color: var(--afd-accent); color: var(--afd-accent); }
+.afd-vars-ok { background: var(--afd-accent); color: #fff; border-color: var(--afd-accent); }
+.afd-vars-ok:hover { filter: brightness(1.08); }
+
+/* Header toolbar Değişkenler butonu */
+.afd-vars-trigger {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-radius: 6px;
+    background: var(--afd-surface); color: var(--afd-text);
+    border: 1px solid var(--afd-border); font-size: 12px; font-weight: 600;
+    cursor: pointer;
+}
+.afd-vars-trigger:hover { border-color: var(--afd-accent); color: var(--afd-accent); }
+.afd-vars-trigger .afd-vars-badge {
+    display: inline-block; min-width: 18px; padding: 1px 5px;
+    background: var(--afd-accent); color: #fff; border-radius: 10px;
+    font-size: 10px; line-height: 1.4; font-weight: 700; text-align: center;
+}

@@ -97,12 +97,53 @@ public interface ILogisticsConfigurationService
     Task<IReadOnlyCollection<BOMDto>> GetBOMsAsync(CancellationToken cancellationToken);
     Task<BOMWithNames?> GetBOMByCodeAsync(string materialCode, string? configCode, CancellationToken cancellationToken);
     Task<BOMWithNames?> GetBOMByIdAsync(int id, CancellationToken cancellationToken);
-    Task<int> SaveBOMAsync(SaveBOMRequest request, CancellationToken cancellationToken);
-    Task DeleteBOMAsync(int id, CancellationToken cancellationToken);
+    /// <summary>
+    /// Recete kaydeder. <paramref name="userId"/> CreatedById/UpdatedById audit
+    /// alanlarina yazilir (rapor 2026-05-17 madde 3.5). Cycle korumasi (madde 3.1):
+    /// kayit oncesi BFS ile dongusel bagimlilik kontrol edilir; tespit edilirse
+    /// ArgumentException firlatilir, DB'ye yazilmaz.
+    /// </summary>
+    Task<int> SaveBOMAsync(SaveBOMRequest request, int? userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Soft delete — IsActive=0 (rapor 2026-05-17 madde 3.6). <paramref name="userId"/>
+    /// UpdatedById audit alanina yazilir. Lines tablosu fiziksel silinmez.
+    /// </summary>
+    Task DeleteBOMAsync(int id, int? userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Multi-level BOM patlatma (rapor 2026-05-17 madde 3.3): X mamulden
+    /// <paramref name="quantity"/> adet uretmek icin tum alt-receteleri gezerek
+    /// hammadde + ara mamul ihtiyacini birikmis (aggregated) olarak doner.
+    /// BFS, depth cap 20 (cycle korumasi disinda guvenlik smaplosu); cap'e
+    /// ulasilirsa <c>Truncated=true</c>. Ayni item farkli yollardan gelirse
+    /// quantity toplanir (depth ilk goruldugu seviye).
+    /// </summary>
+    Task<BOMExplodeResultDto?> ExplodeBOMAsync(
+        int parentItemId, decimal quantity, int? configId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Where-used (ters arama): bir bileseni DOĞRUDAN kullanan parent BOM'larin
+    /// 1-seviye listesi. Transitive (Vida→Leg→Masa) bu surumun kapsami disi.
+    /// (Rapor 2026-05-17 madde 3.3.)
+    /// </summary>
+    Task<IReadOnlyCollection<WhereUsedItemDto>> GetWhereUsedAsync(
+        int componentItemId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<MaterialGroupDto>> GetMaterialGroupsAsync(int? category, CancellationToken cancellationToken);
     Task CreateMaterialGroupAsync(SaveMaterialGroupRequest request, CancellationToken cancellationToken);
     Task UpdateMaterialGroupAsync(SaveMaterialGroupRequest request, CancellationToken cancellationToken);
     Task DeleteMaterialGroupAsync(int id, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<MaterialGroupMappingDto>> GetMaterialGroupMappingsAsync(int stockCardId, CancellationToken cancellationToken);
+    /// <summary>2026-05-24: Batch — Malzeme listeleri icin N+1 onlemek amaciyla.</summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<MaterialGroupMappingDto>>> GetMaterialGroupMappingsBatchAsync(
+        IReadOnlyCollection<int> stockCardIds, CancellationToken cancellationToken);
     Task SaveMaterialGroupMappingsAsync(SaveMaterialGroupMappingsRequest request, CancellationToken cancellationToken);
+
+    /// <summary>2026-05-24: ItemUnit batch — filter panel "Olcu Birimi" alani icin.</summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<CalibraHub.Domain.Entities.ItemUnit>>> GetItemUnitsBatchAsync(
+        IReadOnlyCollection<int> itemIds, CancellationToken cancellationToken);
+
+    /// <summary>2026-05-24: ItemFeatureMapping batch — filter panel "Ozellikler" alanlari icin.</summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyList<CalibraHub.Domain.Entities.ItemFeatureMapping>>> GetItemFeatureMappingsBatchAsync(
+        IReadOnlyCollection<int> itemIds, CancellationToken cancellationToken);
 }
