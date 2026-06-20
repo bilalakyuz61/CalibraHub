@@ -15,7 +15,7 @@
     .\build-installer.ps1 -Version "2.0.0"
 #>
 param(
-    [string]$Version = "2.1.15",
+    [string]$Version = "2.1.16",
     [string]$Configuration = "Release"
 )
 
@@ -65,7 +65,10 @@ Write-Step "Onceki publish subfolder'leri temizleniyor (eski Setup .exe'leri kor
 if (-not (Test-Path $PublishDir)) {
     New-Item -ItemType Directory -Path $PublishDir | Out-Null
 } else {
-    $subFolders = @('Web', 'Worker', 'Designer', 'ServiceManager', 'WhatsAppBridge')
+    # WhatsAppBridge silinmez — node.js sidecar, kaynak kodu repo digi (git'ten restore edilir,
+    # node_modules ilk seferlik npm install ile yaratilir). Build her seferinde Bridge'i
+    # yeniden indirsek kullanici .wwebjs_auth/ (WhatsApp pairing credentials) kaybeder.
+    $subFolders = @('Web', 'Worker', 'Designer', 'ServiceManager')
     foreach ($sub in $subFolders) {
         $path = Join-Path $PublishDir $sub
         if (Test-Path $path) {

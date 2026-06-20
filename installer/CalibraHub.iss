@@ -61,8 +61,10 @@ Source: "grant-service-acl.ps1"; DestDir: "{app}"; Flags: ignoreversion
 ; Source: "grafana\*.ps1";       DestDir: "{app}\GrafanaSetup"; Flags: ignoreversion
 ; Source: "grafana\*.template";  DestDir: "{app}\GrafanaSetup"; Flags: ignoreversion
 ; Source: "grafana\grafana-*.zip"; DestDir: "{app}\GrafanaSetup"; Flags: ignoreversion skipifsourcedoesntexist
-; WhatsApp setup scriptleri
-Source: "whatsapp\*"; DestDir: "{app}\WhatsAppSetup"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 2026-06-20: WhatsApp setup scriptleri kaldirildi (installer\whatsapp\ klasoru artik yok).
+; Eski installer-side bootstrap script'leri yerine Bridge kendi package.json'i ile npm install yapar
+; (post-install [Run] adimi WhatsApp Bridge klasorunde dogrudan npm install cagirir).
+; Source: "whatsapp\*"; DestDir: "{app}\WhatsAppSetup"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; WhatsApp Bridge kaynak kodu (npm install kurulum sirasinda calisir)
 Source: "..\publish\WhatsAppBridge\*"; DestDir: "{app}\WhatsAppBridge"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; Bagimlilik (.NET 10 + Node.js) check & install scripti + bundled hosting bundle.
