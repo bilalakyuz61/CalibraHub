@@ -17,8 +17,14 @@ namespace CalibraHub.Application.Services.Messaging;
 /// </summary>
 public sealed class WhatsAppInboxPollingService : BackgroundService
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(15); // Bridge URL yoksa daha az sik dene
+    // 2026-06-20: PollInterval 3sn → 15sn. Sebep: 3sn polling dakikada 20 GET / saatte 1200
+    // GET üretiyordu; 1-5 şirket + tek-makine deployment topolojisi için aşırı. 15sn ile yük 5×
+    // azalır (saatte 240 GET). Kullanıcıya etki: yeni mesaj görünme gecikmesi 3sn → en kötü 15sn —
+    // chat UI için kabul edilebilir. Webhook push'a çevirmek (Bridge → Web) tam refactor gerektirir
+    // (WaContact resolve, media download, dedup tarafının webhook handler'a taşınması + retry +
+    // Bridge buffer fallback) — gerçek performans metriği gösterene kadar polling kalıyor.
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(30); // Bridge URL yoksa daha az sik dene
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHttpClientFactory _httpClientFactory;
