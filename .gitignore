@@ -89,3 +89,8 @@ build_out.txt
 .docx_extract.txt
 .extract_docx.ps1
 .run-log.txt
+
+# ── Logs ────────────────────────────────────────────────────────────────
+# Tüm runtime log'lar logs/ altına yazılır; klasör korunur, içerik ignored.
+logs/*
+!logs/.gitkeep
