@@ -188,7 +188,7 @@ public sealed record AssetAssignmentDto(
 
 /// <summary>
 /// Zimmet takip raporu satırı — tüm varlıklar arası düz liste: hangi varlık kime zimmetli,
-/// ne zaman verildi, ne zaman geri alındı. (Kompleks analiz Grafana'da; bu sade izleme içindir.)
+/// ne zaman verildi, ne zaman geri alındı.
 /// </summary>
 public sealed record AssignmentReportRowDto(
     int AssignmentId,

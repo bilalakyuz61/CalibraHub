@@ -26,8 +26,8 @@ public static class FormCodes
     // ═══════════════════════════════════════════════════
     // RAPORLAR
     // ═══════════════════════════════════════════════════
-    public const string Dashboards = "DASHBOARDS";
-    public const string Grafana    = "GRAFANA";
+    public const string Dashboards     = "DASHBOARDS";
+    public const string ReportDesigner = "REPORT_DESIGNER";
 
     // ═══════════════════════════════════════════════════
     // ONAY İŞLEMLERİ

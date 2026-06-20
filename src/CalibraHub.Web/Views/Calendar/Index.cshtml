@@ -1,0 +1,72 @@
+@{
+    ViewData["Title"] = "Takvim";
+    ViewData["FormCode"] = "";
+    ViewData["BodyClass"] = "page-calendar";
+}
+
+@section Styles {
+<link rel="stylesheet" href="/react/calibrahub-widgets.css?v=@(DateTime.UtcNow.Ticks)" />
+<style>
+    .page-calendar .workspace-action-bar { display: none !important; }
+    .workspace-frame-body.page-calendar .app-content-area--workspace-frame {
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0;
+    }
+    .page-calendar .integrator-dashboard,
+    .page-calendar .integrator-dashboard__content {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
+        min-height: 0;
+        flex: 1 1 auto;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+    .calendar-mount {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+        overflow: hidden;
+    }
+</style>
+}
+
+<section class="integrator-dashboard integrator-dashboard--wide integrator-dashboard--compact integrator-dashboard__content">
+    <div class="calendar-mount" id="calendarPageRoot"></div>
+</section>
+
+@section Scripts {
+<script src="/react/calibrahub-widgets.js?v=@(DateTime.UtcNow.Ticks)"></script>
+<script>
+    (function () {
+        var el = document.getElementById('calendarPageRoot')
+        if (!el) return
+        function doMount() {
+            if (!window.CalibraHub || !window.CalibraHub.mountCalendar) {
+                console.error('[Calendar] mount fonksiyonu bulunamadı'); return
+            }
+            try { window.CalibraHub.mountCalendar(el) }
+            catch (ex) { console.error('[Calendar] mount hatası:', ex) }
+        }
+        if (window.CalibraHub && window.CalibraHub.mountCalendar) { doMount(); return }
+        var tries = 0
+        var timer = setInterval(function () {
+            tries++
+            if (window.CalibraHub && window.CalibraHub.mountCalendar) { clearInterval(timer); doMount() }
+            else if (tries >= 30) { clearInterval(timer); console.error('[Calendar] timeout') }
+        }, 100)
+    })()
+</script>
+}

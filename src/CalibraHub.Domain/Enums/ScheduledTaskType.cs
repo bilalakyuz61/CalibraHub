@@ -51,4 +51,11 @@ public enum ScheduledTaskType
     /// V1'de tek bir "manuel calistir" semantigi (recordId=null ise wizard test akisi).
     /// </summary>
     Integration = 6,
+
+    /// <summary>
+    /// Bir rapor kaynaginin (ReportSource) snapshot tablosunu (dbo.ReportSnapshot_{id})
+    /// yeniden olusturur — agir sorgu zamanli olarak tabloya yazilir, raporlar oradan okur.
+    /// Parameters: {"sourceId": N}. CompanyId task uzerinden cozulur (snapshot sirket DB'sinde).
+    /// </summary>
+    ReportSnapshotRefresh = 7,
 }

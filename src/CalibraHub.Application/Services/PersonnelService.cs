@@ -60,6 +60,7 @@ public sealed class PersonnelService : IPersonnelService
             Phone = string.IsNullOrWhiteSpace(req.Phone) ? null : req.Phone.Trim(),
             Email = string.IsNullOrWhiteSpace(req.Email) ? null : req.Email.Trim(),
             Notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes.Trim(),
+            BirthDate = req.BirthDate,
         };
         return await _repo.SaveAsync(entity, ct);
     }

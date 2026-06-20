@@ -239,6 +239,7 @@ body.app-theme-dark .ste-err { color: #f87171; }
                   (2, "🌐", "HTTP API",         "Dış servise HTTP isteği gönderir"),
                   (4, "💱", "Kur Güncelleme",  "TCMB'den döviz kurlarını çeker"),
                   (5, "📊", "Rapor",           "View'dan Excel/CSV raporu gönderir"),
+                  (7, "📸", "Rapor Snapshot",  "Rapor kaynağı snapshot tablosunu yeniler"),
                 };
               }
               @foreach (var (val, icon, label, desc) in types)
@@ -316,6 +317,17 @@ body.app-theme-dark .ste-err { color: #f87171; }
               <div class="ste-section-title">Alıcılar</div>
               <div class="ste-kv-list" id="kv-recipients"></div>
               <button class="ste-kv-add" onclick="kvAddSingle('kv-recipients','E-posta adresi')">+ Alıcı Ekle</button>
+            </div>
+
+            <!-- Rapor Snapshot params -->
+            <div id="tp-snapshot" style="display:@(Model.TaskType == 7 ? "block" : "none")">
+              <div class="ste-field">
+                <label class="ste-label" for="ste-snap-source">Rapor Kaynağı *</label>
+                <select id="ste-snap-source" class="ste-select" style="max-width:320px;">
+                  <option value="">— Yükleniyor… —</option>
+                </select>
+              </div>
+              <div class="ste-hint" style="margin-top:8px;">Seçilen kaynağın snapshot tablosu (<code>dbo.ReportSnapshot_{id}</code>) bu görev çalıştığında yeniden oluşturulur.</div>
             </div>
           </div>
         }
@@ -471,13 +483,14 @@ body.app-theme-dark .ste-err { color: #f87171; }
     });
 
     function showTypePanel(val) {
-        ['tp-sql','tp-http','tp-currency','tp-report'].forEach(function (id) {
+        ['tp-sql','tp-http','tp-currency','tp-report','tp-snapshot'].forEach(function (id) {
             var el = document.getElementById(id); if (el) el.style.display = 'none';
         });
-        var map = {'1':'tp-sql','2':'tp-http','4':'tp-currency','5':'tp-report'};
+        var map = {'1':'tp-sql','2':'tp-http','4':'tp-currency','5':'tp-report','7':'tp-snapshot'};
         var target = document.getElementById(map[val]);
         if (target) target.style.display = 'block';
         if (val === '5') loadDbViews();
+        if (val === '7') loadSnapSources();
     }
     showTypePanel(String(initType));
 
@@ -570,6 +583,38 @@ body.app-theme-dark .ste-err { color: #f87171; }
         }).catch(function () {});
     }
 
+    /* ── Load report sources for ReportSnapshotRefresh ── */
+    var snapSourcesLoaded = false;
+    function loadSnapSources() {
+        if (snapSourcesLoaded) return; snapSourcesLoaded = true;
+        fetch('/Admin/ScheduledTasks/ReportSources').then(function (r) { return r.json(); }).then(function (sources) {
+            var sel = document.getElementById('ste-snap-source'); if (!sel) return;
+            sel.innerHTML = '<option value="">— Seçiniz —</option>';
+            sources.forEach(function (s) {
+                var opt = document.createElement('option');
+                opt.value = s.id; opt.textContent = s.name + ' (#' + s.id + ')';
+                opt.dataset.name = s.name;
+                sel.appendChild(opt);
+            });
+            if (initParams && initParams.sourceId) sel.value = String(initParams.sourceId);
+        }).catch(function () {});
+    }
+
+    /* ── Kaynak seçilince Görev Adı'nı otomatik doldur (boş ya da otomatik-isimse) ── */
+    (function () {
+        var snapSel = document.getElementById('ste-snap-source');
+        if (!snapSel) return;
+        snapSel.addEventListener('change', function () {
+            var nameEl = document.getElementById('ste-name');
+            if (!nameEl) return;
+            var opt = snapSel.options[snapSel.selectedIndex];
+            var sn = opt ? (opt.dataset.name || '') : '';
+            if (sn && (!nameEl.value.trim() || /^Snapshot: /.test(nameEl.value))) {
+                nameEl.value = 'Snapshot: ' + sn;
+            }
+        });
+    })();
+
     /* ── Init existing params ── */
     (function initExistingParams() {
         if (!initParams || isBuiltin) return;
@@ -587,6 +632,8 @@ body.app-theme-dark .ste-err { color: #f87171; }
             var fEl = document.getElementById('ste-report-format'); if (fEl && p.format) fEl.value = p.format;
             var sEl = document.getElementById('ste-report-subject'); if (sEl) sEl.value = p.subject || '';
             kvSetList('kv-recipients', p.recipients, 'E-posta adresi');
+        } else if (initType === 7) {
+            loadSnapSources();
         }
     })();
 
@@ -624,6 +671,24 @@ body.app-theme-dark .ste-err { color: #f87171; }
         }
     })();
 
+    /* ── Rapor-sahipli görev: salt-okunur (yalnızca izleme) ── */
+    (function () {
+        if (!initParams || initParams.managedBy !== 'report') return;
+        var sb = document.getElementById('ste-save');
+        if (sb) { sb.disabled = true; sb.style.opacity = '0.45'; sb.style.cursor = 'not-allowed'; sb.title = 'Bu görev rapor kaynağından yönetiliyor — buradan düzenlenemez.'; }
+        document.querySelectorAll('.ste-input, .ste-select, .ste-textarea, .ste-type-card, .ste-sched-btn, .ste-day-btn, .ste-kv-add, .ste-kv-del').forEach(function (el) {
+            el.style.pointerEvents = 'none'; el.style.opacity = '0.6';
+            if ('disabled' in el) el.disabled = true;
+        });
+        var firstPanel = document.querySelector('.ste-panel');
+        if (firstPanel && firstPanel.parentNode) {
+            var b = document.createElement('div');
+            b.style.cssText = 'margin:0 0 14px;padding:10px 14px;border-radius:8px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.35);color:#a5b4fc;font-size:13px;line-height:1.5;';
+            b.textContent = '🔒 Bu görev ilgili rapor kaynağının "Otomatik yenileme" ayarından yönetiliyor — buradan yalnızca izlenir, düzenlenemez. Değiştirmek için rapor kaynağındaki Otomatik yenileme seçimini kullanın.';
+            firstPanel.parentNode.insertBefore(b, firstPanel);
+        }
+    })();
+
     /* ── Collect parameters JSON ── */
     function collectParamsJson(taskType) {
         if (taskType === 1) {
@@ -634,6 +699,8 @@ body.app-theme-dark .ste-err { color: #f87171; }
             return '{}';
         } else if (taskType === 5) {
             return JSON.stringify({ viewName: document.getElementById('ste-view-name')?.value || '', format: document.getElementById('ste-report-format')?.value || 'xlsx', subject: (document.getElementById('ste-report-subject')?.value || '').trim(), recipients: kvGetList('kv-recipients') });
+        } else if (taskType === 7) {
+            return JSON.stringify({ sourceId: parseInt(document.getElementById('ste-snap-source')?.value) || 0 });
         }
         return null;
     }
@@ -698,7 +765,7 @@ body.app-theme-dark .ste-err { color: #f87171; }
             })
             .then(function (r) { return r.json(); })
             .then(function (d) {
-                if (d && d.success) { window.location.href = '/Admin/ScheduledTasks'; }
+                if (d && d.success) { window.location.href = '/Admin/ScheduledTasks?workspace=1'; }
                 else { setErr((d && d.message) || 'Kayıt başarısız.'); saveBtn.disabled = false; }
             })
             .catch(function () { setErr('Bağlantı hatası.'); saveBtn.disabled = false; });
@@ -721,7 +788,7 @@ body.app-theme-dark .ste-err { color: #f87171; }
                 })
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
-                    if (d && d.success) { window.location.href = '/Admin/ScheduledTasks'; }
+                    if (d && d.success) { window.location.href = '/Admin/ScheduledTasks?workspace=1'; }
                     else { steCloseModal(); setErr((d && d.message) || 'Silinemedi.'); }
                 })
                 .catch(function () { steCloseModal(); setErr('Bağlantı hatası.'); });

@@ -64,6 +64,8 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
     const recordingChunksRef = useRef([])
     // Mesaj iletme
     const [forwardMsg, setForwardMsg] = useState(null) // { bridgeMsgId, body } | null
+    // Mesaj bilgisi
+    const [msgInfoMsg, setMsgInfoMsg] = useState(null) // message object | null
     // Seçim modu
     const [selectMode, setSelectMode] = useState(false)
     const [selectedMsgs, setSelectedMsgs] = useState(new Set())
@@ -71,8 +73,13 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
     const [starredPanel, setStarredPanel] = useState(false)
     // Sohbeti temizle onay modalı
     const [clearChatConfirm, setClearChatConfirm] = useState(null) // { phone, displayName } | null
+    // Kişi arama sonuçları (mevcut sohbet olmayan kayıtlı kişiler)
+    const [contactResults, setContactResults] = useState([])
+    const contactSearchTimerRef = useRef(null)
 
     const threadEndRef = useRef(null)
+    const scrollInstantRef = useRef(false) // kişi değişince true → bir sonraki mesaj yüklemesinde anlık scroll
+    const awaitingMediaScrollRef = useRef(false) // kişi geçişinden 3sn: medya yüklenince scroll devam et
     const pollerRef = useRef(null)
     const fileInputRef = useRef(null)
     const imageInputRef = useRef(null)
@@ -154,6 +161,21 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         }
     }, [])
 
+    // ── Kişi arama (searchTerm değişince tetiklenir) ─────────────────────
+    const searchContactsByTerm = useCallback((q, existingConvPhones) => {
+        clearTimeout(contactSearchTimerRef.current)
+        if (!q || q.trim().length < 1) { setContactResults([]); return }
+        contactSearchTimerRef.current = setTimeout(async () => {
+            try {
+                const r = await fetch('/Whatsapp/ContactSearch?q=' + encodeURIComponent(q.trim()), { credentials: 'same-origin' })
+                const data = await r.json()
+                // Zaten sohbette olan kişileri çıkar
+                const filtered = (Array.isArray(data) ? data : []).filter(c => !existingConvPhones.has(c.phone))
+                setContactResults(filtered)
+            } catch { setContactResults([]) }
+        }, 350)
+    }, [])
+
     // ── SignalR hub bağlantısı ────────────────────────────────────────────
     useEffect(() => {
         const hub = new signalR.HubConnectionBuilder()
@@ -166,10 +188,13 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             const phone = selectedPhoneRef.current
             if (msg.phone === phone) {
                 setMessages(prev => {
-                    // Dedup: aynı ID varsa ekleme
-                    if (prev.some(m => m.id === msg.id)) return prev
+                    // Dedup: aynı mesaj varsa ekleme.
+                    // m.id → DB integer; msg.id → bridge string ID.
+                    // loadMessages sonrası DB kayıtları m.bridgeMsgId taşır → onu da kontrol et.
+                    if (prev.some(m => m.id === msg.id || m.bridgeMsgId === msg.id)) return prev
                     return [...prev, {
-                        id: msg.id, direction: msg.direction, body: msg.body,
+                        id: msg.id, bridgeMsgId: msg.id,
+                        direction: msg.direction, body: msg.body,
                         mediaType: msg.mediaType, hasMedia: msg.hasMedia,
                         mediaUrl: msg.mediaUrl, mediaMime: msg.mediaMime,
                         mediaFileName: msg.mediaFileName, mediaSize: msg.mediaSize,
@@ -252,11 +277,21 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         }
     }, [selectedPhone, loadConversations, loadMessages])
 
+    // ── Kişi değişince bir sonraki scroll anlık olsun ───────────────────
+    useEffect(() => {
+        scrollInstantRef.current = true
+        awaitingMediaScrollRef.current = true
+        const t = setTimeout(() => { awaitingMediaScrollRef.current = false }, 3000)
+        return () => clearTimeout(t)
+    }, [selectedPhone])
+
     // ── Yeni mesaj gelince otomatik aşağı kaydir ────────────────────────
     useEffect(() => {
-        if (!threadEndRef.current) return
-        threadEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    }, [messages, selectedPhone])
+        if (!threadEndRef.current || !messages.length) return
+        const behavior = scrollInstantRef.current ? 'auto' : 'smooth'
+        scrollInstantRef.current = false
+        threadEndRef.current.scrollIntoView({ behavior, block: 'end' })
+    }, [messages])
 
     // ── Sohbet secince okundu isaretle + state sifirla ──────────────────
     const selectConversation = useCallback(async (phone) => {
@@ -290,8 +325,10 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
         } catch { /* opsiyonel */ }
     }, [csrfToken, loadConversations])
 
-    // ── Sohbeti sil — geri sayim ile (Gmail "Undo" patterni, modal yok) ──
     const reallyDeleteConversation = useCallback(async (phone) => {
+        // Optimistik: istek tamamlanmadan önce listeden kaldır
+        setConversations(prev => prev.filter(c => c.phone !== phone))
+        if (selectedPhone === phone) { setSelectedPhone(null); setMessages([]) }
         try {
             const r = await fetch('/Whatsapp/DeleteConversation?phone=' + encodeURIComponent(phone), {
                 method: 'POST',
@@ -300,13 +337,14 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
             })
             const d = await r.json()
             if (d.success) {
-                if (selectedPhone === phone) { setSelectedPhone(null); setMessages([]) }
                 loadConversations()
             } else {
                 showToast('Silinemedi: ' + (d.message || 'bilinmeyen hata'))
+                loadConversations() // başarısız → listeyi orijinal haline getir
             }
         } catch (err) {
             showToast('Ag hatasi: ' + err.message)
+            loadConversations()
         }
     }, [csrfToken, loadConversations, selectedPhone, showToast])
 
@@ -475,6 +513,9 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
     }
 
     // ── Yeni helper fonksiyonlar ─────────────────────────────────────────
+
+    // Mesaj bilgisi
+    const showMsgInfo = useCallback((msg) => { setMsgInfoMsg(msg) }, [])
 
     // Yıldızlama
     const toggleStar = useCallback((bridgeMsgId) => {
@@ -699,25 +740,49 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                     </button>
                 </div>
             )}
-            {/* ── Sohbet sağ-tık menüsü ───────────────────────────────────────── */}
+            {/* ── Sohbet menüsü ───────────────────────────────────────────────── */}
             {convMenu && (
                 <div className="wa-conv-menu" style={{ top: convMenu.y, left: convMenu.x }}
                     onClick={e => e.stopPropagation()}>
+                    <button className="wa-conv-menu__item" onClick={() => { toggleArchive(convMenu.phone); setConvMenu(null) }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
+                        </svg>
+                        <span>{archivedConvs.has(convMenu.phone) ? 'Arşivden çıkar' : 'Sohbeti arşivle'}</span>
+                    </button>
+                    <button className="wa-conv-menu__item" onClick={() => { toggleMute(convMenu.phone); setConvMenu(null) }}>
+                        {mutedConvs.has(convMenu.phone) ? (
+                            <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                            </svg><span>Bildirimleri aç</span></>
+                        ) : (
+                            <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/>
+                                <path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-9.33-5"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg><span>Bildirimleri sessize al</span></>
+                        )}
+                    </button>
                     <button className="wa-conv-menu__item" onClick={() => { markUnread(convMenu.phone) }}>
-                        💬 Okunmamış İşaretle
-                    </button>
-                    <button className="wa-conv-menu__item" onClick={() => { toggleMute(convMenu.phone) }}>
-                        {mutedConvs.has(convMenu.phone) ? '🔔 Sesi Aç' : '🔇 Sessize Al'}
-                    </button>
-                    <button className="wa-conv-menu__item" onClick={() => { toggleArchive(convMenu.phone) }}>
-                        {archivedConvs.has(convMenu.phone) ? '📤 Arşivden Çıkar' : '📁 Arşivle'}
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <span>Okunmadı olarak işaretle</span>
                     </button>
                     <div className="wa-conv-menu__divider" />
                     <button className="wa-conv-menu__item" onClick={() => { setClearChatConfirm({ phone: convMenu.phone, displayName: convMenu.displayName }); setConvMenu(null) }}>
-                        🗑 Sohbeti Temizle
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                            <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                        </svg>
+                        <span>Sohbeti temizle</span>
                     </button>
                     <button className="wa-conv-menu__item wa-conv-menu__item--danger" onClick={() => { handleDeleteClick(convMenu.phone, convMenu.displayName, null); setConvMenu(null) }}>
-                        ✕ Sohbeti Sil
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                            <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                        </svg>
+                        <span>Sohbeti sil</span>
                     </button>
                 </div>
             )}
@@ -746,6 +811,49 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                     </div>
                 </div>
             )}
+            {/* ── Mesaj bilgisi modal ───────────────────────────────────────────── */}
+            {msgInfoMsg && (() => {
+                const status = messageStatusMap[msgInfoMsg.id] || msgInfoMsg.deliveryStatus || 'sent'
+                const sentAt = msgInfoMsg.at ? new Date(msgInfoMsg.at) : null
+                const fmtFull = (d) => d ? d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '—'
+                return (
+                    <div className="wa-msginfo-backdrop" onClick={() => setMsgInfoMsg(null)}>
+                        <div className="wa-msginfo-card" onClick={e => e.stopPropagation()}>
+                            <div className="wa-msginfo-card__head">
+                                <span>Mesaj bilgisi</span>
+                                <button className="wa-msginfo-card__close" onClick={() => setMsgInfoMsg(null)}>✕</button>
+                            </div>
+                            <div className="wa-msginfo-card__preview">
+                                {msgInfoMsg.hasMedia
+                                    ? <span className="wa-msginfo-card__media-label">[{msgInfoMsg.mediaType}]</span>
+                                    : <span>{msgInfoMsg.body}</span>
+                                }
+                            </div>
+                            <div className="wa-msginfo-card__rows">
+                                <div className="wa-msginfo-card__row">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    <span>Gönderildi</span>
+                                    <span className="wa-msginfo-card__time">{fmtFull(sentAt)}</span>
+                                </div>
+                                {(status === 'delivered' || status === 'read') && (
+                                    <div className="wa-msginfo-card__row">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/><polyline points="17 6 6 17 1 12"/></svg>
+                                        <span>İletildi</span>
+                                        <span className="wa-msginfo-card__time">—</span>
+                                    </div>
+                                )}
+                                {status === 'read' && (
+                                    <div className="wa-msginfo-card__row wa-msginfo-card__row--read">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#53bdeb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/><polyline points="17 6 6 17 1 12"/></svg>
+                                        <span>Okundu</span>
+                                        <span className="wa-msginfo-card__time">—</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )
+            })()}
             {/* ── Lightbox ─────────────────────────────────────────────────────── */}
             {lightbox && (
                 <div className="wa-lightbox" onClick={() => setLightbox(null)}>
@@ -773,12 +881,19 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                             </button>
                         </div>
                     </div>
+
                     <input
                         type="text"
                         className="wa-msg-search"
-                        placeholder="Sohbet veya kisi ara..."
+                        placeholder="Sohbet veya kişi ara..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => {
+                            const q = e.target.value
+                            setSearchTerm(q)
+                            const existingPhones = new Set(conversations.map(c => c.phone))
+                            searchContactsByTerm(q, existingPhones)
+                            if (!q) setContactResults([])
+                        }}
                     />
                     <div className="wa-filter-chips">
                         {[['all','Tümü'],['unread','Okunmamış'],['groups','Gruplar']].map(([tab, label]) => (
@@ -849,16 +964,41 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                                 </div>
                                 <button
                                     type="button"
-                                    className="wa-msg-conv__del"
-                                    onClick={(e) => handleDeleteClick(c.phone, c.displayName, e)}
-                                    title="Sohbeti sil"
-                                    aria-label={'Sohbeti sil: ' + (c.displayName || c.phone)}
+                                    className="wa-msg-conv__menu-btn"
+                                    onClick={e => {
+                                        e.stopPropagation()
+                                        const rect = e.currentTarget.getBoundingClientRect()
+                                        setConvMenu({ phone: c.phone, displayName: c.displayName || c.phone, x: rect.right - 210, y: rect.bottom + 4 })
+                                    }}
+                                    title="Sohbet menüsü"
+                                    aria-label={'Sohbet menüsü: ' + (c.displayName || c.phone)}
                                 >
-                                    ✕
+                                    ⋮
                                 </button>
                             </div>
                         )
                     })}
+
+                    {/* ── Kişiler bölümü (arama terimi varken gösterilir) ── */}
+                    {searchTerm && contactResults.length > 0 && (
+                        <div className="wa-contact-section">
+                            <div className="wa-contact-section__label">Kişiler</div>
+                            {contactResults.map(c => (
+                                <div key={c.id} className="wa-msg-conv wa-contact-item"
+                                    onClick={() => { setSelectedPhone(c.phone); setSearchTerm(''); setContactResults([]) }}>
+                                    <div className="wa-msg-conv__avatar">
+                                        {(c.displayName || c.phone).slice(0, 1).toUpperCase()}
+                                    </div>
+                                    <div className="wa-msg-conv__body">
+                                        <div className="wa-msg-conv__top">
+                                            <span className="wa-msg-conv__name">{c.displayName}</span>
+                                        </div>
+                                        <div className="wa-msg-conv__snippet">+{c.phone}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -1008,7 +1148,10 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                                                 {m.isDeleted
                                                     ? <div className="wa-msg-bubble__deleted">🚫 Bu mesaj silindi</div>
                                                     : <>
-                                                        {renderMediaContent(m, setLightbox)}
+                                                        {renderMediaContent(m, setLightbox, () => {
+                                                            if (awaitingMediaScrollRef.current && threadEndRef.current)
+                                                                threadEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' })
+                                                        })}
                                                         {m.body && <div className="wa-msg-bubble__text">{m.body}</div>}
                                                     </>
                                                 }
@@ -1016,43 +1159,68 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                                                     <span className="wa-msg-bubble__time">{formatShortTime(m.at)}</span>
                                                     {m.direction === 1 && <DeliveryTick status={messageStatusMap[m.id] || m.deliveryStatus || null} />}
                                                 </div>
+                                                {/* Chevron tetikleyici — bubble içinde sağ üst köşe */}
+                                                {!m.isDeleted && (
+                                                    <button
+                                                        className={'wa-msg-chevron' + (activeMsgId === m.id ? ' is-open' : '')}
+                                                        onClick={e => { e.stopPropagation(); setActiveMsgId(prev => prev === m.id ? null : m.id); setReactionTarget(null); }}
+                                                        title="Seçenekler"
+                                                    >
+                                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+                                                    </button>
+                                                )}
                                             </div>
-                                            {/* Tıklama menüsü */}
-                                            {!m.isDeleted && (
-                                                <div className={'wa-msg-menu' + (activeMsgId === m.id ? ' is-active' : '')} onClick={e => e.stopPropagation()}>
-                                                    <button className="wa-msg-menu__btn" title="Yanıtla"
-                                                        onClick={e => { e.stopPropagation(); setReplyingTo({ id: m.id, bridgeMsgId: m.bridgeMsgId, body: m.body, direction: m.direction }); setActiveMsgId(null) }}>
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
-                                                    </button>
-                                                    <button className="wa-msg-menu__btn" title="Reaksiyon"
-                                                        onClick={e => { e.stopPropagation(); setReactionTarget(prev => prev?.bridgeMsgId === m.bridgeMsgId ? null : { bridgeMsgId: m.bridgeMsgId, fromMe: m.direction === 1 }) }}>
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                                                    </button>
-                                                    {m.body && (
-                                                        <button className="wa-msg-menu__btn" title="Kopyala"
-                                                            onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(m.body); setActiveMsgId(null) }}>
-                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                            {/* Dropdown: emoji satırı + işlem listesi */}
+                                            {!m.isDeleted && activeMsgId === m.id && (
+                                                <div className={'wa-msg-dropdown' + (m.direction === 1 ? ' is-me' : '')} onClick={e => e.stopPropagation()}>
+                                                    <div className="wa-msg-dropdown__emojis">
+                                                        {['👍','❤️','😂','😮','😢','🙏'].map(emoji => (
+                                                            <button key={emoji} className="wa-msg-dropdown__emoji"
+                                                                onClick={() => { sendReaction(m.bridgeMsgId, m.direction === 1, emoji); setActiveMsgId(null); }}>
+                                                                {emoji}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="wa-msg-dropdown__sep" />
+                                                    {m.direction === 1 && (
+                                                        <button className="wa-msg-dropdown__item"
+                                                            onClick={e => { e.stopPropagation(); showMsgInfo(m); setActiveMsgId(null); }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                                            Mesaj bilgisi
                                                         </button>
                                                     )}
-                                                    {/* İlet butonu */}
-                                                    <button className="wa-msg-menu__btn" title="İlet"
-                                                        onClick={e => { e.stopPropagation(); setForwardMsg({ bridgeMsgId: m.bridgeMsgId, body: m.body }); setActiveMsgId(null) }}>
+                                                    <button className="wa-msg-dropdown__item"
+                                                        onClick={e => { e.stopPropagation(); setReplyingTo({ id: m.id, bridgeMsgId: m.bridgeMsgId, body: m.body, direction: m.direction }); setActiveMsgId(null); }}>
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                                                        Yanıtla
+                                                    </button>
+                                                    {m.body && (
+                                                        <button className="wa-msg-dropdown__item"
+                                                            onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(m.body); showToast('Kopyalandı', 'info'); setActiveMsgId(null); }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                                            Kopyala
+                                                        </button>
+                                                    )}
+                                                    <button className="wa-msg-dropdown__item"
+                                                        onClick={e => { e.stopPropagation(); setForwardMsg({ bridgeMsgId: m.bridgeMsgId, body: m.body }); setActiveMsgId(null); }}>
                                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+                                                        İlet
                                                     </button>
-                                                    {/* Yıldızla butonu */}
-                                                    <button className={'wa-msg-menu__btn' + (starredMsgs.has(m.bridgeMsgId) ? ' is-starred' : '')} title="Yıldızla"
-                                                        onClick={e => { e.stopPropagation(); toggleStar(m.bridgeMsgId); setActiveMsgId(null) }}>
+                                                    <button className={'wa-msg-dropdown__item' + (starredMsgs.has(m.bridgeMsgId) ? ' is-starred' : '')}
+                                                        onClick={e => { e.stopPropagation(); toggleStar(m.bridgeMsgId); setActiveMsgId(null); }}>
                                                         <svg width="14" height="14" viewBox="0 0 24 24" fill={starredMsgs.has(m.bridgeMsgId) ? '#f59e0b' : 'none'} stroke={starredMsgs.has(m.bridgeMsgId) ? '#f59e0b' : 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                                        {starredMsgs.has(m.bridgeMsgId) ? 'Yıldızı kaldır' : 'Yıldız ekle'}
                                                     </button>
-                                                    {/* Seç butonu */}
-                                                    <button className="wa-msg-menu__btn" title="Seç"
-                                                        onClick={e => { e.stopPropagation(); setSelectMode(true); toggleSelectMsg(m.id); setActiveMsgId(null) }}>
+                                                    <button className="wa-msg-dropdown__item"
+                                                        onClick={e => { e.stopPropagation(); setSelectMode(true); toggleSelectMsg(m.id); setActiveMsgId(null); }}>
                                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                                        Seç
                                                     </button>
-                                                    {/* Sil butonu — tüm mesajlar için */}
-                                                    <button className="wa-msg-menu__btn wa-msg-menu__btn--danger" title="Sil"
-                                                        onClick={e => { e.stopPropagation(); deleteMessage(m.bridgeMsgId, m.direction === 1); setActiveMsgId(null) }}>
+                                                    <div className="wa-msg-dropdown__sep" />
+                                                    <button className="wa-msg-dropdown__item wa-msg-dropdown__item--danger"
+                                                        onClick={e => { e.stopPropagation(); deleteMessage(m.bridgeMsgId, m.direction === 1); setActiveMsgId(null); }}>
                                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                                                        Sil
                                                     </button>
                                                 </div>
                                             )}
@@ -1061,21 +1229,6 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
                                                 <div className="wa-reaction-badge" title="Reaksiyon kaldır"
                                                     onClick={e => { e.stopPropagation(); sendReaction(m.bridgeMsgId, m.direction === 1, '') }}>
                                                     {m.reactionEmoji}
-                                                </div>
-                                            )}
-                                            {/* Reaksiyon picker */}
-                                            {reactionTarget?.bridgeMsgId === m.bridgeMsgId && (
-                                                <div className="wa-reaction-picker" onClick={e => e.stopPropagation()}>
-                                                    {['👍','❤️','😂','😮','😢','🙏'].map(emoji => (
-                                                        <button key={emoji} className="wa-reaction-picker__btn"
-                                                            onClick={() => sendReaction(m.bridgeMsgId, m.direction === 1, emoji)}>
-                                                            {emoji}
-                                                        </button>
-                                                    ))}
-                                                    <button className="wa-reaction-picker__btn wa-reaction-picker__btn--remove"
-                                                        onClick={() => sendReaction(m.bridgeMsgId, m.direction === 1, '')}>
-                                                        ✕
-                                                    </button>
                                                 </div>
                                             )}
                                         </div>
@@ -1320,7 +1473,7 @@ function WhatsAppMessenger({ initialPhone, csrfToken }) {
 }
 
 // ── Yardimcilar ─────────────────────────────────────────────────────────
-function renderMediaContent(m, setLightbox) {
+function renderMediaContent(m, setLightbox, onMediaLoad) {
     if (!m.hasMedia || !m.mediaUrl) return null
     const url = m.mediaUrl
     const fileName = m.mediaFileName || (m.mediaUrl.split('/').pop() || 'dosya')
@@ -1334,12 +1487,13 @@ function renderMediaContent(m, setLightbox) {
                     title="Tam boyut için tıkla"
                     style={{ cursor: 'zoom-in' }}
                     onClick={e => { e.stopPropagation(); if (setLightbox) setLightbox({ url, type: 'image', fileName }) }}>
-                    <img src={url} alt="" loading="lazy" />
+                    <img src={url} alt="" loading="lazy" onLoad={onMediaLoad} />
                 </div>
             )
         case 'video':
             return (
-                <video className="wa-msg-bubble__media wa-msg-bubble__media--video" controls preload="metadata">
+                <video className="wa-msg-bubble__media wa-msg-bubble__media--video" controls preload="metadata"
+                    onLoadedMetadata={onMediaLoad}>
                     <source src={url} type={m.mediaMime || 'video/mp4'} />
                 </video>
             )
@@ -1389,13 +1543,13 @@ function formatLastSeen(iso) {
 
 /**
  * Telefon mu LID mi: 10-14 basamak gercek E.164 telefon, 15+ basamak WhatsApp LID.
- * UI'da telefon gibi gostermek (+208...) yanlis bilgi verir, bu yuzden ayri etiket dondururuz.
+ * LID icin bos string doner — UI'da yanlis numara gosterme.
  */
 function formatPhoneOrLid(s) {
     if (!s) return ''
     const digits = String(s).replace(/[^\d]/g, '')
     if (digits.length >= 10 && digits.length <= 14) return '+' + digits
-    return '(WhatsApp ID)'
+    return '' // LID — telefon numarasi yok, bos birak
 }
 
 function snippet(body, mediaType) {

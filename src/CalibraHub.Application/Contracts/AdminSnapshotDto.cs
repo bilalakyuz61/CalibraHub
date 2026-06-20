@@ -49,7 +49,7 @@ public sealed record IntegratorSettingsDto(
     int LookbackDays);
 
 public sealed record SmtpProfileDto(
-    Guid Id,
+    int Id,
     int CompanyId,
     string CompanyName,
     string Name,
@@ -96,5 +96,4 @@ public sealed record UserProfileDto(
     string? SupervisorName,
     string Role,
     IReadOnlyCollection<string> Permissions,
-    bool IsActive,
-    string? GrafanaRole);
+    bool IsActive);

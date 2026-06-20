@@ -145,10 +145,10 @@
       </div>
 
       <div class="am-panel" id="panel-hist">
-        <h2 class="am-panel-title">Bakım / Kalibrasyon Geçmişi</h2>
-        <p class="am-panel-sub">Bu varlığa ait bakım ve kalibrasyon kayıtları.</p>
+        <h2 class="am-panel-title">@opLabel Geçmişi</h2>
+        <p class="am-panel-sub">Bu varlığa ait @(opLabel.ToLower()) kayıtları.</p>
         <table class="am-hist" id="am-hist-table" style="display:none;">
-          <thead><tr><th>Tür</th><th>Tarih</th><th>Yapan</th><th>Sonuç</th><th>Maliyet</th><th>Not</th></tr></thead>
+          <thead><tr><th>Tarih</th><th>Yapan</th><th>Sonuç</th><th>Maliyet</th><th>Not</th></tr></thead>
           <tbody id="am-hist-body"></tbody>
         </table>
         <div class="am-hist-empty" id="am-hist-empty">Henüz kayıt yok.</div>
@@ -200,10 +200,8 @@
                 if (!rows.length) { table.style.display = 'none'; empty.style.display = ''; return; }
                 table.style.display = ''; empty.style.display = 'none';
                 body.innerHTML = rows.map(function (e) {
-                    var isCal = (e.eventType === 'Calibration' || e.eventType === 1);
                     var who = e.performedByName || e.performedByText || '';
                     return '<tr>'
-                        + '<td><span class="am-chip ' + (isCal ? 'am-chip--calib' : 'am-chip--maint') + '">' + (EV_TYPE[e.eventType] || '') + '</span></td>'
                         + '<td>' + fmt(e.eventDate) + '</td>'
                         + '<td>' + esc(who) + '</td>'
                         + '<td>' + esc(EV_RESULT[e.result] || '') + '</td>'

@@ -97,10 +97,9 @@
     var guideManagementActive = controller == "admin" && action == "guidemanagement";
 
     var dashboardsActive = controller == "dashboard" && action == "index";
-    var grafanaActive = controller == "dashboard" && action == "grafana";
-    var reportingDesignerActive = controller == "reporting" && action == "designer";
+    var reportDesignerActive = controller == "dashboard" && action == "designer";
     var docDesignerActive = controller == "docdesigner";
-    var reportsGroupOpen = dashboardsActive || grafanaActive || reportingDesignerActive;
+    var reportsGroupOpen = dashboardsActive || reportDesignerActive;
 
     var canViewDashboards = false;
     if (UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role), out var dashboardRole))
@@ -913,22 +912,6 @@
                         </button>
                     </div>
 
-                    <div class="menu-entry" data-menu-entry data-favorite-key="main-reports-grafana">
-                        <a class="side-subitem @(grafanaActive ? "active" : string.Empty)"
-                           asp-controller="Dashboard" asp-action="Grafana"
-                           title="Rapor Tasarımı">
-                            <span class="menu-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="9"/>
-                                    <path d="M12 7v5l3 2"/>
-                                </svg>
-                            </span>
-                            <span class="menu-text">Rapor Tasarımı</span>
-                        </a>
-                        <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Rapor Tasarımı favorilere ekle">
-                            <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
-                        </button>
-                    </div>
                 }
 
                 @if (isMenuAdmin)
@@ -948,16 +931,16 @@
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>
-                <div class="menu-entry" data-menu-entry data-favorite-key="main-reporting-designer">
-                    <a class="side-subitem @(reportingDesignerActive ? "active" : string.Empty)"
-                       asp-controller="Reporting" asp-action="Designer"
-                       title="Şablon Tasarımı">
+                <div class="menu-entry" data-menu-entry data-favorite-key="main-report-designer">
+                    <a class="side-subitem @(reportDesignerActive ? "active" : string.Empty)"
+                       asp-controller="Dashboard" asp-action="Designer"
+                       title="Rapor Tasarımcısı">
                         <span class="menu-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V6"/><path d="M17 16v-4"/></svg>
                         </span>
-                        <span class="menu-text">Şablon Tasarımı</span>
+                        <span class="menu-text">Rapor Tasarımcısı</span>
                     </a>
-                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Şablon Tasarımı favorilere ekle">
+                    <button type="button" class="favorite-toggle" data-favorite-toggle aria-label="Rapor Tasarımcısı favorilere ekle">
                         <svg viewBox="0 0 24 24"><path d="m12 3 2.9 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.4 6.2 20.5l1.1-6.3L2.7 9.7l6.4-.9z"></path></svg>
                     </button>
                 </div>

@@ -42,7 +42,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
             SELECT p.[Id], p.[CompanyId], p.[Code], p.[FullName], p.[Title], p.[Department],
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
-                   p.[Phone], p.[Email], p.[Notes], p.[Created], p.[Updated]
+                   p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated]
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
             WHERE p.[CompanyId] = @CompanyId
@@ -65,7 +65,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                    p.[Id], p.[CompanyId], p.[Code], p.[FullName], p.[Title], p.[Department],
                    p.[PinCode], p.[CardNo], p.[IsProductionOperator], p.[IsActive],
                    p.[UserId], u.[FullName] AS UserFullName,
-                   p.[Phone], p.[Email], p.[Notes], p.[Created], p.[Updated]
+                   p.[Phone], p.[Email], p.[Notes], p.[BirthDate], p.[Created], p.[Updated]
             FROM {_table} p
             LEFT JOIN [{_schema}].[Users] u ON u.[Id] = p.[UserId]
             WHERE p.[Id] = @Id AND p.[CompanyId] = @CompanyId;";
@@ -86,11 +86,11 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                 INSERT INTO {_table}
                     ([CompanyId],[Code],[FullName],[Title],[Department],
                      [PinCode],[CardNo],[IsProductionOperator],[IsActive],
-                     [UserId],[Phone],[Email],[Notes],[Created])
+                     [UserId],[Phone],[Email],[Notes],[BirthDate],[Created])
                 VALUES
                     (@CompanyId,@Code,@FullName,@Title,@Department,
                      @PinCode,@CardNo,@IsProductionOperator,@IsActive,
-                     @UserId,@Phone,@Email,@Notes,SYSUTCDATETIME());
+                     @UserId,@Phone,@Email,@Notes,@BirthDate,SYSUTCDATETIME());
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
         else
@@ -102,7 +102,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                     [PinCode]=@PinCode, [CardNo]=@CardNo,
                     [IsProductionOperator]=@IsProductionOperator, [IsActive]=@IsActive,
                     [UserId]=@UserId, [Phone]=@Phone, [Email]=@Email, [Notes]=@Notes,
-                    [Updated]=SYSUTCDATETIME()
+                    [BirthDate]=@BirthDate, [Updated]=SYSUTCDATETIME()
                 WHERE [Id]=@Id AND [CompanyId]=@CompanyId;
                 SELECT @Id;";
             cmd.Parameters.AddWithValue("@Id", e.Id);
@@ -120,6 +120,7 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
         cmd.Parameters.AddWithValue("@Phone", (object?)e.Phone ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Email", (object?)e.Email ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Notes", (object?)e.Notes ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@BirthDate", (object?)e.BirthDate ?? DBNull.Value);
         var result = await cmd.ExecuteScalarAsync(ct);
         return result != null && result != DBNull.Value ? Convert.ToInt32(result) : 0;
     }
@@ -252,8 +253,9 @@ public sealed class SqlPersonnelRepository : IPersonnelRepository
                 Phone: r.IsDBNull(12) ? null : r.GetString(12),
                 Email: r.IsDBNull(13) ? null : r.GetString(13),
                 Notes: r.IsDBNull(14) ? null : r.GetString(14),
-                Created: r.GetDateTime(15),
-                Updated: r.IsDBNull(16) ? null : r.GetDateTime(16)));
+                BirthDate: r.IsDBNull(15) ? null : r.GetDateTime(15),
+                Created: r.GetDateTime(16),
+                Updated: r.IsDBNull(17) ? null : r.GetDateTime(17)));
         }
         return list;
     }

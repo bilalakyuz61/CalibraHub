@@ -1,6 +1,97 @@
-@inject CalibraHub.Web.Infrastructure.Ui.IUiTextService UiText
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
+    // 2026-06-14 — Ana Sayfa Panosu (Home Dashboard).
+    //
+    // Birincil render yolu: Shell.jsx (UseDashboardShell=true sayesinde _Layout
+    // React Shell'i mount eder). Shell, açık tab yokken (isHomePage) Dashboard
+    // bileşenini EmptyState yerine doğrudan render eder — iframe yok, ikinci
+    // mount yok. Bu durumda _Layout.cshtml → IgnoreBody() çağırır; aşağıdaki
+    // body hiç render edilmez.
+    //
+    // Yedek yol: sayfa ?workspace=1 ile (workspace tab olarak) açılırsa body
+    // render edilir. Bu durumda mountDashboard() ile pano doğrudan bu div'e
+    // mount edilir. Shell config'i (user/system/antiforgery) bu sayfadan gelir
+    // çünkü Shell yoktur.
+    //
+    // Pano verisi: /HomeDashboard/Config + widget endpoint'leri (Dashboard.jsx →
+    // dashboardService). Kullanıcı bilgisi config nesnesi üzerinden iletilir.
     ViewData["UseDashboardShell"] = true;
-    var ui = await UiText.GetFormAsync("home.dashboard");
     ViewData["Title"] = "Ana Sayfa";
+
+    var csrfToken = Antiforgery.GetAndStoreTokens(Context).RequestToken ?? string.Empty;
+    var currentUser = new
+    {
+        name  = User.Identity?.Name ?? "Misafir",
+        email = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty,
+    };
+}
+
+@* ── Yedek mount noktası (workspace=1 yolu) ─────────────────────────────────
+   Shell aktifken _Layout.cshtml → IgnoreBody() → bu blok hiç render edilmez.
+   Workspace iframe veya doğrudan URL açılışında mount edilir.             *@
+<div id="dashboardMount" style="position:absolute;inset:0;overflow:auto;"></div>
+
+@section Scripts {
+<script>
+(function() {
+    var el = document.getElementById('dashboardMount');
+    if (!el) return;
+
+    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+
+    var DASH_CONFIG = {
+        user:             @Html.Raw(System.Text.Json.JsonSerializer.Serialize(currentUser)),
+        antiforgeryToken: '@csrfToken',
+    };
+
+    function showError(msg) {
+        el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-family:system-ui,sans-serif;color:#94a3b8;font-size:14px;">'
+            + '<div style="text-align:center;">'
+            + '<div style="margin-bottom:8px;">Ana Sayfa Panosu yüklenemedi</div>'
+            + '<div style="font-size:12px;opacity:.7;">' + msg + '</div>'
+            + '<button onclick="location.reload()" style="margin-top:12px;padding:6px 16px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#94a3b8;cursor:pointer;font-size:12px;">Yenile</button>'
+            + '</div></div>';
+    }
+
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountDashboard) {
+            showError('mountDashboard bulunamadı');
+            return;
+        }
+        try {
+            window.CalibraHub.mountDashboard(el, DASH_CONFIG);
+        } catch (ex) {
+            console.error('[Dashboard] Mount hatası:', ex);
+            showError(ex.message || String(ex));
+        }
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-dashboard-css]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-dashboard-css', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        if (document.querySelector('script[data-dashboard-js]')) { cb(); return; }
+        var script = document.createElement('script');
+        script.src = BUNDLE_URL;
+        script.setAttribute('data-dashboard-js', '1');
+        script.onload  = function() { setTimeout(cb, 0); };
+        script.onerror = function() { showError('Bundle yüklenemedi'); };
+        document.head.appendChild(script);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountDashboard) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
+})();
+</script>
 }

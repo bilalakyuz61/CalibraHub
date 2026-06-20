@@ -31,6 +31,7 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
 {
     private readonly IEmailSender _email;
     private readonly IUserProfileRepository _userRepo;
+    private readonly IApprovalInstanceRepository _instRepo;
     private readonly ILogger<ApprovalNotificationDispatcher> _logger;
     private readonly IWhatsAppService? _whatsApp;
     private readonly IDocDesignerService? _designer;
@@ -39,6 +40,7 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
     public ApprovalNotificationDispatcher(
         IEmailSender email,
         IUserProfileRepository userRepo,
+        IApprovalInstanceRepository instRepo,
         ILogger<ApprovalNotificationDispatcher> logger,
         IWhatsAppService? whatsApp = null,
         IDocDesignerService? designer = null,
@@ -46,6 +48,7 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
     {
         _email       = email;
         _userRepo    = userRepo;
+        _instRepo    = instRepo;
         _logger      = logger;
         _whatsApp    = whatsApp;
         _designer    = designer;
@@ -153,9 +156,11 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
             return;
         }
 
-        // Token replace
-        var subject = ApplyContextTokens(cfg.Subject ?? "Onay Bildirimi", ctx, recipients[0].Name);
-        var body    = ApplyContextTokens(cfg.Body    ?? "",                 ctx, recipients[0].Name);
+        // Token replace — boş string null değil, ?? çalışmaz; IsNullOrWhiteSpace kullan.
+        var subject = ApplyContextTokens(
+            string.IsNullOrWhiteSpace(cfg.Subject) ? "Onay Bildirimi" : cfg.Subject,
+            ctx, recipients[0].Name);
+        var body    = ApplyContextTokens(cfg.Body ?? "", ctx, recipients[0].Name);
 
         // PDF ek (opsiyonel)
         List<EmailAttachment>? attachments = null;
@@ -195,8 +200,13 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
             {
                 try
                 {
-                    var msg = string.IsNullOrWhiteSpace(body) ? subject : (subject + "\n\n" + body);
-                    var r = await _whatsApp.SendTextMessageAsync(rec.Phone!, msg, ct, interactive: false);
+                    // subject artık asla boş değil (yukarıda default "Onay Bildirimi" atandı).
+                    var msg = string.IsNullOrWhiteSpace(body)
+                        ? subject
+                        : (string.IsNullOrWhiteSpace(subject) ? body : subject + "\n\n" + body);
+                    // interactive: true → rate limit + insan gecikmesi atlanır; UI ile aynı hız.
+                    // Onay bildirimi spam değil — sistem tarafından tek mesaj, normal UI gönderimi gibi.
+                    var r = await _whatsApp.SendTextMessageAsync(rec.Phone!, msg, ct, interactive: true);
                     if (!r.Success)
                         _logger.LogWarning("Notification WhatsApp gönderim başarısız: {Msg}", r.Message);
                 }
@@ -252,6 +262,20 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
                 }
                 break;
 
+            case "managerofcreator":
+                // Belgeyi oluşturan kullanıcının amiri (Users.SupervisorUserId).
+                var morCreatorId = TryGetInt(ctx, "user.userId");
+                if (morCreatorId.HasValue)
+                {
+                    var creator = await _userRepo.GetByIdAsync(morCreatorId.Value, ct);
+                    if (creator?.SupervisorUserId.HasValue == true)
+                    {
+                        var mgr = await _userRepo.GetByIdAsync(creator.SupervisorUserId.Value, ct);
+                        if (mgr is not null) list.Add(NotifyRecipient.From(mgr));
+                    }
+                }
+                break;
+
             case "specificuser":
                 if (int.TryParse(cfg.RecipientId, out var uid))
                 {
@@ -270,9 +294,24 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
                 break;
 
             case "approver":
-                // Notification node'unda "approver" tipik olarak en son aktif step'in
-                // onaylayanıdır — context'te bu bilgi yoksa atlanır. Executor isterse
-                // ctx'i genişletip "current approver" bilgisini ekleyebilir (TODO).
+                // ctx.ApprovalInstanceId, executor tarafından notification case'inde set edilir.
+                // Instance'ın current step'ini bul ve o adımın ApproverId'sini bildirim hedefi yap.
+                if (ctx.ApprovalInstanceId.HasValue)
+                {
+                    var inst = await _instRepo.GetByIdAsync(ctx.ApprovalInstanceId.Value, ct);
+                    if (inst is not null)
+                    {
+                        // CurrentStep'e karşılık gelen step record'unun ApproverId'sini al.
+                        // Step record henüz Pending olabilir; ApproverId flow tanımından gelir.
+                        var sr = inst.StepRecords.FirstOrDefault(s => s.StepOrder == inst.CurrentStep);
+                        var approverId = sr?.ApproverId;
+                        if (!string.IsNullOrEmpty(approverId) && int.TryParse(approverId, out var apId))
+                        {
+                            var u = await _userRepo.GetByIdAsync(apId, ct);
+                            if (u is not null) list.Add(NotifyRecipient.From(u));
+                        }
+                    }
+                }
                 break;
 
             case "custom":
@@ -303,7 +342,7 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
         }
         var docNumber = Get("documentNumber");
         if (string.IsNullOrEmpty(docNumber)) docNumber = ctx.EntityId ?? "";
-        return (template ?? "")
+        var result = (template ?? "")
             .Replace("{documentNumber}", docNumber)
             .Replace("{documentId}",     ctx.EntityId ?? "")
             .Replace("{entityId}",       ctx.EntityId ?? "")
@@ -314,7 +353,32 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
             .Replace("{contactName}",    Get("contactName"))
             .Replace("{taxNo}",          Get("taxNo"))
             .Replace("{approverName}",   recipientName ?? "")
-            .Replace("{recipientName}",  recipientName ?? "");
+            .Replace("{recipientName}",  recipientName ?? "")
+            .Replace("{requesterName}",  ctx.RequesterName ?? "")
+            .Replace("{flowName}",       ctx.FlowName ?? "")
+            .Replace("{currentStepName}", "");
+
+        // {var.degiskenAdi} — FlowVariables'dan resolve et.
+        // Header token'larla çakışmayan, akışa özel dinamik değerler için.
+        if (ctx.FlowVariables.Count > 0 && result.Contains("{var."))
+        {
+            foreach (var (key, val) in ctx.FlowVariables)
+            {
+                var token = "{var." + key + "}";
+                if (!result.Contains(token)) continue;
+                var strVal = val switch
+                {
+                    null           => "",
+                    DateTime dt    => dt.ToString("dd.MM.yyyy"),
+                    decimal dec    => dec.ToString("N2"),
+                    double dbl     => ((decimal)dbl).ToString("N2"),
+                    _              => val.ToString() ?? "",
+                };
+                result = result.Replace(token, strVal);
+            }
+        }
+
+        return result;
     }
 
     private static int? TryGetInt(ApprovalEntityContext ctx, string field)
@@ -389,7 +453,7 @@ public sealed class ApprovalNotificationDispatcher : IApprovalNotificationDispat
         {
             Name = u.FullName,
             Email = u.Email,
-            Phone = null,  // UserProfile'da phone yok
+            Phone = u.PhoneNumber,
             CompanyId = u.CompanyId,
         };
     }

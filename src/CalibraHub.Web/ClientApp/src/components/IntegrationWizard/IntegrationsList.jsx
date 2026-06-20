@@ -17,6 +17,7 @@ import {
   AlertTriangle, RefreshCw, Check, X, Loader2,
   Download, Upload,
 } from 'lucide-react'
+import { navigateInWorkspace } from '../../utils/workspaceNav'
 
 function getCsrf() {
   const el = document.querySelector('input[name="__RequestVerificationToken"]')
@@ -122,7 +123,7 @@ export default function IntegrationsList({ config }) {
       const d = await r.json()
       if (d.success) {
         toast('Kopya oluşturuldu — düzenleme ekranına yönlendiriliyor', 'ok')
-        window.location.href = wizardEdit(d.id)
+        navigateInWorkspace(wizardEdit(d.id))
       } else toast(d.error || 'Hata', 'err')
     } catch (e) {
       toast('Sunucu hatası: ' + e.message, 'err')
@@ -282,7 +283,7 @@ export default function IntegrationsList({ config }) {
                 gönderim seçenekleri olur. Liste kartı sadeleştirildi. */}
             <div className="il-actions il-actions--leading">
               <button className="il-act il-act-edit" title="Düzenle"
-                      onClick={() => window.location.href = wizardEdit(item.id)}>
+                      onClick={() => navigateInWorkspace(wizardEdit(item.id))}>
                 <Edit2 size={14} />
               </button>
               <button className="il-act" title="Kopyala"

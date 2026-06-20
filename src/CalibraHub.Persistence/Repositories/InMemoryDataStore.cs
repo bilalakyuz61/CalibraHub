@@ -177,7 +177,7 @@ public sealed class InMemoryDataStore
                 })
         });
 
-    public ConcurrentDictionary<Guid, SmtpProfile> SmtpProfiles { get; } = new();
+    public ConcurrentDictionary<int, SmtpProfile> SmtpProfiles { get; } = new();
 
     public ConcurrentDictionary<Guid, UiLabelTranslation> UiLabelTranslations { get; } = new();
 

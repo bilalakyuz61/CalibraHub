@@ -2,7 +2,7 @@ using CalibraHub.Domain.Common;
 
 namespace CalibraHub.Domain.Entities;
 
-public sealed class SmtpProfile : Entity
+public sealed class SmtpProfile : EntityInt
 {
     public int CompanyId { get; init; }
     public required string Name { get; init; }

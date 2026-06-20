@@ -118,7 +118,7 @@ public sealed class ReminderNotificationWorker : BackgroundService
                             Title      = subject,
                             Body       = $"Bu notun hatirlaticisi {reminder.RemindAt:dd.MM.yyyy HH:mm} icin planlanmisti.",
                             SourceType = "NoteReminder",
-                            SourceId   = note.Id,
+                            SourceId   = null, // Note.Id is Guid; SourceId is int? — Link field provides navigation
                             Link       = "/Notes?id=" + note.Id,
                         };
                         await notificationRepo.AddAsync(notification, cancellationToken);

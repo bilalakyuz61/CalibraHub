@@ -342,7 +342,7 @@ public sealed class AdminController : Controller
     [HttpGet]
     [PermissionScope(FormCodes.SetupDefinitions)]
     public async Task<IActionResult> MailSettings(
-        Guid? smtpId,
+        int? smtpId,
         int? page,
         int? pageSize,
         CancellationToken cancellationToken)

@@ -8,11 +8,15 @@ namespace CalibraHub.Domain.Entities;
 /// seed edilir; admin elle de kayıt ekleyebilir.
 ///
 /// Standart action'lar (her form için):
-///   VIEW         — formu açabilme (menü görünürlüğü dahil)
+///   VIEW_OWN     — yalnızca kendi oluşturduğu kayıtları görme (CreatedById == userId)
+///   VIEW_DEPT    — kendi departmanındaki kullanıcıların oluşturduğu kayıtları görme
+///   VIEW         — tüm kayıtları görme (menü görünürlüğü dahil)
 ///   CREATE       — yeni kayıt ekleme
 ///   EDIT_OWN     — kullanıcının kendi (CreatedById == userId) kayıtlarını düzenleme
-///   EDIT_ALL     — tüm kayıtları düzenleme (üst kümeler EDIT_OWN'ı kapsar)
+///   EDIT_DEPT    — kendi departmanındaki kullanıcıların kayıtlarını düzenleme
+///   EDIT_ALL     — tüm kayıtları düzenleme
 ///   DELETE_OWN   — kendi kayıtlarını silme
+///   DELETE_DEPT  — kendi departmanındaki kullanıcıların kayıtlarını silme
 ///   DELETE_ALL   — tüm kayıtları silme
 ///
 /// Form-içi özel butonlar:
@@ -24,17 +28,21 @@ public sealed class PermissionDef
 {
     public static class StandardActions
     {
-        public const string View       = "VIEW";
         public const string ViewOwn    = "VIEW_OWN";
+        public const string ViewDept   = "VIEW_DEPT";
+        public const string View       = "VIEW";
         public const string Create     = "CREATE";
         public const string EditOwn    = "EDIT_OWN";
+        public const string EditDept   = "EDIT_DEPT";
         public const string EditAll    = "EDIT_ALL";
         public const string DeleteOwn  = "DELETE_OWN";
+        public const string DeleteDept = "DELETE_DEPT";
         public const string DeleteAll  = "DELETE_ALL";
 
+        // Sıralama: Özel → Departman → Genel (her operasyon grubu için aynı hiyerarşi)
         public static readonly IReadOnlyList<string> All = new[]
         {
-            ViewOwn, View, Create, EditOwn, EditAll, DeleteOwn, DeleteAll,
+            ViewOwn, ViewDept, View, Create, EditOwn, EditDept, EditAll, DeleteOwn, DeleteDept, DeleteAll,
         };
     }
 

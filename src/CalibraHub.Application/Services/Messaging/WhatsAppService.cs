@@ -298,7 +298,7 @@ public sealed class WhatsAppService : IWhatsAppService
         try
         {
             using var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(15);
+            client.Timeout = TimeSpan.FromSeconds(30); // bridge 25 sn timeout'una yetki tanır
             var sendUrl = cfg.WebQrBridgeUrl.TrimEnd('/') + "/send";
             var resp = await client.PostAsJsonAsync(sendUrl, new { to, text = message }, ct);
             var body = await resp.Content.ReadAsStringAsync(ct);

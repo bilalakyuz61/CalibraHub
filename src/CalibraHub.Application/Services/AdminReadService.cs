@@ -141,8 +141,7 @@ public sealed class AdminReadService : IAdminReadService
                     x.SupervisorUserId.HasValue ? userLookup.GetValueOrDefault(x.SupervisorUserId.Value) : null,
                     UserAuthorizationCatalog.GetRoleLabel(x.Role),
                     x.Permissions.Select(UserAuthorizationCatalog.GetPermissionLabel).ToArray(),
-                    x.IsActive,
-                    x.GrafanaRole?.ToString()))
+                    x.IsActive))
                 .ToArray());
     }
 

@@ -26,7 +26,6 @@
         ("addresses",  "TAB_ADDRESSES",   "Adres Kataloğu"),
         ("whatsapp",   "TAB_WHATSAPP",    "WhatsApp"),
         ("ai",         "TAB_AI",          "Yapay Zeka"),
-        ("satinalma",  "TAB_SATINALMA",   "Satın Alma"),
     };
 
     var visibleTabs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -958,42 +957,6 @@
                          style="min-height: 240px;"></div>
                 </div>
 
-                @* ── Satın Alma ── *@
-                <div class="cs-tab-pane@(firstVisible == "satinalma" ? " is-active" : "")" id="cs-pane-satinalma" data-cs-pane-key="satinalma">
-                    <div class="cs-section-title">İhtiyaç Karşılama Depo Ayarları</div>
-                    <p style="font-size:.82rem;color:var(--bs-secondary-color,#6c757d);margin-bottom:14px;">
-                        "Depodan Karşıla" aksiyonu çalışırken hangi depoların stok bakiyesine bakılacağını belirleyin.
-                    </p>
-
-                    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-                        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid var(--app-border,#e2e8f0);">
-                            <input type="radio" name="fcLocMode" id="fcLocModeSpecific" value="SPECIFIC" style="margin-top:3px;accent-color:#6366f1;">
-                            <div>
-                                <div style="font-size:.83rem;font-weight:600;color:var(--bs-body-color,#0f172a);">Belirli Depolar Kullan</div>
-                                <div style="font-size:.76rem;color:var(--bs-secondary-color,#6c757d);">Aşağıdan seçtiğiniz depolar stok kontrolünde kullanılır.</div>
-                            </div>
-                        </label>
-                        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid var(--app-border,#e2e8f0);">
-                            <input type="radio" name="fcLocMode" id="fcLocModeDefault" value="ITEM_DEFAULT" style="margin-top:3px;accent-color:#6366f1;">
-                            <div>
-                                <div style="font-size:.83rem;font-weight:600;color:var(--bs-body-color,#0f172a);">Stok Kartındaki Varsayılan Depoyu Kullan</div>
-                                <div style="font-size:.76rem;color:var(--bs-secondary-color,#6c757d);">Her malzeme için stok kartında tanımlı "varsayılan konum" kullanılır.</div>
-                            </div>
-                        </label>
-                    </div>
-
-                    <div id="fcLocListWrap" style="display:none;margin-bottom:14px;">
-                        <div style="font-size:.78rem;font-weight:600;color:var(--bs-secondary-color,#6c757d);margin-bottom:6px;">Karşılama Depoları</div>
-                        <div id="fcLocList" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border:1px solid var(--app-border,#e2e8f0);border-radius:8px;min-height:40px;">
-                            <span style="color:var(--bs-secondary-color,#6c757d);font-size:.78rem;font-style:italic;" id="fcLocLoading">Yükleniyor…</span>
-                        </div>
-                    </div>
-
-                    <button type="button" class="btn btn-primary btn-sm" onclick="fcSaveLocConfig()">
-                        Kaydet
-                    </button>
-                    <span id="fcLocSaveRes" style="margin-left:8px;font-size:.78rem;font-weight:600;display:none;"></span>
-                </div>
 
             </div>
         </div>
@@ -1089,8 +1052,6 @@
                 if (tab === 'integrator' && !window._isrInited) { window._isrInited = true; isrInit(); }
                 // 2026-05-23 — Yapay Zeka tab: ilk açılışta React panel mount edilir.
                 if (tab === 'ai' && !window._aiPanelMounted) { window._aiPanelMounted = true; mountAiPanel(); }
-                // Satın Alma tab: ilk açılışta depo listesi yüklenir.
-                if (tab === 'satinalma' && !window._fcLocInited) { window._fcLocInited = true; fcLocInit(); }
             });
         });
     })();
@@ -1159,96 +1120,6 @@
         doMount();
     }
 
-    // ── Satın Alma — İhtiyaç Karşılama Depo Ayarları ─────────────────────────
-    var _fcLocs = [];  // { id, name }
-
-    function fcLocInit() {
-        // Mevcut konfigürasyonu yükle
-        fetch('/Purchase/FulfillmentLocationConfig')
-            .then(function(r) { return r.json(); })
-            .then(function(cfg) {
-                var mode = cfg.mode || 'SPECIFIC';
-                var radio = document.getElementById(mode === 'ITEM_DEFAULT' ? 'fcLocModeDefault' : 'fcLocModeSpecific');
-                if (radio) radio.checked = true;
-                fcLocModeChanged(mode, cfg.locationIds || []);
-            })
-            .catch(function() {
-                var r = document.getElementById('fcLocModeSpecific');
-                if (r) r.checked = true;
-                fcLocModeChanged('SPECIFIC', []);
-            });
-
-        // Radio change handlers
-        document.querySelectorAll('input[name="fcLocMode"]').forEach(function(r) {
-            r.addEventListener('change', function() { fcLocModeChanged(this.value, []); });
-        });
-    }
-
-    function fcLocModeChanged(mode, selectedIds) {
-        var wrap = document.getElementById('fcLocListWrap');
-        if (!wrap) return;
-        wrap.style.display = mode === 'SPECIFIC' ? '' : 'none';
-        if (mode !== 'SPECIFIC') return;
-        if (_fcLocs.length) {
-            fcRenderLocList(selectedIds);
-        } else {
-            fetch('/Warehouse/GetLocationsJson')
-                .then(function(r) { return r.json(); })
-                .then(function(locs) {
-                    _fcLocs = locs || [];
-                    fcRenderLocList(selectedIds);
-                })
-                .catch(function() {
-                    var el = document.getElementById('fcLocList');
-                    if (el) el.innerHTML = '<span style="color:#dc2626;font-size:.78rem;">Depolar yüklenemedi</span>';
-                });
-        }
-    }
-
-    function fcRenderLocList(selectedIds) {
-        var el = document.getElementById('fcLocList');
-        if (!el) return;
-        if (!_fcLocs.length) { el.innerHTML = '<span style="color:#94a3b8;font-size:.78rem;font-style:italic;">Tanımlı depo bulunamadı</span>'; return; }
-        el.innerHTML = _fcLocs.map(function(l) {
-            var checked = (selectedIds || []).indexOf(l.id) >= 0;
-            return '<label style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;cursor:pointer;'
-                + 'border:1px solid var(--app-border,#e2e8f0);font-size:.78rem;white-space:nowrap;">'
-                + '<input type="checkbox" class="fc-loc-cb" value="' + l.id + '"'
-                + (checked ? ' checked' : '') + ' style="accent-color:#6366f1;">'
-                + (l.locationName || l.locationCode || 'Depo ' + l.id)
-                + '</label>';
-        }).join('');
-    }
-
-    window.fcSaveLocConfig = function() {
-        var mode = (document.querySelector('input[name="fcLocMode"]:checked') || {}).value || 'SPECIFIC';
-        var ids  = Array.from(document.querySelectorAll('.fc-loc-cb:checked')).map(function(cb) { return parseInt(cb.value); });
-        var token = (document.querySelector('#company-form [name="__RequestVerificationToken"]') || {}).value || '';
-        var res = document.getElementById('fcLocSaveRes');
-
-        function saveParam(key, val) {
-            return fetch('/Admin/SaveParameter', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
-                body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: key, paramValue: val, dataType: 1 })
-            }).then(function(r) { return r.json(); });
-        }
-
-        Promise.all([
-            saveParam('FULFILLMENT_LOCATION_MODE', mode),
-            saveParam('FULFILLMENT_LOCATION_IDS', ids.join(','))
-        ]).then(function(results) {
-            var ok = results.every(function(r) { return r.ok; });
-            if (res) {
-                res.textContent = ok ? '✓ Kaydedildi' : '✕ Kayıt hatası';
-                res.style.color = ok ? '#16a34a' : '#dc2626';
-                res.style.display = 'inline';
-                setTimeout(function() { res.style.display = 'none'; }, 3000);
-            }
-        }).catch(function() {
-            if (res) { res.textContent = '✕ Bağlantı hatası'; res.style.color = '#dc2626'; res.style.display = 'inline'; }
-        });
-    };
     </script>
     <script>
 (function() {

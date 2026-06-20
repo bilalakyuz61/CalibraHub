@@ -1,7 +1,6 @@
 using CalibraHub.Application.Abstractions.Integrations;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
-using CalibraHub.Application.Configuration;
 using CalibraHub.Application.Services;
 using CalibraHub.Application.Services.Integration;
 using CalibraHub.Infrastructure.Integrations;
@@ -119,19 +118,10 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddSingleton<SqlServerConnectionFactory>();
         services.AddScoped<IDocumentImportService, DocumentImportService>();
         services.AddScoped<IAdminReadService, AdminReadService>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IPermissionGrantRepository,
+                           CalibraHub.Persistence.Repositories.SqlPermissionGrantRepository>();
         services.AddScoped<IAdminManagementService, AdminManagementService>();
 
-        // Grafana provisioning — Worker AdminManagementService kullaniyor, DI grafi
-        // icin gerekli. Worker normal kosulda Grafana cagrisi yapmaz; IsEnabled=false
-        // ise no-op. AdminPassword DPAPI ile sifrelenmistir, PostConfigure'da cozulur.
-        services.Configure<GrafanaOptions>(configuration.GetSection(GrafanaOptions.SectionName));
-        services.PostConfigure<GrafanaOptions>(opts =>
-        {
-            opts.AdminPassword = DecryptIfNeeded(opts.AdminPassword);
-        });
-        services.AddHttpClient<
-            CalibraHub.Application.Abstractions.Services.IGrafanaProvisioningService,
-            CalibraHub.Infrastructure.Grafana.GrafanaProvisioningService>();
         services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
         services.AddScoped<IPasswordHashService, Pbkdf2PasswordHashService>();
         services.AddScoped<CalibraDatabaseInitializer>();
@@ -146,6 +136,10 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IIntegratorImportLogRepository, SqlPltSystemLogRepository>();
         services.AddScoped<INoteRepository, SqlNoteRepository>();
         services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDataVisibilityRuleRepository,
+                           CalibraHub.Persistence.Repositories.SqlDataVisibilityRuleRepository>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IDataVisibilityFilter,
+                           CalibraHub.Persistence.Security.SqlDataVisibilityFilter>();
         services.AddScoped<IAssetRepository, SqlAssetRepository>();
         services.AddScoped<CalibraHub.Application.Abstractions.Services.IReminderEmailSender,
                            CalibraHub.Infrastructure.Notifications.SmtpReminderEmailSender>();
@@ -166,6 +160,13 @@ var host = Host.CreateDefaultBuilder(args)
                            CalibraHub.Infrastructure.Scheduling.ViewReportTaskExecutor>();
         services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
                            CalibraHub.Application.Services.Scheduling.IntegrationTaskExecutor>();
+        // Snapshot yenileme executor'u — Worker'da IReportQueryService + repo gerekli
+        services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IReportSourceRepository,
+                           CalibraHub.Persistence.Repositories.SqlReportSourceRepository>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IReportQueryService,
+                           CalibraHub.Infrastructure.Reporting.ReportQueryService>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Application.Services.Scheduling.ReportSnapshotRefreshTaskExecutor>();
 
         // Integration runtime — cron tetiklenen entegrasyonlar icin Worker tarafinda da gerekli
         services.AddScoped<IIntegrationRepository, SqlIntegrationRepository>();
@@ -177,6 +178,10 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IPostProcedureExecutor, SqlPostProcedureExecutor>();
         services.AddScoped<IIntegrationStatusTracker, SqlIntegrationStatusTracker>();
         services.AddScoped<IIntegrationRecordStatusRepository, SqlIntegrationRecordStatusRepository>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IGuideRepository,
+                           CalibraHub.Persistence.Repositories.SqlGuideRepository>();
+        services.AddScoped<CalibraHub.Application.Abstractions.Services.IGuideService,
+                           CalibraHub.Application.Services.GuideService>();
         services.AddScoped<IMappingEngine, MappingEngine>();
         services.AddScoped<IIntegrationAuthHandler, IntegrationAuthHandler>();
         services.AddScoped<IHttpExecutor, HttpExecutor>();
@@ -216,10 +221,12 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<
             CalibraHub.Application.Services.Approval.IApprovalNotificationDispatcher,
             CalibraHub.Application.Services.Approval.ApprovalNotificationDispatcher>();
-        // Faz 4 — Runtime executor Worker'da kayitli degil (DocumentContextProvider'in
-        // bagimliliklari Worker tarafinda yok). ApprovalFlowService executor null gorse
-        // bile graceful: SLA otomatik onay/red yine calisir, graph-aware decision/notif
-        // node'lari Worker tarafinda devre disi (Web'de aktif).
+        // Worker'da IApprovalFlowExecutor (graph-aware executor) KAYIT YOK.
+        // SlaCheckerWorker `GetService<IApprovalFlowExecutor>()` ile null-tolerant
+        // resolve eder ve null donerse legacy SLA actions'a (reminder/escalate/auto)
+        // duser. Graph-timeout eskalesi yalnizca Web'de calisir (kullanici akisi).
+        // Bu Worker'in transitive DI agacini hafifletir (DecisionEvaluator,
+        // MappingEngine, IGuideService, IApprovalSqlQueryService vs. gerekmez).
         services.AddHostedService<SlaCheckerWorker>();
         services.AddScoped<ICurrencyRepository, SqlCurrencyRepository>();
         services.AddScoped<IExchangeRateRepository, SqlExchangeRateRepository>();

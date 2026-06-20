@@ -1,6 +1,22 @@
 namespace CalibraHub.Application.Contracts;
 
 /// <summary>
+/// Erişim kapsamı — bir operasyon için kullanıcının etkin yetki seviyesi.
+/// Öncelik sırası (düşük → yüksek): None &lt; Own &lt; Department &lt; All
+/// </summary>
+public enum AccessScope
+{
+    /// <summary>Hiçbir yetki yok — kayıt listesi boş döner, tekil kayıt 403.</summary>
+    None,
+    /// <summary>Yalnızca kendi oluşturduğu kayıtlar (CreatedById == userId).</summary>
+    Own,
+    /// <summary>Kendi departmanındaki kullanıcıların oluşturduğu kayıtlar.</summary>
+    Department,
+    /// <summary>Tüm kayıtlar.</summary>
+    All,
+}
+
+/// <summary>
 /// İzin katalog DTO'su (PermissionDef satırı).
 /// </summary>
 public sealed record PermissionDefDto(

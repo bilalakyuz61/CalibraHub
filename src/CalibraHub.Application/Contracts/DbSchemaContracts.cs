@@ -77,3 +77,11 @@ public sealed record DbForeignKeyDto(
     string ToColumn,
     string DeleteAction,
     string UpdateAction);
+
+// ── Report Designer — view introspection ──────────────────────────────────
+
+/// <summary>Report Designer kaynak seçici için tek view + kolon bilgisi.</summary>
+public sealed record RdViewInfo(string Name, IReadOnlyList<RdColumnInfo> Columns);
+
+/// <summary>View kolonu — Report Designer metrik/grup sınıflandırması için.</summary>
+public sealed record RdColumnInfo(string Name, string SqlType, bool IsNumeric, bool IsTime);

@@ -2,6 +2,7 @@ using CalibraHub.Application.Constants;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
@@ -89,6 +90,15 @@ public sealed class PurchaseController : Controller
         RenderListAsync("satin_alma_talebi", "PURCHASE_DEMAND_EDIT", "Satın Alma Talepleri",
                         "talep", "/Purchase/Edit?type=purchase_demand", "violet", ct,
                         newUrl: "/Purchase/PurchaseRequestWizard");
+
+    [HttpGet("/Purchase/RequestsBoardConfig")]
+    public async Task<IActionResult> RequestsBoardConfig(CancellationToken ct)
+    {
+        var config = await BuildPurchaseBoardAsync(
+            "alis_talebi", "PURCHASE_REQUEST_EDIT", "İhtiyaç Kayıtları",
+            "ihtiyaç", "/Purchase/Edit?type=purchase_request", "amber", ct);
+        return Json(config);
+    }
 
     [HttpGet("/Purchase/PurchaseDemandsBoardConfig")]
     public async Task<IActionResult> PurchaseDemandsBoardConfig(CancellationToken ct)
@@ -292,20 +302,33 @@ public sealed class PurchaseController : Controller
 
             // İhtiyaç kartlarında "Karşıla" extra aksiyon (fetch-modal) — diğer tiplerde yok.
             // Modal: GET /Purchase/FulfillModal?requestId={id} — SmartCard {id}→doc.Id replace eder.
-            var extraActions = string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase)
-                ? new object[]
+            var extraActionsList = new List<object>();
+            if (string.Equals(typeCode, "alis_talebi", StringComparison.OrdinalIgnoreCase))
+            {
+                extraActionsList.Add(new
                 {
-                    new
-                    {
-                        type       = "fetch-modal",
-                        label      = "Karşıla",
-                        icon       = "Layers",
-                        color      = "indigo",
-                        fetchUrl   = "/Purchase/FulfillModal?requestId={id}",
-                        modalTitle = $"İhtiyaç Karşılama — {doc.DocumentNumber}",
-                    },
-                }
-                : System.Array.Empty<object>();
+                    type       = "fetch-modal",
+                    label      = "Karşıla",
+                    icon       = "Layers",
+                    color      = "indigo",
+                    fetchUrl   = "/Purchase/FulfillModal?requestId={id}",
+                    modalTitle = $"İhtiyaç Karşılama — {doc.DocumentNumber}",
+                });
+
+                // "Onaya Gönder" — Draft belgeler için aktif, diğerleri için pasif (disabled).
+                var isDraft = string.Equals(doc.Status, "Draft", StringComparison.OrdinalIgnoreCase);
+                extraActionsList.Add(new
+                {
+                    type     = "api-post",
+                    label    = "Onaya Gönder",
+                    icon     = "Send",
+                    color    = "emerald",
+                    url      = "/ApprovalFlow/StartByDocument?documentId={id}",
+                    confirm  = $"{doc.DocumentNumber} numaralı ihtiyaç kaydını onaya göndermek istiyor musunuz?",
+                    disabled = !isDraft,
+                });
+            }
+            var extraActions = extraActionsList.ToArray();
 
             entities.Add(new
             {
@@ -350,6 +373,7 @@ public sealed class PurchaseController : Controller
 
         var refreshUrl = typeCode.ToLowerInvariant() switch
         {
+            "alis_talebi"       => "/Purchase/RequestsBoardConfig",
             "satin_alma_talebi" => "/Purchase/PurchaseDemandsBoardConfig",
             _ => (string?)null,
         };
@@ -487,6 +511,15 @@ public sealed class PurchaseController : Controller
             kv => kv.Key.ToString(),
             kv => (object)kv.Value);
 
+        // Ek saha kolonları (cbv_FulfillmentLineExtras view kolonları)
+        var extraCols = await GetFulfillmentExtraColumnsAsync(ct);
+        var extraColTuples = extraCols
+            .Select(c => (
+                Key  : System.Text.RegularExpressions.Regex.Replace(c, "[^a-zA-Z0-9]", "_").ToLowerInvariant(),
+                Label: c
+            ))
+            .ToList();
+
         ViewData["Title"]           = "Karşılama Merkezi";
         ViewData["Requests"]        = (IReadOnlyCollection<DocumentListItemDto>)requests;
         ViewData["Locations"]       = (IReadOnlyCollection<LocationDto>)locations;
@@ -497,6 +530,12 @@ public sealed class PurchaseController : Controller
         ViewData["LineWidgetValJson"]   = JsonSerializer.Serialize(lineWValMap,     fcJsonOpts);
         ViewData["MaterialMapJson"]     = JsonSerializer.Serialize(
             materialMap.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value), fcJsonOpts);
+        ViewData["ExtraColumnTuples"] = extraColTuples;
+        ViewData["ExtraColumnsJson"]  = JsonSerializer.Serialize(
+            extraColTuples.Select(t => new { key = t.Key, label = t.Label }).ToList(), fcJsonOpts);
+
+        var pendingApprovalDocIds = await GetPendingApprovalDocIdsAsync(ct);
+        ViewData["PendingApprovalDocIdsJson"] = JsonSerializer.Serialize(pendingApprovalDocIds, fcJsonOpts);
 
         return View("~/Views/Purchase/FulfillmentCenter.cshtml");
     }
@@ -662,36 +701,67 @@ public sealed class PurchaseController : Controller
 
         try
         {
-            var result = new List<object>();
+            // Kalem verisi
+            var lineData = new List<(int rid, string reqNum, CalibraHub.Application.Contracts.DocumentLineDto l)>();
             foreach (var rid in requestIds.Distinct())
             {
                 var doc   = await _documentService.GetQuoteByIdAsync(rid, ct);
                 var lines = await _documentService.GetQuoteLinesAsync(rid, ct);
                 if (doc == null) continue;
                 foreach (var l in lines)
+                    lineData.Add((rid, doc.DocumentNumber ?? "", l));
+            }
+
+            // Ek saha verisi (cbv_FulfillmentLineExtras — yalnızca view'da kolon varsa)
+            var extrasMap = new Dictionary<int, Dictionary<string, string?>>();
+            var extraCols = await GetFulfillmentExtraColumnsAsync(ct);
+            if (extraCols.Count > 0 && lineData.Count > 0)
+            {
+                var s2 = _schema.Replace("]", "]]");
+                var distinctDocIds = requestIds.Distinct().ToArray();
+                var paramList = string.Join(",", distinctDocIds.Select((_, i) => $"@d{i}"));
+                await using var conn2 = await _connectionFactory.OpenConnectionAsync(ct);
+                await using var cmd2  = conn2.CreateCommand();
+                cmd2.CommandText = $"SELECT * FROM [{s2}].[cbv_FulfillmentLineExtras] WHERE [DocumentId] IN ({paramList});";
+                for (var i = 0; i < distinctDocIds.Length; i++)
+                    cmd2.Parameters.Add(new SqlParameter($"@d{i}", distinctDocIds[i]));
+                await using var r2 = await cmd2.ExecuteReaderAsync(ct);
+                while (await r2.ReadAsync(ct))
                 {
-                    result.Add(new
+                    var lineId = r2.GetInt32(r2.GetOrdinal("LineId"));
+                    var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+                    for (var ci = 0; ci < r2.FieldCount; ci++)
                     {
-                        requestId           = rid,
-                        requestNumber       = doc.DocumentNumber,
-                        lineId              = l.Id,
-                        itemId              = l.ItemId,
-                        materialCode        = l.MaterialCode,
-                        materialName        = l.MaterialName,
-                        unitId              = l.UnitId,
-                        unitCode            = l.UnitCode ?? l.UnitName,
-                        quantity            = l.Quantity,
-                        locationId          = l.LocationId,
-                        locationName        = l.LocationName,
-                        combinationId       = l.CombinationId,
-                        notes               = l.Notes,
-                        fulfilledFromStock  = l.FulfilledFromStock,
-                        fulfilledByPurchase = l.FulfilledByPurchase,
-                        fulfillmentStatus   = l.FulfillmentStatus,
-                        remaining           = l.Quantity - l.FulfilledFromStock - l.FulfilledByPurchase,
-                    });
+                        var cname = r2.GetName(ci);
+                        if (cname is "DocumentId" or "LineId") continue;
+                        dict[cname] = r2.IsDBNull(ci) ? null : r2.GetValue(ci)?.ToString();
+                    }
+                    extrasMap[lineId] = dict;
                 }
             }
+
+            var result = lineData.Select(t => (object)new
+            {
+                requestId           = t.rid,
+                requestNumber       = t.reqNum,
+                lineId              = t.l.Id,
+                itemId              = t.l.ItemId,
+                materialCode        = t.l.MaterialCode,
+                materialName        = t.l.MaterialName,
+                unitId              = t.l.UnitId,
+                unitCode            = t.l.UnitCode ?? t.l.UnitName,
+                quantity            = t.l.Quantity,
+                locationId          = t.l.LocationId,
+                locationName        = t.l.LocationName,
+                combinationId       = t.l.CombinationId,
+                notes               = t.l.Notes,
+                fulfilledFromStock  = t.l.FulfilledFromStock,
+                fulfilledByPurchase = t.l.FulfilledByPurchase,
+                fulfillmentStatus   = t.l.FulfillmentStatus,
+                remaining           = t.l.Quantity - t.l.FulfilledFromStock - t.l.FulfilledByPurchase,
+                extras              = extrasMap.TryGetValue(t.l.Id, out var ex) ? ex : null,
+            }).ToList();
+
             return Json(result);
         }
         catch (Exception ex)
@@ -1579,4 +1649,61 @@ public sealed class PurchaseController : Controller
 
     private static string Capitalize(string s)
         => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
+
+    /// <summary>
+    /// cbv_FulfillmentLineExtras view'ındaki ek kolon isimlerini keşfeder (DocumentId ve LineId hariç).
+    /// View yoksa veya kolon yoksa boş liste döner.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> GetFulfillmentExtraColumnsAsync(CancellationToken ct)
+    {
+        var sl = _schema.Replace("'", "''");
+        try
+        {
+            await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+            await using var cmd  = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = '{sl}' AND TABLE_NAME = 'cbv_FulfillmentLineExtras'
+                  AND COLUMN_NAME NOT IN ('DocumentId', 'LineId')
+                ORDER BY ORDINAL_POSITION;
+                """;
+            var cols = new List<string>();
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct)) cols.Add(r.GetString(0));
+            return cols;
+        }
+        catch { return []; }
+    }
+
+    /// <summary>
+    /// Onay akışında (Pending) olan İhtiyaç Kaydı belge ID'lerini döner.
+    /// DocumentApprovalInstance tablosundaki DocumentId Guid'i, Guid.Parse formatıyla
+    /// 00000000-0000-0000-0000-{docId:D12} şeklinde encode edilmiştir.
+    /// </summary>
+    private async Task<IReadOnlyList<int>> GetPendingApprovalDocIdsAsync(CancellationToken ct)
+    {
+        var sl = _schema.Replace("'", "''");
+        try
+        {
+            await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+            await using var cmd  = conn.CreateCommand();
+            cmd.CommandText = $"""
+                SELECT [DocumentId] FROM [{sl}].[DocumentApprovalInstance]
+                WHERE [Status] = N'Pending' AND [IsActive] = 1
+                """;
+            var result = new List<int>();
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                var g = r.GetGuid(0);
+                // Format: 00000000-0000-0000-0000-XXXXXXXXXXXX
+                // Last 12 chars of D format = decimal docId padded to 12 digits
+                var s = g.ToString("D");
+                var lastSeg = s.Substring(s.LastIndexOf('-') + 1);
+                if (int.TryParse(lastSeg, out var docId)) result.Add(docId);
+            }
+            return result;
+        }
+        catch { return []; }
+    }
 }

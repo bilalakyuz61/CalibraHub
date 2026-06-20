@@ -28,6 +28,13 @@ public interface IApprovalInstanceRepository
     Task RejectAsync(int instanceId, int stepOrder, string approverId, string approverName, string note, CancellationToken ct);
     Task CancelAsync(int instanceId, string byUser, CancellationToken ct);
 
+    /// <summary>
+    /// Graph traversal yoluyla End node'a ulaşıldığında instance'ı tamamla.
+    /// WHERE Status='Pending' koruması ile idempotent — normal ApproveStepAsync
+    /// sonrası instance zaten Approved ise no-op olur.
+    /// </summary>
+    Task ForceCompleteAsync(int instanceId, CancellationToken ct);
+
     // ── SLA islemleri ─────────────────────────────────────────────────────────
     /// <summary>DueDate gecmis, SLA aksiyonu henuz uygulanmamis Pending kayitlar.</summary>
     Task<IReadOnlyList<OverdueStepRecord>> GetOverdueStepsAsync(DateTime nowUtc, CancellationToken ct);
@@ -42,8 +49,30 @@ public interface IApprovalInstanceRepository
     Task MarkSlaWarnedAsync(int recordId, CancellationToken ct);
 
     /// <summary>
+    /// Graph döngü: step node'a geri dönüldüğünde SLA sıfırla (SlaActionAt/Type temizle, DueDate güncelle).
+    /// nodeData'dan SLA süresi hesaplanır; SLA tanımlı değilse DueDate dokunulmaz.
+    /// </summary>
+    Task ResetSlaForLoopAsync(int instanceId, int stepOrder, string? nodeData, CancellationToken ct);
+
+    /// <summary>
     /// Eskale: kaynak kaydi "Escalated" durumuna cek, ayni instance'a ayni step order ile
     /// yeni approver atanmis bir kayit yarat (SlaEscalatedFromRecordId = sourceRecordId).
     /// </summary>
     Task<int> CreateEscalatedStepAsync(int sourceRecordId, string newApproverId, string newApproverName, CancellationToken ct);
+
+    /// <summary>
+    /// Verilen view adindaki kolonlari INFORMATION_SCHEMA uzerinden doner.
+    /// ExtraColumnsView'in hangi kolunlari icerdigi frontend tarafindan ogrenilebilir.
+    /// viewName whitelist'e gore dogrulanmalidir (controller sorumlu).
+    /// InstanceId kolonu otomatik cikarilir (join anahtari, kullaniciya gosterilmez).
+    /// </summary>
+    Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct);
+
+    /// <summary>
+    /// Verilen instanceId'lere ait satir degerlerini view'dan ceker.
+    /// Donus: instanceId → {kolonAdi → deger (string olarak)}.
+    /// viewName whitelist'e gore dogrulanmalidir (controller sorumlu).
+    /// </summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>> GetViewRowDataAsync(
+        string viewName, IReadOnlyCollection<int> instanceIds, CancellationToken ct);
 }

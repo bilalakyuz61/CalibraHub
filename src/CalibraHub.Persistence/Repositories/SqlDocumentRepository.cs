@@ -472,6 +472,17 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task UpdateStatusAsync(int id, string status, CancellationToken ct)
+    {
+        await using var conn = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"UPDATE {_quoteTable} SET [status] = @Status, [Updated] = @Now WHERE [id] = @Id;";
+        cmd.Parameters.Add(new SqlParameter("@Id", id));
+        cmd.Parameters.Add(new SqlParameter("@Status", status));
+        cmd.Parameters.Add(new SqlParameter("@Now", DateTime.Now));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     /// <summary>
     /// Satir revizyonu — atomic SQL batch:
     ///   1) Eski satirin notlari @Description ile UPDATE edilir (revize gerekcesi).

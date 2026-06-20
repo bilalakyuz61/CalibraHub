@@ -323,7 +323,7 @@ public sealed class AssetsController : Controller
         }));
     }
 
-    /// <summary>Sade zimmet takip raporu (tüm varlıklar). Kompleks analiz Grafana'da.</summary>
+    /// <summary>Sade zimmet takip raporu (tüm varlıklar).</summary>
     [HttpGet]
     public async Task<IActionResult> AssignmentReportJson(CancellationToken ct)
         => Json(await _assetService.GetAssignmentReportAsync(ct));

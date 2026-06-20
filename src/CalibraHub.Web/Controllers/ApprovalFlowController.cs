@@ -235,6 +235,8 @@ public sealed class ApprovalFlowController : Controller
                 typeCode     = v.TypeCode,
                 defaultValue = v.DefaultValue,
                 description  = v.Description,
+                valueSource  = v.ValueSource,
+                sqlQuery     = v.SqlQuery,
                 sortOrder    = v.SortOrder,
             }).ToArray();
 
@@ -304,18 +306,24 @@ public sealed class ApprovalFlowController : Controller
             {
                 var kind = string.IsNullOrWhiteSpace(e.EdgeKind) ? "default" : e.EdgeKind;
                 stepNodeTypeById.TryGetValue(e.SourceStepId, out var srcType);
-                string? sourceHandle = null;
-                if (srcType == "step")
+                // 2026-06-15: DB'de SourceHandle/TargetHandle persist edildi.
+                // Eski kayıtlarda null olabilir → EdgeKind + node tipinden geriye uyum deduce.
+                string? sourceHandle = e.SourceHandle;
+                if (string.IsNullOrWhiteSpace(sourceHandle))
                 {
-                    sourceHandle = kind == "true"  ? "approve"
-                                 : kind == "false" ? "reject"
-                                 : null;
-                }
-                else if (srcType == "decision")
-                {
-                    sourceHandle = kind == "true" ? "true"
-                                 : kind == "false" ? "false"
-                                 : null;
+                    if (srcType == "step")
+                    {
+                        sourceHandle = kind == "true"   ? "approve"
+                                     : kind == "false"  ? "reject"
+                                     : kind == "timeout" ? "timeout"
+                                     : null;
+                    }
+                    else if (srcType == "decision")
+                    {
+                        sourceHandle = kind == "true" ? "true"
+                                     : kind == "false" ? "false"
+                                     : null;
+                    }
                 }
                 return (object)new
                 {
@@ -323,6 +331,7 @@ public sealed class ApprovalFlowController : Controller
                     source       = $"step_{e.SourceStepId}",
                     sourceHandle = sourceHandle,
                     target       = $"step_{e.TargetStepId}",
+                    targetHandle = string.IsNullOrWhiteSpace(e.TargetHandle) ? null : e.TargetHandle,
                     label        = e.Label,
                     data         = new
                     {
@@ -467,9 +476,14 @@ public sealed class ApprovalFlowController : Controller
                 return Json(new { ok = false, error = "Bu belge için tanımlı aktif onay akışı yok." });
 
             var userName = User.FindFirstValue(ClaimTypes.Name) ?? "system";
+            var userIdRaw = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var startedByUserId = int.TryParse(userIdRaw, out var uid) ? (int?)uid : null;
             var docGuid = DocumentIntToGuid(documentId);
-            var startReq = new StartApprovalRequest(docGuid, flow.Id, userName);
+            var startReq = new StartApprovalRequest(docGuid, flow.Id, userName, startedByUserId);
             var instance = await _service.StartAsync(startReq, ct);
+
+            // Belge durumunu "Sent" (onayda) yap — board yenilenince "Onaya Gönder" butonu kaybolur.
+            await _documentRepo.UpdateStatusAsync(documentId, "Sent", ct);
 
             return Json(new
             {
@@ -494,17 +508,103 @@ public sealed class ApprovalFlowController : Controller
         var docGuid = DocumentIntToGuid(documentId);
         var instance = await _service.GetInstanceByDocumentIdAsync(docGuid, ct);
         if (instance is null) return Json(new { found = false });
+
+        // Akış tanımını yükle — hem beklenen onaylayıcı etiketi hem de adım sırası için
+        var flow = await _service.GetByIdAsync(instance.FlowId, ct);
+
+        var currentUserName = User.FindFirstValue(ClaimTypes.Name) ?? "";
+        var currentUserId   = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
+
+        string? currentStepName = null;
+        string? pendingApproverLabel = null;
+        bool canApprove = false;
+        var isPending  = instance.Status == "Pending";
+        var isCreator  = string.Equals(instance.StartedBy, currentUserName, StringComparison.OrdinalIgnoreCase);
+        var canCancel  = isCreator && isPending;
+        if (isPending)
+        {
+            var pendingStep = instance.StepRecords.FirstOrDefault(s => s.StepOrder == instance.CurrentStep);
+            currentStepName = pendingStep?.StepName;
+            var flowStep = flow?.Steps.FirstOrDefault(s => s.StepOrder == instance.CurrentStep);
+            // ApproverName: CreateAsync'te ManagerOfRequester için çözümlenen supervisor adı
+            pendingApproverLabel = pendingStep?.ApproverName ?? flowStep?.ApproverLabel;
+
+            // Belgeyi başlatan kişi kendi adımını onaylayamaz
+            if (!isCreator)
+            {
+                canApprove = flowStep?.ApproverType switch
+                {
+                    ApproverType.SpecificUser =>
+                        string.Equals(flowStep.ApproverId, currentUserId, StringComparison.OrdinalIgnoreCase),
+                    ApproverType.ManagerOfRequester =>
+                        // Step record'a yazılan amir ID'si ile karşılaştır (StartAsync'te çözümlendi)
+                        pendingStep is not null
+                        && !string.IsNullOrEmpty(pendingStep.ApproverId)
+                        && string.Equals(pendingStep.ApproverId, currentUserId, StringComparison.OrdinalIgnoreCase),
+                    // Department / AnyUser — tam RBAC henüz yok; non-creator herkes görebilir
+                    _ => true,
+                };
+            }
+        }
+
+        // CurrentStep ham DB StepOrder değeri olup sıra numarasıyla örtüşmeyebilir.
+        // Adım sıralaması için rank hesapla (1'den başlayan listeleme konumu).
+        var orderedSteps = instance.StepRecords.OrderBy(s => s.StepOrder).ToList();
+        var currentStepRankIdx = orderedSteps.FindIndex(s => s.StepOrder == instance.CurrentStep);
+        var currentStepRank = currentStepRankIdx >= 0 ? currentStepRankIdx + 1 : orderedSteps.Count;
+
+        var stepRecords = orderedSteps
+            .Select((s, i) =>
+            {
+                var flowStep = flow?.Steps.FirstOrDefault(fs => fs.StepOrder == s.StepOrder);
+                return new
+                {
+                    stepOrder             = s.StepOrder,
+                    stepRank              = i + 1,
+                    stepName              = s.StepName,
+                    status                = s.Status,
+                    approverName          = s.ApproverName,
+                    intendedApproverLabel = s.ApproverName ?? flowStep?.ApproverLabel,
+                    actionDate            = s.ActionDate?.AddHours(3).ToString("dd.MM.yyyy HH:mm"),
+                    note                  = s.Note,
+                    isCurrent             = s.StepOrder == instance.CurrentStep,
+                };
+            })
+            .ToList();
+
+        // Execution log — yalnızca akış/adım olayları (bildirim/karar/entegrasyon gizli)
+        var stepEventFilter = new HashSet<string>(StringComparer.Ordinal)
+            { "FlowStarted", "FlowEnd", "FlowCancelled", "StepActivated", "StepApproved", "StepRejected" };
+        var rawLogs = await _service.GetInstanceLogsAsync(instance.Id, ct);
+        var runLogs = rawLogs
+            .Where(l => stepEventFilter.Contains(l.Event))
+            .Select(l => new
+            {
+                nodeType   = l.NodeType,
+                nodeName   = l.NodeName,
+                @event     = l.Event,
+                detail     = l.Detail,
+                durationMs = l.DurationMs,
+                created    = l.Created.AddHours(3).ToString("dd.MM.yyyy HH:mm"),
+            }).ToList();
+
         return Json(new
         {
             found = true,
             instanceId = instance.Id,
             status = instance.Status,
             flowName = instance.FlowName,
-            currentStep = instance.CurrentStep,
+            currentStep = currentStepRank,
             totalSteps = instance.TotalSteps,
             startedBy = instance.StartedBy,
-            startedAt = instance.StartedAt.ToString("dd.MM.yyyy HH:mm"),
+            startedAt = instance.StartedAt.AddHours(3).ToString("dd.MM.yyyy HH:mm"),
             rejectNote = instance.RejectNote,
+            currentStepName,
+            pendingApproverLabel,
+            canApprove,
+            canCancel,
+            stepRecords,
+            runLogs,
         });
     }
 

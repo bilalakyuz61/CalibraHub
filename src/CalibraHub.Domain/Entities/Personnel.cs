@@ -44,6 +44,7 @@ public sealed class Personnel
     public string? Phone { get; init; }
     public string? Email { get; init; }
     public string? Notes { get; init; }
+    public DateTime? BirthDate { get; init; }
 
     public DateTime Created { get; init; }
     public DateTime? Updated { get; init; }

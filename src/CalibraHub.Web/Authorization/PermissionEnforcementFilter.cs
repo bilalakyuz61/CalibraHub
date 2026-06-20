@@ -102,11 +102,14 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
 
         return httpMethod switch
         {
-            "GET"  => new[] { "VIEW" },
-            "POST" when IsDeleteAction(lower)  => new[] { "DELETE_OWN", "DELETE_ALL" },
-            "POST" when IsWriteAction(lower)   => new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" },
-            "PUT"  or "PATCH"                   => new[] { "EDIT_OWN", "EDIT_ALL" },
-            "DELETE"                            => new[] { "DELETE_OWN", "DELETE_ALL" },
+            // VIEW_OWN (İzleme Özel) da liste sayfasına erişimi açmalı — sayfa yalnızca
+            // kullanıcının kendi kayıtlarını gösterir, yine de açılabilir olmalı.
+            "GET"  => new[] { "VIEW", "VIEW_OWN" },
+            "POST" when IsDeleteAction(lower)       => new[] { "DELETE_OWN", "DELETE_ALL" },
+            "POST" when IsOperationalAction(lower)  => Array.Empty<string>(), // okundu/typing/sync — VIEW yeterli
+            "POST" when IsWriteAction(lower)        => new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" },
+            "PUT"  or "PATCH"                       => new[] { "EDIT_OWN", "EDIT_ALL" },
+            "DELETE"                                => new[] { "DELETE_OWN", "DELETE_ALL" },
             _ => Array.Empty<string>(),
         };
     }
@@ -130,10 +133,26 @@ public sealed class PermissionEnforcementFilter : IAsyncAuthorizationFilter
         actionLower.Contains("edit")    ||
         actionLower.Contains("insert")  ||
         actionLower.Contains("upsert")  ||
+        actionLower.Contains("send")    ||   // mesaj/bildirim gönderme (WhatsApp, mail vs.)
+        actionLower.Contains("forward") ||   // mesaj iletme
         actionLower.StartsWith("post");
 
     private static bool IsDeleteAction(string actionLower) =>
-        actionLower.Contains("delete") || actionLower.Contains("remove");
+        actionLower.Contains("delete") ||
+        actionLower.Contains("remove") ||
+        actionLower.Contains("clearchat"); // WhatsApp chat temizleme
+
+    /// <summary>
+    /// Operasyonel POST action'lar: sohbet sinyalleri, okundu işaretleme, sync.
+    /// VIEW yetkisi yeterli; CREATE/DELETE izni aranmaz.
+    /// </summary>
+    private static bool IsOperationalAction(string actionLower) =>
+        actionLower == "markread"        ||
+        actionLower == "markunread"      ||
+        actionLower == "sendtyping"      ||
+        actionLower == "sendreadreceipt" ||
+        actionLower == "syncgroups"      ||
+        actionLower == "synccontacts";
 
     private static IActionResult MakeForbidResult(
         AuthorizationFilterContext context, string formCode, string[] actionCodes)

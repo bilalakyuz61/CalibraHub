@@ -1,11 +1,13 @@
+using System.Data.Common;
 using System.Security.Claims;
+using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Persistence.Options;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Persistence.Database;
 
-public sealed class SqlServerConnectionFactory
+public sealed class SqlServerConnectionFactory : IDbConnectionFactory
 {
     private readonly string _systemConnectionString;
     private readonly CompanyConnectionRegistry _registry;
@@ -40,6 +42,9 @@ public sealed class SqlServerConnectionFactory
         await connection.OpenAsync(cancellationToken);
         return connection;
     }
+
+    async Task<DbConnection> IDbConnectionFactory.OpenConnectionAsync(CancellationToken ct)
+        => await OpenConnectionAsync(ct);
 
     private static string EnsureMars(string connectionString)
     {

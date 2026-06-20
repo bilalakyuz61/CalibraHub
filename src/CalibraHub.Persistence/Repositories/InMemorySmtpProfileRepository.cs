@@ -21,7 +21,7 @@ public sealed class InMemorySmtpProfileRepository : ISmtpProfileRepository
         return Task.FromResult(result);
     }
 
-    public Task<SmtpProfile?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public Task<SmtpProfile?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         _dataStore.SmtpProfiles.TryGetValue(id, out var profile);
         return Task.FromResult(profile);

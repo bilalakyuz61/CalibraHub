@@ -15,6 +15,7 @@ import { DocDesignerApp, DocDesignerList } from './components/DocDesigner'
 import AdminWidgetRegistryPanel from './components/AdminWidgetRegistry/AdminWidgetRegistryPanel'
 import ShellRedesignDemo from './components/ShellRedesignDemo/ShellRedesignDemo'
 import Shell from './components/Shell/Shell'
+import Dashboard from './components/Dashboard/Dashboard'
 import CalibraLineItemsGrid from './components/CalibraLineItemsGrid/CalibraLineItemsGrid'
 import DynamicWidgetRenderer from './components/DynamicWidgetRenderer/DynamicWidgetRenderer'
 import FormManagementPanel from './components/FormManagement/FormManagementPanel'
@@ -40,6 +41,9 @@ import IntegrationsHub from './components/IntegrationWizard/IntegrationsHub'
 import IntegrationQueue from './components/IntegrationWizard/IntegrationQueue'
 import './components/IntegrationWizard/IntegrationWizard.css'
 import RoutingTree from './components/RoutingTree/RoutingTree'
+import ReportDesigner from './components/ReportDesigner/ReportDesigner'
+import ReportViewer from './components/ReportViewer/ReportViewer'
+import './components/ReportDesigner/ReportDesigner.css'
 import OperationGrid from './components/OperationGrid/OperationGrid'
 import FixedFieldLookupBridge from './components/FixedFieldLookup/FixedFieldLookupBridge'
 import ProductCombinations from './components/ProductCombinations/ProductCombinations'
@@ -256,6 +260,37 @@ function mountShell(element, config) {
 
   return {
     unmount: function() { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+
+/**
+ * Dashboard mount — Ana sayfa özelleştirilebilir pano (FALLBACK yolu).
+ *
+ * Birincil render yolu Shell.jsx'tir: hiç sekme yokken Shell, Dashboard'u
+ * EmptyState yerine doğrudan render eder (iframe yok). Bu mount fonksiyonu
+ * yalnızca yedek senaryo içindir: kullanıcı /HomeDashboard'u doğrudan açarsa
+ * veya bir entegrasyon panoyu workspace tab olarak deep-link ederse, Razor
+ * sayfası bu fonksiyonla panoyu bir <div>'e mount eder.
+ *
+ * @param {HTMLElement} element
+ * @param {object} config - { user, system, lang, theme, antiforgeryToken }
+ */
+function mountDashboard(element, config) {
+  config = config || {}
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(Dashboard, { config: config })
+    )
+  )
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
   }
 }
 
@@ -916,6 +951,7 @@ window.CalibraHub.mountMaterialList = mountMaterialList
 window.CalibraHub.mountAdminWidgetRegistry = mountAdminWidgetRegistry
 window.CalibraHub.mountShellRedesignDemo = mountShellRedesignDemo
 window.CalibraHub.mountShell = mountShell
+window.CalibraHub.mountDashboard = mountDashboard
 window.CalibraHub.mountLineItemsGrid = mountLineItemsGrid
 window.CalibraHub.mountDynamicWidgetRenderer = mountDynamicWidgetRenderer
 window.CalibraHub.mountFormManagement = mountFormManagement
@@ -1549,6 +1585,7 @@ window.CalibraHub.mountBpmFormFiller = mountBpmFormFiller
 // Razor sayfası tab açılınca tek seferlik mount eder (CompanySettings.cshtml içinden çağrılır).
 import AiProvidersPanel from './components/AiAssistant/AiProvidersPanel'
 import PurchaseRequestWizard from './components/PurchaseRequestWizard/PurchaseRequestWizard'
+import CalendarWidget from './components/Dashboard/widgets/CalendarWidget'
 function mountAiProvidersPanel(element) {
   if (!element) return { unmount: function() {} }
   if (mountedRoots.has(element)) {
@@ -1597,6 +1634,7 @@ function mountApprovalFlowDesigner(element, opts) {
         initialNodes: Array.isArray(opts.initialNodes) ? opts.initialNodes : [],
         initialEdges: Array.isArray(opts.initialEdges) ? opts.initialEdges : [],
         initialRules: Array.isArray(opts.initialRules) ? opts.initialRules : [],
+        initialVariables: Array.isArray(opts.initialVariables) ? opts.initialVariables : [],
         users:        Array.isArray(opts.users) ? opts.users : [],
         departments:  Array.isArray(opts.departments) ? opts.departments : [],
         cariGroups:   Array.isArray(opts.cariGroups) ? opts.cariGroups : [],
@@ -1641,3 +1679,116 @@ function mountPurchaseRequestWizard(element, config) {
   }
 }
 window.CalibraHub.mountPurchaseRequestWizard = mountPurchaseRequestWizard
+
+/**
+ * Calendar mount — Tam sayfa takvim (sol menü "Genel → Takvim" için).
+ * Dashboard widget'ı ile aynı CalendarWidget bileşenini kullanır.
+ * @param {HTMLElement} element
+ */
+function mountCalendar(element) {
+  if (!element) return { unmount: function() {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+
+  function detectDark() {
+    return document.body.classList.contains('app-theme-dark') ||
+           document.documentElement.classList.contains('dark')
+  }
+
+  function CalendarPageRoot() {
+    var [isDark, setIsDark] = React.useState(detectDark)
+    React.useEffect(function() {
+      function sync() { setIsDark(detectDark()) }
+      var obs = new MutationObserver(sync)
+      obs.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+      obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+      return function() { obs.disconnect() }
+    }, [])
+
+    return React.createElement('div', {
+      style: {
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        overflow: 'hidden',
+      }
+    },
+      React.createElement(CalendarWidget, {
+        size: 'lg',
+        height: 3,
+        settings: {},
+        isDark: isDark,
+        lang: 'TR',
+        editMode: false,
+        onSettingsChange: null,
+        fullPage: true,
+      })
+    )
+  }
+
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(React.createElement(ErrorBoundary, null, React.createElement(CalendarPageRoot)))
+  return {
+    unmount: function () { root.unmount(); mountedRoots.delete(element) },
+  }
+}
+window.CalibraHub.mountCalendar = mountCalendar
+
+/**
+ * ReportViewer mount — Kayıtlı raporu salt-okunur görüntüler.
+ * @param {HTMLElement} element
+ * @param {{ loadUrl: string, editUrl: string }} config
+ */
+function mountReportViewer(element, config) {
+  config = config || {}
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(ReportViewer, {
+        loadUrl: config.loadUrl || '',
+        editUrl: config.editUrl || null,
+      })
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountReportViewer = mountReportViewer
+
+/**
+ * ReportDesigner mount — Özel rapor tasarımcısı.
+ * Panel kartı + ayar sidebar'ı + dark kanvas sunar.
+ * @param {HTMLElement} element
+ * @param {{ sourcesUrl: string, saveUrl: string }} config
+ */
+function mountReportDesigner(element, config) {
+  config = config || {}
+  if (!element) return { unmount: function () {} }
+  if (mountedRoots.has(element)) {
+    mountedRoots.get(element).unmount()
+    mountedRoots.delete(element)
+  }
+  var root = createRoot(element)
+  mountedRoots.set(element, root)
+  root.render(
+    React.createElement(ErrorBoundary, null,
+      React.createElement(ReportDesigner, {
+        sourcesUrl: config.sourcesUrl || '/Dashboard/DesignerSources',
+        saveUrl:    config.saveUrl    || '/Dashboard/SaveDesigned',
+        listUrl:    config.listUrl    || '/Dashboard/Designer',
+        loadId:     config.loadId     || null,
+      })
+    )
+  )
+  return { unmount: function () { root.unmount(); mountedRoots.delete(element) } }
+}
+window.CalibraHub.mountReportDesigner = mountReportDesigner

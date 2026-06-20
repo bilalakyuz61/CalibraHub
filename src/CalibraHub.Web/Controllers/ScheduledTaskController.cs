@@ -203,6 +203,17 @@ public sealed class ScheduledTaskController : Controller
         return Json(names);
     }
 
+    /// <summary>ReportSnapshotRefresh görevi için kayıtlı rapor kaynağı dropdown'ı.</summary>
+    [HttpGet("/Admin/ScheduledTasks/ReportSources")]
+    public async Task<IActionResult> ScheduledTaskReportSources(
+        [FromServices] CalibraHub.Application.Abstractions.Persistence.IReportSourceRepository sources,
+        CancellationToken ct)
+    {
+        // Yalnızca Snapshot (Materialize) açık kaynaklar — yalnızca onlar için yenileme görevi anlamlı.
+        var list = await sources.GetAllActiveAsync(ct);
+        return Json(list.Where(s => s.Materialize).Select(s => new { s.Id, s.Name }));
+    }
+
     /// <summary>Bir gorevin son N calistirma gecmisini doner.</summary>
     [HttpGet("/Admin/ScheduledTasks/{id:int}/History")]
     public async Task<IActionResult> ScheduledTaskHistory(int id, int limit,
@@ -290,6 +301,8 @@ public sealed class ScheduledTaskController : Controller
         CalibraHub.Domain.Enums.ScheduledTaskType.FileTransfer    => "Dosya Transfer",
         CalibraHub.Domain.Enums.ScheduledTaskType.CurrencyRefresh => "Kur Güncelleme",
         CalibraHub.Domain.Enums.ScheduledTaskType.ViewReport      => "Rapor",
+        CalibraHub.Domain.Enums.ScheduledTaskType.Integration     => "Entegrasyon",
+        CalibraHub.Domain.Enums.ScheduledTaskType.ReportSnapshotRefresh => "Rapor Snapshot Yenileme",
         _                                                          => type.ToString(),
     };
 

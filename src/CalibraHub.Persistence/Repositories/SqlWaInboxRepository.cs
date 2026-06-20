@@ -80,10 +80,25 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var cmd = conn.CreateCommand();
 
         // Her telefon icin: son mesaj satiri (ROW_NUMBER trick) + okunmamis sayisi (subselect).
-        // Contact join: WaPhone, Mobile veya Phone digit-bazli eslesme — SQL tarafinda karmasik,
-        // basit yaklasim: WaPhone'a digit eslesmesi yap (CalibraHub'da number'lar genelde + ile yazilir).
+        // Contact join: Contact tablosunu tek seferinde CTE'de normalize edip LEFT JOIN ile esles;
+        // per-row OUTER APPLY + her iki tarafta REPLACE chain kaldırıldı (index kör ediyordu).
         cmd.CommandText = $"""
-            ;WITH last_msg AS (
+            ;WITH contact_norm AS (
+                -- Contact tablosunu tek seferinde normalize et — per-row OUTER APPLY yerine
+                SELECT [Id], [AccountTitle], [AccountCode], [WaName],
+                       REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL([WaPhone],''),' ',''),'-',''),'(',''),')',''),'+','') AS norm_phone
+                FROM {_contactTable}
+                WHERE [IsActive] = 1
+                  AND [WaPhone] IS NOT NULL
+                  AND LEN([WaPhone]) > 0
+            ),
+            has_incoming_cte AS (
+                -- Gelen mesaji olan telefon numaralari — LID dedup icin (correlated subquery yerine)
+                SELECT DISTINCT [contact_phone]
+                FROM {_table}
+                WHERE [direction] = 0
+            ),
+            last_msg AS (
                 SELECT
                     [contact_phone],
                     [group_jid],
@@ -110,11 +125,11 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
             )
             SELECT TOP (@N)
                 lm.[contact_phone],
-                c.[Id]             AS contact_id,
-                lin.[contact_name] AS contact_name,
-                c.[AccountTitle],
-                c.[AccountCode],
-                c.[WaName],
+                cn.[Id]             AS contact_id,
+                lin.[contact_name]  AS contact_name,
+                cn.[AccountTitle],
+                cn.[AccountCode],
+                cn.[WaName],
                 lm.[body],
                 lm.[media_type],
                 lm.[direction],
@@ -124,23 +139,19 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                 -- Faz 4: grup bilgileri
                 CASE WHEN lm.[group_jid] IS NOT NULL THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS is_group,
                 lm.[group_jid],
-                wg.[Subject]       AS group_subject,
-                COALESCE(wg.[MemberCount], 0) AS member_count
+                wg.[Subject]        AS group_subject,
+                COALESCE(wg.[MemberCount], 0) AS member_count,
+                -- LID dedup icin: bu konusmada hic gelen mesaj var mi?
+                CAST(CASE WHEN hi.[contact_phone] IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS has_incoming
             FROM last_msg lm
             LEFT JOIN last_incoming_name lin
                    ON lin.[contact_phone] = lm.[contact_phone] AND lin.rn = 1
             LEFT JOIN unread u ON u.[contact_phone] = lm.[contact_phone]
             LEFT JOIN {_groupTable} wg ON wg.[GroupJid] = lm.[group_jid]
-            OUTER APPLY (
-                SELECT TOP 1 [Id],[AccountTitle],[AccountCode],[WaName]
-                FROM {_contactTable}
-                WHERE [IsActive] = 1
-                  AND lm.[group_jid] IS NULL   -- grup sohbetlerinde Contact join yapma
-                  AND lm.[contact_phone] = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
-                                              ISNULL([WaPhone], ''),
-                                              ' ',''),'-',''),'(',''),')',''),'+','')
-                ORDER BY [Id]
-            ) c
+            LEFT JOIN contact_norm cn
+                   ON cn.norm_phone = lm.[contact_phone]
+                  AND lm.[group_jid] IS NULL
+            LEFT JOIN has_incoming_cte hi ON hi.[contact_phone] = lm.[contact_phone]
             WHERE lm.rn = 1
             ORDER BY lm.[received_at] DESC;
             """;
@@ -150,8 +161,12 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
         await using var r = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await r.ReadAsync(cancellationToken))
         {
+            var rawPhone = r.GetString(0);
+            // JID'leri (@ içerenleri) olduğu gibi bırak; düz telefon numaralarını rakam-only'ye normalize et
+            var normPhone = rawPhone.Contains('@') ? rawPhone
+                : (new string(rawPhone.Where(char.IsDigit).ToArray()) is { Length: > 0 } d ? d : rawPhone);
             list.Add(new WaConversationSummary(
-                ContactPhone:     r.GetString(0),
+                ContactPhone:     normPhone,
                 ContactId:        r.IsDBNull(1)  ? null : r.GetInt32(1),
                 ContactName:      r.IsDBNull(2)  ? null : r.GetString(2),
                 AccountTitle:     r.IsDBNull(3)  ? null : r.GetString(3),
@@ -166,15 +181,51 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
                 IsGroup:          r.GetBoolean(12),
                 GroupJid:         r.IsDBNull(13) ? null : r.GetString(13),
                 GroupSubject:     r.IsDBNull(14) ? null : r.GetString(14),
-                GroupMemberCount: r.GetInt32(15)));
+                GroupMemberCount: r.GetInt32(15),
+                HasIncoming:      !r.IsDBNull(16) && r.GetBoolean(16)));
         }
-        return list;
+
+        // Dedup: aynı normalize telefon veya aynı ContactId olan satırlar birleştirilir.
+        // ContactPhone artık normalize edilmiş (yukarıda); liste received_at DESC sıralı
+        // → ilk karşılaşılan (en yeni) tutulur, sonrakiler atlanır.
+        var seenPhones = new HashSet<string>(StringComparer.Ordinal);
+        var seenContactIds = new HashSet<int>();
+        var deduped = new List<WaConversationSummary>(list.Count);
+        foreach (var conv in list)
+        {
+            if (!conv.IsGroup)
+            {
+                bool phoneDup = seenPhones.Contains(conv.ContactPhone);
+                bool contactDup = conv.ContactId.HasValue && seenContactIds.Contains(conv.ContactId.Value);
+                if (phoneDup || contactDup) continue;
+                seenPhones.Add(conv.ContactPhone);
+                if (conv.ContactId.HasValue) seenContactIds.Add(conv.ContactId.Value);
+            }
+            deduped.Add(conv);
+        }
+
+        // WhatsApp LID dedup: gelen mesajlar LID (15+ haneli uzun numara) ile, giden mesajlar
+        // telefon numarasıyla saklanır → aynı kişi iki ayrı satır görünebilir.
+        // Kural: kuyrukta gelen mesajı olan bir LID konuşması varken, yalnızca giden (HasIncoming=false)
+        // olan düz telefon numarası sohbetlerini gizle.
+        static bool IsLidPhone(string p) => !p.Contains('@') && p.Length >= 14;
+        bool hasLidWithIncoming = deduped.Any(c => !c.IsGroup && c.HasIncoming && (c.IsLid || IsLidPhone(c.ContactPhone)));
+        if (hasLidWithIncoming)
+        {
+            deduped = deduped
+                .Where(c => c.IsGroup || c.IsLid || IsLidPhone(c.ContactPhone) || c.HasIncoming)
+                .ToList();
+        }
+
+        return deduped;
     }
 
     public async Task<IReadOnlyList<WaInboxMessage>> GetMessagesByPhoneAsync(string contactPhone, int limit, CancellationToken cancellationToken)
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
+        // contact_phone INSERT tarafinda zaten normalize edilir (rakam-only veya JID olarak).
+        // REPLACE chain kaldırıldı — kolondaki REPLACE index'i kör ediyordu; direkt esitlik kullan.
         cmd.CommandText = $"""
             ;WITH recent AS (
                 SELECT TOP (@N)
@@ -256,7 +307,10 @@ public sealed class SqlWaInboxRepository : IWaInboxRepository
     {
         await using var conn = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"DELETE FROM {_table} WHERE [contact_phone] = @Phone;";
+        cmd.CommandText = $"""
+            DELETE FROM {_table}
+            WHERE [contact_phone] = @Phone;
+            """;
         cmd.Parameters.Add(new SqlParameter("@Phone", contactPhone));
         return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }

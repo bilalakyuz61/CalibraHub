@@ -13,7 +13,7 @@
 // **Cache key versioning:** Yeni offline.html deploy'unda CACHE_VERSION arttırılır;
 // activate event eski cache'leri temizler.
 
-const CACHE_VERSION = 'calibra-offline-v9';
+const CACHE_VERSION = 'calibra-offline-v17';
 const OFFLINE_URL   = '/offline.html';
 
 // Sunucu cevap vermezse bu süre içinde abort edip offline.html'i göster.
@@ -58,17 +58,6 @@ self.addEventListener('fetch', function (event) {
 
     // Probe isteklerini intercept etme — offline.html bunu kontrol için kullanıyor
     if (req.headers.get('X-Offline-Probe') === '1') return;
-
-    // Grafana (alt-servis) iframe navigasyonlarını intercept etme. Grafana
-    // 127.0.0.1:61005'te ayrı bir servis; o kapalıyken app'in offline.html'i
-    // GÖSTERİLMEMELİ. Aksi halde offline.html'in '/' probe'u (ana app ayakta)
-    // başarılı olur → '/grafana/...' hedefine geri yönlenir → tekrar düşer →
-    // sonsuz reload döngüsü (geri sayım 10'da takılır). /grafana sayfası kendi
-    // servis-durumu panelini (health probe) yönetir; burayı SW dışında bırak.
-    try {
-        var p = new URL(req.url).pathname;
-        if (p === '/grafana' || p.indexOf('/grafana/') === 0) return;
-    } catch (_) { /* URL parse fail — normal akışa devam */ }
 
     event.respondWith((async function () {
         // FAST_FALLBACK_MS içinde cevap gelmezse abort + offline.html göster.

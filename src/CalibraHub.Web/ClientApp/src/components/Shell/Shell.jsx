@@ -26,11 +26,14 @@ import * as notifApi from '../../services/notificationsService'
 // 2026-05-23 — Yapay zeka asistanı (sağ alt floating widget). Top-level Shell altında
 // global mount edilir → workspace tab iframe'lerinin DIŞINDA, her sayfada görünür.
 import AiFloatingButton from '../AiAssistant/AiFloatingButton'
+// 2026-06-14 — Ana sayfa özelleştirilebilir pano. Hiç sekme açık değilken
+// (isHomePage) EmptyState yerine doğrudan Shell içinde render edilir (iframe yok).
+import Dashboard from '../Dashboard/Dashboard'
 import {
   // Shell internals
   Sparkles, ChevronLeft, ChevronRight, CircleDot, Bell, BellRing, Moon, Sun, Search,
   Layers, MessageSquare, Languages, UserCircle, LogOut, Bot, Menu,
-  X, LayoutGrid, Building2, Check,
+  X, LayoutGrid, Building2, Check, Home,
   // Menu icons (MenuDefinition'dan gelir)
   LayoutList, FileText, Files, Archive, Truck,
   Package, Folder, Boxes, Sliders, TrendingUp,
@@ -201,10 +204,10 @@ export default function Shell(props) {
   var lastMenuFetchRef = useRef(0)
 
   /* Menüyü sunucudan çek, değiştiyse state güncelle */
-  var refreshMenu = useCallback(function() {
+  var refreshMenu = useCallback(function(force) {
     var now = Date.now()
-    // En fazla 30sn'de bir istek at (gereksiz yükü önle)
-    if (now - lastMenuFetchRef.current < 30000) return
+    // En fazla 30sn'de bir istek at (gereksiz yükü önle); force=true throttle'ı atlar
+    if (!force && now - lastMenuFetchRef.current < 30000) return
     lastMenuFetchRef.current = now
     fetch('/Account/GetMenuItems', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : null })
@@ -224,9 +227,18 @@ export default function Shell(props) {
     function onFocus() { refreshMenu() }
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', onFocus)
+
+    /* BroadcastChannel: Yetki Yönetimi kayıt sonrası tüm sekmelere force-refresh sinyali */
+    var bc = null
+    try {
+      bc = new BroadcastChannel('calibra-menu-refresh')
+      bc.onmessage = function() { refreshMenu(true) }
+    } catch(e) { /* BroadcastChannel desteklenmiyor */ }
+
     return function() {
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onFocus)
+      if (bc) bc.close()
     }
   }, [refreshMenu])
 
@@ -334,6 +346,28 @@ export default function Shell(props) {
     return function() { window.removeEventListener('resize', onResize) }
   }, [])
   function toggleSidebar() { setSidebarOpen(function(v) { return !v }) }
+
+  /* ── Dashboard görünümü — tabları kapatmadan ana sayfaya geçiş ── */
+  var [showDashboard, setShowDashboard] = useState(false)
+
+  function handleLogoClick() { setShowDashboard(true) }
+
+  /* Alt+H global kısayolu — input alanında değilse ana sayfaya (Dashboard) geçer.
+     Ana Sayfa butonuyla aynı davranış: tab'lar kapanmaz, Dashboard view açılır. */
+  useEffect(function () {
+    function onAltH(e) {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+      if ((e.key || '').toLowerCase() !== 'h') return
+      var t = e.target
+      var tag = (t && t.tagName) ? t.tagName.toLowerCase() : ''
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+      if (t && t.isContentEditable) return
+      e.preventDefault()
+      setShowDashboard(true)
+    }
+    window.addEventListener('keydown', onAltH)
+    return function () { window.removeEventListener('keydown', onAltH) }
+  }, [])
 
   /* ── Sidebar tamamen gizle — hangi tab'larin sidebar istegi var ── */
   var [sidebarHideTabKeys, setSidebarHideTabKeys] = useState(function() { return new Set() })
@@ -469,6 +503,7 @@ export default function Shell(props) {
        3) Hicbiri yoksa yeni tab ac. */
   function openNodeAsTab(node) {
     if (!node || !node.url) return
+    setShowDashboard(false)
     var existing = tabs.find(function(t) { return t.url === node.url })
     if (existing) {
       setActiveTabKey(existing.key)
@@ -516,6 +551,7 @@ export default function Shell(props) {
     var url = String(arg.url)
     var title = arg.title || 'Yeni Sekme'
     var matchPath = arg.matchPath || null
+    setShowDashboard(false)
 
     // 1) Ayni URL ile mevcut tab varsa → sadece aktive et
     var exactExisting = tabs.find(function (t) { return t.url === url })
@@ -777,6 +813,7 @@ export default function Shell(props) {
         onSelectLeaf={openNodeAsTab}
         system={system}
         onCollapse={toggleSidebar}
+        onLogoClick={handleLogoClick}
         collapsed={!sidebarOpen}
         hidden={forceSidebarHidden}
         isMobile={isMobile}
@@ -848,7 +885,9 @@ export default function Shell(props) {
           tabs={tabs}
           activeKey={activeTabKey}
           dirtyTabs={dirtyTabs}
-          onTabClick={setActiveTabKey}
+          showDashboard={showDashboard}
+          onGoHome={function() { setShowDashboard(true) }}
+          onTabClick={function(key) { setShowDashboard(false); setActiveTabKey(key) }}
           onTabClose={closeTab}
         />
 
@@ -857,30 +896,33 @@ export default function Shell(props) {
           className="flex-1 min-h-0 relative"
           style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
         >
-          {tabs.length === 0 ? (
-            <EmptyState isDark={isDark} lang={lang} />
-          ) : (
-            tabs.map(function(t) {
-              return (
-                <iframe
-                  key={t.key}
-                  ref={function(el) { if (el) iframeRefs.current[t.key] = el; else delete iframeRefs.current[t.key] }}
-                  onLoad={function() { handleIframeLoad(t.key) }}
-                  src={appendWorkspaceFlag(t.url)}
-                  title={t.title}
-                  className="absolute inset-0 w-full h-full border-0"
-                  // Üretim Terminali (kiosk) iframe içinden tam ekran isteyebilsin —
-                  // Permissions Policy: fullscreen + Web NFC + media (tablet sahasi).
-                  allow="fullscreen; nfc; microphone; camera"
-                  allowFullScreen
-                  style={{
-                    display: t.key === activeTabKey ? 'block' : 'none',
-                    background: isDark ? '#0a0d17' : '#f8fafc',
-                  }}
-                />
-              )
-            })
+          {/* Dashboard: tabs yoksa veya home aktifse göster (z-index üste çıkar) */}
+          {(tabs.length === 0 || showDashboard) && (
+            <div className="absolute inset-0 overflow-auto" style={{ zIndex: 2 }}>
+              <Dashboard config={config} />
+            </div>
           )}
+
+          {/* iframes: tabs varken HEP mounted (state korunur), aktif+dashboard-değil iken görünür */}
+          {tabs.map(function(t) {
+            return (
+              <iframe
+                key={t.key}
+                ref={function(el) { if (el) iframeRefs.current[t.key] = el; else delete iframeRefs.current[t.key] }}
+                onLoad={function() { handleIframeLoad(t.key) }}
+                src={appendWorkspaceFlag(t.url)}
+                title={t.title}
+                className="absolute inset-0 w-full h-full border-0"
+                allow="fullscreen; nfc; microphone; camera"
+                allowFullScreen
+                style={{
+                  display: (!showDashboard && t.key === activeTabKey) ? 'block' : 'none',
+                  background: isDark ? '#0a0d17' : '#f8fafc',
+                  zIndex: 1,
+                }}
+              />
+            )
+          })}
         </div>
 
       </div>
@@ -1223,9 +1265,9 @@ function Sidebar(props) {
         userSelect: 'none',
         WebkitUserSelect: 'none',
         overflow: 'hidden',
-        width: hidden ? 0 : (isMobile ? (collapsed ? 0 : 260) : (collapsed ? 64 : 260)),
+        width: (hidden || collapsed) ? 0 : 260,
         transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
-        borderRightWidth: hidden || (isMobile && collapsed) ? 0 : undefined,
+        borderRightWidth: (hidden || collapsed) ? 0 : undefined,
         ...(isMobile ? { top: 0, bottom: 0, left: 0, height: '100%' } : {}),
       }}
     >
@@ -1242,12 +1284,20 @@ function Sidebar(props) {
           style={{
             background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
             boxShadow: '0 6px 18px rgba(99,102,241,0.4)',
+            cursor: props.onLogoClick ? 'pointer' : undefined,
           }}
+          onClick={props.onLogoClick}
+          title={props.onLogoClick ? 'Ana sayfaya dön' : undefined}
         >
           <Sparkles size={15} className="text-white" strokeWidth={2.2} />
         </div>
         {!collapsed && (
-          <div className="flex-1 min-w-0">
+          <div
+            className="flex-1 min-w-0"
+            onClick={props.onLogoClick}
+            style={{ cursor: props.onLogoClick ? 'pointer' : undefined }}
+            title={props.onLogoClick ? 'Ana sayfaya dön' : undefined}
+          >
             <h1 className={'text-sm font-bold tracking-tight leading-tight ' + (isDark ? 'text-white' : 'text-slate-900')}>
               CalibraHub
             </h1>
@@ -1536,7 +1586,8 @@ function Header(props) {
         <button
           onClick={props.onToggleSidebar}
           className={
-            'md:hidden p-2 rounded-xl transition-colors flex-shrink-0 ' +
+            (props.sidebarOpen ? 'md:hidden ' : '') +
+            'p-2 rounded-xl transition-colors flex-shrink-0 ' +
             (isDark ? 'hover:bg-white/5 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-800')
           }
           aria-label={props.sidebarOpen ? 'Menüyü kapat' : 'Menüyü aç'}
@@ -2126,41 +2177,65 @@ function TabBar(props) {
     (isDark ? 'bg-[#0a0d17] border border-white/10 text-white/60 hover:text-white hover:bg-white/[0.06]'
             : 'bg-white border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100')
 
+  var showDash = !!props.showDashboard
+  var homeActive = showDash || props.tabs.length === 0
+
   return (
     <div
-      className={'flex items-center h-11 border-b flex-shrink-0 relative ' + borderColor}
+      className={'flex items-center h-11 border-b flex-shrink-0 ' + borderColor}
       style={{ background: isDark ? '#0a0d17' : '#f8fafc' }}
     >
-      {canLeft && (
+      {/* Ana Sayfa butonu — sol tarafta sabit, tab'lar sağa doğru büyür */}
+      {typeof props.onGoHome === 'function' && (
         <button
           type="button"
-          onClick={function() { scrollBy(-200) }}
-          className={chevronBtn}
-          style={{ left: 4 }}
-          title="Sola kaydir"
+          onClick={props.onGoHome}
+          title="Ana Sayfa"
+          className={
+            'h-full px-3 flex items-center justify-center flex-shrink-0 border-r transition-colors ' +
+            borderColor + ' ' +
+            (homeActive
+              ? (isDark ? 'text-indigo-400 bg-indigo-500/10' : 'text-indigo-600 bg-indigo-50/80')
+              : (isDark ? 'text-white/40 hover:text-white/70 hover:bg-white/[0.04]'
+                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'))
+          }
         >
-          <ChevronLeft size={14} strokeWidth={2.2} />
+          <Home size={15} strokeWidth={1.8} />
         </button>
       )}
-      {canRight && (
-        <button
-          type="button"
-          onClick={function() { scrollBy(200) }}
-          className={chevronBtn}
-          style={{ right: 4 }}
-          title="Saga kaydir"
+
+      {/* Scrollable tab alanı */}
+      <div className="relative flex-1 overflow-hidden h-full">
+        {canLeft && (
+          <button
+            type="button"
+            onClick={function() { scrollBy(-200) }}
+            className={chevronBtn}
+            style={{ left: 4 }}
+            title="Sola kaydır"
+          >
+            <ChevronLeft size={14} strokeWidth={2.2} />
+          </button>
+        )}
+        {canRight && (
+          <button
+            type="button"
+            onClick={function() { scrollBy(200) }}
+            className={chevronBtn}
+            style={{ right: 4 }}
+            title="Sağa kaydır"
+          >
+            <ChevronRight size={14} strokeWidth={2.2} />
+          </button>
+        )}
+        <div
+          ref={scrollRef}
+          onWheel={handleWheel}
+          className="flex items-center gap-1 h-full overflow-x-auto smartcard-widgets-scroll"
+          style={{ paddingLeft: canLeft ? 34 : 8, paddingRight: canRight ? 34 : 16 }}
         >
-          <ChevronRight size={14} strokeWidth={2.2} />
-        </button>
-      )}
-      <div
-        ref={scrollRef}
-        onWheel={handleWheel}
-        className="flex items-center gap-1 flex-1 h-full overflow-x-auto smartcard-widgets-scroll"
-        style={{ paddingLeft: canLeft ? 34 : 16, paddingRight: canRight ? 34 : 16 }}
-      >
       {props.tabs.map(function(t) {
-        var isActive = t.key === props.activeKey
+        var isActive = t.key === props.activeKey && !showDash
         return (
           <div
             key={t.key}
@@ -2209,6 +2284,7 @@ function TabBar(props) {
           </div>
         )
       })}
+        </div>
       </div>
     </div>
   )

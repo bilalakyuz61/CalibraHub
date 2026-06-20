@@ -3,6 +3,7 @@ using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Contracts;
 using CalibraHub.Application.Services.Approval;
 using CalibraHub.Domain.Enums;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -12,19 +13,36 @@ public sealed class ApprovalFlowService : IApprovalFlowService
 {
     private readonly IApprovalFlowRepository _flowRepo;
     private readonly IApprovalInstanceRepository _instanceRepo;
+    private readonly IUserProfileRepository _userRepo;
     private readonly IApprovalFlowExecutor? _executor;
     private readonly ILogger<ApprovalFlowService>? _logger;
+    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly IApprovalNodeLogger? _nodeLogger;
 
     public ApprovalFlowService(
         IApprovalFlowRepository flowRepo,
         IApprovalInstanceRepository instanceRepo,
+        IUserProfileRepository userRepo,
         IApprovalFlowExecutor? executor = null,
-        ILogger<ApprovalFlowService>? logger = null)
+        ILogger<ApprovalFlowService>? logger = null,
+        IServiceScopeFactory? scopeFactory = null,
+        IApprovalNodeLogger? nodeLogger = null)
     {
-        _flowRepo = flowRepo;
+        _flowRepo     = flowRepo;
         _instanceRepo = instanceRepo;
-        _executor = executor;
-        _logger = logger;
+        _userRepo     = userRepo;
+        _executor     = executor;
+        _logger       = logger;
+        _scopeFactory = scopeFactory;
+        _nodeLogger   = nodeLogger;
+    }
+
+    private async Task TryLogAsync(int instanceId, int flowId, string? nodeType, string? nodeName,
+                                   string eventType, string? detail, CancellationToken ct)
+    {
+        if (_nodeLogger is null) return;
+        try { await _nodeLogger.LogAsync(instanceId, flowId, null, nodeType, nodeName, eventType, detail, null, ct); }
+        catch (Exception ex) { _logger?.LogWarning(ex, "Service log yazılamadı (instance={Iid}, event={Ev}).", instanceId, eventType); }
     }
 
     public Task<IReadOnlyList<ApprovalFlowSummaryDto>> GetAllAsync(CancellationToken ct)
@@ -71,7 +89,9 @@ public sealed class ApprovalFlowService : IApprovalFlowService
             Label:              e.Label,
             EdgeKind:           e.EdgeKind,
             Condition:          e.Condition,
-            SortOrder:          e.SortOrder)).ToList();
+            SortOrder:          e.SortOrder,
+            SourceHandle:       e.SourceHandle,
+            TargetHandle:       e.TargetHandle)).ToList();
 
         var rules = src.Rules.Select(r => new SaveApprovalFlowRuleRequest(
             Id:        0,
@@ -136,14 +156,57 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         if (activeSteps.Length == 0)
             throw new InvalidOperationException("Akışta aktif adım tanımlanmamış.");
 
+        // ManagerOfRequester adımları için talep sahibinin amirini çöz ve ApproverId'yi set et.
+        // Böylece step record'a doğrudan amir ID'si yazılır — "Sadece benim" scope'u çalışır.
+        if (request.StartedByUserId.HasValue
+            && activeSteps.Any(s => s.ApproverType == ApproverType.ManagerOfRequester))
+        {
+            var requester = await _userRepo.GetByIdAsync(request.StartedByUserId.Value, ct);
+            if (requester?.SupervisorUserId.HasValue == true)
+            {
+                var supervisor = await _userRepo.GetByIdAsync(requester.SupervisorUserId.Value, ct);
+                if (supervisor is not null)
+                {
+                    activeSteps = activeSteps
+                        .Select(s => s.ApproverType == ApproverType.ManagerOfRequester
+                            ? s with { ApproverId = supervisor.Id.ToString(), ApproverLabel = supervisor.FullName }
+                            : s)
+                        .ToArray();
+                }
+            }
+        }
+
         var instanceId = await _instanceRepo.CreateAsync(request, activeSteps, ct);
+
+        // Execution log: akış başlatıldı
+        await TryLogAsync(instanceId, request.FlowId, "start", flow.Name,
+            "FlowStarted", $"Başlatan: {request.StartedBy}", ct);
 
         // Faz 4 — Graph-aware: start node sonrası decision/notification node'ları
         // pass-through olarak çalıştır. Linear akışlarda no-op.
+        // Fire-and-forget: bildirim gönderimi (mail/WhatsApp insan gecikmesi) HTTP yanıtını
+        // bloklamasın. Scoped servisler request scope sonrasında dispose olacağından
+        // IServiceScopeFactory ile bağımsız yeni bir scope açılır.
         if (_executor is not null)
         {
-            try { await _executor.AfterStartAsync(instanceId, ct); }
-            catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStartAsync hatası (instance={Iid}).", instanceId); }
+            var capturedId = instanceId;
+            if (_scopeFactory is not null)
+            {
+                var factory = _scopeFactory;
+                var log     = _logger;
+                _ = Task.Run(async () =>
+                {
+                    await using var scope = factory.CreateAsyncScope();
+                    var exec = scope.ServiceProvider.GetRequiredService<IApprovalFlowExecutor>();
+                    try { await exec.AfterStartAsync(capturedId, CancellationToken.None); }
+                    catch (Exception ex) { log?.LogWarning(ex, "Executor AfterStartAsync hatası (instance={Iid}).", capturedId); }
+                });
+            }
+            else
+            {
+                try { await _executor.AfterStartAsync(instanceId, ct); }
+                catch (Exception ex) { _logger?.LogWarning(ex, "Executor AfterStartAsync hatası (instance={Iid}).", instanceId); }
+            }
         }
 
         return await _instanceRepo.GetByIdAsync(instanceId, ct)
@@ -172,6 +235,7 @@ public sealed class ApprovalFlowService : IApprovalFlowService
         // Bu MVP: graph-aware decision degerlendirilmesi yapmaz, branch'ler
         // "default"/"true" oncelik sirasiyla cozulur.
         var stepBefore = instance.CurrentStep;
+        var approvingStepRecord = instance.StepRecords.FirstOrDefault(s => s.StepOrder == stepBefore);
         await _instanceRepo.ApproveStepAsync(
             request.InstanceId,
             stepBefore,
@@ -179,6 +243,10 @@ public sealed class ApprovalFlowService : IApprovalFlowService
             request.ApproverName,
             request.Note,
             ct);
+
+        // Execution log: adım onaylandı
+        await TryLogAsync(request.InstanceId, instance.FlowId, "step", approvingStepRecord?.StepName,
+            "StepApproved", $"{request.ApproverName} onayladı{(string.IsNullOrWhiteSpace(request.Note) ? "" : $" — {request.Note}")}", ct);
 
         // Faz 4 — Graph executor: sonraki yolda decision/notification node'larını işle.
         if (_executor is not null)
@@ -200,6 +268,7 @@ public sealed class ApprovalFlowService : IApprovalFlowService
             throw new InvalidOperationException($"Onay örneği işlem yapılabilir durumda değil: {instance.Status}");
 
         var stepBefore = instance.CurrentStep;
+        var rejectingStepRecord = instance.StepRecords.FirstOrDefault(s => s.StepOrder == stepBefore);
         await _instanceRepo.RejectAsync(
             request.InstanceId,
             stepBefore,
@@ -207,6 +276,10 @@ public sealed class ApprovalFlowService : IApprovalFlowService
             request.ApproverName,
             request.Note,
             ct);
+
+        // Execution log: adım reddedildi
+        await TryLogAsync(request.InstanceId, instance.FlowId, "step", rejectingStepRecord?.StepName,
+            "StepRejected", $"{request.ApproverName} reddetti — {request.Note}", ct);
 
         // Faz 4 — Graph executor: reject yolundaki notification node'larını işle.
         // (Reject sonrası instance zaten Rejected; sadece notification side-effect.)
@@ -222,10 +295,20 @@ public sealed class ApprovalFlowService : IApprovalFlowService
 
     public async Task<ApprovalInstanceDto> CancelAsync(int instanceId, string byUser, CancellationToken ct)
     {
+        var instance = await _instanceRepo.GetByIdAsync(instanceId, ct);
         await _instanceRepo.CancelAsync(instanceId, byUser, ct);
+        // Execution log: akış iptal edildi
+        if (instance is not null)
+            await TryLogAsync(instanceId, instance.FlowId, "flow", null,
+                "FlowCancelled", $"İptal eden: {byUser}", ct);
         return await _instanceRepo.GetByIdAsync(instanceId, ct)
             ?? throw new InvalidOperationException("Onay örneği okunamadı.");
     }
+
+    public Task<IReadOnlyList<ApprovalNodeLogDto>> GetInstanceLogsAsync(int instanceId, CancellationToken ct)
+        => _nodeLogger is not null
+           ? _nodeLogger.GetLogsAsync(instanceId, ct)
+           : Task.FromResult<IReadOnlyList<ApprovalNodeLogDto>>(Array.Empty<ApprovalNodeLogDto>());
 
     public Task<ApprovalInstanceDto?> GetInstanceByDocumentIdAsync(Guid documentId, CancellationToken ct)
         => _instanceRepo.GetByDocumentIdAsync(documentId, ct);

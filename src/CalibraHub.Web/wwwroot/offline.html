@@ -59,11 +59,13 @@
 
        /* Uyuyan uydu — 3B render hissi veren SVG + animasyonlar */
         .satellite {
-            width: 180px; height: 160px; margin: -8px auto 8px;
+            width: 220px; height: 190px; margin: -8px auto 8px;
             display: block;
             filter: drop-shadow(0 16px 24px rgba(0,0,0,0.32));
-            cursor: pointer; user-select: none;
+            cursor: grab; user-select: none; touch-action: none;
+            transition: transform .45s cubic-bezier(.34, 1.56, .64, 1);
         }
+        .satellite.is-grabbed { transition: none; cursor: grabbing; }
         .sat-body { transform-origin: 110px 100px; animation: satBreathe 4s ease-in-out infinite; }
         @keyframes satBreathe {
             0%, 100% { transform: translateY(0) rotate(-3deg); }
@@ -103,47 +105,76 @@
         .sat-drool { transition: opacity .35s ease-out; }
         .satellite.is-wiping .sat-drool { opacity: 0; }
 
-        /* Yan antenler — fly hunt sırasında sineği kovala. Default hafif yukarı eğik. */
-        .sat-antenna-l, .sat-antenna-r {
-            transform-origin: 70px 46px;    /* gövdeye bağlı uç (sol için x=74) */
-            transition: transform .22s ease-out;
-        }
-        .sat-antenna-r { transform-origin: 150px 46px; }
+        /* ── Anger overlay — drag esnasındaki çarpma hızına göre yüz değişir ──
+           Seviye 0 (sakin) : uyuyan default
+           Seviye 1         : gözler hafif açık (ağız suyu kaybolur)
+           Seviye 2 (kızgın): X gözler + kırmızı yanaklar
+           Seviye 3 (öfke)  : seviye 2 + tüm gövde vibrate
+           Not: ?/! emote ve çatık kaşlar render edilmez (mizah yumuşak). */
+        .sat-cheeks, .sat-angry-brows, .sat-eye-angry, .sat-emote { opacity: 0; transition: opacity .25s ease-out; }
+        .satellite[data-anger="1"] .sat-eye-closed { opacity: 0; }
+        .satellite[data-anger="1"] .sat-eye-open   { opacity: 1; }
+        .satellite[data-anger="1"] .sat-drool      { opacity: 0; }
+        .satellite[data-anger="2"] .sat-eye-closed { opacity: 0; }
+        .satellite[data-anger="2"] .sat-eye-open   { opacity: 0; }
+        .satellite[data-anger="2"] .sat-eye-angry  { opacity: 1; }
+        .satellite[data-anger="2"] .sat-cheeks     { opacity: .85; }
+        .satellite[data-anger="2"] .sat-drool      { opacity: 0; }
+        .satellite[data-anger="3"] .sat-eye-closed { opacity: 0; }
+        .satellite[data-anger="3"] .sat-eye-open   { opacity: 0; }
+        .satellite[data-anger="3"] .sat-eye-angry  { opacity: 1; }
+        .satellite[data-anger="3"] .sat-cheeks     { opacity: 1; }
+        .satellite[data-anger="3"] .sat-drool      { opacity: 0; }
 
-        /* Mouseover üzerinde 1.5 sn beklendikten sonra fly-hunt class'ı eklenir.
-           Antenler hızlı sağa-sola sallanır (sinek kovalama) — gözler hâlâ kapalı. */
-        .satellite.is-flyhunt .sat-antenna-l {
-            animation: antennaSwatL 0.32s ease-in-out infinite;
+        /* Drag sırasında baş dönmesi — sat-body breathe yerine geniş yatay sallanma.
+           Yüksek anger'da daha hızlı (override). */
+        .satellite.is-grabbed .sat-body {
+            animation: satDizzy .9s ease-in-out infinite;
         }
-        .satellite.is-flyhunt .sat-antenna-r {
-            animation: antennaSwatR 0.32s ease-in-out infinite;
-            animation-delay: 0.16s;
+        .satellite.is-grabbed[data-anger="2"] .sat-body { animation-duration: .55s; }
+        .satellite.is-grabbed[data-anger="3"] .sat-body { animation: satVibrate .11s steps(2) infinite; }
+        .satellite[data-anger="3"]:not(.is-grabbed) .sat-body { animation: satVibrate .11s steps(2) infinite; }
+        @keyframes satDizzy {
+            0%   { transform: translateY(0)    rotate(-11deg); }
+            50%  { transform: translateY(-3px) rotate(11deg); }
+            100% { transform: translateY(0)    rotate(-11deg); }
         }
-        @keyframes antennaSwatL {
-            0%   { transform: rotate(0deg); }
-            40%  { transform: rotate(-32deg); }
-            60%  { transform: rotate(-32deg); }
-            100% { transform: rotate(8deg); }
+        @keyframes satVibrate {
+            0%, 100% { transform: translate(-2px, 0) rotate(-3deg); }
+            50%      { transform: translate(2px, -1px) rotate(3deg); }
         }
-        @keyframes antennaSwatR {
-            0%   { transform: rotate(0deg); }
-            40%  { transform: rotate(32deg); }
-            60%  { transform: rotate(32deg); }
-            100% { transform: rotate(-8deg); }
+
+        /* Üst anten — fare yaklaşınca o tarafa eğilip "kovmaya çalışır".
+           JS mousemove ile inline `transform: rotate(Xdeg)` set eder. */
+        .sat-antenna-top {
+            transform-box: fill-box;
+            transform-origin: center bottom;
+            transition: transform .12s ease-out;
         }
-        .sat-zz {
-            font-family: "Comic Sans MS", "Segoe UI", sans-serif;
-            font-weight: 700; fill: var(--accent); opacity: 0;
+
+        /* Rüya baloncuğu — uydunun gördüğü ortak hayal: "Cuma 17:00". Yavaş float +
+           saat ":" yanıp söner. Drag/anger esnasında gizlenir (uyku bozulur). */
+        .sat-dream {
+            transform-box: fill-box;
             transform-origin: center;
+            animation: dreamFloat 4s ease-in-out infinite;
+            transition: opacity .3s ease-out;
         }
-        .sat-zz--1 { animation: zzFloat 3.6s ease-in-out infinite; }
-        .sat-zz--2 { animation: zzFloat 3.6s ease-in-out 1.2s infinite; }
-        .sat-zz--3 { animation: zzFloat 3.6s ease-in-out 2.4s infinite; }
-        @keyframes zzFloat {
-            0%   { opacity: 0; transform: translate(0, 0) scale(0.6); }
-            20%  { opacity: 1; }
-            70%  { opacity: 1; }
-            100% { opacity: 0; transform: translate(10px, -22px) scale(1.2); }
+        .satellite.is-grabbed .sat-dream,
+        .satellite[data-anger="2"] .sat-dream,
+        .satellite[data-anger="3"] .sat-dream {
+            opacity: 0;
+        }
+        @keyframes dreamFloat {
+            0%, 100% { transform: translateY(0); }
+            50%      { transform: translateY(-3px); }
+        }
+        .sat-dream-colon {
+            animation: dreamColonBlink 1.05s steps(2) infinite;
+        }
+        @keyframes dreamColonBlink {
+            0%, 49%   { opacity: 1; }
+            50%, 100% { opacity: 0.25; }
         }
         .sat-antenna-light {
             fill: #ef4444; transform-origin: 100px 22px;
@@ -274,11 +305,13 @@
             </defs>
 
             <g class="sat-body">
-                <!-- Üst anten -->
-                <line x1="110" y1="40" x2="110" y2="22" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"/>
-                <!-- Kırmızı ışık + halo -->
-                <circle cx="110" cy="22" r="10" fill="url(#lightGlow)"/>
-                <circle class="sat-antenna-light" cx="110" cy="22" r="3.5"/>
+                <!-- Üst anten — fare yaklaşınca o yöne eğilip kovalar (JS mousemove → inline transform) -->
+                <g class="sat-antenna-top">
+                    <line x1="110" y1="40" x2="110" y2="22" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"/>
+                    <!-- Kırmızı ışık + halo (anten ucunda) -->
+                    <circle cx="110" cy="22" r="10" fill="url(#lightGlow)"/>
+                    <circle class="sat-antenna-light" cx="110" cy="22" r="3.5"/>
+                </g>
 
                 <!-- Sol solar panel kolu -->
                 <rect x="50" y="79" width="14" height="4" rx="1" fill="#94a3b8"/>
@@ -314,14 +347,29 @@
                     <path d="M92 75 Q99 70 106 75" stroke="#475569" stroke-width="2.4" fill="none" stroke-linecap="round"/>
                     <path d="M114 75 Q121 70 128 75" stroke="#475569" stroke-width="2.4" fill="none" stroke-linecap="round"/>
                 </g>
-                <!-- Hafif aralık gözler — peek sırasında görünür (uykudan zar zor uyanmış izlenimi) -->
+                <!-- Hafif aralık gözler — peek + anger=1 sırasında görünür -->
                 <g class="sat-eye-open">
-                    <!-- Üst-alt göz kapakları arasından yarım pupil -->
                     <ellipse cx="99" cy="74" rx="3" ry="2.2" fill="#475569"/>
                     <ellipse cx="121" cy="74" rx="3" ry="2.2" fill="#475569"/>
-                    <!-- Üst göz kapağı çizgisi (yarım açık etkisi) -->
                     <path d="M93 72 Q99 70 105 72" stroke="#475569" stroke-width="1.6" fill="none" stroke-linecap="round"/>
                     <path d="M115 72 Q121 70 127 72" stroke="#475569" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+                </g>
+                <!-- Kızgın gözler (X şekli) — anger=2,3 sırasında görünür -->
+                <g class="sat-eye-angry">
+                    <path d="M93 71 L105 78" stroke="#1e293b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                    <path d="M105 71 L93 78" stroke="#1e293b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                    <path d="M115 71 L127 78" stroke="#1e293b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                    <path d="M127 71 L115 78" stroke="#1e293b" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                </g>
+                <!-- Çatık kaşlar — anger=2,3 sırasında görünür -->
+                <g class="sat-angry-brows">
+                    <line x1="92" y1="64" x2="105" y2="70" stroke="#1e293b" stroke-width="2.6" stroke-linecap="round"/>
+                    <line x1="128" y1="64" x2="115" y2="70" stroke="#1e293b" stroke-width="2.6" stroke-linecap="round"/>
+                </g>
+                <!-- Kırmızı yanaklar — anger=2,3 sırasında belirir -->
+                <g class="sat-cheeks">
+                    <ellipse cx="89" cy="86" rx="5" ry="3" fill="#ef4444" opacity="0.6"/>
+                    <ellipse cx="131" cy="86" rx="5" ry="3" fill="#ef4444" opacity="0.6"/>
                 </g>
 
                 <!-- Açık ağız (üzgün/uykulu) -->
@@ -332,24 +380,34 @@
                     <circle cx="116" cy="106" r="1.8" fill="#7dd3fc" opacity="0.9"/>
                 </g>
 
-                <!-- Yan antenler — sineği kovalamak için kullanılır.
-                     Sol anten: gövdenin sol-üst köşesinden dışa doğru uzanır.
-                     Sağ anten: gövdenin sağ-üst köşesinden dışa doğru uzanır.
-                     transform-origin gövdeye bağlı uca konumlandırıldı ki açıdan eğilebilsin. -->
-                <g class="sat-antenna-l">
-                    <line x1="74" y1="46" x2="60" y2="30" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"/>
-                    <circle cx="60" cy="30" r="2.6" fill="#94a3b8"/>
-                </g>
-                <g class="sat-antenna-r">
-                    <line x1="146" y1="46" x2="160" y2="30" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"/>
-                    <circle cx="160" cy="30" r="2.6" fill="#94a3b8"/>
-                </g>
             </g>
 
-            <!-- Z Z Z -->
-            <text class="sat-zz sat-zz--1" x="142" y="50" font-size="18">z</text>
-            <text class="sat-zz sat-zz--2" x="156" y="38" font-size="14">z</text>
-            <text class="sat-zz sat-zz--3" x="168" y="28" font-size="11">z</text>
+            <!-- Rüya baloncuğu — yazısız: 17:00'ı gösteren küçük analog saat -->
+            <g class="sat-dream">
+                <!-- Thought-bubble kuyrukları: uydudan baloncuğa uzanan iki küçük yuvarlak -->
+                <circle cx="132" cy="56" r="2.2" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.8"/>
+                <circle cx="138" cy="48" r="3.2" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.8"/>
+                <!-- Ana baloncuk -->
+                <circle cx="173" cy="36" r="18"
+                        fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+                <!-- Saat kadranı (iç çerçeve) -->
+                <circle cx="173" cy="36" r="13" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.8"/>
+                <!-- 12/3/6/9 işaretleri -->
+                <line x1="173" y1="25" x2="173" y2="27.5" stroke="#475569" stroke-width="1.4" stroke-linecap="round"/>
+                <line x1="184" y1="36" x2="181.5" y2="36" stroke="#475569" stroke-width="1.4" stroke-linecap="round"/>
+                <line x1="173" y1="47" x2="173" y2="44.5" stroke="#475569" stroke-width="1.4" stroke-linecap="round"/>
+                <line x1="162" y1="36" x2="164.5" y2="36" stroke="#475569" stroke-width="1.4" stroke-linecap="round"/>
+                <!-- Akrep (5'i gösterir, ~150°) -->
+                <line x1="173" y1="36" x2="178" y2="42" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round"/>
+                <!-- Yelkovan (12'yi gösterir, dikey yukarı) -->
+                <line x1="173" y1="36" x2="173" y2="27" stroke="#6366f1" stroke-width="1.6" stroke-linecap="round"/>
+                <!-- Merkez nokta -->
+                <circle cx="173" cy="36" r="1.4" fill="#1e293b"/>
+            </g>
+
+            <!-- Emote ?/! — anger seviyesine göre sağ üstte görünür -->
+            <text class="sat-emote sat-emote--q" x="172" y="58" font-size="22" font-weight="800" fill="#f59e0b">?</text>
+            <text class="sat-emote sat-emote--e" x="174" y="58" font-size="26" font-weight="900" fill="#ef4444">!</text>
         </svg>
 
         <h1>Sunucuya bağlanılamıyor</h1>
@@ -433,43 +491,122 @@
         // ── Uydu etkileşimleri ────────────────────────────────────────
         var satEl = document.querySelector('.satellite');
         if (satEl) {
-            // Mouseover üzerinde 1.5 saniye beklenince "sinek kovalama" modu
-            // başlar — antenler hızlı sallanır, gözler hâlâ kapalı (uyumaya devam).
-            // Mouse uzaklaşınca veya tıklanınca mode kapanır.
-            var flyHuntTimer = null;
-            satEl.addEventListener('mouseenter', function () {
-                if (satEl.classList.contains('is-peeking')) return;
-                clearTimeout(flyHuntTimer);
-                flyHuntTimer = setTimeout(function () {
-                    satEl.classList.add('is-flyhunt');
-                }, 1500);
+            // Üst anten fareyi takip eder — kovmaya çalışır havası.
+            // SVG koordinatına mouse mapping: anten kökü viewBox'ta (110, 40).
+            var antennaTop = satEl.querySelector('.sat-antenna-top');
+            var VB_W = 220;
+            satEl.addEventListener('mousemove', function (e) {
+                if (!antennaTop || dragging) return;
+                var r = satEl.getBoundingClientRect();
+                var scaleX = r.width / VB_W;
+                var mx = (e.clientX - r.left) / scaleX;
+                // Anten kökünden (110) yatay mesafe → eğilme açısı.
+                // Pozitif → sağa, negatif → sola; ±55° clamp.
+                var angle = (mx - 110) * 0.5;
+                angle = Math.max(-55, Math.min(55, angle));
+                antennaTop.style.transform = 'rotate(' + angle.toFixed(1) + 'deg)';
             });
             satEl.addEventListener('mouseleave', function () {
-                clearTimeout(flyHuntTimer);
-                satEl.classList.remove('is-flyhunt');
+                if (antennaTop) antennaTop.style.transform = '';
             });
 
-            // Tıklanınca: gözler aç → ağız suyu silinir → gözler kapanır
-            satEl.addEventListener('click', function (e) {
-                if (satEl.classList.contains('is-peeking')) return; // çift tıklama kilitle
-                // Sinek kovalama modunu da sonlandır (kullanıcı zaten uyduya el sürdü)
-                clearTimeout(flyHuntTimer);
-                satEl.classList.remove('is-flyhunt');
+            // ── Drag + Anger ─────────────────────────────────────────────
+            // Uydu drag edilebilir. Çarpma hızı (px/ms) → anger += vx*6 (max 14/step).
+            // Drag bırakılınca anger her frame -0.8 azalır → 0'a düşünce tekrar uyuyan moda.
+            // Seviyeler:
+            //   0..14   : sakin (default uyuyan)
+            //   15..39  : "?" — gözler yarı açık
+            //   40..69  : kızgın — kaş çatık, X gözler, kırmızı yanaklar, "!"
+            //   70..100 : öfke — yukarısı + tüm gövde vibrate
+            var anger = 0;
+            var ANGER_MAX = 100;
+            var dragging = false;
+            var dragStartX = 0;
+            var lastX = 0, lastT = 0;
+            var dragMoveTotal = 0;
+            var rafId = null;
 
-                // Tıklanan tarafa göre yön — yüz aksine çevrilir
+            function angerStage(a) {
+                if (a >= 70) return 3;
+                if (a >= 40) return 2;
+                if (a >= 15) return 1;
+                return 0;
+            }
+            function applyAngerDom() {
+                var s = angerStage(anger);
+                if (s === 0) satEl.removeAttribute('data-anger');
+                else satEl.setAttribute('data-anger', String(s));
+            }
+            function angerLoop() {
+                if (!dragging) {
+                    anger = Math.max(0, anger - 0.8);
+                }
+                applyAngerDom();
+                if (dragging || anger > 0.5) {
+                    rafId = requestAnimationFrame(angerLoop);
+                } else {
+                    anger = 0;
+                    rafId = null;
+                }
+            }
+            function ensureLoop() {
+                if (rafId == null) rafId = requestAnimationFrame(angerLoop);
+            }
+
+            satEl.addEventListener('pointerdown', function (e) {
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                dragging = true;
+                satEl.classList.add('is-grabbed');
+                dragStartX = e.clientX;
+                lastX = e.clientX;
+                lastT = performance.now();
+                dragMoveTotal = 0;
+                try { satEl.setPointerCapture(e.pointerId); } catch (_) {}
+                ensureLoop();
+            });
+
+            satEl.addEventListener('pointermove', function (e) {
+                if (!dragging) return;
+                var now = performance.now();
+                var dt = Math.max(1, now - lastT);
+                var dx = e.clientX - lastX;
+                var vx = Math.abs(dx) / dt;   // px/ms
+                if (vx > 0.25) {
+                    // çarpma hızına göre öfke artışı (cap'li step)
+                    anger = Math.min(ANGER_MAX, anger + Math.min(vx * 6, 14));
+                }
+                var offset = e.clientX - dragStartX;
+                offset = Math.max(-110, Math.min(110, offset));
+                satEl.style.transform = 'translateX(' + offset + 'px)';
+                dragMoveTotal += Math.abs(dx);
+                lastX = e.clientX;
+                lastT = now;
+            });
+
+            function dropDrag(e) {
+                if (!dragging) return;
+                dragging = false;
+                satEl.classList.remove('is-grabbed');
+                satEl.style.transform = '';   // CSS transition spring-back
+                if (e && e.pointerId != null) {
+                    try { satEl.releasePointerCapture(e.pointerId); } catch (_) {}
+                }
+            }
+            satEl.addEventListener('pointerup', dropDrag);
+            satEl.addEventListener('pointercancel', dropDrag);
+
+            // Tıklanınca: gözler aç → ağız suyu silinir → gözler kapanır
+            // Drag → click suppress (5 px üzeri hareket varsa peek tetiklenmez).
+            satEl.addEventListener('click', function (e) {
+                if (dragMoveTotal > 5) return;
+                if (satEl.classList.contains('is-peeking')) return;
                 var rect = satEl.getBoundingClientRect();
                 var clickedOnLeft = (e.clientX - rect.left) < rect.width / 2;
-                if (clickedOnLeft) {
-                    satEl.classList.remove('peek-left');  // sol tıklandı → sağa eğil
-                } else {
-                    satEl.classList.add('peek-left');     // sağ tıklandı → sola eğil
-                }
+                if (clickedOnLeft) satEl.classList.remove('peek-left');
+                else               satEl.classList.add('peek-left');
                 satEl.classList.add('is-peeking');
-                // Gözler tam açıldıktan sonra ağız suyunu sil (fade out)
                 setTimeout(function () { satEl.classList.add('is-wiping'); }, 400);
-                // Animasyonun son ~%25'lik kısmında gözler kapansın
                 setTimeout(function () { satEl.classList.add('peek-closing'); }, 1200);
-                // Animasyon bitince tüm class'ları temizle — drool da geri görünür
                 setTimeout(function () {
                     satEl.classList.remove('is-peeking', 'peek-left', 'peek-closing', 'is-wiping');
                 }, 1650);

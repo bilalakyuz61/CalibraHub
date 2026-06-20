@@ -297,6 +297,45 @@ public sealed class SqlDbSchemaRepository : IDbSchemaRepository
         return list;
     }
 
+    public async Task<IReadOnlyList<RdViewInfo>> GetDesignerViewsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT
+                v.name           AS ViewName,
+                c.name           AS ColumnName,
+                TYPE_NAME(c.user_type_id) AS SqlType
+            FROM sys.views v
+            INNER JOIN sys.schemas s ON s.schema_id = v.schema_id
+            INNER JOIN sys.columns c ON c.object_id = v.object_id
+            WHERE v.is_ms_shipped = 0 AND s.name = 'dbo'
+            ORDER BY v.name, c.column_id;
+            """;
+
+        var byView = new Dictionary<string, List<RdColumnInfo>>(StringComparer.OrdinalIgnoreCase);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var viewName   = reader.GetString(0);
+            var colName    = reader.GetString(1);
+            var sqlType    = reader.GetString(2);
+            var isNumeric  = IsRdNumericType(sqlType);
+            var isTime     = IsRdTimeType(sqlType);
+            if (!byView.TryGetValue(viewName, out var cols))
+            {
+                cols = [];
+                byView[viewName] = cols;
+            }
+            cols.Add(new RdColumnInfo(colName, sqlType, isNumeric, isTime));
+        }
+
+        return byView
+            .Select(kv => new RdViewInfo(kv.Key, kv.Value))
+            .OrderBy(v => v.Name)
+            .ToList();
+    }
+
     private static bool IsStringType(string sqlType) =>
         sqlType.Equals("char", StringComparison.OrdinalIgnoreCase) ||
         sqlType.Equals("varchar", StringComparison.OrdinalIgnoreCase) ||
@@ -308,4 +347,12 @@ public sealed class SqlDbSchemaRepository : IDbSchemaRepository
     private static bool IsNumericType(string sqlType) =>
         sqlType.Equals("decimal", StringComparison.OrdinalIgnoreCase) ||
         sqlType.Equals("numeric", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRdNumericType(string t) =>
+        t is "int" or "bigint" or "smallint" or "tinyint"
+          or "decimal" or "numeric" or "float" or "real"
+          or "money" or "smallmoney";
+
+    private static bool IsRdTimeType(string t) =>
+        t is "date" or "datetime" or "datetime2" or "datetimeoffset" or "smalldatetime";
 }

@@ -448,7 +448,7 @@
 
             <div class="trf-content hidden" data-panel="customers">
                 <div class="trf-row" style="align-items:flex-start">
-                    <label>Cariler <span class="hint">(ağırlık: 16)</span></label>
+                    <label>Cariler <span class="hint">(ağırlık: 32)</span></label>
                     <div class="chip-wrap">
                         <input id="customerSearch" type="text" class="ac-input" autocomplete="off"
                                placeholder="Cari adı/kodu ile ara… (boş = tüm cariler)"
@@ -467,7 +467,7 @@
 
             <div class="trf-content hidden" data-panel="users">
                 <div class="trf-row" style="align-items:flex-start">
-                    <label>Kullanıcılar <span class="hint">(ağırlık: 4)</span></label>
+                    <label>Kullanıcılar <span class="hint">(ağırlık: 8)</span></label>
                     <div class="chip-wrap">
                         <input id="userSearch" type="text" class="ac-input" autocomplete="off"
                                placeholder="Kullanıcı adı/e-posta ile ara…"
@@ -486,13 +486,13 @@
 
             <div class="trf-content hidden" data-panel="other">
                 <div class="trf-row">
-                    <label for="ContactGroupId">Cari Grubu <span class="hint">(ağırlık: 8)</span></label>
+                    <label for="ContactGroupId">Cari Grubu <span class="hint">(ağırlık: 16)</span></label>
                     <select id="ContactGroupId" name="ContactGroupId" onchange="updateWeight()" data-selected="@(Model.ContactGroupId?.ToString() ?? "")">
                         <option value="">— Tüm gruplar (wildcard) —</option>
                     </select>
                 </div>
                 <div class="trf-row">
-                    <label for="WarehouseId">Depo <span class="hint">(ağırlık: 1)</span></label>
+                    <label for="WarehouseId">Depo <span class="hint">(ağırlık: 2)</span></label>
                     <select id="WarehouseId" name="WarehouseId" onchange="updateWeight()">
                         <option value="">— Tüm depolar (wildcard) —</option>
                         @foreach (var loc in locations)
@@ -504,6 +504,16 @@
                         }
                     </select>
                 </div>
+                <div class="trf-row">
+                    <label for="AccountType">Cari Tipi <span class="hint">(ağırlık: 1)</span></label>
+                    <select id="AccountType" name="AccountType" onchange="updateWeight()"
+                            data-selected="@Model.AccountType">
+                        <option value="">— Tüm cari tipleri (wildcard) —</option>
+                        <option value="1">Müşteri</option>
+                        <option value="2">Satıcı</option>
+                        <option value="3">Her ikisi</option>
+                    </select>
+                </div>
             </div>
 
             <div class="trf-content hidden" data-panel="summary">
@@ -512,7 +522,7 @@
                     <div class="desc" id="weightDesc">Bu kural tüm değerler için geçerli. Aynı belge tipinde daha spesifik kural varsa onlar öncelikli olur.</div>
                 </div>
                 <div class="trf-info" style="margin-top:14px">
-                    <strong>Ağırlık sistemi (2^n):</strong> Cari=16, Grup=8, Kullanıcı=4, Şube=2, Depo=1.
+                    <strong>Ağırlık sistemi (2^n):</strong> Cari=32, Grup=16, Kullanıcı=8, Şube=4, Depo=2, Cari Tipi=1.
                     Her kriter eklenince ağırlığa katkı verir. Toplam ağırlığı en yüksek olan kural seçilir.
                 </div>
                 <div id="multiNote" class="trf-info" style="display:none; margin-top:10px; background:rgba(245,158,11,0.10); border-left-color:#f59e0b; color:#92400e">
@@ -730,6 +740,9 @@
         renderUserChips();
         loadContactGroups();
         onDocTypeChange();
+        // AccountType: set from data-selected attribute (tag helper elements block inline Razor in attrs)
+        var atSel = document.getElementById('AccountType');
+        if (atSel) { var atVal = atSel.getAttribute('data-selected'); if (atVal) atSel.value = atVal; }
         updateWeight();
     });
 
@@ -798,13 +811,15 @@
         var group       = (document.getElementById('ContactGroupId')?.value || '').trim();
         var branch      = (document.getElementById('BranchId')?.value || '').trim();
         var warehouse   = (document.getElementById('WarehouseId')?.value || '').trim();
+        var acctType    = (document.getElementById('AccountType')?.value || '').trim();
 
         var weight = 0, crits = [];
-        if (hasCustomer) { weight += 16; crits.push('Cari'); }
-        if (group)       { weight += 8;  crits.push('Grup'); }
-        if (hasUser)     { weight += 4;  crits.push('Kullanıcı'); }
-        if (branch)      { weight += 2;  crits.push('Şube'); }
-        if (warehouse)   { weight += 1;  crits.push('Depo'); }
+        if (hasCustomer) { weight += 32; crits.push('Cari'); }
+        if (group)       { weight += 16; crits.push('Grup'); }
+        if (hasUser)     { weight += 8;  crits.push('Kullanıcı'); }
+        if (branch)      { weight += 4;  crits.push('Şube'); }
+        if (warehouse)   { weight += 2;  crits.push('Depo'); }
+        if (acctType)    { weight += 1;  crits.push('Cari Tipi'); }
 
         var card  = document.getElementById('weightCard');
         var title = document.getElementById('weightTitle');
@@ -818,9 +833,9 @@
             card.classList.remove('wildcard');
             title.textContent = '⚖ Ağırlık: ' + weight + ' — ' + crits.join(' + ');
             var compare;
-            if      (weight >= 24) compare = 'Çok yüksek öncelikli — neredeyse hep bu kural seçilir.';
-            else if (weight >= 16) compare = 'Yüksek öncelikli — Cari-bazlı kurallar bunu seçer.';
-            else if (weight >= 8)  compare = 'Orta öncelikli — Grup-bazlı kurallar bunu seçer.';
+            if      (weight >= 48) compare = 'Çok yüksek öncelikli — neredeyse hep bu kural seçilir.';
+            else if (weight >= 32) compare = 'Yüksek öncelikli — Cari-bazlı kurallar bunu seçer.';
+            else if (weight >= 16) compare = 'Orta öncelikli — Grup-bazlı kurallar bunu seçer.';
             else                   compare = 'Düşük öncelikli — sadece tamamen wildcard kuralları geçer.';
             desc.textContent = compare;
         }

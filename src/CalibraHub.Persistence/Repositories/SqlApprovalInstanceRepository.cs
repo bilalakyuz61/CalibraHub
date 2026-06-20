@@ -49,18 +49,47 @@ public sealed class SqlApprovalInstanceRepository : IApprovalInstanceRepository
                 var dueDate = ComputeDueDateFromNodeData(step.NodeData, now);
                 await using var sCmd = con.CreateCommand();
                 sCmd.Transaction = tx;
+                // SpecificUser ve ManagerOfRequester için çözümlenen onaylayıcıyı step record'a yaz.
+                // ManagerOfRequester: StartAsync'te supervisor çözümlendi, ApproverId/ApproverLabel set edildi.
+                var storeApprover = step.ApproverType == CalibraHub.Domain.Enums.ApproverType.SpecificUser
+                                 || step.ApproverType == CalibraHub.Domain.Enums.ApproverType.ManagerOfRequester;
+                var intendedApproverId   = storeApprover ? step.ApproverId   : null;
+                var intendedApproverName = storeApprover ? step.ApproverLabel : null;
+
                 sCmd.CommandText = $"""
                     INSERT INTO [{_s}].[DocumentApprovalStepRecord]
-                        ([InstanceId],[StepOrder],[StepName],[Status],[DueDate],[CreatedById],[Created])
+                        ([InstanceId],[StepOrder],[StepName],[Status],[ApproverId],[ApproverName],[DueDate],[CreatedById],[Created])
                     VALUES
-                        (@Iid,@Ord,@Name,N'Pending',@Due,@CreatedById,SYSUTCDATETIME());
+                        (@Iid,@Ord,@Name,N'Pending',@AppId,@AppName,@Due,@CreatedById,SYSUTCDATETIME());
                     """;
                 sCmd.Parameters.Add(new SqlParameter("@Iid", instanceId));
                 sCmd.Parameters.Add(new SqlParameter("@Ord", step.StepOrder));
                 sCmd.Parameters.Add(new SqlParameter("@Name", step.StepName));
+                sCmd.Parameters.Add(new SqlParameter("@AppId",   (object?)intendedApproverId   ?? DBNull.Value));
+                sCmd.Parameters.Add(new SqlParameter("@AppName", (object?)intendedApproverName ?? DBNull.Value));
                 sCmd.Parameters.Add(new SqlParameter("@Due", (object?)dueDate ?? DBNull.Value));
                 sCmd.Parameters.Add(new SqlParameter { ParameterName = "@CreatedById", Value = DBNull.Value, SqlDbType = System.Data.SqlDbType.Int });
                 await sCmd.ExecuteNonQueryAsync(ct);
+            }
+
+            // CurrentStep'i ilk step record'un StepOrder'ına hizala.
+            // Graph akışlarda StepOrder=1 genellikle "Başla" (start node) olur ve step record üretmez;
+            // hard-coded default=1 bırakırsak "Onayda Bekleyenler" sorgusu (sr.StepOrder = inst.CurrentStep)
+            // hiçbir kayıtla eşleşmez → onay sırasındaki kullanıcı listede görünmez.
+            // Linear akışlarda da en küçük StepOrder=1 dönerek doğru davranış korunur.
+            await using (var alignCmd = con.CreateCommand())
+            {
+                alignCmd.Transaction = tx;
+                alignCmd.CommandText = $"""
+                    UPDATE [{_s}].[DocumentApprovalInstance]
+                    SET [CurrentStep] = ISNULL((
+                        SELECT MIN([StepOrder]) FROM [{_s}].[DocumentApprovalStepRecord]
+                        WHERE [InstanceId] = @Iid AND [Status] = N'Pending'
+                    ), 1)
+                    WHERE [Id] = @Iid;
+                    """;
+                alignCmd.Parameters.Add(new SqlParameter("@Iid", instanceId));
+                await alignCmd.ExecuteNonQueryAsync(ct);
             }
 
             tx.Commit();
@@ -135,8 +164,11 @@ SELECT
     inst.[Id]              AS InstanceIdAlias,
     inst.[DocumentId]      AS DocumentId,
     inst.[StartedAt]       AS InstanceStarted,
+    inst.[FlowId]          AS FlowId,
     flow.[Name]            AS FlowName,
+    flow.[ExtraColumnsView] AS ExtraColumnsView,
     (SELECT COUNT(*) FROM [{s}].[DocumentApprovalStepRecord] WHERE [InstanceId] = inst.[Id]) AS TotalSteps,
+    (SELECT COUNT(*) FROM [{s}].[DocumentApprovalStepRecord] WHERE [InstanceId] = inst.[Id] AND [StepOrder] <= sr.[StepOrder]) AS StepPosition,
     doc.[id]               AS DocumentInternalId,
     doc.[DocumentNumber]   AS DocumentNumber,
     doc.[DocumentDate]     AS DocumentDate,
@@ -157,6 +189,8 @@ WHERE sr.[Status] = N'Pending'
   AND inst.[Status] = N'Pending'
   AND inst.[IsActive] = 1
   AND sr.[StepOrder] = inst.[CurrentStep]
+  AND doc.[id] IS NOT NULL
+  AND doc.[IsActive] = 1
 ");
 
         // DocumentApprovalInstance.DocumentId UNIQUEIDENTIFIER, Document.id INT.
@@ -177,7 +211,21 @@ WHERE sr.[Status] = N'Pending'
         // Scope filtresi
         if (string.Equals(scope, PendingApprovalScope.Mine, StringComparison.OrdinalIgnoreCase))
         {
-            sql += " AND sr.[ApproverId] = @UserId\n";
+            // sr.ApproverId NULL olabilir (backfill öncesi SpecificUser adımı); bu durumda
+            // ApprovalFlowStep tablosuna fallback yaparak SpecificUser ApproverId kontrolü yap.
+            // AnyUser / ManagerOfRequester adımları atanmamış görev sayılır — "mine" kapsamına
+            // dahil edilmez; bu adımlar yalnızca "all" scope'ta görünür.
+            sql += $@" AND (
+    sr.[ApproverId] = @UserId
+    OR (sr.[ApproverId] IS NULL AND EXISTS (
+        SELECT 1 FROM [{s}].[ApprovalFlowStep] fs
+        WHERE fs.[FlowId] = inst.[FlowId]
+          AND fs.[StepOrder] = sr.[StepOrder]
+          AND fs.[ApproverType] = N'SpecificUser'
+          AND fs.[ApproverId] = @UserId
+    ))
+)
+";
         }
         else if (string.Equals(scope, PendingApprovalScope.Department, StringComparison.OrdinalIgnoreCase)
                  && departmentUserIds != null && departmentUserIds.Count > 0)
@@ -207,9 +255,12 @@ WHERE sr.[Status] = N'Pending'
                 InstanceId:          rdr.GetInt32(rdr.GetOrdinal("InstanceId")),
                 StepRecordId:        rdr.GetInt32(rdr.GetOrdinal("StepRecordId")),
                 StepOrder:           rdr.GetInt32(rdr.GetOrdinal("StepOrder")),
+                StepPosition:        rdr.GetInt32(rdr.GetOrdinal("StepPosition")),
                 TotalSteps:          rdr.GetInt32(rdr.GetOrdinal("TotalSteps")),
                 StepName:            rdr.GetString(rdr.GetOrdinal("StepName")),
                 FlowName:            rdr.GetString(rdr.GetOrdinal("FlowName")),
+                FlowId:              rdr.GetInt32(rdr.GetOrdinal("FlowId")),
+                ExtraColumnsViewName: rdr.IsDBNull(rdr.GetOrdinal("ExtraColumnsView")) ? null : rdr.GetString(rdr.GetOrdinal("ExtraColumnsView")),
                 DocumentId:          rdr.GetGuid(rdr.GetOrdinal("DocumentId")),
                 DocumentInternalId:  rdr.IsDBNull(rdr.GetOrdinal("DocumentInternalId")) ? null : rdr.GetInt32(rdr.GetOrdinal("DocumentInternalId")),
                 DocumentNumber:      rdr.IsDBNull(rdr.GetOrdinal("DocumentNumber")) ? "(belge yok)" : rdr.GetString(rdr.GetOrdinal("DocumentNumber")),
@@ -244,13 +295,20 @@ WHERE sr.[Status] = N'Pending'
         if (currentStep is null && instance.StepRecords.Count > 0)
             currentStep = instance.StepRecords[0];
 
+        var allStepOrders = instance.StepRecords.Select(s => s.StepOrder).OrderBy(o => o).ToList();
+        var stepPosition  = allStepOrders.IndexOf(instance.CurrentStep) + 1;
+        if (stepPosition < 1) stepPosition = 1;
+
         var header = new PendingApprovalItemDto(
-            InstanceId:         instance.Id,
-            StepRecordId:       currentStep?.Id ?? 0,
-            StepOrder:          instance.CurrentStep,
-            TotalSteps:         instance.TotalSteps,
-            StepName:           currentStep?.StepName ?? string.Empty,
-            FlowName:           instance.FlowName,
+            InstanceId:          instance.Id,
+            StepRecordId:        currentStep?.Id ?? 0,
+            StepOrder:           instance.CurrentStep,
+            StepPosition:        stepPosition,
+            TotalSteps:          instance.TotalSteps,
+            StepName:            currentStep?.StepName ?? string.Empty,
+            FlowName:            instance.FlowName,
+            FlowId:              instance.FlowId,
+            ExtraColumnsViewName: null,  // detail modali icin gerekli degil
             DocumentId:         instance.DocumentId,
             DocumentInternalId: null,
             DocumentNumber:     "—",
@@ -414,6 +472,21 @@ WHERE sr.[Status] = N'Pending'
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task ForceCompleteAsync(int instanceId, CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        // WHERE Status='Pending' → normal approve/reject sonrası no-op (idempotent).
+        cmd.CommandText = $"""
+            UPDATE [{_s}].[DocumentApprovalInstance]
+            SET [Status]=N'Approved',[CompletedAt]=SYSUTCDATETIME(),[IsActive]=0,
+                [Updated]=SYSUTCDATETIME()
+            WHERE [Id]=@Iid AND [Status]=N'Pending';
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Iid", instanceId));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     // ── SLA: tarama + isaretleme + eskale ─────────────────────────────────────
 
     public async Task<IReadOnlyList<OverdueStepRecord>> GetOverdueStepsAsync(DateTime nowUtc, CancellationToken ct)
@@ -488,6 +561,29 @@ WHERE sr.[Status] = N'Pending'
             """;
         cmd.Parameters.Add(new SqlParameter("@Type", actionType));
         cmd.Parameters.Add(new SqlParameter("@Id", recordId));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task ResetSlaForLoopAsync(int instanceId, int stepOrder, string? nodeData, CancellationToken ct)
+    {
+        var newDue = ComputeDueDateFromNodeData(nodeData, DateTime.UtcNow);
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        // DueDate: SLA tanımlıysa yeni süreye set, değilse NULL yap (artık geçerli deadline yok).
+        cmd.CommandText = $"""
+            UPDATE [{_s}].[DocumentApprovalStepRecord]
+            SET [SlaActionAt]   = NULL,
+                [SlaActionType] = NULL,
+                [SlaWarnedAt]   = NULL,
+                [DueDate]       = @NewDue,
+                [Updated]       = SYSUTCDATETIME()
+            WHERE [InstanceId] = @Iid
+              AND [StepOrder]  = @Ord
+              AND [Status]     = N'Pending';
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Iid",    instanceId));
+        cmd.Parameters.Add(new SqlParameter("@Ord",    stepOrder));
+        cmd.Parameters.Add(new SqlParameter("@NewDue", (object?)newDue ?? DBNull.Value));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -840,5 +936,86 @@ WHERE sr.[Status] = N'Pending'
             JsonValueKind.Number => v.GetRawText(),
             _ => null
         };
+    }
+
+    public async Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct)
+    {
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        // INFORMATION_SCHEMA.COLUMNS sorgusu — schema + view adina gore kolon listesi
+        // InstanceId kolonu join anahtaridir, kullaniciya gosterilmez.
+        cmd.CommandText = $"""
+            SELECT c.[COLUMN_NAME], c.[DATA_TYPE]
+            FROM INFORMATION_SCHEMA.COLUMNS c
+            WHERE c.[TABLE_SCHEMA] = @Schema
+              AND c.[TABLE_NAME]   = @ViewName
+              AND c.[COLUMN_NAME]  <> N'InstanceId'
+            ORDER BY c.[ORDINAL_POSITION];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@Schema", _s));
+        cmd.Parameters.Add(new SqlParameter("@ViewName", viewName));
+
+        var result = new List<ExtraColumnMetaDto>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var colName  = rdr.GetString(0);
+            var dataType = rdr.GetString(1);
+            // Kolon adindan label uret: alt-cizgi/buyuk-harf → bosluklu
+            var label = System.Text.RegularExpressions.Regex.Replace(colName, "([A-Z])", " $1").Trim()
+                             .Replace("_", " ").Trim();
+            var metaType = dataType switch
+            {
+                "int" or "bigint" or "smallint" or "tinyint"
+                    or "decimal" or "numeric" or "float" or "real" or "money" or "smallmoney" => "numeric",
+                "date" or "datetime" or "datetime2" or "smalldatetime" or "datetimeoffset" => "date",
+                _ => "text"
+            };
+            result.Add(new ExtraColumnMetaDto(colName, label, metaType));
+        }
+        return result;
+    }
+
+    public async Task<IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>> GetViewRowDataAsync(
+        string viewName, IReadOnlyCollection<int> instanceIds, CancellationToken ct)
+    {
+        var result = new Dictionary<int, IReadOnlyDictionary<string, string?>>();
+        if (instanceIds.Count == 0) return result;
+
+        // instanceIds int listesi — SQL injection riski yok; viewName controller'da regex + whitelist ile dogrulandi.
+        var inClause = string.Join(",", instanceIds);
+        await using var con = await _connectionFactory.OpenConnectionAsync(ct);
+        await using var cmd = con.CreateCommand();
+        cmd.CommandText = $"SELECT * FROM [{_s}].[{viewName}] WHERE [InstanceId] IN ({inClause})";
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        var fieldCount = rdr.FieldCount;
+        var colNames = Enumerable.Range(0, fieldCount).Select(i => rdr.GetName(i)).ToArray();
+        int instanceIdOrdinal = Array.FindIndex(colNames, c => string.Equals(c, "InstanceId", StringComparison.OrdinalIgnoreCase));
+
+        while (await rdr.ReadAsync(ct))
+        {
+            if (instanceIdOrdinal < 0) break;
+            var instanceId = rdr.IsDBNull(instanceIdOrdinal) ? 0 : rdr.GetInt32(instanceIdOrdinal);
+            if (instanceId <= 0) continue;
+
+            var row = new Dictionary<string, string?>();
+            for (var i = 0; i < fieldCount; i++)
+            {
+                if (i == instanceIdOrdinal) continue;
+                if (rdr.IsDBNull(i)) { row[colNames[i]] = null; continue; }
+                var val = rdr.GetValue(i);
+                row[colNames[i]] = val switch
+                {
+                    DateTime dt  => dt.ToString("yyyy-MM-dd HH:mm"),
+                    decimal  d   => d.ToString("N2"),
+                    double   d   => d.ToString("G"),
+                    float    f   => f.ToString("G"),
+                    _            => val.ToString()
+                };
+            }
+            result[instanceId] = row;
+        }
+        return result;
     }
 }

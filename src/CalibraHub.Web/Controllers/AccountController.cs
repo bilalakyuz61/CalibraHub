@@ -27,7 +27,6 @@ public sealed class AccountController : Controller
     private readonly IUiConfigurationService _uiConfigurationService;
     private readonly IUserProfileRepository _userProfileRepository;
     private readonly IUserAuthenticationService _userAuthenticationService;
-    private readonly IGrafanaProvisioningService _grafanaProvisioning;
     private readonly IDepartmentRepository _departmentRepository;
     private readonly IWebHostEnvironment _env;
     private readonly IPermissionService _permissionService;
@@ -37,7 +36,6 @@ public sealed class AccountController : Controller
         IUiConfigurationService uiConfigurationService,
         IUserProfileRepository userProfileRepository,
         IUserAuthenticationService userAuthenticationService,
-        IGrafanaProvisioningService grafanaProvisioning,
         IDepartmentRepository departmentRepository,
         IWebHostEnvironment env,
         IPermissionService permissionService)
@@ -46,7 +44,6 @@ public sealed class AccountController : Controller
         _uiConfigurationService = uiConfigurationService;
         _userProfileRepository = userProfileRepository;
         _userAuthenticationService = userAuthenticationService;
-        _grafanaProvisioning = grafanaProvisioning;
         _departmentRepository = departmentRepository;
         _env = env;
         _permissionService = permissionService;
@@ -144,33 +141,6 @@ public sealed class AccountController : Controller
         // çözümlemesinde kullanır. NULL ise eklenmez.
         if (authenticatedUser.DepartmentId.HasValue)
             claims.Add(new Claim("department_id", authenticatedUser.DepartmentId.Value.ToString()));
-
-        // Grafana lazy provisioning: ViewDashboards yetkisi olan kullanicilar icin
-        // org/membership ensure edilir, orgId claim'e eklenir (middleware kullanir).
-        // Hata durumunda login bloke olmaz — IsEnabled=false ise hicbir cagri yapilmaz.
-        // Role claim hem enum adi hem Turkce label olabilir (UserAuth servisi label dondurur).
-        if (_grafanaProvisioning.IsEnabled
-            && UserAuthorizationCatalog.TryParseRole(authenticatedUser.Role, out var userRole))
-        {
-            var permissions = UserAuthorizationCatalog.GetAllowedPermissions(userRole);
-            if (permissions.Contains(UserPermission.ViewDashboards))
-            {
-                var orgId = await _grafanaProvisioning.EnsureOrganizationAsync(
-                    authenticatedUser.CompanyId, authenticatedUser.CompanyName, cancellationToken);
-                if (orgId > 0)
-                {
-                    var grafanaUsername = $"company_{authenticatedUser.CompanyId}_user_{authenticatedUser.Id}";
-                    var role = permissions.Contains(UserPermission.DesignDashboards)
-                        ? GrafanaRole.Designer
-                        : GrafanaRole.Viewer;
-
-                    await _grafanaProvisioning.EnsureUserOrganizationMembershipAsync(
-                        orgId, grafanaUsername, authenticatedUser.Email, authenticatedUser.FullName, role, cancellationToken);
-
-                    claims.Add(new Claim("grafana_org_id", orgId.ToString()));
-                }
-            }
-        }
 
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme));
@@ -376,7 +346,6 @@ public sealed class AccountController : Controller
             PhoneNumber      = cleanPhone,
             Role             = existing.Role,                        // KORUNUR
             Permissions      = existing.Permissions,
-            GrafanaRole      = existing.GrafanaRole,
         };
         rebuilt.SetPasswordHash(existing.PasswordHash);
         rebuilt.SetInterfacePreferences(input.LanguageCode ?? "tr-TR", input.ThemeCode ?? "light");
@@ -745,16 +714,13 @@ public sealed class AccountController : Controller
         if (!int.TryParse(userIdStr, out var userId) || userId <= 0)
             return Json(new { menu = Array.Empty<object>() });
 
-        var isSystemAdmin = string.Equals(
-            User.FindFirstValue(ClaimTypes.Email), "admin@calibra.local",
-            StringComparison.OrdinalIgnoreCase);
-
-        var languageCode = User.FindFirstValue("language_code") ?? "tr-TR";
-        var full = MenuDefinition.GetMainMenu(isSystemAdmin, languageCode);
-
         var roleStr = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
         var role = UserAuthorizationCatalog.TryParseRole(roleStr, out var r)
             ? r : UserRole.Operator;
+        var isSystemAdmin = role == UserRole.SystemAdmin;
+
+        var languageCode = User.FindFirstValue("language_code") ?? "tr-TR";
+        var full = MenuDefinition.GetMainMenu(isSystemAdmin, languageCode);
         var deptStr = User.FindFirstValue("department_id");
         int? deptId = int.TryParse(deptStr, out var d) && d > 0 ? d : null;
 

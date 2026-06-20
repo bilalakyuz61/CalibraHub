@@ -10669,22 +10669,20 @@ body.app-theme-dark [class*="-msg"].error {
 }
 
 /* ── Sidebar collapsed — TAM kapanma + floating expand FAB ────────────
-   Mevcut `app-side-collapsed` rail davranisi kaldirilir; sidebar ekran
-   disina kayar. Aciliminin yegane yolu: sol-ust kose'deki floating FAB.
+   Mevcut `app-side-collapsed` rail davranisi kaldirilir; sidebar layout'tan
+   tamamen cikar. Aciliminin yegane yolu: sol-ust kose'deki floating FAB.
    _Layout'taki ".app-shell-expand-fab" elementi sadece collapsed durumda
-   gorunur, data-sidebar-toggle ile ayni handler'i tetikler. */
-body.app-side-collapsed .app-sidebar {
-  transform: translateX(-100%) !important;
-  width: 0 !important;
-  min-width: 0 !important;
-  border-right: 0 !important;
-  box-shadow: none !important;
-  pointer-events: none !important;
-  transition: transform var(--layout-motion-duration) var(--layout-motion-ease),
-              width var(--layout-motion-duration) var(--layout-motion-ease) !important;
+   gorunur, data-sidebar-toggle ile ayni handler'i tetikler.
+
+   Not: width:0 + transform yetmez (0 * -100% = 0 = etkisiz). display:none
+   layout'tan tam cikarir, brand-area/rail kalintilarini birakmaz. */
+body.app-side-collapsed .app-sidebar,
+body.app-side-collapsed .admin-sidebar,
+body.app-side-collapsed .dashboard-shell__sidebar {
+  display: none !important;
 }
-.app-sidebar { transition: transform var(--layout-motion-duration) var(--layout-motion-ease),
-                          width var(--layout-motion-duration) var(--layout-motion-ease); }
+body.app-side-collapsed .app-shell { grid-template-columns: minmax(0, 1fr) !important; }
+body.app-side-collapsed .app-main  { margin-left: 0 !important; padding-left: 0 !important; }
 
 .app-shell-expand-fab {
   position: fixed;

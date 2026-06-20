@@ -28,7 +28,6 @@ public sealed class AdminManagementService : IAdminManagementService
     private readonly IPasswordHashService _passwordHashService;
     private readonly IIntegratorImportLogRepository _integratorImportLogRepository;
     private readonly ICompanyConnectionRegistry _companyConnectionRegistry;
-    private readonly IGrafanaProvisioningService _grafanaProvisioning;
     private readonly IPermissionGrantRepository _permissionGrantRepository;
 
     public AdminManagementService(
@@ -42,7 +41,6 @@ public sealed class AdminManagementService : IAdminManagementService
         IPasswordHashService passwordHashService,
         IIntegratorImportLogRepository integratorImportLogRepository,
         ICompanyConnectionRegistry companyConnectionRegistry,
-        IGrafanaProvisioningService grafanaProvisioning,
         IPermissionGrantRepository permissionGrantRepository)
     {
         _integratorDocumentClient = integratorDocumentClient;
@@ -55,7 +53,6 @@ public sealed class AdminManagementService : IAdminManagementService
         _passwordHashService = passwordHashService;
         _integratorImportLogRepository = integratorImportLogRepository;
         _companyConnectionRegistry = companyConnectionRegistry;
-        _grafanaProvisioning = grafanaProvisioning;
         _permissionGrantRepository = permissionGrantRepository;
     }
 
@@ -159,18 +156,6 @@ public sealed class AdminManagementService : IAdminManagementService
         }
 
         _companyConnectionRegistry.Set(savedId, connectionString);
-
-        // Grafana per-company org/datasource/dashboard provisioning. IsEnabled=false
-        // ise no-op; HTTP hatasi exception firlatmaz, sadece log yazar.
-        if (_grafanaProvisioning.IsEnabled)
-        {
-            var orgId = await _grafanaProvisioning.EnsureOrganizationAsync(savedId, name, cancellationToken);
-            if (orgId > 0 && !string.IsNullOrWhiteSpace(connectionString))
-            {
-                await _grafanaProvisioning.EnsureDataSourceAsync(orgId, name, connectionString, cancellationToken);
-                await _grafanaProvisioning.ProvisionDefaultDashboardsAsync(orgId, cancellationToken);
-            }
-        }
 
         return savedId;
     }
@@ -419,7 +404,7 @@ public sealed class AdminManagementService : IAdminManagementService
         }
 
         var profile = BuildSmtpProfile(
-            id: existingById?.Id ?? Guid.NewGuid(),
+            id: existingById?.Id ?? 0,
             companyId: request.CompanyId,
             name: name,
             fromEmail: fromEmail,
@@ -863,39 +848,11 @@ public sealed class AdminManagementService : IAdminManagementService
             SupervisorUserId = request.SupervisorUserId,
             Role = role,
             Permissions = normalizedPermissions,
-            GrafanaRole = request.GrafanaRole
         };
         var password = string.IsNullOrWhiteSpace(request.Password) ? DefaultInitialPassword : request.Password;
         userProfile.SetPasswordHash(_passwordHashService.HashPassword(password));
 
         await _userProfileRepository.AddAsync(userProfile, cancellationToken);
-
-        // Grafana per-user provisioning: GrafanaRole set edilmis ve Grafana enabled ise
-        // kullaniciyi sirket org'una istenen rolde ekle. Idempotent — fail olursa
-        // exception firlatmaz, log'a gecer (CalibraHub akisi devam eder).
-        if (request.GrafanaRole.HasValue && _grafanaProvisioning.IsEnabled)
-        {
-            try
-            {
-                var orgId = await _grafanaProvisioning.EnsureOrganizationAsync(
-                    request.CompanyId, company.Name, cancellationToken);
-                if (orgId > 0)
-                {
-                    await _grafanaProvisioning.EnsureUserOrganizationMembershipAsync(
-                        orgId,
-                        userProfile.Email,        // username = email (yeni middleware ile uyumlu)
-                        userProfile.Email,
-                        userProfile.FullName,
-                        request.GrafanaRole.Value,
-                        cancellationToken);
-                }
-            }
-            catch
-            {
-                // Service-level fail — repository'e zaten yazildi, kullanici manuel olarak
-                // "Duzenle"den tekrar tetikleyebilir.
-            }
-        }
     }
 
     public async Task UpdateUserAsync(UpdateUserRequest request, CancellationToken cancellationToken)
@@ -961,10 +918,6 @@ public sealed class AdminManagementService : IAdminManagementService
             departmentId = dept.Id;
         }
 
-        // GrafanaRole — request.SetGrafanaRole = true ise yeni deger kullanilir,
-        // false ise mevcut rol korunur (geriye uyumlu — eski caller'lari bozmaz).
-        var newGrafanaRole = request.SetGrafanaRole ? request.GrafanaRole : existing.GrafanaRole;
-
         // Role / Permissions — request.SetRole = true ve Role != null ise yeni deger kullanilir,
         // izinler de UserAuthorizationCatalog'tan turetilir. Aksi halde mevcut korunur.
         var newRole = (request.SetRole && request.Role.HasValue) ? request.Role.Value : existing.Role;
@@ -983,7 +936,6 @@ public sealed class AdminManagementService : IAdminManagementService
             SupervisorUserId = existing.SupervisorUserId,
             Role = newRole,
             Permissions = newPermissions,
-            GrafanaRole = newGrafanaRole
         };
 
         // Private setter degerleri korunmasi icin yeniden uygula
@@ -999,47 +951,6 @@ public sealed class AdminManagementService : IAdminManagementService
         }
 
         await _userProfileRepository.UpdateAsync(updated, cancellationToken);
-
-        // Grafana sync — sadece SetGrafanaRole = true ise tetikle (geriye uyumlu).
-        // Eski rol → Yeni rol kombinasyonlari:
-        //   NULL  → NULL    : no-op
-        //   NULL  → Editor  : EnsureUserOrganizationMembershipAsync (add)
-        //   Editor → Admin  : EnsureUserOrganizationMembershipAsync (rol update)
-        //   Editor → NULL   : RemoveUserFromOrganizationAsync (org'tan cikar)
-        if (request.SetGrafanaRole && _grafanaProvisioning.IsEnabled)
-        {
-            try
-            {
-                var orgId = await _grafanaProvisioning.EnsureOrganizationAsync(
-                    request.CompanyId, company.Name, cancellationToken);
-
-                if (orgId > 0)
-                {
-                    if (newGrafanaRole.HasValue)
-                    {
-                        // Add veya rol update — idempotent
-                        await _grafanaProvisioning.EnsureUserOrganizationMembershipAsync(
-                            orgId,
-                            email,                  // username = email
-                            email,
-                            fullName,
-                            newGrafanaRole.Value,
-                            cancellationToken);
-                    }
-                    else if (existing.GrafanaRole.HasValue)
-                    {
-                        // Eski rol vardi, yeni NULL → org'tan cikar
-                        await _grafanaProvisioning.RemoveUserFromOrganizationAsync(
-                            orgId, email, cancellationToken);
-                    }
-                }
-            }
-            catch
-            {
-                // Provisioning fail olursa exception firlatma — DB update yine
-                // de basarili. Kullanici "Duzenle"den tekrar tetikleyebilir.
-            }
-        }
     }
 
     private static (string Name, string BaseUrl, string CompanyTaxNumber, string Username, string Secret, int PollingIntervalSeconds, int MaxRecordsPerPull, int LogRetentionDays, bool IncludeReceivedDocumentsInPull, bool MarkDownloadedDocumentsAsReceived, bool IncludeIssuedEInvoicesInPull, bool IncludeIssuedEArchivesInPull, bool IncludeIssuedEDispatchesInPull)
@@ -1260,7 +1171,7 @@ public sealed class AdminManagementService : IAdminManagementService
     }
 
     private static SmtpProfile BuildSmtpProfile(
-        Guid id,
+        int id,
         int companyId,
         string name,
         string fromEmail,

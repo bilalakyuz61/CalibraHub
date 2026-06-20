@@ -27,9 +27,6 @@
         if (/^(https?:)?\/\//i.test(t)) {
             if (t.indexOf(HOST) === -1) return url;
         }
-        // Reverse-proxy ile sunulan harici servislere (ornegin Grafana) workspace
-        // parametresi eklenmez — bu servisler kendi SPA router'larini yonetir.
-        if (/(^|\/)grafana(\/|$|\?)/i.test(t)) return url;
         if (url.indexOf(WORKSPACE_PARAM) !== -1) return url;
         return url + (url.indexOf('?') !== -1 ? '&' : '?') + WORKSPACE_PARAM;
     }

@@ -27,4 +27,7 @@ public enum UserPermission
 
     // AR-GE modulu
     ManageArgeProjects = 19,
+
+    // Raporlama — snapshot/veri yenileme
+    RefreshReportData = 20,
 }

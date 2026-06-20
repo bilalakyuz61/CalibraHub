@@ -88,10 +88,11 @@ public sealed class SlaCheckerWorker : BackgroundService
     private async Task<int> CheckOnceAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
-        var repo  = scope.ServiceProvider.GetRequiredService<IApprovalInstanceRepository>();
-        var flow  = scope.ServiceProvider.GetRequiredService<IApprovalFlowService>();
-        var notif = scope.ServiceProvider.GetRequiredService<IApprovalNotificationDispatcher>();
-        var users = scope.ServiceProvider.GetRequiredService<IUserProfileRepository>();
+        var repo     = scope.ServiceProvider.GetRequiredService<IApprovalInstanceRepository>();
+        var flow     = scope.ServiceProvider.GetRequiredService<IApprovalFlowService>();
+        var notif    = scope.ServiceProvider.GetRequiredService<IApprovalNotificationDispatcher>();
+        var users    = scope.ServiceProvider.GetRequiredService<IUserProfileRepository>();
+        var executor = scope.ServiceProvider.GetService<IApprovalFlowExecutor>();
         var now = DateTime.UtcNow;
 
         int handled = 0;
@@ -118,6 +119,20 @@ public sealed class SlaCheckerWorker : BackgroundService
         {
             try
             {
+                // Graph-based timeout: flow'da "timeout" edge varsa önce executor'a ver.
+                var graphNodes = executor is not null
+                    ? await executor.AfterTimeoutAsync(o.InstanceId, o.StepOrder, ct)
+                    : 0;
+                if (graphNodes > 0)
+                {
+                    _logger.LogInformation("SLA graph timeout tetiklendi: instance={Iid}, step={Ord}, nodes={N}",
+                        o.InstanceId, o.StepOrder, graphNodes);
+                    await repo.MarkSlaActionAsync(o.StepRecordId, "graphTimeout", ct);
+                    handled++;
+                    continue;
+                }
+
+                // Legacy SLA actions — flow'da timeout edge yok.
                 switch ((o.SlaAction ?? "reminder").Trim())
                 {
                     case "reminder":

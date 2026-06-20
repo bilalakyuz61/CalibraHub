@@ -137,7 +137,7 @@
         border-color: var(--uf-accent) !important;
         box-shadow: 0 0 0 3px var(--uf-soft) !important;
     }
-    /* wrapper div (password / grafana hint içerir) */
+    /* wrapper div (password) */
     .su-form-row__field {
         display: flex !important;
         flex-direction: column !important;
@@ -307,18 +307,6 @@
                             <option value="1">Sistem Admin</option>
                         </select>
                     </div>
-                    <div style="display:grid;grid-template-columns:90px 1fr;align-items:start;gap:0 8px;margin-bottom:6px;">
-                        <label for="suGrafanaRole" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;padding-top:7px;">Grafana</label>
-                        <div style="display:flex;flex-direction:column;gap:2px;">
-                            <select id="suGrafanaRole" style="width:100%;padding:6px 9px;border:1px solid rgba(148,163,184,.4);border-radius:7px;font-size:.82rem;font-family:inherit;background:transparent;color:inherit;outline:none;box-sizing:border-box;">
-                                <option value="">(Atanmadı)</option>
-                                <option value="Viewer">Viewer</option>
-                                <option value="Designer">Editor</option>
-                                <option value="Admin">Admin</option>
-                            </select>
-                            <span style="font-size:.69rem;color:#64748b;">Boş = Grafana'ya eklenmez. Seçilirse şirket org.'una eklenir.</span>
-                        </div>
-                    </div>
                     <div style="display:grid;grid-template-columns:90px auto 1fr;align-items:center;gap:0 8px;margin-bottom:6px;">
                         <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;text-align:right;">Aktif</span>
                         <label class="su-switch">
@@ -418,13 +406,12 @@
     var inpDepartment  = document.getElementById('suDepartment');
     var inpSupervisor  = document.getElementById('suSupervisor');
     var inpRole        = document.getElementById('suRole');
-    var inpGrafanaRole = document.getElementById('suGrafanaRole');
     var inpPassword    = document.getElementById('suPassword');
     var passwordRow    = document.getElementById('suPasswordRow');
     var inpIsActive    = document.getElementById('suIsActive');
     var errBox         = document.getElementById('suFormError');
 
-    // FormData cache — companies + roles + grafanaRoles tum kayitlar icin ortak.
+    // FormData cache — companies + roles tum kayitlar icin ortak.
     // departments + supervisors ise sirket bazinda filtreli, sirket degisince yenilenir.
     var allDepartments = [];
     var allSupervisors = [];
@@ -484,12 +471,6 @@
                     o.value = r.value; o.textContent = r.label;
                     inpRole.appendChild(o);
                 });
-                inpGrafanaRole.innerHTML = '';
-                (data.grafanaRoles || []).forEach(function (g) {
-                    var o = document.createElement('option');
-                    o.value = g.value; o.textContent = g.label;
-                    inpGrafanaRole.appendChild(o);
-                });
                 initialDataLoaded = true;
             });
     }
@@ -525,7 +506,6 @@
                         inpDepartment.value  = u.departmentId != null ? u.departmentId : '';
                         inpSupervisor.value  = u.supervisorUserId || '';
                         inpRole.value        = u.role;
-                        inpGrafanaRole.value = u.grafanaRole || '';
                         inpIsActive.checked  = !!u.isActive;
                         setTimeout(function () { inpFullName.focus(); }, 30);
                     })
@@ -543,7 +523,6 @@
                 inpPhone.value      = '';
                 fillDepartmentsAndSupervisors(firstCompany ? firstCompany.id : null, null);
                 inpRole.value       = inpRole.options.length > 0 ? inpRole.options[0].value : '';
-                inpGrafanaRole.value = '';
                 inpIsActive.checked = true;
                 setTimeout(function () { inpFullName.focus(); }, 30);
             }
@@ -601,7 +580,6 @@
             supervisorUserId: inpSupervisor.value ? parseInt(inpSupervisor.value, 10) : null,
             phoneNumber:      (inpPhone.value || '').trim() || null,
             role:             roleVal,
-            grafanaRole:      (inpGrafanaRole && inpGrafanaRole.value) ? inpGrafanaRole.value : null,
             isActive:         !!inpIsActive.checked,
             password:         !idVal ? pwdVal : null,
         };

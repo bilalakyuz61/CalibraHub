@@ -13,7 +13,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CircleDot, ChevronLeft, ChevronRight, X, AlertTriangle, Trash2, Check } from 'lucide-react'
+import { CircleDot, ChevronLeft, ChevronRight, X, AlertTriangle, Trash2, Check, Loader2 } from 'lucide-react'
 import SmartWidget from './SmartWidget'
 import { resolveColor, resolveIcon } from './DynamicWidgetFactory'
 import { navigateInWorkspace } from '../../utils/workspaceNav'
@@ -179,6 +179,7 @@ export default function SmartCard(props) {
   }, [rawWidgets, visibleIds, order])
 
   var [hovered, setHovered] = useState(false)
+  var [loadingActions, setLoadingActions] = useState({})
 
   // ── Modal state (fetch-modal ekstra aksiyonlar icin) ──
   var [modalOpen,    setModalOpen]    = useState(false)
@@ -551,9 +552,12 @@ export default function SmartCard(props) {
       var fd = new FormData()
       if (action.body) Object.keys(action.body).forEach(function(k) { fd.append(k, String(action.body[k])) })
       if (token) fd.append('__RequestVerificationToken', token)
+      var actionKey = action.id || action.label || 'api-post'
+      setLoadingActions(function(prev) { var n = Object.assign({}, prev); n[actionKey] = true; return n })
       fetch(postUrl, { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function(r) { return r.json() })
         .then(function(data) {
+          setLoadingActions(function(prev) { var n = Object.assign({}, prev); delete n[actionKey]; return n })
           // Rapor §6.6 — toast fallback
           if (data && data.success === false) {
             var msg = 'Hata: ' + (data.message || 'Bilinmeyen')
@@ -564,6 +568,7 @@ export default function SmartCard(props) {
           else window.location.reload()
         })
         .catch(function(err) {
+          setLoadingActions(function(prev) { var n = Object.assign({}, prev); delete n[actionKey]; return n })
           var em = 'Hata: ' + err.message
           if (window.CalibraHub && window.CalibraHub.toast) window.CalibraHub.toast(em, 'err')
           else alert(em)
@@ -581,6 +586,9 @@ export default function SmartCard(props) {
   function renderActionButton(action, handlerOrKey, colorHint) {
     if (!action || action.hideButton) return null
     var ActionIcon = resolveIcon(action.icon)
+    var isDisabled = !!action.disabled
+    var actionKey = action.id || action.label || 'api-post'
+    var isLoading = !!loadingActions[actionKey]
     var handler
     if (typeof handlerOrKey === 'function') {
       handler = handlerOrKey
@@ -593,14 +601,18 @@ export default function SmartCard(props) {
       <button
         key={action.label}
         type="button"
-        onClick={handler}
-        className={'p-2 rounded-xl transition-colors group ' + bgClass}
-        title={action.label || ''}
+        onClick={(isDisabled || isLoading) ? function(e) { e.stopPropagation() } : handler}
+        disabled={isDisabled || isLoading}
+        className={'p-2 rounded-xl transition-colors group ' + ((isDisabled || isLoading) ? 'opacity-50 cursor-not-allowed' : bgClass)}
+        title={isLoading ? 'İşleniyor…' : (action.label || '')}
       >
-        <ActionIcon
-          size={18}
-          className={'text-slate-400 dark:text-white/40 transition-colors ' + textClass}
-        />
+        {isLoading
+          ? <Loader2 size={18} className="text-slate-400 dark:text-white/40 animate-spin" />
+          : <ActionIcon
+              size={18}
+              className={'text-slate-400 dark:text-white/40 transition-colors ' + (isDisabled ? '' : textClass)}
+            />
+        }
       </button>
     )
   }

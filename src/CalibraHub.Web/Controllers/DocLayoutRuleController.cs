@@ -125,6 +125,7 @@ public sealed class DocLayoutRuleController : Controller
             UserId         = rule.UserId?.ToString(),
             BranchId       = rule.BranchId,
             WarehouseId    = rule.WarehouseId,
+            AccountType    = rule.AccountType,
             IsActive       = rule.IsActive,
         };
         return View("Edit", vm);
@@ -244,7 +245,8 @@ public sealed class DocLayoutRuleController : Controller
                         BranchId:       input.BranchId,
                         WarehouseId:    input.WarehouseId,
                         IsActive:       input.IsActive,
-                        ContactGroupId: input.ContactGroupId
+                        ContactGroupId: input.ContactGroupId,
+                        AccountType:    input.AccountType
                     ), ct);
                     savedIds.Add(id);
                     firstIteration = false;
@@ -339,6 +341,7 @@ public sealed class DocLayoutRuleController : Controller
             SmartBoardFilterHelpers.MakeOptionsWidget("w_doctype",  "Belge Tipi", docTypeOptions),
             SmartBoardFilterHelpers.MakeStdWidget   ("w_layout",   "Tasarım",    "text"),
             SmartBoardFilterHelpers.MakeStdWidget   ("w_priority", "Öncelik",    "numeric"),
+            SmartBoardFilterHelpers.MakeStdWidget   ("w_accttype", "Cari Tipi",  "text"),
         };
 
         var entities = rules.Select(r =>
@@ -348,10 +351,11 @@ public sealed class DocLayoutRuleController : Controller
 
             // Kriter özet metni
             var criteriaParts = new List<string>();
-            if (r.CustomerId.HasValue)  criteriaParts.Add($"Cari #{r.CustomerId.Value}");
-            if (r.UserId.HasValue)      criteriaParts.Add("Kullanıcı bağımlı");
-            if (r.BranchId.HasValue)    criteriaParts.Add($"Şube #{r.BranchId.Value}");
-            if (r.WarehouseId.HasValue) criteriaParts.Add($"Depo #{r.WarehouseId.Value}");
+            if (r.CustomerId.HasValue)   criteriaParts.Add($"Cari #{r.CustomerId.Value}");
+            if (r.UserId.HasValue)       criteriaParts.Add("Kullanıcı bağımlı");
+            if (r.BranchId.HasValue)     criteriaParts.Add($"Şube #{r.BranchId.Value}");
+            if (r.WarehouseId.HasValue)  criteriaParts.Add($"Depo #{r.WarehouseId.Value}");
+            if (r.AccountType.HasValue)  criteriaParts.Add(r.AccountType.Value switch { 1 => "Müşteri", 2 => "Satıcı", 3 => "Her ikisi", _ => $"Tip#{r.AccountType.Value}" });
             var criteriaText = criteriaParts.Count == 0 ? "Genel (wildcard)" : string.Join(" · ", criteriaParts);
 
             return (object)new
@@ -395,6 +399,18 @@ public sealed class DocLayoutRuleController : Controller
                         value    = r.Weight.ToString(),
                         detail   = "ağırlık",
                         color    = r.Weight >= 12 ? "emerald" : r.Weight >= 4 ? "amber" : "slate",
+                    },
+                    new
+                    {
+                        id       = "w_accttype",
+                        type     = "data",
+                        dataType = "text",
+                        label    = "Cari Tipi",
+                        value    = r.AccountType.HasValue
+                            ? r.AccountType.Value switch { 1 => "Müşteri", 2 => "Satıcı", 3 => "Her ikisi", _ => $"#{r.AccountType.Value}" }
+                            : "Tüm cariler",
+                        detail   = (string?)null,
+                        color    = r.AccountType.HasValue ? "indigo" : "slate",
                     },
                 },
                 primaryAction = new
@@ -447,6 +463,7 @@ public sealed class DocLayoutRuleController : Controller
         public string?  UserId         { get; set; }   // legacy/backward-compat — tek değer
         public int?     BranchId       { get; set; }
         public int?     WarehouseId    { get; set; }
+        public byte?    AccountType    { get; set; }
         public bool     IsActive       { get; set; } = true;
 
         // Çoklu seçim alanları — CSV ("1,3,5" veya "guid1,guid2"). UI yeni form'dan gelir.

@@ -129,7 +129,9 @@ public sealed class DecisionEvaluator : IDecisionEvaluator
 
     private static bool EvalHeader(DecisionRule rule, ApprovalEntityContext ctx)
     {
-        ctx.HeaderValues.TryGetValue(rule.Field, out var raw);
+        // FlowVariables (SetVariable node çıktıları) öncelikli; yoksa HeaderValues'a düş.
+        if (!ctx.FlowVariables.TryGetValue(rule.Field, out var raw))
+            ctx.HeaderValues.TryGetValue(rule.Field, out raw);
         return CompareValue(raw, rule.Op, rule.Value);
     }
 
@@ -150,8 +152,10 @@ public sealed class DecisionEvaluator : IDecisionEvaluator
         }
         if (string.IsNullOrWhiteSpace(sql)) return false;
 
-        // Entity type'tan gelen SQL parametreleri doğrudan kullanılır.
+        // Standart parametreler + akış değişkenleri (@varAdi olarak kullanılabilir).
         var parameters = new Dictionary<string, object?>(ctx.SqlParameters, StringComparer.OrdinalIgnoreCase);
+        foreach (var (k, v) in ctx.FlowVariables)
+            if (!parameters.ContainsKey(k)) parameters[k] = v;
 
         var result = await _sqlSvc.ExecuteAsync(sql, parameters, ct);
         if (!result.Ok)

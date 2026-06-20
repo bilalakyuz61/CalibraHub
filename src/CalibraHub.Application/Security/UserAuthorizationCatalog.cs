@@ -19,6 +19,7 @@ public static class UserAuthorizationCatalog
                 UserPermission.DesignReports,
                 UserPermission.ViewDashboards,
                 UserPermission.DesignDashboards,
+                UserPermission.RefreshReportData,
                 UserPermission.ManageWorkOrders,
                 UserPermission.ReleaseWorkOrders,
                 UserPermission.ManageArgeProjects
@@ -130,6 +131,7 @@ public static class UserAuthorizationCatalog
             UserPermission.ReportProduction => "Uretim Hareketi Bildirme",
             UserPermission.OperateMachine => "Makine Operatorlugu (Shop-Floor)",
             UserPermission.ManageArgeProjects => "AR-GE Proje Yonetimi",
+            UserPermission.RefreshReportData => "Rapor Verisi Guncelleme (Snapshot Yenileme)",
             _ => permission.ToString()
         };
 }

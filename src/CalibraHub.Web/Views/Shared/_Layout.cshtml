@@ -305,6 +305,18 @@
     <script src="~/react/calibrahub-widgets.js" asp-append-version="true"></script>
     <script>
         (function () {
+            // 2026-06-19: Iframe içindeyse Shell mount ETME — outer Shell zaten var.
+            // Server-side isWorkspaceFrame detection (Sec-Fetch-Dest header) bazı
+            // tarayıcılarda kayboluyor → query'de workspace=1 olmasa bile burada
+            // garanti altında: window.self !== window.top → iframe → Shell SKIP +
+            // shell-root gizle. Matruska duplicate sidebar kökten engellenir.
+            try {
+                if (window.self !== window.top) {
+                    var sr = document.getElementById('shell-root');
+                    if (sr) sr.style.display = 'none';
+                    return;
+                }
+            } catch (_) { /* cross-origin top — emin değiliz, fallback olarak Shell mount */ }
             var el = document.getElementById('shell-root');
             function tryMount() {
                 if (window.CalibraHub && window.CalibraHub.mountShell) {

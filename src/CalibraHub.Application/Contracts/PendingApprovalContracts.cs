@@ -26,9 +26,12 @@ public sealed record PendingApprovalItemDto(
     int InstanceId,
     int StepRecordId,
     int StepOrder,
+    int StepPosition,  // rank among step records (1-based): meaningful display for ADIM column
     int TotalSteps,
     string StepName,
     string FlowName,
+    int FlowId,
+    string? ExtraColumnsViewName,  // ApprovalFlow.ExtraColumnsView — hangi view bu akis icin ek sutun saglar
     System.Guid DocumentId,
     int? DocumentInternalId,     // Document.id (int) — eger varsa
     string DocumentNumber,
@@ -44,6 +47,13 @@ public sealed record PendingApprovalItemDto(
     System.DateTime StepCreated,
     System.DateTime? DueDate,
     System.DateTime InstanceStarted
+);
+
+/// <summary>Ek sutun metadata — FlowExtraColumns endpoint'inden donerler.</summary>
+public sealed record ExtraColumnMetaDto(
+    string Key,        // kolon adi (kucuk harf, saflandirilmis)
+    string Label,      // kullaniciya gosterilecek baslik
+    string DataType    // 'text' | 'numeric' | 'date'
 );
 
 /// <summary>Modal detayi (belge baslik + tum adimlar).</summary>

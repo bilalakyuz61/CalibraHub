@@ -97,9 +97,9 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 ins.Transaction = tx;
                 ins.CommandText = $"""
                     INSERT INTO [{_s}].[ApprovalFlow]
-                        ([Name],[Description],[DocumentKind],[Priority],[IsActive],[CreatedById],[Created],[UpdatedById],[Updated])
+                        ([Name],[Description],[DocumentKind],[Priority],[IsActive],[ExtraColumnsView],[CreatedById],[Created],[UpdatedById],[Updated])
                     VALUES
-                        (@Name,@Desc,@Kind,@Pri,@Active,@ById,SYSUTCDATETIME(),@ById,SYSUTCDATETIME());
+                        (@Name,@Desc,@Kind,@Pri,@Active,@ExtraView,@ById,SYSUTCDATETIME(),@ById,SYSUTCDATETIME());
                     SELECT SCOPE_IDENTITY();
                     """;
                 ins.Parameters.Add(new SqlParameter("@Name", (object?)req.Name ?? DBNull.Value));
@@ -107,6 +107,7 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 ins.Parameters.Add(new SqlParameter("@Kind", (object?)req.DocumentKind ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@Pri", req.Priority));
                 ins.Parameters.Add(new SqlParameter("@Active", req.IsActive));
+                ins.Parameters.Add(new SqlParameter("@ExtraView", (object?)req.ExtraColumnsView ?? DBNull.Value));
                 ins.Parameters.Add(new SqlParameter("@ById", (object?)byUserId ?? DBNull.Value));
                 flowId = Convert.ToInt32(await ins.ExecuteScalarAsync(ct));
             }
@@ -118,7 +119,8 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 upd.CommandText = $"""
                     UPDATE [{_s}].[ApprovalFlow]
                     SET [Name]=@Name,[Description]=@Desc,[DocumentKind]=@Kind,[Priority]=@Pri,
-                        [IsActive]=@Active,[UpdatedById]=@ById,[Updated]=SYSUTCDATETIME()
+                        [IsActive]=@Active,[ExtraColumnsView]=@ExtraView,
+                        [UpdatedById]=@ById,[Updated]=SYSUTCDATETIME()
                     WHERE [Id]=@Id;
                     """;
                 upd.Parameters.Add(new SqlParameter("@Name", req.Name));
@@ -126,6 +128,7 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 upd.Parameters.Add(new SqlParameter("@Kind", req.DocumentKind));
                 upd.Parameters.Add(new SqlParameter("@Pri", req.Priority));
                 upd.Parameters.Add(new SqlParameter("@Active", req.IsActive));
+                upd.Parameters.Add(new SqlParameter("@ExtraView", (object?)req.ExtraColumnsView ?? DBNull.Value));
                 upd.Parameters.Add(new SqlParameter("@ById", (object?)byUserId ?? DBNull.Value));
                 upd.Parameters.Add(new SqlParameter("@Id", flowId));
                 await upd.ExecuteNonQueryAsync(ct);
@@ -200,16 +203,18 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                     vCmd.Transaction = tx;
                     vCmd.CommandText = $"""
                         INSERT INTO [{_s}].[ApprovalFlowVariable]
-                            ([FlowId],[Name],[TypeCode],[DefaultValue],[Description],[SortOrder],[Created])
+                            ([FlowId],[Name],[TypeCode],[DefaultValue],[Description],[ValueSource],[SqlQuery],[SortOrder],[Created])
                         VALUES
-                            (@Fid,@Name,@Type,@Default,@Desc,@Sort,SYSUTCDATETIME());
+                            (@Fid,@Name,@Type,@Default,@Desc,@ValueSource,@SqlQuery,@Sort,SYSUTCDATETIME());
                         """;
-                    vCmd.Parameters.Add(new SqlParameter("@Fid",     flowId));
-                    vCmd.Parameters.Add(new SqlParameter("@Name",    v.Name.Trim()));
-                    vCmd.Parameters.Add(new SqlParameter("@Type",    string.IsNullOrWhiteSpace(v.TypeCode) ? "int" : v.TypeCode));
-                    vCmd.Parameters.Add(new SqlParameter("@Default", (object?)v.DefaultValue ?? DBNull.Value));
-                    vCmd.Parameters.Add(new SqlParameter("@Desc",    (object?)v.Description ?? DBNull.Value));
-                    vCmd.Parameters.Add(new SqlParameter("@Sort",    v.SortOrder > 0 ? v.SortOrder : ++vsort));
+                    vCmd.Parameters.Add(new SqlParameter("@Fid",         flowId));
+                    vCmd.Parameters.Add(new SqlParameter("@Name",        v.Name.Trim()));
+                    vCmd.Parameters.Add(new SqlParameter("@Type",        string.IsNullOrWhiteSpace(v.TypeCode) ? "int" : v.TypeCode));
+                    vCmd.Parameters.Add(new SqlParameter("@Default",     (object?)v.DefaultValue ?? DBNull.Value));
+                    vCmd.Parameters.Add(new SqlParameter("@Desc",        (object?)v.Description ?? DBNull.Value));
+                    vCmd.Parameters.Add(new SqlParameter("@ValueSource", string.IsNullOrWhiteSpace(v.ValueSource) ? "manual" : v.ValueSource));
+                    vCmd.Parameters.Add(new SqlParameter("@SqlQuery",    (object?)v.SqlQuery ?? DBNull.Value));
+                    vCmd.Parameters.Add(new SqlParameter("@Sort",        v.SortOrder > 0 ? v.SortOrder : ++vsort));
                     await vCmd.ExecuteNonQueryAsync(ct);
                 }
             }
@@ -231,9 +236,9 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                     eCmd.Transaction = tx;
                     eCmd.CommandText = $"""
                         INSERT INTO [{_s}].[ApprovalFlowEdge]
-                            ([FlowId],[SourceStepId],[TargetStepId],[Label],[EdgeKind],[Condition],[SortOrder],[Created])
+                            ([FlowId],[SourceStepId],[TargetStepId],[Label],[EdgeKind],[Condition],[SortOrder],[SourceHandle],[TargetHandle],[Created])
                         VALUES
-                            (@Fid,@Src,@Tgt,@Label,@Kind,@Cond,@Sort,SYSUTCDATETIME());
+                            (@Fid,@Src,@Tgt,@Label,@Kind,@Cond,@Sort,@SrcH,@TgtH,SYSUTCDATETIME());
                         """;
                     eCmd.Parameters.Add(new SqlParameter("@Fid", flowId));
                     eCmd.Parameters.Add(new SqlParameter("@Src", sourceDbId));
@@ -242,6 +247,8 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                     eCmd.Parameters.Add(new SqlParameter("@Kind", string.IsNullOrWhiteSpace(edge.EdgeKind) ? "default" : edge.EdgeKind));
                     eCmd.Parameters.Add(new SqlParameter("@Cond", (object?)edge.Condition ?? DBNull.Value));
                     eCmd.Parameters.Add(new SqlParameter("@Sort", edge.SortOrder > 0 ? edge.SortOrder : ++sort));
+                    eCmd.Parameters.Add(new SqlParameter("@SrcH", (object?)edge.SourceHandle ?? DBNull.Value));
+                    eCmd.Parameters.Add(new SqlParameter("@TgtH", (object?)edge.TargetHandle ?? DBNull.Value));
                     await eCmd.ExecuteNonQueryAsync(ct);
                 }
             }
@@ -270,16 +277,18 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
     private async Task<ApprovalFlowDto?> ReadFlowAsync(SqlConnection con, int id, CancellationToken ct)
     {
         ApprovalFlowSummaryDto? header = null;
+        string? extraColumnsView = null;
         await using (var cmd = con.CreateCommand())
         {
             cmd.CommandText = $"""
-                SELECT [Id],[Name],[Description],[DocumentKind],[Priority],[IsActive]
+                SELECT [Id],[Name],[Description],[DocumentKind],[Priority],[IsActive],[ExtraColumnsView]
                 FROM [{_s}].[ApprovalFlow] WHERE [Id] = @Id;
                 """;
             cmd.Parameters.Add(new SqlParameter("@Id", id));
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (await r.ReadAsync(ct))
             {
+                extraColumnsView = r.IsDBNull(6) ? null : r.GetString(6);
                 header = new ApprovalFlowSummaryDto(
                     r.GetInt32(0), r.GetString(1),
                     r.IsDBNull(2) ? null : r.GetString(2),
@@ -295,14 +304,16 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
 
         return new ApprovalFlowDto(
             header.Id, header.Name, header.Description, header.DocumentKind,
-            header.Priority, header.IsActive, rules, steps, edges, variables);
+            header.Priority, header.IsActive, rules, steps, edges, variables,
+            ExtraColumnsView: extraColumnsView);
     }
 
     private async Task<IReadOnlyList<ApprovalFlowVariableDto>> ReadVariablesAsync(SqlConnection con, int flowId, CancellationToken ct)
     {
         await using var cmd = con.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id],[FlowId],[Name],[TypeCode],[DefaultValue],[Description],[SortOrder]
+            SELECT [Id],[FlowId],[Name],[TypeCode],[DefaultValue],[Description],[SortOrder],
+                   ISNULL([ValueSource], N'manual'), [SqlQuery]
             FROM [{_s}].[ApprovalFlowVariable] WHERE [FlowId] = @Fid
             ORDER BY [SortOrder], [Id];
             """;
@@ -316,7 +327,9 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 r.IsDBNull(3) ? "int" : r.GetString(3),
                 r.IsDBNull(4) ? null : r.GetString(4),
                 r.IsDBNull(5) ? null : r.GetString(5),
-                r.IsDBNull(6) ? 0 : r.GetInt32(6)));
+                r.IsDBNull(6) ? 0 : r.GetInt32(6),
+                r.IsDBNull(7) ? "manual" : r.GetString(7),
+                r.IsDBNull(8) ? null : r.GetString(8)));
         }
         return list;
     }
@@ -374,7 +387,7 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
     {
         await using var cmd = con.CreateCommand();
         cmd.CommandText = $"""
-            SELECT [Id],[FlowId],[SourceStepId],[TargetStepId],[Label],[EdgeKind],[Condition],[SortOrder]
+            SELECT [Id],[FlowId],[SourceStepId],[TargetStepId],[Label],[EdgeKind],[Condition],[SortOrder],[SourceHandle],[TargetHandle]
             FROM [{_s}].[ApprovalFlowEdge] WHERE [FlowId] = @Fid
             ORDER BY [SortOrder], [Id];
             """;
@@ -388,7 +401,9 @@ public sealed class SqlApprovalFlowRepository : IApprovalFlowRepository
                 r.IsDBNull(4) ? null : r.GetString(4),
                 r.IsDBNull(5) ? "default" : r.GetString(5),
                 r.IsDBNull(6) ? null : r.GetString(6),
-                r.IsDBNull(7) ? 0 : r.GetInt32(7)));
+                r.IsDBNull(7) ? 0 : r.GetInt32(7),
+                SourceHandle: r.IsDBNull(8) ? null : r.GetString(8),
+                TargetHandle: r.IsDBNull(9) ? null : r.GetString(9)));
         }
         return list;
     }

@@ -6,11 +6,83 @@
  *   DecisionNode — sarı elmas (rotate 45), koşul ifadesi gösterir, iki output (Evet/Hayır)
  *   EndNode      — kırmızı yuvarlak "Bitir"
  */
-import React, { useCallback } from 'react'
-import { Handle, Position } from '@xyflow/react'
+import React, { useCallback, useEffect } from 'react'
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { Play, Square, GitBranch, CheckSquare, Bell, GitMerge, Zap, Variable } from 'lucide-react'
 import DraggableHandle from './DraggableHandle.jsx'
 import { useUpdateNodeData } from './nodeDataContext.js'
+
+/**
+ * ExtraInputHandles — kullanici sag panelden "Ek Kol" ekledikce her satir icin
+ * GORUNUR target handle render eder. Yeni model: data.extraInputs bir DIZI:
+ *   [ { id: 'x12345', side: 'right'|'left'|'bottom', offset: 0..1 }, ... ]
+ *
+ * Geriye uyumluluk: data.extraInputs eski object format ({right:true, ...})
+ * geldiyse runtime'da array'e cevrilir (id 'x'+side, offset 0.5).
+ *
+ * Handle id: 'in-' + item.id (uniq). Alt+drag ile kenar/offset commit edilir.
+ * excludeSides param'i artik tasiyici degil (kullanici hangi kenari secerse
+ * onun gorunmesi gerekiyor) ama EndNode gibi top'u zaten kullanan node'lar
+ * icin top'a ek input eklenmemeli — bu durumda 'top' filtrelenir.
+ */
+function normalizeExtraInputs(raw) {
+  if (Array.isArray(raw)) {
+    return raw
+      .filter(function (it) { return it && typeof it.side === 'string' })
+      .map(function (it) {
+        var kind = (it.kind === 'out') ? 'out' : 'in'
+        return { id: it.id, side: it.side, offset: it.offset, kind: kind }
+      })
+  }
+  if (raw && typeof raw === 'object') {
+    var out = []
+    ;['right', 'bottom', 'left'].forEach(function (s) {
+      if (raw[s] === true) out.push({ id: 'x' + s, side: s, offset: 0.5, kind: 'in' })
+    })
+    return out
+  }
+  return []
+}
+function ExtraInputHandles({ nodeId, data, excludeSides }) {
+  excludeSides = excludeSides || []
+  var items = normalizeExtraInputs(data && data.extraInputs)
+  var updateNodeData = useUpdateNodeData()
+  var updateNodeInternals = useUpdateNodeInternals()
+  // Items degisince (yeni handle eklendi/silindi/kind degisti) React Flow'a
+  // node handle setini yeniden tarat — yoksa eski cache'li set'e gore connection
+  // drop hedefi olarak taninmaz ve bagimsiz handle yeni id'sini kabul etmez.
+  var signature = items.map(function (it) { return it.id + ':' + it.kind + ':' + it.side }).join('|')
+  useEffect(function () {
+    if (nodeId && typeof updateNodeInternals === 'function') {
+      updateNodeInternals(nodeId)
+    }
+  }, [nodeId, signature, updateNodeInternals])
+  function commit(itemId, side, offset) {
+    if (typeof updateNodeData !== 'function') return
+    var next = items.map(function (it) {
+      return it.id === itemId ? Object.assign({}, it, { side: side, offset: offset }) : it
+    })
+    updateNodeData(nodeId, { extraInputs: next })
+  }
+  return items
+    .filter(function (it) { return excludeSides.indexOf(it.side) === -1 })
+    .map(function (it) {
+      var isOut = it.kind === 'out'
+      var renderId = (isOut ? 'out-' : 'in-') + it.id
+      return React.createElement(DraggableHandle, {
+        key: 'extra-' + renderId,
+        id: renderId,
+        type: isOut ? 'source' : 'target',
+        nodeId: nodeId,
+        defaultSide: it.side,
+        defaultOffset: typeof it.offset === 'number' ? it.offset : 0.5,
+        pos: { side: it.side, offset: typeof it.offset === 'number' ? it.offset : 0.5 },
+        siblings: [],
+        className: isOut ? 'afd-handle--extra afd-handle--extra-out' : 'afd-handle--extra',
+        onPositionChange: function (s, o) { commit(it.id, s, o) },
+      })
+    })
+}
 
 /**
  * useNodeHandles — node'un handle pozisyonlarini data.handlePos uzerinden cozer
@@ -130,6 +202,7 @@ export function StepNode({ id, data, selected }) {
         label="Gecikme" labelClassName="afd-foot--tm"
         onPositionChange={function (side, offset) { h.commit('timeout', side, offset) }}
       />
+      <ExtraInputHandles nodeId={id} data={data} />
     </div>
   )
 }
@@ -171,6 +244,7 @@ export function DecisionNode({ id, data, selected }) {
         className="afd-handle--reject"
         label="Hayır" labelClassName="afd-foot--no"
         onPositionChange={function (s, o) { h.commit('false', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
     </div>
   )
 }
@@ -200,6 +274,7 @@ export function ParallelNode({ id, data, selected }) {
         defaultSide={PARALLEL_DEFAULTS.out.side} defaultOffset={PARALLEL_DEFAULTS.out.offset}
         pos={h.resolved.out} siblings={[]}
         onPositionChange={function (s, o) { h.commit('out', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
     </div>
   )
 }
@@ -230,6 +305,7 @@ export function NotificationNode({ id, data, selected }) {
         defaultSide={NOTIF_DEFAULTS.out.side} defaultOffset={NOTIF_DEFAULTS.out.offset}
         pos={h.resolved.out} siblings={[]}
         onPositionChange={function (s, o) { h.commit('out', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
     </div>
   )
 }
@@ -262,6 +338,7 @@ export function IntegrationNode({ id, data, selected }) {
         defaultSide={INTEG_DEFAULTS.out.side} defaultOffset={INTEG_DEFAULTS.out.offset}
         pos={h.resolved.out} siblings={[]}
         onPositionChange={function (s, o) { h.commit('out', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
     </div>
   )
 }
@@ -294,6 +371,7 @@ export function SetVariableNode({ id, data, selected }) {
         defaultSide={SETVAR_DEFAULTS.out.side} defaultOffset={SETVAR_DEFAULTS.out.offset}
         pos={h.resolved.out} siblings={[]}
         onPositionChange={function (s, o) { h.commit('out', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
     </div>
   )
 }
@@ -310,6 +388,7 @@ export function EndNode({ id, data, selected }) {
         defaultSide={END_DEFAULTS.in.side} defaultOffset={END_DEFAULTS.in.offset}
         pos={h.resolved.in} siblings={[]}
         onPositionChange={function (s, o) { h.commit('in', s, o) }} />
+      <ExtraInputHandles nodeId={id} data={data} />
       <Square size={14} strokeWidth={2.5} />
       <span>Bitir</span>
     </div>

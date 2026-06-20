@@ -65,7 +65,7 @@ public static class MenuDefinition
             new("settings.companyusers",   isEn ? "User Definitions"       : "Kullanıcı Tanımlamaları", "Users",              "/CompanyUser",              null, AdminOnly: true),
             new("settings.permissions",    isEn ? "Permission Management"  : "Yetki Yönetimi",          "ShieldCheck",        "/Admin/Permissions",        null,
                 PermissionFormCode: FormCodes.PermissionMgmt),
-            new("settings.datavisibility", isEn ? "Data Visibility Rules"  : "Veri Görünürlük Kuralları","EyeOff",             "/Admin/DataVisibilityRules",null,
+            new("settings.datavisibility", isEn ? "Data Visibility Rules"  : "Veri Perdeleme Kuralları","EyeOff",             "/Admin/DataVisibilityRules",null,
                 PermissionFormCode: FormCodes.DataVisibility),
             new("settings.dbschema",       isEn ? "Database Map"           : "Veritabanı Haritası",     "Database",           "/admin/db-schema",          null, AdminOnly: true),
             new("settings.scheduledtasks", isEn ? "Scheduled Tasks"        : "Zamanlanmış Görevler",    "Clock",              "/Admin/ScheduledTasks",     null,
@@ -86,10 +86,9 @@ public static class MenuDefinition
             // Grup: isMenuAdmin || canView("NOTES")  →  en az bir child gerekiyor (otomatik gizleme var)
             new("general", isEn ? "General" : "Genel", "LayoutList", null, new List<MenuNode>
             {
+                new("general.calendar", isEn ? "Calendar"           : "Takvim",              "CalendarDays", "/Calendar", null),
                 new("general.notes",    isEn ? "Notes"              : "Notlar",             "FileText",     "/Notes",    null,
                     PermissionFormCode: FormCodes.Notes),
-                new("general.orgchart", isEn ? "Organization Chart" : "Organizasyon Şeması","Network",      "/OrgChart", null,
-                    PermissionFormCode: FormCodes.OrgChart),
                 new("general.whatsapp", "WhatsApp",                                          "MessageCircle","/Whatsapp", null,
                     PermissionFormCode: FormCodes.WhatsApp),
                 new("general.mailsend", isEn ? "Bulk Mail"          : "Toplu Mail",          "Mail",         "/MailSend", null,
@@ -100,12 +99,10 @@ public static class MenuDefinition
             // Grup: canViewDashboards || isMenuAdmin  →  tüm içerik admin-only veya dashboard yetkili
             new("reports", isEn ? "Reports" : "Raporlar", "BarChart3", null, new List<MenuNode>
             {
-                new("reports.dashboards",    isEn ? "Report Dashboards" : "Rapor Panoları",       "BarChart3", "/Dashboard",              null,
+                new("reports.boards",     isEn ? "Report Boards"   : "Rapor Panoları",   "LayoutDashboard", "/Dashboard/Boards",   null,
                     PermissionFormCode: FormCodes.Dashboards),
-                new("reports.grafana",       isEn ? "Report Design" : "Rapor Tasarımı",         "Activity",  "/Dashboard/Grafana",       null,
-                    PermissionFormCode: FormCodes.Grafana),
-                new("reports.accessconfig",  isEn ? "Dashboard Access" : "Pano Erişim Yönetimi", "ShieldCheck", "/Dashboard/AccessConfig", null,
-                    PermissionFormCode: FormCodes.Grafana),
+                new("reports.dashboards", isEn ? "Report Designer" : "Rapor Tasarımcısı", "PenLine",        "/Dashboard/Designer", null,
+                    PermissionFormCode: FormCodes.ReportDesigner),
             }),
 
             // ────────────── 3. Onay İşlemleri / Approval Processes ──────────────
@@ -279,13 +276,20 @@ public static class MenuDefinition
             if (node.AdminOnly && !isAdmin) continue;
 
             // Permission gerekiyorsa kontrol et — admin kullanıcılar bu kontrolü de atlar.
-            // VIEW yetkisi yoksa EDIT/CREATE/DELETE'ten herhangi biri yeterliydi —
-            // "Malzeme Kartı Düzenleme" gibi EDIT-only izinler de menüyü açmalı.
+            // Önce standart CRUD action'larına bak; bulunamazsa (örn. DASHBOARDS gibi tüm standart
+            // action'ları inactive olan formlar için) form genelindeki aktif action'lardan herhangi
+            // birini kontrol et — RESOURCE:DASH:* gibi non-standart action'lar da kapsanır.
             if (!string.IsNullOrEmpty(node.PermissionFormCode) && !isAdmin)
             {
+                // Özel/Departman/Genel tüm seviyeleri dahil; herhangi biri yeterliyse menüde göster.
                 var allowed = await permService.CheckAnyAsync(
                     userId, role, departmentId, node.PermissionFormCode,
-                    new[] { "VIEW", "CREATE", "EDIT_OWN", "EDIT_ALL", "DELETE_OWN", "DELETE_ALL" }, ct);
+                    new[] { "VIEW", "VIEW_DEPT", "VIEW_OWN", "CREATE",
+                            "EDIT_OWN", "EDIT_DEPT", "EDIT_ALL",
+                            "DELETE_OWN", "DELETE_DEPT", "DELETE_ALL" }, ct);
+                if (!allowed)
+                    allowed = await permService.CheckAnyForFormAsync(
+                        userId, role, departmentId, node.PermissionFormCode, ct);
                 if (!allowed) continue;
             }
 

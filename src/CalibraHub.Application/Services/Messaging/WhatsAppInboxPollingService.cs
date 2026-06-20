@@ -267,7 +267,7 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
 
             try
             {
-                await inbox.InsertIfNotExistsAsync(new WaInboxMessage
+                var insertedId = await inbox.InsertIfNotExistsAsync(new WaInboxMessage
                 {
                     BridgeMsgId   = m.Id,
                     Direction     = m.FromMe ? (byte)1 : (byte)0,
@@ -289,13 +289,18 @@ public sealed class WhatsAppInboxPollingService : BackgroundService
                     SenderName    = m.SenderName,
                 }, ct);
 
-                // Hub'a push — React istemcileri anında güncellenir
-                await _notifier.MessageReceivedAsync(
-                    phone, m.Id ?? string.Empty, m.FromMe ? 1 : 0,
-                    m.Body, m.MediaType ?? "chat", m.IsMedia,
-                    mediaPath, m.MediaMime, m.MediaFileName, m.MediaSize,
-                    ts, ct);
-                await _notifier.ConversationUpdatedAsync(phone, ct);
+                // Hub'a push sadece gerçekten yeni eklenen mesajlar için yapılır.
+                // insertedId == null → kayıt zaten vardı (SendMedia/Send tarafından eklendi);
+                // tekrar push etmek frontend'de çift mesaj balonuna yol açar.
+                if (insertedId.HasValue)
+                {
+                    await _notifier.MessageReceivedAsync(
+                        phone, m.Id ?? string.Empty, m.FromMe ? 1 : 0,
+                        m.Body, m.MediaType ?? "chat", m.IsMedia,
+                        mediaPath, m.MediaMime, m.MediaFileName, m.MediaSize,
+                        ts, ct);
+                    await _notifier.ConversationUpdatedAsync(phone, ct);
+                }
             }
             catch (Exception ex)
             {

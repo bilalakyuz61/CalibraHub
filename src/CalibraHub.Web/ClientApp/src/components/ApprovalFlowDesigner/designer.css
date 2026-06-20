@@ -209,6 +209,33 @@ body.app-theme-dark .afd-props__head-badge--edge     { background: rgba(59,130,2
     font-size: .72rem; font-weight: 600; color: var(--afd-muted);
     margin: 10px 0 5px;
 }
+/* ── Inline row: label yanında input ── */
+.afd-props__row {
+    display: flex; gap: 8px; align-items: center; margin-top: 8px;
+}
+.afd-props__row--top { align-items: flex-start; }
+.afd-props__row-lbl {
+    font-size: .72rem; font-weight: 600; color: var(--afd-muted);
+    white-space: nowrap; min-width: 58px; flex-shrink: 0; padding-top: 1px;
+}
+.afd-props__row .afd-props__input { flex: 1; min-width: 0; margin: 0; }
+/* ── @ token picker dropdown ── */
+.afd-token-picker {
+    position: absolute; left: 0; top: calc(100% + 2px); width: 100%; z-index: 9999;
+    background: var(--afd-bg); border: 1px solid var(--afd-border);
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.22);
+    overflow: hidden; max-height: 200px; overflow-y: auto;
+}
+.afd-token-picker__item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 12px; cursor: pointer; font-size: .82rem; color: var(--afd-text);
+}
+.afd-token-picker__item:hover,
+.afd-token-picker__item.is-active { background: var(--afd-accent-s); color: var(--afd-accent); }
+.afd-token-picker__key {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: .7rem; color: var(--afd-muted);
+}
 .afd-props__input {
     padding: 7px 10px; border: 1px solid var(--afd-border);
     border-radius: 7px; font-size: .82rem;
@@ -565,6 +592,26 @@ body.app-theme-dark .afd-node--setvar .afd-node__head { color: #cbd5e1; backgrou
     background: #f59e0b !important;
     box-shadow: 0 0 0 2px rgba(245,158,11,.22) !important;
 }
+/* Ek bağlantı handle (kullanıcı sağ panelden açtı) — görünür halka.
+   Giriş (target) = indigo, Çıkış (source) = yeşil.
+   Saydam aux model kaldırıldı (istemsiz drop hedefi olmasın diye). */
+.afd-handle--extra {
+    background: var(--afd-surface, #fff) !important;
+    border: 2px solid var(--afd-accent, #6366f1) !important;
+    box-shadow: 0 0 0 2px rgba(99,102,241,.18) !important;
+}
+.afd-handle--extra:hover {
+    background: var(--afd-accent, #6366f1) !important;
+    box-shadow: 0 0 0 5px rgba(99,102,241,.30) !important;
+}
+.afd-handle--extra-out {
+    border-color: var(--afd-success, #10b981) !important;
+    box-shadow: 0 0 0 2px rgba(16,185,129,.18) !important;
+}
+.afd-handle--extra-out:hover {
+    background: var(--afd-success, #10b981) !important;
+    box-shadow: 0 0 0 5px rgba(16,185,129,.30) !important;
+}
 .afd-handle--timeout:hover {
     box-shadow:
         0 0 0 6px rgba(245,158,11,.32),
@@ -686,6 +733,68 @@ body.app-theme-dark .afd-vars-err { color: #fca5a5; }
 .afd-vars-del:hover { background: rgba(239,68,68,.12); color: var(--afd-danger); border-color: rgba(239,68,68,.35); }
 .afd-vars-empty {
     text-align: center; color: var(--afd-muted); font-style: italic; padding: 18px 0;
+}
+/* SQL badge + edit button in table row */
+.afd-vars-sql-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .7rem;
+    font-weight: 700; background: rgba(99,102,241,.15); color: var(--afd-accent);
+    border: 1px solid rgba(99,102,241,.3);
+}
+.afd-vars-sql-edit-btn {
+    padding: 2px 8px; border-radius: 4px; font-size: .72rem; font-weight: 700;
+    cursor: pointer; border: 1px solid rgba(99,102,241,.4);
+    background: rgba(99,102,241,.12); color: var(--afd-accent);
+    white-space: nowrap;
+}
+.afd-vars-sql-edit-btn:hover { background: rgba(99,102,241,.24); border-color: var(--afd-accent); }
+
+/* SQL Editor Modal */
+.afd-sql-modal-backdrop {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(3px);
+    display: flex; align-items: center; justify-content: center;
+}
+.afd-sql-modal-card {
+    background: var(--afd-surface); color: var(--afd-text);
+    border: 1px solid var(--afd-border); border-radius: 10px;
+    width: min(760px, 96vw); display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+}
+.afd-sql-modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px 10px; border-bottom: 1px solid var(--afd-border);
+}
+.afd-sql-modal-title {
+    font-size: .9rem; font-weight: 700; color: var(--afd-text);
+}
+.afd-sql-modal-varname {
+    font-weight: 500; color: var(--afd-accent);
+}
+.afd-sql-modal-hint {
+    padding: 8px 16px; font-size: .73rem; color: var(--afd-muted);
+    border-bottom: 1px solid var(--afd-border); line-height: 1.5;
+}
+.afd-sql-modal-hint code {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    background: rgba(99,102,241,.1); padding: 1px 5px; border-radius: 3px;
+    font-size: .72rem; color: var(--afd-accent);
+}
+.afd-sql-modal-textarea {
+    margin: 12px 16px; flex: 1;
+    padding: 10px 12px; font-size: .82rem;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    background: var(--afd-bg); color: var(--afd-text);
+    border: 1px solid var(--afd-border); border-radius: 6px;
+    resize: vertical; min-height: 220px;
+    line-height: 1.55;
+}
+.afd-sql-modal-textarea:focus { outline: none; border-color: var(--afd-accent); }
+.afd-sql-modal-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 16px 14px; border-top: 1px solid var(--afd-border);
+}
+.afd-sql-modal-shortcut {
+    font-size: .71rem; color: var(--afd-muted);
 }
 .afd-vars-foot {
     display: flex; justify-content: space-between; gap: 8px;

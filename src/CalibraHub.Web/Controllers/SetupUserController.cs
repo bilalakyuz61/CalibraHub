@@ -138,8 +138,6 @@ public sealed class SetupUserController : Controller
                     .AddTextWidget("w_company", "Şirket", companyName, color: "violet")
                     .AddTextWidget("w_role", "Rol", roleLabel, color: "indigo");
 
-                if (u.GrafanaRole.HasValue)
-                    eb.AddTextWidget("w_grafana", "Grafana", u.GrafanaRole.Value.ToString(), color: "blue");
                 if (!string.IsNullOrWhiteSpace(deptName))
                     eb.AddTextWidget("w_dept", "Departman", deptName, color: "slate");
                 if (!string.IsNullOrWhiteSpace(u.EmployeeCode))
@@ -230,15 +228,7 @@ public sealed class SetupUserController : Controller
             new { value = (int)UserRole.SystemAdmin,       label = "Sistem Admin" },
         };
 
-        var grafanaRoles = new[]
-        {
-            new { value = "",         label = "(Atanmadı)" },
-            new { value = "Viewer",   label = "Viewer" },
-            new { value = "Designer", label = "Editor" },
-            new { value = "Admin",    label = "Admin" },
-        };
-
-        return Json(new { companies, departments, supervisors, roles, grafanaRoles });
+        return Json(new { companies, departments, supervisors, roles });
     }
 
     [HttpGet]
@@ -265,7 +255,6 @@ public sealed class SetupUserController : Controller
                 supervisorUserId = user.SupervisorUserId,
                 phoneNumber = user.PhoneNumber,
                 role = (int)user.Role,
-                grafanaRole = user.GrafanaRole?.ToString(),
                 isActive = user.IsActive,
             }
         });
@@ -283,8 +272,7 @@ public sealed class SetupUserController : Controller
         string? PhoneNumber,
         int Role,
         bool IsActive,
-        string? Password = null,
-        string? GrafanaRole = null);
+        string? Password = null);
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -304,15 +292,6 @@ public sealed class SetupUserController : Controller
         if (role != UserRole.Operator && role != UserRole.DepartmentManager && role != UserRole.SystemAdmin)
             return Json(new { ok = false, error = "Yalnızca User, Admin veya Sistem Admin yetkisi atanabilir." });
 
-        GrafanaRole? grafanaRole = null;
-        if (!string.IsNullOrWhiteSpace(dto.GrafanaRole))
-        {
-            if (Enum.TryParse(dto.GrafanaRole.Trim(), true, out GrafanaRole parsed))
-                grafanaRole = parsed;
-            else
-                return Json(new { ok = false, error = "Grafana yetkisi geçersiz (Viewer/Designer/Admin/boş)." });
-        }
-
         try
         {
             if (dto.Id.HasValue && dto.Id.Value > 0)
@@ -331,8 +310,6 @@ public sealed class SetupUserController : Controller
                     FullName: dto.FullName ?? string.Empty,
                     Email: dto.Email ?? string.Empty,
                     Password: null,
-                    SetGrafanaRole: true,
-                    GrafanaRole: grafanaRole,
                     SetRole: true,
                     Role: role
                 ), ct);
@@ -353,7 +330,6 @@ public sealed class SetupUserController : Controller
                         PhoneNumber      = NormalizePhone(dto.PhoneNumber),
                         Role             = refreshed.Role,
                         Permissions      = refreshed.Permissions,
-                        GrafanaRole      = refreshed.GrafanaRole,
                     };
                     rebuilt.SetPasswordHash(refreshed.PasswordHash);
                     rebuilt.SetInterfacePreferences(refreshed.LanguageCode, refreshed.ThemeCode);
@@ -392,8 +368,7 @@ public sealed class SetupUserController : Controller
                     SupervisorUserId: dto.SupervisorUserId,
                     Role: role,
                     Permissions: permissions,
-                    Password: initialPassword,
-                    GrafanaRole: grafanaRole
+                    Password: initialPassword
                 ), ct);
 
                 // PhoneNumber CreateUserRequest'te yok — telefon verildiyse repository update.
@@ -415,7 +390,6 @@ public sealed class SetupUserController : Controller
                             PhoneNumber      = phone,
                             Role             = created.Role,
                             Permissions      = created.Permissions,
-                            GrafanaRole      = created.GrafanaRole,
                         };
                         withPhone.SetPasswordHash(created.PasswordHash);
                         withPhone.SetInterfacePreferences(created.LanguageCode, created.ThemeCode);

@@ -72,6 +72,13 @@ public sealed class PendingApprovalService : IPendingApprovalService
     public Task<IReadOnlyList<string>> GetAvailableScopesAsync(CancellationToken ct)
         => _authority.GetAvailableScopesAsync(ct);
 
+    public Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct)
+        => _repo.GetViewColumnMetaAsync(viewName, ct);
+
+    public Task<IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>> GetViewRowDataAsync(
+        string viewName, IReadOnlyCollection<int> instanceIds, CancellationToken ct)
+        => _repo.GetViewRowDataAsync(viewName, instanceIds, ct);
+
     private async Task<string> EnsureScopeAllowedAsync(string requested, CancellationToken ct)
     {
         var available = await _authority.GetAvailableScopesAsync(ct);

@@ -14,6 +14,9 @@ public sealed class ApprovalFlowVariableEntity
     public string TypeCode { get; init; } = "int";
     public string? DefaultValue { get; init; }
     public string? Description { get; init; }
+    /// <summary>manual | sql</summary>
+    public string ValueSource { get; init; } = "manual";
+    public string? SqlQuery { get; init; }
     public int SortOrder { get; init; }
     public DateTime Created { get; init; }
 }

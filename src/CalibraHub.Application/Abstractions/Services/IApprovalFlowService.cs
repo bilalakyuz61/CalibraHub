@@ -26,4 +26,7 @@ public interface IApprovalFlowService
     Task<ApprovalInstanceDto> CancelAsync(int instanceId, string byUser, CancellationToken ct);
 
     Task<ApprovalInstanceDto?> GetInstanceByDocumentIdAsync(Guid documentId, CancellationToken ct);
+
+    // Execution log — her node traversal + onay/red/iptal olayları
+    Task<IReadOnlyList<ApprovalNodeLogDto>> GetInstanceLogsAsync(int instanceId, CancellationToken ct);
 }

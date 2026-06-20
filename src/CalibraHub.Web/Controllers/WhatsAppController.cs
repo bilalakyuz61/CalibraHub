@@ -1,18 +1,24 @@
 using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
+using CalibraHub.Application.Constants;
 using CalibraHub.Application.WhatsApp;
+using CalibraHub.Web.Authorization;
+using CalibraHub.Persistence.Database;
+using CalibraHub.Persistence.Options;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
 /// WhatsApp Web tarzi sohbet UI'i icin endpoint'ler:
-///  GET  /Whatsapp                          → React/JSX sayfasi
-///  GET  /Whatsapp/Conversations            → sohbet listesi (sidebar)
-///  GET  /Whatsapp/Messages?phone=...       → bir sohbetin mesajlari
-///  POST /Whatsapp/Send                     → metin mesaj gonder
-///  POST /Whatsapp/MarkRead?phone=...       → bir sohbeti okundu isaretle
+///  GET  /Whatsapp                          → React/JSX sayfasi (VIEW)
+///  GET  /Whatsapp/Conversations            → sohbet listesi (VIEW)
+///  POST /Whatsapp/Send                     → mesaj gönder (CREATE → Mesaj Gönderme)
+///  POST /Whatsapp/Delete*                  → mesaj sil (DELETE_OWN → Mesaj Silme)
+///  POST /Whatsapp/MarkRead                 → okundu işareti — operasyonel, ek izin gerektirmez
 /// </summary>
+[PermissionScope(FormCodes.WhatsApp)]
 public sealed class WhatsAppController : Controller
 {
     private const int ConversationLimit = 200;
@@ -115,6 +121,8 @@ public sealed class WhatsAppController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Send(
         [FromServices] IWhatsAppService whatsAppService,
+        [FromServices] IWaInboxRepository inbox,
+        [FromServices] IWhatsAppRealTimeNotifier notifier,
         [FromBody] SendBody body,
         CancellationToken ct)
     {
@@ -123,6 +131,35 @@ public sealed class WhatsAppController : Controller
 
         // Chat UI'dan elle yazilan mesaj — interactive=true, anti-spam human-delay atlanir.
         var result = await whatsAppService.SendTextMessageAsync(body.Phone, body.Text, ct, interactive: true);
+
+        if (result.Success)
+        {
+            // Gönderilen mesajı wa_inbox'a ekle — UI'ın beklemesine gerek kalmaz.
+            // Web QR (bridge) path'ında bridge zaten echo'luyor → InsertIfNotExists dedup'ı UNIQUE'e takılır, sorun yok.
+            // Cloud API path'ında echo olmadığı için bu insert tek kayıttır.
+            var normalized = NormalizePhone(body.Phone);
+            var msgId = result.MessageId ?? $"local-{DateTime.UtcNow.Ticks}";
+            var now = DateTime.UtcNow;
+            try
+            {
+                await inbox.InsertIfNotExistsAsync(new Domain.Entities.WaInboxMessage
+                {
+                    BridgeMsgId  = msgId,
+                    Direction    = 1,
+                    ContactPhone = normalized,
+                    Body         = body.Text,
+                    MediaType    = "chat",
+                    HasMedia     = false,
+                    ReceivedAt   = now,
+                    CreatedAt    = now,
+                }, ct);
+
+                await notifier.MessageReceivedAsync(normalized, msgId, 1, body.Text, "chat", false, null, null, null, null, now, ct);
+                await notifier.ConversationUpdatedAsync(normalized, ct);
+            }
+            catch { /* SignalR/insert hataları mesaj gönderimi engellememeli */ }
+        }
+
         return Json(new { success = result.Success, message = result.Message, messageId = result.MessageId });
     }
 
@@ -136,6 +173,8 @@ public sealed class WhatsAppController : Controller
     public async Task<IActionResult> SendMedia(
         [FromServices] CalibraHub.Application.Abstractions.Persistence.IWhatsAppConfigRepository configRepo,
         [FromServices] IHttpClientFactory httpClientFactory,
+        [FromServices] IWaInboxRepository inbox,
+        [FromServices] IWhatsAppRealTimeNotifier notifier,
         [FromForm] string phone,
         [FromForm] string? caption,
         IFormFile file,
@@ -179,6 +218,74 @@ public sealed class WhatsAppController : Controller
             var ok = root.TryGetProperty("ok", out var o) && o.ValueKind == System.Text.Json.JsonValueKind.True;
             var error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
             var messageId = root.TryGetProperty("messageId", out var mid) ? mid.GetString() : null;
+
+            if (ok)
+            {
+                // Gönderilen medyayı diske kaydet + wa_inbox'a ekle.
+                // Polling service'in gelen medya için kullandığı aynı pattern.
+                var normalized = NormalizePhone(phone);
+                var now = DateTime.UtcNow;
+                var msgId = messageId ?? $"local-{now.Ticks}";
+                var mime = file.ContentType ?? "application/octet-stream";
+                var mediaType = mime.Split('/')[0] switch
+                {
+                    "image" => "image",
+                    "video" => "video",
+                    "audio" => "audio",
+                    _       => "document",
+                };
+                var extRaw = Path.GetExtension(file.FileName ?? string.Empty).TrimStart('.');
+                var ext = !string.IsNullOrEmpty(extRaw)
+                    ? extRaw.ToLowerInvariant()
+                    : mime switch
+                    {
+                        "image/jpeg"      => "jpg",
+                        "image/png"       => "png",
+                        "image/gif"       => "gif",
+                        "image/webp"      => "webp",
+                        "video/mp4"       => "mp4",
+                        "audio/ogg"       => "ogg",
+                        "audio/mpeg"      => "mp3",
+                        "application/pdf" => "pdf",
+                        _                 => "bin",
+                    };
+
+                // Dosyayı kaydet — wwwroot/uploads/whatsapp/yyyy/MM/<msgId>.<ext>
+                var safeId = string.Concat(msgId.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_'));
+                if (string.IsNullOrEmpty(safeId)) safeId = Guid.NewGuid().ToString("N");
+                var wwwroot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                var subPath = Path.Combine("uploads", "whatsapp", now.Year.ToString(), now.Month.ToString("D2"));
+                var dir = Path.Combine(wwwroot, subPath);
+                Directory.CreateDirectory(dir);
+                var fullPath = Path.Combine(dir, $"{safeId}.{ext}");
+                await System.IO.File.WriteAllBytesAsync(fullPath, bytes, ct);
+                var urlPath = "/" + subPath.Replace('\\', '/') + "/" + safeId + "." + ext;
+
+                try
+                {
+                    await inbox.InsertIfNotExistsAsync(new Domain.Entities.WaInboxMessage
+                    {
+                        BridgeMsgId   = msgId,
+                        Direction     = 1,
+                        ContactPhone  = normalized,
+                        Body          = caption,
+                        MediaType     = mediaType,
+                        HasMedia      = true,
+                        MediaPath     = urlPath,
+                        MediaMime     = mime,
+                        MediaFileName = file.FileName,
+                        MediaSize     = bytes.Length,
+                        ReceivedAt    = now,
+                        CreatedAt     = now,
+                        DeliveryStatus = "sent",
+                    }, ct);
+
+                    await notifier.MessageReceivedAsync(normalized, msgId, 1, caption, mediaType, true, urlPath, mime, file.FileName, bytes.Length, now, ct);
+                    await notifier.ConversationUpdatedAsync(normalized, ct);
+                }
+                catch { /* insert/SignalR hataları gönderimi engellememeli */ }
+            }
+
             return Json(new { success = ok, message = error ?? "Gonderildi.", messageId });
         }
         catch (Exception ex)
@@ -620,5 +727,110 @@ public sealed class WhatsAppController : Controller
     {
         public string? ToPhone { get; set; }
         public string? MessageId { get; set; }
+    }
+
+    /// <summary>
+    /// WhatsApp numarası olan kişileri arar — mevcut sohbet olmayan kişiler için.
+    /// İki kaynak: 1) CRM Contact.WaPhone  2) Bridge /contacts (telefonun WA rehberi).
+    /// </summary>
+    [HttpGet("/Whatsapp/ContactSearch")]
+    public async Task<IActionResult> ContactSearch(
+        [FromServices] SqlServerConnectionFactory connFactory,
+        [FromServices] CalibraDatabaseOptions dbOptions,
+        [FromServices] IWhatsAppConfigRepository waConfigRepo,
+        [FromServices] IHttpClientFactory httpClientFactory,
+        [FromQuery] string q,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 1)
+            return Json(Array.Empty<object>());
+
+        var qTrim = q.Trim();
+        var seenPhones = new HashSet<string>(StringComparer.Ordinal);
+        var results    = new List<object>();
+
+        // ── 1) CRM Contact tablosu ───────────────────────────────────────
+        var s    = string.IsNullOrWhiteSpace(dbOptions.Schema) ? "dbo" : dbOptions.Schema.Trim();
+        var like = "%" + qTrim.Replace("[", "[[]").Replace("%", "[%]").Replace("_", "[_]") + "%";
+
+        await using var conn = await connFactory.OpenConnectionAsync(ct);
+        await using var cmd  = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT TOP 20
+                [Id],
+                COALESCE([WaName], [AccountTitle]) AS DisplayName,
+                [AccountTitle],
+                [AccountCode],
+                [WaPhone]
+            FROM [{s}].[Contact]
+            WHERE [IsActive] = 1
+              AND [WaPhone] IS NOT NULL
+              AND [WaPhone] <> ''
+              AND (
+                [AccountTitle] LIKE @q
+                OR [WaName]    LIKE @q
+                OR [WaPhone]   LIKE @q
+                OR [AccountCode] LIKE @q
+              )
+            ORDER BY [AccountTitle];
+            """;
+        cmd.Parameters.Add(new SqlParameter("@q", like));
+
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var rawPhone  = r.GetString(4);
+            var normPhone = new string(rawPhone.Where(char.IsDigit).ToArray()) is { Length: > 0 } d ? d : rawPhone;
+            if (seenPhones.Add(normPhone))
+                results.Add(new
+                {
+                    id           = r.GetInt32(0),
+                    displayName  = r.GetString(1),
+                    accountTitle = r.GetString(2),
+                    accountCode  = r.IsDBNull(3) ? null : r.GetString(3),
+                    phone        = normPhone,
+                });
+        }
+        await r.CloseAsync();
+
+        // ── 2) Bridge /contacts — telefonun WhatsApp rehberi ────────────
+        try
+        {
+            var cfg = await waConfigRepo.GetAsync(ct);
+            if (cfg is { IsEnabled: true, Provider: Domain.Entities.WhatsAppProviderType.WebQr }
+                && !string.IsNullOrWhiteSpace(cfg.WebQrBridgeUrl))
+            {
+                using var http = httpClientFactory.CreateClient();
+                http.Timeout = TimeSpan.FromSeconds(3);
+                var url  = cfg.WebQrBridgeUrl.TrimEnd('/') + "/contacts?q=" + Uri.EscapeDataString(qTrim);
+                var resp = await http.GetAsync(url, ct);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(ct);
+                    if (json.TryGetProperty("contacts", out var arr) && arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var c in arr.EnumerateArray())
+                        {
+                            var ph   = c.TryGetProperty("phone", out var pv) ? pv.GetString() ?? "" : "";
+                            var name = c.TryGetProperty("name",  out var nv) ? nv.GetString() ?? "" : "";
+                            if (string.IsNullOrEmpty(ph)) continue;
+                            var normPh = new string(ph.Where(char.IsDigit).ToArray()) is { Length: > 0 } d ? d : ph;
+                            if (!seenPhones.Add(normPh)) continue; // CRM'de zaten varsa atla
+                            results.Add(new
+                            {
+                                id           = 0,
+                                displayName  = name,
+                                accountTitle = name,
+                                accountCode  = (string?)null,
+                                phone        = normPh,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        catch { /* bridge erişilemez ise CRM sonuçlarıyla devam et */ }
+
+        return Json(results.Take(30));
     }
 }

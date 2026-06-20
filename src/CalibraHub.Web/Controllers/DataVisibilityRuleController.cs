@@ -14,7 +14,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CalibraHub.Web.Controllers;
 
 /// <summary>
-/// 2026-06-13 — Veri Görünürlük Kuralları (satır bazlı veri kısıtlama / row-level security) yönetim
+/// 2026-06-13 — Veri Perdeleme Kuralları (satır bazlı veri kısıtlama / row-level security) yönetim
 /// ekranı + JSON CRUD. Operatör bazlı kısıtlama: kurala takılan satırlar HERKESE gizlenir.
 ///
 /// Endpoint'ler:
@@ -690,13 +690,13 @@ public sealed class DataVisibilityRuleController : Controller
         return new
         {
             boardKey          = "data-visibility-rules",
-            title             = "Veri Görünürlük Kuralları",
+            title             = "Veri Perdeleme Kuralları",
             subtitle          = $"{rules.Count} kural",
             icon              = "EyeOff",
             iconColor         = "indigo",
             refreshUrl        = "/Admin/DataVisibilityRules/BoardConfig",
             searchPlaceholder = "Kural ara…",
-            emptyText         = "Henüz veri görünürlük kuralı tanımlanmamış",
+            emptyText         = "Henüz veri perdeleme kuralı tanımlanmamış",
             actions = new object[]
             {
                 new { id = "new", label = "Yeni Kural", icon = "Plus", variant = "primary", url = "/Admin/DataVisibilityRuleEdit" },

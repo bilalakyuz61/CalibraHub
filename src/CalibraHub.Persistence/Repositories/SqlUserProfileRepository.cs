@@ -22,7 +22,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
     }
 
     private const string SelectColumns =
-        "[Id], [CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [GrafanaRole], [PhoneNumber]";
+        "[Id], [CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [PhoneNumber]";
 
     public async Task<IReadOnlyCollection<UserProfile>> GetAllAsync(CancellationToken cancellationToken)
     {
@@ -100,9 +100,9 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         // INT IDENTITY — Id girilmez, SCOPE_IDENTITY ile geri çekilir.
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [GrafanaRole], [PhoneNumber])
+                ([CompanyId], [FullName], [Email], [EmployeeCode], [DepartmentId], [SupervisorUserId], [Role], [Permissions], [PasswordHash], [LanguageCode], [ThemeCode], [GridPreferencesJson], [IsActive], [PhoneNumber])
             VALUES
-                (@CompanyId, @FullName, @Email, @EmployeeCode, @DepartmentId, @SupervisorUserId, @Role, @Permissions, @PasswordHash, @LanguageCode, @ThemeCode, @GridPreferencesJson, @IsActive, @GrafanaRole, @PhoneNumber);
+                (@CompanyId, @FullName, @Email, @EmployeeCode, @DepartmentId, @SupervisorUserId, @Role, @Permissions, @PasswordHash, @LanguageCode, @ThemeCode, @GridPreferencesJson, @IsActive, @PhoneNumber);
             SELECT CAST(SCOPE_IDENTITY() AS INT);
             """;
 
@@ -135,7 +135,6 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
                 [ThemeCode] = @ThemeCode,
                 [GridPreferencesJson] = @GridPreferencesJson,
                 [IsActive] = @IsActive,
-                [GrafanaRole] = @GrafanaRole,
                 [PhoneNumber] = @PhoneNumber
             WHERE [Id] = @Id;
             """;
@@ -161,9 +160,6 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         command.Parameters.Add(new SqlParameter("@ThemeCode", userProfile.ThemeCode));
         command.Parameters.Add(new SqlParameter("@GridPreferencesJson", (object?)userProfile.GridPreferencesJson ?? DBNull.Value));
         command.Parameters.Add(new SqlParameter("@IsActive", userProfile.IsActive));
-        command.Parameters.Add(new SqlParameter("@GrafanaRole", userProfile.GrafanaRole.HasValue
-            ? (object)userProfile.GrafanaRole.Value.ToString()
-            : DBNull.Value));
         command.Parameters.Add(new SqlParameter("@PhoneNumber",
             string.IsNullOrWhiteSpace(userProfile.PhoneNumber) ? (object)DBNull.Value : userProfile.PhoneNumber));
     }
@@ -177,14 +173,7 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
         var themeCode = reader.IsDBNull(11) ? UserProfile.DefaultThemeCode : reader.GetString(11);
         var gridPreferencesJson = reader.IsDBNull(12) ? string.Empty : reader.GetString(12);
         var isActive = reader.GetBoolean(13);
-        GrafanaRole? grafanaRole = null;
-        if (!reader.IsDBNull(14))
-        {
-            var gr = reader.GetString(14);
-            if (Enum.TryParse(gr, true, out GrafanaRole parsedGrafana))
-                grafanaRole = parsedGrafana;
-        }
-        string? phoneNumber = reader.IsDBNull(15) ? null : reader.GetString(15);
+        string? phoneNumber = reader.IsDBNull(14) ? null : reader.GetString(14);
 
         if (!Enum.TryParse(roleRaw, true, out UserRole role) || !Enum.IsDefined(role))
         {
@@ -202,7 +191,6 @@ public sealed class SqlUserProfileRepository : IUserProfileRepository
             SupervisorUserId = reader.IsDBNull(6) ? null : reader.GetInt32(6),
             Role = role,
             Permissions = DeserializePermissions(permissionsRaw),
-            GrafanaRole = grafanaRole,
             PhoneNumber = phoneNumber,
         };
 

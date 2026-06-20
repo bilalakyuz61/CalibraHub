@@ -12,7 +12,8 @@ public sealed record DocLayoutRuleMatchRow(
     int? BranchId,
     int? WarehouseId,
     DateTime UpdatedAt,
-    int? ContactGroupId = null);
+    int? ContactGroupId = null,
+    byte? AccountType   = null);
 
 /// <summary>
 /// DocLayoutRule listesi / detay görüntüsü için DTO. Hesaplanmış Weight de taşır.
@@ -30,8 +31,9 @@ public sealed record DocLayoutRuleDto(
     bool IsActive,
     int Weight,
     DateTime UpdatedAt,
-    int? ContactGroupId = null,
-    int? DocumentTypeId = null);
+    int? ContactGroupId  = null,
+    int? DocumentTypeId  = null,
+    byte? AccountType    = null);
 
 /// <summary>
 /// Kural kaydetme isteği. NULLable kriterler = "wildcard" (tüm değerler için).
@@ -46,6 +48,7 @@ public sealed record SaveDocLayoutRuleRequest(
     int? UserId,
     int? BranchId,
     int? WarehouseId,
-    bool IsActive = true,
-    int? ContactGroupId = null,
-    int? DocumentTypeId = null);
+    bool IsActive        = true,
+    int? ContactGroupId  = null,
+    int? DocumentTypeId  = null,
+    byte? AccountType    = null);

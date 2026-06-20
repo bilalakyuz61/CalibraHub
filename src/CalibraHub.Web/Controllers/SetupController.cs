@@ -504,7 +504,6 @@ public sealed class SetupController : Controller
                     email        = primary.Email,
                     isActive     = g.Any(x => x.IsActive),
                     uiRole,
-                    grafanaRole  = primary.GrafanaRole,
                     employeeCode = primary.EmployeeCode,
                     // Geriye dönük uyumluluk için tek şirket alanları (eski kod için)
                     companyId   = primary.CompanyId,
@@ -619,23 +618,9 @@ public sealed class SetupController : Controller
         if (!isUpdate && string.IsNullOrWhiteSpace(input.Password))
             return Json(new { success = false, message = "Sifre zorunludur." });
 
-        // Grafana yetki seviyesi parse
-        CalibraHub.Domain.Enums.GrafanaRole? grafanaRole = null;
-        if (!string.IsNullOrWhiteSpace(input.GrafanaRole))
-        {
-            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out CalibraHub.Domain.Enums.GrafanaRole parsed))
-                grafanaRole = parsed;
-            else
-                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Designer/Admin/bos)." });
-        }
-
         // Global rol parse (per-company override yoksa kullanılır)
         var globalRole  = ParseUiRole(input.Role);
         var globalPerms = UserAuthorizationCatalog.GetAllowedPermissions(globalRole);
-
-        // Grafana: modal artık bu alanı göndermiyor (rol tanımına taşınacak).
-        // null ise mevcut Grafana rolü KORUNUR; sadece açıkça gönderilirse güncellenir.
-        var setGrafana = input.GrafanaRole != null;
 
         try
         {
@@ -653,7 +638,6 @@ public sealed class SetupController : Controller
                         new UpdateUserRequest(
                             profileId, companyId, input.FullName, input.Email,
                             Password: string.IsNullOrWhiteSpace(input.Password) ? null : input.Password,
-                            SetGrafanaRole: setGrafana, GrafanaRole: grafanaRole,
                             SetRole: true, Role: compRole),
                         cancellationToken);
                     await ApplyExtraFieldsAsync(input, companyId, cancellationToken);
@@ -663,7 +647,7 @@ public sealed class SetupController : Controller
                 foreach (var companyId in requestedSet.Except(existingMap.Keys))
                 {
                     var (compRole, compPerms) = GetRoleForCompany(input, companyId, globalRole);
-                    await CreateUserForCompanyAsync(companyId, input, compRole, compPerms, grafanaRole, cancellationToken);
+                    await CreateUserForCompanyAsync(companyId, input, compRole, compPerms, cancellationToken);
                 }
 
                 // 3. Listeden çıkan şirketler = pasife al
@@ -683,13 +667,12 @@ public sealed class SetupController : Controller
                     new UpdateUserRequest(
                         input.Id.Value, effectiveCompanyIds[0], input.FullName, input.Email,
                         Password: string.IsNullOrWhiteSpace(input.Password) ? null : input.Password,
-                        SetGrafanaRole: setGrafana, GrafanaRole: grafanaRole,
                         SetRole: true, Role: globalRole),
                     cancellationToken);
                 return Json(new { success = true, message = "Kullanici guncellendi." });
             }
 
-            await CreateUserForCompanyAsync(effectiveCompanyIds[0], input, globalRole, globalPerms, grafanaRole, cancellationToken);
+            await CreateUserForCompanyAsync(effectiveCompanyIds[0], input, globalRole, globalPerms, cancellationToken);
             return Json(new { success = true, message = "Kullanici olusturuldu." });
         }
         catch (Exception ex)
@@ -702,7 +685,6 @@ public sealed class SetupController : Controller
     private async Task CreateUserForCompanyAsync(
         int companyId, SetupUserInput input,
         UserRole calibraRole, IReadOnlyCollection<CalibraHub.Domain.Enums.UserPermission> calibraPermissions,
-        CalibraHub.Domain.Enums.GrafanaRole? grafanaRole,
         CancellationToken ct)
     {
         var allDepts = await _departmentRepository.GetAllAsync(ct);
@@ -725,8 +707,7 @@ public sealed class SetupController : Controller
                 employeeCode,
                 dept.Id, null,
                 calibraRole, calibraPermissions,
-                Password: input.Password,
-                GrafanaRole: grafanaRole),
+                Password: input.Password),
             ct);
 
         // PhoneNumber ve IsActive CreateUserRequest'te yok — oluşturulduktan sonra doğrudan güncelle.
@@ -758,7 +739,6 @@ public sealed class SetupController : Controller
             PhoneNumber      = phone ?? profile.PhoneNumber,
             Role             = profile.Role,
             Permissions      = profile.Permissions,
-            GrafanaRole      = profile.GrafanaRole,
         };
         rebuilt.SetPasswordHash(profile.PasswordHash);
         rebuilt.SetInterfacePreferences(profile.LanguageCode, profile.ThemeCode);

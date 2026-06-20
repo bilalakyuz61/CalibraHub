@@ -96,7 +96,7 @@ public sealed class IntegratorSettingsInput
 
 public sealed class SmtpProfileInput
 {
-    public Guid? Id { get; set; }
+    public int? Id { get; set; }
 
     public int? CompanyId { get; set; }
 

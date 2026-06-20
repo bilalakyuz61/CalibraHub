@@ -16,6 +16,7 @@ public sealed record PersonnelDto(
     string? Phone,
     string? Email,
     string? Notes,
+    DateTime? BirthDate,
     DateTime Created,
     DateTime? Updated);
 
@@ -32,4 +33,5 @@ public sealed record SavePersonnelRequest(
     int? UserId,
     string? Phone,
     string? Email,
-    string? Notes);
+    string? Notes,
+    DateTime? BirthDate);

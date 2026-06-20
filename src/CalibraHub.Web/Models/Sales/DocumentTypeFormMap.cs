@@ -14,19 +14,20 @@ namespace CalibraHub.Web.Models.Sales;
 /// </summary>
 public static class DocumentTypeFormMap
 {
-    public sealed record FormCodes(string Header, string HeaderNew, string Lines, string ListUrl);
+    // Parent: izin kontrolünde kullanılan liste/parent form kodu (PURCHASE_REQUEST, SALES_QUOTE vb.)
+    public sealed record FormCodes(string Header, string HeaderNew, string Lines, string ListUrl, string Parent);
 
     private static readonly Dictionary<string, FormCodes> _map =
         new(StringComparer.OrdinalIgnoreCase)
         {
             // ── Satis tarafi ──
-            ["satis_teklifi"]  = new("SALES_QUOTE_EDIT",     "SALES_QUOTE_NEW",     "SALES_QUOTE_LINES",     "/Sales/Quotes"),
-            ["satis_siparisi"] = new("SALES_ORDER_EDIT",     "SALES_ORDER_NEW",     "SALES_ORDER_LINES",     "/Sales/Orders"),
+            ["satis_teklifi"]  = new("SALES_QUOTE_EDIT",      "SALES_QUOTE_NEW",      "SALES_QUOTE_LINES",      "/Sales/Quotes",              "SALES_QUOTE"),
+            ["satis_siparisi"] = new("SALES_ORDER_EDIT",      "SALES_ORDER_NEW",      "SALES_ORDER_LINES",      "/Sales/Orders",              "SALES_ORDER"),
             // ── Satin Alma tarafi (2026-05-23) ──
-            ["alis_talebi"]        = new("PURCHASE_REQUEST_EDIT","PURCHASE_REQUEST_NEW","PURCHASE_REQUEST_LINES","/Purchase/Requests"),
-            ["alis_teklifi"]       = new("PURCHASE_QUOTE_EDIT",  "PURCHASE_QUOTE_NEW",  "PURCHASE_QUOTE_LINES",  "/Purchase/Quotes"),
-            ["alis_siparisi"]      = new("PURCHASE_ORDER_EDIT",  "PURCHASE_ORDER_NEW",  "PURCHASE_ORDER_LINES",  "/Purchase/Orders"),
-            ["satin_alma_talebi"]  = new("PURCHASE_DEMAND_EDIT", "PURCHASE_DEMAND_NEW", "PURCHASE_DEMAND_LINES", "/Purchase/PurchaseDemands"),
+            ["alis_talebi"]        = new("PURCHASE_REQUEST_EDIT", "PURCHASE_REQUEST_NEW", "PURCHASE_REQUEST_LINES", "/Purchase/Requests",         "PURCHASE_REQUEST"),
+            ["alis_teklifi"]       = new("PURCHASE_QUOTE_EDIT",   "PURCHASE_QUOTE_NEW",   "PURCHASE_QUOTE_LINES",   "/Purchase/Quotes",           "PURCHASE_QUOTE"),
+            ["alis_siparisi"]      = new("PURCHASE_ORDER_EDIT",   "PURCHASE_ORDER_NEW",   "PURCHASE_ORDER_LINES",   "/Purchase/Orders",           "PURCHASE_ORDER"),
+            ["satin_alma_talebi"]  = new("PURCHASE_DEMAND_EDIT",  "PURCHASE_DEMAND_NEW",  "PURCHASE_DEMAND_LINES",  "/Purchase/PurchaseDemands",  "PURCHASE_DEMAND"),
         };
 
     /// <summary>

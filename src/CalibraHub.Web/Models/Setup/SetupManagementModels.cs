@@ -94,13 +94,6 @@ public sealed class SetupUserInput
     public string? Role { get; set; }
 
     /// <summary>
-    /// Grafana yetki seviyesi: NULL/empty = Grafana'ya eklenmez,
-    /// "Viewer" / "Designer" / "Admin" → ilgili rolde Calibra_{companyId} org'a eklenir.
-    /// Update sirasinda da uygulanir (mevcut rol farkli ise update, NULL'a inerse cikarilir).
-    /// </summary>
-    public string? GrafanaRole { get; set; }
-
-    /// <summary>
     /// Çoklu şirket bağlantısı — React panel tarafından kullanılır.
     /// Listedeki her şirket için ayrı UserProfile oluşturulur/güncellenir/pasife alınır.
     /// Dolu gelirse CompanyId alanı göz ardı edilir.

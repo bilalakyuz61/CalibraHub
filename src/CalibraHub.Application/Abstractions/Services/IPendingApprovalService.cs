@@ -20,4 +20,16 @@ public interface IPendingApprovalService
 
     /// <summary>Mevcut kullanicinin secebilecegi scope'lar (yetkiye gore).</summary>
     Task<IReadOnlyList<string>> GetAvailableScopesAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Verilen view adinin kolon meta bilgisini doner.
+    /// viewName'in ApprovalFlow.ExtraColumnsView olarak kayitli oldugu dogrulanmalidir (controller).
+    /// </summary>
+    Task<IReadOnlyList<ExtraColumnMetaDto>> GetViewColumnMetaAsync(string viewName, CancellationToken ct);
+
+    /// <summary>
+    /// Verilen view'dan instanceId bazinda satir degerlerini ceker.
+    /// </summary>
+    Task<IReadOnlyDictionary<int, IReadOnlyDictionary<string, string?>>> GetViewRowDataAsync(
+        string viewName, IReadOnlyCollection<int> instanceIds, CancellationToken ct);
 }

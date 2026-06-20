@@ -20,8 +20,15 @@ run_output.txt
 
 # Installer output
 install/
-installer/
 *.exe
+
+# Installer artifact'leri (kaynak script'ler tracked: CalibraHub.iss, *.ps1)
+installer/output/
+installer/publish/
+installer/grafana/
+installer/dependencies/
+installer/whatsapp/node_modules/
+installer/build-output.log
 
 # Node
 node_modules/
@@ -61,3 +68,24 @@ bridge.*.log
 # Build verification ciktilari (PowerShell hookundan)
 build-*.log
 web-*.log
+
+# ── Build output / payload ──────────────────────────────────────────────
+# Publish ciktilari (Web/Worker/WhatsAppBridge) — installer payload kaynagi.
+# Yerel build sonuclari, repo'ya commit edilmez; .exe + dll'ler her build'de yeniden uretilir.
+publish/
+
+# Grafana — 2.1.x serisinde projeden cikarildi (Rapor Tasarimcisi yerini aldi).
+# Mevcut .grafana/ dizinindeki conf+data dosyalari runtime artifact, koklenir.
+.grafana/
+
+# ── Geliştirici-spesifik dev artifact'ler (run-out, build-out, vs.) ────
+run-out.txt
+run-err.txt
+worker-out.txt
+worker-err.txt
+_run*.txt
+_run_*.txt
+build_out.txt
+.docx_extract.txt
+.extract_docx.ps1
+.run-log.txt

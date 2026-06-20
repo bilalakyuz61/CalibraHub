@@ -278,6 +278,7 @@ body.app-theme-dark .ap-wrapper {
             <button type="button" class="ap-tab"           data-pane="production" data-label="Üretim">Üretim</button>
             <button type="button" class="ap-tab"           data-pane="workorder" data-label="İş Emri">İş Emri</button>
             <button type="button" class="ap-tab"           data-pane="salesquote" data-label="Satış Teklifi">Satış Teklifi</button>
+            <button type="button" class="ap-tab"           data-pane="ihtiyac"   data-label="İhtiyaç Kayıtları">İhtiyaç Kayıtları</button>
         </aside>
 
         <main class="ap-content">
@@ -421,6 +422,58 @@ body.app-theme-dark .ap-wrapper {
                     </div>
                 </div>
             </section>
+            @* ── İhtiyaç Kayıtları ──────────────────────── *@
+            <section class="ap-pane" id="ap-pane-ihtiyac">
+                <h2>İhtiyaç Kayıtları</h2>
+                <div class="ap-hint">İhtiyaç karşılama merkezi ("Depodan Karşıla") davranış parametreleri.</div>
+
+                <div class="ap-row">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Karşılama Deposu Seçimi</div>
+                        <div class="ap-row-desc">
+                            "Depodan Karşıla" aksiyonu çalışırken hangi depoların stok bakiyesine bakılacağını belirleyin.
+                        </div>
+                    </div>
+                    <div class="ap-row-control" style="min-width:200px;">
+                        <div style="display:flex;flex-direction:column;gap:10px;padding-top:2px;">
+                            <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;">
+                                <input type="radio" name="apFcLocMode" id="apFcLocSpecific" value="SPECIFIC"
+                                       checked style="margin-top:3px;accent-color:var(--ap-accent);">
+                                <div>
+                                    <div style="font-size:13px;font-weight:600;color:var(--ap-text);">Belirli Depolar</div>
+                                    <div style="font-size:11.5px;color:var(--ap-text-muted);">Aşağıdan seçilen depolar kullanılır</div>
+                                </div>
+                            </label>
+                            <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;">
+                                <input type="radio" name="apFcLocMode" id="apFcLocDefault" value="ITEM_DEFAULT"
+                                       style="margin-top:3px;accent-color:var(--ap-accent);">
+                                <div>
+                                    <div style="font-size:13px;font-weight:600;color:var(--ap-text);">Stok Kartındaki Depo</div>
+                                    <div style="font-size:11.5px;color:var(--ap-text-muted);">Her malzemenin varsayılan konumu</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ap-row" id="apFcLocListRow">
+                    <div class="ap-row-main">
+                        <div class="ap-row-title">Karşılama Depoları</div>
+                        <div class="ap-row-desc">
+                            Stok bakiyesi kontrol edilecek depoları seçin. Seçilmezse hiçbir depo kullanılmaz.
+                        </div>
+                    </div>
+                    <div class="ap-row-control" style="min-width:280px;max-width:380px;">
+                        <div id="apFcLocList"
+                             style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;
+                                    border:1px solid var(--ap-border);border-radius:8px;min-height:40px;
+                                    background:var(--ap-input-bg);">
+                            <span id="apFcLocLoading" style="color:var(--ap-text-muted);font-size:12px;font-style:italic;">Yükleniyor…</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </main>
     </div>
 </div>
@@ -441,7 +494,7 @@ body.app-theme-dark .ap-wrapper {
 
     // ── Tab gecisi + Kaydet butonunun aktif/pasif durumu ────
     function syncSaveButton() {
-        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production');
+        var hasParams = (activePane === 'general' || activePane === 'approval' || activePane === 'production' || activePane === 'ihtiyac');
         saveBtn.disabled = !hasParams;
         saveBtn.title = hasParams ? '' : 'Bu sekmede henüz kaydedilebilir parametre yok.';
     }
@@ -532,6 +585,31 @@ body.app-theme-dark .ap-wrapper {
                 ok = !!datap.ok;
                 if (ok) flash('Kaydedildi.', true);
                 else    flash(datap.error || 'Kaydetme basarisiz.', false);
+            } else if (activePane === 'ihtiyac') {
+                var mode = document.querySelector('input[name="apFcLocMode"]:checked')?.value || 'SPECIFIC';
+                var ids  = [];
+                if (mode === 'SPECIFIC') {
+                    document.querySelectorAll('#apFcLocList input[type="checkbox"]:checked').forEach(function(cb) {
+                        ids.push(cb.value);
+                    });
+                }
+                var r1 = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_LOCATION_MODE', paramValue: mode, dataType: 1 })
+                });
+                var d1 = await r1.json();
+                var r2 = await fetch('/Admin/SaveParameter', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                    body: JSON.stringify({ formCode: 'PURCHASE_FULFILLMENT', paramKey: 'FULFILLMENT_LOCATION_IDS', paramValue: ids.join(','), dataType: 1 })
+                });
+                var d2 = await r2.json();
+                ok = !!d1.ok && !!d2.ok;
+                if (ok) flash('Kaydedildi.', true);
+                else    flash((d1.error || d2.error || 'Kaydetme basarisiz.'), false);
             } else if (activePane === 'approval') {
                 var invCb  = document.getElementById('ap-invoice-approval');
                 var disCb  = document.getElementById('ap-dispatch-approval');
@@ -555,6 +633,66 @@ body.app-theme-dark .ap-wrapper {
             flash('Ag hatasi: ' + e.message, false);
         } finally {
             syncSaveButton();
+        }
+    });
+
+    // ── İhtiyaç Kayıtları: depo listesi yönetimi ──────────────────
+    var _fcLocsLoaded = false;
+    var _fcLocs       = [];
+    var _fcCheckedIds = [];
+
+    function fcModeChange() {
+        var mode = document.querySelector('input[name="apFcLocMode"]:checked')?.value;
+        var row  = document.getElementById('apFcLocListRow');
+        if (row) row.style.display = (mode === 'SPECIFIC') ? '' : 'none';
+    }
+
+    function fcRenderLocList() {
+        var el = document.getElementById('apFcLocList');
+        if (!el) return;
+        if (_fcLocs.length === 0) {
+            el.innerHTML = '<span style="color:var(--ap-text-muted);font-size:12px;font-style:italic;">Aktif depo bulunamadı.</span>';
+            return;
+        }
+        el.innerHTML = _fcLocs.map(function(l) {
+            var checked = _fcCheckedIds.indexOf(l.id) !== -1;
+            return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;'
+                 + 'padding:3px 8px 3px 6px;border-radius:6px;cursor:pointer;'
+                 + 'background:var(--ap-surface2);border:1px solid var(--ap-border);white-space:nowrap;">'
+                 + '<input type="checkbox" value="' + l.id + '"' + (checked ? ' checked' : '') + ' style="accent-color:var(--ap-accent);">'
+                 + (l.locationName || l.locationCode || 'Depo ' + l.id)
+                 + '</label>';
+        }).join('');
+    }
+
+    async function fcLoadConfig() {
+        if (_fcLocsLoaded) return;
+        _fcLocsLoaded = true;
+        try {
+            var cfg = await (await fetch('/Purchase/FulfillmentLocationConfig')).json();
+            _fcCheckedIds = cfg.locationIds || [];
+            var modeEl = document.getElementById(cfg.mode === 'ITEM_DEFAULT' ? 'apFcLocDefault' : 'apFcLocSpecific');
+            if (modeEl) modeEl.checked = true;
+            fcModeChange();
+
+            var locs = await (await fetch('/Warehouse/GetLocationsJson')).json();
+            _fcLocs = locs || [];
+            fcRenderLocList();
+        } catch(e) {
+            var el = document.getElementById('apFcLocList');
+            if (el) el.innerHTML = '<span style="color:var(--ap-text-muted);font-size:12px;">Yüklenirken hata oluştu.</span>';
+        }
+    }
+
+    // Radio değişiklik olayları
+    document.querySelectorAll('input[name="apFcLocMode"]').forEach(function(r) {
+        r.addEventListener('change', fcModeChange);
+    });
+
+    // Tab tıklamasında config'i yükle
+    tabs.forEach(function(t) {
+        if (t.dataset.pane === 'ihtiyac') {
+            t.addEventListener('click', function() { fcLoadConfig(); });
         }
     });
 })();

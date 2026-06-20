@@ -18,8 +18,7 @@ import {
 var EMPTY_COMPANY = { id: null, name: '', sqlServer: '', sqlDatabase: '', sqlUsername: '', sqlPassword: '', hasPassword: false, isActive: true }
 // companyIds: kullanıcının bağlı olduğu şirket ID'leri listesi (multi-company)
 // role: CalibraHub yetkisi — 'Admin' / 'SistemAdmin' / 'User'
-// grafanaRole: Grafana yetkisi — 'Admin' / 'Designer' / 'Viewer'
-var EMPTY_USER = { companyIds: [], firstName: '', lastName: '', email: '', password: '', role: 'User', grafanaRole: 'Viewer', isActive: true }
+var EMPTY_USER = { companyIds: [], firstName: '', lastName: '', email: '', password: '', role: 'User', isActive: true }
 
 export default function CompanyUserManagementPanel() {
 
@@ -156,7 +155,6 @@ export default function CompanyUserManagementPanel() {
       lastName:   lastName,
       password:   '',
       role:       u.uiRole || 'User',
-      grafanaRole: u.grafanaRole || 'Viewer',
       isActive:   u.isActive
     })
     setUserFormErr(null); setShowUserPwd(false)
@@ -194,7 +192,6 @@ export default function CompanyUserManagementPanel() {
       lastName:   userForm.lastName,
       password:   userForm.password || null,
       role:       userForm.role,
-      grafanaRole: userForm.grafanaRole,
       isActive:   userForm.isActive
     }
     var result = await saveUserJson(payload)
@@ -707,32 +704,6 @@ export default function CompanyUserManagementPanel() {
                           <input type="radio" name="cum-role"
                             value={opt.v} checked={checked}
                             onChange={function () { setUserForm(Object.assign({}, userForm, { role: opt.v })) }} />
-                          <span className="cum-radio-dot" aria-hidden="true"></span>
-                          <span className="cum-radio-text">
-                            <span className="cum-radio-title">{opt.t}</span>
-                            <span className="cum-radio-desc">{opt.d}</span>
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Grafana Yetkisi */}
-                <div className="cum-field">
-                  <label className="cum-label">Grafana Yetkisi <span className="cum-req">*</span></label>
-                  <div className="cum-radio-group" role="radiogroup">
-                    {[
-                      { v: 'Admin',    t: 'Admin',    d: 'Org yöneticisi (datasource, kullanıcı yönetimi)' },
-                      { v: 'Designer', t: 'Designer', d: 'Dashboard ve panel tasarlar/edit eder' },
-                      { v: 'Viewer',   t: 'Viewer',   d: 'Sadece dashboard görüntüleyebilir' }
-                    ].map(function (opt) {
-                      var checked = (userForm.grafanaRole || 'Viewer') === opt.v
-                      return (
-                        <label key={opt.v} className={'cum-radio' + (checked ? ' is-checked' : '')}>
-                          <input type="radio" name="cum-grafanarole"
-                            value={opt.v} checked={checked}
-                            onChange={function () { setUserForm(Object.assign({}, userForm, { grafanaRole: opt.v })) }} />
                           <span className="cum-radio-dot" aria-hidden="true"></span>
                           <span className="cum-radio-text">
                             <span className="cum-radio-title">{opt.t}</span>

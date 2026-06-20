@@ -89,11 +89,11 @@ function humanizeFieldKey(raw) {
 
 function Row(props) {
   return (
-    <div className="flex items-center gap-2 min-h-[32px]">
-      <label className="w-[110px] flex-shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40 leading-tight">
+    <div className="flex items-start gap-3 min-h-[32px] py-1">
+      <label className="w-[160px] flex-shrink-0 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/40 leading-tight pt-[6px]">
         {props.label}
         {props.hint && (
-          <span className="block text-slate-400 dark:text-white/45 font-normal normal-case text-[9px] mt-0.5">
+          <span className="block text-slate-400 dark:text-white/45 font-normal normal-case text-[9.5px] mt-0.5">
             {props.hint}
           </span>
         )}

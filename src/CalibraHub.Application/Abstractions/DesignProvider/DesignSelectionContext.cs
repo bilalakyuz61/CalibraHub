@@ -14,6 +14,9 @@ public sealed class DesignSelectionContext
     public int?  UserId         { get; init; }
     public int?  BranchId       { get; init; }
     public int?  WarehouseId    { get; init; }
-
-    // İleride yeni kriter: public int? RegionId { get; init; } gibi serbestçe eklenebilir.
+    /// <summary>
+    /// Cari tipi kısıtı (ContactType enum'un byte değeri).
+    /// NULL → wildcard (tüm cari tipleri için geçerli).
+    /// </summary>
+    public byte? AccountType    { get; init; }
 }

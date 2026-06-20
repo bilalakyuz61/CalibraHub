@@ -9,7 +9,6 @@ using CalibraHub.Infrastructure.Reporting;
 using CalibraHub.Persistence.Database;
 using CalibraHub.Persistence.Options;
 using CalibraHub.Persistence.Repositories;
-using CalibraHub.Application.Configuration;
 using CalibraHub.Web.Infrastructure.Collaboration;
 using CalibraHub.Web.Infrastructure.Ui;
 using CalibraHub.Web.Infrastructure.Workspace;
@@ -19,7 +18,6 @@ using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.SqlClient;
-using Yarp.ReverseProxy.Configuration;
 
 // ─── SERVICE STARTUP HARDENING ────────────────────────────────────────────
 // Servis modunda (LocalSystem) cwd = C:\Windows\System32 olur — relative path
@@ -131,6 +129,15 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ILice
                            CalibraHub.Persistence.Repositories.SqlLicenseRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ILicenseService,
                            CalibraHub.Application.Services.Licensing.LicenseService>();
+// Rapor Motoru (IMemoryCache + per-company SQL)
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IReportSourceRepository,
+                           CalibraHub.Persistence.Repositories.SqlReportSourceRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IReportDesignRepository,
+                           CalibraHub.Persistence.Repositories.SqlReportDesignRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IReportQueryService,
+                           CalibraHub.Infrastructure.Reporting.ReportQueryService>();
+
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
@@ -152,6 +159,10 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.ISchedul
                            CalibraHub.Infrastructure.Scheduling.ViewReportTaskExecutor>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
                            CalibraHub.Application.Services.Scheduling.IntegrationTaskExecutor>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Application.Services.Scheduling.ReportSnapshotRefreshTaskExecutor>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IScheduledTaskExecutor,
+                           CalibraHub.Application.Services.Scheduling.CurrencyRefreshTaskExecutor>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IEmailSender,
                            CalibraHub.Infrastructure.Notifications.SmtpEmailSender>();
 // Mail sablonu HTML render — DocLayout (OutputFormat='email') -> HTML mail govdesi.
@@ -373,6 +384,9 @@ builder.Services.AddScoped<IExchangeRateRepository, SqlExchangeRateRepository>()
 builder.Services.AddScoped<ICurrencyService, CurrencyService>();
 builder.Services.AddSingleton<ITcmbExchangeRateClient, TcmbExchangeRateClient>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
+// 2026-06-14: Ana Sayfa Panosu (Home Dashboard) — layout + widget veri toplama servisi.
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IDashboardService,
+                           CalibraHub.Application.Services.DashboardService>();
 // SQL View tabanli Rehber (Lookup / LOV) sistemi
 builder.Services.AddScoped<IGuideRepository, SqlGuideRepository>();
 builder.Services.AddScoped<IGuideService, GuideService>();
@@ -410,6 +424,9 @@ builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWork
     CalibraHub.Persistence.Repositories.SqlWorkOrderRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IWorkOrderService,
     CalibraHub.Application.Services.WorkOrderService>();
+builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.ICalendarRepository,
+    CalibraHub.Persistence.Repositories.SqlCalendarRepository>();
+builder.Services.AddScoped<CalibraHub.Application.Services.Calendar.CalendarService>();
 
 // Operasyon Tanımlamaları (Faz 3 routing/operasyon temel sözlüğü)
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IOperationRepository,
@@ -471,11 +488,6 @@ builder.Services.AddScoped<IRptDefinitionRepository, SqlRptDefinitionRepository>
 builder.Services.AddScoped<IRptRunLogRepository, SqlRptRunLogRepository>();
 builder.Services.AddScoped<IReportQueryExecutor, SqlReportQueryExecutor>();
 builder.Services.AddScoped<IReportEngineService, ReportEngineService>();
-// Rapor Panoları per-dashboard erişim altyapısı
-builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IReportDashboardRepository,
-                           CalibraHub.Persistence.Repositories.SqlReportDashboardRepository>();
-builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IReportDashboardService,
-                           CalibraHub.Application.Services.ReportDashboardService>();
 
 // Document Designer (Belge Tasarımcısı)
 builder.Services.AddScoped<IDocLayoutRepository, SqlDocLayoutRepository>();
@@ -495,6 +507,8 @@ builder.Services.AddSingleton<CalibraHub.Application.Abstractions.DesignProvider
                               CalibraHub.Application.Services.DesignProvider.BranchCriterion>();
 builder.Services.AddSingleton<CalibraHub.Application.Abstractions.DesignProvider.IDesignCriterion,
                               CalibraHub.Application.Services.DesignProvider.WarehouseCriterion>();
+builder.Services.AddSingleton<CalibraHub.Application.Abstractions.DesignProvider.IDesignCriterion,
+                              CalibraHub.Application.Services.DesignProvider.AccountTypeCriterion>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IDocLayoutRuleRepository,
                            CalibraHub.Persistence.Repositories.SqlDocLayoutRuleRepository>();
 builder.Services.AddScoped<CalibraHub.Application.Abstractions.DesignProvider.IDesignProvider,
@@ -549,6 +563,8 @@ if (useInMemoryPersistence)
                                CalibraHub.Persistence.Repositories.SqlApprovalFlowRepository>();
     builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IApprovalInstanceRepository,
                                CalibraHub.Persistence.Repositories.SqlApprovalInstanceRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprovalNodeLogger,
+                               CalibraHub.Persistence.Repositories.SqlApprovalNodeLogRepository>();
     builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IWorkflowDefinitionRepository,
                                CalibraHub.Persistence.Repositories.SqlWorkflowDefinitionRepository>();
     builder.Services.AddScoped<CalibraHub.Application.Services.WorkflowDefinitionService>();
@@ -582,6 +598,8 @@ else
                                CalibraHub.Persistence.Repositories.SqlApprovalFlowRepository>();
     builder.Services.AddScoped<CalibraHub.Application.Abstractions.Persistence.IApprovalInstanceRepository,
                                CalibraHub.Persistence.Repositories.SqlApprovalInstanceRepository>();
+    builder.Services.AddScoped<CalibraHub.Application.Abstractions.Services.IApprovalNodeLogger,
+                               CalibraHub.Persistence.Repositories.SqlApprovalNodeLogRepository>();
     builder.Services.AddScoped<IIntegratorImportLogRepository, SqlPltSystemLogRepository>();
     builder.Services.AddScoped<INoteRepository, SqlNoteRepository>();
     builder.Services.AddScoped<IUserNotificationRepository, SqlUserNotificationRepository>();
@@ -617,52 +635,6 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 builder.Services.AddAuthorization();
 
-// ─── Grafana entegrasyonu ─────────────────────────────────────────────────
-// Options + YARP reverse proxy + provisioning service. Servis 127.0.0.1:61005'te
-// calisir (CalibraHub 61xxx port konvansiyonu), /grafana path'i YARP ile
-// Grafana'ya forward edilir. Auth: cookie -> X-WEBAUTH-* (auth.proxy mode).
-// AdminPassword DPAPI ile sifreli gelir.
-builder.Services.Configure<GrafanaOptions>(
-    builder.Configuration.GetSection(GrafanaOptions.SectionName));
-
-builder.Services.PostConfigure<GrafanaOptions>(opts =>
-{
-    opts.AdminPassword = DecryptIfNeeded(opts.AdminPassword);
-});
-
-builder.Services.AddHttpClient<
-    CalibraHub.Application.Abstractions.Services.IGrafanaProvisioningService,
-    CalibraHub.Infrastructure.Grafana.GrafanaProvisioningService>();
-
-var grafanaEnabled = builder.Configuration.GetValue<bool>($"{GrafanaOptions.SectionName}:Enabled");
-var grafanaUrl = builder.Configuration[$"{GrafanaOptions.SectionName}:Url"] ?? "http://127.0.0.1:61005";
-
-if (grafanaEnabled)
-{
-    var grafanaRoutes = new[]
-    {
-        new RouteConfig
-        {
-            RouteId = "grafana-route",
-            ClusterId = "grafana-cluster",
-            Match = new RouteMatch { Path = "/grafana/{**catch-all}" }
-        }
-    };
-
-    var grafanaClusters = new[]
-    {
-        new ClusterConfig
-        {
-            ClusterId = "grafana-cluster",
-            Destinations = new Dictionary<string, DestinationConfig>
-            {
-                ["primary"] = new DestinationConfig { Address = grafanaUrl }
-            }
-        }
-    };
-
-    builder.Services.AddReverseProxy().LoadFromMemory(grafanaRoutes, grafanaClusters);
-}
 // ──────────────────────────────────────────────────────────────────────────
 var mvcBuilder = builder.Services.AddControllersWithViews(opts =>
 {
@@ -960,17 +932,6 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapHub<CollaborationHub>("/hubs/collaboration");
 app.MapHub<CalibraHub.Web.Hubs.WhatsAppHub>("/hubs/whatsapp");
-
-// Grafana reverse proxy — yalnizca Grafana:Enabled=true ise haritalanir.
-// Pipeline: cookie auth challenge (RequireAuthorization), header injection
-// (GrafanaAuthProxyMiddleware), ve YARP forward.
-if (grafanaEnabled)
-{
-    app.MapReverseProxy(proxyPipeline =>
-    {
-        proxyPipeline.UseMiddleware<GrafanaAuthProxyMiddleware>();
-    }).RequireAuthorization();
-}
 
 app.Run();
 

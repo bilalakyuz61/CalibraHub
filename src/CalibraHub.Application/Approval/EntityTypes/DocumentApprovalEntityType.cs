@@ -51,6 +51,7 @@ public sealed class DocumentApprovalEntityType : IApprovalEntityType
     {
         var header = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
+            ["documentNumber"]    = doc.DocumentNumber,
             ["amount"]            = doc.Amount,
             ["documentDate"]      = doc.DocumentDate,
             ["taxNo"]             = doc.ContactCode,
@@ -112,6 +113,7 @@ public sealed class DocumentApprovalEntityType : IApprovalEntityType
         new ApprovalEntityField { Code="user.departmentId", Label="Departman",           Type="lookup",  Scope="header", GroupLabel="Kullanıcı Bilgileri", LookupSource="departments" },
         new ApprovalEntityField { Code="user.userId",       Label="Belgeyi Oluşturan",   Type="lookup",  Scope="header", GroupLabel="Kullanıcı Bilgileri", LookupSource="users"       },
         // Belge üst bilgileri
+        new ApprovalEntityField { Code="documentNumber",  Label="Belge No",              Type="text",    Scope="header", GroupLabel="Belge Üst Bilgileri" },
         new ApprovalEntityField { Code="amount",          Label="Toplam Tutar",          Type="numeric", Scope="header", GroupLabel="Belge Üst Bilgileri" },
         new ApprovalEntityField { Code="documentDate",    Label="Belge Tarihi",          Type="date",    Scope="header", GroupLabel="Belge Üst Bilgileri" },
         new ApprovalEntityField { Code="taxNo",           Label="Tedarikçi/Müşteri VKN", Type="text",    Scope="header", GroupLabel="Belge Üst Bilgileri" },

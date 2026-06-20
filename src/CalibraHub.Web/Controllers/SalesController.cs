@@ -578,7 +578,6 @@ public sealed class SalesController : Controller
     }
 
     [HttpGet]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
     public async Task<IActionResult> DocumentEdit(int? id, string? type, int? fromRequest, CancellationToken ct)
     {
         // Iframe/tarayici cache nedeniyle eski HTML icerigi yapis(an)mayi
@@ -593,12 +592,13 @@ public sealed class SalesController : Controller
         //  3) Aksi → satis_teklifi (varsayilan)
         var typeCode = "satis_teklifi";
         int? typeId = null;
+        DocumentDto? existingDoc = null;
         if (id.HasValue && id.Value > 0)
         {
-            var existing = await _quoteService.GetQuoteByIdAsync(id.Value, ct);
-            if (existing != null && existing.DocumentTypeId.HasValue)
+            existingDoc = await _quoteService.GetQuoteByIdAsync(id.Value, ct);
+            if (existingDoc != null && existingDoc.DocumentTypeId.HasValue)
             {
-                var dt = await _documentTypeRepo.GetByIdAsync(existing.DocumentTypeId.Value, ct);
+                var dt = await _documentTypeRepo.GetByIdAsync(existingDoc.DocumentTypeId.Value, ct);
                 if (dt != null) { typeCode = dt.Code; typeId = dt.Id; }
             }
         }
@@ -619,6 +619,17 @@ public sealed class SalesController : Controller
                 "purchase_demand"  or "satin_alma_talebi"     => "satin_alma_talebi",
                 _ => typeCode,  // tanimsiz — varsayilani koru
             };
+        }
+
+        // Belge tipine göre doğru parent form kodu ile dinamik izin kontrolü.
+        // Statik [PermissionScope(SalesQuote)] yerine her belge tipi kendi formuna bakılır.
+        {
+            var _pfc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(typeCode).Parent;
+            UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var _pRole);
+            int? _pDept = int.TryParse(User.FindFirstValue("department_id"), out var _pd) && _pd > 0 ? _pd : null;
+            if (!await _permService.CheckAnyAsync(GetUserId(), _pRole, _pDept, _pfc,
+                    new[] { "VIEW", "VIEW_OWN", "CREATE", "EDIT_OWN", "EDIT_ALL" }, ct))
+                return Forbid();
         }
 
         // DocumentType sadece kavramsal belge tipi (Document.DocumentTypeId FK + raporlama).
@@ -722,13 +733,26 @@ public sealed class SalesController : Controller
                 filtered = personnel;
             }
 
-            ViewData["RequesterPersonnels"] = filtered
+            // Mevcut belgede kayıtlı talep eden (onay akışında bakan kişi ≠ oluşturan).
+            // existingDoc.RequesterPersonnelId varsa onu "efektif" seçili ID olarak kullan;
+            // liste içinde yoksa personnel havuzundan ekle — disabled select doğru görünür.
+            var existingRequesterId = existingDoc?.RequesterPersonnelId;
+            var effectivePersonnelId = existingRequesterId ?? currentPersonnel?.Id;
+
+            var optionsList = filtered.ToList();
+            if (existingRequesterId.HasValue && !optionsList.Any(p => p.Id == existingRequesterId.Value))
+            {
+                var savedRequester = personnel.FirstOrDefault(p => p.Id == existingRequesterId.Value);
+                if (savedRequester != null) optionsList.Add(savedRequester);
+            }
+
+            ViewData["RequesterPersonnels"] = optionsList
                 .OrderBy(p => p.FullName)
                 .Select(p => new { p.Id, Name = p.FullName, Dept = p.Department ?? "" })
                 .ToList();
             ViewData["CanCreateOnBehalf"]      = canOnBehalf;
             ViewData["RequesterLocked"]        = !canOnBehalf;
-            ViewData["CurrentUserPersonnelId"] = currentPersonnel?.Id;
+            ViewData["CurrentUserPersonnelId"] = effectivePersonnelId;
         }
 
         return View("DocumentEdit", vm);
@@ -1153,11 +1177,26 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
     public async Task<IActionResult> SaveDocument([FromBody] SaveDocumentRequest? request, CancellationToken ct)
     {
         if (request is null)
             return Json(new { success = false, message = "Gecersiz istek govdesi. Tarih ve zorunlu alanlari kontrol ediniz." });
+
+        // Belge tipine göre doğru parent form kodu ile dinamik izin kontrolü.
+        {
+            var _sDtCode = "satis_teklifi";
+            if (request.DocumentTypeId.HasValue)
+            {
+                var _sDt = await _documentTypeRepo.GetByIdAsync(request.DocumentTypeId.Value, ct);
+                if (_sDt != null) _sDtCode = _sDt.Code;
+            }
+            var _sPfc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(_sDtCode).Parent;
+            UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var _sRole);
+            int? _sDept = int.TryParse(User.FindFirstValue("department_id"), out var _sd) && _sd > 0 ? _sd : null;
+            if (!await _permService.CheckAnyAsync(GetUserId(), _sRole, _sDept, _sPfc,
+                    new[] { "CREATE", "EDIT_OWN", "EDIT_ALL" }, ct))
+                return Json(new { success = false, message = "Bu belge için yetkiniz bulunmuyor." });
+        }
 
         try
         {
@@ -1249,9 +1288,20 @@ public sealed class SalesController : Controller
     }
 
     [HttpPost]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
     public async Task<IActionResult> DeleteDocument([FromBody] DeleteQuoteBody body, CancellationToken ct)
     {
+        // Belge tipini DB'den çözerek doğru parent form kodu kontrolü.
+        var _dDoc = await _quoteService.GetQuoteByIdAsync(body.Id, ct);
+        if (_dDoc != null && _dDoc.DocumentTypeId.HasValue)
+        {
+            var _dDt = await _documentTypeRepo.GetByIdAsync(_dDoc.DocumentTypeId.Value, ct);
+            var _dPfc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(_dDt?.Code).Parent;
+            UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var _dRole);
+            int? _dDept = int.TryParse(User.FindFirstValue("department_id"), out var _dd) && _dd > 0 ? _dd : null;
+            if (!await _permService.CheckAnyAsync(GetUserId(), _dRole, _dDept, _dPfc,
+                    new[] { "DELETE_OWN", "DELETE_ALL" }, ct))
+                return Json(new { success = false, message = "Bu belgeyi silmek için yetkiniz bulunmuyor." });
+        }
         await _quoteService.DeleteQuoteAsync(body.Id, ct);
         return Json(new { success = true });
     }
@@ -1264,11 +1314,21 @@ public sealed class SalesController : Controller
     /// pattern'i ile ayni).
     /// </summary>
     [HttpPost]
-    [CalibraHub.Web.Authorization.PermissionScope(FormCodes.SalesQuote)]
     public async Task<IActionResult> DeleteDocumentJson(int id, CancellationToken ct)
     {
         try
         {
+            var _djDoc = await _quoteService.GetQuoteByIdAsync(id, ct);
+            if (_djDoc != null && _djDoc.DocumentTypeId.HasValue)
+            {
+                var _djDt = await _documentTypeRepo.GetByIdAsync(_djDoc.DocumentTypeId.Value, ct);
+                var _djPfc = CalibraHub.Web.Models.Sales.DocumentTypeFormMap.Resolve(_djDt?.Code).Parent;
+                UserAuthorizationCatalog.TryParseRole(User.FindFirstValue(ClaimTypes.Role) ?? "", out var _djRole);
+                int? _djDept = int.TryParse(User.FindFirstValue("department_id"), out var _djd) && _djd > 0 ? _djd : null;
+                if (!await _permService.CheckAnyAsync(GetUserId(), _djRole, _djDept, _djPfc,
+                        new[] { "DELETE_OWN", "DELETE_ALL" }, ct))
+                    return Json(new { success = false, message = "Bu belgeyi silmek için yetkiniz bulunmuyor." });
+            }
             await _quoteService.DeleteQuoteAsync(id, ct);
             return Json(new { success = true });
         }
@@ -1520,10 +1580,12 @@ public sealed class SalesController : Controller
 
             // Carinin grubunu cek — kural eslemesinde "su gruba ait cariler" siniri icin
             int? contactGroupId = null;
+            byte? contactAccountType = null;
             if (quote.ContactId is int qcid && qcid > 0)
             {
                 var contact = await _financeService.GetContactByIdAsync(qcid, ct);
                 contactGroupId = contact?.ContactGroupId;
+                contactAccountType = contact?.AccountType;
             }
 
             var ctx = new DesignSelectionContext
@@ -1534,6 +1596,7 @@ public sealed class SalesController : Controller
                 UserId         = userId <= 0 ? null : (int?)userId,
                 BranchId       = null,    // ileride quote.BranchId
                 WarehouseId    = null,
+                AccountType    = contactAccountType,
             };
 
             _logger.LogInformation(

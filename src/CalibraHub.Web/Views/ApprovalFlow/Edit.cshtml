@@ -9,12 +9,13 @@
     var flowId = Model?.Id ?? 0;
     var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     var initData = JsonSerializer.Serialize(new {
-        id          = flowId,
-        name        = Model?.Name ?? "",
-        description = Model?.Description ?? "",
-        documentKind= Model?.DocumentKind ?? "Document",
-        priority    = Model?.Priority ?? 0,
-        isActive    = Model?.IsActive ?? true,
+        id               = flowId,
+        name             = Model?.Name ?? "",
+        description      = Model?.Description ?? "",
+        documentKind     = Model?.DocumentKind ?? "Document",
+        priority         = Model?.Priority ?? 0,
+        isActive         = Model?.IsActive ?? true,
+        extraColumnsView = Model?.ExtraColumnsView ?? "",
         rules       = (Model?.Rules ?? Array.Empty<ApprovalFlowRuleDto>()).Select(r => new {
             id        = r.Id,
             ruleType  = r.RuleType.ToString(),
@@ -36,6 +37,8 @@
             typeCode     = v.TypeCode,
             defaultValue = v.DefaultValue,
             description  = v.Description,
+            valueSource  = v.ValueSource,
+            sqlQuery     = v.SqlQuery,
             sortOrder    = v.SortOrder,
         }),
     }, jsonOpts);
@@ -224,6 +227,9 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
             <span class="afe-switch__track"></span>
             <span>Aktif</span>
         </label>
+        <input type="text" id="fExtraView" class="afe-hb-input" style="width:220px;font-size:.78rem;"
+               placeholder="Ek sütun view adı (opsiyonel)"
+               title="Onayda Bekleyenler listesinde ek sütun göstermek için DB view adı (ör: cbv_SatinAlmaTalepCols)" />
         <div style="flex:1"></div>
         <button id="btnSave" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
@@ -284,10 +290,11 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
     }
 
     // ── DOM bağlantıları ──────────────────────────────────────────────────────
-    var fName     = document.getElementById('fName');
-    var fKind     = document.getElementById('fKind');
-    var fPriority = document.getElementById('fPriority');
-    var fActive   = document.getElementById('fActive');
+    var fName      = document.getElementById('fName');
+    var fKind      = document.getElementById('fKind');
+    var fPriority  = document.getElementById('fPriority');
+    var fActive    = document.getElementById('fActive');
+    var fExtraView = document.getElementById('fExtraView');
 
     // ── Center confirm modal helper (Promise tabanlı) ──────────────────────────
     function afeConfirm(message, opts) {
@@ -356,8 +363,9 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
         });
     }
 
-    fName.value     = INIT.name || '';
-    var initKind    = INIT.documentKind || '';
+    fName.value      = INIT.name || '';
+    fExtraView.value = INIT.extraColumnsView || '';
+    var initKind     = INIT.documentKind || '';
     // Geriye uyumluluk: "All" enum değeri yeni sistemde "Document" (wildcard) ile eş anlamlı.
     if (initKind === 'All') initKind = 'Document';
 
@@ -456,9 +464,9 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
             return;
         }
 
-        // SLA + 3. kol (timeout) tutarlılık kontrolü:
-        //   - Step'in slaAction='escalate' ise timeout edge zorunlu
-        //   - Timeout edge varsa slaEnabled + slaHours > 0 zorunlu
+        // 3. kol (Gecikme/timeout) tutarlılık kontrolü:
+        //   - Timeout edge varsa slaHours > 0 zorunlu (SLA toggle kaldırıldı —
+        //     edge'in varlığı SLA'nın aktif olması demek)
         for (var si = 0; si < stepNodes.length; si++) {
             var sn = stepNodes[si];
             var nd = null;
@@ -467,18 +475,10 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
             var hasTimeoutEdge = dpEdges.some(function (e) {
                 return e.sourceClientId === sn.clientId && e.edgeKind === 'timeout';
             });
-            if (nd.slaAction === 'escalate' && !hasTimeoutEdge) {
-                showToast('"' + (sn.stepName || 'Adım') + '" eskale için 3. kol (sarı "Gecikme" handle) bağlanmamış.', false);
-                return;
-            }
             if (hasTimeoutEdge) {
-                if (nd.slaEnabled !== true) {
-                    showToast('"' + (sn.stepName || 'Adım') + '" için 3. kol bağlı ama SLA kapalı — SLA\'yı aktif edin.', false);
-                    return;
-                }
                 var sh = parseInt(nd.slaHours, 10);
                 if (!sh || sh <= 0) {
-                    showToast('"' + (sn.stepName || 'Adım') + '" için süre değeri girilmemiş.', false);
+                    showToast('"' + (sn.stepName || 'Adım') + '" Gecikme kolu bağlı ama süre girilmemiş — edge\'i seçip Süre alanına değer girin.', false);
                     return;
                 }
             }
@@ -522,16 +522,19 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
                 edgeKind:           e.edgeKind || 'default',
                 condition:          e.condition || null,
                 sortOrder:          (typeof e.sortOrder === 'number' ? e.sortOrder : i),
+                sourceHandle:       e.sourceHandle || null,
+                targetHandle:       e.targetHandle || null,
             };
         }).filter(Boolean);
 
         var payload = {
-            id:           INIT.id,
-            name:         name,
-            description:  INIT.description || null,
-            documentKind: fKind.value,
-            priority:     parseInt(fPriority.value) || 0,
-            isActive:     fActive.checked,
+            id:               INIT.id,
+            name:             name,
+            description:      INIT.description || null,
+            documentKind:     fKind.value,
+            priority:         parseInt(fPriority.value) || 0,
+            isActive:         fActive.checked,
+            extraColumnsView: fExtraView.value.trim() || null,
             rules: dpRules.map(function(r) {
                 return {
                     id: r.id || 0,
@@ -549,6 +552,8 @@ body.app-theme-dark .afe-toast--err { background: rgba(239,68,68,.2);  color: #f
                     typeCode:     v.typeCode || 'int',
                     defaultValue: v.defaultValue || null,
                     description:  v.description || null,
+                    valueSource:  v.valueSource || 'manual',
+                    sqlQuery:     v.sqlQuery || null,
                     sortOrder:    (typeof v.sortOrder === 'number' ? v.sortOrder : vi),
                 };
             }).filter(function (v) { return v.name; }),

@@ -1,0 +1,51 @@
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@{
+    ViewData["Title"] = "Rapor Tasarımları";
+    var boardConfigJson = (string?)ViewData["BoardConfigJson"] ?? "{}";
+}
+
+<div id="designerBoardRoot" style="height:100%;overflow-y:auto;"></div>
+
+@section Scripts {
+<script>
+(function() {
+    var BOARD_CONFIG = @Html.Raw(boardConfigJson);
+    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var el = document.getElementById('designerBoardRoot');
+
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountSmartBoard) {
+            el.innerHTML = '<div style="padding:2rem;color:#f87171;">SmartBoard yüklenemedi</div>';
+            return;
+        }
+        window.CalibraHub.mountSmartBoard(el, BOARD_CONFIG);
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-rd-bundle]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-rd-bundle', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        if (document.querySelector('script[data-rd-bundle]')) { cb(); return; }
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL;
+        s.setAttribute('data-rd-bundle', '1');
+        s.onload  = function() { setTimeout(cb, 0); };
+        s.onerror = function() { el.innerHTML = '<div style="padding:2rem;color:#f87171;">Bundle yüklenemedi</div>'; };
+        document.head.appendChild(s);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountSmartBoard) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
+})();
+</script>
+}

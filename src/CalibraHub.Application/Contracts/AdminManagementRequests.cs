@@ -66,7 +66,7 @@ public sealed record TestIntegratorConnectionRequest(
 public sealed record IntegratorConnectionTestResult(bool IsSuccess, string Message);
 
 public sealed record SaveSmtpProfileRequest(
-    Guid? Id,
+    int? Id,
     int CompanyId,
     string Name,
     string FromEmail,
@@ -129,8 +129,7 @@ public sealed record CreateUserRequest(
     int? SupervisorUserId,
     UserRole Role,
     IReadOnlyCollection<UserPermission> Permissions,
-    string? Password = null,
-    GrafanaRole? GrafanaRole = null);
+    string? Password = null);
 
 public sealed record UpdateUserRequest(
     int Id,
@@ -138,12 +137,6 @@ public sealed record UpdateUserRequest(
     string FullName,
     string Email,
     string? Password = null,
-    // GrafanaRole degeri:
-    //   • SetGrafanaRole = false → mevcut rol korunur (geriye uyumlu — SetupController gibi caller'lar)
-    //   • SetGrafanaRole = true && GrafanaRole = null → kullanici Grafana'dan cikarilir
-    //   • SetGrafanaRole = true && GrafanaRole != null → kullanici Grafana'ya eklenir/rolu guncellenir
-    bool SetGrafanaRole = false,
-    GrafanaRole? GrafanaRole = null,
     // Role / Permissions:
     //   • SetRole = false → mevcut rol/izinler korunur (geriye uyumlu)
     //   • SetRole = true && Role != null → rol guncellenir; izinler de UserAuthorizationCatalog'tan turetilip set edilir

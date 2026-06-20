@@ -99,6 +99,15 @@
 
         <div class="ux-row2">
           <div class="ux-field">
+            <label for="pe-birthdate">Doğum Tarihi</label>
+            <input id="pe-birthdate" type="date"
+                   value="@(Model?.BirthDate?.ToString("yyyy-MM-dd") ?? "")" />
+          </div>
+          <div class="ux-field"></div>
+        </div>
+
+        <div class="ux-row2">
+          <div class="ux-field">
             <label for="pe-pin">PIN Kodu</label>
             <input id="pe-pin" type="text" maxlength="20"
                    value="@(Model?.PinCode ?? "")" placeholder="Vardiya/terminal girişi" />
@@ -300,7 +309,8 @@
                 userId:               (function () { var v = document.getElementById('pe-user').value; return v ? parseInt(v, 10) : null; })(),
                 phone:                document.getElementById('pe-phone').value.trim() || null,
                 email:                document.getElementById('pe-email').value.trim() || null,
-                notes:                document.getElementById('pe-notes').value.trim() || null
+                notes:                document.getElementById('pe-notes').value.trim() || null,
+                birthDate:            document.getElementById('pe-birthdate').value || null
             };
             saveBtn.disabled = true;
             setErr('');

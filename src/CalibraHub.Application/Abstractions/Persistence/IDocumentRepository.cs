@@ -28,6 +28,9 @@ public interface IDocumentRepository
 
     Task SaveLinesAsync(int documentId, IReadOnlyCollection<DocumentLine> lines, CancellationToken ct);
     Task DeleteAsync(int id, CancellationToken ct);
+
+    /// <summary>Sadece [status] kolonunu günceller — onay başlatıldığında, onaylandığında vb.</summary>
+    Task UpdateStatusAsync(int id, string status, CancellationToken ct);
     Task<string> GetNextDocumentNumberAsync(CancellationToken ct);
     Task<IReadOnlyCollection<DocumentLineDetail>> GetLineDetailsAsync(int documentLineId, CancellationToken ct);
     Task SaveLineDetailsAsync(int documentLineId, IReadOnlyCollection<DocumentLineDetail> details, CancellationToken ct);

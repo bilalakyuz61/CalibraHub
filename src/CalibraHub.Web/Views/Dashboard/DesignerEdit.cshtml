@@ -1,0 +1,59 @@
+@inject Microsoft.AspNetCore.Mvc.ViewFeatures.IFileVersionProvider FileVersionProvider
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"]     = "Rapor Tasarımcısı";
+    ViewData["BodyClass"] = "page-report-designer";
+    var csrfToken = Antiforgery.GetAndStoreTokens(Context).RequestToken ?? "";
+}
+
+<meta name="csrf-token" content="@csrfToken" />
+
+<div id="reportDesignerRoot" style="position:fixed;inset:0;z-index:1;"></div>
+
+@section Scripts {
+<script>
+(function() {
+    var BUNDLE_URL = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.js")';
+    var CSS_URL    = '@FileVersionProvider.AddFileVersionToPath(Context.Request.PathBase, "/react/calibrahub-widgets.css")';
+    var el = document.getElementById('reportDesignerRoot');
+
+    function doMount() {
+        if (!window.CalibraHub || !window.CalibraHub.mountReportDesigner) {
+            el.innerHTML = '<div style="padding:2rem;color:#f87171;">mountReportDesigner yüklenemedi</div>';
+            return;
+        }
+        window.CalibraHub.mountReportDesigner(el, {
+            sourcesUrl: '/Dashboard/DesignerSources',
+            saveUrl:    '/Dashboard/SaveDesigned',
+            listUrl:    '/Dashboard/Designer',
+            loadId:     @(ViewData["LoadId"] != null ? ViewData["LoadId"].ToString() : "null"),
+        });
+    }
+
+    function loadCss() {
+        if (document.querySelector('link[data-rd-bundle]')) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet'; link.href = CSS_URL;
+        link.setAttribute('data-rd-bundle', '1');
+        document.head.appendChild(link);
+    }
+
+    function loadScript(cb) {
+        if (document.querySelector('script[data-rd-bundle]')) { cb(); return; }
+        var s = document.createElement('script');
+        s.src = BUNDLE_URL;
+        s.setAttribute('data-rd-bundle', '1');
+        s.onload  = function() { setTimeout(cb, 0); };
+        s.onerror = function() { el.innerHTML = '<div style="padding:2rem;color:#f87171;">Bundle yüklenemedi</div>'; };
+        document.head.appendChild(s);
+    }
+
+    loadCss();
+    if (window.CalibraHub && window.CalibraHub.mountReportDesigner) {
+        doMount();
+    } else {
+        loadScript(doMount);
+    }
+})();
+</script>
+}

@@ -145,7 +145,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
     private string SelectRuleFields() => $@"
         r.[Id], r.[DocType], r.[LayoutId], l.[Name] AS LayoutName,
         r.[CustomerId], r.[UserId], r.[BranchId], r.[WarehouseId],
-        r.[IsActive], r.[UpdatedAt], r.[ContactGroupId]";
+        r.[IsActive], r.[UpdatedAt], r.[ContactGroupId], r.[AccountType]";
 
     public async Task<IReadOnlyCollection<DocLayoutRuleDto>> ListAllAsync(CancellationToken ct)
     {
@@ -200,6 +200,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
                     [UserId]         = @UserId,
                     [BranchId]       = @BranchId,
                     [WarehouseId]    = @WarehouseId,
+                    [AccountType]    = @AccountType,
                     [IsActive]       = @IsActive,
                     [UpdatedAt]      = SYSUTCDATETIME()
                 WHERE [Id] = @Id;
@@ -210,20 +211,21 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
         {
             cmd.CommandText = $@"
                 INSERT INTO {_ruleTable}
-                    ([DocType],[LayoutId],[CustomerId],[ContactGroupId],[UserId],[BranchId],[WarehouseId],[IsActive])
+                    ([DocType],[LayoutId],[CustomerId],[ContactGroupId],[UserId],[BranchId],[WarehouseId],[AccountType],[IsActive])
                 VALUES
-                    (@DocType,@LayoutId,@CustomerId,@ContactGroupId,@UserId,@BranchId,@WarehouseId,@IsActive);
+                    (@DocType,@LayoutId,@CustomerId,@ContactGroupId,@UserId,@BranchId,@WarehouseId,@AccountType,@IsActive);
                 SELECT CAST(SCOPE_IDENTITY() AS INT);";
         }
 
         cmd.Parameters.Add(new SqlParameter("@DocType",  SqlDbType.NVarChar, 60) { Value = req.DocType });
         cmd.Parameters.Add(new SqlParameter("@LayoutId", SqlDbType.Int)         { Value = req.LayoutId });
-        cmd.Parameters.Add(new SqlParameter("@CustomerId",     SqlDbType.Int)              { Value = (object?)req.CustomerId     ?? DBNull.Value });
-        cmd.Parameters.Add(new SqlParameter("@ContactGroupId", SqlDbType.Int)              { Value = (object?)req.ContactGroupId ?? DBNull.Value });
-        cmd.Parameters.Add(new SqlParameter("@UserId",         SqlDbType.Int)              { Value = (object?)req.UserId         ?? DBNull.Value });
-        cmd.Parameters.Add(new SqlParameter("@BranchId",       SqlDbType.Int)              { Value = (object?)req.BranchId       ?? DBNull.Value });
-        cmd.Parameters.Add(new SqlParameter("@WarehouseId",    SqlDbType.Int)              { Value = (object?)req.WarehouseId    ?? DBNull.Value });
-        cmd.Parameters.Add(new SqlParameter("@IsActive",       SqlDbType.Bit)              { Value = req.IsActive });
+        cmd.Parameters.Add(new SqlParameter("@CustomerId",     SqlDbType.Int)     { Value = (object?)req.CustomerId     ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@ContactGroupId", SqlDbType.Int)     { Value = (object?)req.ContactGroupId ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@UserId",         SqlDbType.Int)     { Value = (object?)req.UserId         ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@BranchId",       SqlDbType.Int)     { Value = (object?)req.BranchId       ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@WarehouseId",    SqlDbType.Int)     { Value = (object?)req.WarehouseId    ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@AccountType",    SqlDbType.TinyInt) { Value = (object?)req.AccountType    ?? DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@IsActive",       SqlDbType.Bit)     { Value = req.IsActive });
 
         try
         {
@@ -256,7 +258,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
         // Sorgu: belirtilen DocType için tüm aktif kuralların kriter alanları
         // ile UpdatedAt'ı. Küçük dataset; tamamen RAM'e alınıp eşleştirme C#'ta.
         var sql = $@"
-            SELECT [Id], [LayoutId], [CustomerId], [UserId], [BranchId], [WarehouseId], [UpdatedAt], [ContactGroupId]
+            SELECT [Id], [LayoutId], [CustomerId], [UserId], [BranchId], [WarehouseId], [UpdatedAt], [ContactGroupId], [AccountType]
             FROM {_ruleTable} WITH (READUNCOMMITTED)
             WHERE [IsActive] = 1 AND [DocType] = @DocType;";
 
@@ -277,18 +279,20 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
                 BranchId:       reader.IsDBNull(4) ? null : reader.GetInt32(4),
                 WarehouseId:    reader.IsDBNull(5) ? null : reader.GetInt32(5),
                 UpdatedAt:      reader.GetDateTime(6),
-                ContactGroupId: reader.IsDBNull(7) ? null : reader.GetInt32(7)));
+                ContactGroupId: reader.IsDBNull(7) ? null : reader.GetInt32(7),
+                AccountType:    reader.IsDBNull(8) ? null : reader.GetByte(8)));
         }
         return list;
     }
 
     private DocLayoutRuleDto MapRule(SqlDataReader r)
     {
-        var customerId     = r.IsDBNull(4) ? (int?)null  : r.GetInt32(4);
-        var userId         = r.IsDBNull(5) ? (int?)null  : r.GetInt32(5);
-        var branchId       = r.IsDBNull(6) ? (int?)null  : r.GetInt32(6);
-        var warehouseId    = r.IsDBNull(7) ? (int?)null  : r.GetInt32(7);
-        var contactGroupId = r.IsDBNull(10) ? (int?)null : r.GetInt32(10);
+        var customerId     = r.IsDBNull(4)  ? (int?)null   : r.GetInt32(4);
+        var userId         = r.IsDBNull(5)  ? (int?)null   : r.GetInt32(5);
+        var branchId       = r.IsDBNull(6)  ? (int?)null   : r.GetInt32(6);
+        var warehouseId    = r.IsDBNull(7)  ? (int?)null   : r.GetInt32(7);
+        var contactGroupId = r.IsDBNull(10) ? (int?)null   : r.GetInt32(10);
+        var accountType    = r.IsDBNull(11) ? (byte?)null  : r.GetByte(11);
 
         // Weight'i kriter listesinden dinamik hesapla
         int weight = 0;
@@ -301,6 +305,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
                 "UserId"         => userId,
                 "BranchId"       => branchId,
                 "WarehouseId"    => warehouseId,
+                "AccountType"    => accountType,
                 _                => null,
             };
             if (val != null) weight += c.Weight;
@@ -319,6 +324,7 @@ public sealed class SqlDocLayoutRuleRepository : IDocLayoutRuleRepository
             WarehouseId:    warehouseId,
             IsActive:       r.GetBoolean(8),
             Weight:         weight,
-            UpdatedAt:      r.GetDateTime(9));
+            UpdatedAt:      r.GetDateTime(9),
+            AccountType:    accountType);
     }
 }

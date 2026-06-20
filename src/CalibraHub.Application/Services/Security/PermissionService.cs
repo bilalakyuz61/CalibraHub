@@ -2,6 +2,7 @@ using CalibraHub.Application.Abstractions.Persistence;
 using CalibraHub.Application.Abstractions.Services;
 using CalibraHub.Application.Constants;
 using CalibraHub.Application.Contracts;
+using CalibraHub.Domain.Entities;
 using CalibraHub.Domain.Enums;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -105,14 +106,17 @@ public sealed class PermissionService : IPermissionService
     /// </summary>
     private static int ActionSortPriority(string actionCode) => actionCode switch
     {
-        "VIEW_OWN"   => 0,
-        "VIEW"       => 5,
-        "CREATE"     => 10,
-        "EDIT_OWN"   => 20,
-        "EDIT_ALL"   => 30,
-        "DELETE_OWN" => 40,
-        "DELETE_ALL" => 50,
-        _            => 100,
+        "VIEW_OWN"    => 0,
+        "VIEW_DEPT"   => 3,
+        "VIEW"        => 5,
+        "CREATE"      => 10,
+        "EDIT_OWN"    => 20,
+        "EDIT_DEPT"   => 25,
+        "EDIT_ALL"    => 30,
+        "DELETE_OWN"  => 40,
+        "DELETE_DEPT" => 45,
+        "DELETE_ALL"  => 50,
+        _             => 100,
     };
 
     public async Task<bool> CheckAsync(
@@ -184,6 +188,71 @@ public sealed class PermissionService : IPermissionService
                 return true;
         }
         return false;
+    }
+
+    public async Task<bool> CheckAnyForFormAsync(
+        int userId, UserRole role, int? departmentId, string formCode, CancellationToken ct)
+    {
+        if (role == UserRole.SystemAdmin) return true;
+        var defs = await GetDefsCachedAsync(ct);
+        var actionCodes = defs
+            .Where(d => d.IsActive && string.Equals(d.FormCode, formCode, StringComparison.OrdinalIgnoreCase))
+            .Select(d => d.ActionCode)
+            .ToList();
+        if (actionCodes.Count == 0) return false;
+        return await CheckAnyAsync(userId, role, departmentId, formCode, actionCodes, ct);
+    }
+
+    // ── Scope-based helpers ───────────────────────────────────────────────
+
+    // Her operasyon tipi için Genel / Departman / Özel action kodları
+    private static (string All, string Dept, string Own)? OperationActionTriplet(string operation) =>
+        operation.ToUpperInvariant() switch
+        {
+            "VIEW"   => (PermissionDef.StandardActions.View,      PermissionDef.StandardActions.ViewDept,   PermissionDef.StandardActions.ViewOwn),
+            "EDIT"   => (PermissionDef.StandardActions.EditAll,   PermissionDef.StandardActions.EditDept,   PermissionDef.StandardActions.EditOwn),
+            "DELETE" => (PermissionDef.StandardActions.DeleteAll, PermissionDef.StandardActions.DeleteDept, PermissionDef.StandardActions.DeleteOwn),
+            _        => null,
+        };
+
+    public async Task<AccessScope> GetAccessScopeAsync(
+        int userId, UserRole role, int? departmentId,
+        string formCode, string operation, CancellationToken ct)
+    {
+        if (role == UserRole.SystemAdmin) return AccessScope.All;
+
+        // DepartmentManager → SetupDefinitions ve Scheduler dışında her şeye All
+        if (role == UserRole.DepartmentManager)
+        {
+            var blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { FormCodes.SetupDefinitions, FormCodes.Scheduler };
+            return blocked.Contains(formCode) ? AccessScope.None : AccessScope.All;
+        }
+
+        var triplet = OperationActionTriplet(operation);
+        if (triplet is null) return AccessScope.None;
+        var (actionAll, actionDept, actionOwn) = triplet.Value;
+
+        if (await CheckAsync(userId, role, departmentId, formCode, actionAll,  ct)) return AccessScope.All;
+        if (await CheckAsync(userId, role, departmentId, formCode, actionDept, ct)) return AccessScope.Department;
+        if (await CheckAsync(userId, role, departmentId, formCode, actionOwn,  ct)) return AccessScope.Own;
+        return AccessScope.None;
+    }
+
+    public async Task<bool> CheckRecordAccessAsync(
+        int userId, UserRole role, int? userDeptId,
+        string formCode, string operation,
+        int recordCreatorId, int? recordCreatorDeptId,
+        CancellationToken ct)
+    {
+        var scope = await GetAccessScopeAsync(userId, role, userDeptId, formCode, operation, ct);
+        return scope switch
+        {
+            AccessScope.All        => true,
+            AccessScope.Department => userDeptId.HasValue && userDeptId == recordCreatorDeptId,
+            AccessScope.Own        => userId == recordCreatorId,
+            _                      => false,
+        };
     }
 
     public async Task<IReadOnlyList<EffectivePermissionDto>> GetEffectivePermissionsAsync(

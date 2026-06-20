@@ -24,13 +24,6 @@ public sealed class UserProfile : EntityInt
     public string GridPreferencesJson { get; private set; } = string.Empty;
     public bool IsActive { get; private set; } = true;
 
-    /// <summary>
-    /// Grafana per-org role. NULL = kullanici Grafana'ya eklenmez.
-    /// Set edilince UserManagementService Save sirasinda
-    /// IGrafanaProvisioningService.EnsureUserOrganizationMembershipAsync cagrir.
-    /// </summary>
-    public Enums.GrafanaRole? GrafanaRole { get; set; }
-
     // Not: Üretim operatörü PIN/Kart bilgileri Personnel tablosunda tutuluyor (Faz 3a revize).
     // Personnel.UserId üzerinden bu kullanıcıyla bağlanabilir; sistem login'i olmadan da
     // shop-floor'da çalışan operatörler olabilir.

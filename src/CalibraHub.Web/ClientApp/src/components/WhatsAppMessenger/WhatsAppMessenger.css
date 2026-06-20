@@ -130,9 +130,9 @@ body.app-theme-dark .wa-msg-toast__close:hover { background: rgba(255,255,255,.0
 
 .wa-msg-conv {
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 11px 14px;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 10px 11px 14px;
     width: 100%;
     background: transparent;
     border: none;
@@ -148,72 +148,27 @@ body.app-theme-dark .wa-msg-toast__close:hover { background: rgba(255,255,255,.0
 .wa-msg-conv.is-active {
     background: rgba(37,211,102,.10);
 }
-/* Sohbet sil butonu — sadece hover'da gorunur */
-.wa-msg-conv__del {
-    position: absolute;
-    /* Saati kapatmamasi icin alt-orta hizada — silmeyi tetikleyince kalici gorunur. */
-    bottom: 10px; right: 8px;
-    width: 22px; height: 22px;
+/* Sohbet kebab (⋮) butonu — hover'da görünür, akış içinde sağ sütunda */
+.wa-msg-conv__menu-btn {
+    flex-shrink: 0;
+    align-self: center;
+    width: 24px; height: 24px;
     border-radius: 50%; border: none;
-    background: rgba(239,68,68,.15);
-    color: #dc2626;
-    font-size: 0.78rem; font-weight: 700;
+    background: var(--app-muted-surface, #f1f5f9);
+    color: var(--app-text-muted, #64748b);
+    font-size: 1rem; font-weight: 700;
     cursor: pointer;
     opacity: 0; transition: opacity .12s, background .12s, color .12s;
     display: inline-flex; align-items: center; justify-content: center;
     line-height: 1;
 }
-.wa-msg-conv:hover .wa-msg-conv__del { opacity: 1; }
-.wa-msg-conv__del:hover { background: #dc2626; color: #fff; }
-/* Geri sayim aktifken buton kalici, dolu kirmizi ve hafif puls — kullanici iptal icin tekrar tikladigini bilsin. */
-.wa-msg-conv__del.is-pending {
-    opacity: 1;
-    background: #dc2626;
-    color: #fff;
-    box-shadow: 0 0 0 3px rgba(239,68,68,.25);
-    animation: waConvDelPulse 1.2s ease-in-out infinite;
+.wa-msg-conv:hover .wa-msg-conv__menu-btn { opacity: 1; }
+.wa-msg-conv__menu-btn:hover { background: var(--app-border, #e2e8f0); color: var(--app-text, #1e293b); }
+body.app-theme-dark .wa-msg-conv__menu-btn {
+    background: rgba(255,255,255,.08); color: #94a3b8;
 }
-@keyframes waConvDelPulse {
-    0%, 100% { box-shadow: 0 0 0 3px rgba(239,68,68,.25); }
-    50%      { box-shadow: 0 0 0 6px rgba(239,68,68,.10); }
-}
-body.app-theme-dark .wa-msg-conv__del {
-    background: rgba(239,68,68,.18); color: #fca5a5;
-}
-body.app-theme-dark .wa-msg-conv__del:hover { background: #dc2626; color: #fff; }
-body.app-theme-dark .wa-msg-conv__del.is-pending { background: #dc2626; color: #fff; }
+body.app-theme-dark .wa-msg-conv__menu-btn:hover { background: rgba(255,255,255,.14); color: #e2e8f0; }
 
-/* Geri sayim cubugu — sohbet kartinin tam altinda, kirmizi, 100%→0% kuculur. */
-.wa-msg-conv__deletebar {
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    height: 3px;
-    background: rgba(239,68,68,.15);
-    overflow: hidden;
-    pointer-events: none;
-    z-index: 5;
-}
-.wa-msg-conv__deletebar-fill {
-    height: 100%;
-    width: 100%;
-    background: #ef4444;
-    box-shadow: 0 0 8px rgba(239,68,68,.7);
-    animation-name: waConvDeleteCountdown;
-    animation-timing-function: linear;
-    animation-fill-mode: forwards;
-    transform-origin: right center;
-}
-@keyframes waConvDeleteCountdown {
-    from { width: 100%; }
-    to   { width: 0%; }
-}
-/* Pending durumda kart hafifce kirmizimsi vurgu */
-.wa-msg-conv.is-pending-delete {
-    background: rgba(239,68,68,.06);
-}
-body.app-theme-dark .wa-msg-conv.is-pending-delete {
-    background: rgba(239,68,68,.10);
-}
 .wa-msg-conv__avatar {
     width: 42px; height: 42px;
     border-radius: 50%;
@@ -227,6 +182,10 @@ body.app-theme-dark .wa-msg-conv.is-pending-delete {
 .wa-msg-conv__body {
     flex: 1;
     min-width: 0;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 .wa-msg-conv__row {
     display: flex;
@@ -385,8 +344,6 @@ body.app-theme-dark .wa-msg-conv.is-pending-delete {
 }
 
 .wa-msg-bubble {
-    align-self: flex-start;
-    max-width: 65%;
     background: #fff;
     border-radius: 8px;
     padding: 7px 10px 4px;
@@ -396,7 +353,6 @@ body.app-theme-dark .wa-msg-conv.is-pending-delete {
     color: #303030;
 }
 .wa-msg-bubble.is-me {
-    align-self: flex-end;
     background: #d9fdd3;
     color: #303030;
 }
@@ -764,42 +720,101 @@ body.app-theme-dark .wa-msg-composer__input:focus { border-color: #25d366; backg
     position: relative;
     display: inline-flex;
     flex-direction: column;
-    max-width: 100%;
+    max-width: 65%;
+    align-self: flex-start;
 }
-/* Menüyü tıklayınca göster (is-active) */
-.wa-msg-menu.is-active { opacity: 1; pointer-events: auto; }
-
-/* ── Faz 3: Hover menu (reply/react/copy/delete) ─────────────────── */
-.wa-msg-menu {
+.wa-msg-bubble-wrap.is-me {
+    align-self: flex-end;
+}
+/* ── Mesaj chevron tetikleyici ───────────────────────────────────── */
+.wa-msg-chevron {
     position: absolute;
-    top: -4px;
-    right: -4px;
+    top: 4px;
+    right: 4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(0,0,0,.15);
+    border: none;
+    cursor: pointer;
     display: flex;
-    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    color: rgba(0,0,0,.55);
+    opacity: 0;
+    transition: opacity .12s, background .12s;
+    z-index: 5;
+    padding: 0;
+}
+.wa-msg-bubble:hover .wa-msg-chevron,
+.wa-msg-chevron.is-open { opacity: 1; }
+.wa-msg-chevron:hover { background: rgba(0,0,0,.25); }
+.wa-msg-bubble.is-me .wa-msg-chevron { color: rgba(0,0,0,.45); background: rgba(0,0,0,.1); }
+
+/* ── Mesaj dropdown menüsü ───────────────────────────────────────── */
+.wa-msg-dropdown {
+    position: absolute;
+    top: 28px;
+    left: 0;
     background: var(--app-surface, #fff);
     border: 1px solid var(--app-border, #e2e8f0);
-    border-radius: 20px;
-    padding: 2px 6px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity .12s;
-    box-shadow: 0 2px 8px rgba(0,0,0,.12);
-    z-index: 10;
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.15);
+    min-width: 192px;
+    z-index: 50;
+    overflow: hidden;
+    animation: waDropIn .1s ease-out;
 }
-.wa-msg-menu__btn {
+.wa-msg-dropdown.is-me { left: auto; right: 0; }
+@keyframes waDropIn {
+    from { opacity: 0; transform: scale(.96) translateY(-4px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+/* Emoji satırı */
+.wa-msg-dropdown__emojis {
+    display: flex;
+    align-items: center;
+    padding: 8px 6px 6px;
+    gap: 0;
+}
+.wa-msg-dropdown__emoji {
     background: none;
     border: none;
     cursor: pointer;
-    padding: 5px 6px;
+    font-size: 1.35rem;
+    padding: 4px 7px;
     border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--app-text-muted, #64748b);
-    transition: background .1s, color .1s;
+    line-height: 1;
+    transition: background .1s, transform .12s;
 }
-.wa-msg-menu__btn:hover { background: rgba(99,102,241,.12); color: var(--theme-accent, #6366f1); }
-.wa-msg-menu__btn--danger:hover { background: rgba(239,68,68,.12); color: #ef4444; }
+.wa-msg-dropdown__emoji:hover { background: rgba(0,0,0,.07); transform: scale(1.25); }
+/* Ayırıcı çizgi */
+.wa-msg-dropdown__sep {
+    height: 1px;
+    background: var(--app-border, #e2e8f0);
+    margin: 2px 0;
+}
+/* Menü satırı */
+.wa-msg-dropdown__item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 10px 16px;
+    font-size: 0.875rem;
+    color: var(--app-text, #1e293b);
+    text-align: left;
+    transition: background .1s;
+}
+.wa-msg-dropdown__item:hover { background: rgba(0,0,0,.04); }
+.wa-msg-dropdown__item svg { flex-shrink: 0; opacity: .65; }
+.wa-msg-dropdown__item.is-starred svg { fill: #f59e0b; stroke: #f59e0b; opacity: 1; }
+.wa-msg-dropdown__item--danger { color: #ef4444; }
+.wa-msg-dropdown__item--danger svg { opacity: .8; }
+.wa-msg-dropdown__item--danger:hover { background: rgba(239,68,68,.07); }
 
 /* ── Faz 3: Quoted (yanıtlanan) mesaj ───────────────────────────── */
 .wa-quoted {
@@ -843,38 +858,6 @@ body.app-theme-dark .wa-msg-composer__input:focus { border-color: #25d366; backg
 }
 .is-me + .wa-reaction-badge { align-self: flex-end; margin-right: 8px; margin-left: 0; }
 
-/* ── Faz 3: Reaksiyon seçici ─────────────────────────────────────── */
-.wa-reaction-picker {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 0;
-    background: var(--app-surface, #fff);
-    border: 1px solid var(--app-border, #e2e8f0);
-    border-radius: 30px;
-    padding: 4px 8px;
-    display: flex;
-    gap: 4px;
-    box-shadow: 0 4px 20px rgba(0,0,0,.15);
-    z-index: 20;
-    animation: waPickerIn .12s ease-out;
-}
-.is-me .wa-reaction-picker { left: auto; right: 0; }
-@keyframes waPickerIn {
-    from { opacity: 0; transform: scale(.85) translateY(6px); }
-    to   { opacity: 1; transform: scale(1) translateY(0); }
-}
-.wa-reaction-picker__btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1.2rem;
-    padding: 2px 4px;
-    border-radius: 50%;
-    transition: transform .1s;
-    line-height: 1;
-}
-.wa-reaction-picker__btn:hover { transform: scale(1.25); }
-.wa-reaction-picker__btn--remove { font-size: 0.75rem; color: #ef4444; padding: 4px 6px; }
 
 /* ── Faz 3: Sohbet içi arama paneli ─────────────────────────────── */
 .wa-chat-search {
@@ -963,17 +946,19 @@ body.app-theme-dark .wa-msg-composer__input:focus { border-color: #25d366; backg
 .wa-reply-bar__close:hover { color: #ef4444; background: rgba(239,68,68,.08); }
 
 /* ── Faz 3 Dark mode ─────────────────────────────────────────────── */
-body.app-theme-dark .wa-msg-menu {
-    background: #202c33;
-    border-color: rgba(255,255,255,.10);
-}
-body.app-theme-dark .wa-msg-menu__btn { color: #94a3b8; }
-body.app-theme-dark .wa-msg-menu__btn:hover { background: rgba(129,140,248,.15); color: #818cf8; }
-body.app-theme-dark .wa-msg-menu__btn--danger:hover { background: rgba(239,68,68,.15); color: #f87171; }
+body.app-theme-dark .wa-msg-chevron { color: rgba(255,255,255,.55); background: rgba(0,0,0,.3); }
+body.app-theme-dark .wa-msg-chevron:hover { background: rgba(0,0,0,.45); }
+body.app-theme-dark .wa-msg-dropdown { background: #233038; border-color: rgba(255,255,255,.09); box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+body.app-theme-dark .wa-msg-dropdown__item { color: #e9edef; }
+body.app-theme-dark .wa-msg-dropdown__item:hover { background: rgba(255,255,255,.06); }
+body.app-theme-dark .wa-msg-dropdown__item--danger { color: #f87171; }
+body.app-theme-dark .wa-msg-dropdown__item--danger:hover { background: rgba(239,68,68,.12); }
+body.app-theme-dark .wa-msg-dropdown__sep { background: rgba(255,255,255,.08); }
+body.app-theme-dark .wa-msg-dropdown__emojis { border-bottom-color: rgba(255,255,255,.08); }
+body.app-theme-dark .wa-msg-dropdown__emoji:hover { background: rgba(255,255,255,.08); }
 body.app-theme-dark .wa-quoted { background: rgba(37,211,102,.06); }
 body.app-theme-dark .wa-quoted__body { color: #94a3b8; }
 body.app-theme-dark .wa-reaction-badge { background: #202c33; border-color: rgba(255,255,255,.10); }
-body.app-theme-dark .wa-reaction-picker { background: #202c33; border-color: rgba(255,255,255,.10); }
 body.app-theme-dark .wa-chat-search { background: rgba(15,23,42,.8); border-bottom-color: rgba(255,255,255,.08); }
 body.app-theme-dark .wa-chat-search__input { border-color: rgba(255,255,255,.10); color: #e2e8f0; }
 body.app-theme-dark .wa-chat-search__input:focus { border-color: #25d366; }
@@ -1268,6 +1253,86 @@ body.app-theme-dark .wa-group-panel {
 }
 body.app-theme-dark .wa-group-panel__head,
 body.app-theme-dark .wa-group-panel__member { border-color: rgba(255,255,255,.08); }
+
+/* ── Mesaj bilgisi modal ─────────────────────────────────────────────── */
+.wa-msginfo-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    backdrop-filter: blur(2px);
+}
+.wa-msginfo-card {
+    background: var(--app-surface, #fff);
+    border-radius: 12px;
+    width: 360px;
+    max-width: 92vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,.25);
+    overflow: hidden;
+}
+.wa-msginfo-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    border-bottom: 1px solid var(--app-border, #e2e8f0);
+    color: var(--app-text, #1e293b);
+}
+.wa-msginfo-card__close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: var(--app-text-muted, #64748b);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.wa-msginfo-card__close:hover { background: rgba(0,0,0,.06); }
+.wa-msginfo-card__preview {
+    padding: 12px 16px;
+    font-size: 0.88rem;
+    color: var(--app-text-muted, #64748b);
+    border-bottom: 1px solid var(--app-border, #e2e8f0);
+    max-height: 72px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+.wa-msginfo-card__media-label {
+    font-style: italic;
+}
+.wa-msginfo-card__rows {
+    padding: 8px 0 4px;
+}
+.wa-msginfo-card__row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    font-size: 0.875rem;
+    color: var(--app-text, #1e293b);
+}
+.wa-msginfo-card__row svg { flex-shrink: 0; color: var(--app-text-muted, #64748b); }
+.wa-msginfo-card__row--read svg { color: #53bdeb; }
+.wa-msginfo-card__time {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--app-text-muted, #64748b);
+    white-space: nowrap;
+}
+body.app-theme-dark .wa-msginfo-card { background: #233038; }
+body.app-theme-dark .wa-msginfo-card__head { color: #e9edef; border-bottom-color: rgba(255,255,255,.09); }
+body.app-theme-dark .wa-msginfo-card__close { color: #94a3b8; }
+body.app-theme-dark .wa-msginfo-card__preview { color: #94a3b8; border-bottom-color: rgba(255,255,255,.09); }
+body.app-theme-dark .wa-msginfo-card__row { color: #e9edef; }
+body.app-theme-dark .wa-msginfo-card__row svg { color: #94a3b8; }
+body.app-theme-dark .wa-msginfo-card__time { color: #94a3b8; }
 
 /* ── Lightbox ────────────────────────────────────────────────────────── */
 .wa-lightbox {
@@ -1575,3 +1640,20 @@ body.app-theme-dark .wa-forward-panel__item:hover { background: rgba(255,255,255
 body.app-theme-dark .wa-starred-overlay { background: #1e293b; border-color: rgba(255,255,255,.1); }
 body.app-theme-dark .wa-starred-item { background: #0f172a; border-left-color: rgba(255,255,255,.1); }
 body.app-theme-dark .wa-starred-item__body { color: #e2e8f0; }
+
+/* ── Kişiler bölümü (arama sırasında sohbet altında) ────────────── */
+.wa-contact-section {
+    border-top: 1px solid var(--app-border, #e2e8f0);
+    margin-top: 4px;
+}
+.wa-contact-section__label {
+    padding: 6px 14px 4px;
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--app-text-muted, #94a3b8);
+}
+.wa-contact-item { cursor: pointer; }
+.wa-contact-item .wa-msg-conv__avatar { background: #10b981; }
+body.app-theme-dark .wa-contact-section { border-color: rgba(255,255,255,.08); }

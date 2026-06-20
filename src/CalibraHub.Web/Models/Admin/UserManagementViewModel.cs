@@ -52,18 +52,8 @@ public sealed class UserCreateInput
     [MinLength(1, ErrorMessage = "En az bir yetki seciniz.")]
     public List<string> Permissions { get; set; } = new();
 
-    /// <summary>
-    /// Grafana yetki seviyesi: NULL/empty = Grafana'ya eklenmez,
-    /// "Viewer" / "Editor" / "Admin" → ilgili rolde org'a eklenir.
-    /// </summary>
-    public string? GrafanaRole { get; set; }
 }
 
-/// <summary>
-/// "Duzenle" akisi — mevcut kullaniciyi gunceller. Sadece form'da
-/// degisiklik yapilan alanlar gonderilir. GrafanaRoleProvided=true ise
-/// GrafanaRole degeri kullanilir; false ise mevcut rol korunur (geriye uyumlu).
-/// </summary>
 public sealed class UserUpdateInput
 {
     [Required]
@@ -80,13 +70,4 @@ public sealed class UserUpdateInput
     [EmailAddress]
     [MaxLength(120)]
     public string Email { get; set; } = string.Empty;
-
-    /// <summary>true → GrafanaRole degeri uygulanir; false → mevcut rol korunur.</summary>
-    public bool GrafanaRoleProvided { get; set; } = true;
-
-    /// <summary>
-    /// "" / null = Grafana'dan cikar; "Viewer"/"Editor"/"Admin" = ilgili role.
-    /// Sadece GrafanaRoleProvided = true ise islenir.
-    /// </summary>
-    public string? GrafanaRole { get; set; }
 }

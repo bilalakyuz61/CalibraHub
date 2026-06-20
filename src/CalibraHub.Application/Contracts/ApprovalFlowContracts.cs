@@ -13,7 +13,8 @@ public sealed record ApprovalFlowDto(
     IReadOnlyList<ApprovalFlowRuleDto> Rules,
     IReadOnlyList<ApprovalFlowStepDto> Steps,
     IReadOnlyList<ApprovalFlowEdgeDto> Edges,
-    IReadOnlyList<ApprovalFlowVariableDto> Variables);
+    IReadOnlyList<ApprovalFlowVariableDto> Variables,
+    string? ExtraColumnsView = null);
 
 public sealed record ApprovalFlowSummaryDto(
     int Id,
@@ -54,7 +55,9 @@ public sealed record ApprovalFlowEdgeDto(
     string? Label,
     string EdgeKind,
     string? Condition,
-    int SortOrder);
+    int SortOrder,
+    string? SourceHandle = null,
+    string? TargetHandle = null);
 
 public sealed record ApprovalFlowVariableDto(
     int Id,
@@ -63,7 +66,9 @@ public sealed record ApprovalFlowVariableDto(
     string TypeCode,
     string? DefaultValue,
     string? Description,
-    int SortOrder);
+    int SortOrder,
+    string ValueSource = "manual",
+    string? SqlQuery = null);
 
 // ── Save isteği ───────────────────────────────────────────────────────────────
 public sealed record SaveApprovalFlowRequest(
@@ -76,7 +81,8 @@ public sealed record SaveApprovalFlowRequest(
     IReadOnlyList<SaveApprovalFlowRuleRequest> Rules,
     IReadOnlyList<SaveApprovalFlowStepRequest> Steps,
     IReadOnlyList<SaveApprovalFlowEdgeRequest>? Edges = null,
-    IReadOnlyList<SaveApprovalFlowVariableRequest>? Variables = null);
+    IReadOnlyList<SaveApprovalFlowVariableRequest>? Variables = null,
+    string? ExtraColumnsView = null);
 
 public sealed record SaveApprovalFlowRuleRequest(
     int Id,
@@ -104,7 +110,9 @@ public sealed record SaveApprovalFlowEdgeRequest(
     string? Label,
     string EdgeKind,
     string? Condition,
-    int SortOrder);
+    int SortOrder,
+    string? SourceHandle = null,
+    string? TargetHandle = null);
 
 public sealed record SaveApprovalFlowVariableRequest(
     int Id,
@@ -112,7 +120,9 @@ public sealed record SaveApprovalFlowVariableRequest(
     string TypeCode,         // int | bool | string | decimal | date
     string? DefaultValue,
     string? Description,
-    int SortOrder);
+    int SortOrder,
+    string ValueSource = "manual",
+    string? SqlQuery = null);
 
 // ── Onay örneği (Instance) ────────────────────────────────────────────────────
 public sealed record ApprovalInstanceDto(
@@ -173,7 +183,8 @@ public sealed record OverdueStepRecord(
 public sealed record StartApprovalRequest(
     Guid DocumentId,
     int FlowId,
-    string StartedBy);
+    string StartedBy,
+    int? StartedByUserId = null);
 
 public sealed record ApproveStepRequest(
     int InstanceId,

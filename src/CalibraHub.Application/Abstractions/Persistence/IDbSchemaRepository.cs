@@ -17,4 +17,11 @@ public interface IDbSchemaRepository
 
     /// <summary>Sistem DB'sindeki user-defined view adlarini doner (ViewReport task icin).</summary>
     Task<IReadOnlyList<string>> GetViewNamesAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Report Designer kaynak seçicisi için tüm dbo view'larını kolon
+    /// metadata'sıyla döner. Sayısal kolonlar metrik, tarih/metin kolonlar grup
+    /// olarak sınıflandırılır.
+    /// </summary>
+    Task<IReadOnlyList<RdViewInfo>> GetDesignerViewsAsync(CancellationToken cancellationToken);
 }

@@ -39,6 +39,7 @@ Metadata-driven engine motoru (`engine.Entity` + `engine.Field` + dynamic DDL) v
 - Veri giriş ekranlarında sol tab menüsü + sağ seçili sekme içeriği standardı (`st-modal-body--tabbed`).
 - Sebep net tespit edildiyse plan dökümanı yazma — direkt Edit + kısa açıklama.
 - **Boolean alanlar için checkbox değil switchkey (toggle switch) kullanılır.** Aktif/Pasif, Makine/Depo gibi açma-kapama girişleri her zaman switch kontrolüyle gösterilir. Native `<input type="checkbox">` ham haliyle UI'a düşmez — ya Bootstrap `form-check form-switch` ya da custom switch CSS pattern'i kullanılır (track + sliding thumb). Form içinde "evet/hayır" değeri toplayan tüm yerlerde geçerlidir.
+- **Başlık/etiket metinleri Title Case (İlk Harfler Büyük), ALL-CAPS değil.** Bölüm başlıkları, panel başlıkları, form etiketleri "Rapor Özellikleri", "Veri Kaynağı", "Görünüm" gibi yazılır — `text-transform: uppercase` ile büyütülmez. Metin zaten JSX/Razor'da doğru yazılır; CSS yalnızca gösterir. Yeni CSS yazarken başlık/label sınıflarına `text-transform: uppercase` ekleme. (İstisna: kısa kod/tip rozetleri — 2-3 harfli durum etiketleri kalabilir.)
 
 ## CSS ve Tema Kuralları
 

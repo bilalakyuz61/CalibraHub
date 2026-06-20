@@ -63,15 +63,6 @@
             <label>Rol *</label>
             <select id="admUsrRole" class="form-select form-select-sm"></select>
         </div>
-        <div class="cs-line">
-            <label>Grafana Yetkisi</label>
-            <select id="admUsrGrafanaRole" class="form-select form-select-sm" title="Bos = Grafana'ya eklenmez">
-                <option value="">— Yok (Grafana'ya eklenmez) —</option>
-                <option value="Viewer">Viewer (sadece görüntüler)</option>
-                <option value="Designer">Designer (dashboard tasarlar)</option>
-                <option value="Admin">Admin (org yöneticisi)</option>
-            </select>
-        </div>
         <div class="admusr-section-title">Yetkiler</div>
         <div id="admUsrPerms" class="admusr-perms"></div>
         <div id="admUsrMsg"></div>
@@ -86,7 +77,7 @@
         <div class="admusr-table-wrap">
             <table class="admusr-grid"><thead><tr>
                 <th>Sirket</th><th>Ad Soyad</th><th>E-posta</th><th>Sicil</th>
-                <th>Departman</th><th>Ust Kullanici</th><th>Rol</th><th>Grafana</th><th>Yetkiler</th><th>Durum</th><th>İşlem</th>
+                <th>Departman</th><th>Ust Kullanici</th><th>Rol</th><th>Yetkiler</th><th>Durum</th><th>İşlem</th>
             </tr></thead><tbody id="admUsrBody"></tbody></table>
         </div>
     </div>
@@ -167,9 +158,6 @@
                     return;
                 }
                 body.innerHTML = data.map(function(u) {
-                    var grafanaBadge = u.grafanaRole
-                        ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;font-size:0.68rem;font-weight:600;">' + esc(u.grafanaRole) + '</span>'
-                        : '<span style="color:#cbd5e1;font-size:0.7rem;">—</span>';
                     return '<tr>' +
                         '<td>' + esc(u.companyName) + '</td>' +
                         '<td style="font-weight:600;">' + esc(u.fullName) + '</td>' +
@@ -178,7 +166,6 @@
                         '<td>' + esc(u.departmentName) + '</td>' +
                         '<td>' + esc(u.supervisorName) + '</td>' +
                         '<td style="font-size:0.72rem;color:#2563eb;">' + esc(u.role) + '</td>' +
-                        '<td>' + grafanaBadge + '</td>' +
                         '<td style="font-size:0.72rem;color:#64748b;">' + esc(u.permissions) + '</td>' +
                         '<td style="font-size:0.72rem;color:' + (u.isActive ? '#15803d' : '#dc2626') + ';">' + (u.isActive ? 'Aktif' : 'Pasif') + '</td>' +
                         '<td><button type="button" class="btn btn-sm btn-outline-primary" style="padding:1px 8px;font-size:0.7rem;" onclick="admUsrEdit(\'' + u.id + '\')">Düzenle</button></td>' +
@@ -196,9 +183,6 @@
         document.getElementById('admUsrFullName').value = u.fullName || '';
         document.getElementById('admUsrEmail').value = u.email || '';
         document.getElementById('admUsrEmployeeCode').value = u.employeeCode || '';
-        // Grafana yetkisi
-        var gr = document.getElementById('admUsrGrafanaRole');
-        gr.value = u.grafanaRole || '';
         admUsrMsg('Düzenleme modunda: ' + u.fullName + ' — Kaydet ile guncelle.', true);
         // Form alanlarinin gorulebilmesi icin sayfayi yukari kaydir
         document.querySelector('.admusr-form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -209,13 +193,11 @@
         document.getElementById('admUsrFullName').value = '';
         document.getElementById('admUsrEmail').value = '';
         document.getElementById('admUsrEmployeeCode').value = '';
-        document.getElementById('admUsrGrafanaRole').value = '';
         admUsrMsg('');
     };
 
     window.admUsrSave = function() {
         var companyId = document.getElementById('admUsrCompanyId').value;
-        var grafanaRole = document.getElementById('admUsrGrafanaRole').value || null;
 
         // Edit mode (mevcut user duzenleme)
         if (_editingUserId) {
@@ -227,8 +209,6 @@
                     companyId: companyId || null,
                     fullName: document.getElementById('admUsrFullName').value,
                     email: document.getElementById('admUsrEmail').value,
-                    grafanaRoleProvided: true,    // Mevcut rolu yeni degerle her zaman override et
-                    grafanaRole: grafanaRole
                 })
             })
                 .then(function(r) { return r.json(); })
@@ -261,8 +241,7 @@
                 departmentId: departmentId || null,
                 supervisorUserId: supervisorId || null,
                 role: role,
-                permissions: selectedPerms,
-                grafanaRole: grafanaRole
+                permissions: selectedPerms
             })
         })
             .then(function(r) { return r.json(); })

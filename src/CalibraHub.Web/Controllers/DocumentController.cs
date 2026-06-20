@@ -70,10 +70,12 @@ public sealed class DocumentController : Controller
             var userId = int.TryParse(userIdRaw, out var u) ? (int?)u : null;
 
             int? contactGroupId = null;
+            byte? contactAccountType = null;
             if (document.ContactId is int cid && cid > 0)
             {
                 var contact = await _financeRepo.GetContactByIdAsync(cid, ct);
                 contactGroupId = contact?.ContactGroupId;
+                contactAccountType = (byte?)contact?.AccountType;
             }
 
             var ctx = new DesignSelectionContext
@@ -84,6 +86,7 @@ public sealed class DocumentController : Controller
                 UserId         = userId,
                 BranchId       = null,
                 WarehouseId    = null,
+                AccountType    = contactAccountType,
             };
 
             _logger.LogInformation(

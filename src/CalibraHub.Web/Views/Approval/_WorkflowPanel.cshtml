@@ -21,7 +21,7 @@
                     onclick="wfRejectCurrent(@Model)" id="wf-reject-btn-@Model">
                 Reddet
             </button>
-            <button type="button" class="btn btn-sm btn-outline-danger d-none"
+            <button type="button" class="btn btn-sm btn-outline-secondary d-none"
                     onclick="wfCancelCurrent(@Model)" id="wf-cancel-btn-@Model">
                 İptal
             </button>
@@ -38,10 +38,60 @@
     .wf-summary-row    { display: flex; gap: 8px; padding: 4px 0; }
     .wf-summary-label  { color: #64748b; min-width: 110px; }
     .wf-summary-value  { color: #0f172a; font-weight: 500; }
+    .wf-summary-row--pending .wf-summary-label { color: #92400e; }
+    .wf-summary-row--pending .wf-summary-value { color: #b45309; font-weight: 600; }
     body.app-theme-dark .wf-instance-panel { background: var(--app-surface, #0d1323); border-color: var(--app-border, rgba(255,255,255,.08)); }
     body.app-theme-dark .wf-summary        { color: var(--app-text-muted, #94a3b8); }
     body.app-theme-dark .wf-summary-label  { color: var(--app-text-muted, #64748b); }
     body.app-theme-dark .wf-summary-value  { color: var(--app-text, #e2e8f0); }
+    body.app-theme-dark .wf-summary-row--pending .wf-summary-label { color: #fbbf24; }
+    body.app-theme-dark .wf-summary-row--pending .wf-summary-value { color: #f59e0b; font-weight: 600; }
+    .wf-reject-note { background: rgba(239,68,68,.08); border-radius: 7px; padding: 8px 12px; color: #ef4444; font-size: .82rem; margin-top: 10px; }
+    /* Execution log (runlog) */
+    .wf-runlog-section { margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+    .wf-runlog-hdr  { font-size: .72rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .wf-runlog-list { max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+    .wf-rl-entry    { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; }
+    .wf-rl-dot      { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: .62rem; flex-shrink: 0; margin-top: 1px; }
+    .wf-rl-dot--success { background: rgba(16,185,129,.12); color: #10b981; }
+    .wf-rl-dot--danger  { background: rgba(239,68,68,.12);  color: #ef4444; }
+    .wf-rl-dot--info    { background: rgba(59,130,246,.12); color: #3b82f6; }
+    .wf-rl-dot--indigo  { background: rgba(99,102,241,.12); color: #6366f1; }
+    .wf-rl-dot--amber   { background: rgba(245,158,11,.12); color: #f59e0b; }
+    .wf-rl-dot--neutral { background: rgba(100,116,139,.12); color: #64748b; }
+    .wf-rl-body { flex: 1; min-width: 0; }
+    .wf-rl-ev   { font-size: .8rem; font-weight: 600; color: #0f172a; }
+    .wf-rl-nm   { font-size: .8rem; color: #64748b; }
+    .wf-rl-dt   { font-size: .78rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+    .wf-rl-meta { font-size: .7rem; color: #94a3b8; margin-top: 1px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    body.app-theme-dark .wf-runlog-section { border-color: var(--app-border, rgba(255,255,255,.08)); }
+    body.app-theme-dark .wf-runlog-hdr  { color: #475569; }
+    body.app-theme-dark .wf-rl-ev       { color: #e2e8f0; }
+    body.app-theme-dark .wf-rl-nm       { color: #64748b; }
+    body.app-theme-dark .wf-rl-dt       { color: #475569; }
+    body.app-theme-dark .wf-rl-meta     { color: #334155; }
+    /* Custom onay modal */
+    .wf-modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(3px);
+        display: flex; align-items: center; justify-content: center; z-index: 9050;
+    }
+    .wf-modal-card {
+        background: var(--app-surface, #fff); border: 1px solid var(--app-border, #e2e8f0);
+        border-radius: 14px; padding: 28px 24px; max-width: 420px; width: 90%;
+        box-shadow: 0 20px 60px rgba(0,0,0,.3);
+        display: flex; flex-direction: column; gap: 12px;
+    }
+    .wf-modal-ico { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; margin: 0 auto; }
+    .wf-modal-ico--success { background: rgba(16,185,129,.12); color: #10b981; }
+    .wf-modal-ico--danger  { background: rgba(239,68,68,.12);  color: #ef4444; }
+    .wf-modal-ico--warning { background: rgba(245,158,11,.12); color: #f59e0b; }
+    .wf-modal-ttl { font-size: .95rem; font-weight: 700; color: var(--app-text, #0f172a); text-align: center; }
+    .wf-modal-msg { font-size: .84rem; color: var(--app-text-muted, #64748b); text-align: center; }
+    .wf-modal-textarea { resize: vertical; min-height: 80px; }
+    .wf-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+    body.app-theme-dark .wf-modal-card { background: var(--app-surface, #0d1323); border-color: var(--app-border, rgba(255,255,255,.08)); }
+    body.app-theme-dark .wf-modal-ttl { color: var(--app-text, #e2e8f0); }
+    body.app-theme-dark .wf-modal-msg { color: var(--app-text-muted, #94a3b8); }
 </style>
 <script>
 (function () {
@@ -50,6 +100,57 @@
 
     function token() {
         return document.querySelector('[name=__RequestVerificationToken]')?.value || '';
+    }
+
+    /* ── Ortalanmış custom modal (prompt/confirm yerine) ── */
+    function showWfModal(opts) {
+        // opts: { icoClass, icon, title, message, placeholder, required, okLabel, okClass }
+        return new Promise(function (resolve) {
+            var bd = document.createElement('div');
+            bd.className = 'wf-modal-backdrop';
+            var hasInput = opts.placeholder !== undefined;
+            bd.innerHTML =
+                '<div class="wf-modal-card">' +
+                  '<div class="wf-modal-ico ' + (opts.icoClass || 'wf-modal-ico--success') + '">' + (opts.icon || '') + '</div>' +
+                  '<div class="wf-modal-ttl">' + (opts.title || '') + '</div>' +
+                  (opts.message ? '<div class="wf-modal-msg">' + opts.message + '</div>' : '') +
+                  (hasInput ? '<textarea class="form-control wf-modal-textarea" placeholder="' + (opts.placeholder || '') + '" rows="3"></textarea>' : '') +
+                  '<div class="wf-modal-actions">' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary wf-mc">Vazgeç</button>' +
+                    '<button type="button" class="btn btn-sm ' + (opts.okClass || 'btn-primary') + ' wf-mo">' + (opts.okLabel || 'Tamam') + '</button>' +
+                  '</div>' +
+                '</div>';
+            document.body.appendChild(bd);
+
+            var ta  = bd.querySelector('.wf-modal-textarea');
+            var okBtn  = bd.querySelector('.wf-mo');
+            var cxBtn  = bd.querySelector('.wf-mc');
+
+            if (ta) { setTimeout(function () { ta.focus(); }, 30); }
+            else     { setTimeout(function () { okBtn.focus(); }, 30); }
+
+            function done(ok) {
+                document.body.removeChild(bd);
+                document.removeEventListener('keydown', onKey);
+                resolve({ ok: ok, value: ta ? ta.value.trim() : null });
+            }
+            function tryOk() {
+                if (opts.required && ta && !ta.value.trim()) {
+                    ta.classList.add('is-invalid');
+                    ta.focus();
+                    return;
+                }
+                done(true);
+            }
+            function onKey(e) {
+                if (e.key === 'Escape') { done(false); return; }
+                if (e.key === 'Enter' && !hasInput) { e.preventDefault(); tryOk(); }
+            }
+            okBtn.addEventListener('click', tryOk);
+            cxBtn.addEventListener('click', function () { done(false); });
+            bd.addEventListener('click', function (e) { if (e.target === bd) done(false); });
+            document.addEventListener('keydown', onKey);
+        });
     }
 
     function loadPanel() {
@@ -80,40 +181,141 @@
         }
 
         currentInstanceId = data.instanceId;
-        badge.textContent = data.status;
+        var statusLabel = data.status === 'Pending'   ? 'Bekliyor'
+                        : data.status === 'Approved'  ? 'Onaylandı'
+                        : data.status === 'Rejected'  ? 'Reddedildi'
+                        : data.status === 'Cancelled' ? 'İptal'
+                        : data.status;
+        badge.textContent = statusLabel;
         badge.className   = 'badge ms-2 ' +
-            (data.status === 'Active'    ? 'bg-primary' :
-             data.status === 'Completed' ? 'bg-success' :
+            (data.status === 'Pending'   ? 'bg-primary' :
+             data.status === 'Approved'  ? 'bg-success' :
              data.status === 'Cancelled' || data.status === 'Rejected' ? 'bg-danger' : 'bg-secondary');
 
         startBtn.classList.add('d-none');
-        var isActive = (data.status === 'Active');
-        approveBtn.classList.toggle('d-none', !isActive);
-        rejectBtn.classList.toggle('d-none', !isActive);
-        cancelBtn.classList.toggle('d-none', !isActive);
+        // Onayla/Reddet: yalnızca yetkili onaylayıcıya; İptal: yalnızca başlatana
+        approveBtn.classList.toggle('d-none', !data.canApprove);
+        rejectBtn.classList.toggle('d-none', !data.canApprove);
+        cancelBtn.classList.toggle('d-none', !data.canCancel);
 
-        // TODO: Per-step timeline (DocumentApprovalStepRecord) — GetInstance su an step listesi
-        // dondurmuyor (sadece ozet). Adim adim gosterim icin GetInstance response'una steps[]
-        // eklenmeli veya ayrica /ApprovalFlow/GetInstanceSteps?instanceId=X eklenmeli.
         var rows = [
-            ['Akış',         data.flowName || ''],
-            ['Adım',         (data.currentStep || 1) + ' / ' + (data.totalSteps || 1)],
-            ['Başlatan',     data.startedBy || ''],
-            ['Başlama',      data.startedAt || ''],
+            ['Başlatan', data.startedBy || ''],
+            ['Başlama',  data.startedAt || ''],
         ];
+
+        // Tamamlanan adımları satır olarak göster
+        if (data.stepRecords && data.stepRecords.length > 0) {
+            data.stepRecords.forEach(function (s) {
+                if (s.status === 'Approved' && s.approverName) {
+                    var val = s.approverName;
+                    if (s.actionDate) val += ' · ' + s.actionDate;
+                    if (s.note) val += ' · <em>"' + escHtml(s.note) + '"</em>';
+                    rows.push(['Onaylayan', val]);
+                } else if (s.status === 'Rejected' && s.approverName) {
+                    var val = s.approverName;
+                    if (s.actionDate) val += ' · ' + s.actionDate;
+                    rows.push(['Reddeden', val]);
+                }
+            });
+        }
+
+        // Bekleyen onaylayıcıyı her zaman göster (stepRecords'tan veya pendingApproverLabel'dan)
+        if (data.status === 'Pending') {
+            var pendingApprover = data.pendingApproverLabel || '';
+            if (!pendingApprover && data.stepRecords) {
+                var curr = data.stepRecords.find(function (s) { return s.isCurrent; });
+                if (curr) pendingApprover = curr.intendedApproverLabel || curr.stepName || '';
+            }
+            rows.push(['Onaylayacak', pendingApprover || '—']);
+        }
+
         if (data.rejectNote) rows.push(['Red Notu', data.rejectNote]);
-        summary.innerHTML = rows.map(function (r) {
-            return '<div class="wf-summary-row">' +
+
+        var html = rows.map(function (r) {
+            var isPendingRow = r[0] === 'Onaylayacak';
+            return '<div class="wf-summary-row' + (isPendingRow ? ' wf-summary-row--pending' : '') + '">' +
                 '<span class="wf-summary-label">' + r[0] + '</span>' +
                 '<span class="wf-summary-value">' + (r[1] || '—') + '</span>' +
                 '</div>';
         }).join('');
+
+        // Execution log (runlog) bölümü
+        if (data.runLogs && data.runLogs.length > 0) {
+            html += '<div class="wf-runlog-section">';
+            html += '<div class="wf-runlog-hdr">Çalışma Günlüğü</div>';
+            html += '<div class="wf-runlog-list">';
+            data.runLogs.forEach(function (log) {
+                var dotClass = wfRlDotClass(log.event);
+                var icon = wfRlIcon(log.event);
+                var evLabel = wfRlEventLabel(log.event);
+                var meta = formatWfDt(log.created);
+                if (log.durationMs != null && log.durationMs > 5) meta += ' · ' + log.durationMs + 'ms';
+                html += '<div class="wf-rl-entry">' +
+                    '<span class="wf-rl-dot ' + dotClass + '">' + icon + '</span>' +
+                    '<div class="wf-rl-body">' +
+                        '<span class="wf-rl-ev">' + evLabel + '</span>' +
+                        (log.nodeName ? '<span class="wf-rl-nm"> · ' + escHtml(log.nodeName) + '</span>' : '') +
+                        (log.detail   ? '<div class="wf-rl-dt">' + escHtml(log.detail) + '</div>' : '') +
+                        '<div class="wf-rl-meta">' + meta + '</div>' +
+                    '</div>' +
+                '</div>';
+            });
+            html += '</div></div>';
+        }
+
+        summary.innerHTML = html;
+    }
+
+    function wfRlDotClass(ev) {
+        if (ev === 'FlowStarted' || ev === 'StepApproved' || ev === 'FlowEnd') return 'wf-rl-dot--success';
+        if (ev === 'StepRejected' || ev === 'FlowCancelled' || ev === 'IntegrationHalt' || ev === 'IntegrationFail') return 'wf-rl-dot--danger';
+        if (ev === 'Notification') return 'wf-rl-dot--info';
+        if (ev === 'Decision')     return 'wf-rl-dot--indigo';
+        if (ev === 'StepActivated') return 'wf-rl-dot--amber';
+        if (ev === 'Integration')  return 'wf-rl-dot--indigo';
+        return 'wf-rl-dot--neutral';
+    }
+    function wfRlIcon(ev) {
+        if (ev === 'FlowStarted')  return '▶';
+        if (ev === 'StepApproved') return '✓';
+        if (ev === 'StepRejected') return '✗';
+        if (ev === 'FlowEnd')      return '⊙';
+        if (ev === 'FlowCancelled') return '⊗';
+        if (ev === 'Notification') return '✉';
+        if (ev === 'Decision')     return '⑂';
+        if (ev === 'StepActivated') return '⧖';
+        if (ev === 'Integration' || ev === 'IntegrationHalt' || ev === 'IntegrationFail') return '⇄';
+        if (ev === 'SetVariable')  return '≔';
+        if (ev === 'Parallel')     return '⫶';
+        return '·';
+    }
+    function wfRlEventLabel(ev) {
+        var map = {
+            'FlowStarted':    'Akış Başlatıldı',
+            'FlowEnd':        'Akış Tamamlandı',
+            'FlowCancelled':  'Akış İptal Edildi',
+            'StepActivated':  'Adım Aktif',
+            'StepApproved':   'Onaylandı',
+            'StepRejected':   'Reddedildi',
+            'Decision':       'Karar',
+            'Notification':   'Bildirim',
+            'Integration':    'Entegrasyon',
+            'IntegrationHalt':'Entegrasyon Durdu',
+            'IntegrationFail':'Entegrasyon Hatası',
+            'SetVariable':    'Değişken Ata',
+            'Parallel':       'Paralel Dal',
+        };
+        return map[ev] || ev;
+    }
+    function formatWfDt(s) {
+        return s || '';
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     window.wfStartByDocument = function (docId) {
-        // Modal'a gerek yok — backend StartByDocument kind/amount/department'i kendi cikartip
-        // ilk eslesen akisi baslatir. Birden fazla akis durumunda: MatchFlowAsync priority sirasinda
-        // ilk uygunu doner (MVP — kullanici secimi gerekirse modal eklenir).
         fetch('/ApprovalFlow/StartByDocument?documentId=' + docId, {
             method: 'POST', credentials: 'same-origin',
             headers: { 'RequestVerificationToken': token() },
@@ -125,41 +327,59 @@
           .catch(function (e) { alert('Onaya gönderme hatası: ' + e); });
     };
 
-    // TODO (CLAUDE.md): prompt() yerine ortali custom modal (Views/PriceList/Report.cshtml
-    // showConfirm pattern'i). MVP icin prompt korunuyor — kapsam dar tutulsun.
     window.wfApproveCurrent = function (docId) {
         if (!currentInstanceId) return;
-        var note = prompt('Onay notu (opsiyonel):') || null;
-        fetch('/ApprovalFlow/ApproveStep', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-            // ApproverId/ApproverName non-null string contract — backend overrides from claims;
-            // empty string yeterli (controller `request with { ApproverId=userId, ApproverName=userName }`).
-            body: JSON.stringify({ InstanceId: currentInstanceId, ApproverId: '', ApproverName: '', Note: note }),
-        }).then(function (r) { return r.json(); })
-          .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+        showWfModal({
+            icoClass: 'wf-modal-ico--success', icon: '✓',
+            title: 'Onayla',
+            message: 'Onay notu ekleyebilirsiniz (opsiyonel).',
+            placeholder: 'Onay notu…',
+            required: false, okLabel: 'Onayla', okClass: 'btn-success',
+        }).then(function (r) {
+            if (!r.ok) return;
+            fetch('/ApprovalFlow/ApproveStep', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({ InstanceId: currentInstanceId, ApproverId: '', ApproverName: '', Note: r.value }),
+            }).then(function (res) { return res.json(); })
+              .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+        });
     };
 
     window.wfRejectCurrent = function (docId) {
         if (!currentInstanceId) return;
-        var reason = prompt('Red nedeni:');
-        if (reason === null) return; // kullanici iptal etti
-        fetch('/ApprovalFlow/RejectStep', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
-            body: JSON.stringify({ InstanceId: currentInstanceId, ApproverId: '', ApproverName: '', Note: reason || '' }),
-        }).then(function (r) { return r.json(); })
-          .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+        showWfModal({
+            icoClass: 'wf-modal-ico--danger', icon: '✕',
+            title: 'Reddet',
+            message: 'Red nedeni giriniz.',
+            placeholder: 'Red nedeni…',
+            required: true, okLabel: 'Reddet', okClass: 'btn-danger',
+        }).then(function (r) {
+            if (!r.ok) return;
+            fetch('/ApprovalFlow/RejectStep', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token() },
+                body: JSON.stringify({ InstanceId: currentInstanceId, ApproverId: '', ApproverName: '', Note: r.value || '' }),
+            }).then(function (res) { return res.json(); })
+              .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+        });
     };
 
     window.wfCancelCurrent = function (docId) {
         if (!currentInstanceId) return;
-        if (!confirm('Onay akışını iptal etmek istediğinizden emin misiniz?')) return;
-        fetch('/ApprovalFlow/CancelApproval?instanceId=' + currentInstanceId, {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'RequestVerificationToken': token() },
-        }).then(function (r) { return r.json(); })
-          .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+        showWfModal({
+            icoClass: 'wf-modal-ico--warning', icon: '⚠',
+            title: 'Onay Akışını İptal Et',
+            message: 'Bu işlem geri alınamaz. Onay akışını iptal etmek istediğinizden emin misiniz?',
+            required: false, okLabel: 'İptal Et', okClass: 'btn-danger',
+        }).then(function (r) {
+            if (!r.ok) return;
+            fetch('/ApprovalFlow/CancelApproval?instanceId=' + currentInstanceId, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'RequestVerificationToken': token() },
+            }).then(function (res) { return res.json(); })
+              .then(function (res) { if (res.ok) loadPanel(); else alert('Hata: ' + (res.error || '')); });
+        });
     };
 
     loadPanel();

@@ -112,6 +112,24 @@ public sealed class ApprovalEntityContext
     /// </summary>
     public IReadOnlyDictionary<string, object?> SqlParameters { get; init; }
         = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// SetVariable node'ların yazdığı, Decision node'ların okuduğu runtime değişkenleri.
+    /// Aynı traversal zinciri içinde geçerlidir; akışlar arası paylaşılmaz.
+    /// </summary>
+    public Dictionary<string, object?> FlowVariables { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Notification dispatcher'ın "approver" recipient modunu çözümleyebilmesi için
+    /// executor tarafından set edilen approval instance ID.
+    /// </summary>
+    public int? ApprovalInstanceId { get; set; }
+
+    /// <summary>Akışı başlatan kullanıcının adı — {requesterName} token'ı için.</summary>
+    public string? RequesterName { get; set; }
+
+    /// <summary>Çalışan akışın adı — {flowName} token'ı için.</summary>
+    public string? FlowName { get; set; }
 }
 
 /// <summary>

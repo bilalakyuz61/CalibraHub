@@ -274,7 +274,7 @@ function TextLookupCell(props) {
     onChange(column.key, patch[column.key], patch)
     setOpen(false)
     setFilter('')
-    triggerSilentLineSave()
+    triggerSilentLineSave(patch)
     // Guided workflow chain: material secildikten sonra trackCombinations=true
     // ise kombinasyon modal'ini ac; degilse direkt ek alanlar modal'ini ac.
     // Sadece materialCode column'u icin tetikle.
@@ -316,7 +316,7 @@ function TextLookupCell(props) {
       onChange(column.key, typed, enriched)
       setOpen(false)
       setFilter('')
-      triggerSilentLineSave()
+      triggerSilentLineSave(enriched)
       return
     }
     // Eslesme yok — yazili degeri ham olarak kaydet, lookupFillMap alanlarini temizle
@@ -333,9 +333,16 @@ function TextLookupCell(props) {
   // Satir-ici sessiz kayit — materialCode basariyla cozulunce calisir.
   // window.sqSave({ silent:true }) KITT animasyonu olmadan kayder.
   // column.saveOnResolve !== false ise tetiklenir (sales quote varsayilani).
-  function triggerSilentLineSave() {
+  // patch: onChange'e verilen patch objesi. trackCombinations=true ama
+  // combinationId henuz secilmediyse backend validasyonu atmasin diye
+  // kaydi erteleriz; kombinasyon secilince onApply zaten save triggerlar.
+  function triggerSilentLineSave(patch) {
     if (column.saveOnResolve === false) return
     if (typeof window === 'undefined' || typeof window.sqSave !== 'function') return
+    var p = patch || {}
+    var tracks = p.trackCombinations === true
+    var hasCombination = p.combinationId != null && p.combinationId !== '' && parseInt(p.combinationId, 10) > 0
+    if (tracks && !hasCombination) return
     // Setstate'in render'a commit olmasi icin kucuk bir delay
     setTimeout(function() {
       try { window.sqSave({ silent: true }) } catch (e) { /* ignore */ }
@@ -933,6 +940,13 @@ function CombinationLookupCell(props) {
               // combinationId — DB'deki FK; combinationCode — display; details — ozellik listesi
               onChange('combinationCode', code, { combinationId: configId, combinationDetails: details })
               setOpen(false)
+              // Material seciminde save ertelenmisti (combo bekleniyor); artik combo
+              // secildi, sessiz kayit tetikle (validasyon artik gecmeli).
+              if (column.saveOnResolve !== false && typeof window !== 'undefined' && typeof window.sqSave === 'function') {
+                setTimeout(function() {
+                  try { window.sqSave({ silent: true }) } catch (_) {}
+                }, 150)
+              }
               // Guided workflow chain: kombinasyon secildikten sonra ek alanlar
               // modal'ini grid seviyesinde ac (extras stage).
               if (row && row._uid) {

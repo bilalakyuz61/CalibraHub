@@ -726,6 +726,10 @@ END;";
             await EnsureAttachmentTableAsync(cancellationToken);
             await EnsurePermissionTablesAsync(connection, cancellationToken);
             await MigrateDateTime2ToDateTimeAsync(connection, cancellationToken);
+            await EnsureCalendarTablesAsync(connection, cancellationToken);
+            await EnsurePersonnelBirthDateAsync(connection, cancellationToken);
+            await EnsureReportEngineTablesAsync(connection, cancellationToken);
+            await EnsureFulfillmentLineExtrasViewAsync(connection, cancellationToken);
         }
         catch (SqlException sqlEx)
         {
@@ -733,6 +737,36 @@ END;";
             Console.Error.WriteLine($"[DB INIT ERROR] Procedure: {sqlEx.Procedure}");
             throw;
         }
+    }
+
+    /// <summary>
+    /// İhtiyaç Karşılama ekranı ek saha view'ı — yalnızca yoksa oluşturulur.
+    /// Kullanıcı view'a yeni kolon eklediğinde otomatik görünür; CREATE OR ALTER kullanılmaz.
+    /// </summary>
+    private async Task EnsureFulfillmentLineExtrasViewAsync(SqlConnection connection, CancellationToken ct)
+    {
+        var s  = _schema.Replace("]", "]]");
+        var sl = _schema.Replace("'", "''");
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"""
+            IF NOT EXISTS (
+                SELECT 1 FROM INFORMATION_SCHEMA.VIEWS
+                WHERE TABLE_SCHEMA = '{sl}' AND TABLE_NAME = 'cbv_FulfillmentLineExtras'
+            )
+            BEGIN
+                DECLARE @sql NVARCHAR(MAX) = N'
+            CREATE VIEW [{s}].[cbv_FulfillmentLineExtras] AS
+            SELECT
+                dl.[DocumentId],
+                dl.[Id] AS LineId
+                /* Buraya kalem bazlı ek sahalar ekleyin.
+                   Yeni kolon eklenince İhtiyaç Karşılama ekranında otomatik görünür. */
+                /* ÖRNEK: ,i.[Description] AS [Malzeme Aciklamasi] */
+            FROM [{s}].[DocumentLine] dl';
+                EXEC sp_executesql @sql;
+            END
+            """;
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>
@@ -979,22 +1013,25 @@ END;";
                 ALTER TABLE [{schemaForSql}].[Department] ADD [UpdatedById] INT NULL;
                 ALTER TABLE [{schemaForSql}].[Department] ADD [Updated] DATETIME NULL;
             END;
-            -- CreatedById migration: NVARCHAR → INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Department]') AND name = N'CreatedBy')
+            -- CreatedById migration: NVARCHAR → INT (tablo varsa)
+            IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Department] DROP COLUMN [CreatedBy];
-                ALTER TABLE [{schemaForSql}].[Department] ADD [CreatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Department]') AND name = N'CreatedById')
-                ALTER TABLE [{schemaForSql}].[Department] ADD [CreatedById] INT NULL;
-            -- UpdatedById migration: NVARCHAR → INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Department]') AND name = N'UpdatedBy')
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[Department] DROP COLUMN [UpdatedBy];
-                ALTER TABLE [{schemaForSql}].[Department] ADD [UpdatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Department]') AND name = N'UpdatedById')
-                ALTER TABLE [{schemaForSql}].[Department] ADD [UpdatedById] INT NULL;
+                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Department]') AND name = N'CreatedBy')
+                BEGIN
+                    ALTER TABLE [{schemaForSql}].[Department] DROP COLUMN [CreatedBy];
+                    ALTER TABLE [{schemaForSql}].[Department] ADD [CreatedById] INT NULL;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Department]') AND name = N'CreatedById')
+                    ALTER TABLE [{schemaForSql}].[Department] ADD [CreatedById] INT NULL;
+                -- UpdatedById migration: NVARCHAR → INT
+                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Department]') AND name = N'UpdatedBy')
+                BEGIN
+                    ALTER TABLE [{schemaForSql}].[Department] DROP COLUMN [UpdatedBy];
+                    ALTER TABLE [{schemaForSql}].[Department] ADD [UpdatedById] INT NULL;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Department]') AND name = N'UpdatedById')
+                    ALTER TABLE [{schemaForSql}].[Department] ADD [UpdatedById] INT NULL;
+            END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[Department]', N'U') IS NULL
             BEGIN
@@ -1298,40 +1335,11 @@ END;";
                     ON [{schemaForSql}].[SmtpProfile]([Name]);
             END;
 
-            -- smtp_profiles: id INT → UNIQUEIDENTIFIER + company_id ekleme
-            IF OBJECT_ID(N'[{schemaForSql}].[SmtpProfile]', N'U') IS NOT NULL
-               AND EXISTS (
-                   SELECT 1 FROM sys.columns
-                   WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[SmtpProfile]')
-                     AND name = 'id'
-                     AND system_type_id = TYPE_ID('int')
-               )
-            BEGIN
-                -- Eski tabloyu yeniden olustur (veri az, migration guvenli)
-                DROP TABLE [{schemaForSql}].[SmtpProfile];
-                CREATE TABLE [{schemaForSql}].[SmtpProfile]
-                (
-                    [Id] INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_SmtpProfile] PRIMARY KEY,
-                    [CompanyId] INT NOT NULL CONSTRAINT [DF_SmtpProfile_CompanyId] DEFAULT(0),
-                    [Name] NVARCHAR(120) NOT NULL,
-                    [FromEmail] NVARCHAR(160) NOT NULL,
-                    [FromDisplayName] NVARCHAR(120) NULL,
-                    [Host] NVARCHAR(200) NOT NULL,
-                    [Port] INT NOT NULL CONSTRAINT [DF_SmtpProfile_Port] DEFAULT(587),
-                    [Username] NVARCHAR(160) NOT NULL,
-                    [Password] NVARCHAR(2000) NOT NULL,
-                    [AuthMethod] NVARCHAR(30) NOT NULL CONSTRAINT [DF_SmtpProfile_AuthMethod] DEFAULT(N'Normal'),
-                    [OAuth2ClientId] NVARCHAR(300) NULL,
-                    [OAuth2ClientSecret] NVARCHAR(300) NULL,
-                    [OAuth2RefreshToken] NVARCHAR(500) NULL,
-                    [UseSsl] BIT NOT NULL CONSTRAINT [DF_SmtpProfile_UseSsl] DEFAULT(1),
-                    [IsActive] BIT NOT NULL CONSTRAINT [DF_SmtpProfile_IsActive] DEFAULT(1),
-                    [Created] DATETIME NOT NULL CONSTRAINT [DF_SmtpProfile_Created] DEFAULT SYSUTCDATETIME(),
-                    [Updated] DATETIME NULL,
-                    CONSTRAINT [CK_SmtpProfile_Port] CHECK ([Port] >= 1 AND [Port] <= 65535)
-                );
-                CREATE UNIQUE INDEX [UX_SmtpProfile_Name] ON [{schemaForSql}].[SmtpProfile]([Name]);
-            END;
+            -- 2026-06-17: SmtpProfile id INT → UNIQUEIDENTIFIER migration bloğu KALDIRILDI.
+            -- SQL Server default case-insensitive collation yüzünden filter "name='id'" yeni
+            -- PascalCase "Id" kolonuyla da eşleşiyor → her startup'ta DROP+CREATE TABLE → kullanıcı
+            -- mail ayarları her restart'ta SILINIYORDU. Migration zaten geçmiş tarihte tamamlandı;
+            -- bu blok artık dead code + aktif veri kaybı kaynağıydı.
 
             -- SmtpProfile: CompanyId yoksa ekle (olusturulmus ama eski versiyondan kalmis tablo)
             IF OBJECT_ID(N'[{schemaForSql}].[SmtpProfile]', N'U') IS NOT NULL
@@ -1806,6 +1814,101 @@ END;";
 
                 CREATE UNIQUE INDEX [UX_Field_FieldKey]
                     ON [{schemaForSql}].[Field]([FieldKey]);
+            END;
+
+            -- Snake_case → PascalCase migration (Field tablosu legacy schema'dan geliyorsa):
+            -- 2.1.8'den önce upgrade edilen kurulumlarda Field tablosu snake_case kolonlarla
+            -- yaratılmış olabilir (field_key, data_type, vs.). Sonraki UPDATE/CREATE INDEX
+            -- statement'ları PascalCase bekliyor — rename etmezsek "Invalid column name 'FieldKey'"
+            -- hatasıyla initializer komple çöker (Web + Worker servisi kalkamaz).
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'field_key') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'FieldKey') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].field_key', N'FieldKey', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'field_label') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'FieldLabel') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].field_label', N'FieldLabel', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'data_type') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'DataType') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].data_type', N'DataType', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'is_visible') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'IsVisible') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].is_visible', N'IsVisible', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'is_required') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'IsRequired') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].is_required', N'IsRequired', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'default_value') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'DefaultValue') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].default_value', N'DefaultValue', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'display_order') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'DisplayOrder') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].display_order', N'DisplayOrder', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'column_span') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'ColumnSpan') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].column_span', N'ColumnSpan', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'is_system') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'IsSystem') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].is_system', N'IsSystem', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'is_active') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'IsActive') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].is_active', N'IsActive', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'group_id') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'GroupId') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].group_id', N'GroupId', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'created_at') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'Created') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].created_at', N'Created', N'COLUMN';
+            END;
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'updated_at') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'Updated') IS NULL
+            BEGIN
+                EXEC sp_rename N'[{schemaForSql}].[Field].updated_at', N'Updated', N'COLUMN';
+            END;
+
+            -- Defensive guard: FieldKey hâlâ yoksa (snake_case rename başarısız olduysa veya
+            -- tablo tamamen farklı bir schema'daysa), aşağıdaki UPDATE'lerin patlamasını
+            -- engellemek için boş bir NVARCHAR(60) FieldKey kolonu ekle. Kullanıcı verisi
+            -- bozulmaz, sadece UPDATE 0 satır etkiler.
+            IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'FieldKey') IS NULL
+            BEGIN
+                ALTER TABLE [{schemaForSql}].[Field]
+                ADD [FieldKey] NVARCHAR(60) NULL;
             END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
@@ -2696,22 +2799,24 @@ END;";
                AND COL_LENGTH(N'{schemaLiteral}.[Unit]', N'UpdatedAt') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Unit]', N'Updated') IS NULL
                 EXEC sp_rename N'{schemaLiteral}.[Unit].[UpdatedAt]', N'Updated', N'COLUMN';
-            -- CreatedById migration: NVARCHAR → INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Unit]') AND name = N'CreatedBy')
+            -- CreatedById/UpdatedById migration: NVARCHAR → INT (tablo varsa)
+            IF OBJECT_ID(N'[{schemaForSql}].[Unit]', N'U') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Unit] DROP COLUMN [CreatedBy];
-                ALTER TABLE [{schemaForSql}].[Unit] ADD [CreatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Unit]') AND name = N'CreatedById')
-                ALTER TABLE [{schemaForSql}].[Unit] ADD [CreatedById] INT NULL;
-            -- UpdatedById migration: NVARCHAR → INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Unit]') AND name = N'UpdatedBy')
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[Unit] DROP COLUMN [UpdatedBy];
-                ALTER TABLE [{schemaForSql}].[Unit] ADD [UpdatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Unit]') AND name = N'UpdatedById')
-                ALTER TABLE [{schemaForSql}].[Unit] ADD [UpdatedById] INT NULL;
+                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Unit]') AND name = N'CreatedBy')
+                BEGIN
+                    ALTER TABLE [{schemaForSql}].[Unit] DROP COLUMN [CreatedBy];
+                    ALTER TABLE [{schemaForSql}].[Unit] ADD [CreatedById] INT NULL;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Unit]') AND name = N'CreatedById')
+                    ALTER TABLE [{schemaForSql}].[Unit] ADD [CreatedById] INT NULL;
+                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Unit]') AND name = N'UpdatedBy')
+                BEGIN
+                    ALTER TABLE [{schemaForSql}].[Unit] DROP COLUMN [UpdatedBy];
+                    ALTER TABLE [{schemaForSql}].[Unit] ADD [UpdatedById] INT NULL;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Unit]') AND name = N'UpdatedById')
+                    ALTER TABLE [{schemaForSql}].[Unit] ADD [UpdatedById] INT NULL;
+            END;
             -- Created kolonu henüz yoksa ekle (çok eski DB)
             IF OBJECT_ID(N'[{schemaForSql}].[Unit]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Unit]', N'Created') IS NULL
@@ -2766,22 +2871,24 @@ END;";
                 ALTER TABLE [{schemaForSql}].[Machine] ADD [UpdatedById] INT NULL;
                 ALTER TABLE [{schemaForSql}].[Machine] ADD [Updated] DATETIME NULL;
             END;
-            -- CreatedById migration: NVARCHAR → INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Machine]') AND name = N'CreatedBy')
+            -- CreatedById/UpdatedById migration: NVARCHAR → INT (tablo varsa)
+            IF OBJECT_ID(N'[{schemaForSql}].[Machine]', N'U') IS NOT NULL
             BEGIN
-                ALTER TABLE [{schemaForSql}].[Machine] DROP COLUMN [CreatedBy];
-                ALTER TABLE [{schemaForSql}].[Machine] ADD [CreatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Machine]') AND name = N'CreatedById')
-                ALTER TABLE [{schemaForSql}].[Machine] ADD [CreatedById] INT NULL;
-            -- UpdatedById migration: NVARCHAR → INT
-            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Machine]') AND name = N'UpdatedBy')
-            BEGIN
-                ALTER TABLE [{schemaForSql}].[Machine] DROP COLUMN [UpdatedBy];
-                ALTER TABLE [{schemaForSql}].[Machine] ADD [UpdatedById] INT NULL;
-            END
-            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Machine]') AND name = N'UpdatedById')
-                ALTER TABLE [{schemaForSql}].[Machine] ADD [UpdatedById] INT NULL;
+                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Machine]') AND name = N'CreatedBy')
+                BEGIN
+                    ALTER TABLE [{schemaForSql}].[Machine] DROP COLUMN [CreatedBy];
+                    ALTER TABLE [{schemaForSql}].[Machine] ADD [CreatedById] INT NULL;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Machine]') AND name = N'CreatedById')
+                    ALTER TABLE [{schemaForSql}].[Machine] ADD [CreatedById] INT NULL;
+                IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Machine]') AND name = N'UpdatedBy')
+                BEGIN
+                    ALTER TABLE [{schemaForSql}].[Machine] DROP COLUMN [UpdatedBy];
+                    ALTER TABLE [{schemaForSql}].[Machine] ADD [UpdatedById] INT NULL;
+                END
+                ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[Machine]') AND name = N'UpdatedById')
+                    ALTER TABLE [{schemaForSql}].[Machine] ADD [UpdatedById] INT NULL;
+            END;
 
             IF OBJECT_ID(N'[{schemaForSql}].[Machine]', N'U') IS NULL
             BEGIN
@@ -8768,6 +8875,18 @@ END;";
                 ALTER TABLE [{s}].[wa_inbox] ADD [SenderName] NVARCHAR(200) NULL;
             END;
 
+            -- Performans indexi: direction + contact_phone + received_at
+            -- GetConversationsAsync CTE'leri (has_incoming_cte, last_incoming_name) ve
+            -- GetMessagesByPhoneAsync direkt esitlik sorgusu icin kullanilir.
+            IF OBJECT_ID(N'[{s}].[wa_inbox]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                               WHERE object_id = OBJECT_ID(N'[{s}].[wa_inbox]')
+                                 AND name = N'ix_wa_inbox_direction_phone')
+            BEGIN
+                CREATE INDEX [ix_wa_inbox_direction_phone]
+                    ON [{s}].[wa_inbox]([direction], [contact_phone], [received_at] DESC);
+            END;
+
             -- WaGroup: grup master tablosu
             IF OBJECT_ID(N'[{s}].[WaGroup]', N'U') IS NULL
             BEGIN
@@ -9105,6 +9224,7 @@ END;";
             {
                 await using var dsCmd = connection.CreateCommand();
                 dsCmd.CommandText = $@"
+                    IF NOT EXISTS (SELECT 1 FROM [{s}].[DocLayoutDs] WHERE [LayoutId]=@LayoutId AND [Alias]=@Alias)
                     INSERT INTO [{s}].[DocLayoutDs]
                         ([LayoutId],[Alias],[Role],[ViewId],[AdHocSql],[JoinOn],[ParentAlias],[Ordinal])
                     VALUES
@@ -10394,7 +10514,7 @@ END;";
 
             // ── Raporlar ─────────────────────────────────────────────────────
             ("DASHBOARDS",          "Rapor Panoları",                   "Raporlar",             null,                       150,  false),
-            ("GRAFANA",             "Rapor Tasarımı",                   "Raporlar",             null,                       160,  false),
+            ("REPORT_DESIGNER",     "Rapor Tasarımı",                   "Raporlar",             null,                       160,  false),
 
             // ── Onay İşlemleri ───────────────────────────────────────────────
             ("APPROVAL_PENDING",    "Onayda Bekleyenler",               "Onay İşlemleri",       null,                       190,  false),
@@ -14008,6 +14128,29 @@ END;";
                        INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [LayoutId], [UpdatedAt]);');
             END;
 
+            -- ── Mevcut DB'ler için AccountType kolonu (Cari tipi kriteri) ──
+            IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'{schemaLiteral}.DocLayoutRule', N'AccountType') IS NULL
+            BEGIN
+                ALTER TABLE [{s}].[DocLayoutRule] ADD [AccountType] TINYINT NULL;
+
+                -- UNIQUE index'e AccountType ekle (aynı kombinasyon farklı tip için iki kural olabilir)
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ux_DocLayoutRule_Combo' AND object_id = OBJECT_ID(N'[{s}].[DocLayoutRule]'))
+                    EXEC(N'DROP INDEX [ux_DocLayoutRule_Combo] ON [{s}].[DocLayoutRule];');
+
+                EXEC(N'CREATE UNIQUE NONCLUSTERED INDEX [ux_DocLayoutRule_Combo]
+                       ON [{s}].[DocLayoutRule]([DocType], [CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [AccountType])
+                       WHERE [IsActive] = 1;');
+
+                -- Covering index INCLUDE'a AccountType ekle
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_DocLayoutRule_Lookup' AND object_id = OBJECT_ID(N'[{s}].[DocLayoutRule]'))
+                    EXEC(N'DROP INDEX [ix_DocLayoutRule_Lookup] ON [{s}].[DocLayoutRule];');
+
+                EXEC(N'CREATE NONCLUSTERED INDEX [ix_DocLayoutRule_Lookup]
+                       ON [{s}].[DocLayoutRule]([DocType], [IsActive])
+                       INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [AccountType], [LayoutId], [UpdatedAt]);');
+            END;
+
             -- ── Mevcut DB icin DocumentTypeId kolonu (Phase: tip FK konsolidasyon) ──
             IF OBJECT_ID(N'[{s}].[DocLayoutRule]', N'U') IS NOT NULL
                AND COL_LENGTH(N'[{s}].[DocLayoutRule]', N'DocumentTypeId') IS NULL
@@ -14284,6 +14427,10 @@ END;";
                     ALTER TABLE [{s}].[ApprovalFlow] ADD [UpdatedById] INT NULL;
             END
 
+            -- Migration: ExtraColumnsView — onay bekleyenler listesinde ek sütun view adı
+            IF COL_LENGTH(N'[{s}].[ApprovalFlow]', N'ExtraColumnsView') IS NULL
+                ALTER TABLE [{s}].[ApprovalFlow] ADD [ExtraColumnsView] NVARCHAR(200) NULL;
+
             -- ── Entity-agnostic plugin migration (no-op) ────────────────────────────
             -- 2026-05-25: DocumentKind artık spesifik belge türü kodu da taşır (EInvoice,
             -- EArchive, EDispatch, SalesQuote, SalesOrder, PurchaseRequest, PurchaseQuote,
@@ -14409,6 +14556,14 @@ END;";
                 CREATE INDEX [IX_ApprovalFlowEdge_Source] ON [{s}].[ApprovalFlowEdge]([SourceStepId]);
             END;
 
+            -- 2026-06-15: SourceHandle + TargetHandle — node'un hangi handle'ina bagli.
+            -- StepNode source: 'approve'|'reject'|'timeout'; target: 'in'|'in-right'|'in-bottom'|'in-left'.
+            -- Bu bilgi reload sonrasi edge'in kenari/koseyi korumasi icin gerekli.
+            IF COL_LENGTH(N'[{s}].[ApprovalFlowEdge]', N'SourceHandle') IS NULL
+                ALTER TABLE [{s}].[ApprovalFlowEdge] ADD [SourceHandle] NVARCHAR(30) NULL;
+            IF COL_LENGTH(N'[{s}].[ApprovalFlowEdge]', N'TargetHandle') IS NULL
+                ALTER TABLE [{s}].[ApprovalFlowEdge] ADD [TargetHandle] NVARCHAR(30) NULL;
+
             -- ── ApprovalFlowVariable ─────────────────────────────────────────────────
             -- 2026-06-14: Surec-scoped degisken tanimlari (per-flow). Designer'da
             -- SetVariable node + Decision kosul satirlarinda referans edilir. Per-instance
@@ -14423,11 +14578,20 @@ END;";
                     [TypeCode]      NVARCHAR(20) NOT NULL CONSTRAINT [DF_ApprovalFlowVariable_Type] DEFAULT N'int',
                     [DefaultValue]  NVARCHAR(400) NULL,
                     [Description]   NVARCHAR(400) NULL,
+                    [ValueSource]   NVARCHAR(20) NOT NULL CONSTRAINT [DF_ApprovalFlowVariable_ValueSource] DEFAULT N'manual',
+                    [SqlQuery]      NVARCHAR(MAX) NULL,
                     [SortOrder]     INT          NOT NULL CONSTRAINT [DF_ApprovalFlowVariable_Sort] DEFAULT 0,
                     [Created]       DATETIME     NOT NULL CONSTRAINT [DF_ApprovalFlowVariable_Created] DEFAULT SYSUTCDATETIME()
                 );
                 CREATE UNIQUE INDEX [UX_ApprovalFlowVariable_Flow_Name]
                     ON [{s}].[ApprovalFlowVariable]([FlowId],[Name]);
+            END;
+            ELSE
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalFlowVariable]') AND name = N'ValueSource')
+                    ALTER TABLE [{s}].[ApprovalFlowVariable] ADD [ValueSource] NVARCHAR(20) NOT NULL CONSTRAINT [DF_ApprovalFlowVariable_ValueSource] DEFAULT N'manual';
+                IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[ApprovalFlowVariable]') AND name = N'SqlQuery')
+                    ALTER TABLE [{s}].[ApprovalFlowVariable] ADD [SqlQuery] NVARCHAR(MAX) NULL;
             END;
 
             -- ── ApprovalInstanceVariable ─────────────────────────────────────────────
@@ -14565,6 +14729,51 @@ END;";
         await using var idxCmd = connection.CreateCommand();
         idxCmd.CommandText = indexSql;
         await idxCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Backfill: CreateAsync eski sürümünde ApproverId/ApproverName eksik bırakıldı.
+        // Sadece SpecificUser tipindeki Pending step'leri güncelle — idempotent.
+        var backfillSql = $"""
+            UPDATE sr
+            SET sr.[ApproverId]   = fs.[ApproverId],
+                sr.[ApproverName] = fs.[ApproverLabel]
+            FROM [{s}].[DocumentApprovalStepRecord] sr
+            INNER JOIN [{s}].[DocumentApprovalInstance] inst ON inst.[Id]  = sr.[InstanceId]
+            INNER JOIN [{s}].[ApprovalFlow]             af   ON af.[Id]   = inst.[FlowId]
+            INNER JOIN [{s}].[ApprovalFlowStep]         fs   ON fs.[FlowId]  = af.[Id]
+                                                             AND fs.[StepOrder] = sr.[StepOrder]
+                                                             AND fs.[ApproverType] = N'SpecificUser'
+            WHERE sr.[Status]      = N'Pending'
+              AND sr.[ApproverId]  IS NULL
+              AND fs.[ApproverId]  IS NOT NULL;
+            """;
+        await using var bfCmd = connection.CreateCommand();
+        bfCmd.CommandText = backfillSql;
+        await bfCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // ApprovalFlowRunLog — her node traversal olayı için execution log
+        var runLogSql = $"""
+            IF OBJECT_ID(N'[{s}].[ApprovalFlowRunLog]', N'U') IS NULL
+                CREATE TABLE [{s}].[ApprovalFlowRunLog] (
+                    [Id]         BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ApprovalFlowRunLog] PRIMARY KEY,
+                    [InstanceId] INT NOT NULL,
+                    [FlowId]     INT NOT NULL,
+                    [NodeId]     INT NULL,
+                    [NodeType]   NVARCHAR(50)   NULL,
+                    [NodeName]   NVARCHAR(200)  NULL,
+                    [Event]      NVARCHAR(50)   NOT NULL,
+                    [Detail]     NVARCHAR(1000) NULL,
+                    [DurationMs] INT NULL,
+                    [Created]    DATETIME NOT NULL CONSTRAINT [DF_ApprovalFlowRunLog_Created] DEFAULT SYSUTCDATETIME()
+                );
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                           WHERE name = N'IX_ApprovalFlowRunLog_InstanceId'
+                             AND object_id = OBJECT_ID(N'[{s}].[ApprovalFlowRunLog]'))
+                CREATE INDEX [IX_ApprovalFlowRunLog_InstanceId]
+                    ON [{s}].[ApprovalFlowRunLog] ([InstanceId]);
+            """;
+        await using var rlCmd = connection.CreateCommand();
+        rlCmd.CommandText = runLogSql;
+        await rlCmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -15034,56 +15243,6 @@ END;";
         cmd2.CommandText = sql2;
         await cmd2.ExecuteNonQueryAsync(cancellationToken);
 
-        // Rapor Panoları per-dashboard erişim altyapısı
-        var sql3 = $"""
-            IF OBJECT_ID(N'[{s}].[ReportDashboard]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{s}].[ReportDashboard]
-                (
-                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ReportDashboard] PRIMARY KEY,
-                    [GrafanaUid]  NVARCHAR(100) NOT NULL,
-                    [Title]       NVARCHAR(200) NOT NULL,
-                    [FolderTitle] NVARCHAR(200) NULL,
-                    [Tags]        NVARCHAR(500) NULL,
-                    [SortOrder]   INT           NOT NULL CONSTRAINT [DF_ReportDashboard_SortOrder] DEFAULT 0,
-                    [IsActive]    BIT           NOT NULL CONSTRAINT [DF_ReportDashboard_IsActive]  DEFAULT 1,
-                    [CreatedBy]   NVARCHAR(120) NULL,
-                    [Created]     DATETIME2     NOT NULL CONSTRAINT [DF_ReportDashboard_Created]   DEFAULT SYSUTCDATETIME(),
-                    [UpdatedBy]   NVARCHAR(120) NULL,
-                    [Updated]     DATETIME2     NULL
-                );
-                CREATE UNIQUE INDEX [UX_ReportDashboard_GrafanaUid]
-                    ON [{s}].[ReportDashboard]([GrafanaUid]);
-            END;
-
-            IF OBJECT_ID(N'[{s}].[ReportDashboardAccess]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{s}].[ReportDashboardAccess]
-                (
-                    [Id]                INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ReportDashboardAccess] PRIMARY KEY,
-                    [ReportDashboardId] INT           NOT NULL
-                        CONSTRAINT [FK_ReportDashboardAccess_ReportDashboard]
-                        REFERENCES [{s}].[ReportDashboard]([Id]) ON DELETE CASCADE,
-                    [UserId]            INT           NULL,
-                    [DepartmentId]      INT           NULL,
-                    [CreatedBy]         NVARCHAR(120) NULL,
-                    [Created]           DATETIME2     NOT NULL CONSTRAINT [DF_ReportDashboardAccess_Created] DEFAULT SYSUTCDATETIME(),
-                    CONSTRAINT [CK_ReportDashboardAccess_OneOwner] CHECK (
-                        ([UserId] IS NOT NULL AND [DepartmentId] IS NULL) OR
-                        ([UserId] IS NULL AND [DepartmentId] IS NOT NULL)
-                    )
-                );
-                CREATE UNIQUE INDEX [UX_ReportDashboardAccess_User]
-                    ON [{s}].[ReportDashboardAccess]([ReportDashboardId], [UserId])
-                    WHERE [UserId] IS NOT NULL;
-                CREATE UNIQUE INDEX [UX_ReportDashboardAccess_Dept]
-                    ON [{s}].[ReportDashboardAccess]([ReportDashboardId], [DepartmentId])
-                    WHERE [DepartmentId] IS NOT NULL;
-            END;
-            """;
-        await using var cmd3 = connection.CreateCommand();
-        cmd3.CommandText = sql3;
-        await cmd3.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -15331,9 +15490,9 @@ END;";
                 new[]
                 {
                     ("ix_DocLayoutRule_Lookup",
-                        $"CREATE NONCLUSTERED INDEX [ix_DocLayoutRule_Lookup] ON [{s}].[DocLayoutRule]([DocType], [IsActive]) INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [LayoutId], [UpdatedAt]);"),
+                        $"CREATE NONCLUSTERED INDEX [ix_DocLayoutRule_Lookup] ON [{s}].[DocLayoutRule]([DocType], [IsActive]) INCLUDE ([CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [AccountType], [LayoutId], [UpdatedAt]);"),
                     ("ux_DocLayoutRule_Combo",
-                        $"CREATE UNIQUE NONCLUSTERED INDEX [ux_DocLayoutRule_Combo] ON [{s}].[DocLayoutRule]([DocType], [CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId]) WHERE [IsActive] = 1;")
+                        $"CREATE UNIQUE NONCLUSTERED INDEX [ux_DocLayoutRule_Combo] ON [{s}].[DocLayoutRule]([DocType], [CustomerId], [ContactGroupId], [UserId], [BranchId], [WarehouseId], [AccountType]) WHERE [IsActive] = 1;")
                 },
                 false, null),
 
@@ -15798,6 +15957,31 @@ END;";
                 ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[UserPermission]') AND name = N'CreatedById')
                     ALTER TABLE [{s}].[UserPermission] ADD [CreatedById] INT NULL;
             END
+
+            -- 2026-06-17: DASHBOARDS VIEW aksiyon ekran erisimi rol-tabanlı kontrol ediliyor;
+            -- RESOURCE:DASH:* izinleri ekran erisimini zimnen iceriyor -- VIEW redundant.
+            IF OBJECT_ID(N'[{s}].[PermissionDef]', N'U') IS NOT NULL
+            BEGIN
+                UPDATE [{s}].[PermissionDef] SET [IsActive] = 0, [Updated] = SYSUTCDATETIME()
+                WHERE [FormCode] = N'DASHBOARDS' AND [ActionCode] = N'VIEW' AND [IsActive] = 1;
+            END;
+
+            -- 2026-06-17: Eski orphan Rapor Tasarimi form kodlari REPORT_DESIGNER olarak
+            -- yeniden kodlandi. Farkli form koduyla kalan Forms + PermissionDef pasiflestirilir.
+            IF OBJECT_ID(N'[{s}].[Forms]', N'U') IS NOT NULL
+            BEGIN
+                UPDATE [{s}].[Forms] SET [IsActive] = 0
+                WHERE [FormName] LIKE N'Rapor Tasarım%' AND [FormCode] != N'REPORT_DESIGNER' AND [IsActive] = 1;
+            END;
+            IF OBJECT_ID(N'[{s}].[PermissionDef]', N'U') IS NOT NULL
+              AND OBJECT_ID(N'[{s}].[Forms]', N'U') IS NOT NULL
+            BEGIN
+                UPDATE pd SET pd.[IsActive] = 0, pd.[Updated] = SYSUTCDATETIME()
+                FROM [{s}].[PermissionDef] pd
+                INNER JOIN [{s}].[Forms] f ON f.[FormCode] = pd.[FormCode]
+                WHERE f.[IsActive] = 0 AND f.[FormName] LIKE N'Rapor Tasarım%'
+                  AND pd.[IsActive] = 1;
+            END;
         ";
 
         await using var cmd = connection.CreateCommand();
@@ -16022,5 +16206,117 @@ END;";
         cmd.CommandText = sql;
         cmd.CommandTimeout = 0;
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task EnsurePersonnelBirthDateAsync(SqlConnection connection, CancellationToken ct)
+    {
+        await ExecAsync(connection, """
+            IF OBJECT_ID(N'dbo.Personnel', N'U') IS NOT NULL
+               AND COL_LENGTH(N'dbo.Personnel', N'BirthDate') IS NULL
+            BEGIN
+                ALTER TABLE dbo.Personnel ADD [BirthDate] DATETIME2 NULL;
+            END
+            """, ct);
+    }
+
+    private static async Task EnsureCalendarTablesAsync(SqlConnection connection, CancellationToken ct)
+    {
+        const string sql = """
+            IF OBJECT_ID(N'dbo.CalendarEvent', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.CalendarEvent (
+                    Id          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CalendarEvent PRIMARY KEY,
+                    Title       NVARCHAR(200) NOT NULL,
+                    Description NVARCHAR(1000) NULL,
+                    StartDate   DATETIME2 NOT NULL,
+                    EndDate     DATETIME2 NULL,
+                    IsAllDay    BIT NOT NULL CONSTRAINT DF_CalendarEvent_IsAllDay DEFAULT 1,
+                    Color       NVARCHAR(50) NULL,
+                    UserId      INT NOT NULL,
+                    IsActive    BIT NOT NULL CONSTRAINT DF_CalendarEvent_IsActive DEFAULT 1,
+                    CreatedBy   NVARCHAR(120) NULL,
+                    Created     DATETIME2 NOT NULL CONSTRAINT DF_CalendarEvent_Created DEFAULT SYSUTCDATETIME(),
+                    UpdatedBy   NVARCHAR(120) NULL,
+                    Updated     DATETIME2 NULL
+                );
+                CREATE INDEX IX_CalendarEvent_UserId ON dbo.CalendarEvent (UserId, StartDate);
+            END
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private async Task EnsureReportEngineTablesAsync(SqlConnection connection, CancellationToken ct)
+    {
+        const string sql = """
+            -- ReportSource: Kayıtlı SQL veri kaynakları (rapor motoru)
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ReportSource' AND schema_id = SCHEMA_ID('dbo'))
+            BEGIN
+                CREATE TABLE dbo.ReportSource (
+                    Id              INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ReportSource PRIMARY KEY,
+                    Name            NVARCHAR(200)  NOT NULL,
+                    Description     NVARCHAR(1000) NULL,
+                    SqlQuery        NVARCHAR(MAX)  NOT NULL,
+                    CacheTtlMinutes INT            NOT NULL CONSTRAINT DF_ReportSource_CacheTtl    DEFAULT 5,
+                    Materialize      BIT           NOT NULL CONSTRAINT DF_ReportSource_Materialize DEFAULT 0,
+                    LastMaterialized DATETIME2     NULL,
+                    MaterializedRows INT           NULL,
+                    RefreshScheduleJson NVARCHAR(200) NULL,
+                    IsActive        BIT            NOT NULL CONSTRAINT DF_ReportSource_IsActive    DEFAULT 1,
+                    CreatedBy       NVARCHAR(120)  NULL,
+                    Created         DATETIME2      NOT NULL CONSTRAINT DF_ReportSource_Created     DEFAULT SYSUTCDATETIME(),
+                    UpdatedBy       NVARCHAR(120)  NULL,
+                    Updated         DATETIME2      NULL
+                );
+                CREATE UNIQUE INDEX UX_ReportSource_Name ON dbo.ReportSource (Name) WHERE IsActive = 1;
+            END
+            -- Materialize (dosya cache) kolon migrasyonu (eski schema)
+            IF COL_LENGTH('dbo.ReportSource', 'Materialize') IS NULL
+                ALTER TABLE dbo.ReportSource ADD Materialize BIT NOT NULL CONSTRAINT DF_ReportSource_Materialize DEFAULT 0;
+            IF COL_LENGTH('dbo.ReportSource', 'LastMaterialized') IS NULL
+                ALTER TABLE dbo.ReportSource ADD LastMaterialized DATETIME2 NULL;
+            IF COL_LENGTH('dbo.ReportSource', 'MaterializedRows') IS NULL
+                ALTER TABLE dbo.ReportSource ADD MaterializedRows INT NULL;
+            IF COL_LENGTH('dbo.ReportSource', 'RefreshScheduleJson') IS NULL
+                ALTER TABLE dbo.ReportSource ADD RefreshScheduleJson NVARCHAR(200) NULL;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(ct);
+
+        const string sql2 = """
+            -- ReportDesign: Kullanıcının kaydettiği panel tasarımları
+            IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ReportDesign' AND schema_id = SCHEMA_ID('dbo'))
+            BEGIN
+                CREATE TABLE dbo.ReportDesign (
+                    Id          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_ReportDesign PRIMARY KEY,
+                    Title       NVARCHAR(200)  NOT NULL,
+                    GroupName   NVARCHAR(100)  NULL,
+                    Description NVARCHAR(1000) NULL,
+                    PanelsJson  NVARCHAR(MAX)  NOT NULL,
+                    IsActive    BIT            NOT NULL CONSTRAINT DF_ReportDesign_IsActive DEFAULT 1,
+                    CreatedBy   NVARCHAR(120)  NULL,
+                    Created     DATETIME2      NOT NULL CONSTRAINT DF_ReportDesign_Created  DEFAULT SYSUTCDATETIME(),
+                    UpdatedBy   NVARCHAR(120)  NULL,
+                    Updated     DATETIME2      NULL
+                );
+            END
+            -- GroupName kolon migrasyonu (eski schema)
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.ReportDesign') AND name = 'GroupName')
+            BEGIN
+                ALTER TABLE dbo.ReportDesign ADD GroupName NVARCHAR(100) NULL;
+            END
+            -- Description kolon migrasyonu (eski schema)
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.ReportDesign') AND name = 'Description')
+            BEGIN
+                ALTER TABLE dbo.ReportDesign ADD Description NVARCHAR(1000) NULL;
+            END
+            """;
+        await using var cmd2 = connection.CreateCommand();
+        cmd2.CommandText = sql2;
+        await cmd2.ExecuteNonQueryAsync(ct);
+
+        Console.WriteLine("[DB INIT] EnsureReportEngineTablesAsync tamamlandı.");
     }
 }

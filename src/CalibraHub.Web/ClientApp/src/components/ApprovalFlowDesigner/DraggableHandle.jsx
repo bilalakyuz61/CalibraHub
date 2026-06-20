@@ -134,6 +134,13 @@ export default function DraggableHandle(props) {
 
   var onPointerMove = useCallback(function (ev) {
     if (pointerIdRef.current == null) return
+    // React Flow native pointer-move listener'i drag sirasinda devreye girer ve
+    // connection-state'e gecirir → handle DOM'u "drag preview" sayilip gorunmez
+    // olabilir. Native bubble'i da kapatip Handle'i tamamen biz yonetelim.
+    ev.stopPropagation()
+    if (ev.nativeEvent && typeof ev.nativeEvent.stopImmediatePropagation === 'function') {
+      ev.nativeEvent.stopImmediatePropagation()
+    }
     if (!nodeElRef.current) return
     var p = pointToSideOffset(nodeElRef.current, ev.clientX, ev.clientY)
     if (!p) return

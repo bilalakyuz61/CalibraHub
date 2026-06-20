@@ -53,6 +53,7 @@ public interface IApprovalDocumentContextProvider
 public sealed class ApprovalDocumentContextProvider : IApprovalDocumentContextProvider
 {
     private readonly IIncomingDocumentRepository _incomingRepo;
+    private readonly IDocumentRepository _documentRepo;
     private readonly IUserProfileRepository _userRepo;
     private readonly ICardGroupRepository _cardGroupRepo;
     private readonly IFinanceService? _financeService;
@@ -61,6 +62,7 @@ public sealed class ApprovalDocumentContextProvider : IApprovalDocumentContextPr
 
     public ApprovalDocumentContextProvider(
         IIncomingDocumentRepository incomingRepo,
+        IDocumentRepository documentRepo,
         IUserProfileRepository userRepo,
         ICardGroupRepository cardGroupRepo,
         ILogger<ApprovalDocumentContextProvider> logger,
@@ -68,6 +70,7 @@ public sealed class ApprovalDocumentContextProvider : IApprovalDocumentContextPr
         ILogisticsConfigurationService? logistics = null)
     {
         _incomingRepo = incomingRepo;
+        _documentRepo = documentRepo;
         _userRepo = userRepo;
         _cardGroupRepo = cardGroupRepo;
         _financeService = financeService;
@@ -80,10 +83,8 @@ public sealed class ApprovalDocumentContextProvider : IApprovalDocumentContextPr
         var incoming = await _incomingRepo.GetByIdAsync(documentId, ct);
         if (incoming is null)
         {
-            // Belge bulunamadıysa: boş context dön — decision evaluator
-            // ham veri olmadan "false" döner, akış güvenli tarafta kalır.
-            _logger.LogWarning("ApprovalDocumentContext: IncomingDocument bulunamadı ({DocId}).", documentId);
-            return new ApprovalDocumentContext { DocumentId = documentId };
+            // IncomingDocument bulunamadı — regular Document fallback (ihtiyaç kaydı, teklif vb.)
+            return await BuildFromDocumentAsync(documentId, ct);
         }
 
         // Contact (cari) kartı sender VKN üzerinden eşle — varsa.
@@ -123,8 +124,7 @@ public sealed class ApprovalDocumentContextProvider : IApprovalDocumentContextPr
             }
         }
 
-        // IncomingDocument'ta CreatedByUserId yok — null geçilir.
-        // İleride uygulama tarafında document.CreatedByUserId eklendiğinde bağlanır.
+        // IncomingDocument'ta CreatedByUserId yok.
         int? createdByUserId = null;
         int? createdByDeptId = null;
 
@@ -147,6 +147,44 @@ public sealed class ApprovalDocumentContextProvider : IApprovalDocumentContextPr
             CreatedByUserId = createdByUserId,
             CreatedByDepartmentId = createdByDeptId,
             Lines = lines,
+        };
+    }
+
+    // ── Regular Document fallback (ihtiyaç kaydı, teklif, sipariş vb.) ───────
+    // DocumentIntToGuid imzası: ilk 4 byte little-endian int, kalan 12 byte magic.
+    // Aynı tersine çevirme: BitConverter.ToInt32(guid.ToByteArray(), 0) → orijinal int ID.
+    private async Task<ApprovalDocumentContext> BuildFromDocumentAsync(Guid documentId, CancellationToken ct)
+    {
+        var bytes    = documentId.ToByteArray();
+        var docIntId = BitConverter.ToInt32(bytes, 0);
+
+        if (docIntId <= 0)
+        {
+            _logger.LogWarning("ApprovalDocumentContext: GUID → int dönüşümü başarısız ({DocId}).", documentId);
+            return new ApprovalDocumentContext { DocumentId = documentId };
+        }
+
+        var doc = await _documentRepo.GetByIdAsync(docIntId, ct);
+        if (doc is null)
+        {
+            _logger.LogWarning("ApprovalDocumentContext: Document bulunamadı (GUID={DocId}, Id={IntId}).", documentId, docIntId);
+            return new ApprovalDocumentContext { DocumentId = documentId };
+        }
+
+        return new ApprovalDocumentContext
+        {
+            DocumentId            = documentId,
+            DocumentNumber        = doc.DocumentNumber,
+            DocumentKind          = "Document",
+            Amount                = doc.GrandTotal,
+            DocumentDate          = doc.DocumentDate,
+            ContactId             = doc.ContactId,
+            ContactCode           = null,
+            ContactName           = null,
+            ContactGroupByLevel   = new Dictionary<int, int>(),
+            CreatedByUserId       = doc.CreatedById,
+            CreatedByDepartmentId = null,
+            Lines                 = Array.Empty<DocumentLineCtx>(),
         };
     }
 }

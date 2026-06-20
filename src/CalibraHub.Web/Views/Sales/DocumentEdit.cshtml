@@ -28,6 +28,12 @@
     var listReturnUrl  = !string.IsNullOrWhiteSpace(Model.ListReturnUrl)
         ? Model.ListReturnUrl
         : (isOrder ? "/Sales/Orders" : "/Sales/Quotes");   // teklif yeni route + siparis ayri
+    // 2026-06-16: iframe-aware — query'ye workspace=1 ekle. _Layout.cshtml bu flag'i
+    // görünce React Shell'i mount etmez (matruska kabuk / duplicate sidebar önlenir).
+    // Bazı tarayıcılarda JS-driven window.location.href navigate'inde Sec-Fetch-Dest
+    // "document" gelir → workspace=1 olmadan Shell tekrar render edilir.
+    if (!listReturnUrl.Contains("workspace=", StringComparison.Ordinal))
+        listReturnUrl += (listReturnUrl.Contains('?') ? "&" : "?") + "workspace=1";
     ViewData["Title"] = Model.DocumentId.HasValue ? entityLabel + " Duzenle" : "Yeni " + entityLabel;
     ViewData["FormCode"] = headerFormCode;
     ViewData["BodyClass"] = "page-sales-quote-edit";
@@ -2371,7 +2377,7 @@
                             <small class="text-warning ms-1" title="Hesabınıza bağlı personel kaydı bulunamadı.">⚠ Personel kaydı yok</small>
                         }
                     </div>
-                    @if (requesterLocked && curPersonnelId.HasValue)
+                    @if (curPersonnelId.HasValue)
                     {
                         <script>
                         (function(){

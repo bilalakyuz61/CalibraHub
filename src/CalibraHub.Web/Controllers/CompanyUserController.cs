@@ -211,7 +211,7 @@ public sealed class CompanyUserController : Controller
         var supervisors = usersAll
             .Where(u => u.IsActive && u.CompanyId == companyId)
             .OrderBy(u => u.FullName, StringComparer.OrdinalIgnoreCase)
-            .Select(u => new { id = u.Id, name = u.FullName })
+            .Select(u => new { id = u.Id, name = u.FullName, email = u.Email })
             .ToArray();
 
         var roles = new[]
@@ -269,7 +269,6 @@ public sealed class CompanyUserController : Controller
                 supervisorUserId = user.SupervisorUserId,
                 phoneNumber = user.PhoneNumber,
                 role = (int)user.Role,
-                grafanaRole = user.GrafanaRole?.ToString(),
                 isActive = user.IsActive,
             }
         });
@@ -286,11 +285,7 @@ public sealed class CompanyUserController : Controller
         string? PhoneNumber,
         int Role,
         bool IsActive,
-        // Yeni kullanici icin ilk giris sifresi. Edit modunda gonderilmez (mevcut sifre korunur).
-        // Bos verilirse backend DefaultPassword ("12345678") atar.
-        string? Password = null,
-        // Grafana yetki seviyesi: NULL/empty = Grafana'ya eklenmez, "Viewer"/"Designer"/"Admin" = ilgili rol.
-        string? GrafanaRole = null);
+        string? Password = null);
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -314,17 +309,6 @@ public sealed class CompanyUserController : Controller
         if (role != UserRole.Operator && role != UserRole.DepartmentManager && role != UserRole.SystemAdmin)
             return Json(new { ok = false, error = "Yalnızca User, Admin veya Sistem Admin yetkisi atanabilir." });
 
-        // Grafana yetki seviyesi parse — bos/null = Grafana'ya eklenmez/cikartilir,
-        // "Viewer"/"Designer"/"Admin" = ilgili rol.
-        GrafanaRole? grafanaRole = null;
-        if (!string.IsNullOrWhiteSpace(dto.GrafanaRole))
-        {
-            if (Enum.TryParse(dto.GrafanaRole.Trim(), true, out GrafanaRole parsedGrafana))
-                grafanaRole = parsedGrafana;
-            else
-                return Json(new { ok = false, error = "Grafana yetkisi geçersiz (Viewer/Designer/Admin/boş)." });
-        }
-
         try
         {
             if (dto.Id.HasValue && dto.Id.Value > 0)
@@ -335,15 +319,13 @@ public sealed class CompanyUserController : Controller
                     return Json(new { ok = false, error = "Kullanıcı bulunamadı." });
 
                 // 2026-06-08 — Departman artık UI'da; dto.DepartmentId ile güncellenir.
-                // Amir / Grafana UI'da yok; mevcut değer korunur.
+                // 2026-06-15 — Amir artık UI'da; dto.SupervisorUserId ile güncellenir.
                 await _adminService.UpdateUserAsync(new UpdateUserRequest(
                     Id: existing.Id,
                     CompanyId: companyId,
                     FullName: dto.FullName ?? string.Empty,
                     Email: dto.Email ?? string.Empty,
                     Password: null,
-                    SetGrafanaRole: false,
-                    GrafanaRole: null,
                     SetRole: true,
                     Role: role
                 ), ct);
@@ -363,11 +345,10 @@ public sealed class CompanyUserController : Controller
                         // 2026-06-08 — DepartmentId UI payload'unda mevcut. Boş gönderilirse
                         // (null) departmandan çıkar; dolu ise yeni departmanı set et.
                         DepartmentId     = dto.DepartmentId,
-                        SupervisorUserId = refreshed.SupervisorUserId,  // korunur (UI'da yok)
+                        SupervisorUserId = dto.SupervisorUserId,
                         PhoneNumber      = NormalizePhone(dto.PhoneNumber),
                         Role             = refreshed.Role,              // role yukarida AdminService set etti
                         Permissions      = refreshed.Permissions,
-                        GrafanaRole      = refreshed.GrafanaRole,
                     };
                     rebuilt.SetPasswordHash(refreshed.PasswordHash);
                     rebuilt.SetInterfacePreferences(refreshed.LanguageCode, refreshed.ThemeCode);
@@ -411,8 +392,7 @@ public sealed class CompanyUserController : Controller
                     SupervisorUserId: dto.SupervisorUserId,
                     Role: role,
                     Permissions: permissions,
-                    Password: initialPassword,
-                    GrafanaRole: grafanaRole
+                    Password: initialPassword
                 ), ct);
 
                 // PhoneNumber CreateUserRequest'te yok — telefon verildiyse yeni user'i
@@ -435,7 +415,6 @@ public sealed class CompanyUserController : Controller
                             PhoneNumber      = phone,
                             Role             = created.Role,
                             Permissions      = created.Permissions,
-                            GrafanaRole      = created.GrafanaRole,
                         };
                         withPhone.SetPasswordHash(created.PasswordHash);
                         withPhone.SetInterfacePreferences(created.LanguageCode, created.ThemeCode);

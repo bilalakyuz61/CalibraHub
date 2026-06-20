@@ -70,4 +70,5 @@ public sealed record WaConversationSummary(
     bool IsGroup = false,
     string? GroupJid = null,
     string? GroupSubject = null,
-    int GroupMemberCount = 0);
+    int GroupMemberCount = 0,
+    bool HasIncoming = true);

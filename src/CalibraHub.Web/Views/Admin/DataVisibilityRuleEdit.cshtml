@@ -2,7 +2,7 @@
 @using System.Text.Json
 @{
     var isNew = Model.IsNew;
-    ViewData["Title"]     = isNew ? "Yeni Veri Görünürlük Kuralı" : $"Kural: {Model.Name}";
+    ViewData["Title"]     = isNew ? "Yeni Veri Perdeleme Kuralı" : $"Kural: {Model.Name}";
     ViewData["FormCode"]  = "DATA_VISIBILITY";
     ViewData["BodyClass"] = "page-dv-edit";
 
@@ -238,7 +238,7 @@ body.app-theme-dark .dv-rp-hide { color: #f87171; }
                 <option value="@f.Code" selected="@(string.Equals(f.Code, Model.FormCode, StringComparison.OrdinalIgnoreCase))">@f.Name</option>
               }
             </select>
-            <span class="dv-hint">Kuralın uygulanacağı veri ekranı. Bu forma takılan satırlar herkesten gizlenir.</span>
+            <span class="dv-hint">Kuralın uygulanacağı veri ekranı. Bu forma takılan satırlar herkesten perdelenir.</span>
           </div>
 
           <div class="dv-field">
@@ -262,7 +262,7 @@ body.app-theme-dark .dv-rp-hide { color: #f87171; }
           <div class="dv-field">
             <label class="dv-label" for="dv-operator">Operatör *</label>
             <select id="dv-operator" class="dv-select"></select>
-            <span class="dv-hint">Bu koşulu sağlayan satırlar gizlenir.</span>
+            <span class="dv-hint">Bu koşulu sağlayan satırlar perdelenir.</span>
           </div>
 
           <div class="dv-field" id="dv-values-field">
@@ -289,7 +289,7 @@ body.app-theme-dark .dv-rp-hide { color: #f87171; }
         <!-- Kısıtlamalar -->
         <div class="dv-panel" id="panel-grants">
           <p class="dv-grant-hint">
-            Seçilen kullanıcılar veya departmanlar bu kuraldan etkilenir — eşleşen satırlar onlardan gizlenir.
+            Seçilen kullanıcılar veya departmanlar bu kuraldan etkilenir — eşleşen satırlar onlardan perdelenir.
             Hiç seçilmezse kural tüm kullanıcılara uygulanır.
           </p>
 
@@ -659,7 +659,7 @@ body.app-theme-dark .dv-rp-hide { color: #f87171; }
         } else {
             html = '<strong>' + escHtml(formText) + '</strong> formunda <strong>'
                 + escHtml(fieldText) + '</strong> alanı <em>' + escHtml(opLabel) + '</em>'
-                + valPart + ' olan satırlar etkilenen kullanıcılardan <span class="dv-rp-hide">gizlenecek</span>.';
+                + valPart + ' olan satırlar etkilenen kullanıcılardan <span class="dv-rp-hide">perdelenecek</span>.';
         }
         el.innerHTML = html;
     }
@@ -771,9 +771,11 @@ function dvCloseModal() {
     if (btn) { btn.disabled = false; btn.textContent = 'Sil'; }
 }
 function dvNavBack() {
-    // workspace-frame-nav-guard.js intercepts href setter inside iframe → adds ?workspace=1.
-    // Düz navigate yeterli; Shell API'si iframe src'yi güncellemediği için openWorkspaceTab gereksiz.
-    window.location.href = '/Admin/DataVisibilityRules';
+    // Iframe (workspace) içindeyiz. workspace-frame-nav-guard.js href-setter override'ı bazı
+    // tarayıcılarda tutmaz (__wsNavHrefOverride=false) → ?workspace=1 düşerse liste TAM shell ile
+    // yüklenir ve menü iç içe açılır. Bu yüzden parametreyi AÇIKÇA ekliyoruz; _Layout ?workspace=1
+    // gördüğünde React Shell'i render etmez (yalnızca içerik). Guard çalışsa da çift eklenmez.
+    window.location.href = '/Admin/DataVisibilityRules?workspace=1';
 }
 </script>
 }

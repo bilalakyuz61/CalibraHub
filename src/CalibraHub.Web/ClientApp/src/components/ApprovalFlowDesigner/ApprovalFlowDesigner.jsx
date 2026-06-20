@@ -102,10 +102,12 @@ function ensureMinimumNodes(initialNodes) {
 }
 
 function edgeStyleForKind(kind) {
-  if (kind === 'true')    return { stroke: '#10b981', strokeWidth: 2 }
-  if (kind === 'false')   return { stroke: '#ef4444', strokeWidth: 2 }
-  if (kind === 'timeout') return { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5 3' }
-  return { stroke: '#94a3b8', strokeWidth: 1.6 }
+  if (kind === 'true')    return { stroke: '#10b981', strokeWidth: 2 }                            // Onay/Evet
+  if (kind === 'false')   return { stroke: '#ef4444', strokeWidth: 2 }                            // Red/Hayır
+  if (kind === 'timeout') return { stroke: '#f59e0b', strokeWidth: 2, strokeDasharray: '5 3' }    // Gecikme
+  if (kind === 'info')    return { stroke: '#3b82f6', strokeWidth: 2 }                            // Bilgi/Bildirim
+  if (kind === 'error')   return { stroke: '#a855f7', strokeWidth: 2, strokeDasharray: '6 3' }    // Hata
+  return { stroke: '#94a3b8', strokeWidth: 1.6 }                                                   // Varsayılan
 }
 
 function decorateEdge(edge) {
@@ -154,10 +156,13 @@ function DesignerInner(props) {
     var nodeTypeById = {}
     initNodes.forEach(function (n) { nodeTypeById[n.id] = n.type })
     return (Array.isArray(props.initialEdges) ? props.initialEdges : []).map(function (e) {
-      // EdgeKind → sourceHandle deduce (DB SourceHandle persist etmez; render için gerekli)
+      // 1) Backend'den gelen sourceHandle/targetHandle varsa direkt kullan
+      //    (2026-06-15: ApprovalFlowEdge.SourceHandle/TargetHandle kolonlari).
+      // 2) Yoksa edgeKind + source node tipinden deduce (geriye uyum, eski kayitlar).
       var srcType = nodeTypeById[e.source]
       var kind = e.data && e.data.edgeKind
       var sh = e.sourceHandle
+      var th = e.targetHandle
       if (!sh && kind) {
         if (srcType === 'step') {
           if (kind === 'true')        sh = 'approve'
@@ -168,7 +173,10 @@ function DesignerInner(props) {
           else if (kind === 'false') sh = 'false'
         }
       }
-      var withHandle = sh ? Object.assign({}, e, { sourceHandle: sh }) : e
+      var patch = {}
+      if (sh) patch.sourceHandle = sh
+      if (th) patch.targetHandle = th
+      var withHandle = (sh || th) ? Object.assign({}, e, patch) : e
       return decorateEdge(withHandle)
     })
   })
@@ -208,6 +216,19 @@ function DesignerInner(props) {
 
   var reactFlowWrapper = useRef(null)
   var rf = useReactFlow()
+
+  // Initial mount sonrasi fit garanti — `fitView` prop'u bazen CSS layout hazir
+  // olmadan tetikleniyor ve zoom yanlis hesaplaniyor. 200ms gecikme ile rf.fitView()
+  // cagrisi ekran tam yerlesince butun node'larin viewport'a oturmasini saglar.
+  useEffect(function () {
+    var t = setTimeout(function () {
+      if (rf && typeof rf.fitView === 'function') {
+        try { rf.fitView({ padding: 0.2, maxZoom: 1.2, duration: 0 }) } catch (_) {}
+      }
+    }, 200)
+    return function () { clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /* ── Undo/Redo history ────────────────────────────────────────────────────
      Anlamlı sınırlarda (drop/connect/delete/drag-stop/prop-change) snapshot
@@ -348,6 +369,8 @@ function DesignerInner(props) {
         edgeKind: d.edgeKind || 'default',
         condition: d.condition || null,
         sortOrder: i,
+        sourceHandle: e.sourceHandle || null,
+        targetHandle: e.targetHandle || null,
       }
     })
     return { nodes: payloadNodes, edges: payloadEdges, rules: rules, variables: variables }

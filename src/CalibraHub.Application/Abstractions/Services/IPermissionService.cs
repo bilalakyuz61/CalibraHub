@@ -33,6 +33,14 @@ public interface IPermissionService
         string formCode, IReadOnlyList<string> actionCodes, CancellationToken ct);
 
     /// <summary>
+    /// Form'a ait aktif PermissionDef'lerden herhangi biri izinli mi?
+    /// RESOURCE:DASH:* gibi non-standart action'ları da kapsar.
+    /// Menü görünürlüğü kontrolü için kullanılır — form için hiç grant yoksa false.
+    /// </summary>
+    Task<bool> CheckAnyForFormAsync(int userId, UserRole role, int? departmentId,
+        string formCode, CancellationToken ct);
+
+    /// <summary>
     /// Kullanıcının tüm efektif izinlerini matrisi olarak döner (admin UI "Override" tabı için).
     /// Her PermissionDef için (Source: USER/DEPARTMENT/DEFAULT, IsAllowed: true/false) çifti.
     /// </summary>
@@ -45,6 +53,34 @@ public interface IPermissionService
     /// </summary>
     Task<IReadOnlyList<EffectivePermissionDto>> GetDepartmentPermissionsAsync(
         int departmentId, CancellationToken ct);
+
+    /// <summary>
+    /// Kullanıcının belirli bir operasyon için en geniş erişim kapsamını döner.
+    /// <para>
+    /// <paramref name="operation"/>: "VIEW", "EDIT" veya "DELETE".
+    /// VIEW → VIEW / VIEW_DEPT / VIEW_OWN kontrol edilir (en yüksekten düşüğe).
+    /// </para>
+    /// <para>Sonuç: <see cref="AccessScope.All"/> | Department | Own | None</para>
+    /// </summary>
+    Task<AccessScope> GetAccessScopeAsync(
+        int userId, UserRole role, int? departmentId,
+        string formCode, string operation, CancellationToken ct);
+
+    /// <summary>
+    /// Kullanıcının belirli bir kaydı okuyup okuyamayacağını / düzenleyip düzenleyemeyeceğini
+    /// scope+kayıt sahipliği üzerinden kontrol eder.
+    /// <para>
+    /// <paramref name="operation"/>: "VIEW", "EDIT" veya "DELETE".<br/>
+    /// <paramref name="recordCreatorId"/>: Kaydın <c>CreatedById</c> değeri.<br/>
+    /// <paramref name="recordCreatorDeptId"/>: Kaydı oluşturan kullanıcının departmanı
+    ///   (genelde <c>Users.DepartmentId</c> JOIN üzerinden gelir).
+    /// </para>
+    /// </summary>
+    Task<bool> CheckRecordAccessAsync(
+        int userId, UserRole role, int? userDeptId,
+        string formCode, string operation,
+        int recordCreatorId, int? recordCreatorDeptId,
+        CancellationToken ct);
 
     /// <summary>
     /// Admin izinleri toplu kaydetti — ilgili cache satırını temizle.

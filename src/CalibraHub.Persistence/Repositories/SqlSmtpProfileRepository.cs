@@ -42,7 +42,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         return result;
     }
 
-    public async Task<SmtpProfile?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<SmtpProfile?> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         await using var connection = await _connectionFactory.OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -68,9 +68,9 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             INSERT INTO {_tableName}
-                ([Id], [CompanyId], [Name], [FromEmail], [FromDisplayName], [Host], [Port], [Username], [Password], [AuthMethod], [OAuth2ClientId], [OAuth2ClientSecret], [OAuth2RefreshToken], [UseSsl], [IsActive], [Created], [Updated])
+                ([CompanyId], [Name], [FromEmail], [FromDisplayName], [Host], [Port], [Username], [Password], [AuthMethod], [OAuth2ClientId], [OAuth2ClientSecret], [OAuth2RefreshToken], [UseSsl], [IsActive], [Created], [Updated])
             VALUES
-                (@Id, @EntityCompanyId, @Name, @FromEmail, @FromDisplayName, @Host, @Port, @Username, @Password, @AuthMethod, @OAuth2ClientId, @OAuth2ClientSecret, @OAuth2RefreshToken, @UseSsl, @IsActive, @Created, @Updated);
+                (@EntityCompanyId, @Name, @FromEmail, @FromDisplayName, @Host, @Port, @Username, @Password, @AuthMethod, @OAuth2ClientId, @OAuth2ClientSecret, @OAuth2RefreshToken, @UseSsl, @IsActive, @Created, @Updated);
             """;
 
         AddCommonParameters(command, profile);
@@ -105,6 +105,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
             """;
 
         AddCommonParameters(command, profile);
+        command.Parameters.Add(new SqlParameter("@Id", profile.Id));
         command.Parameters.Add(new SqlParameter("@Updated", DateTime.Now));
 
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -112,7 +113,6 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
 
     private static void AddCommonParameters(SqlCommand command, SmtpProfile profile)
     {
-        command.Parameters.Add(new SqlParameter("@Id", profile.Id));
         command.Parameters.Add(new SqlParameter("@EntityCompanyId", profile.CompanyId));
         command.Parameters.Add(new SqlParameter("@Name", profile.Name));
         command.Parameters.Add(new SqlParameter("@FromEmail", profile.FromEmail));
@@ -133,7 +133,7 @@ public sealed class SqlSmtpProfileRepository : ISmtpProfileRepository
     {
         var profile = new SmtpProfile
         {
-            Id = r.GetGuid(r.GetOrdinal("Id")),
+            Id = r.GetInt32(r.GetOrdinal("Id")),
             CompanyId = r.GetInt32(r.GetOrdinal("CompanyId")),
             Name = r.GetString(r.GetOrdinal("Name")),
             FromEmail = r.GetString(r.GetOrdinal("FromEmail")),

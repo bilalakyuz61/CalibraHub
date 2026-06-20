@@ -37,13 +37,14 @@
         border-color: rgba(255,255,255,.1);
     }
 
-    .pa-body { display: grid; grid-template-columns: 260px 1fr; gap: 14px; flex: 1 1 auto; min-height: 0; }
+    .pa-body { display: flex; flex-direction: row; gap: 14px; flex: 1 1 auto; min-height: 0; }
 
     .pa-groups {
+        flex: 0 0 260px;
         background: var(--surface, #fff);
         border: 1px solid rgba(148,163,184,.18);
         border-radius: 10px; padding: 8px;
-        overflow-y: auto;
+        overflow-y: auto; min-height: 0;
     }
     body.app-theme-dark .pa-groups,
     html.dark .pa-groups {
@@ -74,6 +75,7 @@
     .pa-group.empty { opacity: 0.5; padding: 14px; text-align: center; font-size: 12px; color: #94a3b8; }
 
     .pa-list-wrap {
+        flex: 1 1 auto;
         background: var(--surface, #fff);
         border: 1px solid rgba(148,163,184,.18);
         border-radius: 10px; overflow: hidden;
@@ -99,13 +101,14 @@
         position: sticky; top: 0;
         background: rgba(241,245,249,1); color: #64748b;
         font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
-        padding: 10px 14px; text-align: left;
+        padding: 7px 12px; text-align: left;
         border-bottom: 1px solid rgba(148,163,184,.15);
     }
     body.app-theme-dark .pa-table th,
     html.dark .pa-table th { background: rgba(30,41,59,1); }
     .pa-table td {
-        padding: 10px 14px; border-bottom: 1px solid rgba(148,163,184,.08);
+        padding: 6px 12px; border-bottom: 1px solid rgba(148,163,184,.08);
+        vertical-align: middle;
     }
     .pa-table tr { cursor: pointer; transition: background 0.12s; }
     .pa-table tr:hover td { background: rgba(99,102,241,.05); }
@@ -122,6 +125,57 @@
         padding: 2px 8px; border-radius: 10px;
     }
     .pa-overdue { color: #ef4444; font-weight: 600; }
+
+    /* ── Sütunlar butonu ─────────────────────────────────── */
+    .pa-col-btn {
+        margin-left: auto;
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 5px 12px; border-radius: 7px;
+        border: 1px solid rgba(148,163,184,.25);
+        background: transparent; cursor: pointer;
+        font-size: 12px; font-weight: 500; color: #64748b;
+        transition: background 0.15s, border-color 0.15s;
+    }
+    .pa-col-btn:hover { background: rgba(99,102,241,.07); border-color: rgba(99,102,241,.35); color: #6366f1; }
+    body.app-theme-dark .pa-col-btn { color: #94a3b8; border-color: rgba(255,255,255,.12); }
+    body.app-theme-dark .pa-col-btn:hover { background: rgba(99,102,241,.15); color: #818cf8; }
+
+    /* ── Sütun seçim paneli ──────────────────────────────── */
+    .pa-col-panel {
+        display: none; position: fixed; z-index: 1100;
+        background: var(--app-surface, #fff);
+        border: 1px solid rgba(148,163,184,.2);
+        border-radius: 10px;
+        box-shadow: 0 8px 32px rgba(15,23,42,.18);
+        padding: 12px 0; min-width: 200px;
+    }
+    .pa-col-panel.open { display: block; }
+    body.app-theme-dark .pa-col-panel {
+        background: #1e293b; border-color: rgba(255,255,255,.1);
+        box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    .pa-col-panel-title {
+        padding: 2px 14px 10px;
+        font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+        color: #94a3b8; border-bottom: 1px solid rgba(148,163,184,.12); margin-bottom: 6px;
+    }
+    .pa-col-row {
+        padding: 5px 14px; display: flex; align-items: center; gap: 8px;
+        cursor: pointer; font-size: 13px; transition: background 0.12s;
+    }
+    .pa-col-row:hover { background: rgba(99,102,241,.07); }
+    body.app-theme-dark .pa-col-row:hover { background: rgba(99,102,241,.12); }
+    .pa-col-row input[type="checkbox"] { cursor: pointer; accent-color: #6366f1; }
+    .pa-col-row label { cursor: pointer; flex: 1; user-select: none; }
+
+    /* ── Sütun gizleme (CSS class toggle on .pa-list-wrap) ── */
+    .pa-list-wrap.pa-hide-flow .pa-col-flow { display: none !important; }
+    .pa-list-wrap.pa-hide-typ  .pa-col-typ  { display: none !important; }
+    .pa-list-wrap.pa-hide-cari .pa-col-cari { display: none !important; }
+    .pa-list-wrap.pa-hide-amt  .pa-col-amt  { display: none !important; }
+    .pa-list-wrap.pa-hide-step .pa-col-step { display: none !important; }
+    .pa-list-wrap.pa-hide-apvr .pa-col-apvr { display: none !important; }
+    .pa-list-wrap.pa-hide-dt   .pa-col-dt   { display: none !important; }
 
     /* Modal */
     .pa-modal-backdrop {
@@ -240,6 +294,21 @@
                     <div class="pa-list-title" id="paListTitle">Tüm belge türleri</div>
                     <div class="pa-list-count" id="paListCount"></div>
                 </div>
+                <button type="button" class="pa-col-btn" id="paColBtn" onclick="paToggleColPanel(event)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v1m0 16v1M4.22 4.22l.71.71m14.14 14.14.71.71M3 12h1m16 0h1M4.93 19.07l.71-.71M18.36 5.64l.71-.71"/><circle cx="12" cy="12" r="4"/></svg>
+                    Sütunlar
+                </button>
+            </div>
+            <!-- Sütun seçim paneli -->
+            <div class="pa-col-panel" id="paColPanel">
+                <div class="pa-col-panel-title">Sütun Görünürlüğü</div>
+                <div class="pa-col-row"><input type="checkbox" id="paColFlow" onchange="paColToggle('flow',this.checked)"><label for="paColFlow">Akış Adı</label></div>
+                <div class="pa-col-row"><input type="checkbox" id="paColTyp"  onchange="paColToggle('typ', this.checked)"><label for="paColTyp">Tür</label></div>
+                <div class="pa-col-row"><input type="checkbox" id="paColCari" onchange="paColToggle('cari',this.checked)"><label for="paColCari">Cari</label></div>
+                <div class="pa-col-row"><input type="checkbox" id="paColAmt"  onchange="paColToggle('amt', this.checked)"><label for="paColAmt">Tutar</label></div>
+                <div class="pa-col-row"><input type="checkbox" id="paColStep" onchange="paColToggle('step',this.checked)"><label for="paColStep">Adım</label></div>
+                <div class="pa-col-row"><input type="checkbox" id="paColApvr" onchange="paColToggle('apvr',this.checked)"><label for="paColApvr">Onaylayıcı</label></div>
+                <div class="pa-col-row"><input type="checkbox" id="paColDt"   onchange="paColToggle('dt',  this.checked)"><label for="paColDt">Bekliyor (Tarih)</label></div>
             </div>
             <div class="pa-list-scroll" id="paListScroll">
                 <div class="pa-empty">Sol panelden bir belge türü seçin…</div>
@@ -290,6 +359,8 @@
 
     let activeDocTypeId = null;  // null = tüm türler
     let currentInstanceId = null;
+    let _extraCols = [];          // [{key, label, dataType}] — aktif extra kolon defs
+    let _extraData = {};          // {instanceId: {colName: strValue}} — aktif extra kolon verileri
 
     function csrf() {
         const el = document.querySelector('input[name="__RequestVerificationToken"]');
@@ -370,38 +441,100 @@
             const data = await resp.json();
             if (!data.ok) throw new Error(data.error || 'Hata');
             renderList(data.items);
+            // noinspection ES6MissingAwait — arka planda extra kolon meta+veri yükle, hazır olunca yeniden render
+            loadExtraColumnsAndData(data.items);
         } catch (err) {
             listScrollEl.innerHTML = '<div class="pa-empty" style="color:#ef4444;">Hata: ' + escapeHtml(err.message) + '</div>';
         }
+    }
+
+    async function loadExtraColumnsAndData(items) {
+        const views = [...new Set(items.map(i => i.extraColumnsViewName).filter(Boolean))];
+        if (views.length !== 1) {
+            _extraCols = []; _extraData = {};
+            updateExtraColPanel();
+            return;
+        }
+        const viewName = views[0];
+        const idList   = items.map(i => i.instanceId).join(',');
+        try {
+            const [metaR, dataR] = await Promise.all([
+                fetch('/PendingApproval/FlowExtraColumns?viewName=' + encodeURIComponent(viewName), { credentials: 'same-origin' }),
+                fetch('/PendingApproval/FlowExtraData?viewName=' + encodeURIComponent(viewName) + '&ids=' + idList, { credentials: 'same-origin' })
+            ]);
+            const [metaJ, dataJ] = await Promise.all([metaR.json(), dataR.json()]);
+            _extraCols = (metaJ.ok && metaJ.columns) ? metaJ.columns : [];
+            _extraData = (dataJ.ok && dataJ.data)    ? dataJ.data    : {};
+        } catch(e) { _extraCols = []; _extraData = {}; }
+        renderList(items);
+        updateExtraColPanel();
+    }
+
+    function updateExtraColPanel() {
+        const panel = document.getElementById('paColPanel');
+        if (!panel) return;
+        panel.querySelectorAll('.pa-col-row-extra').forEach(el => el.remove());
+        if (!_extraCols.length) return;
+        let localCfg = {};
+        try { localCfg = JSON.parse(localStorage.getItem('pa-col-cfg') || '{}'); } catch(e) {}
+        const sep = document.createElement('div');
+        sep.style.cssText = 'padding:4px 14px 2px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;border-top:1px solid rgba(148,163,184,.12);margin-top:4px;';
+        sep.textContent = 'Akış Alanları';
+        sep.className = 'pa-col-row-extra';
+        panel.appendChild(sep);
+        _extraCols.forEach(col => {
+            const row = document.createElement('div');
+            row.className = 'pa-col-row pa-col-row-extra';
+            const cbId    = 'paColExt_' + col.key;
+            const checked = localCfg['ext_' + col.key] !== false;
+            row.innerHTML = '<input type="checkbox" id="' + cbId + '" ' + (checked ? 'checked' : '') +
+                            ' onchange="paColToggle(\'ext_' + col.key + '\',this.checked)">' +
+                            '<label for="' + cbId + '">' + escapeHtml(col.label) + '</label>';
+            panel.appendChild(row);
+        });
     }
 
     function renderList(items) {
         if (!items || items.length === 0) {
             listScrollEl.innerHTML = '<div class="pa-empty">Bu türde bekleyen kayıt yok.</div>';
             listCountEl.textContent = '';
+            _extraCols = []; _extraData = {};
+            updateExtraColPanel();
             return;
         }
         listCountEl.textContent = items.length + ' kayıt';
+        // Extra kolon header'ları
+        const extraHeaders = _extraCols.map(c =>
+            '<th class="pa-col-ext pa-col-ext-' + c.key + '">' + escapeHtml(c.label) + '</th>'
+        ).join('');
         let html = '<table class="pa-table"><thead><tr>' +
                    '<th>Belge No</th>' +
-                   '<th>Tür</th>' +
-                   '<th>Cari</th>' +
-                   '<th>Tutar</th>' +
-                   '<th>Adım</th>' +
-                   '<th>Bekliyor</th>' +
+                   '<th class="pa-col-flow">Akış</th>' +
+                   '<th class="pa-col-typ">Tür</th>' +
+                   '<th class="pa-col-cari">Cari</th>' +
+                   '<th class="pa-col-amt">Tutar</th>' +
+                   '<th class="pa-col-step">Adım</th>' +
+                   '<th class="pa-col-apvr">Onaylayıcı</th>' +
+                   extraHeaders +
+                   '<th class="pa-col-dt">Bekliyor</th>' +
                    '</tr></thead><tbody>';
         const now = Date.now();
         items.forEach(it => {
             const overdue = it.dueDate && new Date(it.dueDate).getTime() < now;
             html += '<tr data-instance-id="' + it.instanceId + '">' +
-                    '<td><strong>' + escapeHtml(it.documentNumber) + '</strong>' +
-                    '<div style="font-size:11px;color:#94a3b8;">' + escapeHtml(it.flowName) + '</div></td>' +
-                    '<td>' + escapeHtml(it.documentTypeName || 'Belirsiz') + '</td>' +
-                    '<td>' + escapeHtml(it.contactName || '—') + '</td>' +
-                    '<td>' + fmtMoney(it.grandTotal, it.currencyCode) + '</td>' +
-                    '<td><span class="pa-step-pill">' + it.stepOrder + ' / ' + it.totalSteps + '</span>' +
-                    '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">' + escapeHtml(it.stepName) + '</div></td>' +
-                    '<td class="' + (overdue ? 'pa-overdue' : '') + '">' + fmtDate(it.stepCreated) + '</td>' +
+                    '<td><strong>' + escapeHtml(it.documentNumber) + '</strong></td>' +
+                    '<td class="pa-col-flow" style="font-size:11px;color:#94a3b8;">' + escapeHtml(it.flowName) + '</td>' +
+                    '<td class="pa-col-typ">' + escapeHtml(it.documentTypeName || 'Belirsiz') + '</td>' +
+                    '<td class="pa-col-cari">' + escapeHtml(it.contactName || '—') + '</td>' +
+                    '<td class="pa-col-amt">' + fmtMoney(it.grandTotal, it.currencyCode) + '</td>' +
+                    '<td class="pa-col-step"><span class="pa-step-pill">' + it.stepPosition + ' / ' + it.totalSteps + '</span>' +
+                    '<span style="font-size:11px;color:#94a3b8;margin-left:6px;">' + escapeHtml(it.stepName) + '</span></td>' +
+                    '<td class="pa-col-apvr">' + escapeHtml(it.approverName || '—') + '</td>' +
+                    _extraCols.map(function(c) {
+                        const extRow = _extraData[it.instanceId] || _extraData[String(it.instanceId)] || {};
+                        return '<td class="pa-col-ext pa-col-ext-' + c.key + '">' + escapeHtml(extRow[c.key] || '—') + '</td>';
+                    }).join('') +
+                    '<td class="pa-col-dt ' + (overdue ? 'pa-overdue' : '') + '">' + fmtDate(it.stepCreated) + '</td>' +
                     '</tr>';
         });
         html += '</tbody></table>';
@@ -433,7 +566,7 @@
     function renderDetail(d) {
         const h = d.header;
         modalTitleEl.textContent = 'Belge: ' + (h.documentNumber || '—');
-        modalSubEl.textContent = h.flowName + ' • Adım ' + h.stepOrder + ' / ' + h.totalSteps;
+        modalSubEl.textContent = h.flowName + ' • Adım ' + h.stepPosition + ' / ' + h.totalSteps;
 
         let html = '<dl class="pa-detail-grid">' +
                    '<dt>Belge No</dt><dd>' + escapeHtml(h.documentNumber || '—') + '</dd>' +
@@ -528,6 +661,84 @@
 
     // İlk yüklemede grupları çek
     loadGroups();
+})();
+
+// ── Sütun görünürlüğü (localStorage: pa-col-cfg) ─────────────────────────
+(function() {
+    const STORAGE_KEY = 'pa-col-cfg';
+    const COL_KEYS    = ['flow','typ','cari','amt','step','apvr','dt'];
+    const COL_CB_IDS  = { flow:'paColFlow', typ:'paColTyp', cari:'paColCari', amt:'paColAmt', step:'paColStep', apvr:'paColApvr', dt:'paColDt' };
+
+    let _cfg = {};
+    try { _cfg = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) {}
+
+    function getListWrap() { return document.querySelector('.pa-list-wrap'); }
+
+    function applyExtColStyle(colKey, hidden) {
+        const styleId = 'pa-ext-hide-' + colKey;
+        if (hidden) {
+            if (!document.getElementById(styleId)) {
+                const s = document.createElement('style');
+                s.id = styleId;
+                s.textContent = '.pa-col-ext-' + colKey + ' { display: none !important; }';
+                document.head.appendChild(s);
+            }
+        } else {
+            const s = document.getElementById(styleId);
+            if (s) s.remove();
+        }
+    }
+
+    function applyAll() {
+        const wrap = getListWrap();
+        if (!wrap) return;
+        COL_KEYS.forEach(k => {
+            const hidden = _cfg[k] === false;
+            wrap.classList.toggle('pa-hide-' + k, hidden);
+            const cb = document.getElementById(COL_CB_IDS[k]);
+            if (cb) cb.checked = !hidden;
+        });
+        // Kaydedilmiş ext kolon gizliliklerini uygula
+        Object.entries(_cfg).forEach(([k, v]) => {
+            if (k.startsWith('ext_')) applyExtColStyle(k.slice(4), v === false);
+        });
+    }
+
+    window.paColToggle = function(key, visible) {
+        _cfg[key] = visible;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_cfg)); } catch(e) {}
+        if (key.startsWith('ext_')) {
+            applyExtColStyle(key.slice(4), !visible);
+        } else {
+            const wrap = getListWrap();
+            if (wrap) wrap.classList.toggle('pa-hide-' + key, !visible);
+        }
+    };
+
+    window.paToggleColPanel = function(e) {
+        e.stopPropagation();
+        const panel = document.getElementById('paColPanel');
+        if (!panel) return;
+        const isOpen = panel.classList.contains('open');
+        panel.classList.toggle('open', !isOpen);
+        if (!isOpen) {
+            applyAll(); // checkbox state'lerini sync et
+            const btn  = document.getElementById('paColBtn');
+            const rect = btn ? btn.getBoundingClientRect() : { left: 0, bottom: 0, width: 0 };
+            panel.style.top  = (rect.bottom + 4) + 'px';
+            panel.style.left = Math.max(4, rect.right - panel.offsetWidth) + 'px';
+        }
+    };
+
+    document.addEventListener('click', function(e) {
+        const panel = document.getElementById('paColPanel');
+        if (panel && panel.classList.contains('open') && !panel.contains(e.target)) {
+            panel.classList.remove('open');
+        }
+    });
+
+    // Sayfa açıldığında hemen uygula
+    applyAll();
 })();
 </script>
 }

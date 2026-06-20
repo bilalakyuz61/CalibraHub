@@ -15,8 +15,8 @@ namespace CalibraHub.Web.Controllers;
 /// Tasinmis endpoint'ler:
 ///   - GET  /Admin/GetAdminUsersJson      → liste (search + companyId)
 ///   - GET  /Admin/GetUsersFormDataJson   → dropdown'lar (sirket/dep/sup/role/perm)
-///   - POST /Admin/SaveAdminUserJson      → yeni kullanici + Grafana rolu
-///   - POST /Admin/UpdateAdminUserJson    → guncelle (Grafana rolu dahil)
+///   - POST /Admin/SaveAdminUserJson      → yeni kullanici
+///   - POST /Admin/UpdateAdminUserJson    → guncelle
 /// </summary>
 [Authorize]
 public sealed class AdminUserJsonController : Controller
@@ -52,8 +52,7 @@ public sealed class AdminUserJsonController : Controller
             x.Id, x.CompanyId, x.CompanyName, x.FullName, x.Email, x.EmployeeCode,
             x.DepartmentName, supervisorName = x.SupervisorName ?? "-",
             x.Role, permissions = string.Join(", ", x.Permissions),
-            x.IsActive,
-            grafanaRole = x.GrafanaRole
+            x.IsActive
         }).ToArray());
     }
 
@@ -112,16 +111,6 @@ public sealed class AdminUserJsonController : Controller
         if (!TryParsePermissions(input.Permissions, out var permissions))
             return Json(new { success = false, message = "Secilen yetkilerden biri gecersiz." });
 
-        // Grafana yetki seviyesi (opsiyonel) — bos/null ise kullanici Grafana'ya eklenmez.
-        GrafanaRole? grafanaRole = null;
-        if (!string.IsNullOrWhiteSpace(input.GrafanaRole))
-        {
-            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out GrafanaRole parsed))
-                grafanaRole = parsed;
-            else
-                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Editor/Admin)." });
-        }
-
         try
         {
             await _adminManagementService.CreateUserAsync(
@@ -134,8 +123,7 @@ public sealed class AdminUserJsonController : Controller
                     input.SupervisorUserId,
                     role,
                     permissions,
-                    Password: null,
-                    GrafanaRole: grafanaRole),
+                    Password: null),
                 cancellationToken);
             return Json(new { success = true, message = "Kullanici olusturuldu." });
         }
@@ -145,7 +133,7 @@ public sealed class AdminUserJsonController : Controller
         }
     }
 
-    /// <summary>Mevcut kullanicinin temel bilgilerini ve Grafana rolunu gunceller.</summary>
+    /// <summary>Mevcut kullanicinin temel bilgilerini gunceller.</summary>
     [HttpPost("/Admin/UpdateAdminUserJson")]
     public async Task<IActionResult> UpdateAdminUserJson(
         [FromBody] UserUpdateInput input, CancellationToken cancellationToken)
@@ -159,17 +147,6 @@ public sealed class AdminUserJsonController : Controller
         if (string.IsNullOrWhiteSpace(input.Email))
             return Json(new { success = false, message = "E-posta zorunludur." });
 
-        // Grafana yetki seviyesi: input.GrafanaRoleProvided = true ise "" → null (Yok),
-        // "Viewer"/"Editor"/"Admin" → enum. Provided = false ise mevcut rol korunur.
-        GrafanaRole? grafanaRole = null;
-        if (input.GrafanaRoleProvided && !string.IsNullOrWhiteSpace(input.GrafanaRole))
-        {
-            if (Enum.TryParse(input.GrafanaRole.Trim(), true, out GrafanaRole parsed))
-                grafanaRole = parsed;
-            else
-                return Json(new { success = false, message = "Grafana yetkisi gecersiz (Viewer/Editor/Admin/bos)." });
-        }
-
         try
         {
             await _adminManagementService.UpdateUserAsync(
@@ -178,9 +155,7 @@ public sealed class AdminUserJsonController : Controller
                     input.CompanyId.Value,
                     input.FullName,
                     input.Email,
-                    Password: null,
-                    SetGrafanaRole: input.GrafanaRoleProvided,
-                    GrafanaRole: grafanaRole),
+                    Password: null),
                 cancellationToken);
             return Json(new { success = true, message = "Kullanici guncellendi." });
         }
