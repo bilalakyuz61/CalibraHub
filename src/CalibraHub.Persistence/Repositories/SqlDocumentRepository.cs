@@ -667,7 +667,7 @@ public sealed class SqlDocumentRepository : IDocumentRepository
         Notes = r.IsDBNull(r.GetOrdinal("notes")) ? null : r.GetString(r.GetOrdinal("notes")),
         CreatedById = TryGetOrdinal(r, "CreatedById") is int cbOrd && cbOrd >= 0 && !r.IsDBNull(cbOrd) ? r.GetInt32(cbOrd) : null,
         CreatedAt = r.GetDateTime(r.GetOrdinal("Created")),
-        UpdatedAt = r.GetDateTime(r.GetOrdinal("Updated")),
+        UpdatedAt = r.IsDBNull(r.GetOrdinal("Updated")) ? DateTime.MinValue : r.GetDateTime(r.GetOrdinal("Updated")),
         IsActive = r.GetBoolean(r.GetOrdinal("IsActive")),
         LineCount      = TryGetOrdinal(r, "line_count")      is int lcOrd  && lcOrd  >= 0 ? r.GetInt32(lcOrd)  : 0,
         FulfillPending = TryGetOrdinal(r, "fulfill_pending") is int fp0rd  && fp0rd  >= 0 ? r.GetInt32(fp0rd)  : 0,

@@ -676,11 +676,11 @@ END;";
             await EnsureWhatsAppConfigTableAsync(connection, cancellationToken);
             await SeedDocumentTypesAsync(connection, cancellationToken);
             await SeedArgeNumberRuleAsync(connection, cancellationToken);
+            await EnsureCurrencyTablesAsync(connection, cancellationToken);
+            await SeedCurrenciesAsync(connection, cancellationToken);
             await EnsureReportDataViewsAsync(connection, cancellationToken);
             await EnsureUserSettingsTableAsync(connection, cancellationToken);
             await EnsureSalesRepresentativeTableAsync(connection, cancellationToken);
-            await EnsureCurrencyTablesAsync(connection, cancellationToken);
-            await SeedCurrenciesAsync(connection, cancellationToken);
             await EnsureDocumentLineDetailsTableAsync(connection, cancellationToken);
             await EnsurePriceListTablesAsync(connection, cancellationToken);
             await SeedFieldsAsync(connection, cancellationToken);
@@ -1360,13 +1360,14 @@ END;";
                 ALTER TABLE [{schemaForSql}].[SmtpProfile] ADD [OAuth2RefreshToken] NVARCHAR(500) NULL;
             END;
 
-            -- erp_connection_settings: id INT → UNIQUEIDENTIFIER migration
+            -- erp_connection_settings: eski UNIQUEIDENTIFIER PK → INT IDENTITY migration
+            -- DIKKAT: koşul UNIQUEIDENTIFIER kontrol etmeli; INT kontrol etmek yeni tabloyu siler.
             IF OBJECT_ID(N'[{schemaForSql}].[ErpConnectionSetting]', N'U') IS NOT NULL
                AND EXISTS (
                    SELECT 1 FROM sys.columns
                    WHERE object_id = OBJECT_ID(N'[{schemaForSql}].[ErpConnectionSetting]')
                      AND name = 'id'
-                     AND system_type_id = TYPE_ID('int')
+                     AND system_type_id = TYPE_ID('uniqueidentifier')
                )
             BEGIN
                 DROP TABLE [{schemaForSql}].[ErpConnectionSetting];
@@ -2003,7 +2004,7 @@ END;";
 
             IF OBJECT_ID(N'[{schemaForSql}].[Field]', N'U') IS NOT NULL
                AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'IsActive') IS NULL
-               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'IsActive') IS NULL
+               AND COL_LENGTH(N'{schemaLiteral}.[Field]', N'is_active') IS NULL
             BEGIN
                 ALTER TABLE [{schemaForSql}].[Field]
                 ADD [IsActive] BIT NOT NULL CONSTRAINT [DF_Field_IsActive] DEFAULT(1);
@@ -7077,7 +7078,7 @@ END;";
             -- DocumentTypeId FK kolonu (Phase 2 konsolidasyon). NULL satirlari
             -- BackfillDocumentTypeIdsAsync tarafindan (document_types seed'inden sonra) doldurulur.
             IF COL_LENGTH(N'[{s}].[Document]', N'DocumentTypeId') IS NULL
-               AND COL_LENGTH(N'[{s}].[Document]', N'DocumentTypeId') IS NULL
+               AND COL_LENGTH(N'[{s}].[Document]', N'document_type_id') IS NULL
                 ALTER TABLE [{s}].[Document] ADD [DocumentTypeId] INT NULL;
 
             -- RequesterPersonnelId — Ihtiyac Kaydi (alis_talebi) icin "Talep Eden" (Personnel.Id INT FK).
@@ -14594,24 +14595,8 @@ END;";
                     ALTER TABLE [{s}].[ApprovalFlowVariable] ADD [SqlQuery] NVARCHAR(MAX) NULL;
             END;
 
-            -- ── ApprovalInstanceVariable ─────────────────────────────────────────────
-            -- Per-instance degisken state. Workflow runtime okur/yazar.
-            IF OBJECT_ID(N'[{s}].[ApprovalInstanceVariable]', N'U') IS NULL
-            BEGIN
-                CREATE TABLE [{s}].[ApprovalInstanceVariable]
-                (
-                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ApprovalInstanceVariable] PRIMARY KEY,
-                    [InstanceId]  INT          NOT NULL CONSTRAINT [FK_ApprovalInstanceVariable_Instance] REFERENCES [{s}].[DocumentApprovalInstance]([Id]) ON DELETE CASCADE,
-                    [Name]        NVARCHAR(60) NOT NULL,
-                    [Value]       NVARCHAR(MAX) NULL,
-                    [TypeCode]    NVARCHAR(20) NOT NULL CONSTRAINT [DF_ApprovalInstanceVariable_Type] DEFAULT N'int',
-                    [Updated]     DATETIME     NOT NULL CONSTRAINT [DF_ApprovalInstanceVariable_Updated] DEFAULT SYSUTCDATETIME()
-                );
-                CREATE UNIQUE INDEX [UX_ApprovalInstanceVariable_Inst_Name]
-                    ON [{s}].[ApprovalInstanceVariable]([InstanceId],[Name]);
-            END;
-
             -- ── DocumentApprovalInstance ─────────────────────────────────────────────
+            -- ÖNCE bu tablo: ApprovalInstanceVariable FK'sı buraya referans veriyor.
             IF OBJECT_ID(N'[{s}].[DocumentApprovalInstance]', N'U') IS NULL
             BEGIN
                 CREATE TABLE [{s}].[DocumentApprovalInstance]
@@ -14653,6 +14638,24 @@ END;";
                 ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[{s}].[DocumentApprovalInstance]') AND name = N'UpdatedById')
                     ALTER TABLE [{s}].[DocumentApprovalInstance] ADD [UpdatedById] INT NULL;
             END
+
+            -- ── ApprovalInstanceVariable ─────────────────────────────────────────────
+            -- Per-instance degisken state. Workflow runtime okur/yazar.
+            -- DocumentApprovalInstance YUKARDA olusturuldu — FK gecerli.
+            IF OBJECT_ID(N'[{s}].[ApprovalInstanceVariable]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ApprovalInstanceVariable]
+                (
+                    [Id]          INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ApprovalInstanceVariable] PRIMARY KEY,
+                    [InstanceId]  INT          NOT NULL CONSTRAINT [FK_ApprovalInstanceVariable_Instance] REFERENCES [{s}].[DocumentApprovalInstance]([Id]) ON DELETE CASCADE,
+                    [Name]        NVARCHAR(60) NOT NULL,
+                    [Value]       NVARCHAR(MAX) NULL,
+                    [TypeCode]    NVARCHAR(20) NOT NULL CONSTRAINT [DF_ApprovalInstanceVariable_Type] DEFAULT N'int',
+                    [Updated]     DATETIME     NOT NULL CONSTRAINT [DF_ApprovalInstanceVariable_Updated] DEFAULT SYSUTCDATETIME()
+                );
+                CREATE UNIQUE INDEX [UX_ApprovalInstanceVariable_Inst_Name]
+                    ON [{s}].[ApprovalInstanceVariable]([InstanceId],[Name]);
+            END;
 
             -- ── DocumentApprovalStepRecord ───────────────────────────────────────────
             IF OBJECT_ID(N'[{s}].[DocumentApprovalStepRecord]', N'U') IS NULL
@@ -15291,7 +15294,8 @@ END;";
             BEGIN
                 IF OBJECT_ID(N'[dbo].[DF_Attachment_Id]', 'D') IS NOT NULL
                     ALTER TABLE [dbo].[Attachment] DROP CONSTRAINT [DF_Attachment_Id];
-                ALTER TABLE [dbo].[Attachment] DROP CONSTRAINT [PK_Attachment];
+                IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'PK_Attachment' AND parent_object_id = OBJECT_ID(N'[dbo].[Attachment]'))
+                    ALTER TABLE [dbo].[Attachment] DROP CONSTRAINT [PK_Attachment];
                 ALTER TABLE [dbo].[Attachment] DROP COLUMN [Id];
                 ALTER TABLE [dbo].[Attachment] ADD [Id] INT IDENTITY(1,1) NOT NULL
                     CONSTRAINT [PK_Attachment] PRIMARY KEY;
@@ -15362,7 +15366,7 @@ END;";
             FETCH NEXT FROM cur INTO @stmt;
             WHILE @@FETCH_STATUS = 0
             BEGIN
-                BEGIN TRY EXEC(@stmt); END TRY BEGIN CATCH END CATCH;
+                BEGIN TRY EXEC(@stmt); END TRY BEGIN CATCH PRINT(N'[DB INIT] DATETIME2 convert skip: ' + @stmt + N' | ' + ERROR_MESSAGE()); END CATCH;
                 FETCH NEXT FROM cur INTO @stmt;
             END;
             CLOSE cur; DEALLOCATE cur;
@@ -16214,7 +16218,7 @@ END;";
             IF OBJECT_ID(N'dbo.Personnel', N'U') IS NOT NULL
                AND COL_LENGTH(N'dbo.Personnel', N'BirthDate') IS NULL
             BEGIN
-                ALTER TABLE dbo.Personnel ADD [BirthDate] DATETIME2 NULL;
+                ALTER TABLE dbo.Personnel ADD [BirthDate] DATETIME NULL;
             END
             """, ct);
     }
@@ -16228,19 +16232,34 @@ END;";
                     Id          INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_CalendarEvent PRIMARY KEY,
                     Title       NVARCHAR(200) NOT NULL,
                     Description NVARCHAR(1000) NULL,
-                    StartDate   DATETIME2 NOT NULL,
-                    EndDate     DATETIME2 NULL,
+                    StartDate   DATETIME NOT NULL,
+                    EndDate     DATETIME NULL,
                     IsAllDay    BIT NOT NULL CONSTRAINT DF_CalendarEvent_IsAllDay DEFAULT 1,
                     Color       NVARCHAR(50) NULL,
                     UserId      INT NOT NULL,
                     IsActive    BIT NOT NULL CONSTRAINT DF_CalendarEvent_IsActive DEFAULT 1,
-                    CreatedBy   NVARCHAR(120) NULL,
-                    Created     DATETIME2 NOT NULL CONSTRAINT DF_CalendarEvent_Created DEFAULT SYSUTCDATETIME(),
-                    UpdatedBy   NVARCHAR(120) NULL,
-                    Updated     DATETIME2 NULL
+                    CreatedById INT NULL,
+                    Created     DATETIME NOT NULL CONSTRAINT DF_CalendarEvent_Created DEFAULT SYSUTCDATETIME(),
+                    UpdatedById INT NULL,
+                    Updated     DATETIME NULL
                 );
                 CREATE INDEX IX_CalendarEvent_UserId ON dbo.CalendarEvent (UserId, StartDate);
             END
+            -- Migration: CreatedBy/UpdatedBy NVARCHAR → CreatedById/UpdatedById INT
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.CalendarEvent') AND name = N'CreatedBy')
+            BEGIN
+                ALTER TABLE dbo.CalendarEvent DROP COLUMN [CreatedBy];
+                ALTER TABLE dbo.CalendarEvent ADD [CreatedById] INT NULL;
+            END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.CalendarEvent') AND name = N'CreatedById')
+                ALTER TABLE dbo.CalendarEvent ADD [CreatedById] INT NULL;
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.CalendarEvent') AND name = N'UpdatedBy')
+            BEGIN
+                ALTER TABLE dbo.CalendarEvent DROP COLUMN [UpdatedBy];
+                ALTER TABLE dbo.CalendarEvent ADD [UpdatedById] INT NULL;
+            END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.CalendarEvent') AND name = N'UpdatedById')
+                ALTER TABLE dbo.CalendarEvent ADD [UpdatedById] INT NULL;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
@@ -16260,14 +16279,14 @@ END;";
                     SqlQuery        NVARCHAR(MAX)  NOT NULL,
                     CacheTtlMinutes INT            NOT NULL CONSTRAINT DF_ReportSource_CacheTtl    DEFAULT 5,
                     Materialize      BIT           NOT NULL CONSTRAINT DF_ReportSource_Materialize DEFAULT 0,
-                    LastMaterialized DATETIME2     NULL,
+                    LastMaterialized DATETIME      NULL,
                     MaterializedRows INT           NULL,
                     RefreshScheduleJson NVARCHAR(200) NULL,
                     IsActive        BIT            NOT NULL CONSTRAINT DF_ReportSource_IsActive    DEFAULT 1,
-                    CreatedBy       NVARCHAR(120)  NULL,
-                    Created         DATETIME2      NOT NULL CONSTRAINT DF_ReportSource_Created     DEFAULT SYSUTCDATETIME(),
-                    UpdatedBy       NVARCHAR(120)  NULL,
-                    Updated         DATETIME2      NULL
+                    CreatedById     INT            NULL,
+                    Created         DATETIME       NOT NULL CONSTRAINT DF_ReportSource_Created     DEFAULT SYSUTCDATETIME(),
+                    UpdatedById     INT            NULL,
+                    Updated         DATETIME       NULL
                 );
                 CREATE UNIQUE INDEX UX_ReportSource_Name ON dbo.ReportSource (Name) WHERE IsActive = 1;
             END
@@ -16275,11 +16294,26 @@ END;";
             IF COL_LENGTH('dbo.ReportSource', 'Materialize') IS NULL
                 ALTER TABLE dbo.ReportSource ADD Materialize BIT NOT NULL CONSTRAINT DF_ReportSource_Materialize DEFAULT 0;
             IF COL_LENGTH('dbo.ReportSource', 'LastMaterialized') IS NULL
-                ALTER TABLE dbo.ReportSource ADD LastMaterialized DATETIME2 NULL;
+                ALTER TABLE dbo.ReportSource ADD LastMaterialized DATETIME NULL;
             IF COL_LENGTH('dbo.ReportSource', 'MaterializedRows') IS NULL
                 ALTER TABLE dbo.ReportSource ADD MaterializedRows INT NULL;
             IF COL_LENGTH('dbo.ReportSource', 'RefreshScheduleJson') IS NULL
                 ALTER TABLE dbo.ReportSource ADD RefreshScheduleJson NVARCHAR(200) NULL;
+            -- Migration: CreatedBy/UpdatedBy NVARCHAR → CreatedById/UpdatedById INT
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportSource') AND name = N'CreatedBy')
+            BEGIN
+                ALTER TABLE dbo.ReportSource DROP COLUMN [CreatedBy];
+                ALTER TABLE dbo.ReportSource ADD [CreatedById] INT NULL;
+            END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportSource') AND name = N'CreatedById')
+                ALTER TABLE dbo.ReportSource ADD [CreatedById] INT NULL;
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportSource') AND name = N'UpdatedBy')
+            BEGIN
+                ALTER TABLE dbo.ReportSource DROP COLUMN [UpdatedBy];
+                ALTER TABLE dbo.ReportSource ADD [UpdatedById] INT NULL;
+            END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportSource') AND name = N'UpdatedById')
+                ALTER TABLE dbo.ReportSource ADD [UpdatedById] INT NULL;
             """;
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
@@ -16296,10 +16330,10 @@ END;";
                     Description NVARCHAR(1000) NULL,
                     PanelsJson  NVARCHAR(MAX)  NOT NULL,
                     IsActive    BIT            NOT NULL CONSTRAINT DF_ReportDesign_IsActive DEFAULT 1,
-                    CreatedBy   NVARCHAR(120)  NULL,
-                    Created     DATETIME2      NOT NULL CONSTRAINT DF_ReportDesign_Created  DEFAULT SYSUTCDATETIME(),
-                    UpdatedBy   NVARCHAR(120)  NULL,
-                    Updated     DATETIME2      NULL
+                    CreatedById INT            NULL,
+                    Created     DATETIME       NOT NULL CONSTRAINT DF_ReportDesign_Created  DEFAULT SYSUTCDATETIME(),
+                    UpdatedById INT            NULL,
+                    Updated     DATETIME       NULL
                 );
             END
             -- GroupName kolon migrasyonu (eski schema)
@@ -16312,6 +16346,21 @@ END;";
             BEGIN
                 ALTER TABLE dbo.ReportDesign ADD Description NVARCHAR(1000) NULL;
             END
+            -- Migration: CreatedBy/UpdatedBy NVARCHAR → CreatedById/UpdatedById INT
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportDesign') AND name = N'CreatedBy')
+            BEGIN
+                ALTER TABLE dbo.ReportDesign DROP COLUMN [CreatedBy];
+                ALTER TABLE dbo.ReportDesign ADD [CreatedById] INT NULL;
+            END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportDesign') AND name = N'CreatedById')
+                ALTER TABLE dbo.ReportDesign ADD [CreatedById] INT NULL;
+            IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportDesign') AND name = N'UpdatedBy')
+            BEGIN
+                ALTER TABLE dbo.ReportDesign DROP COLUMN [UpdatedBy];
+                ALTER TABLE dbo.ReportDesign ADD [UpdatedById] INT NULL;
+            END
+            ELSE IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.ReportDesign') AND name = N'UpdatedById')
+                ALTER TABLE dbo.ReportDesign ADD [UpdatedById] INT NULL;
             """;
         await using var cmd2 = connection.CreateCommand();
         cmd2.CommandText = sql2;
