@@ -662,6 +662,8 @@ END;";
             // 2026-05-23 Yapay Zeka entegrasyonu — AiProvider (şirket bazlı provider config)
             // + AiUserKey (kullanıcı override key). IntegratorSecretProtector ile şifreli.
             await EnsureAiTablesAsync(connection, cancellationToken);
+            // 2026-06-20 Şablon-tabanlı içe aktarım (AI'sız) — ImportTemplate (Cari pilotu).
+            await EnsureImportTablesAsync(connection, cancellationToken);
             await EnsureDynamicFieldValuesTableAsync(connection, cancellationToken);
             await EnsureDocumentTablesAsync(connection, cancellationToken);
             await EnsureDocumentAttachmentsTableAsync(connection, cancellationToken);
@@ -6786,6 +6788,41 @@ END;";
     //
     // Per-company schema'da. Master DB'de yok — şirketler birbirinin AI key'ini görmez.
     // ════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════════
+    // 2026-06-20 — Şablon-tabanlı içe aktarım (AI'sız). ImportTemplate: kaynak dosya
+    // kolonu → hedef entity alanı eşleme tanımı (MappingJson). Cari pilotu.
+    private async Task EnsureImportTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        var s = _schema.Replace("]", "]]");
+        var sql = $"""
+            IF OBJECT_ID(N'[{s}].[ImportTemplate]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [{s}].[ImportTemplate]
+                (
+                    [Id]             INT IDENTITY(1,1) NOT NULL CONSTRAINT [PK_ImportTemplate] PRIMARY KEY,
+                    [Name]           NVARCHAR(200) NOT NULL,
+                    [TargetEntity]   NVARCHAR(50)  NOT NULL CONSTRAINT [DF_ImportTemplate_Target]    DEFAULT(N'CONTACT'),
+                    [SheetName]      NVARCHAR(200) NULL,
+                    [HeaderRowIndex] INT           NOT NULL CONSTRAINT [DF_ImportTemplate_HeaderRow] DEFAULT(1),
+                    [MatchKeyField]  NVARCHAR(100) NULL,
+                    [MappingJson]    NVARCHAR(MAX) NOT NULL CONSTRAINT [DF_ImportTemplate_Mapping]   DEFAULT(N'[]'),
+                    [IsActive]       BIT           NOT NULL CONSTRAINT [DF_ImportTemplate_IsActive]  DEFAULT(1),
+                    [Created]        DATETIME      NOT NULL CONSTRAINT [DF_ImportTemplate_Created]   DEFAULT(SYSUTCDATETIME()),
+                    [Updated]        DATETIME      NULL,
+                    [CreatedById]    INT           NULL,
+                    [UpdatedById]    INT           NULL
+                );
+                -- Aktif şablonlar arasında ad benzersiz (pasif edilince aynı ad tekrar kullanılabilir).
+                CREATE UNIQUE INDEX [UX_ImportTemplate_Name]
+                    ON [{s}].[ImportTemplate]([Name])
+                    WHERE [IsActive] = 1;
+            END;
+            """;
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private async Task EnsureAiTablesAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
         var s = _schema.Replace("]", "]]");
@@ -9238,7 +9275,16 @@ END;";
                 dsCmd.Parameters.AddWithValue("@JoinOn",      (object?)ds.JoinOn ?? DBNull.Value);
                 dsCmd.Parameters.AddWithValue("@ParentAlias", (object?)ds.ParentAlias ?? DBNull.Value);
                 dsCmd.Parameters.AddWithValue("@Ordinal",     ds.Ordinal);
-                await dsCmd.ExecuteNonQueryAsync(cancellationToken);
+                try
+                {
+                    await dsCmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+                catch (Microsoft.Data.SqlClient.SqlException dup) when (dup.Number == 2601 || dup.Number == 2627)
+                {
+                    // Race: aynı (LayoutId, Alias) başka bir initializer scope tarafından
+                    // (örn. Worker + Web paralel startup) eklendi. UNIQUE INDEX 'ux_DocLayoutDs_Alias'.
+                    // IF NOT EXISTS check ile INSERT arasında window var; idempotent davran, atla.
+                }
             }
         }
     }
