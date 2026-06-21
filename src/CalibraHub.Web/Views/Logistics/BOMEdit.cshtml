@@ -200,7 +200,7 @@
     .pte-btn--primary.pte-btn--icon:active:not(:disabled) svg {
         animation: cb-save-pulse .35s var(--motion-ease-out);
     }
-    @keyframes cb-save-pulse {
+    @@keyframes cb-save-pulse {
         0%   { transform: scale(1) rotate(0); }
         40%  { transform: scale(1.25) rotate(-6deg); }
         100% { transform: scale(1) rotate(0); }
@@ -224,7 +224,7 @@
     .pte-btn--danger.pte-btn--icon:hover:not(:disabled) > svg {
         animation: cb-trash-shake .45s ease-in-out;
     }
-    @keyframes cb-trash-shake {
+    @@keyframes cb-trash-shake {
         0%, 100% { transform: rotate(0); }
         20%      { transform: rotate(-12deg); }
         40%      { transform: rotate(10deg); }
